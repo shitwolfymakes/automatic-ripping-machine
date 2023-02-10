@@ -18,4 +18,5 @@ jobs:
             
         - 
             name: Build the Docker image
+
             run: docker build . --file Dockerfile --tag "pr${{ github.event.number }}"
