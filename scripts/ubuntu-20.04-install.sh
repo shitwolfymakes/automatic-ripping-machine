@@ -94,7 +94,7 @@ function install_arm_requirements() {
         libdvd-pkg lsdvd
 
     sudo dpkg-reconfigure libdvd-pkg
-    
+
     # create folders required to run the ARM service
     sudo -u arm mkdir -p /home/arm/logs
 }
@@ -117,11 +117,11 @@ function clone_arm() {
         sudo rm -rf arm
     fi
 
-    git clone --recurse-submodules https://github.com/automatic-ripping-machine/automatic-ripping-machine --branch "main" arm
+    # THIS COMMAND WILL BREAK IF SCRIPT IS NOT RUN WITH `sudo -E`
+    git clone git@github.com:shitwolfymakes/automatic-ripping-machine.git --branch main arm
 
     cd arm
     git submodule update --init --recursive
-    git submodule update --recursive --remote
     cd ..
 
     sudo chown -R arm:arm /opt/arm
