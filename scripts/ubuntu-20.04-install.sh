@@ -12,19 +12,20 @@ function usage() {
 }
 
 port_flag=
-while getopts 'p:' OPTION
+while getopts ':p:' OPTION
 do
     case $OPTION in
     p)    port_flag=1
           PORT=$OPTARG
           # test if port is valid (DOES NOT WORK WITH `set -u` DECLARED)
           if ! [[ $PORT -gt 0 && $PORT -le 65535 ]]; then
-              echo -e "\nERROR: ${PORT} is not a port"
+              echo -e "\nERROR: ${PORT} is not a port" >&2
               usage
-              exit 2
+              exit 1
           fi
           ;;
-    ?)    usage
+    ?)  echo "Invalid flag" >&2
+        usage
           exit 1
           ;;
     esac
