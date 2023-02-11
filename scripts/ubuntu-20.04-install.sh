@@ -4,32 +4,48 @@ set -eo pipefail
 
 RED='\033[1;31m'
 NC='\033[0m' # No Color
+
+FORK=
 PORT=8080
 
 function usage() {
-    echo -e "\nUsage: ubuntu-20.04-install.sh [OPTIONS]"
+    echo -e "\nUsage: ubuntu-20.04-install.sh -f <fork> [OPTIONS]"
+    echo -e " -f <fork>\tSpecify the username of the GitHub fork to be installed"
     echo -e " -p <port>\tSpecify the port arm will serve on. \n\t\tDefault is \"$PORT\""
 }
 
+# parse script arguments
 port_flag=
-while getopts ':p:' OPTION
+while getopts 'f:p:' OPTION
 do
     case $OPTION in
-    p)    port_flag=1
-          PORT=$OPTARG
-          # test if port is valid (DOES NOT WORK WITH `set -u` DECLARED)
-          if ! [[ $PORT -gt 0 && $PORT -le 65535 ]]; then
-              echo -e "\nERROR: ${PORT} is not a port" >&2
-              usage
-              exit 1
-          fi
-          ;;
-    ?)  echo "Invalid flag" >&2
+    f)
+        FORK=$OPTARG
+        ;;
+    p)
+        port_flag=1
+        PORT=$OPTARG
+        # test if port is valid (DOES NOT WORK WITH `set -u` DECLARED)
+        if ! [[ $PORT -gt 0 && $PORT -le 65535 ]]; then
+            echo -e "\nERROR: ${PORT} is not a port" >&2
+            usage
+            exit 1
+        fi
+        ;;
+    ?)
+        echo "Invalid flag" >&2
         usage
-          exit 1
-          ;;
+        exit 1
+        ;;
     esac
 done
+
+# make sure mandatory args were used
+if [ -z "$FORK" ]; then
+    echo -e "\nERROR: fork not specified!" >&2
+    usage
+    exit 1
+fi
 
 function install_os_tools() {
     sudo apt update -y && sudo apt upgrade -y
