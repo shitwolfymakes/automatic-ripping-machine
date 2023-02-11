@@ -27,7 +27,7 @@ do
         PORT=$OPTARG
         # test if port is valid (DOES NOT WORK WITH `set -u` DECLARED)
         if ! [[ $PORT -gt 0 && $PORT -le 65535 ]]; then
-            echo -e "\nERROR: ${PORT} is not a port" >&2
+            echo "ERROR: ${PORT} is not a port" >&2
             usage
             exit 1
         fi
@@ -42,7 +42,7 @@ done
 
 # make sure mandatory args were used
 if [ -z "$FORK" ]; then
-    echo -e "\nERROR: fork not specified!" >&2
+    echo "ERROR: fork not specified!" >&2
     usage
     exit 1
 fi
