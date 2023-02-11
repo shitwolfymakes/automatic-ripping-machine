@@ -135,8 +135,7 @@ function clone_arm() {
     fi
 
     # THIS COMMAND WILL BREAK IF SCRIPT IS NOT RUN WITH `sudo -E`
-    git clone git@github.com:shitwolfymakes/automatic-ripping-machine.git --branch main arm
-
+    git clone "git@github.com:${FORK}/automatic-ripping-machine.git" --branch main arm
     cd arm
     git submodule update --init --recursive
     cd ..
