@@ -26,7 +26,30 @@ do
 done
 IMAGE="$FORK/automatic-ripping-machine:$TAG"
 
-# TODO: Remove thick-client installation stuff
+function remove_existing_arm() {
+    # Remove thick-client installation artifacts
+    ## Check if the ArmUI service exists in any state and remove it
+    if sudo systemctl list-unit-files --type service | grep -F armui.service; then
+        echo -e "${RED}Previous installation of ARM service found. Removing...${NC}"
+        service=armui.service
+        sudo systemctl stop $service && sudo systemctl disable $service
+        sudo find /etc/systemd/system/$service -delete
+        sudo systemctl daemon-reload && sudo systemctl reset-failed
+    fi
+
+    ## Check if the ARM codebase is installed
+    cd /opt
+    if [ -d arm ]; then
+        echo -e "${RED}Existing ARM installation found, removing...${NC}"
+        sudo rm -rf arm
+    fi
+
+    ## Check if old logging rules are installed
+    if [ -f /etc/rsyslog.d/30-arm.conf ]; then
+        echo -e "${RED}ARM syslog rule found. Removing...${NC}"
+        sudo rm /etc/rsyslog.d/30-arm.conf
+    fi
+}
 
 function install_reqs() {
     apt update -y && apt upgrade -y
@@ -89,6 +112,8 @@ function save_start_command() {
 }
 
 # start here
+remove_existing_arm
+
 install_reqs
 add_arm_user
 launch_setup
