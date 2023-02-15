@@ -91,4 +91,5 @@ pull_image
 setup_mountpoints
 save_start_command
 
-echo -e "${RED}Installation complete. A template command to run the ARM container is located in: $(~arm) ${NC}"
+cd ~arm
+echo -e "${RED}Installation complete. A template command to run the ARM container is located in: $(pwd) ${NC}"
