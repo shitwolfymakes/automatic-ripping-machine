@@ -111,7 +111,21 @@ function save_start_command() {
     sudo -u arm cp /opt/arm/scripts/docker/start_arm_container.sh start_arm_container.sh
     chmod +x start_arm_container.sh
     sed -i "s|IMAGE_NAME|${IMAGE}|" start_arm_container.sh
-    # TODO: auto populate/remove ARM_UID AND ARM_GID
+
+    # auto populate or remove ARM_UID AND ARM_GID
+    ARM_UID=$(id -u arm)
+    ARM_GID=$(id -g arm)
+    if [ "$ARM_UID" -ne "1000" ]; then
+    	sed -i "s|ARM_UID|-e ARM_UID=$ARM_UID|" start_arm_container.sh
+    else
+    	sed -i "/^.*ARM_UID.*$/d" start_arm_container.sh
+    fi
+    if [ "$ARM_GID" -ne "1000" ]; then
+    	sed -i "s|ARM_GID|-e ARM_GID=$ARM_GID|" start_arm_container.sh
+    else
+    	sed -i "/^.*ARM_GID.*$/d" start_arm_container.sh
+    fi
+
     # TODO: prompt num cpus to use (or auto-configure? How to print num cpu CORES)
     # TODO: Auto-add entries for each sr?
 }
