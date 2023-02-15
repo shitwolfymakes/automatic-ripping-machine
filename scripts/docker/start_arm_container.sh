@@ -9,8 +9,8 @@ docker run -d \
     --privileged \
     --restart "always" \
     --name "arm-rippers" \
-    -e ARM_UID="<id -u arm>" \
-    -e ARM_GID="<id -g arm>" \
+    ARM_UID \
+    ARM_GID \
     --device="/dev/sr0:/dev/sr0" \
     --device="/dev/sr1:/dev/sr1" \
     --device="/dev/sr2:/dev/sr2" \
