@@ -26,6 +26,8 @@ do
 done
 IMAGE="$FORK/automatic-ripping-machine:$TAG"
 
+# TODO: Remove thick-client installation stuff
+
 function install_reqs() {
     apt update -y && apt upgrade -y
     apt install -y curl lsscsi
@@ -78,9 +80,12 @@ function setup_mountpoints() {
 function save_start_command() {
     url="https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/v2_devel/scripts/docker/start_arm_container.sh"
     cd ~arm
-    sudo -u arm curl -fsSL "$url" -o start_arm_container.sh
+    sudo -u arm wget -O start_arm_container.sh "$url"
     chmod +x start_arm_container.sh
     sed -i "s|IMAGE_NAME|${IMAGE}|" start_arm_container.sh
+    # TODO: auto populate/remove ARM_UID AND ARM_GID
+    # TODO: prompt num cpus to use (or auto-configure? How to print num cpu CORES)
+    # TODO: Auto-add entries for each sr?
 }
 
 # start here
