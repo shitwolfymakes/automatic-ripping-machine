@@ -107,9 +107,8 @@ function setup_mountpoints() {
 }
 
 function save_start_command() {
-    url="https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/v2_devel/scripts/docker/start_arm_container.sh"
     cd ~arm
-    sudo -u arm wget -O start_arm_container.sh "$url"
+    sudo -u arm cp /opt/arm/scripts/docker/start_arm_container.sh start_arm_container.sh
     chmod +x start_arm_container.sh
     sed -i "s|IMAGE_NAME|${IMAGE}|" start_arm_container.sh
     # TODO: auto populate/remove ARM_UID AND ARM_GID
