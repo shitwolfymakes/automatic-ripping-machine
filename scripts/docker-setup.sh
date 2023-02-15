@@ -37,17 +37,23 @@ function remove_existing_arm() {
         sudo systemctl daemon-reload && sudo systemctl reset-failed
     fi
 
+    ## Check if old logging rules are installed
+    if [ -f /etc/rsyslog.d/30-arm.conf ]; then
+        echo -e "${RED}ARM syslog rule found. Removing...${NC}"
+        sudo rm /etc/rsyslog.d/30-arm.conf
+    fi
+
+    ## Check if old automedia rule is installed (critical to prevent duplicate starts)
+    if [ -f /etc/udev/rules.d/51-automedia.rules ]; then
+        echo -e "${RED}ARM automedia rule found. Removing...${NC}"
+        sudo rm /etc/udev/rules.d/51-automedia.rules
+    fi
+
     ## Check if the ARM codebase is installed
     cd /opt
     if [ -d arm ]; then
         echo -e "${RED}Existing ARM installation found. Removing...${NC}"
         sudo rm -rf arm
-    fi
-
-    ## Check if old logging rules are installed
-    if [ -f /etc/rsyslog.d/30-arm.conf ]; then
-        echo -e "${RED}ARM syslog rule found. Removing...${NC}"
-        sudo rm /etc/rsyslog.d/30-arm.conf
     fi
 }
 
