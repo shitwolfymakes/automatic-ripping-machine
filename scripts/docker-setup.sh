@@ -40,7 +40,7 @@ function remove_existing_arm() {
     ## Check if the ARM codebase is installed
     cd /opt
     if [ -d arm ]; then
-        echo -e "${RED}Existing ARM installation found, removing...${NC}"
+        echo -e "${RED}Existing ARM installation found. Removing...${NC}"
         sudo rm -rf arm
     fi
 
