@@ -12,5 +12,3 @@ docker run -d \
     ARM_UID \
     ARM_GID \
     CPUS \
-    MOUNTS \
-    IMAGE_NAME
