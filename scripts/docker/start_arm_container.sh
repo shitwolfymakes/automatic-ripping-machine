@@ -11,9 +11,9 @@ docker run -d \
     --name "arm-rippers" \
     ARM_UID \
     ARM_GID \
+    CPUS \
     --device="/dev/sr0:/dev/sr0" \
     --device="/dev/sr1:/dev/sr1" \
     --device="/dev/sr2:/dev/sr2" \
     --device="/dev/sr3:/dev/sr3" \
-    --cpus='3' \
     IMAGE_NAME
