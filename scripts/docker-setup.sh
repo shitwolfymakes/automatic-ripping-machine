@@ -126,7 +126,11 @@ function save_start_command() {
     	sed -i "/^.*ARM_GID.*$/d" start_arm_container.sh
     fi
 
-    # TODO: prompt num cpus to use (or auto-configure? How to print num cpu CORES)
+    # Automatically allocate all but one core to the ripper to make sure host can breathe
+    # shellcheck disable=SC2002
+    TOTAL_CORES=$(cat /proc/cpuinfo | grep "core id" | sort -u | wc -l)
+    sed -i "s|CPUS|--cpus=$((TOTAL_CORES - 1))|" start_arm_container.sh
+
     # TODO: Auto-add entries for each sr?
 }
 
