@@ -1,6 +1,6 @@
 # 04 — Data Model
 
-Postgres 16 is the source of truth. All durable state lives here. No SQLite fallback, no sidecar state stores.
+Postgres 18 is the source of truth. All durable state lives here. No SQLite fallback, no sidecar state stores.
 
 This document sketches the logical data model. Exact column types, indexes, and constraints land in the first Alembic migration — this is the shape, not the DDL.
 

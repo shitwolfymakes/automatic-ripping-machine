@@ -14,7 +14,7 @@ v3 is a **multi-container, Python-first** system built around a job/session stat
 | **Backend** | `arm-backend` | Long-running | FastAPI: job/session state machine, internet adapters, WS hub, spawns transcoders |
 | **Ripper** | `arm-ripper` | Long-running, one per drive | Bound to a single `/dev/sr*`; identifies disc, rips to `/raw`, reports to Backend |
 | **Transcode** | `arm-transcode` | Ad-hoc, one per transcode | Spawned by Backend; optional GPU pass-through; reports progress, exits |
-| **DB** | `postgres:16` | Long-running | Encrypted-at-rest Postgres; source of truth for all state |
+| **DB** | `postgres:18` | Long-running | Encrypted-at-rest Postgres; source of truth for all state |
 
 ## Documents
 

@@ -33,7 +33,7 @@ name: armv3   # compose project name; keeps container/volume names distinct from
 
 services:
   arm-db:
-    image: postgres:16
+    image: postgres:18
     container_name: armv3-db
     restart: unless-stopped
     environment:
