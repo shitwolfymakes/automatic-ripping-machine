@@ -67,7 +67,7 @@
 - **Notes:** SPA can be rebuilt and redeployed without touching Backend. Framework TBD between Vue and React — decide when the UI track starts.
 
 ### `arm-backend`
-- **Image:** custom, Python 3.12 + FastAPI + Uvicorn + docker-py.
+- **Image:** custom, Python 3.14 + FastAPI + Uvicorn + docker-py.
 - **Replicas:** 1. (Not horizontally scalable in v3.0 — it owns the WS hub and the state machine.)
 - **Inputs:** REST + WS from UI and rippers; Docker socket for spawning transcoders.
 - **Outputs:** Postgres writes; container spawns; outbound HTTPS to TMDB/OMDB/MB/notifications.
@@ -75,7 +75,7 @@
 - **Notes:** Requires `/var/run/docker.sock` mounted to spawn `arm-transcode` containers.
 
 ### `arm-ripper-<drive>`
-- **Image:** custom, Python 3.12 + MakeMKV + libdvdcss + abcde.
+- **Image:** custom, Python 3.14 + MakeMKV + libdvdcss + abcde.
 - **Replicas:** one per optical drive. Declared explicitly as separate services in `docker-compose.yml` — e.g. `arm-ripper-sr0`, `arm-ripper-sr1`.
 - **Inputs:** polled `ioctl(CDROM_DRIVE_STATUS)` on passed-through `/dev/sr*`; REST/WS config from Backend.
 - **Outputs:** raw media files under `/raw/<job-id>/`; REST status updates + WS progress to Backend.
@@ -83,7 +83,7 @@
 - **Notes:** Reads `ARM_DRIVE_DEV` env var on boot (e.g. `/dev/sr0`) and registers with Backend at startup. Never talks to the internet.
 
 ### `arm-transcode-<uuid>`
-- **Image:** custom, Python 3.12 + HandBrakeCLI + ffmpeg + optional VAAPI/NVENC/QSV drivers.
+- **Image:** custom, Python 3.14 + HandBrakeCLI + ffmpeg + optional VAAPI/NVENC/QSV drivers.
 - **Replicas:** zero at rest. Backend spawns one container per transcode job; the container exits when the job completes.
 - **Inputs:** transcode job spec via env / mounted config; raw files from `/raw` (read-only).
 - **Outputs:** transcoded files to `/media`; REST status + WS progress to Backend.
