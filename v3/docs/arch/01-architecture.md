@@ -50,7 +50,7 @@
     └─────────────────────────────────────────────────────────────────────┘
 
     ┌──────────────────────────────────────┐
-    │ arm-db   Postgres 18, at-rest enc.   │◀── all services read/write here
+    │ arm-db   Postgres 18                 │◀── all services read/write here
     └──────────────────────────────────────┘
 
   ◇ Notifications: typed events emit from Backend; dispatched via Apprise with native pass-through config (see 05-cross-cutting.md "Notifications").
@@ -91,7 +91,7 @@
 - **Notes:** Auto-detects available hardware encoders and advertises them to Backend on handshake. Backend flag `ARM_AUTO_TRANSCODE` toggles "spawn when idle" vs. "user must initiate."
 
 ### `arm-db`
-- **Image:** `postgres:18`. At-rest encryption is optional and user-owned (LUKS or ZFS native — not required by ARM).
+- **Image:** `postgres:18`.
 - **Replicas:** 1.
 - **Notes:** Bootstrap credentials come from env vars; all other config (TMDB key, Apprise URLs, etc.) lives in DB rows written through the UI, stored plaintext.
 

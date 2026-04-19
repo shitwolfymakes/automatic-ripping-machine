@@ -41,7 +41,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - armv3_db_data:/var/lib/postgresql/data   # optionally LUKS-backed — see "encryption at rest" below
+      - armv3_db_data:/var/lib/postgresql/data
 
   arm-backend:
     build: ./services/backend
@@ -97,7 +97,7 @@ volumes:
     driver: local
     driver_opts:
       type: none
-      device: /arm/db/postgres_v3   # path on host, see encryption-at-rest below
+      device: /arm/db/postgres_v3   # path on host
       o: bind
   armv3_raw:
   armv3_media:
@@ -142,14 +142,6 @@ environment:
 
 `.env` plus the committed `v3/docker-compose.yml` is the **only** thing that changes between deployments. Updates ship by pulling new images and running `docker compose up -d`; the compose file changes with the release and the user's `.env` is untouched.
 
-## Encryption at rest (optional, user-owned)
-
-ARM does not require or manage at-rest encryption. All data (including third-party API keys and Apprise URLs) is stored in plaintext in Postgres. This is a deliberate trade-off: losing a key-we-own can silently lock users out of their saved credentials, whereas a plaintext DB behind a private LAN is a threat the user already controls.
-
-Users who want encryption can mount `/arm/db/postgres_v3` onto a LUKS volume or a ZFS dataset with native encryption. Either works, neither is required, and ARM holds no keys.
-
-**Important consequence:** `pg_dump` output and on-disk Postgres files contain plaintext API keys and Apprise URLs. Back them up to locations you'd trust with a password manager export. If you're not sure, encrypt the backup file at rest.
-
 ## File ownership
 
 v3 uses the linuxserver.io-style `PUID`/`PGID` pattern to keep files on `/raw` and `/media` owned by a UID/GID the user controls — typically matching their media server (Plex/Jellyfin) so downstream consumers can read the files without any post-hoc `chown`.
@@ -190,7 +182,7 @@ No `privileged: true` anywhere. If a ripper ever needs it for a weird host, we d
 2. User runs `docker compose -f v3/docker-compose.yml up -d`.
 3. Backend starts, waits for Postgres, runs `alembic upgrade head`, seeds `admin` user with a random password that is printed to stdout + written to `/logs/first-boot.log`.
 4. User navigates to `http://host:8081`, logs in as `admin` with the printed password, is forced to change it.
-5. User enters third-party API keys in UI → stored encrypted in `config`.
+5. User enters third-party API keys in UI → stored in `config`.
 6. Rippers register themselves with Backend, appear in UI.
 7. User inserts a disc; flow proceeds as documented in [02-job-lifecycle.md](02-job-lifecycle.md).
 
@@ -215,5 +207,5 @@ Compose-level metadata (compose file itself) is in-repo, no backup required beyo
 ## Platform-specific notes
 
 - **Unraid**: Users can define the compose stack via the Compose Manager plugin. Drive pass-through works via device mappings. Put `arm_raw` / `arm_media` on the array; `arm_db_data` on an SSD cache.
-- **Synology**: Use Container Manager / Portainer. LUKS is not straightforward on DSM; users can rely on DSM's shared-folder encryption for the DB volume, or skip at-rest encryption entirely — ARM itself doesn't require it.
+- **Synology**: Use Container Manager / Portainer.
 - **Bare-metal**: The reference path. All docs default to this.

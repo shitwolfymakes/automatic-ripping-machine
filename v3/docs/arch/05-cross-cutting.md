@@ -115,9 +115,8 @@ Generated once by the install script (`openssl rand -hex 32`). No rotation cerem
 
 ## Secrets handling
 
-- Third-party API keys (TMDB, OMDB, MusicBrainz) and Apprise URLs are stored **plaintext** in the `config` table. See [04-data-model.md](04-data-model.md) "At-rest handling" for the rationale.
-- Consequence: DB dumps contain secrets. The deployment doc explicitly calls out that Postgres backups are sensitive files.
-- Users who want at-rest encryption can put the Postgres data directory on a LUKS volume or a ZFS dataset with native encryption. That layer is user-owned; ARM neither requires it nor holds the key.
+- Third-party API keys (TMDB, OMDB, MusicBrainz) and Apprise URLs are stored **plaintext** in the `config` table.
+- Consequence: DB dumps contain secrets. Treat Postgres backups as sensitive files.
 - No secrets are logged. Log lines that touch `config` rows MUST redact the API-key/URL fields — enforced by a structured-logging helper that knows which fields to drop.
 
 ## Logging

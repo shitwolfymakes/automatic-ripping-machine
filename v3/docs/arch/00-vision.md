@@ -39,7 +39,7 @@ The Ripper and Transcode containers **never talk to the internet**. All external
 
 ### 4. Postgres is the source of truth; stdout is the source of logs
 
-Durable state lives in Postgres. At-rest encryption is available but user-owned (LUKS or ZFS) — ARM does not hold any encryption keys, because losing an ARM-owned key would mean losing user data, which is a red line. Logs are structured JSON emitted to stdout and appended to a shared volume. We do not invent a third persistence mechanism for state, and we do not hide debug data behind a query language.
+Durable state lives in Postgres. Logs are structured JSON emitted to stdout and appended to a shared volume. We do not invent a third persistence mechanism for state, and we do not hide debug data behind a query language.
 
 ### 5. Crash-safe by default
 
