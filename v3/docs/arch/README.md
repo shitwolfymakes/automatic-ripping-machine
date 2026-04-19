@@ -41,5 +41,3 @@ Explicit non-goals for v3.0 — not features that are not done yet, but features
 ## Status
 
 This is a **first-draft architecture**, initially drawn up on 2026-04-18 and refined through a follow-up pass that resolved most of the first-draft open questions. A small set of decisions remain deliberately deferred (queue mechanism, frontend framework) — see [07-open-questions.md](07-open-questions.md).
-
-Disc fingerprinting was explored during scoping and spun out to a standalone spec at [../../../disk-fingerprinting-algorithm/](../../../disk-fingerprinting-algorithm/) — it is **not** part of v3.0 scope.
