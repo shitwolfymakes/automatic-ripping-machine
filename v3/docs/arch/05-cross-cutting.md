@@ -102,6 +102,8 @@ No YAML files. No mounted `/etc/arm/*.conf`. The v2 `arm.yaml` pattern is retire
 
 **Why JWT and not session cookies.** Homelab operators deploy ARM in ways we can't predict, including behind reverse proxies with public hostnames. Session cookies touch GDPR/CCPA consent law; Bearer-in-header / localStorage sidesteps it. The single-user scope also means cookie-specific wins (easy server-side revocation, HttpOnly XSS protection) don't buy much here.
 
+**Why argon2id and not bcrypt.** Argon2id is the 2015 Password Hashing Competition winner and the current OWASP recommendation. It is memory-hard — cost is tunable on three axes (time, memory, parallelism) instead of bcrypt's single rounds parameter — which forces an attacker to spend RAM per guess and neutralises the GPU/ASIC speedup bcrypt is vulnerable to. The `id` variant combines Argon2i's side-channel resistance with Argon2d's GPU resistance. Secondary wins: no 72-byte silent truncation (bcrypt's long-standing footgun), and the encoded hash embeds its parameters so cost can be raised later via transparent rehash-on-verify without a schema change. Implementation: `argon2-cffi`'s `PasswordHasher` with OWASP-default parameters (memory=19 MiB, iterations=2, parallelism=1); tune upward if login latency budget allows. bcrypt would not be *broken*, just a weaker default for something designed in 2026.
+
 The default-creds footgun that v2 has (ships with `admin`/`password` and does not force change) is closed by the random generated password.
 
 ### Service-to-service

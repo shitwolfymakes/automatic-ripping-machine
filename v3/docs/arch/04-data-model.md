@@ -19,7 +19,7 @@ One row per admin account. v3.0 has exactly one default user (`admin`) seeded on
 
 - `id` (ULID)
 - `username` (unique, citext)
-- `password_hash` (argon2id)
+- `password_hash` (argon2id — see [05-cross-cutting.md § Authentication model](05-cross-cutting.md#authentication-model) for rationale)
 - `password_must_change` (bool, default true for seeded admin)
 - `last_login_at`
 
