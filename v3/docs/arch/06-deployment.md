@@ -226,10 +226,11 @@ curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic
 
 **Idempotent rerun.** Re-running `install.sh` is safe and recommended when adding drives, upgrading across major versions, or recovering from local edits:
 
-- Existing `.env` is preserved. Only `PUID`/`PGID`/`CDROM_GID` are re-derived from the host and overwritten if they drifted.
-- Existing CA is preserved. `install.sh --rotate-ca` is a separate, explicit subcommand that regenerates the CA + all leaves (with a confirmation prompt — every client on the LAN needs to re-import the new `arm-ca.crt`).
-- Newly-detected drives pick up new leaf certs and new service blocks appended to the compose file.
-- Previously-removed drives leave their service blocks intact (inert when the device is absent) — the user explicitly deletes them if they want.
+- **Existing `.env` is preserved.** Only `PUID`/`PGID`/`CDROM_GID` are re-derived from the host and overwritten if they drifted.
+- **Existing CA is preserved.** The CA is the one cert LAN clients have imported into their trust stores; regenerating it would force every browser, phone, and laptop to re-import. `install.sh --rotate-ca` is a separate, explicit subcommand that regenerates the CA + all leaves (with a confirmation prompt — the nuclear option for suspected CA key compromise).
+- **All leaf certs are regenerated every run**, signed by the existing CA. Leaves are disposable — LAN clients trust the CA, not the specific leaf, so new leaves are invisible across the network. This self-heals hand-edited / corrupted / stale leaves and picks up SAN changes (e.g. host LAN hostname changed, new drive added) without any special flag or branching in the installer. Running containers keep their in-memory cert until restart; the `docker compose up -d` the user runs next cycles anything whose config changed.
+- **Newly-detected drives** get a new `arm-ripper-srN` service block appended to the compose file and a matching leaf cert.
+- **Previously-removed drives** leave their service blocks intact (inert when the device is absent) — the user explicitly deletes them if they want. Their leaf certs also get regenerated on rerun, which is harmless.
 
 **First-boot sequence** (after `docker compose up -d`):
 
