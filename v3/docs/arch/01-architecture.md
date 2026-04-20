@@ -151,4 +151,4 @@ The ripper reads disc presence directly via `ioctl(CDROM_DRIVE_STATUS)` on its b
 ## What's NOT in this diagram
 
 - **Queue / broker.** We considered DB-as-queue, Redis, NATS. The decision is deferred — the state machine is designed so the queue can be swapped in without reshaping services. See [07-open-questions.md](07-open-questions.md).
-- **Metadata worker.** Currently Backend does lookups inline. If this proves too slow or flaky it becomes a separate worker in a later version.
+- **Metadata worker.** Backend does TMDB/OMDB/MusicBrainz lookups inline. This stays inline for v3 — lookup latency is dominated by the MakeMKV scan anyway, and a separate worker is complexity without payoff at homelab scale.
