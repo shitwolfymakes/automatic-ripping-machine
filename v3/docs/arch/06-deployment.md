@@ -38,6 +38,15 @@ The install script (see "Install" below) drops everything under a single prefix,
 
 The user runs the stack from this directory: `cd ~/arm && docker compose up -d`. All bind-mounts in the generated compose are relative (`./certs/...`, `./raw`, etc.), so moving `~/arm/` to `/srv/arm/` or `/mnt/tank/arm/` is a matter of moving the directory — nothing is hard-coded to `$HOME`.
 
+## Build chain
+
+v3 images are built fresh on upstream bases. They do **not** derive from the v2 `arm-dependencies` image, do **not** pull from the `arm-dependencies` submodule, and do **not** inherit `phusion/baseimage`.
+
+- **No `arm-dependencies`.** That image existed to bake HandBrake / MakeMKV / libdvd-pkg on top of a shared phusion base for the v2 all-in-one container. v3 splits those workloads across separate images (only `arm-ripper` and `arm-transcode` need MakeMKV/HandBrake), so the shared dependency layer isn't shared enough to justify a submodule. The `arm-dependencies` submodule stays in the repo untouched through v3 development and is deleted in the cutover PR — see [08-v2-isolation-and-cutover.md](08-v2-isolation-and-cutover.md).
+- **No `phusion/baseimage` by default.** phusion was adopted in v2 to get multi-service supervision (`/sbin/my_init` + `/etc/service/` runit) inside one container. v3's topology is one long-running process per container (UI = nginx, Backend = uvicorn, Ripper = the drive poller, Transcode = HandBrake — all PID-1-appropriate), so the entire reason phusion was chosen no longer applies. Dropping it removes a stack of v2 friction: the UID-unsettable limitation and its UID/GID remap dance, the `start_udev.sh` "job control turned off" noise in every bug report, the ~1 GB base-image bloat, and the two-repo version-bump tax that the submodule coupling created. The concrete choice of replacement base image and PID-1 strategy (debian-slim + `tini`, `python:slim`, or another minimal target) is deliberately deferred — see [07-open-questions.md § OQ-3](07-open-questions.md).
+- **Each service has its own Dockerfile under `v3/services/<service>/Dockerfile`.** Shared Python code (schemas, clients) lives in `v3/packages/arm_common/` and is installed into each image by the build, not mounted at runtime — there is no v2-style `PYTHONPATH=/opt/arm` shim.
+- **Nothing compiles on the host.** The installer (see [§ Install](#install)) only pulls pinned images from `docker.io/automaticrippingmachine/`. Contributors building locally use `docker compose -f v3/docker-compose.yml build`; end users never do.
+
 ## Compose topology
 
 The generated `~/arm/docker-compose.yml` references pinned images from `docker.io/automaticrippingmachine/` and bind-mounts paths under its own directory. No `build:` directives; nothing is compiled on the host.
