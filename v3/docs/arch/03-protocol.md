@@ -11,13 +11,13 @@ All schemas are defined as Pydantic models in `packages/arm_common/schemas/` and
 
 ## Base URLs
 
-- Backend listens on port `8000` inside its container.
-- UI's nginx proxies `/api/*` and `/ws/*` to `http://arm-backend:8000`.
-- Rippers and Transcoders reach Backend at `http://arm-backend:8000` on the compose network.
+- Backend listens on port `8443` inside its container (TLS only; there is no plaintext port).
+- UI's nginx proxies `/api/*` and `/ws/*` to `https://arm-backend:8443`.
+- Rippers and Transcoders reach Backend at `https://arm-backend:8443` on the compose network, verifying the server cert against the internal CA mounted at `/etc/ssl/certs/arm-ca.pem`. See [05-cross-cutting.md § Transport (TLS)](05-cross-cutting.md#transport-tls).
 
 ## Authentication between services
 
-Internal services (Ripper, Transcode) authenticate with a **shared service token** passed as `Authorization: Bearer <token>`. The token is generated once at install time (`openssl rand -hex 32`), stored in `v3/.env`, and injected into Backend, Ripper, and Transcode containers via Compose as `ARM_SERVICE_TOKEN`. Every container reads it from its own environment; there is no DB copy.
+Internal services (Ripper, Transcode) authenticate with a **shared service token** passed as `Authorization: Bearer <token>`. The token is generated once at install time (`openssl rand -hex 32`), stored in `~/arm/.env`, and injected into Backend, Ripper, and Transcode containers via Compose as `ARM_SERVICE_TOKEN`. Every container reads it from its own environment; there is no DB copy.
 
 The UI authenticates as a logged-in user with a JWT in `Authorization: Bearer <jwt>` on REST and via a first-message `{"op": "auth", "token": "<jwt>"}` handshake on WS. See [05-cross-cutting.md](05-cross-cutting.md) for the full auth model.
 
@@ -82,7 +82,7 @@ The transcode container is short-lived and single-purpose. Its API surface is mi
 
 ## WebSocket channels
 
-There is one WS endpoint on Backend: `/ws`. After connecting, the client subscribes to named topics with `{op: "subscribe", topic: "…"}` messages. Topics are:
+There is one WS endpoint on Backend: `/ws`. After connecting, the client subscribes to named topics with `{op: "subscribe", topic: "…"}` messages. Auth, origin validation, per-topic authorization, and JWT-expiry handling are specified in [05-cross-cutting.md § WebSocket security](05-cross-cutting.md#websocket-security) — the topics below assume a principal that has already passed those checks. Topics are:
 
 | Topic | Direction | Producers | Consumers | Payload |
 |---|---|---|---|---|
@@ -92,6 +92,14 @@ There is one WS endpoint on Backend: `/ws`. After connecting, the client subscri
 | `transcode.events` | Backend → subscribers | Backend | UI | Typed events: `session.queued`, `session.started`, `session.completed`, `session.failed`, `task.started`, `task.completed`, `task.failed` |
 | `system.events` | Backend → subscribers | Backend | UI | Drive online/offline, backend restart, config change. |
 | `logs.{job_id}` | Backend → subscribers | Log collector in Backend | UI log viewer | Tails the per-job log stream. |
+| `ripper.commands.{drive_id}` | Backend → one ripper | Backend | The ripper registered on that `drive_id` | Typed commands to the owning ripper: `identify.resolved` (user-resolved identity delivered to a ripper parked in `awaiting_user_id`), `job.cancel`. Only the ripper whose hostname matches the drive's `hostname` may subscribe. |
+| `transcoder.commands.{task_id}` | Backend → one transcoder | Backend | The transcoder that claimed that task | Typed commands: `task.cancel`. Only the transcoder holding the claim may subscribe. |
+
+### UI session scope
+
+The UI's WS connection is session-scoped: opened after login, closed on logout or page unload. The UI MUST NOT keep a WS alive in a service worker or background tab — "tell me what happened while I wasn't watching" is Apprise's job, not the UI's. On page load the UI reads *current* state (job list, track statuses, etc.) from REST and then opens a WS for live updates going forward; there is no event replay, no catch-up from the `events` table, no "what did I miss." If the user cares about something that already happened, the REST-rendered state reflects it; if they needed to be told about it in real time, they already were — by Apprise.
+
+The ripper's WS producer side is indifferent to whether any UI is subscribed. It pushes progress regardless; Backend's fanout is a no-op when the subscriber set is empty. A user who logs in mid-rip sees the next progress tick immediately (~1s), no warm-up needed.
 
 ### Why WS for progress, REST for state transitions?
 

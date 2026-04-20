@@ -58,7 +58,7 @@ During development, v2 and v3 run side by side on the same host. They cannot col
 | Volume name prefix | `arm_*` | `armv3_*` |
 | Host port (UI) | 8080 | 8081 |
 | Host port (DB, if exposed) | 3306 (MySQL) | 5432 (Postgres) — different anyway |
-| Host path (DB data) | `/arm/db/mysql` | `/arm/db/postgres_v3` |
+| Host path (DB data) | `/arm/db/mysql` | `~/arm/db/` by default (see [06-deployment.md § Install prefix and layout](06-deployment.md#install-prefix-and-layout)) |
 | Default user | `1000:1000` | `1000:1000` (same host user is fine; paths are distinct) |
 
 The only shared resource is the **physical optical drive** (`/dev/sr0`). Both v2 and v3 compose files map it, but only one should be actively listening at a time. Stop v2's ripper service (or the whole v2 stack) before exercising v3 rips.
@@ -197,7 +197,7 @@ Users who want to stay on v2 pin their image to this tag. No existing v2 install
 We run the cutover PR only after v3 meets all of these:
 
 - All architecture decisions in this directory are either resolved or explicitly deferred with a known plug-in point (OQs from [07-open-questions.md](07-open-questions.md)).
-- A fresh-host install of v3 (from `v3/docker-compose.yml`) lands at the login screen, accepts a disc, and produces a transcoded file using the Big Buck Bunny ISO fixture.
+- A fresh-host install of v3 (via the install-script one-liner — see [06-deployment.md § Install](06-deployment.md#install)) lands at the login screen, accepts a disc, and produces a transcoded file using the Big Buck Bunny ISO fixture.
 - Crash-recovery exercise passes: five queued rips + simulated power cut mid-batch resumes cleanly without manual intervention.
 - At least one real Blu-ray, DVD, and audio CD rip have completed end-to-end on a contributor's machine.
 - `.github/workflows/v3-*.yml` CI passes on every targeted platform in the supported matrix.

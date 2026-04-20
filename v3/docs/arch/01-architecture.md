@@ -6,15 +6,15 @@
                               ┌───────────────────────┐
                               │   Browser (admin)     │
                               └──────────┬────────────┘
-                                         │  HTTPS (reverse proxy recommended, not required)
+                                         │  HTTPS / WSS (always; TLS terminates at arm-ui nginx)
                                          │
               ┌──────────────────────────▼──────────────────────────┐
               │                    arm-ui                            │
               │   nginx serving Vite-built SPA (Vue or React)        │
-              │   /api → proxy to arm-backend:8000                   │
-              │   /ws  → proxy to arm-backend:8000 (WebSocket)       │
+              │   /api → proxy to arm-backend:8443 (HTTPS)           │
+              │   /ws  → proxy to arm-backend:8443 (WSS)             │
               └──────────────────────────┬──────────────────────────┘
-                                         │  REST + WS
+                                         │  HTTPS + WSS (internal CA)
                                          │
     ┌────────────────────────────────────▼────────────────────────────────────┐
     │                               arm-backend                                │
@@ -33,7 +33,7 @@
     └──────┬────────────────────────┬────────────────────────┬────────────────┘
            │                        │                        │
            │                        │                        │ (ephemeral)
-           │ REST + WS              │ REST + WS              ▼
+           │ HTTPS + WSS            │ HTTPS + WSS            ▼
     ┌──────▼─────────┐       ┌──────▼─────────┐       ┌──────────────────┐
     │ arm-ripper-sr0 │       │ arm-ripper-sr1 │       │ arm-transcode-*  │
     │  Python        │       │  Python        │       │  Python wrapper  │
