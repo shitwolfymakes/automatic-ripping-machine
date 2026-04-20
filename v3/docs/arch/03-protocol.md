@@ -2,7 +2,7 @@
 
 Services communicate over two transports, and only two:
 
-- **REST (HTTP/1.1 or HTTP/2, JSON bodies)** for request/response: config fetches, state transitions, blocking lookups, CRUD.
+- **REST (HTTP/1.1, JSON bodies)** for request/response: config fetches, state transitions, blocking lookups, CRUD. HTTP/1.1 is sufficient — the call volume between services is low (config fetch, state transition, complete) and the multiplexing/header-compression wins of HTTP/2 don't pay for the operational complexity at this scale.
 - **WebSocket** for streaming: live progress, events, and async push from Backend to UI.
 
 Everything else (direct DB access between services, file-based IPC, shared memory) is explicitly out of scope. Workers never read other workers' state.
