@@ -204,7 +204,7 @@ The three top-level folder names (`Movies`, `TV Shows`, `Music`) are configurabl
 
 ### Filename templates: honest mechanical names
 
-The core design principle: **don't pretend to know what we don't know.** MakeMKV surfaces only a track layout (per-title durations, stream info) and the disc's volume label — no episode titles, no disc numbers, no "this is the main feature" signal; per-track names come back as generic `title_nn`. Title and year are resolved by the TMDB/OMDB lookup at identify time; disc number for multi-disc TV sets is user-supplied (volume labels occasionally encode it as a hint, but most don't, and TV box sets are the routine case where identify lands in `awaiting_user_id`). Defaults therefore generate mechanical names that the user can edit post-rip for scanner-perfect matching.
+The core design principle: **don't pretend to know what we don't know.** MakeMKV surfaces only a track layout (per-title durations, stream info) and the disc's volume label — no episode titles, no season or disc numbers, no "this is the main feature" signal; per-track names come back as generic `title_nn`. Title and year are resolved by the TMDB/OMDB lookup at identify time; **season and disc number for TV box sets are both user-supplied** (volume labels occasionally encode one or both as a hint — `WEST_WING_S03_D02` — but most don't, and TV box sets are the routine case where identify lands in `awaiting_user_id` waiting for the user to enter them). Defaults therefore generate mechanical names that the user can edit post-rip for scanner-perfect matching.
 
 **Movies** — relative path, prefixed by `Movies/` at write time:
 
@@ -237,8 +237,8 @@ Sessions own the relative path from the media-type root down to the leaf filenam
 | `{title}` | ✓ | — | — | identification |
 | `{year}` | ✓ | ✓ | — | identification |
 | `{show}` | — | ✓ | — | identification |
-| `{season}` | — | ✓ | — | identification (zero-padded) |
-| `{disc}` | — | ✓ | — | identification / user input (zero-padded) |
+| `{season}` | — | ✓ | — | identification / user input (zero-padded) — usually user input for box sets, since volume labels rarely encode it |
+| `{disc}` | — | ✓ | — | identification / user input (zero-padded) — same caveat as `{season}` |
 | `{track}` | ✓ | ✓ | ✓ | MakeMKV / CD track number (zero-padded) |
 | `{duration_human}` | ✓ | ✓ | — | MakeMKV (`{HH}h{MM}m`) |
 | `{artist}` | — | — | ✓ | MusicBrainz / CD-Text |
