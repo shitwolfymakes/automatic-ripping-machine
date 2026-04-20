@@ -50,12 +50,28 @@ services:
     image: postgres:18
     container_name: armv3-db
     restart: unless-stopped
+    # Entrypoint wrapper copies the bind-mounted leaf into a postgres-owned
+    # location with mode 0600. Postgres refuses ssl_key_file otherwise.
+    entrypoint:
+      - bash
+      - -c
+      - |
+        install -o postgres -g postgres -m 0600 /etc/ssl/arm/tls.key /tmp/pg.key
+        install -o postgres -g postgres -m 0644 /etc/ssl/arm/tls.crt /tmp/pg.crt
+        exec docker-entrypoint.sh postgres \
+          -c ssl=on \
+          -c ssl_cert_file=/tmp/pg.crt \
+          -c ssl_key_file=/tmp/pg.key \
+          -c ssl_ca_file=/etc/ssl/arm/arm-ca.crt
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - ./db:/var/lib/postgresql/data
+      - ./certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
+      - ./certs/arm-db.crt:/etc/ssl/arm/tls.crt:ro
+      - ./certs/arm-db.key:/etc/ssl/arm/tls.key:ro
 
   arm-backend:
     image: docker.io/automaticrippingmachine/arm-backend:v3.0.0
@@ -63,7 +79,7 @@ services:
     restart: unless-stopped
     depends_on: [arm-db]
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@arm-db:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@arm-db:5432/${POSTGRES_DB}?sslmode=verify-full&sslrootcert=/etc/ssl/arm/arm-ca.crt
       ARM_SERVICE_TOKEN: ${ARM_SERVICE_TOKEN}
       ARM_LOG_LEVEL: ${ARM_LOG_LEVEL:-info}
       PUID: ${PUID:-1000}
@@ -201,7 +217,7 @@ curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic
 1. **Prereq check.** `docker` ≥ 24, `docker compose` v2, `openssl` ≥ 1.1.1, `bash` ≥ 4. User is in the `docker` group (or `sudo` usable), and in the host's optical group. Fails fast with a clear message if anything is missing.
 2. **Create the install prefix** (`~/arm/` by default) with the layout shown above. Correct permissions on `certs/` (0700), `.env` (0600), and `raw`/`media` (2775 setgid). Run as the invoking user — no `sudo` needed if `~/arm/` is writable.
 3. **Generate the internal CA** at `~/arm/certs/arm-ca.{key,crt}` (EC P-384, 10-year expiry, CN = "ARM v3 Local CA"). The key is `0400`, stays on the host, and is never mounted into any container.
-4. **Probe for optical drives** via `ls /dev/sr* 2>/dev/null`; for each, generate a leaf cert (`arm-ripper-srN.{key,crt}`) signed by the CA. Also generate leaves for `arm-backend` and `arm-ui`. All leaves have a 10-year expiry.
+4. **Probe for optical drives** via `ls /dev/sr* 2>/dev/null`; for each, generate a leaf cert (`arm-ripper-srN.{key,crt}`) signed by the CA. Also generate leaves for `arm-backend`, `arm-ui`, and `arm-db`. All leaves have a 10-year expiry. Leaf keys are written `0400` owned by the invoking user; the `arm-db` container re-permissions its leaf at startup via an entrypoint wrapper (see the compose block above) because Postgres refuses to read an SSL key not owned by the `postgres` user.
 5. **Seed `~/arm/.env`** from a bundled template: `ARM_SERVICE_TOKEN` (`openssl rand -hex 32`), `POSTGRES_PASSWORD` (`openssl rand -hex 24`), `PUID=$(id -u)`, `PGID=$(id -g)`, `CDROM_GID=$(stat -c %g /dev/sr0)` (falls back to `44` if no drive is present). Third-party API keys are left blank for the user to fill via the UI later.
 6. **Generate `~/arm/docker-compose.yml`** from a bundled template, emitting one `arm-ripper-srN` service block per detected drive (with the corresponding cert mounts). If no drives are detected, the stack still installs — only the ripper services are omitted — and a warning is printed.
 7. **Print next steps.** Install location, `cd ~/arm && docker compose up -d`, where to find the admin password once Backend boots (`docker compose logs arm-backend | grep "admin password"`), and how to import `arm-ca.crt` into a browser/OS trust store to clear cert warnings on the LAN.
