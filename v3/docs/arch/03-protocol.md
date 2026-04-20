@@ -57,8 +57,8 @@ All UI routes are under `/api/`. The UI is the client; a logged-in admin is the 
 | `GET` | `/api/jobs/{job_id}` | Job detail with tracks. |
 | `POST` | `/api/jobs/{job_id}/resolve` | Resolve an `awaiting_user_id` job with a manual identification. |
 | `POST` | `/api/jobs/{job_id}/abandon` | Give up on a job and eject. |
-| `GET` | `/api/sessions` | List session templates + custom sessions. |
-| `POST` | `/api/sessions` | Create a session (from scratch or cloning a template). |
+| `GET` | `/api/sessions` | List sessions (built-in and user-authored). |
+| `POST` | `/api/sessions` | Create a session (from scratch or cloned from a built-in). |
 | `PATCH` | `/api/sessions/{id}` | Update a session. |
 | `DELETE` | `/api/sessions/{id}` | Delete a non-built-in session. |
 | `POST` | `/api/jobs/{job_id}/transcode` | Queue a session against a rip. Body: `{session_id, overrides?}`. |

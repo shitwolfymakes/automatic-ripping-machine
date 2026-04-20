@@ -4,13 +4,14 @@ Crash-safe batch ripping is a top-three reason v3 exists. This document spells o
 
 ## Entities
 
-Three long-lived entities drive the lifecycle:
+Four long-lived entities drive the lifecycle, plus one reusable template:
 
 - **Job** — one disc insertion. Created when a ripper identifies an inserted disc. Owns the overall rip outcome.
 - **Track** — one logical piece of a disc (one title on a DVD/BD, one song on a CD, one dump on a data disc). Created per track once identification succeeds. This is the **unit of checkpointing**.
-- **Session** — a transcode intent: "take these raw tracks and produce these outputs with this preset." Created by the user (or auto-created from a default session). Owns one or more **Transcode Tasks**.
+- **Session Application** — the durable record of "apply session S to job J." Created when a user (or `drives.default_session_id` auto-apply) queues a session against a rip. Carries its own state machine and owns the fan-out into **Transcode Tasks**.
+- **Transcode Task** — the unit of work a single `arm-transcode` container executes. One session application fans out to N tasks, one per track being transcoded.
 
-A fourth entity — **Transcode Task** — is the unit of work a single `arm-transcode` container executes. One session fans out to N transcode tasks, one per track being transcoded.
+**Session** is not itself a lifecycle entity. It is a named, reusable bundle of (rip preset, transcode preset, output path template) scoped to a media type. Users pick a session to apply to a rip; applying creates a Session Application. Full definition in [§ Session model details](#session-model-details).
 
 ## Job state machine
 
@@ -40,7 +41,7 @@ A fourth entity — **Transcode Task** — is the unit of work a single `arm-tra
              └──────────────┬─────────────────┘
                             ▼
                     (disc ejected, ripper idle)
-                    (downstream sessions may queue)
+                    (downstream session applications may queue)
 ```
 
 Terminal states for a `Job`: `ripped`, `ripped_partial`, `abandoned` (user gave up in UI), `failed` (identification failed catastrophically).
@@ -103,11 +104,11 @@ The UI surfaces this: any track that was re-queued after a stale-claim sweep is 
 - **Resume mid-track.** MakeMKV cannot resume a partial rip of one title. `in_progress → queued` means "re-rip that track from scratch." This is a deliberate accepted loss — the crash-resumability goal is batch-level, not byte-level.
 - **Protect against corrupt output.** A rip that crashed halfway may leave a truncated file in `/raw/<job_id>/`. The re-rip overwrites it.
 
-## Session & Transcode Task lifecycle
+## Session Application & Transcode Task lifecycle
 
-Sessions are user-intent; Transcode Tasks are execution. They have separate lifecycles.
+Session Applications are the runtime record of "apply this session to this job"; Transcode Tasks are the execution units that fan out from an application. They have separate lifecycles. (The Session itself is a template and has no runtime state — see [§ Session model details](#session-model-details).)
 
-### Session state machine
+### Session Application state machine
 
 ```
   ┌─────────┐    user queues or auto-queued    ┌────────────────────┐
@@ -133,7 +134,7 @@ Sessions are user-intent; Transcode Tasks are execution. They have separate life
                           └─────────┘        └─────────────┘      └─────────┘
 ```
 
-`waiting_identify` is the durable "this session is parked until you tell us what the disc is" state. See [§ Unidentified and placeholder rips](#unidentified-and-placeholder-rips) for when it's used and the transitions around it.
+`waiting_identify` is the durable "this session application is parked until you tell us what the disc is" state. See [§ Unidentified and placeholder rips](#unidentified-and-placeholder-rips) for when it's used and the transitions around it.
 
 ### Transcode task state machine
 

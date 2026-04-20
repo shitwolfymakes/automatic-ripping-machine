@@ -104,7 +104,7 @@
    - On miss: behavior depends on `config.block_on_miss`. Default (`true`): Backend returns `status: "needs_user_input"`, UI shows a prompt, ripper waits for resolution — disc stays in drive, rip does not start. Opt-in (`false`): ripper begins ripping immediately to `/raw/<job_id>/` (raw paths key on `job_id`, which is assigned pre-identify and never changes). Transcode is gated on identity: queued `session_applications` remain in `waiting_identify` until the user resolves identity, then fan out against the resolved title. No files are ever renamed or moved — the only path that could encode identity is the `/media` path, and nothing is written there until identity exists. A rip is **never** cancelled by miss-handling.
 4. **Rip.** Ripper creates one `Track` row per title and begins ripping. Each track's state transitions `queued → in_progress → done|failed`. Progress streams over WS.
 5. **Rip complete.** Ripper emits `rip.completed` event, ejects disc, returns to idle.
-6. **Auto-session (if configured).** If the Backend is configured with auto-sessions, it queues a transcode for each assigned default session.
+6. **Auto-session (if configured).** If the drive has a `default_session_id` set and auto-transcode is on, Backend queues a session application for that session against the new job.
 7. **Transcode spawn.** Backend dequeues a transcode job and spawns `arm-transcode-<uuid>` via Docker socket. Container mounts `/raw` read-only and `/media` read-write, receives job spec via env.
 8. **Transcode.** Worker runs HandBrake, streams progress over WS, writes output to `/media/<layout>/<title>`.
 9. **Transcode complete.** Worker emits `session.completed` event, container exits, Backend updates state, notifications fire.

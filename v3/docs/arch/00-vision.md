@@ -54,7 +54,7 @@ This is a greenfield rebuild. Any assumption inherited from v2 is open for revie
 v3.0 is ready when:
 
 - Five discs queued across two drives complete without manual intervention, including a simulated power-cut mid-batch that resumes cleanly.
-- A ripped disc can have a new transcode session queued from the UI months later without re-ripping.
+- A ripped disc can have a new session applied from the UI months later without re-ripping.
 - A single PR can change a protocol payload and its two endpoints (ripper side + backend side) atomically.
 - A bug-reporter can download one log file scoped to one job_id and attach it to a GitHub issue.
 - Fresh install on a new host lands at the login screen in under 5 minutes.
