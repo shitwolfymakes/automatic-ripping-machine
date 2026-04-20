@@ -61,8 +61,13 @@ One row per disc insertion the ripper detected (via its `ioctl(CDROM_DRIVE_STATU
 - `year` (int, nullable)
 - `metadata_json` (jsonb — full lookup result: artwork URLs, cast, synopsis)
 - `status` (enum: created | awaiting_user_id | identified | ripping | ripped | ripped_partial | abandoned | failed)
-- `resumed_from_crash` (bool, default false — set by stale-claim sweep)
+- `resumed_from_crash` (bool, default false — set by Backend-startup sweep or by `POST /api/ripper/jobs/{job_id}/resume`; cleared when the job next reaches a terminal state)
 - `started_at`, `ripped_at`
+
+Indexes:
+- `(status)` is the only one needed for the rip side — the Backend-startup sweep finds every job with `status='ripping'` and resets it (see [02-job-lifecycle.md § Crash recovery](02-job-lifecycle.md#crash-recovery-restart-the-rip-from-scratch)).
+
+No heartbeat columns and no track-level claim. With one ripper per drive, the ripper that creates the tracks is the only writer; tracks transition `queued → in_progress → done` directly with no contention. Crash detection happens at container-restart time, not via timeout — interrupted rips restart from scratch (the entire `/raw/<job_id>/` folder is wiped and every track requeued), so there is nothing to track-and-time-out at runtime.
 
 ### `tracks`
 The **checkpoint unit**. Every title on a DVD/BD or every song on a CD is a track row.
@@ -74,8 +79,6 @@ The **checkpoint unit**. Every title on a DVD/BD or every song on a CD is a trac
 - `source_ref` (text — MakeMKV title id / CD track number / etc.)
 - `expected_duration_seconds` (int, nullable)
 - `status` (enum: queued | in_progress | done | failed)
-- `claimed_by` (text, nullable — ripper container hostname)
-- `claim_heartbeat_at` (timestamptz, nullable)
 - `attempts` (int, default 0)
 - `output_path` (text, nullable — `/raw/<job_id>/<file>` once done)
 - `size_bytes` (bigint, nullable)
@@ -84,8 +87,9 @@ The **checkpoint unit**. Every title on a DVD/BD or every song on a CD is a trac
 - `last_error` (text, nullable)
 
 Indexes:
-- `(status, claim_heartbeat_at)` for the stale-claim sweep.
 - `(job_id)` for job detail views.
+
+No `claimed_by` / `claim_heartbeat_at` columns and no per-track recovery state. Interrupted rips restart from scratch — every track for the affected job is reset to `queued` and `/raw/<job_id>/` is wiped, triggered at container-restart time (see `jobs.resumed_from_crash` above and [02-job-lifecycle.md § Crash recovery](02-job-lifecycle.md#crash-recovery-restart-the-rip-from-scratch)). The transcoder side, in contrast, keeps explicit per-task claims (`transcode_tasks.claimed_by`, `transcode_tasks.claim_heartbeat_at`) because multiple ephemeral transcoder containers really do compete for queued tasks.
 
 ### `rip_presets`
 Controls ripper behavior: which tracks to rip, whether to identify, and what output form they take. Built-ins are seeded on first boot and are `is_builtin=true` (locked). Users create editable copies by cloning a built-in in the UI wizard (which pre-fills the form; no parent FK is stored).

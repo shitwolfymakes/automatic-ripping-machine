@@ -34,11 +34,12 @@ All ripper routes are under `/api/ripper/`. The Ripper is the client.
 | `POST` | `/api/ripper/identify` | Identify a disc. Body: `{drive_id, disc_type, volume_label, scan_result}` (scan_result is the MakeMKV scan output for DVD/BD, the MusicBrainz Disc ID for CD). Response: `{job_id, status: "identified"}` with metadata, or `{job_id, status: "needs_user_input"}`. This call **blocks** on the server side while external lookup runs (with a generous timeout). |
 | `GET` | `/api/ripper/jobs/{job_id}` | Poll job status (rarely needed; WS is preferred). |
 | `POST` | `/api/ripper/jobs/{job_id}/tracks` | Create track rows after identification succeeds. Body: list of track specs. |
-| `POST` | `/api/ripper/tracks/{track_id}/claim` | Claim a track before ripping. Returns 409 if already claimed. |
-| `PATCH` | `/api/ripper/tracks/{track_id}/heartbeat` | Heartbeat every 30s while ripping. Body: `{progress_pct, eta_seconds}`. |
+| `POST` | `/api/ripper/jobs/{job_id}/resume` | Ripper-initiated on container startup when its drive has an in-flight job in `status='ripping'`. Backend marks `resumed_from_crash=true`, resets every track for the job to `queued`, and increments each track's `attempts`. Ripper then wipes `/raw/<job_id>/` and re-runs MakeMKV from scratch — no per-track resume. See [02-job-lifecycle.md § Crash recovery](02-job-lifecycle.md#crash-recovery-restart-the-rip-from-scratch). |
 | `PATCH` | `/api/ripper/tracks/{track_id}/complete` | Mark track done. Body: `{output_path, sha256, size_bytes, duration_seconds}`. |
 | `PATCH` | `/api/ripper/tracks/{track_id}/fail` | Mark track failed. Body: `{error_code, error_message, retriable}`. |
 | `POST` | `/api/ripper/jobs/{job_id}/complete` | All tracks terminal; mark job done. |
+
+There is no ripper heartbeat endpoint. Live progress streams over WS (see "WebSocket channels" below); crash detection happens at container-restart time, not via timeout. State-transition calls (`complete`, `fail`, `complete-job`) retry until acknowledged.
 
 ### UI ↔ Backend
 
@@ -85,22 +86,24 @@ There is one WS endpoint on Backend: `/ws`. After connecting, the client subscri
 
 | Topic | Direction | Producers | Consumers | Payload |
 |---|---|---|---|---|
-| `ripper.progress.{job_id}` | Backend → subscribers | Rippers (via REST heartbeat, fanned out) | UI, other tooling | `{track_id, progress_pct, eta_seconds, updated_at}` |
+| `ripper.progress.{job_id}` | Backend → subscribers | Rippers (push directly over WS, fanned out) | UI, other tooling | `{track_id, progress_pct, eta_seconds, updated_at}` |
 | `ripper.events` | Backend → subscribers | Backend | UI | Typed events: `rip.started`, `rip.completed`, `rip.failed`, `rip.needs_user_input`, `rip.resumed_from_crash` |
 | `transcode.progress.{task_id}` | Backend → subscribers | Transcoders | UI | `{progress_pct, current_pass, eta_seconds}` |
 | `transcode.events` | Backend → subscribers | Backend | UI | Typed events: `session.queued`, `session.started`, `session.completed`, `session.failed`, `task.started`, `task.completed`, `task.failed` |
 | `system.events` | Backend → subscribers | Backend | UI | Drive online/offline, backend restart, config change. |
 | `logs.{job_id}` | Backend → subscribers | Log collector in Backend | UI log viewer | Tails the per-job log stream. |
 
-### Why REST-heartbeat + WS-fanout instead of WS-from-ripper?
+### Why WS for progress, REST for state transitions?
 
-A ripper could push heartbeats directly over WS. We chose REST for heartbeats because:
+Two different cost models, two different transports.
 
-1. Heartbeats are state transitions — they mutate `claim_heartbeat_at` in the DB. REST makes the authoritative write explicit.
-2. If the Backend restarts, rippers reconnect REST naturally on the next heartbeat tick. WS reconnect logic would be more code on the ripper side.
-3. A ripper's WS disconnect is already detected by the stale-claim sweep via absent heartbeats — we don't need a second signal.
+**State transitions are REST.** `complete`, `fail`, and `complete-job` *must* land — they're the source of truth for what's been ripped. REST gives us request/response acknowledgement, retry-until-acked semantics on the client, and a clean failure mode (HTTP error code) when something goes wrong. Idempotency keys handle the at-least-once retry case.
 
-Progress broadcasts to the UI are cheap to fan out from the REST heartbeat into the WS channel on the Backend side.
+**Progress is WS push from the ripper.** Live progress (`{track_id, progress_pct, eta_seconds}`) is fire-and-forget telemetry — losing a tick during a Backend restart is invisible to the user; the next tick replaces it. WS amortizes per-message overhead across the rip, no HTTP handshake per heartbeat tick. The same connection delivers identify-resolution events back to the ripper, so we get one durable connection instead of one + polling.
+
+**No heartbeat at all.** Crash detection is handled at container-restart time (Backend-startup sweep + ripper-startup probe — see [02-job-lifecycle.md § Crash recovery](02-job-lifecycle.md#crash-recovery-restart-the-rip-from-scratch)), not via timeout-based liveness pings. WS protocol-layer ping/pong keeps the connection alive; nothing more is needed.
+
+The transcoder still uses REST + claim/heartbeat (see `/api/transcoder/tasks/{task_id}/heartbeat` below) because multiple ephemeral transcoders compete for queued tasks, which actually requires per-task liveness tracking — a different problem from the one-ripper-per-drive case.
 
 ## Event payload shape
 

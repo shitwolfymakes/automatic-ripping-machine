@@ -46,63 +46,59 @@ Four long-lived entities drive the lifecycle, plus one reusable template:
 
 Terminal states for a `Job`: `ripped`, `ripped_partial`, `abandoned` (user gave up in UI), `failed` (identification failed catastrophically).
 
-## Track state machine (the one that matters for recovery)
+## Track state machine
 
-Every track is a row with a status column. Checkpointing happens by writing to this row, not by writing checkpoint files on disk.
+Every track is a row with a status column. Within a single rip, tracks move through this machine sequentially as the ripper works:
 
 ```
-    ┌────────┐   ripper claims it        ┌─────────────┐
+    ┌────────┐                           ┌─────────────┐
     │ queued │ ────────────────────────▶ │ in_progress │
     └────────┘                           └──────┬──────┘
                                                 │
-                      ┌─────────────────────────┼─────────────────────────┐
-                      │                         │                         │
-                      ▼                         ▼                         ▼
-                  ┌──────┐                  ┌──────┐                  ┌──────┐
-                  │ done │                  │failed│                  │stale │◀─── detected on startup
-                  └──────┘                  └──────┘                  └──┬───┘
-                                                                         │
-                                                                         ▼
-                                                                    ┌────────┐
-                                                                    │ queued │ (re-enqueued)
-                                                                    └────────┘
+                                ┌───────────────┴───────────────┐
+                                ▼                               ▼
+                            ┌──────┐                        ┌──────┐
+                            │ done │                        │failed│
+                            └──────┘                        └──────┘
 ```
+
+There is no `stale` state and no per-track claim. With one ripper container per drive (see [01-architecture.md](01-architecture.md)), the ripper that creates the tracks is the only writer for the lifetime of the disc — no other process can race for them.
 
 A `Track` carries these fields relevant to recovery:
 - `status` — one of the states above.
-- `claimed_by` — container id (or hostname) of the ripper currently working on it.
-- `claim_heartbeat_at` — last time the ripper pinged "still alive."
-- `attempts` — how many times this track has been tried. Used to cap retries.
+- `attempts` — how many times this track has been tried (incremented on a job-level reset; see below).
 
-## Crash recovery: the "stale claim" rule
+## Crash recovery: restart the rip from scratch
 
-On Backend startup, a one-shot sweep runs this query (semantically):
+A rip is interrupted only by something that takes the whole ripper process down — overwhelmingly that means a power outage or a host reboot. Backend-only restarts don't interrupt rips (the ripper keeps working and replays its state-transition REST calls when Backend comes back); ripper-only crashes are rare in practice (single-purpose container, Docker restart policy brings it back in seconds).
 
-```sql
-UPDATE tracks
-   SET status = 'queued',
-       claimed_by = NULL,
-       claim_heartbeat_at = NULL,
-       attempts = attempts + 1
- WHERE status = 'in_progress'
-   AND (claim_heartbeat_at IS NULL
-        OR claim_heartbeat_at < NOW() - INTERVAL '2 minutes');
-```
+When an interruption does happen, **the entire rip restarts from scratch**: every track for that job is reset to `queued`, the `/raw/<job_id>/` folder is wiped, the ripper re-runs MakeMKV against the disc, and previously-"done" tracks are re-ripped. There is no per-track resume.
 
-Every ripper pings `PATCH /api/tracks/{id}/heartbeat` every 30 seconds while it holds a claim. If heartbeats stop (container died, host powered off, network partition), the next Backend startup re-queues the track. If the Backend itself died but rippers were still alive, the rippers continue their current track; on Backend restart, live heartbeats keep those claims intact.
+Why no resume of done tracks? Three reasons:
 
-The UI surfaces this: any track that was re-queued after a stale-claim sweep is marked "resumed from crash" until it next reaches a terminal state, and the job carries a "resumed" banner.
+1. **MakeMKV can't resume a partial title** — that boundary already forced re-ripping the in-progress one.
+2. **Filesystem durability is not guaranteed track-by-track.** A "done" file recorded in the DB may not have hit disk before the power cut (no per-track `fsync`). Trusting it would risk silent corruption in the library.
+3. **The cost is small in practice.** Interruptions are rare. Re-ripping a few done tracks on a once-in-a-blue-moon power cut is cheaper than carrying the durability machinery to make partial state trustworthy.
+
+Two recovery paths trigger the reset:
+
+- **Backend-startup sweep (one-shot, no timeout).** On boot, before serving traffic, Backend finds every job with `status='ripping'` — by definition all such jobs were interrupted, since Backend was just down — sets `resumed_from_crash=true`, resets every track for those jobs to `queued`, increments each track's `attempts`, and instructs the relevant rippers to wipe `/raw/<job_id>/` before re-rip.
+- **Ripper-startup probe.** When a ripper container starts, it polls its drive (`ioctl(CDROM_DRIVE_STATUS)`); if a disc is present and Backend reports an in-flight job for the drive in `status='ripping'`, the ripper calls `POST /api/ripper/jobs/{job_id}/resume`. Backend performs the same reset (mark resumed, requeue all tracks, increment attempts) and the ripper wipes `/raw/<job_id>/` and starts over.
+
+Both paths converge on the same DB transition; the difference is who initiates it (Backend on its own boot, or the ripper on its boot when Backend was up the whole time).
+
+The UI marks a job "resumed from crash" until its next terminal state.
 
 ### What this buys us
 
-- **Power cut mid-batch.** All `in_progress` tracks go back to `queued`. Rippers restart, claim, finish. Already-`done` tracks are never re-ripped.
-- **One ripper crashes, others keep working.** Only the dead ripper's claims go stale; everything else continues.
-- **Backend crashes, rippers keep going.** Rippers retry REST calls with exponential backoff (1s, 2s, 4s, 8s, 30s cap) — sibling containers on a Compose network don't partition, so realistic outages are a Backend restart of a few seconds. WS progress is fire-and-forget; if a heartbeat tick lands during the outage it's dropped, the next one replaces it. State-transition REST calls (`complete`, `fail`) retry until acknowledged. The DB row is still source of truth.
+- **Power cut mid-batch.** Every interrupted job is found by the Backend-startup sweep and restarted from scratch. No per-track timeouts to wait out, no orphan claims to clean up.
+- **Ripper container crashes alone.** Docker restart brings it back; the ripper-startup probe handles the reset. Backend was never down so its in-memory WS subscribers reconnect naturally.
+- **Backend crashes, rippers keep ripping.** Nothing to recover. Rippers buffer state-transition REST calls (`complete`, `fail`, `job-complete`) with exponential backoff (1s, 2s, 4s, 8s, 30s cap) until Backend is back. WS progress messages dropped during the outage are simply not delivered; the next message replaces them. The DB row is still source of truth.
 
 ### What this does NOT do
 
-- **Resume mid-track.** MakeMKV cannot resume a partial rip of one title. `in_progress → queued` means "re-rip that track from scratch." This is a deliberate accepted loss — the crash-resumability goal is batch-level, not byte-level.
-- **Protect against corrupt output.** A rip that crashed halfway may leave a truncated file in `/raw/<job_id>/`. The re-rip overwrites it.
+- **Resume mid-track or mid-job.** Interruption means full restart of the rip — every track, including ones the DB says were `done`. Accepted by design (see reasons above).
+- **Detect a hung-but-not-crashed ripper.** If MakeMKV wedges without the container exiting, no automatic detection. The user sees flat progress in the UI and restarts the ripper container manually, which triggers the ripper-startup probe.
 
 ## Session Application & Transcode Task lifecycle
 
@@ -138,13 +134,15 @@ Session Applications are the runtime record of "apply this session to this job";
 
 ### Transcode task state machine
 
-Identical in shape to the Track state machine: `queued → in_progress → (done|failed|stale)`, with heartbeats. The stale-claim rule also applies, though in practice HandBrake cannot resume mid-transcode either, so `stale → queued` means "re-transcode from scratch."
+`queued → in_progress → (done | failed | stale)`, with per-task claims and heartbeats — see `transcode_tasks.claimed_by` / `claim_heartbeat_at` in [04-data-model.md](04-data-model.md#transcode_tasks). Unlike the rip side, multiple ephemeral transcoder containers really do compete for queued tasks, so the claim mechanism is load-bearing here. The stale-claim sweep applies; HandBrake can't resume mid-transcode either, so `stale → queued` means "re-transcode that file from scratch" — but already-`done` sibling tasks in the same session application keep their output.
 
-## Why track-level (not job-level) checkpointing
+## Why rip-level restart but task-level checkpointing for transcode
 
-A single Blu-ray can take 45 minutes to rip. A batch of five BDs can take 4 hours. Losing progress to job-level checkpointing would force the user to manually identify and restart every partially-completed disc. Track-level granularity is the smallest unit that matches the natural retry boundary of the underlying tools (MakeMKV rips one title at a time; HandBrake transcodes one file at a time).
+Two different cost models drove two different choices.
 
-Byte-level checkpointing — resuming MakeMKV mid-title — would require tool cooperation we don't have. Track-level is the right floor.
+**Rip side: whole-job restart on interruption.** Crash recovery for a rip means re-running MakeMKV against the disc and overwriting `/raw/<job_id>/`. We accept re-ripping done tracks because (a) MakeMKV has no mid-title resume, so the in-progress track is already a re-rip; (b) "done" in the DB doesn't guarantee the file is durable on disk without a per-track `fsync` we don't issue; and (c) interruptions are rare — a power outage every few months that costs an extra 30 minutes of re-ripping is cheaper than the machinery to make per-track resume safe.
+
+**Transcode side: per-task checkpointing.** A session application can fan out into many transcode tasks (one per ripped track), and a 4-hour batch transcode losing all progress on a Backend restart is a different cost than a 45-minute rip losing progress on a power cut. Transcode tasks have stable inputs (the raw files in `/raw/`, which don't change), no spinning physical media to babysit, and run in ephemeral containers that come and go anyway — so they're a natural fit for claim-and-heartbeat with per-task retry. Done tasks are kept; only the interrupted ones re-run.
 
 ## Session model details
 
