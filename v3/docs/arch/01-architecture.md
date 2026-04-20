@@ -110,6 +110,28 @@
 9. **Transcode complete.** Worker emits `session.completed` event, container exits, Backend updates state, notifications fire.
 10. **Done.** Raw is retained by default (no auto-prune). User can queue additional sessions from UI at any time.
 
+## Drive polling (`CDROM_DRIVE_STATUS`)
+
+The ripper reads disc presence directly via `ioctl(CDROM_DRIVE_STATUS)` on its bound `/dev/sr*`. This is the same ioctl `udev`'s `cdrom_id` helper uses to emit `ID_CDROM_MEDIA` events — we are not inventing a mechanism, just cutting out the event router so the ripper works inside a container without host-side udev config.
+
+**Mechanics.** Open `/dev/sr*` with `O_RDONLY | O_NONBLOCK` (so `open()` does not block on an empty or open tray), call the ioctl, close. It's a controller query — no disc I/O, no spin-up, cheap to run every 2s. No root required; the ripper user needs membership in `cdrom`.
+
+**Return values** (from `<linux/cdrom.h>`):
+
+| Value | Constant | Meaning |
+|---|---|---|
+| 0 | `CDS_NO_INFO` | Drive does not report status (rare on modern hardware) |
+| 1 | `CDS_NO_DISC` | Tray closed, empty |
+| 2 | `CDS_TRAY_OPEN` | Tray out |
+| 3 | `CDS_DRIVE_NOT_READY` | Spinning up / reading TOC |
+| 4 | `CDS_DISC_OK` | Ready to read |
+
+**Insert transition.** `NO_DISC` or `TRAY_OPEN` → `DRIVE_NOT_READY` (1–5s while the drive reads TOC) → `DISC_OK`. `DRIVE_NOT_READY` is treated as "keep polling," not an error.
+
+**During an active rip.** Polling is suspended once MakeMKV starts reading the disc. The drive is being actively read, and the signal that matters — "did a read fail?" — bubbles up through MakeMKV directly. A user-initiated mid-rip eject manifests as a read error, not a status transition we need to race for. This also forecloses a v2-era failure mode (see issue #1731, PR #1703) where multiple insert events spawned duplicate rip processes on the same `/dev/sr*`: with one long-running ripper owning the drive and polling gated on rip state, a second rip cannot start on a disc that is already being read.
+
+**After rip completion.** Ripper auto-ejects, polling resumes, and the ripper waits for `TRAY_OPEN` → `NO_DISC` → `DISC_OK` to detect the next disc. No state is held between discs — each `DISC_OK` transition allocates a fresh `job_id`.
+
 ## Shared volumes
 
 | Volume | Mount path | Writers | Readers | Notes |
