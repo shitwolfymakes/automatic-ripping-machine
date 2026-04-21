@@ -1,0 +1,80 @@
+name: armv3
+
+services:
+  arm-db:
+    image: postgres:18
+    container_name: armv3-db
+    restart: unless-stopped
+    entrypoint:
+      - bash
+      - -c
+      - |
+        install -o postgres -g postgres -m 0600 /etc/ssl/arm/tls.key /tmp/pg.key
+        install -o postgres -g postgres -m 0644 /etc/ssl/arm/tls.crt /tmp/pg.crt
+        exec docker-entrypoint.sh postgres \
+          -c ssl=on \
+          -c ssl_cert_file=/tmp/pg.crt \
+          -c ssl_key_file=/tmp/pg.key \
+          -c ssl_ca_file=/etc/ssl/arm/arm-ca.crt
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - ./db:/var/lib/postgresql
+      - ./certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
+      - ./certs/arm-db.crt:/etc/ssl/arm/tls.crt:ro
+      - ./certs/arm-db.key:/etc/ssl/arm/tls.key:ro
+
+  arm-backend:
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
+    container_name: armv3-backend
+    restart: unless-stopped
+    depends_on:
+      - arm-db
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@arm-db:5432/${POSTGRES_DB}?sslmode=verify-full&sslrootcert=/etc/ssl/arm/arm-ca.crt
+      ARM_SERVICE_TOKEN: ${ARM_SERVICE_TOKEN}
+      ARM_LOG_LEVEL: ${ARM_LOG_LEVEL:-info}
+      TLS_CERT_PATH: /etc/ssl/arm/tls.crt
+      TLS_KEY_PATH: /etc/ssl/arm/tls.key
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+    volumes:
+      - ./logs:/logs
+      - ./certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
+      - ./certs/arm-backend.crt:/etc/ssl/arm/tls.crt:ro
+      - ./certs/arm-backend.key:/etc/ssl/arm/tls.key:ro
+    # Uncomment to reach Backend directly from the host for verification curl:
+    # ports:
+    #   - "8443:8443"
+
+  arm-ripper-sr0:
+    build:
+      context: .
+      dockerfile: services/ripper/Dockerfile
+    container_name: armv3-ripper-sr0
+    hostname: arm-ripper-sr0
+    restart: unless-stopped
+    depends_on:
+      - arm-backend
+    devices:
+      - "/dev/sr0:/dev/sr0"
+    group_add:
+      - "${CDROM_GID:-44}"
+    environment:
+      ARM_DRIVE_DEV: /dev/sr0
+      ARM_BACKEND_URL: https://arm-backend:8443
+      ARM_SERVICE_TOKEN: ${ARM_SERVICE_TOKEN}
+      ARM_LOG_LEVEL: ${ARM_LOG_LEVEL:-info}
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      CDROM_GID: ${CDROM_GID:-44}
+    volumes:
+      - ./raw:/raw
+      - ./logs:/logs
+      - ./certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
+      - ./certs/arm-ripper-sr0.crt:/etc/ssl/arm/tls.crt:ro
+      - ./certs/arm-ripper-sr0.key:/etc/ssl/arm/tls.key:ro

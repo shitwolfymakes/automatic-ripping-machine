@@ -1,0 +1,13 @@
+[tool.uv.workspace]
+members = [
+    "packages/arm_common",
+    "services/backend",
+    "services/ripper",
+]
+
+[tool.uv.sources]
+arm_common = { workspace = true }
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
