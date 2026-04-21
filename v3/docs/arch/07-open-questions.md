@@ -51,7 +51,7 @@ v3 abandons the premise. The ripper is one container per drive, and disc detecti
 **Candidates to weigh when the first Dockerfile lands:**
 
 - **`debian:stable-slim` + `tini`.** Minimum that does the job. `tini` is Docker's built-in `--init` in library form; enough for zombie-reaping short-lived subprocesses (`makemkvcon`, `HandBrakeCLI`). No multi-service init layer. This is the default bias.
-- **`python:3.12-slim`** for Python-heavy services (Backend, Ripper) to avoid reinstalling CPython on top of `debian-slim`. Same PID-1 story, one fewer apt step.
+- **`python:slim`** (current stable tag — 3.13 or 3.14 at decision time) for Python-heavy services (Backend, Ripper) to avoid reinstalling CPython on top of `debian-slim`. Same PID-1 story, one fewer apt step. Pin the minor version explicitly at the Dockerfile PR; don't track `:slim` unpinned.
 - **`nginx:alpine`** (or distroless nginx) for the UI, which only serves a built SPA — nothing Python-shaped runs in that container at all.
 - **`lscr.io/linuxserver/*` bases** — brings a mature PUID/PGID entrypoint for free, at the cost of pulling in their whole s6-overlay worldview. Worth benchmarking against a hand-rolled `gosu`-based entrypoint on `debian-slim`; probably not worth the foreign abstraction if our entrypoint is ~20 lines.
 - **`phusion/baseimage` (status quo).** Not ruled out, but needs a concrete reason to be picked — the multi-process justification is gone.
