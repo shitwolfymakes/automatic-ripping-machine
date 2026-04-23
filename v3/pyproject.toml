@@ -8,6 +8,29 @@ members = [
 [tool.uv.sources]
 arm_common = { workspace = true }
 
+[dependency-groups]
+dev = [
+    "mypy>=1.13",
+    "pre-commit>=4.0",
+]
+
 [tool.ruff]
 line-length = 120
 target-version = "py314"
+
+[tool.mypy]
+python_version = "3.14"
+mypy_path = "packages/arm_common:services/backend:services/ripper"
+exclude = [
+    "\\.venv/.*",
+    "migrations/.*",
+    "build/.*",
+]
+namespace_packages = true
+explicit_package_bases = true
+strict = true
+# Unreachable blocks have been an issue when compiling mypyc, let's try to avoid 'em in the first place.
+warn_unreachable = true
+implicit_reexport = true
+show_error_codes = true
+show_column_numbers = true
