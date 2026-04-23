@@ -18,20 +18,14 @@ class Event(SQLModel, table=True):
     id: str = Field(default_factory=_event_id, primary_key=True)
     event_type: str = Field(sa_column=Column(String, nullable=False, index=True))
     emitted_at: datetime | None = Field(
-        sa_column=Column(
-            DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
-        )
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
     )
     job_id: str | None = Field(
         sa_column=Column(String, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=True, index=True)
     )
-    track_id: str | None = Field(
-        sa_column=Column(String, ForeignKey("tracks.id", ondelete="CASCADE"), nullable=True)
-    )
+    track_id: str | None = Field(sa_column=Column(String, ForeignKey("tracks.id", ondelete="CASCADE"), nullable=True))
     session_application_id: str | None = Field(
-        sa_column=Column(
-            String, ForeignKey("session_applications.id", ondelete="CASCADE"), nullable=True
-        )
+        sa_column=Column(String, ForeignKey("session_applications.id", ondelete="CASCADE"), nullable=True)
     )
     payload_json: dict[str, Any] = Field(
         default_factory=dict,

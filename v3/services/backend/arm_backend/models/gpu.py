@@ -22,16 +22,10 @@ class Gpu(SQLModel, table=True):
         default_factory=list,
         sa_column=Column(ARRAY(String), nullable=False, server_default="{}"),
     )
-    status: GpuStatus = Field(
-        sa_column=enum_column(GpuStatus, "gpu_status", server_default=GpuStatus.AVAILABLE.value)
-    )
+    status: GpuStatus = Field(sa_column=enum_column(GpuStatus, "gpu_status", server_default=GpuStatus.AVAILABLE.value))
     claimed_by_task_id: str | None = Field(
-        sa_column=Column(
-            String, ForeignKey("transcode_tasks.id", ondelete="SET NULL"), nullable=True
-        )
+        sa_column=Column(String, ForeignKey("transcode_tasks.id", ondelete="SET NULL"), nullable=True)
     )
-    last_seen_at: datetime | None = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=True)
-    )
+    last_seen_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
     created_at: datetime | None = Field(sa_column=created_at_column())
     updated_at: datetime | None = Field(sa_column=updated_at_column())

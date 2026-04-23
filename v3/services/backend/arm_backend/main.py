@@ -1,5 +1,6 @@
 import logging
 import subprocess
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -37,7 +38,7 @@ async def _run_seeders() -> None:
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     _run_migrations()
     await _run_seeders()
     yield

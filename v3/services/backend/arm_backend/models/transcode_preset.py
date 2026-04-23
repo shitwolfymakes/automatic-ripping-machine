@@ -19,20 +19,12 @@ class TranscodePreset(SQLModel, table=True):
     id: str = Field(default_factory=_transcode_preset_id, primary_key=True)
     name: str = Field(sa_column=Column(String, nullable=False))
     media_type: MediaType = Field(sa_column=enum_column(MediaType, "media_type"))
-    is_builtin: bool = Field(
-        sa_column=Column(Boolean, nullable=False, server_default="false")
-    )
+    is_builtin: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
     tool: TranscodeTool = Field(sa_column=enum_column(TranscodeTool, "transcode_tool"))
     preset_ref: str | None = Field(default=None)
-    preset_json: dict[str, Any] | None = Field(
-        default=None, sa_column=Column(JSONB, nullable=True)
-    )
-    container: ContainerFormat = Field(
-        sa_column=enum_column(ContainerFormat, "container_format")
-    )
-    hw_preference: HwPreference | None = Field(
-        sa_column=enum_column(HwPreference, "hw_preference", nullable=True)
-    )
+    preset_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
+    container: ContainerFormat = Field(sa_column=enum_column(ContainerFormat, "container_format"))
+    hw_preference: HwPreference | None = Field(sa_column=enum_column(HwPreference, "hw_preference", nullable=True))
     extra_args: str | None = Field(default=None)
     created_by_user_id: str | None = Field(
         sa_column=Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
