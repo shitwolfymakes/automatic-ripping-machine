@@ -15,6 +15,14 @@ Start here for v3:
 
 **The rest of this file describes v2 as it exists today and is retained as reference for anyone spelunking in the legacy code.** None of it applies to work under `v3/` — that subtree has its own compose, its own tooling, and its own docs.
 
+## Project memory (read this at session start)
+
+Claude-specific memory for this repo is tracked in source control at [.claude/memory/](.claude/memory/). This is authoritative for this project and overrides the default guidance in `~/.claude/CLAUDE.md` that points at `~/.claude/projects/<slug>/memory/` — the per-user path is not used here, so every device and every teammate sees the same memory.
+
+At the start of every session touching this repo, `Read` [.claude/memory/MEMORY.md](.claude/memory/MEMORY.md) — it's a short index (one line per entry). Read individual entries on demand when their hook is relevant to the task at hand.
+
+When saving a new memory, write the file into `.claude/memory/` and update `MEMORY.md` there; commit both alongside the related code change.
+
 ---
 
 ## Historical: v2 state (frozen reference)
