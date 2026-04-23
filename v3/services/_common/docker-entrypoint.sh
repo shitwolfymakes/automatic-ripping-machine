@@ -22,10 +22,12 @@ else
 fi
 
 if [[ -n "${CDROM_GID:-}" ]]; then
-    if ! getent group cdrom-host >/dev/null; then
-        groupadd --gid "${CDROM_GID}" cdrom-host || true
+    cdrom_group="$(getent group "${CDROM_GID}" | cut -d: -f1)"
+    if [[ -z "${cdrom_group}" ]]; then
+        groupadd --gid "${CDROM_GID}" cdrom-host
+        cdrom_group="cdrom-host"
     fi
-    usermod --append --groups cdrom-host arm || true
+    usermod --append --groups "${cdrom_group}" arm
 fi
 
 for d in /logs /raw /media; do
