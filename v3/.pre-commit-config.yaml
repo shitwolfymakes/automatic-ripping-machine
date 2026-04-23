@@ -1,0 +1,36 @@
+# Pre-commit hooks for ARM v3. v2 is frozen, so every hook is scoped to ^v3/.
+#
+# Install once:  uv run --project v3 pre-commit install --config v3/.pre-commit-config.yaml
+# Run manually:  uv run --project v3 pre-commit run --config v3/.pre-commit-config.yaml --all-files
+# Bump pins:     uv run --project v3 pre-commit autoupdate --config v3/.pre-commit-config.yaml
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.11
+    hooks:
+      - id: ruff-format
+        files: ^v3/
+      - id: ruff
+        files: ^v3/
+        args: [--fix]
+
+  # mypy runs as a local hook against the uv-synced venv so it sees the real
+  # workspace dependencies (fastapi, sqlmodel, pydantic, …) instead of a pinned
+  # subset maintained in additional_dependencies.
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: uv run --project v3 mypy
+        language: system
+        pass_filenames: false
+        args:
+          - --config-file=v3/pyproject.toml
+          - -p
+          - arm_common
+          - -p
+          - arm_backend
+          - -p
+          - arm_ripper
+        files: ^v3/
+        types: [python]

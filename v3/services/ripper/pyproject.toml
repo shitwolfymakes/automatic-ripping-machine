@@ -16,5 +16,8 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["arm_ripper"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"arm_ripper/py.typed" = "arm_ripper/py.typed"
+
 [tool.uv.sources]
 arm_common = { workspace = true }
