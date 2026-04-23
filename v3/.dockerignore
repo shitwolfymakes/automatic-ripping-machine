@@ -18,6 +18,15 @@ raw/
 media/
 logs/
 
+# Stray key/cert material — defense in depth. No v3 image bakes certs in;
+# they are always bind-mounted at runtime. See docs/arch/06-deployment.md.
+**/*.key
+**/*.pem
+**/*.crt
+**/*.srl
+**/*.p12
+**/*.pfx
+
 docs/
 test_fixtures/
 
