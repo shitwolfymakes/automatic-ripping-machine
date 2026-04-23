@@ -23,9 +23,7 @@ class TranscodeTask(SQLModel, table=True):
             index=True,
         )
     )
-    source_track_id: str = Field(
-        sa_column=Column(String, ForeignKey("tracks.id", ondelete="RESTRICT"), nullable=False)
-    )
+    source_track_id: str = Field(sa_column=Column(String, ForeignKey("tracks.id", ondelete="RESTRICT"), nullable=False))
     status: TranscodeTaskStatus = Field(
         sa_column=enum_column(
             TranscodeTaskStatus,
@@ -35,14 +33,10 @@ class TranscodeTask(SQLModel, table=True):
         )
     )
     claimed_by: str | None = Field(default=None)
-    claim_heartbeat_at: datetime | None = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=True)
-    )
+    claim_heartbeat_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
     attempts: int = Field(sa_column=Column(Integer, nullable=False, server_default="0"))
     output_path: str | None = Field(default=None)
-    progress_pct: int = Field(
-        sa_column=Column(Integer, nullable=False, server_default="0")
-    )
+    progress_pct: int = Field(sa_column=Column(Integer, nullable=False, server_default="0"))
     last_error: str | None = Field(default=None)
     created_at: datetime | None = Field(sa_column=created_at_column())
     updated_at: datetime | None = Field(sa_column=updated_at_column())

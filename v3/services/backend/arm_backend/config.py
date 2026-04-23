@@ -13,4 +13,4 @@ class Settings(BaseSettings):
     BIND_PORT: int = 8443
 
 
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]  # fields loaded from env by pydantic-settings

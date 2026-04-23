@@ -2,19 +2,19 @@ import ssl
 from collections.abc import AsyncIterator
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from arm_backend.config import settings
 
 
-def _build_engine(url: str):
+def _build_engine(url: str) -> AsyncEngine:
     parsed = urlparse(url)
     query = parse_qs(parsed.query)
 
     sslmode = query.pop("sslmode", [None])[0]
     sslrootcert = query.pop("sslrootcert", [None])[0]
 
-    connect_args: dict = {}
+    connect_args: dict[str, object] = {}
     if sslmode in ("verify-ca", "verify-full"):
         ctx = ssl.create_default_context(cafile=sslrootcert)
         if sslmode == "verify-ca":

@@ -19,23 +19,15 @@ class Session(SQLModel, table=True):
     id: str = Field(default_factory=_session_id, primary_key=True)
     name: str = Field(sa_column=Column(String, nullable=False))
     media_type: MediaType = Field(sa_column=enum_column(MediaType, "media_type"))
-    is_builtin: bool = Field(
-        sa_column=Column(Boolean, nullable=False, server_default="false")
-    )
+    is_builtin: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
     rip_preset_id: str = Field(
-        sa_column=Column(
-            String, ForeignKey("rip_presets.id", ondelete="RESTRICT"), nullable=False
-        )
+        sa_column=Column(String, ForeignKey("rip_presets.id", ondelete="RESTRICT"), nullable=False)
     )
     transcode_preset_id: str | None = Field(
-        sa_column=Column(
-            String, ForeignKey("transcode_presets.id", ondelete="RESTRICT"), nullable=True
-        )
+        sa_column=Column(String, ForeignKey("transcode_presets.id", ondelete="RESTRICT"), nullable=True)
     )
     output_path_template: str = Field(sa_column=Column(String, nullable=False))
-    overrides_json: dict[str, Any] | None = Field(
-        default=None, sa_column=Column(JSONB, nullable=True)
-    )
+    overrides_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
     created_by_user_id: str | None = Field(
         sa_column=Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     )

@@ -15,9 +15,7 @@ class Track(SQLModel, table=True):
     __tablename__ = "tracks"
 
     id: str = Field(default_factory=_track_id, primary_key=True)
-    job_id: str = Field(
-        sa_column=Column(String, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
-    )
+    job_id: str = Field(sa_column=Column(String, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True))
     kind: TrackKind = Field(sa_column=enum_column(TrackKind, "track_kind"))
     index: int = Field(sa_column=Column(Integer, nullable=False))
     source_ref: str = Field(sa_column=Column(String, nullable=False))
@@ -25,9 +23,7 @@ class Track(SQLModel, table=True):
     role: str | None = Field(default=None)
     role_source: str | None = Field(default=None)
     edition: str | None = Field(default=None)
-    expected_duration_seconds: int | None = Field(
-        sa_column=Column(Integer, nullable=True)
-    )
+    expected_duration_seconds: int | None = Field(sa_column=Column(Integer, nullable=True))
     status: TrackStatus = Field(
         sa_column=enum_column(TrackStatus, "track_status", server_default=TrackStatus.QUEUED.value)
     )

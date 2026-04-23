@@ -19,19 +19,11 @@ class RipPreset(SQLModel, table=True):
     id: str = Field(default_factory=_rip_preset_id, primary_key=True)
     name: str = Field(sa_column=Column(String, nullable=False))
     media_type: MediaType = Field(sa_column=enum_column(MediaType, "media_type"))
-    is_builtin: bool = Field(
-        sa_column=Column(Boolean, nullable=False, server_default="false")
-    )
-    track_selection: TrackSelection = Field(
-        sa_column=enum_column(TrackSelection, "track_selection")
-    )
-    identification_mode: IdentificationMode = Field(
-        sa_column=enum_column(IdentificationMode, "identification_mode")
-    )
+    is_builtin: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
+    track_selection: TrackSelection = Field(sa_column=enum_column(TrackSelection, "track_selection"))
+    identification_mode: IdentificationMode = Field(sa_column=enum_column(IdentificationMode, "identification_mode"))
     output_mode: OutputMode = Field(sa_column=enum_column(OutputMode, "output_mode"))
-    track_filters_json: dict[str, Any] | None = Field(
-        default=None, sa_column=Column(JSONB, nullable=True)
-    )
+    track_filters_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
     created_by_user_id: str | None = Field(
         sa_column=Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     )

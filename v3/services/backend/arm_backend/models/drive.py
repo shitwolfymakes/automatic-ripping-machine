@@ -20,21 +20,15 @@ class Drive(SQLModel, table=True):
     device_path: str = Field(nullable=False)
     display_name: str | None = Field(default=None)
     status: DriveStatus = Field(
-        sa_column=enum_column(
-            DriveStatus, "drive_status", server_default=DriveStatus.ONLINE.value
-        )
+        sa_column=enum_column(DriveStatus, "drive_status", server_default=DriveStatus.ONLINE.value)
     )
-    last_seen_at: datetime | None = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=True)
-    )
+    last_seen_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
     rip_params_json: dict[str, Any] = Field(
         default_factory=dict,
         sa_column=Column(JSON, nullable=False, server_default="{}"),
     )
     default_session_id: str | None = Field(
-        sa_column=Column(
-            String, ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True
-        )
+        sa_column=Column(String, ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True)
     )
     created_at: datetime | None = Field(sa_column=created_at_column())
     updated_at: datetime | None = Field(sa_column=updated_at_column())

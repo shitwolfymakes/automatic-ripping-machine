@@ -33,7 +33,7 @@ class BackendClient:
         drive_id: str,
         disc_type: DiscType,
         volume_label: str | None = None,
-        scan_result: dict | None = None,
+        scan_result: dict[str, object] | None = None,
     ) -> IdentifyResponse:
         req = IdentifyRequest(
             drive_id=drive_id,

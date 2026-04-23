@@ -18,15 +18,9 @@ class SessionApplication(SQLModel, table=True):
 
     id: str = Field(default_factory=_session_application_id, primary_key=True)
     session_id: str = Field(
-        sa_column=Column(
-            String, ForeignKey("sessions.id", ondelete="RESTRICT"), nullable=False, index=True
-        )
+        sa_column=Column(String, ForeignKey("sessions.id", ondelete="RESTRICT"), nullable=False, index=True)
     )
-    job_id: str = Field(
-        sa_column=Column(
-            String, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True
-        )
-    )
+    job_id: str = Field(sa_column=Column(String, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True))
     status: SessionApplicationStatus = Field(
         sa_column=enum_column(
             SessionApplicationStatus,
@@ -34,16 +28,10 @@ class SessionApplication(SQLModel, table=True):
             server_default=SessionApplicationStatus.QUEUED.value,
         )
     )
-    overrides_json: dict[str, Any] | None = Field(
-        default=None, sa_column=Column(JSONB, nullable=True)
-    )
-    overwrite: bool = Field(
-        sa_column=Column(Boolean, nullable=False, server_default="false")
-    )
+    overrides_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
+    overwrite: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
     created_by_user_id: str | None = Field(
         sa_column=Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     )
     created_at: datetime | None = Field(sa_column=created_at_column())
-    completed_at: datetime | None = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=True)
-    )
+    completed_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))

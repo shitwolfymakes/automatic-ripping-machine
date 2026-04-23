@@ -14,4 +14,4 @@ class Settings(BaseSettings):
     POLL_INTERVAL_SECONDS: float = 2.0
 
 
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]  # fields loaded from env by pydantic-settings

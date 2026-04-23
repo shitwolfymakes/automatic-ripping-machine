@@ -4,14 +4,15 @@ Idempotent — safe to run on every Backend startup. Rows are keyed on determini
 IDs (for built-ins) or a known sentinel (config.id=1, username="admin") so re-runs
 do not duplicate.
 """
+
 import logging
 import secrets
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable, Protocol
 
 from argon2 import PasswordHasher
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, select
 
 from arm_backend.models import (
     Config,
@@ -41,9 +42,7 @@ ADMIN_USERNAME = "admin"
 
 
 async def _seed_admin_user(session: AsyncSession) -> None:
-    existing = (
-        await session.execute(select(User).where(User.username == ADMIN_USERNAME))
-    ).scalar_one_or_none()
+    existing = (await session.execute(select(User).where(col(User.username) == ADMIN_USERNAME))).scalar_one_or_none()
     if existing is not None:
         return
 
@@ -81,9 +80,7 @@ CONFIG_SINGLETON_ID = 1
 
 
 async def _seed_config_singleton(session: AsyncSession) -> None:
-    existing = (
-        await session.execute(select(Config).where(Config.id == CONFIG_SINGLETON_ID))
-    ).scalar_one_or_none()
+    existing = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     if existing is None:
         session.add(
             Config(
@@ -107,7 +104,7 @@ async def _seed_config_singleton(session: AsyncSession) -> None:
 
 # --- Built-in rip presets -----------------------------------------------------
 
-RIP_PRESETS: list[dict] = [
+RIP_PRESETS: list[dict[str, Any]] = [
     {
         "id": "rpr_builtin_movie_main_feature",
         "name": "Movie — Main Feature",
@@ -169,7 +166,7 @@ RIP_PRESETS: list[dict] = [
 
 # --- Built-in transcode presets -----------------------------------------------
 
-TRANSCODE_PRESETS: list[dict] = [
+TRANSCODE_PRESETS: list[dict[str, Any]] = [
     {
         "id": "tpr_builtin_plex_1080p_h265",
         "name": "Plex 1080p H.265",
@@ -247,7 +244,7 @@ TRANSCODE_PRESETS: list[dict] = [
 
 # --- Built-in sessions --------------------------------------------------------
 
-SESSIONS: list[dict] = [
+SESSIONS: list[dict[str, Any]] = [
     {
         "id": "ses_builtin_movie_plex_1080p",
         "name": "Movie → Plex 1080p H.265",
@@ -315,15 +312,21 @@ SESSIONS: list[dict] = [
 ]
 
 
+class _BuiltinRow(Protocol):
+    """Seedable model: has a string id and accepts row dicts plus is_builtin in its ctor."""
+
+    id: str
+
+    def __init__(self, **kwargs: Any) -> None: ...
+
+
 async def _insert_missing(
     session: AsyncSession,
-    model: type,
-    rows: Iterable[dict],
+    model: type[_BuiltinRow],
+    rows: Iterable[dict[str, Any]],
 ) -> None:
     for row in rows:
-        existing = (
-            await session.execute(select(model).where(model.id == row["id"]))
-        ).scalar_one_or_none()
+        existing = (await session.execute(select(model).where(col(model.id) == row["id"]))).scalar_one_or_none()
         if existing is not None:
             continue
         session.add(model(**row, is_builtin=True))
