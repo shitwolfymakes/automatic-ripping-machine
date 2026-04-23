@@ -30,6 +30,9 @@ class Job(SQLModel, table=True):
             nullable=False,
         )
     )
+    disc_fingerprint: str | None = Field(default=None)
+    disc_fingerprint_algo: str | None = Field(default=None)
+    aacs_disc_id: str | None = Field(default=None)
     title: str | None = Field(default=None)
     year: int | None = Field(sa_column=Column(Integer, nullable=True))
     metadata_json: dict[str, Any] = Field(
