@@ -183,3 +183,10 @@ removed/*
 /installed
 
 arm.yaml
+
+# v3 local Docker bind-mount runtime state
+v3/db/
+v3/raw/
+v3/media/
+v3/logs/
+v3/.env
