@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Column, DateTime, Enum, String, func
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, String
 from sqlmodel import Field, SQLModel
 
+from arm_backend.models._columns import created_at_column, enum_column, updated_at_column
 from arm_common import DriveStatus, new_id
 
 
@@ -19,16 +20,8 @@ class Drive(SQLModel, table=True):
     device_path: str = Field(nullable=False)
     display_name: str | None = Field(default=None)
     status: DriveStatus = Field(
-        sa_column=Column(
-            Enum(
-                DriveStatus,
-                name="drive_status",
-                native_enum=True,
-                create_type=False,
-                values_callable=lambda e: [x.value for x in e],
-            ),
-            nullable=False,
-            server_default=DriveStatus.ONLINE.value,
+        sa_column=enum_column(
+            DriveStatus, "drive_status", server_default=DriveStatus.ONLINE.value
         )
     )
     last_seen_at: datetime | None = Field(
@@ -38,15 +31,10 @@ class Drive(SQLModel, table=True):
         default_factory=dict,
         sa_column=Column(JSON, nullable=False, server_default="{}"),
     )
-    default_session_id: str | None = Field(default=None)
-    created_at: datetime | None = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    )
-    updated_at: datetime | None = Field(
+    default_session_id: str | None = Field(
         sa_column=Column(
-            DateTime(timezone=True),
-            nullable=False,
-            server_default=func.now(),
-            onupdate=func.now(),
+            String, ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True
         )
     )
+    created_at: datetime | None = Field(sa_column=created_at_column())
+    updated_at: datetime | None = Field(sa_column=updated_at_column())

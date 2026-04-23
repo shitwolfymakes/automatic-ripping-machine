@@ -46,7 +46,7 @@ Captured here so later phases can reference what's already running.
 1. SQLModel adoption — port the current SQLAlchemy-only `Drive`/`Job` models to SQLModel so they double as Pydantic schemas. ([04-data-model.md § Schema definition and migrations](../arch/04-data-model.md#schema-definition-and-migrations))
 2. Add `users`, `config`, `events` tables + migration.
 3. Add `tracks`, `rip_presets`, `transcode_presets`, `sessions`, `session_applications`, `transcode_tasks`, `gpus` tables + migration(s).
-4. Postgres enum types for every status/mode column (not CHECK constraints).
+4. Status/mode columns are stored as `VARCHAR`; validation lives in the SQLModel/Pydantic layer against the `StrEnum` source of truth. No native Postgres `CREATE TYPE` enums and no CHECK constraints. ([04-data-model.md § Conventions](../arch/04-data-model.md#conventions))
 5. Partial unique index on `transcode_tasks(output_path) WHERE status IN ('queued','in_progress','done')`.
 6. First-boot seeders: default admin user (random password logged to stdout + `/logs/first-boot.log`), `config` singleton row, built-in presets and sessions (`is_builtin=true`).
 

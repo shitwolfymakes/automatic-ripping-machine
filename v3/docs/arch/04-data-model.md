@@ -10,7 +10,7 @@ This document sketches the logical data model. Exact column types, indexes, and 
 - Every table has `created_at` and `updated_at` (`TIMESTAMPTZ NOT NULL DEFAULT now()`).
 - Soft-delete is avoided. If a row needs to hide, a status column handles it.
 - Foreign keys are enforced at the DB layer; no ORM-only relationships.
-- Enums are Postgres enum types so they show up sanely in `psql`.
+- Enums are stored as plain `VARCHAR` columns; the `StrEnum` class in [packages/arm_common/arm_common/enums.py](../../packages/arm_common/arm_common/enums.py) is the source of truth and validation runs at write time through the SQLModel/Pydantic layer. No native Postgres `CREATE TYPE` enums. Rationale: adding/removing/renaming values via `ALTER TYPE` is awkward in transactional migrations, and several schema-diff tools (Atlas, Bytebase) gate enum-diff features behind paid tiers — `VARCHAR` keeps the door open to those tools on their free tiers. The tradeoff we accept: a bad value inserted by raw `psql` or a rogue migration is not caught by the DB; the app is the only guardrail. This is acceptable for a single-admin homelab system.
 
 ## Core entities
 
@@ -234,7 +234,7 @@ events (sparse FKs to jobs / tracks / session_applications)
 
 - Edit a SQLModel class.
 - `alembic revision --autogenerate -m "…"` diffs models against the live DB and emits a revision file.
-- **Review the generated revision before committing.** Autogenerate handles column add/drop/type changes well; it misses constraint renames, server defaults on existing columns, Postgres enum value additions, and partial-index changes — patch those by hand. Treat the generated file as a draft, not the final.
+- **Review the generated revision before committing.** Autogenerate handles column add/drop/type changes well; it misses constraint renames, server defaults on existing columns, and partial-index changes — patch those by hand. Treat the generated file as a draft, not the final.
 - Hand-edited revisions for data migrations (backfills, enum value renames, etc.).
 
 **Runtime:** Backend runs `alembic upgrade head` on startup before serving requests. No sidecar migration container. No online schema changes planned for v3.0 — downtime during `docker compose up` after a migration is acceptable for a homelab.

@@ -7,7 +7,9 @@ import uvicorn
 from fastapi import FastAPI
 
 from arm_backend.config import settings
+from arm_backend.db import SessionLocal
 from arm_backend.routers import health, ripper
+from arm_backend.seeders import run_seeders
 
 logging.basicConfig(
     level=settings.ARM_LOG_LEVEL.upper(),
@@ -27,9 +29,17 @@ def _run_migrations() -> None:
     logger.info("migrations applied")
 
 
+async def _run_seeders() -> None:
+    logger.info("running first-boot seeders")
+    async with SessionLocal() as session:
+        await run_seeders(session)
+    logger.info("seeders complete")
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     _run_migrations()
+    await _run_seeders()
     yield
 
 
