@@ -1,0 +1,18 @@
+MSG:1005,0,1,"MakeMKV v1.17.5 linux(x64-release) started","%1 started","MakeMKV v1.17.5 linux(x64-release)"
+DRV:0,2,999,1,"DVD-VIDEO","THE_MATRIX_1999","/dev/sr0"
+TCOUNT:2
+CINFO:1,6209,"DVD"
+CINFO:2,0,"THE_MATRIX_1999"
+CINFO:30,0,"THE MATRIX (1999)"
+CINFO:32,0,"DVD-Video disc"
+TINFO:0,8,0,"32"
+TINFO:0,9,0,"2:16:17"
+TINFO:0,11,0,"7340032000"
+TINFO:0,27,0,"title00.mkv"
+TINFO:1,8,0,"3"
+TINFO:1,9,0,"0:01:53"
+TINFO:1,11,0,"104857600"
+TINFO:1,27,0,"title01.mkv"
+SINFO:0,0,1,6201,"Video"
+SINFO:0,0,5,0,"Mpeg2"
+TCOUNT:2

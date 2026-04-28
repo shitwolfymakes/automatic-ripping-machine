@@ -1,4 +1,37 @@
-# TODO(v3-release): pin by @sha256:<digest> — see docs/arch/06-deployment.md
+# TODO(v3-release): pin both stages by @sha256:<digest> — see docs/arch/06-deployment.md
+
+# ---------- Stage 1: build MakeMKV from upstream signed tarballs ----------
+FROM python:3.14-slim-bookworm AS mkv-build
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Build deps for makemkv-oss + makemkv-bin (mirrors v2 temp_install_mkv_hb_deps.sh,
+# minus HandBrake — that lands in Phase 7 with the transcode container).
+# qtbase5-dev is needed because MakeMKV's OSS configure builds a GUI that we
+# never ship; we only copy makemkvcon out into the runtime stage.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        dirmngr \
+        g++ \
+        gcc \
+        gnupg \
+        libavcodec-dev \
+        libexpat-dev \
+        libssl-dev \
+        make \
+        pkg-config \
+        qtbase5-dev \
+        wget \
+        zlib1g-dev \
+        openjdk-17-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY services/ripper/install/install_makemkv.sh /install_makemkv.sh
+RUN chmod +x /install_makemkv.sh && /install_makemkv.sh
+
+# ---------- Stage 2: runtime image ----------
 FROM python:3.14-slim-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -8,13 +41,43 @@ ENV DEBIAN_FRONTEND=noninteractive \
     UV_COMPILE_BYTECODE=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv
 
-# TODO(v3): install MakeMKV + libdvdcss here when the real rip path lands.
+# Phase 2 runtime deps: MakeMKV handles its own DVD CSS, so we deliberately
+# skip libdvd-pkg / libdvdcss here — Phase 3 (real rip pipeline) can re-add
+# them if any rip-time tool turns out to need them. Keeps the image to
+# main-repo packages only and avoids enabling contrib / non-free.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         tini \
         gosu \
         ca-certificates \
+        curl \
+        abcde \
+        cdparanoia \
+        eject \
+        flac \
+        util-linux \
+        libdiscid0 \
+        libavcodec59 \
+        libexpat1 \
+        libssl3 \
     && rm -rf /var/lib/apt/lists/*
+
+# Pull MakeMKV binaries + libs from the build stage. The bin tarball installs
+# libmakemkv*, libdriveio*, and libmmbd* under /usr/local/lib/; nothing else
+# in the build stage targets /usr/local/lib/, so copying the whole tree is safe.
+COPY --from=mkv-build /usr/local/bin/makemkvcon /usr/local/bin/makemkvcon
+COPY --from=mkv-build /usr/local/lib/ /usr/local/lib/
+COPY --from=mkv-build /usr/local/share/MakeMKV /usr/local/share/MakeMKV
+RUN ldconfig
+
+# Pre-create the arm user's home so update_key.sh has somewhere to write.
+# The shared entrypoint creates the arm user with --no-create-home; we own
+# /home/arm at PUID=1000 (the entrypoint will usermod it on PUID changes).
+RUN mkdir -p /home/arm/.MakeMKV \
+    && chown -R 1000:1000 /home/arm
+
+COPY services/ripper/install/update_key.sh /usr/local/bin/update_key.sh
+RUN chmod +x /usr/local/bin/update_key.sh
 
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/
 

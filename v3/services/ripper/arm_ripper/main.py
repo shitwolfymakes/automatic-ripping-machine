@@ -3,10 +3,10 @@ import logging
 
 import httpx
 
-from arm_common import DiscType
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.config import settings
 from arm_ripper.drive_poll import DriveState, read_drive_status
+from arm_ripper.job_controller import JobController
 
 RIPPER_VERSION = "0.0.0-skeleton"
 
@@ -34,8 +34,9 @@ async def register_with_retry(client: BackendClient) -> str:
             delay = min(delay * 2, 30.0)
 
 
-async def poll_loop(client: BackendClient, drive_id: str) -> None:
+async def poll_loop(controller: JobController) -> None:
     last_state: DriveState | None = None
+    active_task: asyncio.Task[None] | None = None
     while True:
         try:
             state = read_drive_status(settings.ARM_DRIVE_DEV)
@@ -46,17 +47,15 @@ async def poll_loop(client: BackendClient, drive_id: str) -> None:
         if state != last_state:
             logger.info("drive state %s -> %s", last_state, state)
 
-        if state == DriveState.DISC_OK and last_state not in (DriveState.DISC_OK, DriveState.NOT_READY):
-            try:
-                job = await client.identify(
-                    drive_id=drive_id,
-                    disc_type=DiscType.UNKNOWN,
-                    volume_label=None,
-                    scan_result={},
-                )
-                logger.info("identify job_id=%s status=%s", job.id, job.status)
-            except httpx.HTTPError as exc:
-                logger.error("identify failed: %s", exc)
+        if active_task is not None and active_task.done():
+            active_task = None
+
+        if (
+            state == DriveState.DISC_OK
+            and last_state not in (DriveState.DISC_OK, DriveState.NOT_READY)
+            and active_task is None
+        ):
+            active_task = asyncio.create_task(controller.handle_disc_inserted(settings.ARM_DRIVE_DEV))
 
         last_state = state
         await asyncio.sleep(settings.POLL_INTERVAL_SECONDS)
@@ -66,7 +65,8 @@ async def amain() -> None:
     client = BackendClient(settings.ARM_BACKEND_URL, settings.ARM_SERVICE_TOKEN)
     try:
         drive_id = await register_with_retry(client)
-        await poll_loop(client, drive_id)
+        controller = JobController(client, drive_id)
+        await poll_loop(controller)
     finally:
         await client.close()
 

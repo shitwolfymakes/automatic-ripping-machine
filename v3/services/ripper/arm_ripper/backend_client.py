@@ -1,7 +1,7 @@
 import httpx
 
-from arm_common import DiscType, Drive, Job
-from arm_common.schemas import IdentifyRequest, RegisterRequest
+from arm_common import Drive, Job
+from arm_common.schemas import IdentifyRequest, JobView, RegisterRequest, ScanResult
 
 
 class BackendClient:
@@ -22,20 +22,13 @@ class BackendClient:
         r.raise_for_status()
         return Drive.model_validate(r.json())
 
-    async def identify(
-        self,
-        *,
-        drive_id: str,
-        disc_type: DiscType,
-        volume_label: str | None = None,
-        scan_result: dict[str, object] | None = None,
-    ) -> Job:
-        req = IdentifyRequest(
-            drive_id=drive_id,
-            disc_type=disc_type,
-            volume_label=volume_label,
-            scan_result=scan_result or {},
-        )
+    async def identify(self, *, drive_id: str, scan_result: ScanResult) -> Job:
+        req = IdentifyRequest(drive_id=drive_id, scan_result=scan_result)
         r = await self._client.post("/api/ripper/identify", json=req.model_dump(mode="json"))
         r.raise_for_status()
         return Job.model_validate(r.json())
+
+    async def get_job(self, job_id: str) -> JobView:
+        r = await self._client.get(f"/api/ripper/jobs/{job_id}")
+        r.raise_for_status()
+        return JobView.model_validate(r.json())

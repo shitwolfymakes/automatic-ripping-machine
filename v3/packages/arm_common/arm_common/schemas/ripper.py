@@ -12,8 +12,22 @@ class RegisterRequest(BaseModel):
     hw_caps: dict[str, Any] = Field(default_factory=dict)
 
 
-class IdentifyRequest(BaseModel):
-    drive_id: str
+class ScanTitle(BaseModel):
+    index: int
+    duration_seconds: int
+    chapter_count: int | None = None
+    size_bytes: int | None = None
+    source_file: str | None = None
+
+
+class ScanResult(BaseModel):
     disc_type: DiscType
     volume_label: str | None = None
-    scan_result: dict[str, Any] = Field(default_factory=dict)
+    titles: list[ScanTitle] = Field(default_factory=list)
+    musicbrainz_disc_id: str | None = None
+    raw: dict[str, Any] = Field(default_factory=dict)
+
+
+class IdentifyRequest(BaseModel):
+    drive_id: str
+    scan_result: ScanResult
