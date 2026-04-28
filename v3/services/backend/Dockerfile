@@ -20,16 +20,17 @@ COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
-# Copy workspace root + packages + the backend service (context = v3/)
+# Copy workspace root + packages + the backend service (context = v3/).
+# Source must land before `uv sync` because hatchling validates each workspace
+# package's force-include (e.g. arm_backend/py.typed) at install time.
 COPY pyproject.toml /app/pyproject.toml
 COPY uv.lock /app/uv.lock
 COPY packages/arm_common /app/packages/arm_common
-COPY services/backend/pyproject.toml /app/services/backend/pyproject.toml
 COPY services/ripper/pyproject.toml /app/services/ripper/pyproject.toml
+COPY services/backend /app/services/backend
 
 RUN uv sync --frozen --package arm_backend --no-dev
 
-COPY services/backend /app/services/backend
 COPY services/_common/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 

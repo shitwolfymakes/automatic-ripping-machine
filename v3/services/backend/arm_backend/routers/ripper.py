@@ -5,8 +5,7 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_service_token
 from arm_backend.db import get_session
-from arm_backend.models import Drive, Job
-from arm_common import DriveStatus, JobStatus
+from arm_common import Drive, DriveStatus, Job, JobStatus
 from arm_common.schemas import (
     IdentifyRequest,
     IdentifyResponse,

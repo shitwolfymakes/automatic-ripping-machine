@@ -3,8 +3,8 @@ from datetime import datetime
 from sqlalchemy import Boolean, Column, DateTime, String
 from sqlmodel import Field, SQLModel
 
-from arm_backend.models._columns import created_at_column, updated_at_column
-from arm_common import new_id
+from arm_common.models._columns import created_at_column, updated_at_column
+from arm_common.ulid import new_id
 
 
 def _user_id() -> str:

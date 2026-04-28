@@ -20,15 +20,16 @@ COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
+# Source must land before `uv sync` because hatchling validates each workspace
+# package's force-include (e.g. arm_ripper/py.typed) at install time.
 COPY pyproject.toml /app/pyproject.toml
 COPY uv.lock /app/uv.lock
 COPY packages/arm_common /app/packages/arm_common
 COPY services/backend/pyproject.toml /app/services/backend/pyproject.toml
-COPY services/ripper/pyproject.toml /app/services/ripper/pyproject.toml
+COPY services/ripper /app/services/ripper
 
 RUN uv sync --frozen --package arm_ripper --no-dev
 
-COPY services/ripper /app/services/ripper
 COPY services/_common/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
