@@ -30,27 +30,29 @@ Captured here so later phases can reference what's already running.
 - Postgres 18 with TLS, internal CA, service token, PUID/PGID entrypoint ([services/_common/docker-entrypoint.sh](../../services/_common/docker-entrypoint.sh) — to verify on disk).
 - Backend boots, runs Alembic `0001_initial` + `0002_disc_fingerprint`, serves `/api/health`, `/api/ripper/register`, `/api/ripper/identify`.
 - One ripper container polls `ioctl(CDROM_DRIVE_STATUS)` on `/dev/sr0`, registers with Backend, posts `identify` on disc insert → creates a `Job` row in `status='created'`.
-- [packages/arm_common/](../../packages/arm_common/) has enums (`DriveStatus`, `JobStatus`, `DiscType`), ULID helper, and the two ripper schemas (`RegisterRequest/Response`, `IdentifyRequest/Response`).
+- [packages/arm_common/](../../packages/arm_common/) has enums (`DriveStatus`, `JobStatus`, `DiscType`), ULID helper, and the two ripper request schemas (`RegisterRequest`, `IdentifyRequest`). Phase 0 also shipped skinny `RegisterResponse`/`IdentifyResponse` stubs; Phase 1 replaces them with the full `Drive`/`Job` row models.
 
 **Not delivered:** every other table, real disc identification, MakeMKV invocation, WebSocket hub, UI, transcode, auth, notifications, installer, supply-chain hygiene. Roughly **5%** of the target architecture.
 
 ---
 
-## Phase 1 — Data model completion
+## Phase 1 — Data model completion (shipped)
 
-**Goal.** Every entity the architecture describes exists in the DB, with the relationships enforced at the schema layer. No behavior wired up yet — this is runway for Phases 2–7.
+**Delivered** (commits `aa531dee` → `fd2c539a`):
 
-**Exit criteria.** `\dt` in `armv3-db` shows every table listed in [04-data-model.md](../arch/04-data-model.md). Seeded built-in rip presets, transcode presets, and sessions are present after a fresh migration. SQLModel classes in `arm_common` match the migrations 1:1.
+1. SQLModel adoption — `Drive`/`Job` (and every other entity) are SQLModel classes, doubling as wire schemas. The `/api/ripper/register` and `/api/ripper/identify` routes return the row models directly; the skinny `RegisterResponse`/`IdentifyResponse` stubs from Phase 0 are gone.
+2. `users`, `config`, `events` tables present.
+3. `tracks`, `rip_presets`, `transcode_presets`, `sessions`, `session_applications`, `transcode_tasks`, `gpus` tables present.
+4. Status/mode columns are `VARCHAR`. No native Postgres enum types, no CHECK constraints. A `_StrEnumString` SQLAlchemy `TypeDecorator` ([packages/arm_common/arm_common/models/_columns.py](../../packages/arm_common/arm_common/models/_columns.py)) round-trips `str ↔ StrEnum` at the SQL boundary so loaded rows present typed enums to Pydantic.
+5. Partial unique index `uq_transcode_tasks_output_path_live` on `transcode_tasks(output_path) WHERE status IN ('queued','in_progress','done')`.
+6. First-boot seeders ([services/backend/arm_backend/seeders.py](../../services/backend/arm_backend/seeders.py)): admin user with a random `secrets.token_urlsafe(18)` password (argon2id, logged once with a banner), `config` singleton with HS256 signing key, 7 built-in rip presets, 8 built-in transcode presets, 8 built-in sessions. Idempotent — re-running on a populated DB is a no-op.
 
-**Deliverables:**
-1. SQLModel adoption — port the current SQLAlchemy-only `Drive`/`Job` models to SQLModel so they double as Pydantic schemas. ([04-data-model.md § Schema definition and migrations](../arch/04-data-model.md#schema-definition-and-migrations))
-2. Add `users`, `config`, `events` tables + migration.
-3. Add `tracks`, `rip_presets`, `transcode_presets`, `sessions`, `session_applications`, `transcode_tasks`, `gpus` tables + migration(s).
-4. Status/mode columns are stored as `VARCHAR`; validation lives in the SQLModel/Pydantic layer against the `StrEnum` source of truth. No native Postgres `CREATE TYPE` enums and no CHECK constraints. ([04-data-model.md § Conventions](../arch/04-data-model.md#conventions))
-5. Partial unique index on `transcode_tasks(output_path) WHERE status IN ('queued','in_progress','done')`.
-6. First-boot seeders: default admin user (random password logged to stdout + `/logs/first-boot.log`), `config` singleton row, built-in presets and sessions (`is_builtin=true`).
+Realignment landed alongside the data model:
 
-**Depends on:** Phase 0.
+- SQLModel classes live in [packages/arm_common/arm_common/models/](../../packages/arm_common/arm_common/models/) per [04-data-model.md § Schema definition and migrations](../arch/04-data-model.md#schema-definition-and-migrations) — moved out of `arm_backend` so future ripper/transcode services can reuse them without depending on the backend package.
+- All 0001/0002/0003 migrations from the Phase 0 walking skeleton were collapsed into a single consolidated [0001_initial](../../services/backend/migrations/versions/0001_initial.py); no production DB to migrate.
+
+**Verified end-to-end on a fresh DB.** Alembic upgrade clean, banner logged, `\dt` shows 13 tables, seed counts match (users=1, config=1, rip_presets=7, transcode_presets=8, sessions=8), backend restart is idempotent.
 
 ---
 
