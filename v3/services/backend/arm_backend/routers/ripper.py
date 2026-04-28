@@ -6,12 +6,7 @@ from sqlmodel import col, select
 from arm_backend.auth import require_service_token
 from arm_backend.db import get_session
 from arm_common import Drive, DriveStatus, Job, JobStatus
-from arm_common.schemas import (
-    IdentifyRequest,
-    IdentifyResponse,
-    RegisterRequest,
-    RegisterResponse,
-)
+from arm_common.schemas import IdentifyRequest, RegisterRequest
 
 router = APIRouter(
     prefix="/api/ripper",
@@ -20,8 +15,8 @@ router = APIRouter(
 )
 
 
-@router.post("/register", response_model=RegisterResponse)
-async def register(req: RegisterRequest, session: AsyncSession = Depends(get_session)) -> RegisterResponse:
+@router.post("/register", response_model=Drive)
+async def register(req: RegisterRequest, session: AsyncSession = Depends(get_session)) -> Drive:
     stmt = (
         pg_insert(Drive)
         .values(
@@ -41,11 +36,13 @@ async def register(req: RegisterRequest, session: AsyncSession = Depends(get_ses
     result = await session.execute(stmt)
     drive_id = result.scalar_one()
     await session.commit()
-    return RegisterResponse(drive_id=drive_id, drive_config={}, service_token_verified=True)
+
+    drive = (await session.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one()
+    return drive
 
 
-@router.post("/identify", response_model=IdentifyResponse)
-async def identify(req: IdentifyRequest, session: AsyncSession = Depends(get_session)) -> IdentifyResponse:
+@router.post("/identify", response_model=Job)
+async def identify(req: IdentifyRequest, session: AsyncSession = Depends(get_session)) -> Job:
     drive = (await session.execute(select(Drive).where(col(Drive.id) == req.drive_id))).scalar_one_or_none()
     if drive is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
@@ -54,4 +51,4 @@ async def identify(req: IdentifyRequest, session: AsyncSession = Depends(get_ses
     session.add(job)
     await session.commit()
     await session.refresh(job)
-    return IdentifyResponse(job_id=job.id, status=JobStatus.CREATED)
+    return job
