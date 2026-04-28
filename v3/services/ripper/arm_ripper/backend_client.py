@@ -1,12 +1,7 @@
 import httpx
 
-from arm_common import DiscType
-from arm_common.schemas import (
-    IdentifyRequest,
-    IdentifyResponse,
-    RegisterRequest,
-    RegisterResponse,
-)
+from arm_common import DiscType, Drive, Job
+from arm_common.schemas import IdentifyRequest, RegisterRequest
 
 
 class BackendClient:
@@ -21,11 +16,11 @@ class BackendClient:
     async def close(self) -> None:
         await self._client.aclose()
 
-    async def register(self, *, hostname: str, device_path: str, ripper_version: str) -> RegisterResponse:
+    async def register(self, *, hostname: str, device_path: str, ripper_version: str) -> Drive:
         req = RegisterRequest(hostname=hostname, device_path=device_path, ripper_version=ripper_version)
         r = await self._client.post("/api/ripper/register", json=req.model_dump())
         r.raise_for_status()
-        return RegisterResponse.model_validate(r.json())
+        return Drive.model_validate(r.json())
 
     async def identify(
         self,
@@ -34,7 +29,7 @@ class BackendClient:
         disc_type: DiscType,
         volume_label: str | None = None,
         scan_result: dict[str, object] | None = None,
-    ) -> IdentifyResponse:
+    ) -> Job:
         req = IdentifyRequest(
             drive_id=drive_id,
             disc_type=disc_type,
@@ -43,4 +38,4 @@ class BackendClient:
         )
         r = await self._client.post("/api/ripper/identify", json=req.model_dump(mode="json"))
         r.raise_for_status()
-        return IdentifyResponse.model_validate(r.json())
+        return Job.model_validate(r.json())

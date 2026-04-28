@@ -21,13 +21,13 @@ async def register_with_retry(client: BackendClient) -> str:
     delay = 1.0
     while True:
         try:
-            resp = await client.register(
+            drive = await client.register(
                 hostname=settings.HOSTNAME,
                 device_path=settings.ARM_DRIVE_DEV,
                 ripper_version=RIPPER_VERSION,
             )
-            logger.info("registered drive_id=%s device=%s", resp.drive_id, settings.ARM_DRIVE_DEV)
-            return resp.drive_id
+            logger.info("registered drive_id=%s device=%s", drive.id, settings.ARM_DRIVE_DEV)
+            return drive.id
         except (httpx.HTTPError, OSError) as exc:
             logger.warning("register failed (%s); retrying in %.1fs", exc, delay)
             await asyncio.sleep(delay)
@@ -48,13 +48,13 @@ async def poll_loop(client: BackendClient, drive_id: str) -> None:
 
         if state == DriveState.DISC_OK and last_state not in (DriveState.DISC_OK, DriveState.NOT_READY):
             try:
-                resp = await client.identify(
+                job = await client.identify(
                     drive_id=drive_id,
                     disc_type=DiscType.UNKNOWN,
                     volume_label=None,
                     scan_result={},
                 )
-                logger.info("identify job_id=%s status=%s", resp.job_id, resp.status)
+                logger.info("identify job_id=%s status=%s", job.id, job.status)
             except httpx.HTTPError as exc:
                 logger.error("identify failed: %s", exc)
 
