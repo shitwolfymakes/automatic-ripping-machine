@@ -56,18 +56,19 @@ Realignment landed alongside the data model:
 
 ---
 
-## Phase 2 — Real disc identification
+## Phase 2 — Real disc identification (shipped)
 
-**Goal.** An inserted disc is scanned, identified against external metadata, and produces either an `identified` or `awaiting_user_id` job. No ripping yet.
+**Delivered** on `wolfy/v3-improvments`:
 
-**Exit criteria.** Inserting a real DVD/BD/CD transitions its job through `created → identified` (on lookup hit) or `created → awaiting_user_id` (on miss, with `config.block_on_miss=true`). `metadata_json` is populated with the lookup result. Disc fingerprint columns stay null in v3.0 but the scaffolding exists.
+1. Typed `ScanResult` / `ScanTitle` in [packages/arm_common/arm_common/schemas/ripper.py](../../packages/arm_common/arm_common/schemas/ripper.py); `IdentifyRequest.scan_result` is no longer an opaque dict.
+2. New `arm_backend/metadata/` package with `TMDBClient` (v4 bearer auth so the key never leaks via query string), `OMDBClient` (movie fallback), `MusicBrainzClient` (1 req/s rate limit + required user-agent), and a `MetadataDispatcher` that owns one shared `httpx.AsyncClient` with the merged trust store. Routing: DVD/BD → TMDB movie → TMDB TV → OMDB movie; CD → MusicBrainz only; DATA/UNKNOWN → short-circuit miss.
+3. Backend `/api/ripper/identify` handler runs the lookup, persists `title`/`year`/`metadata_json`, and lands the job at `identified` (hit) or `awaiting_user_id` (miss with `config.block_on_miss=true`) or `identified` with `metadata_json={"unidentified": true}` (miss with `block_on_miss=false`, placeholder mode for Phase 10). Per-provider 8s + overall 25s `asyncio.wait_for` budget; provider 5xx logs and falls through, never failing the request.
+4. Ripper-side `JobController` ([services/ripper/arm_ripper/job_controller.py](../../services/ripper/arm_ripper/job_controller.py)) holds per-job state. On `AWAITING_USER_ID` it polls `GET /api/ripper/jobs/{job_id}` (5s → 30s exponential backoff) until the UI/curl resolves it. Backend retries with backoff on transport errors. Replaced by WS in Phase 4.
+5. UI-side `POST /api/jobs/{job_id}/resolve` ungated (dev-only; carries a `# Phase 5: gate behind require_jwt` marker pending JWT in Phase 5).
+6. Ripper Dockerfile multistage build that ports v2's signed-tarball MakeMKV install and runtime `update_key.sh` (env `MAKEMKV_PERMA_KEY` or scraped monthly beta) wired into the shared entrypoint. `libdvd-pkg` reconfigured non-interactively at image build time; `abcde`/`flac`/`cdparanoia` for CDs; `python-discid` for MusicBrainz disc-id computation.
+7. Tests: 16 backend tests (metadata clients via `respx`, dispatcher routing rules) + 7 ripper tests (`makemkvcon` parser fixtures, JobController behaviour with a fake backend) — all passing under `uv run pytest`.
 
-**Deliverables:**
-1. **Ripper:** MakeMKV scan wrapper (`makemkvcon -r info`) for DVD/BD; MusicBrainz Disc ID probe for CD; data-disc fallback. Surface volume label + per-title durations in `scan_result`. Install MakeMKV/libdvdcss/abcde in `services/ripper/Dockerfile`.
-2. **Backend adapters:** `TMDBClient`, `OMDBClient`, `MusicBrainzClient` — plain `httpx.AsyncClient` with keys read from `config` row. Outbound HTTPS verified via the merged trust store ([05-cross-cutting.md § Transport (TLS)](../arch/05-cross-cutting.md#transport-tls)).
-3. **Backend state machine:** the inline identify handler upgrades from "always return `CREATED`" to running the lookup, persisting `title`/`year`/`metadata_json`, and returning `identified` or `needs_user_input`. Ripper blocks on this call with a generous timeout.
-4. **Ripper command channel (REST-polling fallback).** The WS hub doesn't exist yet; for now a ripper parked in `awaiting_user_id` polls `GET /api/ripper/jobs/{job_id}` every few seconds to pick up UI-supplied resolution. Replaced by WS in Phase 4.
-5. **`POST /api/jobs/{job_id}/resolve`** UI-side endpoint (UI consumer still stubbed — curl-testable).
+`disc_fingerprint` / `aacs_disc_id` columns remain null per [04-data-model.md](../arch/04-data-model.md). Live DB integration tests for `/identify` and `/resolve` deferred to a future phase that brings up testcontainers; manual verification via real DVD documented in [v3/docs/ops/makemkv.md](../ops/makemkv.md).
 
 **Depends on:** Phase 1.
 
@@ -261,9 +262,10 @@ Split out so CPU-only can ship first.
 
 **Deliverables:**
 1. **`v3/install.sh`** — prereq check, prefix creation, CA generation (EC P-384, 10y), drive probe, leaf cert generation, `.env` seed, compose generation from template with one ripper block per detected drive.
-2. **`--rotate-ca`, `--prefix`, `--start`** flags.
-3. **Idempotent rerun** — preserves `.env` and CA, appends new drive blocks, regenerates leaves.
-4. **Retire `v3/devtools/bootstrap-certs.sh`** (the skeleton scaffolding) or fold its logic into `install.sh`.
+2. **Per-drive SCSI-generic auto-detect.** Every ripper service in the generated compose needs both `/dev/sr<N>` *and* the matching `/dev/sg<M>` passed in `devices:`. The two are paired via the kernel device path — discover with `ls /sys/class/block/sr<N>/device/scsi_generic/` (returns `sgM`). MakeMKV does its drive enumeration via SCSI-generic ioctls; without the sg node it logs `Unknown device - '/dev/srN'` and emits zero titles, silently degrading to the data-disc fallback. Found during Phase 2 verification on Big Buck Bunny BD; the workaround is hardcoded for the dev host in [v3/docker-compose.yml](../../docker-compose.yml) until the installer auto-detects.
+3. **`--rotate-ca`, `--prefix`, `--start`** flags.
+4. **Idempotent rerun** — preserves `.env` and CA, appends new drive blocks, regenerates leaves.
+5. **Retire `v3/devtools/bootstrap-certs.sh`** (the skeleton scaffolding) or fold its logic into `install.sh`.
 
 **Depends on:** Phase 7 (installer needs the full compose topology it's generating to be correct).
 

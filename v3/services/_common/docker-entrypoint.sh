@@ -35,5 +35,14 @@ for d in /logs /raw /media; do
     chown arm:arm "$d" 2>/dev/null || true
 done
 
+# Ripper-only: refresh the MakeMKV app_Key on every boot. The hook is
+# gated on update_key.sh + makemkvcon existing, so backend / transcode
+# containers no-op past it. Failures must not block boot.
+if [[ -x /usr/local/bin/update_key.sh ]] && command -v makemkvcon >/dev/null 2>&1; then
+    [[ -d /home/arm/.MakeMKV ]] || install -d -o arm -g arm /home/arm/.MakeMKV
+    chown arm:arm /home/arm /home/arm/.MakeMKV 2>/dev/null || true
+    gosu arm /usr/local/bin/update_key.sh || true
+fi
+
 umask 002
 exec /usr/bin/tini -- gosu arm "$@"

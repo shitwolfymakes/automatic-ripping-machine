@@ -4,12 +4,14 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 import uvicorn
 from fastapi import FastAPI
 
 from arm_backend.config import settings
 from arm_backend.db import SessionLocal
-from arm_backend.routers import health, ripper
+from arm_backend.metadata import MetadataDispatcher
+from arm_backend.routers import health, jobs, ripper
 from arm_backend.seeders import run_seeders
 
 logging.basicConfig(
@@ -38,15 +40,21 @@ async def _run_seeders() -> None:
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _run_migrations()
     await _run_seeders()
-    yield
+    http = httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=10.0))
+    app.state.dispatcher = MetadataDispatcher(http, omdb_api_key_override=settings.OMDB_API_KEY)
+    try:
+        yield
+    finally:
+        await app.state.dispatcher.aclose()
 
 
 app = FastAPI(title="ARM v3 Backend", lifespan=lifespan)
 app.include_router(health.router)
 app.include_router(ripper.router)
+app.include_router(jobs.router)
 
 
 def main() -> None:

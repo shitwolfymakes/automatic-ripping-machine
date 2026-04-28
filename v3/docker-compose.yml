@@ -38,6 +38,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@arm-db:5432/${POSTGRES_DB}?sslmode=verify-full&sslrootcert=/etc/ssl/arm/arm-ca.crt
       ARM_SERVICE_TOKEN: ${ARM_SERVICE_TOKEN}
       ARM_LOG_LEVEL: ${ARM_LOG_LEVEL:-info}
+      OMDB_API_KEY: ${OMDB_API_KEY:-}
       TLS_CERT_PATH: /etc/ssl/arm/tls.crt
       TLS_KEY_PATH: /etc/ssl/arm/tls.key
       PUID: ${PUID:-1000}
@@ -62,6 +63,11 @@ services:
       - arm-backend
     devices:
       - "/dev/sr0:/dev/sr0"
+      # MakeMKV reads the disc through SCSI generic ioctls, not the block
+      # device — pass the matching /dev/sg* node too. Find it with:
+      #   readlink -f /sys/class/block/sr0/device | xargs -I{} ls {}/scsi_generic/
+      # Phase 13 (installer) will auto-detect this; for now it's per-host.
+      - "/dev/sg5:/dev/sg5"
     group_add:
       - "${CDROM_GID:-44}"
     environment:

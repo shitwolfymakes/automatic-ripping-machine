@@ -132,6 +132,7 @@ services:
     depends_on: [arm-backend]
     devices:
       - "/dev/sr0:/dev/sr0"
+      - "/dev/sgN:/dev/sgN"  # matching SCSI-generic node — see "SCSI-generic pairing" below
     group_add:
       - "${CDROM_GID:-44}"   # host's optical group GID so PUID-dropped process can read /dev/sr0
     environment:
@@ -159,6 +160,18 @@ Each service container, on startup, copies the mounted `/etc/ssl/arm/arm-ca.crt`
 Note that v2 may be simultaneously bound to `/dev/sr0`. If you want to run a real v3 rip, stop v2 first — the kernel permits multiple containers to map the same device but MakeMKV won't play nicely with the disc being used by two processes. This is the one unavoidable resource conflict and it only matters during the transition period.
 
 Transcode services are NOT declared in compose — they are spawned dynamically by the Backend via Docker socket.
+
+### SCSI-generic pairing
+
+Each ripper container needs **both** the block device (`/dev/srN`) **and** its matching SCSI-generic node (`/dev/sgM`). MakeMKV enumerates drives via SG ioctls, not by opening the block device — without the sg node, `makemkvcon info` returns `Unknown device - '/dev/srN'` and zero titles. The ripper's scan dispatcher silently falls through to the data-disc fallback in that case, so the failure mode is "every disc looks unidentifiable" rather than a clean error.
+
+The pairing isn't lexicographic — `sr0` does **not** automatically pair with `sg0`. Find the matching node from the kernel device tree:
+
+```sh
+ls /sys/class/block/sr0/device/scsi_generic/   # → e.g. "sg5"
+```
+
+Phase 13's installer auto-detects this per drive and emits the right `devices:` entries. Until then, the dev compose file at [v3/docker-compose.yml](../../docker-compose.yml) hardcodes the pairing for one host — change it (or add more entries for multi-drive setups) before bringing the stack up on a different machine.
 
 ## Why one ripper service per drive
 
