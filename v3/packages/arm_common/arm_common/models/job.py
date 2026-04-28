@@ -4,8 +4,9 @@ from typing import Any
 from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlmodel import Field, SQLModel
 
-from arm_backend.models._columns import created_at_column, enum_column, updated_at_column
-from arm_common import DiscType, JobStatus, new_id
+from arm_common.models._columns import created_at_column, enum_column, updated_at_column
+from arm_common.enums import DiscType, JobStatus
+from arm_common.ulid import new_id
 
 
 def _job_id() -> str:

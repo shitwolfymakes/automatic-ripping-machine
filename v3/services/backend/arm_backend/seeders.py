@@ -14,7 +14,7 @@ from argon2 import PasswordHasher
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.models import (
+from arm_common.models import (
     Config,
     RipPreset,
     Session,

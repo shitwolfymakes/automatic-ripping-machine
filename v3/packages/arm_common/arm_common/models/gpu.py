@@ -4,8 +4,9 @@ from sqlalchemy import Column, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlmodel import Field, SQLModel
 
-from arm_backend.models._columns import created_at_column, enum_column, updated_at_column
-from arm_common import GpuStatus, GpuVendor, new_id
+from arm_common.models._columns import created_at_column, enum_column, updated_at_column
+from arm_common.enums import GpuStatus, GpuVendor
+from arm_common.ulid import new_id
 
 
 def _gpu_id() -> str:

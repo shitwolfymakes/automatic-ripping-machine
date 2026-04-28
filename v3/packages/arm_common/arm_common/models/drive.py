@@ -4,8 +4,9 @@ from typing import Any
 from sqlalchemy import JSON, Column, DateTime, ForeignKey, String
 from sqlmodel import Field, SQLModel
 
-from arm_backend.models._columns import created_at_column, enum_column, updated_at_column
-from arm_common import DriveStatus, new_id
+from arm_common.models._columns import created_at_column, enum_column, updated_at_column
+from arm_common.enums import DriveStatus
+from arm_common.ulid import new_id
 
 
 def _drive_id() -> str:

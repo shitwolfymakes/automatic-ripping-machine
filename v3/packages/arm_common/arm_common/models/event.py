@@ -5,7 +5,7 @@ from sqlalchemy import Column, DateTime, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
-from arm_common import new_id
+from arm_common.ulid import new_id
 
 
 def _event_id() -> str:

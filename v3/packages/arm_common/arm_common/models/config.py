@@ -4,8 +4,8 @@ from sqlalchemy import Boolean, Column, ForeignKey, Integer, LargeBinary, String
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlmodel import Field, SQLModel
 
-from arm_backend.models._columns import enum_column, updated_at_column
-from arm_common import RetentionPolicy
+from arm_common.models._columns import enum_column, updated_at_column
+from arm_common.enums import RetentionPolicy
 
 
 class Config(SQLModel, table=True):

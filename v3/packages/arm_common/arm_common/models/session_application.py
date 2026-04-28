@@ -5,8 +5,9 @@ from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
-from arm_backend.models._columns import created_at_column, enum_column
-from arm_common import SessionApplicationStatus, new_id
+from arm_common.models._columns import created_at_column, enum_column
+from arm_common.enums import SessionApplicationStatus
+from arm_common.ulid import new_id
 
 
 def _session_application_id() -> str:
