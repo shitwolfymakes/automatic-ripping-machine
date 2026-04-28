@@ -1,6 +1,6 @@
 # 05 — Cross-Cutting Concerns
 
-Things that touch every service: configuration, authentication, secrets, logging, observability, testing, and the shared Python package.
+Things that touch every service: configuration, authentication, secrets, logging, observability, code quality, testing, and the shared Python package.
 
 ## Repo layout
 
@@ -249,6 +249,35 @@ Every service logs **structured JSON to stdout**. One event per line (JSONL). Re
 **v3.0 ships logs only.** No Prometheus `/metrics`, no OpenTelemetry traces. Homelab operators who need them can scrape Docker engine metrics or add their own sidecars.
 
 The explicit structure of the typed event log (`events` table) is the closest thing to metrics in v3.0 — an operator can SQL it for "how many rips succeeded this week" without an external TSDB.
+
+## Code quality
+
+A single pre-commit stack, configured at the workspace root, gates every Python file in `v3/`. All three packages (`arm_common`, `arm_backend`, `arm_ripper`) are held to the same bar.
+
+| Tool | Role | Config |
+|---|---|---|
+| **ruff** (`format` + `check --fix`) | Formatter + linter. One Rust-backed binary covering what black, isort, flake8, bugbear, and pyupgrade did separately. | `[tool.ruff]` in [v3/pyproject.toml](../../pyproject.toml) |
+| **mypy** | Strict type checker. Runs via `uv run` so it resolves against the real synced workspace graph, not a pinned subset maintained per-hook. | `[tool.mypy]` in [v3/pyproject.toml](../../pyproject.toml) |
+| **pre-commit** | Orchestrates the above. Hooks are scoped to `^v3/` so v2 files are never rewritten. | [v3/.pre-commit-config.yaml](../../.pre-commit-config.yaml) |
+
+The ruff + uv pairing is deliberate: both ship from Astral and wire together cleanly, and the full sweep finishes well under a second on a warm cache. Black + isort + flake8 would reproduce the same rules across four tools and four configs for no gain.
+
+**What strict mypy buys us.** Untyped returns, untyped calls, untyped defs, and unreachable code all fail. Every workspace package ships a `py.typed` marker so cross-package imports are trusted as typed rather than silently collapsed to `Any`.
+
+**Install and run (from `v3/`):**
+
+```bash
+uv sync --group dev                                                 # sync tools into v3/.venv
+uv run pre-commit install --config .pre-commit-config.yaml          # wire up the git hook
+uv run pre-commit run --config .pre-commit-config.yaml --all-files  # run over everything
+uv run pre-commit autoupdate --config .pre-commit-config.yaml       # bump hook pins
+```
+
+Pre-commit changes `cwd` to the git root before executing hooks, which is why the `--config` paths in the hook file (`v3/pyproject.toml`, `-p arm_common -p arm_backend -p arm_ripper`) are all phrased repo-root-relative — they resolve correctly no matter which directory invokes pre-commit.
+
+**No docstring-body reformatter.** The historical tool for this (`docformatter`) is effectively unmaintained and its transitive dep doesn't build on Python 3.14. Ruff covers docstring quote style and whitespace; docstring content is a review concern.
+
+**Not yet in this gate.** `pytest` lands with the Tier 1 tests described below — quality gates and tests come online together.
 
 ## Testing strategy
 
