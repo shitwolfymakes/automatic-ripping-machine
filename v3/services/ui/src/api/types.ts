@@ -70,14 +70,186 @@ export interface DriveView {
   default_session_id: string | null;
 }
 
+export type MediaType = "movie" | "tv" | "music" | "data" | "iso";
+
+export type TrackSelection = "main_feature" | "all_tracks" | "archive" | "custom";
+
+export type IdentificationMode = "required" | "skip" | "deferred_placeholder";
+
+export type OutputMode = "tracks" | "iso" | "data_copy";
+
+export type TranscodeTool = "handbrake" | "abcde" | "none";
+
+export type ContainerFormat =
+  | "mkv"
+  | "mp4"
+  | "webm"
+  | "flac"
+  | "mp3"
+  | "ogg"
+  | "iso"
+  | "none";
+
+export type HwPreference = "cpu_only" | "any";
+
+export type SessionApplicationStatus =
+  | "waiting_identify"
+  | "queued"
+  | "running"
+  | "done"
+  | "done_partial"
+  | "failed"
+  | "cancelled";
+
+export type TranscodeTaskStatus = "queued" | "in_progress" | "done" | "failed";
+
+export interface TrackFilters {
+  min_duration_seconds?: number | null;
+  max_duration_seconds?: number | null;
+  title_indices?: number[] | null;
+  title_indices_exclude?: number[] | null;
+}
+
 export interface SessionView {
   id: string;
   name: string;
-  media_type: string;
+  media_type: MediaType;
   is_builtin: boolean;
   rip_preset_id: string;
   transcode_preset_id: string | null;
   output_path_template: string;
+  overrides_json: Record<string, unknown> | null;
+  created_by_user_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface SessionCreateRequest {
+  name: string;
+  media_type: MediaType;
+  rip_preset_id: string;
+  transcode_preset_id?: string | null;
+  output_path_template: string;
+  overrides_json?: Record<string, unknown> | null;
+}
+
+export interface SessionUpdateRequest {
+  name?: string;
+  rip_preset_id?: string;
+  transcode_preset_id?: string | null;
+  output_path_template?: string;
+  overrides_json?: Record<string, unknown> | null;
+}
+
+export interface SessionCloneRequest {
+  name: string;
+}
+
+export interface RipPresetView {
+  id: string;
+  name: string;
+  media_type: MediaType;
+  is_builtin: boolean;
+  track_selection: TrackSelection;
+  identification_mode: IdentificationMode;
+  output_mode: OutputMode;
+  track_filters_json: TrackFilters | null;
+  created_by_user_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface RipPresetCreateRequest {
+  name: string;
+  media_type: MediaType;
+  track_selection: TrackSelection;
+  identification_mode: IdentificationMode;
+  output_mode: OutputMode;
+  track_filters_json?: TrackFilters | null;
+}
+
+export type RipPresetUpdateRequest = Partial<Omit<RipPresetCreateRequest, "media_type">>;
+
+export interface TranscodePresetView {
+  id: string;
+  name: string;
+  media_type: MediaType;
+  is_builtin: boolean;
+  tool: TranscodeTool;
+  preset_ref: string | null;
+  preset_json: Record<string, unknown> | null;
+  container: ContainerFormat;
+  hw_preference: HwPreference | null;
+  extra_args: string | null;
+  created_by_user_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface TranscodePresetCreateRequest {
+  name: string;
+  media_type: MediaType;
+  tool: TranscodeTool;
+  preset_ref?: string | null;
+  preset_json?: Record<string, unknown> | null;
+  container: ContainerFormat;
+  hw_preference?: HwPreference | null;
+  extra_args?: string | null;
+}
+
+export type TranscodePresetUpdateRequest = Partial<Omit<TranscodePresetCreateRequest, "media_type">>;
+
+export interface SessionApplicationView {
+  id: string;
+  session_id: string;
+  job_id: string;
+  status: SessionApplicationStatus;
+  overrides_json: Record<string, unknown> | null;
+  overwrite: boolean;
+  created_by_user_id: string | null;
+  created_at: string | null;
+  completed_at: string | null;
+}
+
+export interface TranscodeTaskView {
+  id: string;
+  session_application_id: string;
+  source_track_id: string;
+  status: TranscodeTaskStatus;
+  output_path: string | null;
+  progress_pct: number;
+  attempts: number;
+  last_error: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ApplySessionRequest {
+  session_id: string;
+  overwrite?: boolean;
+}
+
+export interface CollisionInfo {
+  output_path: string;
+  existing_task_id: string | null;
+  on_filesystem: boolean;
+}
+
+export interface ApplySessionResponse {
+  session_application: SessionApplicationView;
+  tasks: TranscodeTaskView[];
+  collisions: CollisionInfo[];
+  idempotent: boolean;
+}
+
+export interface TemplatePreviewRequest {
+  template: string;
+  media_type: MediaType;
+  has_transcode_preset: boolean;
+}
+
+export interface TemplatePreviewResponse {
+  expansion: string;
 }
 
 export interface ConfigView {

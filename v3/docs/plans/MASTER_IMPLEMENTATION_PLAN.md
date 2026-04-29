@@ -143,19 +143,22 @@ Visual UI verification deferred to manual click-through; per [05-cross-cutting.m
 
 ---
 
-## Phase 6 — Sessions & session applications
+## Phase 6 — Sessions & session applications (shipped)
 
 **Goal.** The CRUD layer for user-authored sessions. Creating a session application against a ripped job produces `transcode_tasks` rows in `queued` state — but nothing transcodes them yet (Phase 7).
 
-**Exit criteria.** A user can clone a built-in session, tweak it, apply it to a ripped job via `POST /api/jobs/{job_id}/transcode`, and see the resulting `session_applications` + `transcode_tasks` rows. Path-template validation rejects templates that produce empty required tokens. Cross-session and cross-job collisions surface the dialog described in [02-job-lifecycle.md § Concurrent write safety](../arch/02-job-lifecycle.md#concurrent-write-safety).
+**Exit criteria — met.** A user can clone a built-in session, tweak it, apply it to a ripped job via `POST /api/jobs/{job_id}/transcode`, and see the resulting `session_applications` + `transcode_tasks` rows. Path-template validation rejects templates that produce empty required tokens. Cross-session and cross-job collisions surface the dialog described in [02-job-lifecycle.md § Concurrent write safety](../arch/02-job-lifecycle.md#concurrent-write-safety).
 
 **Deliverables:**
-1. **REST:** `GET/POST/PATCH/DELETE /api/sessions`, `GET /api/transcodes`, `DELETE /api/transcodes/{id}` (queue only — running cancel lands in Phase 7).
-2. **Path-template expansion + validation** at save time against a synthetic job of the session's `media_type`.
-3. **Apply-time fan-out.** Resolve every output path, check for cross-session and cross-job collisions (`SELECT` against `transcode_tasks.output_path` in live states + filesystem check). Surface the overwrite dialog on the UI side; set `session_applications.overwrite=true` when confirmed.
-4. **Idempotency** for `POST /api/jobs/{job_id}/transcode` — re-applying the same session to the same job returns the existing `session_application`.
-5. **UI "New Session" wizard** prefilled from built-ins; rip-preset + transcode-preset dropdowns filtered by the session's `media_type`.
-6. **`custom` rip-preset support** — the `track_filters_json` declarative rules the MVP track selector skipped in Phase 3.
+1. **REST CRUD** for sessions, rip presets, and transcode presets. `POST /api/sessions/{id}/clone` is a first-class endpoint that copies a built-in into a user-owned non-builtin row. `is_builtin=true` rows are name-only-editable; `DELETE` is refused with a useful message. `DELETE /api/rip-presets/{id}` and `DELETE /api/transcode-presets/{id}` 409 with the names of any sessions still referencing the preset.
+2. **`POST /api/jobs/{job_id}/transcode`** is the apply endpoint — body `{session_id, overwrite: bool=false}`. Idempotent on `(session_id, job_id)`. Returns `ApplySessionResponse {session_application, tasks, collisions, idempotent}`. On `AWAITING_USER_ID` the application is parked in `WAITING_IDENTIFY` with no tasks (real fan-out-on-resolve is Phase 10's job).
+3. **Path-template expansion + validation** in [arm_backend/path_template.py](../../services/backend/arm_backend/path_template.py): per-`MediaType` token whitelist mirrors arch §02, synthetic-context expansion at save-time, real-data expansion at apply-time. `{transcode_slug}` requires a transcode preset; `{ext}` requires one (except `media_type=ISO`). Empty real-data tokens raise 422 — better than writing `Iron Man () - .mkv`.
+4. **Apply-time collision check** in [arm_backend/transcode_apply.py](../../services/backend/arm_backend/transcode_apply.py): single `SELECT … WHERE output_path IN (...) AND status IN live_states` against `transcode_tasks`, plus an `os.stat` against `MEDIA_ROOT/<path>` for filesystem-only hits (pre-v3 user content). 409 with `{collisions: [...]}` unless `overwrite=true`. The partial unique index on `transcode_tasks(output_path)` is the DB-level safety net for TOCTOU races; `IntegrityError` maps to a generic 409 too.
+5. **`GET /api/transcodes`** with `?status=` and `?session_application_id=` filters; **`DELETE /api/transcodes/{id}`** soft-cancels `QUEUED` tasks (`status=FAILED, last_error="cancelled by user"`) and 409s on `IN_PROGRESS` (running cancel lands in Phase 7).
+6. **`POST /api/sessions/preview`** drives the wizard's live template preview — debounced 300 ms client-side, returns the synthetic expansion or a 422 with the validation message.
+7. **UI:** new `SessionForm.vue` (used at `/sessions/new` and `/sessions/:id/edit`), full CRUD for `RipPresets.vue` / `RipPresetForm.vue` and `TranscodePresets.vue` / `TranscodePresetForm.vue`, a `TrackFiltersEditor.vue` component that renders only when `track_selection==custom`, and an `ApplySessionDialog.vue` on `JobDetail.vue` that surfaces the collision flow. Pinia stores: `sessions.ts`, `ripPresets.ts`, `transcodePresets.ts`, `transcodes.ts`. Built-in protection is also enforced UI-side (Edit on a built-in only exposes the name field).
+8. **`custom` rip-preset support.** Declarative `TrackFilters` schema (`min_duration_seconds`, `max_duration_seconds`, `title_indices`, `title_indices_exclude`) — all conditions ANDed. Required iff `track_selection==CUSTOM`; rejected at save otherwise. [arm_backend/track_selection.py](../../services/backend/arm_backend/track_selection.py) is no longer raising `NotImplementedError` for CUSTOM; the rip pipeline now consumes the filters end-to-end.
+9. **Tests:** 36 new backend tests (path-template, slugify, custom-track-selection, compute_outputs, sessions/rip-presets routers, apply-session matrix), 4 new Vitest specs (sessions store CRUD + apply + collision retry). 156 backend / 12 UI total — all green.
 
 **Depends on:** Phase 1 (every session-related table), Phase 3 (applying against real ripped jobs), Phase 5 (UI to drive it).
 

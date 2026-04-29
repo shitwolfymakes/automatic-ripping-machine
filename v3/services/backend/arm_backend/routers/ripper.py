@@ -174,7 +174,7 @@ async def rip_start(
     preset_id = _DEFAULT_RIP_PRESET_BY_DISC_TYPE.get(job.disc_type)
     if preset_id is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"no default rip preset for disc_type={job.disc_type.value}",
         )
 
@@ -214,7 +214,7 @@ async def rip_start(
     new_tracks = select_tracks(job.id, scan, preset)
     if not new_tracks:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="track selection produced zero tracks",
         )
 

@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     BIND_HOST: str = "0.0.0.0"
     BIND_PORT: int = 8443
 
+    # Filesystem root the apply-time collision check stats against. Resolved
+    # relative paths (`{title} ({year})/...`) are joined to this; the partial
+    # unique index on `transcode_tasks.output_path` is the safety net for races.
+    MEDIA_ROOT: str = "/media"
+
     # Optional .env override for the OMDB key. When set, takes precedence over
     # config.omdb_api_key on every identify call — useful in dev where the
     # secret lives in v3/.env and the Config row stays empty.

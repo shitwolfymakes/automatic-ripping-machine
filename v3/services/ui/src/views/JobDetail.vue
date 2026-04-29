@@ -1,22 +1,34 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { api, ApiError } from "../api/client";
-import type { JobDetailView } from "../api/types";
+import ApplySessionDialog from "../components/ApplySessionDialog.vue";
+import type { ApplySessionResponse, JobDetailView, JobStatus } from "../api/types";
 
 const route = useRoute();
 const detail = ref<JobDetailView | null>(null);
 const error = ref<string | null>(null);
+const showApply = ref(false);
+const lastApplied = ref<ApplySessionResponse | null>(null);
 
-onMounted(async () => {
+const APPLY_OK: JobStatus[] = ["identified", "ripped", "ripped_partial", "awaiting_user_id"];
+const canApply = computed(() => detail.value !== null && APPLY_OK.includes(detail.value.job.status));
+
+async function load(): Promise<void> {
   try {
     const id = route.params.id as string;
     detail.value = await api.get<JobDetailView>(`/api/jobs/${id}`);
   } catch (e) {
-    error.value =
-      e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to load";
+    error.value = e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to load";
   }
-});
+}
+
+onMounted(load);
+
+function onApplied(resp: ApplySessionResponse): void {
+  lastApplied.value = resp;
+  showApply.value = false;
+}
 </script>
 
 <template>
@@ -40,8 +52,35 @@ onMounted(async () => {
         <div class="muted">Title</div>
         <div>{{ detail.job.title ?? "—" }}<span v-if="detail.job.year"> ({{ detail.job.year }})</span></div>
       </div>
+      <div class="spacer" />
+      <button v-if="canApply && !showApply" @click="showApply = true">Apply session</button>
     </div>
   </div>
+
+  <ApplySessionDialog
+    v-if="detail && showApply"
+    :job="detail.job"
+    @close="showApply = false"
+    @applied="onApplied"
+  />
+
+  <div v-if="lastApplied" class="card">
+    <h3 style="margin-top: 0">
+      Session queued
+      <span v-if="lastApplied.idempotent" class="muted">(already applied — same response returned)</span>
+    </h3>
+    <p>
+      Application <code>{{ lastApplied.session_application.id }}</code> in status
+      <strong>{{ lastApplied.session_application.status }}</strong>
+      with {{ lastApplied.tasks.length }} task(s) queued.
+    </p>
+    <ul>
+      <li v-for="t in lastApplied.tasks" :key="t.id">
+        <code>{{ t.output_path }}</code> — {{ t.status }}
+      </li>
+    </ul>
+  </div>
+
   <div v-if="detail" class="card">
     <h3 style="margin-top: 0">Tracks</h3>
     <p v-if="detail.tracks.length === 0" class="muted">No tracks yet.</p>
