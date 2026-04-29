@@ -1,0 +1,327 @@
+"""Phase 8: shared apply-session core + rip-complete auto-apply hook.
+
+`apply_session_internal` is the engine behind both code paths:
+  * `POST /api/jobs/{id}/transcode` — manual click in the UI.
+  * `_maybe_auto_apply_session` — fired from `rip-complete` when the disc's
+    drive has `default_session_id` set and `Config.auto_transcode_on_idle` is
+    enabled.
+
+Both paths emit a single `session.queued` WS event on success with the
+`source` field set to `"manual"` or `"auto"` so the UI can render where each
+in-flight transcode came from.
+
+Auto-apply failures never bubble out: a deleted session, a template that
+resolves to an empty token, or a path collision all log at WARN and let the
+caller's HTTP response succeed unchanged. The user can still hand-apply the
+session afterwards.
+"""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+from typing import Literal, NamedTuple
+
+from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, select
+
+from arm_backend.config import settings
+from arm_backend.path_template import TemplateValidationError
+from arm_backend.transcode_apply import compute_outputs, find_collisions
+from arm_backend.ws import WSHub
+from arm_common import (
+    Config,
+    Drive,
+    Job,
+    JobStatus,
+    RipPreset,
+    Session,
+    SessionApplication,
+    SessionApplicationStatus,
+    Track,
+    TranscodePreset,
+    TranscodeTask,
+    TranscodeTaskStatus,
+)
+from arm_common.schemas import CollisionInfo
+
+logger = logging.getLogger("arm_backend.auto_session")
+
+
+_APPLY_OK_STATUSES: frozenset[JobStatus] = frozenset({JobStatus.IDENTIFIED, JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL})
+
+
+class SessionNotFoundError(Exception):
+    """Raised by `apply_session_internal` when `session_id` doesn't resolve."""
+
+
+SkippedReason = Literal["collisions", "template", "session_missing"]
+ApplySource = Literal["manual", "auto"]
+
+
+class ApplySessionOutcome(NamedTuple):
+    application: SessionApplication | None
+    tasks: list[TranscodeTask]
+    collisions: list[CollisionInfo]
+    idempotent: bool
+    skipped_reason: SkippedReason | None
+
+
+async def apply_session_internal(
+    db: AsyncSession,
+    *,
+    job: Job,
+    session_id: str,
+    overwrite: bool = False,
+    created_by_user_id: str | None,
+    source: ApplySource,
+    hub: WSHub | None = None,
+) -> ApplySessionOutcome:
+    """Create (or return existing) session_application + fan out transcode tasks.
+
+    Caller responsibilities:
+      * Manual route: map `SessionNotFoundError`/`TemplateValidationError`/
+        `IntegrityError` to the appropriate HTTP 4xx response, and inspect
+        `skipped_reason` to surface collisions to the client.
+      * Auto hook: catch all exceptions, log at WARN, swallow.
+    """
+    sess = (await db.execute(select(Session).where(col(Session.id) == session_id))).scalar_one_or_none()
+    if sess is None:
+        raise SessionNotFoundError(session_id)
+
+    # Idempotency: same (session, job) → return the existing application.
+    existing = (
+        await db.execute(
+            select(SessionApplication)
+            .where(col(SessionApplication.session_id) == session_id)
+            .where(col(SessionApplication.job_id) == job.id)
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        tasks = await _load_tasks(db, existing.id)
+        return ApplySessionOutcome(
+            application=existing,
+            tasks=tasks,
+            collisions=[],
+            idempotent=True,
+            skipped_reason=None,
+        )
+
+    # `awaiting_user_id` → park as `waiting_identify` with no tasks.
+    # In practice this only happens via the manual route — `rip-complete`
+    # only fires for jobs already past identification.
+    if job.status == JobStatus.AWAITING_USER_ID:
+        application = SessionApplication(
+            session_id=session_id,
+            job_id=job.id,
+            status=SessionApplicationStatus.WAITING_IDENTIFY,
+            overwrite=False,
+            created_by_user_id=created_by_user_id,
+        )
+        db.add(application)
+        await db.commit()
+        await db.refresh(application)
+        return ApplySessionOutcome(
+            application=application,
+            tasks=[],
+            collisions=[],
+            idempotent=False,
+            skipped_reason=None,
+        )
+
+    if job.status not in _APPLY_OK_STATUSES:
+        # Manual route maps this to 409; auto path never reaches here because
+        # `maybe_auto_apply_session` gates on RIPPED/RIPPED_PARTIAL.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"job is in status {job.status.value}; cannot apply a session",
+        )
+
+    rip_preset = (
+        await db.execute(select(RipPreset).where(col(RipPreset.id) == sess.rip_preset_id))
+    ).scalar_one_or_none()
+    if rip_preset is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"session references missing rip_preset_id={sess.rip_preset_id}",
+        )
+
+    transcode_preset: TranscodePreset | None = None
+    if sess.transcode_preset_id is not None:
+        transcode_preset = (
+            await db.execute(select(TranscodePreset).where(col(TranscodePreset.id) == sess.transcode_preset_id))
+        ).scalar_one_or_none()
+        if transcode_preset is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"session references missing transcode_preset_id={sess.transcode_preset_id}",
+            )
+
+    tracks = list(
+        (await db.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index)))).scalars().all()
+    )
+
+    resolved = compute_outputs(job, tracks, sess, transcode_preset)
+
+    paths = [r.output_path for r in resolved]
+    media_root = Path(settings.MEDIA_ROOT)
+    collisions = await find_collisions(db, paths, media_root)
+    if collisions and not overwrite:
+        return ApplySessionOutcome(
+            application=None,
+            tasks=[],
+            collisions=collisions,
+            idempotent=False,
+            skipped_reason="collisions",
+        )
+
+    application = SessionApplication(
+        session_id=session_id,
+        job_id=job.id,
+        status=SessionApplicationStatus.QUEUED,
+        overwrite=overwrite,
+        created_by_user_id=created_by_user_id,
+    )
+    db.add(application)
+    await db.flush()
+
+    new_tasks = [
+        TranscodeTask(
+            session_application_id=application.id,
+            source_track_id=r.track_id,
+            status=TranscodeTaskStatus.QUEUED,
+            output_path=r.output_path,
+            attempts=0,
+            progress_pct=0,
+        )
+        for r in resolved
+    ]
+    db.add_all(new_tasks)
+
+    if hub is not None and new_tasks:
+        await hub.emit(
+            topic="session.events",
+            event_type="session.queued",
+            payload={
+                "session_application_id": application.id,
+                "session_id": session_id,
+                "job_id": job.id,
+                "source": source,
+                "task_count": len(new_tasks),
+            },
+            job_id=job.id,
+            session=db,
+        )
+
+    await db.commit()
+    await db.refresh(application)
+    for task in new_tasks:
+        await db.refresh(task)
+
+    logger.info(
+        "apply session_id=%s job_id=%s tasks=%d overwrite=%s source=%s",
+        session_id,
+        job.id,
+        len(new_tasks),
+        overwrite,
+        source,
+    )
+
+    return ApplySessionOutcome(
+        application=application,
+        tasks=new_tasks,
+        collisions=[],
+        idempotent=False,
+        skipped_reason=None,
+    )
+
+
+async def _load_tasks(db: AsyncSession, session_application_id: str) -> list[TranscodeTask]:
+    rows = (
+        (
+            await db.execute(
+                select(TranscodeTask)
+                .where(col(TranscodeTask.session_application_id) == session_application_id)
+                .order_by(col(TranscodeTask.created_at).asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return list(rows)
+
+
+async def maybe_auto_apply_session(
+    db: AsyncSession,
+    job: Job,
+    hub: WSHub,
+) -> None:
+    """Hook invoked from `rip-complete`. Silent on every failure mode.
+
+    Only fires when:
+      * the drive has a `default_session_id`,
+      * `Config.auto_transcode_on_idle` is True.
+    """
+    drive = (await db.execute(select(Drive).where(col(Drive.id) == job.drive_id))).scalar_one_or_none()
+    if drive is None or drive.default_session_id is None:
+        return
+
+    config_row = (await db.execute(select(Config).where(col(Config.id) == 1))).scalar_one_or_none()
+    if config_row is None or not config_row.auto_transcode_on_idle:
+        return
+
+    session_id = drive.default_session_id
+    try:
+        outcome = await apply_session_internal(
+            db,
+            job=job,
+            session_id=session_id,
+            overwrite=False,
+            created_by_user_id=None,
+            source="auto",
+            hub=hub,
+        )
+    except SessionNotFoundError:
+        logger.warning(
+            "auto-apply skipped: session_id=%s missing for drive_id=%s job_id=%s",
+            session_id,
+            drive.id,
+            job.id,
+        )
+        return
+    except TemplateValidationError as exc:
+        logger.warning(
+            "auto-apply skipped: template error session_id=%s job_id=%s: %s",
+            session_id,
+            job.id,
+            exc,
+        )
+        return
+    except IntegrityError as exc:
+        await db.rollback()
+        logger.warning(
+            "auto-apply skipped: integrity error session_id=%s job_id=%s: %s",
+            session_id,
+            job.id,
+            exc,
+        )
+        return
+    except Exception as exc:  # noqa: BLE001 - hook must never break rip-complete
+        await db.rollback()
+        logger.exception(
+            "auto-apply unexpected error session_id=%s job_id=%s: %s",
+            session_id,
+            job.id,
+            exc,
+        )
+        return
+
+    if outcome.skipped_reason is not None:
+        logger.warning(
+            "auto-apply skipped reason=%s session_id=%s job_id=%s",
+            outcome.skipped_reason,
+            session_id,
+            job.id,
+        )

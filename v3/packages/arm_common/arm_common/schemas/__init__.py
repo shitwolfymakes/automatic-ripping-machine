@@ -9,6 +9,7 @@ from arm_common.schemas.auth import (
     PasswordChangeRequest,
 )
 from arm_common.schemas.common import ErrorResponse, HealthResponse
+from arm_common.schemas.drives import DriveUpdateRequest
 from arm_common.schemas.jobs import JobView, ResolveRequest, RipStartResponse, TrackView
 from arm_common.schemas.ripper import (
     IdentifyRequest,
@@ -68,6 +69,7 @@ __all__ = [
     "ConfigView",
     "DiagnosticsResponse",
     "DiagnosticsServiceView",
+    "DriveUpdateRequest",
     "ErrorResponse",
     "FailTaskRequest",
     "HardwareCaps",
