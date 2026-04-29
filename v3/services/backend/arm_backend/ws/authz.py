@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.ws.principal import Principal, ServicePrincipal
-from arm_common import Drive, Job
+from arm_common import Drive, Job, TranscodeTask, TranscodeTaskStatus
 
 
 def _split(topic: str) -> tuple[str, str | None]:
@@ -52,15 +52,24 @@ async def can_publish(principal: Principal, topic: str, session: AsyncSession) -
     prefix, scope = _split(topic)
 
     if isinstance(principal, ServicePrincipal):
-        if principal.kind != "ripper":
+        if principal.kind == "ripper":
+            if prefix != "ripper.progress" or not scope:
+                return False
+            job = (await session.execute(select(Job).where(col(Job.id) == scope))).scalar_one_or_none()
+            if job is None:
+                return False
+            drive = (await session.execute(select(Drive).where(col(Drive.id) == job.drive_id))).scalar_one_or_none()
+            return drive is not None and drive.hostname == principal.hostname
+
+        # principal.kind == "transcoder"
+        if prefix != "transcode.progress" or not scope or scope != principal.task_id:
             return False
-        if prefix != "ripper.progress" or not scope:
-            return False
-        job = (await session.execute(select(Job).where(col(Job.id) == scope))).scalar_one_or_none()
-        if job is None:
-            return False
-        drive = (await session.execute(select(Drive).where(col(Drive.id) == job.drive_id))).scalar_one_or_none()
-        return drive is not None and drive.hostname == principal.hostname
+        task = (await session.execute(select(TranscodeTask).where(col(TranscodeTask.id) == scope))).scalar_one_or_none()
+        return (
+            task is not None
+            and task.claimed_by == principal.hostname
+            and task.status == TranscodeTaskStatus.IN_PROGRESS
+        )
 
     # UI never publishes; backend uses hub.emit() in-process.
     return False

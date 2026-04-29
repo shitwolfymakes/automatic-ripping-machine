@@ -12,6 +12,7 @@ each candidate path under `MEDIA_ROOT` to surface filesystem-only hits
 (pre-v3 content the user copied in by hand).
 """
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
 
@@ -28,8 +29,8 @@ from arm_common import (
     TrackKind,
     TranscodePreset,
 )
-from arm_common.enums import TranscodeTaskStatus
-from arm_common.models import TranscodeTask
+from arm_common.enums import SessionApplicationStatus, TranscodeTaskStatus
+from arm_common.models import SessionApplication, TranscodeTask
 from arm_common.schemas import CollisionInfo
 
 LIVE_STATES: tuple[TranscodeTaskStatus, ...] = (
@@ -184,3 +185,61 @@ def stat_exists(media_root: Path, relative: str) -> bool:
         return full.exists()
     except OSError:
         return False
+
+
+_TERMINAL_TASK_STATES: frozenset[TranscodeTaskStatus] = frozenset(
+    {TranscodeTaskStatus.DONE, TranscodeTaskStatus.FAILED}
+)
+
+
+class AggregateOutcome(NamedTuple):
+    """Result of `_aggregate_application`. `transitioned_to` is None when the
+    application is still RUNNING (some tasks remain non-terminal); otherwise
+    one of DONE / DONE_PARTIAL / FAILED.
+    """
+
+    transitioned_to: SessionApplicationStatus | None
+    event_type: str | None  # "session.completed" / "session.partial" / "session.failed"
+
+
+async def aggregate_session_application(
+    db: AsyncSession,
+    application: SessionApplication,
+) -> AggregateOutcome:
+    """Recompute the session application's status from its tasks.
+
+    Called from the transcoder router on every task complete/fail. Mutates
+    `application` in place when transitioning to a terminal state and stamps
+    `completed_at`. Caller is responsible for committing.
+    """
+    rows = (
+        (await db.execute(select(TranscodeTask).where(col(TranscodeTask.session_application_id) == application.id)))
+        .scalars()
+        .all()
+    )
+    statuses = [r.status for r in rows]
+    if not statuses:
+        # Defensive: no tasks fanned out (waiting_identify path) — keep status untouched.
+        return AggregateOutcome(transitioned_to=None, event_type=None)
+
+    if any(s not in _TERMINAL_TASK_STATES for s in statuses):
+        return AggregateOutcome(transitioned_to=None, event_type=None)
+
+    done_count = sum(1 for s in statuses if s == TranscodeTaskStatus.DONE)
+    if done_count == len(statuses):
+        target = SessionApplicationStatus.DONE
+        event = "session.completed"
+    elif done_count == 0:
+        target = SessionApplicationStatus.FAILED
+        event = "session.failed"
+    else:
+        target = SessionApplicationStatus.DONE_PARTIAL
+        event = "session.partial"
+
+    if application.status == target:
+        # Idempotent re-run after a retry — don't re-emit.
+        return AggregateOutcome(transitioned_to=None, event_type=None)
+
+    application.status = target
+    application.completed_at = datetime.now(UTC)
+    return AggregateOutcome(transitioned_to=target, event_type=event)

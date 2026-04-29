@@ -43,18 +43,27 @@ def resolve_principal(
     token: str,
     hostname_hint: str | None,
     *,
+    task_id_hint: str | None = None,
     signing_key: bytes | None = None,
 ) -> Principal:
     """Map an auth-message token to a Principal.
 
     Resolution order:
-      1. Service token → ServicePrincipal(kind="ripper", hostname=hostname_hint)
-      2. JWT-shaped + signing_key provided → UIPrincipal from verified payload
-      3. Raise AuthError
+      1. Service token + `task_id_hint` → ServicePrincipal(kind="transcoder", ...)
+      2. Service token → ServicePrincipal(kind="ripper", hostname=hostname_hint)
+      3. JWT-shaped + signing_key provided → UIPrincipal from verified payload
+      4. Raise AuthError
+
+    `task_id_hint` is sourced from the `X-ARM-Task-Id` header at the WS
+    handshake. Cross-checking that the task is actually claimed by this
+    hostname happens at subscribe/publish time in `ws/authz.py` — keeping
+    the principal pure means we don't need a DB session here.
     """
     if check_service_token(token):
         if not hostname_hint:
             raise AuthError("service-token connection requires hostname (X-ARM-Hostname header)")
+        if task_id_hint:
+            return ServicePrincipal(kind="transcoder", hostname=hostname_hint, task_id=task_id_hint)
         return ServicePrincipal(kind="ripper", hostname=hostname_hint)
 
     if signing_key is not None and looks_like_jwt(token):

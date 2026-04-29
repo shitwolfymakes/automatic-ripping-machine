@@ -219,9 +219,36 @@ export interface TranscodeTaskView {
   output_path: string | null;
   progress_pct: number;
   attempts: number;
+  claimed_by: string | null;
+  claim_heartbeat_at: string | null;
   last_error: string | null;
   created_at: string | null;
   updated_at: string | null;
+}
+
+// Phase 7: WS event payloads (typed events on `transcode.events`).
+export interface TranscodeProgressPayload {
+  task_id: string;
+  progress_pct: number;
+  eta_seconds: number | null;
+  current_pass: string | null;
+}
+
+export interface TranscodeTaskEventPayload {
+  task_id: string;
+  session_application_id: string;
+  output_path?: string | null;
+  size_bytes?: number | null;
+  duration_seconds?: number | null;
+  sha256?: string | null;
+  last_error?: string | null;
+}
+
+export interface TranscodeSessionEventPayload {
+  session_application_id: string;
+  session_id: string;
+  job_id: string;
+  status?: string;
 }
 
 export interface ApplySessionRequest {

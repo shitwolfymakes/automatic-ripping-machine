@@ -61,6 +61,24 @@ def _matches(row: Any, filters: list[BinaryExpression]) -> bool:
                 return False
             if actual not in collection:
                 return False
+        elif op_repr == "lt":
+            values = _extract_values(right)
+            if values is None or actual is None:
+                return False
+            try:
+                if not (actual < values[0]):
+                    return False
+            except TypeError:
+                return False
+        elif op_repr == "gt":
+            values = _extract_values(right)
+            if values is None or actual is None:
+                return False
+            try:
+                if not (actual > values[0]):
+                    return False
+            except TypeError:
+                return False
         else:
             values = _extract_values(right)
             if values is None or actual != values[0]:

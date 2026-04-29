@@ -182,6 +182,8 @@ class TranscodeTaskView(BaseModel):
     output_path: str | None
     progress_pct: int
     attempts: int
+    claimed_by: str | None
+    claim_heartbeat_at: datetime | None
     last_error: str | None
     created_at: datetime | None
     updated_at: datetime | None

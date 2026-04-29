@@ -38,6 +38,15 @@ from arm_common.schemas.sessions import (
     TranscodePresetView,
     TranscodeTaskView,
 )
+from arm_common.schemas.transcoder import (
+    ClaimTaskResponse,
+    CompleteTaskRequest,
+    FailTaskRequest,
+    HardwareCaps,
+    HeartbeatRequest,
+    RegisterTranscoderRequest,
+    RegisterTranscoderResponse,
+)
 from arm_common.schemas.ws import (
     WSAck,
     WSAuthRequest,
@@ -52,13 +61,18 @@ from arm_common.schemas.ws import (
 __all__ = [
     "ApplySessionRequest",
     "ApplySessionResponse",
+    "ClaimTaskResponse",
     "CollisionInfo",
+    "CompleteTaskRequest",
     "ConfigUpdateRequest",
     "ConfigView",
     "DiagnosticsResponse",
     "DiagnosticsServiceView",
     "ErrorResponse",
+    "FailTaskRequest",
+    "HardwareCaps",
     "HealthResponse",
+    "HeartbeatRequest",
     "IdentifyRequest",
     "JobCompleteRequest",
     "JobDetailView",
@@ -67,6 +81,8 @@ __all__ = [
     "LoginResponse",
     "PasswordChangeRequest",
     "RegisterRequest",
+    "RegisterTranscoderRequest",
+    "RegisterTranscoderResponse",
     "ResolveRequest",
     "RipPresetCreateRequest",
     "RipPresetUpdateRequest",
