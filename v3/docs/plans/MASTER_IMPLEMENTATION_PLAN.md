@@ -187,11 +187,21 @@ Visual UI verification deferred to manual click-through; per [05-cross-cutting.m
 
 ### Phase 7b — GPU transcoding
 
-Split out so CPU-only can ship first.
+**Goal.** Light up VAAPI / NVENC / QSV hardware encoders behind the same dispatcher loop, so applying a "Plex 1080p H.265" session on a host with a GPU produces a real `.mkv` encoded by the GPU (visibly faster + measurable in `nvidia-smi`/`intel_gpu_top`). Hosts without a GPU regress to nothing — the CPU path from Phase 7 stays the silent fallback.
 
-1. **GPU probe at Backend startup** — VAAPI via `/dev/dri/renderD*`, NVENC via `nvidia-smi`, QSV via MediaSDK. Populate `gpus` table (truncate-and-fill). Emit `transcode.hw_unavailable` on empty.
-2. **Spawn injects `ARM_GPU_DEVICE`** or nvidia runtime flags. Claim-and-release via `SELECT … FOR UPDATE SKIP LOCKED` on the `gpus` row.
-3. **`hw_preference` respected** in dispatch — `NULL`/`cpu_only`/`any` semantics.
+**Exit criteria — met.** On a GPU host (Intel iGPU / AMD GPU / NVIDIA), Backend's lifespan probe populates the `gpus` table, the dispatcher claims a row before spawning, and `arm-transcode-<id>` runs `HandBrakeCLI ... --encoder vaapi_h265` (or `nvenc_h265` / `qsv_h265`). On task complete/fail, the row flips back to `available`. On a CPU-only host, the table stays empty, `transcode.hw_unavailable` fires once at startup, and every task spawns CPU exactly as before.
+
+**Delivered** on `wolfy/v3-improvments`:
+
+1. **`codec` column on `transcode_presets`** ([0002 migration](../../services/backend/migrations/versions/0002_transcode_preset_codec.py)) — explicit predicate for the GPU↔preset match. Backfills seeded rows by ILIKE on `preset_ref`. `VideoCodec(H264|H265|AV1)` enum on the SQLModel + view/request schemas + UI types. Built-in H.265 / TV / 2160p presets backfilled to `H265`.
+2. **`gpu_probe.py`** at Backend startup ([gpu_probe.py](../../services/backend/arm_backend/gpu_probe.py)) — `_probe_dri()` enumerates `/dev/dri/renderD*` and reads `/sys/class/drm/<n>/device/vendor` (Intel `0x8086` → QSV, AMD `0x1002` → VAAPI; NVIDIA Mesa nodes skipped). `_probe_nvidia()` shells `nvidia-smi -L`; `FileNotFoundError` and non-zero exit both cleanly degrade to `[]`. Both paths advertise `["h264", "h265"]` for now. Lifespan truncates `gpus`, refills, and emits `transcode.hw_unavailable` on empty.
+3. **Dispatcher GPU dispatch** ([transcode_dispatcher.py](../../services/backend/arm_backend/transcode_dispatcher.py)) — `_claim_gpu_for_task` implements the four-branch matrix from `04-data-model.md:126`: `cpu_only` → CPU; `any` → GPU if free else CPU; `NULL` → GPU if free, queue if busy, CPU only when no GPU advertises this codec. `_inject_gpu_run_kwargs` adds `devices=` for VAAPI/QSV (`/dev/dri/renderD*:rwm`) and `runtime="nvidia"` + `device_requests=[DeviceRequest(driver="nvidia", count=1, device_ids=[idx], capabilities=[["gpu","video"]])]` for NVENC. Spawn-failure branch rolls the claim back so the next tick can retry. The stale-claim sweep also releases the claimed `gpus` row.
+4. **Transcoder release on terminal** — `release_gpu_for_task` is a module-level helper called from `complete` and `fail` in [routers/transcoder.py](../../services/backend/arm_backend/routers/transcoder.py); idempotent.
+5. **`--encoder` injection** in [arm_transcode/handbrake.py](../../services/transcode/arm_transcode/handbrake.py) — `_hw_encoder_args()` reads `ARM_GPU_VENDOR` + `ARM_GPU_CODEC` from env and returns `["--encoder", "<vendor>_<codec>"]` from a 6-entry table (vaapi/qsv/nvenc × h264/h265). Inserted after `--preset` so HandBrake's preset CPU encoder is overridden; `extra_args` from the user-defined preset still wins via append-last. AV1 deferred (encoder-name space varies by silicon generation).
+6. **Compose overlay** — [docker-compose.gpu.yml](../../../docker-compose.gpu.yml) adds `/dev/dri:/dev/dri:ro` + `runtime: nvidia` + `deploy.resources.reservations.devices` to the Backend service. Users opt in via `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up`. The Backend image stays nvidia-free — when the overlay is loaded, the NVIDIA Container Toolkit bind-mounts the host's `nvidia-smi` automatically. CPU-only hosts use the base compose unchanged. .env.example documents the overlay knob; [services/transcode/README.md](../../services/transcode/README.md) gains a "GPU transcoding" section with the full hw_preference matrix.
+7. **Tests:** 19 new (`test_gpu_probe.py` × 5: empty host, VAAPI-only, QSV+NVENC mix, nvidia-smi missing, nvidia-smi rc≠0; `test_transcode_dispatcher_gpu.py` × 12 spanning the full hw_preference × availability × vendor matrix; `test_transcoder_router_gpu.py` × 2 for complete/fail release; `test_handbrake_hw.py` × 11 covering all 6 vendor/codec pairs + edge cases). 241 backend+ripper+transcode / 17 UI total; mypy strict + ruff lint clean; OpenAPI snapshot regenerated.
+
+**Depends on:** Phase 7 (CPU dispatch surface).
 
 ---
 

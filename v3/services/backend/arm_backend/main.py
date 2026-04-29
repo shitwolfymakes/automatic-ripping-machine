@@ -3,15 +3,18 @@ import logging
 import subprocess
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
 import uvicorn
 from fastapi import FastAPI
+from sqlalchemy import delete
 from sqlmodel import col, select
 
 from arm_backend.config import settings
 from arm_backend.db import SessionLocal
+from arm_backend.gpu_probe import probe_gpus
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.routers import (
     auth,
@@ -31,7 +34,7 @@ from arm_backend.seeders import CONFIG_SINGLETON_ID, run_seeders
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
 from arm_backend.ws import WSHub
 from arm_backend.ws.router import router as ws_router
-from arm_common import Config
+from arm_common import Config, Gpu, GpuStatus
 
 logging.basicConfig(
     level=settings.ARM_LOG_LEVEL.upper(),
@@ -56,6 +59,36 @@ async def _run_seeders() -> None:
     async with SessionLocal() as session:
         await run_seeders(session)
     logger.info("seeders complete")
+
+
+async def _refresh_gpu_inventory(hub: WSHub) -> None:
+    """Probe the host, truncate `gpus`, repopulate. Emit `transcode.hw_unavailable` on empty."""
+    try:
+        probed = probe_gpus()
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("gpu probe failed: %s", exc)
+        probed = []
+    now = datetime.now(UTC)
+    async with SessionLocal() as session:
+        await session.execute(delete(Gpu))
+        for g in probed:
+            session.add(
+                Gpu(
+                    vendor=g.vendor,
+                    device_path=g.device_path,
+                    encoder_kinds=g.encoder_kinds,
+                    status=GpuStatus.AVAILABLE,
+                    last_seen_at=now,
+                )
+            )
+        if not probed:
+            await hub.emit(
+                topic="transcode.events",
+                event_type="transcode.hw_unavailable",
+                payload={},
+                session=session,
+            )
+        await session.commit()
 
 
 def _build_docker_client() -> object | None:
@@ -83,6 +116,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     http = httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=10.0))
     app.state.dispatcher = MetadataDispatcher(http, omdb_api_key_override=settings.OMDB_API_KEY)
     app.state.ws_hub = WSHub()
+
+    # GPU probe — truncate-and-fill the gpus table so the dispatcher's first
+    # tick sees a consistent inventory. Runs before the dispatcher starts.
+    await _refresh_gpu_inventory(app.state.ws_hub)
 
     docker_client = _build_docker_client()
     transcode_dispatcher: TranscodeDispatcher | None = None

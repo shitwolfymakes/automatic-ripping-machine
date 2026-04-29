@@ -29,6 +29,7 @@ from arm_common import (
     RetentionPolicy,
     TrackSelection,
     TranscodeTool,
+    VideoCodec,
 )
 
 logger = logging.getLogger("arm_backend.seeders")
@@ -174,6 +175,7 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
         "tool": TranscodeTool.HANDBRAKE,
         "preset_ref": "H.265 MKV 1080p30",
         "container": ContainerFormat.MKV,
+        "codec": VideoCodec.H265,
         "hw_preference": None,
     },
     {
@@ -183,6 +185,7 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
         "tool": TranscodeTool.HANDBRAKE,
         "preset_ref": "H.265 MKV 2160p60 4K",
         "container": ContainerFormat.MKV,
+        "codec": VideoCodec.H265,
         "hw_preference": None,
     },
     {
@@ -192,6 +195,7 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
         "tool": TranscodeTool.HANDBRAKE,
         "preset_ref": "Matroska Passthrough",
         "container": ContainerFormat.MKV,
+        "codec": None,
         "hw_preference": None,
     },
     {
@@ -201,6 +205,7 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
         "tool": TranscodeTool.HANDBRAKE,
         "preset_ref": "H.265 MKV 1080p30",
         "container": ContainerFormat.MKV,
+        "codec": VideoCodec.H265,
         "hw_preference": None,
     },
     {
@@ -210,6 +215,7 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
         "tool": TranscodeTool.ABCDE,
         "preset_ref": "flac",
         "container": ContainerFormat.FLAC,
+        "codec": None,
         "hw_preference": None,
     },
     {
@@ -219,6 +225,7 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
         "tool": TranscodeTool.ABCDE,
         "preset_ref": "mp3",
         "container": ContainerFormat.MP3,
+        "codec": None,
         "hw_preference": None,
     },
     {
@@ -228,6 +235,7 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
         "tool": TranscodeTool.NONE,
         "preset_ref": None,
         "container": ContainerFormat.NONE,
+        "codec": None,
         "hw_preference": None,
     },
     {
@@ -237,6 +245,7 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
         "tool": TranscodeTool.NONE,
         "preset_ref": None,
         "container": ContainerFormat.ISO,
+        "codec": None,
         "hw_preference": None,
     },
 ]

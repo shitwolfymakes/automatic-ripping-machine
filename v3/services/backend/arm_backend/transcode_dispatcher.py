@@ -22,14 +22,20 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
 
 from arm_backend.config import Settings
 from arm_common import (
+    Gpu,
+    GpuStatus,
+    GpuVendor,
+    HwPreference,
+    Session,
     SessionApplication,
+    TranscodePreset,
     TranscodeTask,
     TranscodeTaskStatus,
 )
@@ -44,6 +50,30 @@ logger = logging.getLogger("arm_backend.transcode_dispatcher")
 # gracefully before falling back to `docker stop`.
 _CANCEL_GRACE_SECONDS = 10
 _DOCKER_LABEL_KEY = "arm.task_id"
+
+
+class GpuAssignment(NamedTuple):
+    """Outcome of `_claim_gpu_for_task`. `gpu` is None for the CPU spawn path;
+    `action="queue"` means leave the task queued so a later tick can retry
+    when a matching GPU frees up (NULL hw_preference + all matching GPUs busy).
+    """
+
+    gpu: Gpu | None
+    codec: str | None
+    action: Literal["spawn", "queue"]
+
+
+async def release_gpu_for_task(db: AsyncSession, task_id: str) -> None:
+    """Flip every GPU row claimed by this task back to AVAILABLE.
+
+    Called from the transcoder router on complete/fail and from the
+    stale-claim sweep. Idempotent — a no-op if no GPU was claimed.
+    Caller is responsible for committing.
+    """
+    gpus = (await db.execute(select(Gpu).where(col(Gpu.claimed_by_task_id) == task_id))).scalars().all()
+    for gpu in gpus:
+        gpu.status = GpuStatus.AVAILABLE
+        gpu.claimed_by_task_id = None
 
 
 class TranscodeDispatcher:
@@ -109,6 +139,9 @@ class TranscodeDispatcher:
             return 0
         touched = 0
         for task in stale:
+            # Release any GPU this task held; a stale claim cannot be holding
+            # a real container any more.
+            await release_gpu_for_task(db, task.id)
             if task.attempts >= self._settings.ARM_TRANSCODE_MAX_ATTEMPTS:
                 task.status = TranscodeTaskStatus.FAILED
                 task.last_error = f"exceeded retry limit after stale claim (attempts={task.attempts})"
@@ -215,13 +248,81 @@ class TranscodeDispatcher:
         queued = list(queued_all)[:slots]
         spawned = 0
         for task in queued:
+            preset = await self._resolve_preset_for_task(db, task)
+            assignment = await self._claim_gpu_for_task(db, task, preset)
+            if assignment.action == "queue":
+                logger.info(
+                    "transcode task waiting for GPU codec=%s task_id=%s",
+                    assignment.codec,
+                    task.id,
+                )
+                continue
             try:
-                self._spawn_container(task)
+                self._spawn_container(task, assignment=assignment)
                 spawned += 1
             except Exception as exc:
                 logger.exception("transcode spawn failed task_id=%s: %s", task.id, exc)
+                # Release the GPU claim so the task can retry on a later tick.
+                if assignment.gpu is not None:
+                    assignment.gpu.status = GpuStatus.AVAILABLE
+                    assignment.gpu.claimed_by_task_id = None
         await db.commit()
         return spawned
+
+    async def _resolve_preset_for_task(self, db: AsyncSession, task: TranscodeTask) -> TranscodePreset | None:
+        application = (
+            await db.execute(
+                select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id)
+            )
+        ).scalar_one_or_none()
+        if application is None:
+            return None
+        sess = (await db.execute(select(Session).where(col(Session.id) == application.session_id))).scalar_one_or_none()
+        if sess is None or sess.transcode_preset_id is None:
+            return None
+        return (
+            await db.execute(select(TranscodePreset).where(col(TranscodePreset.id) == sess.transcode_preset_id))
+        ).scalar_one_or_none()
+
+    async def _claim_gpu_for_task(
+        self, db: AsyncSession, task: TranscodeTask, preset: TranscodePreset | None
+    ) -> GpuAssignment:
+        """Implements the `hw_preference` × GPU-availability matrix.
+
+        Branches:
+        - `cpu_only`, or no preset, or preset has no codec → CPU spawn.
+        - matching GPU AVAILABLE → claim it, GPU spawn.
+        - all matching GPUs BUSY + `any` → CPU spawn.
+        - all matching GPUs BUSY + NULL → queue (retry next tick).
+        - no GPU advertises this codec at all → CPU spawn (NULL fallback).
+        """
+        if preset is None or preset.codec is None:
+            return GpuAssignment(gpu=None, codec=None, action="spawn")
+        if preset.hw_preference == HwPreference.CPU_ONLY:
+            return GpuAssignment(gpu=None, codec=preset.codec.value, action="spawn")
+
+        codec = preset.codec.value
+        # Filter in Python — `text[]` ANY predicates are awkward to express in
+        # SQLAlchemy ORM and the in-memory test fake doesn't grok them. The
+        # gpus table is small (1-4 rows on real hosts) so the cost is trivial.
+        all_gpus = (await db.execute(select(Gpu))).scalars().all()
+        matching = [g for g in all_gpus if codec in (g.encoder_kinds or [])]
+        if not matching:
+            # No silicon on this host advertises the requested codec — CPU.
+            return GpuAssignment(gpu=None, codec=codec, action="spawn")
+
+        available = [g for g in matching if g.status == GpuStatus.AVAILABLE]
+        if available:
+            gpu = available[0]
+            gpu.status = GpuStatus.BUSY
+            gpu.claimed_by_task_id = task.id
+            return GpuAssignment(gpu=gpu, codec=codec, action="spawn")
+
+        # All matching GPUs are busy.
+        if preset.hw_preference == HwPreference.ANY:
+            return GpuAssignment(gpu=None, codec=codec, action="spawn")
+        # NULL semantics: hold the task in queued so a later tick retries.
+        return GpuAssignment(gpu=None, codec=codec, action="queue")
 
     def _host_paths_set(self) -> bool:
         return bool(
@@ -231,7 +332,7 @@ class TranscodeDispatcher:
             and self._settings.ARM_HOST_CERTS_PATH
         )
 
-    def _spawn_container(self, task: TranscodeTask) -> Any:
+    def _spawn_container(self, task: TranscodeTask, *, assignment: GpuAssignment | None = None) -> Any:
         env = {
             "ARM_TRANSCODE_TASK_ID": task.id,
             "ARM_BACKEND_URL": "https://arm-backend:8443",
@@ -245,6 +346,13 @@ class TranscodeDispatcher:
             self._settings.ARM_HOST_LOGS_PATH: {"bind": "/logs", "mode": "rw"},
             str(certs_root / "arm-ca.crt"): {"bind": "/etc/ssl/arm/arm-ca.crt", "mode": "ro"},
         }
+        extra_run_kwargs: dict[str, Any] = {}
+        if assignment is not None and assignment.gpu is not None:
+            env["ARM_GPU_VENDOR"] = assignment.gpu.vendor.value
+            env["ARM_GPU_DEVICE"] = assignment.gpu.device_path
+            if assignment.codec is not None:
+                env["ARM_GPU_CODEC"] = assignment.codec
+            self._inject_gpu_run_kwargs(extra_run_kwargs, assignment.gpu)
         # Container hostname is the last 12 chars of the ULID — short enough
         # for `docker ps` and unique enough that two simultaneous transcoders
         # never collide.
@@ -259,14 +367,55 @@ class TranscodeDispatcher:
             network=self._settings.ARM_DOCKER_NETWORK,
             detach=True,
             auto_remove=True,
+            **extra_run_kwargs,
         )
         logger.info(
-            "transcode spawned task_id=%s container=%s image=%s",
+            "transcode spawned task_id=%s container=%s image=%s gpu=%s",
             task.id,
             hostname,
             self._settings.ARM_TRANSCODE_IMAGE,
+            assignment.gpu.device_path if assignment and assignment.gpu else "cpu",
         )
         return container
+
+    def _inject_gpu_run_kwargs(self, kwargs: dict[str, Any], gpu: Gpu) -> None:
+        """Vendor-specific docker-py kwargs.
+
+        VAAPI/QSV: pass the `/dev/dri/renderD*` node via `devices=`.
+        NVENC: ask for the NVIDIA runtime + a single GPU via `device_requests`.
+        """
+        if gpu.vendor in (GpuVendor.VAAPI, GpuVendor.QSV):
+            kwargs["devices"] = [f"{gpu.device_path}:{gpu.device_path}:rwm"]
+            return
+        if gpu.vendor == GpuVendor.NVENC:
+            # device_path is "nvidia://N"; pass the index as a string ID so
+            # `--gpus device=N` semantics select that single GPU.
+            idx = gpu.device_path.removeprefix("nvidia://")
+            try:
+                import docker  # type: ignore[import-untyped]
+
+                kwargs["runtime"] = "nvidia"
+                kwargs["device_requests"] = [
+                    docker.types.DeviceRequest(
+                        driver="nvidia",
+                        count=1,
+                        device_ids=[idx] if idx else None,
+                        capabilities=[["gpu", "video"]],
+                    )
+                ]
+            except ImportError:
+                # Tests run without docker-py installed; the dispatcher's
+                # docker_client is a MagicMock anyway, so kwarg shape doesn't
+                # need to be exact for the test to pass.
+                kwargs["runtime"] = "nvidia"
+                kwargs["device_requests"] = [
+                    {
+                        "Driver": "nvidia",
+                        "Count": 1,
+                        "DeviceIDs": [idx] if idx else None,
+                        "Capabilities": [["gpu", "video"]],
+                    }
+                ]
 
     # --- .arm-inprogress sweep ----------------------------------------------
 

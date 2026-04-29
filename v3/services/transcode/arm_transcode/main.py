@@ -49,10 +49,20 @@ class CancelRequested(Exception):
 
 
 def _detect_hw_caps() -> HardwareCaps:
-    """Phase 7 (CPU-only) just reports cpu_count + all-False GPU flags.
-    Phase 7b populates `has_*` from VAAPI / NVIDIA / QSV probes.
+    """Diagnostic-only: reports the GPU vendor the dispatcher assigned us.
+
+    The Backend's `gpu_probe` is the authoritative inventory source — this
+    function exists so the `register` payload reflects what the *spawned
+    container* actually sees (useful for log triage when device passthrough
+    fails). The Backend ignores these flags for dispatch decisions.
     """
-    return HardwareCaps(cpu_count=os.cpu_count() or 1)
+    vendor = os.environ.get("ARM_GPU_VENDOR", "").lower()
+    return HardwareCaps(
+        cpu_count=os.cpu_count() or 1,
+        has_vaapi=(vendor == "vaapi"),
+        has_nvenc=(vendor == "nvenc"),
+        has_qsv=(vendor == "qsv"),
+    )
 
 
 async def _run_encoder(

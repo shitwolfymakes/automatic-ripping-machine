@@ -21,6 +21,7 @@ from arm_common.enums import (
     TrackSelection,
     TranscodeTaskStatus,
     TranscodeTool,
+    VideoCodec,
 )
 
 
@@ -87,6 +88,7 @@ class TranscodePresetView(BaseModel):
     preset_ref: str | None
     preset_json: dict[str, Any] | None
     container: ContainerFormat
+    codec: VideoCodec | None
     hw_preference: HwPreference | None
     extra_args: str | None
     created_by_user_id: str | None
@@ -101,6 +103,7 @@ class TranscodePresetCreateRequest(BaseModel):
     preset_ref: str | None = None
     preset_json: dict[str, Any] | None = None
     container: ContainerFormat
+    codec: VideoCodec | None = None
     hw_preference: HwPreference | None = None
     extra_args: str | None = None
 
@@ -111,6 +114,7 @@ class TranscodePresetUpdateRequest(BaseModel):
     preset_ref: str | None = None
     preset_json: dict[str, Any] | None = None
     container: ContainerFormat | None = None
+    codec: VideoCodec | None = None
     hw_preference: HwPreference | None = None
     extra_args: str | None = None
 

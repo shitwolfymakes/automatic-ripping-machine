@@ -24,6 +24,7 @@ from sqlmodel import col, select
 from arm_backend.auth import require_service_token
 from arm_backend.db import get_session
 from arm_backend.transcode_apply import aggregate_session_application
+from arm_backend.transcode_dispatcher import release_gpu_for_task
 from arm_backend.ws import WSHub
 from arm_common import (
     Session,
@@ -240,6 +241,7 @@ async def complete(
     task.progress_pct = 100
     task.output_path = req.output_path
     task.last_error = None
+    await release_gpu_for_task(db, task.id)
     await db.flush()
 
     application = (
@@ -300,6 +302,7 @@ async def fail(
         )
     task.status = TranscodeTaskStatus.FAILED
     task.last_error = req.last_error
+    await release_gpu_for_task(db, task.id)
     await db.flush()
 
     application = (

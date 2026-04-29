@@ -92,6 +92,8 @@ export type ContainerFormat =
 
 export type HwPreference = "cpu_only" | "any";
 
+export type VideoCodec = "h264" | "h265" | "av1";
+
 export type SessionApplicationStatus =
   | "waiting_identify"
   | "queued"
@@ -179,6 +181,7 @@ export interface TranscodePresetView {
   preset_ref: string | null;
   preset_json: Record<string, unknown> | null;
   container: ContainerFormat;
+  codec: VideoCodec | null;
   hw_preference: HwPreference | null;
   extra_args: string | null;
   created_by_user_id: string | null;
@@ -193,6 +196,7 @@ export interface TranscodePresetCreateRequest {
   preset_ref?: string | null;
   preset_json?: Record<string, unknown> | null;
   container: ContainerFormat;
+  codec?: VideoCodec | null;
   hw_preference?: HwPreference | null;
   extra_args?: string | null;
 }
