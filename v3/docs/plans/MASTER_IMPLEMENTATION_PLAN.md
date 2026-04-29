@@ -103,18 +103,20 @@ Realignment landed alongside the data model:
 
 ---
 
-## Phase 4 — WebSocket hub
+## Phase 4 — WebSocket hub (shipped)
 
-**Goal.** Live progress streams from rippers to Backend to any subscriber. Command channel delivers identify-resolution events to parked rippers (replaces the REST-polling fallback).
+**Delivered** on `wolfy/v3-improvments`:
 
-**Exit criteria.** A test client connecting to `wss://arm-backend:8443/ws` with a valid service token can subscribe to `ripper.progress.{job_id}` and see progress ticks during a rip. `ripper.commands.{drive_id}` delivers `identify.resolved` to the correct ripper. Principal-to-topic authorization rejects cross-drive subscriptions.
+1. New `arm_common.schemas.ws` — discriminated-union message types for `auth`, `subscribe`, `unsubscribe`, `publish`, plus the outbound `WSEnvelope` / `WSAck` / `WSError` frames. The `publish` op extends what 03-protocol.md documents — the hub builds the envelope server-side (`event_id`, `emitted_at`), clients never set those themselves; documented in the new "Implementation notes" section of [03-protocol.md](../arch/03-protocol.md).
+2. New `services/backend/arm_backend/ws/` package: `principal.py` (`ServicePrincipal`/`UIPrincipal` with `resolve_principal(token, hostname)` lifting the token-compare out of the FastAPI dep so the same check runs in REST and WS paths), `authz.py` (`can_subscribe`/`can_publish` enforcing the per-principal topic matrix from [05-cross-cutting.md § WebSocket security](../arch/05-cross-cutting.md#websocket-security)), `hub.py` (in-memory `WSHub` with 1 Hz/track progress throttle and 2s per-recipient send timeout that evicts slow subscribers), `router.py` (`/ws` endpoint with origin allowlist, service-token-subprotocol skip, 5s unauth timeout, message dispatch loop).
+3. Backend lifespan attaches `app.state.ws_hub`; `/ws` route registered. New `ARM_ALLOWED_ORIGINS` setting (comma-separated, empty-by-default per Phase 4 — service-token only until the UI ships in Phase 5).
+4. Typed events emitted from REST handlers: `rip.needs_user_input` (identify lands `awaiting_user_id`), `rip.started` (rip-start), `track.completed` / `track.failed` (PATCH track), `rip.completed` / `rip.partial` / `rip.failed` (rip-complete), `identify.resolved` (resolve, fanned out on both `ripper.events` and the per-drive `ripper.commands.{drive_id}` command topic). Every typed event also writes an `events` row in the same transaction; `ripper.progress.*` bypasses persistence.
+5. Resolve handler now preserves `metadata_json["scan_result"]` when overwriting metadata, so post-resolve rip-start can still find the scan list.
+6. New `services/ripper/arm_ripper/ws_client.py` — long-lived `WSClient` with reconnect-with-backoff (1s → 2s → 4s → 8s → 30s cap), auth-then-replay-subscriptions on every connect, fire-and-forget `publish` (drops silently when disconnected), per-topic dispatch to async handlers. Uses stdlib `websockets>=12` over the merged trust store.
+7. `JobController` rewired: `_await_resolution` is now event-driven on an `asyncio.Event` keyed by `job_id`, set by the WS handler when `identify.resolved` arrives. 5s boot-race fallback to REST `get_job` covers the window before the WS handshake completes; periodic REST sanity polls handle a torn WS connection. `on_track_progress` callback now publishes `ripper.progress.{job_id}` over WS (no `eta_seconds` — the protocol doc lists it but PRGV doesn't carry remaining time; deferred).
+8. Tests: 28 new backend tests (principal, origin, hub fan-out + persist + throttle + eviction, full authz matrix) + 4 new ripper tests (WS client handshake / subscribe replay on reconnect / publish-while-disconnected, JobController WS-event-unblocks-resolution). Existing 38 tests still green; full suite at 70 tests.
 
-**Deliverables:**
-1. `/ws` endpoint with first-message auth, origin allowlist (`ARM_ALLOWED_ORIGINS` from `.env`), 5s unauth timeout, topic-subscription gating ([05-cross-cutting.md § WebSocket security](../arch/05-cross-cutting.md#websocket-security)).
-2. **Fan-out hub** (in-memory subscriber table) supporting the topics enumerated in [03-protocol.md § WebSocket channels](../arch/03-protocol.md#websocket-channels).
-3. **Ripper WS producer** for `ripper.progress.{job_id}` — ticks parsed from `makemkvcon --robot` output.
-4. **Ripper WS consumer** for `ripper.commands.{drive_id}` — replaces the REST poll in Phase 2.
-5. **`events` persistence.** Every typed event that hits the WS also appends to the `events` table with the standard envelope.
+`eta_seconds` on `ripper.progress.*` is the only protocol field deferred (PRGV doesn't expose it — derive from elapsed-vs-fraction is its own ticket). The `identify.resolved` payload is ad-hoc; Phase 11 (notifications) will tighten it once Apprise consumers care.
 
 **Depends on:** Phase 3 (there's something to stream progress *about*).
 

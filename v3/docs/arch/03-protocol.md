@@ -95,6 +95,11 @@ There is one WS endpoint on Backend: `/ws`. After connecting, the client subscri
 | `ripper.commands.{drive_id}` | Backend → one ripper | Backend | The ripper registered on that `drive_id` | Typed commands to the owning ripper: `identify.resolved` (user-resolved identity delivered to a ripper parked in `awaiting_user_id`), `job.cancel`. Only the ripper whose hostname matches the drive's `hostname` may subscribe. |
 | `transcoder.commands.{task_id}` | Backend → one transcoder | Backend | The transcoder that claimed that task | Typed commands: `task.cancel`. Only the transcoder holding the claim may subscribe. |
 
+### Implementation notes
+
+- **`publish` op.** In addition to the `subscribe`/`unsubscribe` ops listed above, clients with the right principal may send `{op: "publish", topic, event_type, payload}` to push events the backend then fans out. The hub builds the event envelope (assigns `event_id`, stamps `emitted_at`); clients never set those themselves. Per-principal authorization on the topic is the gate — a ripper can only publish to `ripper.progress.{job_id}` for a job whose drive it owns, and never to typed-event topics. The UI never publishes; backend code uses an in-process `hub.emit(...)` call instead.
+- **`ripper.progress.*` is not persisted.** Progress topics bypass the `events` table — they're fire-and-forget telemetry per the section below, and writing every PRGV tick would 10–100× the events-row write rate for zero audit value. Only typed events (`rip.started`, `rip.completed`, `track.completed`, `identify.resolved`, etc.) get an `events` row. The hub also throttles progress at 1 Hz per `(topic, track_id)`; subscribers receive coalesced ticks.
+
 ### UI session scope
 
 The UI's WS connection is session-scoped: opened after login, closed on logout or page unload. The UI MUST NOT keep a WS alive in a service worker or background tab — "tell me what happened while I wasn't watching" is Apprise's job, not the UI's. On page load the UI reads *current* state (job list, track statuses, etc.) from REST and then opens a WS for live updates going forward; there is no event replay, no catch-up from the `events` table, no "what did I miss." If the user cares about something that already happened, the REST-rendered state reflects it; if they needed to be told about it in real time, they already were — by Apprise.

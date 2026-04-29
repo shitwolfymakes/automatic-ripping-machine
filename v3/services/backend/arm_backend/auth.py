@@ -8,11 +8,16 @@ from arm_common import Drive, Job
 from arm_common.models import Track
 
 
+def check_service_token(token: str) -> bool:
+    """Constant-time-ish service-token compare. Used by both the REST dep and the WS auth path."""
+    return bool(token) and token == settings.ARM_SERVICE_TOKEN
+
+
 async def require_service_token(authorization: str | None = Header(default=None)) -> None:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token")
     token = authorization.removeprefix("Bearer ").strip()
-    if token != settings.ARM_SERVICE_TOKEN:
+    if not check_service_token(token):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid service token")
 
 

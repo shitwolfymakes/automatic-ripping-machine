@@ -5,10 +5,11 @@ from pathlib import Path
 import httpx
 
 from arm_common import Job, JobStatus, TrackStatus
-from arm_common.schemas import JobView, RipStartResponse, ScanResult, TrackView
+from arm_common.schemas import JobView, RipStartResponse, ScanResult, TrackView, WSEnvelope
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.rip import RipResult, rip_all
 from arm_ripper.scan import ScanError, scan as scan_disc
+from arm_ripper.ws_client import WSClient
 
 logger = logging.getLogger("arm_ripper.job_controller")
 
@@ -19,6 +20,12 @@ IDENTIFY_RETRY_MAX_SECONDS = 30.0
 PATCH_RETRY_INITIAL_SECONDS = 1.0
 PATCH_RETRY_MAX_SECONDS = 30.0
 EJECT_GRACE_SECONDS = 3.0
+# Hard ceiling on awaiting_user_id wait; if no WS event arrives by then,
+# fall back to one REST GET to handle a stale-WS edge case (boot race or
+# extended outage). Beyond that, we assume the user abandoned the disc
+# and return — the next disc-insert event re-triggers identify.
+RESOLUTION_WAIT_TIMEOUT_SECONDS = 30 * 60.0
+RESOLUTION_WS_FIRST_WAIT_SECONDS = 5.0
 # After makemkvcon exits, the kernel takes up to ~5s to release exclusive
 # access on the optical drive — `eject` then sees EBUSY on open(). The
 # delay schedule below is "best-effort with growing patience"; a healthy
@@ -31,9 +38,30 @@ RAW_ROOT = Path("/raw")
 class JobController:
     """Drives one disc through scan → identify → rip → eject."""
 
-    def __init__(self, client: BackendClient, drive_id: str) -> None:
+    def __init__(self, client: BackendClient, drive_id: str, *, ws: WSClient | None = None) -> None:
         self._client = client
         self._drive_id = drive_id
+        self._ws = ws
+        # job_id → asyncio.Event signalled when an `identify.resolved`
+        # arrives over WS. Populated by `_await_resolution`, drained by
+        # `on_ws_command`.
+        self._resolution_events: dict[str, asyncio.Event] = {}
+
+    async def on_ws_command(self, envelope: WSEnvelope) -> None:
+        """Handler registered for `ripper.commands.{drive_id}` topic."""
+        if envelope.event_type == "identify.resolved":
+            job_id = envelope.payload.get("job_id") if isinstance(envelope.payload, dict) else None
+            if not isinstance(job_id, str):
+                logger.warning("identify.resolved without job_id payload: %s", envelope.payload)
+                return
+            event = self._resolution_events.get(job_id)
+            if event is not None:
+                event.set()
+                logger.info("ws identify.resolved received for job_id=%s", job_id)
+            else:
+                logger.debug("identify.resolved for job_id=%s but no waiter registered", job_id)
+        else:
+            logger.debug("ws command ignored: type=%s", envelope.event_type)
 
     async def handle_disc_inserted(self, device_path: str) -> None:
         try:
@@ -67,24 +95,92 @@ class JobController:
                 delay = min(delay * 2, IDENTIFY_RETRY_MAX_SECONDS)
 
     async def _await_resolution(self, job_id: str) -> JobView | None:
-        logger.info("job %s awaiting_user_id; polling for resolve", job_id)
-        delay = POLL_INITIAL_SECONDS
-        while True:
-            await asyncio.sleep(delay)
-            try:
-                view = await self._client.get_job(job_id)
-            except httpx.HTTPError as e:
-                logger.warning("get_job %s failed (%s); retrying in %.1fs", job_id, e, delay)
-                delay = min(delay * 2, POLL_MAX_SECONDS)
-                continue
+        """Wait for the user to resolve identity.
 
-            if view.status == JobStatus.IDENTIFIED:
-                logger.info("job %s resolved -> identified title=%s", job_id, view.title)
-                return view
-            if view.status != JobStatus.AWAITING_USER_ID:
-                logger.info("job %s left awaiting_user_id with status=%s; abandoning poll", job_id, view.status.value)
-                return None
-            delay = min(delay * 2, POLL_MAX_SECONDS) if delay < POLL_MAX_SECONDS else POLL_MAX_SECONDS
+        Primary path: the resolution arrives via WS (`identify.resolved`
+        on `ripper.commands.{drive_id}`); we park on an asyncio.Event
+        keyed by job_id and the WS handler sets it.
+
+        Fallback path: if no WS event arrives within
+        RESOLUTION_WS_FIRST_WAIT_SECONDS, do one REST get_job to cover
+        the boot-race case where the disc landed `awaiting_user_id`
+        before WSClient finished its handshake. After that, fall back
+        to slow polling so an extended WS outage doesn't strand a job.
+        """
+        logger.info("job %s awaiting_user_id; waiting for resolve", job_id)
+        event = asyncio.Event()
+        self._resolution_events[job_id] = event
+        try:
+            return await self._wait_for_resolution(job_id, event)
+        finally:
+            self._resolution_events.pop(job_id, None)
+
+    async def _wait_for_resolution(self, job_id: str, event: asyncio.Event) -> JobView | None:
+        # First-wait window: covers the boot race where we missed the
+        # resolve-event broadcast before subscribing.
+        try:
+            await asyncio.wait_for(event.wait(), timeout=RESOLUTION_WS_FIRST_WAIT_SECONDS)
+        except asyncio.TimeoutError:
+            view = await self._safe_get_job(job_id)
+            if view is not None:
+                if view.status == JobStatus.IDENTIFIED:
+                    logger.info("job %s resolved (REST fallback) title=%s", job_id, view.title)
+                    return view
+                if view.status != JobStatus.AWAITING_USER_ID:
+                    logger.info(
+                        "job %s left awaiting_user_id with status=%s; abandoning",
+                        job_id,
+                        view.status.value,
+                    )
+                    return None
+
+        # Long wait: WS-driven, with periodic REST sanity polls so we
+        # don't hang forever on a torn WS connection.
+        deadline = asyncio.get_event_loop().time() + RESOLUTION_WAIT_TIMEOUT_SECONDS
+        while asyncio.get_event_loop().time() < deadline:
+            try:
+                await asyncio.wait_for(event.wait(), timeout=POLL_MAX_SECONDS)
+                # WS event fired — confirm via REST.
+                view = await self._safe_get_job(job_id)
+                if view is None:
+                    return None
+                if view.status == JobStatus.IDENTIFIED:
+                    logger.info("job %s resolved -> identified title=%s", job_id, view.title)
+                    return view
+                if view.status != JobStatus.AWAITING_USER_ID:
+                    logger.info(
+                        "job %s left awaiting_user_id with status=%s; abandoning",
+                        job_id,
+                        view.status.value,
+                    )
+                    return None
+                # Spurious WS wake — clear and re-arm.
+                event.clear()
+            except asyncio.TimeoutError:
+                # Periodic sanity poll — handles torn WS connections.
+                view = await self._safe_get_job(job_id)
+                if view is None:
+                    continue
+                if view.status == JobStatus.IDENTIFIED:
+                    logger.info("job %s resolved (poll catch-up) title=%s", job_id, view.title)
+                    return view
+                if view.status != JobStatus.AWAITING_USER_ID:
+                    logger.info(
+                        "job %s left awaiting_user_id with status=%s; abandoning",
+                        job_id,
+                        view.status.value,
+                    )
+                    return None
+
+        logger.warning("job %s resolution timed out after %.0fs", job_id, RESOLUTION_WAIT_TIMEOUT_SECONDS)
+        return None
+
+    async def _safe_get_job(self, job_id: str) -> JobView | None:
+        try:
+            return await self._client.get_job(job_id)
+        except httpx.HTTPError as e:
+            logger.warning("get_job %s failed (%s); will retry on next signal", job_id, e)
+            return None
 
     async def _run_rip(self, job: Job, device_path: str) -> None:
         rip_start = await self._rip_start_with_retry(job.id)
@@ -131,6 +227,15 @@ class JobController:
 
         async def on_track_progress(track: TrackView, fraction: float) -> None:
             logger.debug("track %s progress=%.2f", track.id, fraction)
+            if self._ws is not None:
+                await self._ws.publish(
+                    topic=f"ripper.progress.{job.id}",
+                    event_type="ripper.progress",
+                    payload={
+                        "track_id": track.id,
+                        "progress_pct": round(fraction * 100, 1),
+                    },
+                )
 
         await rip_all(
             disc_type=job.disc_type,

@@ -13,6 +13,8 @@ from arm_backend.db import SessionLocal
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.routers import health, jobs, ripper
 from arm_backend.seeders import run_seeders
+from arm_backend.ws import WSHub
+from arm_backend.ws.router import router as ws_router
 
 logging.basicConfig(
     level=settings.ARM_LOG_LEVEL.upper(),
@@ -45,6 +47,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await _run_seeders()
     http = httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=10.0))
     app.state.dispatcher = MetadataDispatcher(http, omdb_api_key_override=settings.OMDB_API_KEY)
+    app.state.ws_hub = WSHub()
     try:
         yield
     finally:
@@ -55,6 +58,7 @@ app = FastAPI(title="ARM v3 Backend", lifespan=lifespan)
 app.include_router(health.router)
 app.include_router(ripper.router)
 app.include_router(jobs.router)
+app.include_router(ws_router)
 
 
 def main() -> None:
