@@ -12,7 +12,19 @@ from sqlmodel import col, select
 from arm_backend.config import settings
 from arm_backend.db import SessionLocal
 from arm_backend.metadata import MetadataDispatcher
-from arm_backend.routers import auth, config as config_router, diagnostics, drives, health, jobs, ripper, sessions
+from arm_backend.routers import (
+    auth,
+    config as config_router,
+    diagnostics,
+    drives,
+    health,
+    jobs,
+    rip_presets,
+    ripper,
+    sessions,
+    transcode_presets,
+    transcodes,
+)
 from arm_backend.seeders import CONFIG_SINGLETON_ID, run_seeders
 from arm_backend.ws import WSHub
 from arm_backend.ws.router import router as ws_router
@@ -68,6 +80,9 @@ app.include_router(ripper.router)
 app.include_router(jobs.router)
 app.include_router(drives.router)
 app.include_router(sessions.router)
+app.include_router(rip_presets.router)
+app.include_router(transcode_presets.router)
+app.include_router(transcodes.router)
 app.include_router(config_router.router)
 app.include_router(diagnostics.router)
 app.include_router(ws_router)

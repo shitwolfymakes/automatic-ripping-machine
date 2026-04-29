@@ -37,6 +37,46 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
   },
   {
+    path: "/sessions/new",
+    component: () => import("../views/SessionForm.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/sessions/:id/edit",
+    component: () => import("../views/SessionForm.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/rip-presets",
+    component: () => import("../views/RipPresets.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/rip-presets/new",
+    component: () => import("../views/RipPresetForm.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/rip-presets/:id/edit",
+    component: () => import("../views/RipPresetForm.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/transcode-presets",
+    component: () => import("../views/TranscodePresets.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/transcode-presets/new",
+    component: () => import("../views/TranscodePresetForm.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/transcode-presets/:id/edit",
+    component: () => import("../views/TranscodePresetForm.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
     path: "/config",
     component: () => import("../views/Config.vue"),
     meta: { requiresAuth: true },

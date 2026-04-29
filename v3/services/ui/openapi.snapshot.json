@@ -807,6 +807,74 @@
         }
       }
     },
+    "/api/jobs/{job_id}/transcode": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Apply Session",
+        "operationId": "apply_session_api_jobs__job_id__transcode_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplySessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplySessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/drives": {
       "get": {
         "tags": [
@@ -893,12 +961,1103 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/Session"
+                    "$ref": "#/components/schemas/SessionView"
                   },
                   "title": "Response List Sessions Api Sessions Get"
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Create Session",
+        "operationId": "create_session_api_sessions_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Get Session By Id",
+        "operationId": "get_session_by_id_api_sessions__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Update Session",
+        "operationId": "update_session_api_sessions__session_id__patch",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Delete Session",
+        "operationId": "delete_session_api_sessions__session_id__delete",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/clone": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Clone Session",
+        "operationId": "clone_session_api_sessions__session_id__clone_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCloneRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/preview": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Preview Template",
+        "operationId": "preview_template_api_sessions_preview_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplatePreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplatePreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rip-presets": {
+      "get": {
+        "tags": [
+          "rip-presets"
+        ],
+        "summary": "List Rip Presets",
+        "operationId": "list_rip_presets_api_rip_presets_get",
+        "parameters": [
+          {
+            "name": "media_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/MediaType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Media Type"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RipPresetView"
+                  },
+                  "title": "Response List Rip Presets Api Rip Presets Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "rip-presets"
+        ],
+        "summary": "Create Rip Preset",
+        "operationId": "create_rip_preset_api_rip_presets_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RipPresetCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RipPresetView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rip-presets/{preset_id}": {
+      "get": {
+        "tags": [
+          "rip-presets"
+        ],
+        "summary": "Get Rip Preset",
+        "operationId": "get_rip_preset_api_rip_presets__preset_id__get",
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preset Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RipPresetView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "rip-presets"
+        ],
+        "summary": "Update Rip Preset",
+        "operationId": "update_rip_preset_api_rip_presets__preset_id__patch",
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preset Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RipPresetUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RipPresetView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "rip-presets"
+        ],
+        "summary": "Delete Rip Preset",
+        "operationId": "delete_rip_preset_api_rip_presets__preset_id__delete",
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preset Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcode-presets": {
+      "get": {
+        "tags": [
+          "transcode-presets"
+        ],
+        "summary": "List Transcode Presets",
+        "operationId": "list_transcode_presets_api_transcode_presets_get",
+        "parameters": [
+          {
+            "name": "media_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/MediaType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Media Type"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TranscodePresetView"
+                  },
+                  "title": "Response List Transcode Presets Api Transcode Presets Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "transcode-presets"
+        ],
+        "summary": "Create Transcode Preset",
+        "operationId": "create_transcode_preset_api_transcode_presets_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranscodePresetCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscodePresetView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcode-presets/{preset_id}": {
+      "get": {
+        "tags": [
+          "transcode-presets"
+        ],
+        "summary": "Get Transcode Preset",
+        "operationId": "get_transcode_preset_api_transcode_presets__preset_id__get",
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preset Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscodePresetView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "transcode-presets"
+        ],
+        "summary": "Update Transcode Preset",
+        "operationId": "update_transcode_preset_api_transcode_presets__preset_id__patch",
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preset Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranscodePresetUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscodePresetView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "transcode-presets"
+        ],
+        "summary": "Delete Transcode Preset",
+        "operationId": "delete_transcode_preset_api_transcode_presets__preset_id__delete",
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preset Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcodes": {
+      "get": {
+        "tags": [
+          "transcodes"
+        ],
+        "summary": "List Transcodes",
+        "operationId": "list_transcodes_api_transcodes_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TranscodeTaskStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "session_application_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Application Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TranscodeTaskView"
+                  },
+                  "title": "Response List Transcodes Api Transcodes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcodes/{task_id}": {
+      "delete": {
+        "tags": [
+          "transcodes"
+        ],
+        "summary": "Cancel Transcode",
+        "operationId": "cancel_transcode_api_transcodes__task_id__delete",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -1071,6 +2230,87 @@
   },
   "components": {
     "schemas": {
+      "ApplySessionRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "overwrite": {
+            "type": "boolean",
+            "title": "Overwrite",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id"
+        ],
+        "title": "ApplySessionRequest"
+      },
+      "ApplySessionResponse": {
+        "properties": {
+          "session_application": {
+            "$ref": "#/components/schemas/SessionApplicationView"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TranscodeTaskView"
+            },
+            "type": "array",
+            "title": "Tasks"
+          },
+          "collisions": {
+            "items": {
+              "$ref": "#/components/schemas/CollisionInfo"
+            },
+            "type": "array",
+            "title": "Collisions"
+          },
+          "idempotent": {
+            "type": "boolean",
+            "title": "Idempotent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_application",
+          "tasks",
+          "collisions",
+          "idempotent"
+        ],
+        "title": "ApplySessionResponse"
+      },
+      "CollisionInfo": {
+        "properties": {
+          "output_path": {
+            "type": "string",
+            "title": "Output Path"
+          },
+          "existing_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Existing Task Id"
+          },
+          "on_filesystem": {
+            "type": "boolean",
+            "title": "On Filesystem"
+          }
+        },
+        "type": "object",
+        "required": [
+          "output_path",
+          "existing_task_id",
+          "on_filesystem"
+        ],
+        "title": "CollisionInfo"
+      },
       "ConfigUpdateRequest": {
         "properties": {
           "tmdb_api_key": {
@@ -1247,6 +2487,20 @@
         ],
         "title": "ConfigView",
         "description": "`Config` row projected for the UI. `session_signing_key` is intentionally absent."
+      },
+      "ContainerFormat": {
+        "type": "string",
+        "enum": [
+          "mkv",
+          "mp4",
+          "webm",
+          "flac",
+          "mp3",
+          "ogg",
+          "iso",
+          "none"
+        ],
+        "title": "ContainerFormat"
       },
       "DiagnosticsResponse": {
         "properties": {
@@ -1432,6 +2686,23 @@
           "status"
         ],
         "title": "HealthResponse"
+      },
+      "HwPreference": {
+        "type": "string",
+        "enum": [
+          "cpu_only",
+          "any"
+        ],
+        "title": "HwPreference"
+      },
+      "IdentificationMode": {
+        "type": "string",
+        "enum": [
+          "required",
+          "skip",
+          "deferred_placeholder"
+        ],
+        "title": "IdentificationMode"
       },
       "IdentifyRequest": {
         "properties": {
@@ -1742,6 +3013,15 @@
         ],
         "title": "MediaType"
       },
+      "OutputMode": {
+        "type": "string",
+        "enum": [
+          "tracks",
+          "iso",
+          "data_copy"
+        ],
+        "title": "OutputMode"
+      },
       "PasswordChangeRequest": {
         "properties": {
           "current_password": {
@@ -1826,6 +3106,198 @@
           "custom"
         ],
         "title": "RetentionPolicy"
+      },
+      "RipPresetCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "track_selection": {
+            "$ref": "#/components/schemas/TrackSelection"
+          },
+          "identification_mode": {
+            "$ref": "#/components/schemas/IdentificationMode"
+          },
+          "output_mode": {
+            "$ref": "#/components/schemas/OutputMode"
+          },
+          "track_filters_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Filters Json"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "media_type",
+          "track_selection",
+          "identification_mode",
+          "output_mode"
+        ],
+        "title": "RipPresetCreateRequest"
+      },
+      "RipPresetUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "track_selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrackSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identification_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdentificationMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "output_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OutputMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "track_filters_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Filters Json"
+          }
+        },
+        "type": "object",
+        "title": "RipPresetUpdateRequest"
+      },
+      "RipPresetView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "is_builtin": {
+            "type": "boolean",
+            "title": "Is Builtin"
+          },
+          "track_selection": {
+            "$ref": "#/components/schemas/TrackSelection"
+          },
+          "identification_mode": {
+            "$ref": "#/components/schemas/IdentificationMode"
+          },
+          "output_mode": {
+            "$ref": "#/components/schemas/OutputMode"
+          },
+          "track_filters_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Filters Json"
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "media_type",
+          "is_builtin",
+          "track_selection",
+          "identification_mode",
+          "output_mode",
+          "track_filters_json",
+          "created_by_user_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RipPresetView"
       },
       "RipStartResponse": {
         "properties": {
@@ -1950,7 +3422,233 @@
         ],
         "title": "ScanTitle"
       },
-      "Session": {
+      "SessionApplicationStatus": {
+        "type": "string",
+        "enum": [
+          "waiting_identify",
+          "queued",
+          "running",
+          "done",
+          "done_partial",
+          "failed",
+          "cancelled"
+        ],
+        "title": "SessionApplicationStatus"
+      },
+      "SessionApplicationView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionApplicationStatus"
+          },
+          "overrides_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrides Json"
+          },
+          "overwrite": {
+            "type": "boolean",
+            "title": "Overwrite"
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "session_id",
+          "job_id",
+          "status",
+          "overrides_json",
+          "overwrite",
+          "created_by_user_id",
+          "created_at",
+          "completed_at"
+        ],
+        "title": "SessionApplicationView"
+      },
+      "SessionCloneRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "SessionCloneRequest"
+      },
+      "SessionCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "rip_preset_id": {
+            "type": "string",
+            "title": "Rip Preset Id"
+          },
+          "transcode_preset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcode Preset Id"
+          },
+          "output_path_template": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Output Path Template"
+          },
+          "overrides_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrides Json"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "media_type",
+          "rip_preset_id",
+          "output_path_template"
+        ],
+        "title": "SessionCreateRequest"
+      },
+      "SessionUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "rip_preset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rip Preset Id"
+          },
+          "transcode_preset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcode Preset Id"
+          },
+          "output_path_template": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Path Template"
+          },
+          "overrides_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrides Json"
+          }
+        },
+        "type": "object",
+        "title": "SessionUpdateRequest"
+      },
+      "SessionView": {
         "properties": {
           "id": {
             "type": "string",
@@ -2036,17 +3734,55 @@
         },
         "type": "object",
         "required": [
+          "id",
           "name",
           "media_type",
           "is_builtin",
           "rip_preset_id",
           "transcode_preset_id",
           "output_path_template",
+          "overrides_json",
           "created_by_user_id",
           "created_at",
           "updated_at"
         ],
-        "title": "Session"
+        "title": "SessionView"
+      },
+      "TemplatePreviewRequest": {
+        "properties": {
+          "template": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Template"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "has_transcode_preset": {
+            "type": "boolean",
+            "title": "Has Transcode Preset",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "template",
+          "media_type"
+        ],
+        "title": "TemplatePreviewRequest"
+      },
+      "TemplatePreviewResponse": {
+        "properties": {
+          "expansion": {
+            "type": "string",
+            "title": "Expansion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expansion"
+        ],
+        "title": "TemplatePreviewResponse"
       },
       "TrackKind": {
         "type": "string",
@@ -2056,6 +3792,16 @@
           "data_dump"
         ],
         "title": "TrackKind"
+      },
+      "TrackSelection": {
+        "type": "string",
+        "enum": [
+          "main_feature",
+          "all_tracks",
+          "archive",
+          "custom"
+        ],
+        "title": "TrackSelection"
       },
       "TrackStatus": {
         "type": "string",
@@ -2223,6 +3969,385 @@
           "last_error"
         ],
         "title": "TrackView"
+      },
+      "TranscodePresetCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "tool": {
+            "$ref": "#/components/schemas/TranscodeTool"
+          },
+          "preset_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset Ref"
+          },
+          "preset_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset Json"
+          },
+          "container": {
+            "$ref": "#/components/schemas/ContainerFormat"
+          },
+          "hw_preference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HwPreference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "extra_args": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Args"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "media_type",
+          "tool",
+          "container"
+        ],
+        "title": "TranscodePresetCreateRequest"
+      },
+      "TranscodePresetUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscodeTool"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preset_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset Ref"
+          },
+          "preset_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset Json"
+          },
+          "container": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContainerFormat"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hw_preference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HwPreference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "extra_args": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Args"
+          }
+        },
+        "type": "object",
+        "title": "TranscodePresetUpdateRequest"
+      },
+      "TranscodePresetView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "is_builtin": {
+            "type": "boolean",
+            "title": "Is Builtin"
+          },
+          "tool": {
+            "$ref": "#/components/schemas/TranscodeTool"
+          },
+          "preset_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset Ref"
+          },
+          "preset_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset Json"
+          },
+          "container": {
+            "$ref": "#/components/schemas/ContainerFormat"
+          },
+          "hw_preference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HwPreference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "extra_args": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Args"
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "media_type",
+          "is_builtin",
+          "tool",
+          "preset_ref",
+          "preset_json",
+          "container",
+          "hw_preference",
+          "extra_args",
+          "created_by_user_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TranscodePresetView"
+      },
+      "TranscodeTaskStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "in_progress",
+          "done",
+          "failed"
+        ],
+        "title": "TranscodeTaskStatus"
+      },
+      "TranscodeTaskView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "session_application_id": {
+            "type": "string",
+            "title": "Session Application Id"
+          },
+          "source_track_id": {
+            "type": "string",
+            "title": "Source Track Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TranscodeTaskStatus"
+          },
+          "output_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Path"
+          },
+          "progress_pct": {
+            "type": "integer",
+            "title": "Progress Pct"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "session_application_id",
+          "source_track_id",
+          "status",
+          "output_path",
+          "progress_pct",
+          "attempts",
+          "last_error",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TranscodeTaskView"
+      },
+      "TranscodeTool": {
+        "type": "string",
+        "enum": [
+          "handbrake",
+          "abcde",
+          "none"
+        ],
+        "title": "TranscodeTool"
       },
       "ValidationError": {
         "properties": {

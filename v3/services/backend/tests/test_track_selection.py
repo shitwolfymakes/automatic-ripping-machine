@@ -69,8 +69,10 @@ def test_main_feature_falls_back_to_longest_when_no_threshold_match():
     assert tracks[0].expected_duration_seconds == short
 
 
-def test_custom_raises():
-    with pytest.raises(NotImplementedError):
+def test_custom_without_filters_raises():
+    from arm_backend.track_selection import TrackSelectionError
+
+    with pytest.raises(TrackSelectionError):
         select_tracks("job_x", _scan(60), _preset(TrackSelection.CUSTOM))
 
 
