@@ -87,3 +87,51 @@ Cancellation: the dispatcher emits `task.cancel` on
 `transcoder.commands.{task_id}` over WS; the transcoder's main loop
 catches it via the WS subscription and SIGTERMs the encoder. After a
 10s grace, the dispatcher falls back to `docker stop`.
+
+## GPU transcoding (Phase 7b)
+
+Run with the GPU overlay loaded:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+```
+
+The overlay adds `/dev/dri:/dev/dri:ro` (so Backend can list Intel/AMD
+render nodes) and `runtime: nvidia` + `device_requests` (so `nvidia-smi`
+works inside Backend and the toolkit attaches NVIDIA driver libraries).
+
+Backend probes the host once at lifespan startup and populates the
+`gpus` table:
+
+| vendor | how detected | encoders advertised |
+|--------|--------------|---------------------|
+| QSV    | `/dev/dri/renderD*` + `/sys vendor=0x8086` | h264, h265 |
+| VAAPI  | `/dev/dri/renderD*` + `/sys vendor=0x1002` | h264, h265 |
+| NVENC  | `nvidia-smi -L` (per GPU) | h264, h265 |
+
+Each `transcode_presets.codec` (h264 / h265 / av1 / NULL) is matched
+against the GPU's `encoder_kinds` array. AV1 is intentionally not on
+this list yet — encoder support varies by silicon generation; treat any
+AV1 preset as CPU-only for Phase 7b.
+
+`hw_preference` semantics:
+
+| value     | matching GPU available | matching GPU busy | no matching GPU on host |
+|-----------|------------------------|-------------------|-------------------------|
+| `cpu_only`| CPU                    | CPU               | CPU                     |
+| `any`     | GPU                    | CPU               | CPU                     |
+| `NULL` (default) | GPU             | queue → GPU when free | CPU                |
+
+The dispatcher injects `ARM_GPU_VENDOR`, `ARM_GPU_DEVICE`, and
+`ARM_GPU_CODEC` env vars; `arm_transcode/handbrake.py` appends
+`--encoder <vendor>_<codec>` (e.g. `vaapi_h265`, `nvenc_h264`) to the
+HandBrake invocation. Verify with the spawned container's logs:
+
+```sh
+docker compose logs arm-transcode-<id> | grep "HandBrakeCLI launching"
+```
+
+If your host's HandBrake build doesn't include the requested encoder
+(`HandBrakeCLI --help | grep encoder` to check), the task fails with a
+clear `last_error`. There's no silent CPU fallback at the encoder layer
+— GPU is only chosen when Backend successfully claimed a `gpus` row.

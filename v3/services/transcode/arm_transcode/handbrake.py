@@ -3,8 +3,13 @@
 `HandBrakeCLI -i <input> -o <output> --preset "<preset_ref>" --json` emits
 two-section JSON output: a `JSON Title Set` block (info), then `Progress`
 records every ~1 s. We parse `Progress` records to surface % + ETA to the
-caller's `progress_callback`. CPU-only Phase 7 — `--encoder` flags are
-preset-driven; HW-accel-specific encoders land with Phase 7b.
+caller's `progress_callback`.
+
+Phase 7b: when `ARM_GPU_VENDOR` and `ARM_GPU_CODEC` are set in the env
+(populated by the Backend dispatcher on spawn), `_hw_encoder_args()`
+appends `--encoder <vendor>_<codec>` *after* `--preset` so HandBrake's
+preset-driven encoder is overridden. `extra_args` from the user-defined
+preset still appends last (escape hatch).
 """
 
 from __future__ import annotations
@@ -13,6 +18,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -23,6 +29,40 @@ ProgressCallback = Callable[[int, int | None, str | None], Awaitable[None]]
 
 
 _PROGRESS_BLOCK_RE = re.compile(r"Progress:\s*(\{.*?\})", re.DOTALL)
+
+
+# Vendor + codec → HandBrake `--encoder` ID. The names match HandBrakeCLI's
+# canonical encoder list (`HandBrakeCLI --help | grep encoder`) on
+# Debian Bookworm builds. AV1 is intentionally absent — Phase 7b's encoder
+# matrix is h264 + h265 only; AV1 lands in a follow-up.
+_HW_ENCODER_TABLE: dict[tuple[str, str], str] = {
+    ("vaapi", "h264"): "vaapi_h264",
+    ("vaapi", "h265"): "vaapi_h265",
+    ("qsv", "h264"): "qsv_h264",
+    ("qsv", "h265"): "qsv_h265",
+    ("nvenc", "h264"): "nvenc_h264",
+    ("nvenc", "h265"): "nvenc_h265",
+}
+
+
+def _hw_encoder_args() -> list[str]:
+    """Return `["--encoder", "<vendor>_<codec>"]` if the dispatcher injected
+    a GPU into the env, else `[]`. Unknown combinations also yield `[]` so
+    HandBrake falls back to the preset's CPU encoder.
+    """
+    vendor = os.environ.get("ARM_GPU_VENDOR")
+    codec = os.environ.get("ARM_GPU_CODEC")
+    if not vendor or not codec:
+        return []
+    encoder = _HW_ENCODER_TABLE.get((vendor, codec))
+    if encoder is None:
+        logger.warning(
+            "no HandBrake encoder mapping for vendor=%s codec=%s; falling back to preset",
+            vendor,
+            codec,
+        )
+        return []
+    return ["--encoder", encoder]
 
 
 async def transcode_handbrake(
@@ -48,6 +88,7 @@ async def transcode_handbrake(
         preset_ref,
         "--json",
     ]
+    cmd.extend(_hw_encoder_args())
     if extra_args:
         cmd.extend(extra_args.split())
 

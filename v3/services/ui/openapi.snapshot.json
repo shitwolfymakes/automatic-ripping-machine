@@ -4600,6 +4600,16 @@
           "container": {
             "$ref": "#/components/schemas/ContainerFormat"
           },
+          "codec": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoCodec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "hw_preference": {
             "anyOf": [
               {
@@ -4688,6 +4698,16 @@
               }
             ]
           },
+          "codec": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoCodec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "hw_preference": {
             "anyOf": [
               {
@@ -4759,6 +4779,16 @@
           "container": {
             "$ref": "#/components/schemas/ContainerFormat"
           },
+          "codec": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoCodec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "hw_preference": {
             "anyOf": [
               {
@@ -4826,6 +4856,7 @@
           "preset_ref",
           "preset_json",
           "container",
+          "codec",
           "hw_preference",
           "extra_args",
           "created_by_user_id",
@@ -5004,6 +5035,15 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VideoCodec": {
+        "type": "string",
+        "enum": [
+          "h264",
+          "h265",
+          "av1"
+        ],
+        "title": "VideoCodec"
       }
     }
   }

@@ -8,6 +8,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
     UV_COMPILE_BYTECODE=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv
 
+# `nvidia-smi` is intentionally NOT installed here. When the user opts into
+# GPU mode via docker-compose.gpu.yml the NVIDIA Container Toolkit mounts the
+# host's `nvidia-smi` into the container automatically. On hosts without the
+# Toolkit (or without NVIDIA at all) `nvidia-smi` is absent and the GPU probe
+# treats that as "no NVENC" — clean fallback to CPU.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         tini \

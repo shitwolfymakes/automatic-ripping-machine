@@ -16,6 +16,7 @@ from arm_common.enums import (
     TrackStatus,
     TranscodeTaskStatus,
     TranscodeTool,
+    VideoCodec,
 )
 from arm_common.models import (
     Config,
@@ -63,5 +64,6 @@ __all__ = [
     "TranscodeTaskStatus",
     "TranscodeTool",
     "User",
+    "VideoCodec",
     "new_id",
 ]

@@ -1,0 +1,31 @@
+# Phase 7b: GPU transcoding overlay.
+#
+# Run with:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#
+# What this enables:
+# - Backend mounts /dev/dri so it can probe Intel (QSV) and AMD (VAAPI) GPUs.
+# - Backend gets the NVIDIA runtime so `nvidia-smi` works inside the container,
+#   the probe sees NVENC GPUs, and spawned transcoder containers can also
+#   request the runtime via docker-py `device_requests`.
+# - Backend probes once at startup, populates the `gpus` table, and the
+#   dispatcher claims a row per task before spawning.
+#
+# If you only have Intel/AMD (no NVIDIA), strip the `runtime: nvidia` and
+# `deploy.resources.reservations.devices` sections — the `/dev/dri` mount is
+# all you need.
+#
+# If you only have NVIDIA, strip the `devices: [/dev/dri:...]` line.
+
+services:
+  arm-backend:
+    devices:
+      - /dev/dri:/dev/dri:ro
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, video]

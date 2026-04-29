@@ -121,3 +121,9 @@ class GpuVendor(StrEnum):
 class GpuStatus(StrEnum):
     AVAILABLE = "available"
     BUSY = "busy"
+
+
+class VideoCodec(StrEnum):
+    H264 = "h264"
+    H265 = "h265"
+    AV1 = "av1"

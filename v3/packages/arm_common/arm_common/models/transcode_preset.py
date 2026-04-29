@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
 from arm_common.models._columns import created_at_column, enum_column, updated_at_column
-from arm_common.enums import ContainerFormat, HwPreference, MediaType, TranscodeTool
+from arm_common.enums import ContainerFormat, HwPreference, MediaType, TranscodeTool, VideoCodec
 from arm_common.ulid import new_id
 
 
@@ -25,6 +25,7 @@ class TranscodePreset(SQLModel, table=True):
     preset_ref: str | None = Field(default=None)
     preset_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
     container: ContainerFormat = Field(sa_column=enum_column(ContainerFormat, "container_format"))
+    codec: VideoCodec | None = Field(sa_column=enum_column(VideoCodec, "video_codec", nullable=True))
     hw_preference: HwPreference | None = Field(sa_column=enum_column(HwPreference, "hw_preference", nullable=True))
     extra_args: str | None = Field(default=None)
     created_by_user_id: str | None = Field(
