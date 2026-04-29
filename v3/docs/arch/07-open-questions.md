@@ -18,20 +18,6 @@ The deferred question is whether to upgrade this to Redis+RQ, NATS, or keep DB-a
 
 ---
 
-## OQ-2: Frontend framework — Vue vs React
-
-**Status:** deferred to the UI track.
-
-**Context.** Both are reasonable for a small SPA; the project's contributor pool is the deciding factor. No strong architectural consequences either way — both work fine with Vite, OpenAPI codegen, and WS subscriptions.
-
-**Considerations:**
-- **Vue.** Smaller bundle, less JS ceremony, gentler learning curve. Composition API fits the "reactive stores" pattern the UI will need for job lists.
-- **React.** Larger contributor pool in the Python/homelab crossover. More libraries for niche components.
-
-**Resolve by:** when the first UI contributor commits to leading that track.
-
----
-
 ## Process for resolving open questions
 
 1. When an OQ is ready to resolve, the relevant design decision is folded directly into the main architecture docs in a PR that also deletes the OQ entry here. No `resolutions/` folder — git history carries the context.
