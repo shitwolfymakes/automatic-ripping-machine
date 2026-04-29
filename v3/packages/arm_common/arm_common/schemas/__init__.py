@@ -1,3 +1,13 @@
+from arm_common.schemas.auth import (
+    ConfigUpdateRequest,
+    ConfigView,
+    DiagnosticsResponse,
+    DiagnosticsServiceView,
+    JobDetailView,
+    LoginRequest,
+    LoginResponse,
+    PasswordChangeRequest,
+)
 from arm_common.schemas.common import ErrorResponse, HealthResponse
 from arm_common.schemas.jobs import JobView, ResolveRequest, RipStartResponse, TrackView
 from arm_common.schemas.ripper import (
@@ -20,11 +30,19 @@ from arm_common.schemas.ws import (
 )
 
 __all__ = [
+    "ConfigUpdateRequest",
+    "ConfigView",
+    "DiagnosticsResponse",
+    "DiagnosticsServiceView",
     "ErrorResponse",
     "HealthResponse",
     "IdentifyRequest",
     "JobCompleteRequest",
+    "JobDetailView",
     "JobView",
+    "LoginRequest",
+    "LoginResponse",
+    "PasswordChangeRequest",
     "RegisterRequest",
     "ResolveRequest",
     "RipStartResponse",

@@ -7,14 +7,16 @@ from pathlib import Path
 import httpx
 import uvicorn
 from fastapi import FastAPI
+from sqlmodel import col, select
 
 from arm_backend.config import settings
 from arm_backend.db import SessionLocal
 from arm_backend.metadata import MetadataDispatcher
-from arm_backend.routers import health, jobs, ripper
-from arm_backend.seeders import run_seeders
+from arm_backend.routers import auth, config as config_router, diagnostics, drives, health, jobs, ripper, sessions
+from arm_backend.seeders import CONFIG_SINGLETON_ID, run_seeders
 from arm_backend.ws import WSHub
 from arm_backend.ws.router import router as ws_router
+from arm_common import Config
 
 logging.basicConfig(
     level=settings.ARM_LOG_LEVEL.upper(),
@@ -45,6 +47,11 @@ async def _run_seeders() -> None:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _run_migrations()
     await _run_seeders()
+    async with SessionLocal() as session:
+        cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
+        if cfg.session_signing_key is None:
+            raise RuntimeError("session_signing_key missing — seeders should have populated it")
+        app.state.signing_key = cfg.session_signing_key
     http = httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=10.0))
     app.state.dispatcher = MetadataDispatcher(http, omdb_api_key_override=settings.OMDB_API_KEY)
     app.state.ws_hub = WSHub()
@@ -56,8 +63,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="ARM v3 Backend", lifespan=lifespan)
 app.include_router(health.router)
+app.include_router(auth.router)
 app.include_router(ripper.router)
 app.include_router(jobs.router)
+app.include_router(drives.router)
+app.include_router(sessions.router)
+app.include_router(config_router.router)
+app.include_router(diagnostics.router)
 app.include_router(ws_router)
 
 

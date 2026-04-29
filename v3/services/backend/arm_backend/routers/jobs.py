@@ -1,18 +1,18 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
+from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
 from arm_backend.ws import WSHub
-from arm_common import Job, JobStatus
-from arm_common.schemas import JobView, ResolveRequest
+from arm_common import Job, JobStatus, User
+from arm_common.models import Track
+from arm_common.schemas import JobDetailView, JobView, ResolveRequest, TrackView
 
 logger = logging.getLogger("arm_backend.routers.jobs")
 
-# Phase 5: gate this router behind require_jwt(scopes=["jobs:resolve"]) once
-# UI JWT auth lands. Today this is curl-testable for local dev only.
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
@@ -21,10 +21,49 @@ def _get_hub(request: Request) -> WSHub:
     return hub
 
 
+@router.get("", response_model=list[JobView])
+async def list_jobs(
+    _: User = Depends(require_jwt),
+    session: AsyncSession = Depends(get_session),
+    status_filter: JobStatus | None = Query(default=None, alias="status"),
+    drive_id: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> list[Job]:
+    stmt = select(Job).order_by(col(Job.created_at).desc()).limit(limit).offset(offset)
+    if status_filter is not None:
+        stmt = stmt.where(col(Job.status) == status_filter)
+    if drive_id is not None:
+        stmt = stmt.where(col(Job.drive_id) == drive_id)
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+@router.get("/{job_id}", response_model=JobDetailView)
+async def get_job_detail(
+    job_id: str,
+    _: User = Depends(require_jwt),
+    session: AsyncSession = Depends(get_session),
+) -> JobDetailView:
+    job = (await session.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
+    tracks = (
+        (await session.execute(select(Track).where(col(Track.job_id) == job_id).order_by(col(Track.index))))
+        .scalars()
+        .all()
+    )
+    return JobDetailView(
+        job=JobView.model_validate(job),
+        tracks=[TrackView.model_validate(t) for t in tracks],
+    )
+
+
 @router.post("/{job_id}/resolve", response_model=JobView)
 async def resolve(
     job_id: str,
     req: ResolveRequest,
+    _: User = Depends(require_jwt),
     session: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> Job:

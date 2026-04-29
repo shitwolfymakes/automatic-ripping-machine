@@ -39,6 +39,7 @@ services:
       ARM_SERVICE_TOKEN: ${ARM_SERVICE_TOKEN}
       ARM_LOG_LEVEL: ${ARM_LOG_LEVEL:-info}
       OMDB_API_KEY: ${OMDB_API_KEY:-}
+      ARM_ALLOWED_ORIGINS: ${ARM_ALLOWED_ORIGINS:-}
       TLS_CERT_PATH: /etc/ssl/arm/tls.crt
       TLS_KEY_PATH: /etc/ssl/arm/tls.key
       PUID: ${PUID:-1000}
@@ -84,3 +85,18 @@ services:
       - ./certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
       - ./certs/arm-ripper-sr0.crt:/etc/ssl/arm/tls.crt:ro
       - ./certs/arm-ripper-sr0.key:/etc/ssl/arm/tls.key:ro
+
+  arm-ui:
+    build:
+      context: .
+      dockerfile: services/ui/Dockerfile
+    container_name: armv3-ui
+    restart: unless-stopped
+    depends_on:
+      - arm-backend
+    ports:
+      - "8081:443"
+    volumes:
+      - ./certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
+      - ./certs/arm-ui.crt:/etc/ssl/arm/tls.crt:ro
+      - ./certs/arm-ui.key:/etc/ssl/arm/tls.key:ro

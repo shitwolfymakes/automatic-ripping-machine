@@ -34,20 +34,28 @@ fi
 
 mkleaf() {
     local name="$1"
+    shift
+    local extra_sans=("$@")
     local key="${name}.key"
     local csr="${name}.csr"
     local crt="${name}.crt"
     local ext="${name}.ext"
 
-    echo "issuing leaf: ${name}"
+    echo "issuing leaf: ${name} (extra SANs: ${extra_sans[*]:-none})"
 
     openssl ecparam -name prime256v1 -genkey -noout -out "${key}"
     chmod 400 "${key}"
 
     openssl req -new -key "${key}" -subj "/CN=${name}" -out "${csr}"
 
+    local san_line="DNS:${name}"
+    for s in "${extra_sans[@]:-}"; do
+        [[ -z "$s" ]] && continue
+        san_line+=",DNS:${s}"
+    done
+
     cat > "${ext}" <<EOF
-subjectAltName = DNS:${name}
+subjectAltName = ${san_line}
 extendedKeyUsage = serverAuth, clientAuth
 EOF
 
@@ -59,10 +67,16 @@ EOF
     rm -f "${csr}" "${ext}"
 }
 
+# arm-ui is the only listening service the browser talks to directly.
+# Phase 13 (installer) will auto-detect the host's LAN hostname; today we
+# hardcode `localhost` plus `hostname -f` so a browser pointed at either
+# https://localhost:8081 or https://<host>:8081 doesn't trip a SAN mismatch.
+HOST_FQDN="$(hostname -f 2>/dev/null || hostname || echo localhost)"
+
 mkleaf arm-backend
 mkleaf arm-db
 mkleaf arm-ripper-sr0
-mkleaf arm-ui
+mkleaf arm-ui localhost "${HOST_FQDN}"
 
 cat <<EOF
 
