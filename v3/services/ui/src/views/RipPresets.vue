@@ -1,21 +1,21 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { ApiError } from "../api/client";
-import { useRipPresetsStore } from "../stores/ripPresets";
+import { onMounted, ref } from 'vue'
+import { ApiError } from '../api/client'
+import { useRipPresetsStore } from '../stores/ripPresets'
 
-const ripPresets = useRipPresetsStore();
-const error = ref<string | null>(null);
+const ripPresets = useRipPresetsStore()
+const error = ref<string | null>(null)
 
 onMounted(async () => {
-  await ripPresets.fetchAll();
-});
+  await ripPresets.fetchAll()
+})
 
 async function deletePreset(id: string, name: string): Promise<void> {
-  if (!confirm(`Delete rip preset "${name}"?`)) return;
+  if (!confirm(`Delete rip preset "${name}"?`)) return
   try {
-    await ripPresets.remove(id);
+    await ripPresets.remove(id)
   } catch (e) {
-    error.value = e instanceof ApiError ? e.message : "Delete failed";
+    error.value = e instanceof ApiError ? e.message : 'Delete failed'
   }
 }
 </script>
@@ -50,10 +50,14 @@ async function deletePreset(id: string, name: string): Promise<void> {
           <td>{{ p.track_selection }}</td>
           <td>{{ p.identification_mode }}</td>
           <td>{{ p.output_mode }}</td>
-          <td>{{ p.is_builtin ? "yes" : "no" }}</td>
+          <td>{{ p.is_builtin ? 'yes' : 'no' }}</td>
           <td>
-            <RouterLink :to="`/rip-presets/${p.id}/edit`"><button class="secondary">Edit</button></RouterLink>
-            <button v-if="!p.is_builtin" class="secondary" @click="deletePreset(p.id, p.name)">Delete</button>
+            <RouterLink :to="`/rip-presets/${p.id}/edit`"
+              ><button class="secondary">Edit</button></RouterLink
+            >
+            <button v-if="!p.is_builtin" class="secondary" @click="deletePreset(p.id, p.name)">
+              Delete
+            </button>
           </td>
         </tr>
       </tbody>

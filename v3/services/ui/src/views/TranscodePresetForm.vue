@@ -1,56 +1,56 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import { ApiError } from "../api/client";
-import { useTranscodePresetsStore } from "../stores/transcodePresets";
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ApiError } from '../api/client'
+import { useTranscodePresetsStore } from '../stores/transcodePresets'
 import type {
   ContainerFormat,
   HwPreference,
   MediaType,
   TranscodePresetView,
   TranscodeTool,
-} from "../api/types";
+} from '../api/types'
 
-const route = useRoute();
-const router = useRouter();
-const tcPresets = useTranscodePresetsStore();
+const route = useRoute()
+const router = useRouter()
+const tcPresets = useTranscodePresetsStore()
 
-const editing = computed(() => typeof route.params.id === "string");
-const editId = computed(() => (editing.value ? (route.params.id as string) : null));
+const editing = computed(() => typeof route.params.id === 'string')
+const editId = computed(() => (editing.value ? (route.params.id as string) : null))
 
-const name = ref("");
-const mediaType = ref<MediaType>("movie");
-const tool = ref<TranscodeTool>("handbrake");
-const presetRef = ref<string>("");
-const container = ref<ContainerFormat>("mkv");
-const hwPreference = ref<HwPreference | "">("");
-const extraArgs = ref<string>("");
-const isBuiltin = ref(false);
+const name = ref('')
+const mediaType = ref<MediaType>('movie')
+const tool = ref<TranscodeTool>('handbrake')
+const presetRef = ref<string>('')
+const container = ref<ContainerFormat>('mkv')
+const hwPreference = ref<HwPreference | ''>('')
+const extraArgs = ref<string>('')
+const isBuiltin = ref(false)
 
-const error = ref<string | null>(null);
-const saving = ref(false);
+const error = ref<string | null>(null)
+const saving = ref(false)
 
 onMounted(async () => {
   if (editing.value && editId.value) {
     try {
-      const p: TranscodePresetView = await tcPresets.getById(editId.value);
-      name.value = p.name;
-      mediaType.value = p.media_type;
-      tool.value = p.tool;
-      presetRef.value = p.preset_ref ?? "";
-      container.value = p.container;
-      hwPreference.value = p.hw_preference ?? "";
-      extraArgs.value = p.extra_args ?? "";
-      isBuiltin.value = p.is_builtin;
+      const p: TranscodePresetView = await tcPresets.getById(editId.value)
+      name.value = p.name
+      mediaType.value = p.media_type
+      tool.value = p.tool
+      presetRef.value = p.preset_ref ?? ''
+      container.value = p.container
+      hwPreference.value = p.hw_preference ?? ''
+      extraArgs.value = p.extra_args ?? ''
+      isBuiltin.value = p.is_builtin
     } catch (e) {
-      error.value = e instanceof ApiError ? e.message : "Failed to load";
+      error.value = e instanceof ApiError ? e.message : 'Failed to load'
     }
   }
-});
+})
 
 async function save(): Promise<void> {
-  saving.value = true;
-  error.value = null;
+  saving.value = true
+  error.value = null
   try {
     if (editing.value && editId.value) {
       const payload = isBuiltin.value
@@ -62,8 +62,8 @@ async function save(): Promise<void> {
             container: container.value,
             hw_preference: (hwPreference.value || null) as HwPreference | null,
             extra_args: extraArgs.value || null,
-          };
-      await tcPresets.update(editId.value, payload);
+          }
+      await tcPresets.update(editId.value, payload)
     } else {
       await tcPresets.create({
         name: name.value,
@@ -73,19 +73,19 @@ async function save(): Promise<void> {
         container: container.value,
         hw_preference: (hwPreference.value || null) as HwPreference | null,
         extra_args: extraArgs.value || null,
-      });
+      })
     }
-    await router.push("/transcode-presets");
+    await router.push('/transcode-presets')
   } catch (e) {
-    error.value = e instanceof ApiError ? e.message : "Save failed";
+    error.value = e instanceof ApiError ? e.message : 'Save failed'
   } finally {
-    saving.value = false;
+    saving.value = false
   }
 }
 </script>
 
 <template>
-  <h2>{{ editing ? "Edit transcode preset" : "New transcode preset" }}</h2>
+  <h2>{{ editing ? 'Edit transcode preset' : 'New transcode preset' }}</h2>
   <p v-if="isBuiltin" class="muted">Built-in preset — only the name is editable.</p>
   <p v-if="error" class="error">{{ error }}</p>
   <form class="card" style="max-width: 720px" @submit.prevent="save">
@@ -141,8 +141,10 @@ async function save(): Promise<void> {
       <input v-model="extraArgs" :disabled="isBuiltin" />
     </div>
     <div class="row" style="gap: 8px">
-      <button type="submit" :disabled="saving || !name">{{ saving ? "Saving…" : "Save" }}</button>
-      <RouterLink to="/transcode-presets"><button class="secondary" type="button">Cancel</button></RouterLink>
+      <button type="submit" :disabled="saving || !name">{{ saving ? 'Saving…' : 'Save' }}</button>
+      <RouterLink to="/transcode-presets"
+        ><button class="secondary" type="button">Cancel</button></RouterLink
+      >
     </div>
   </form>
 </template>

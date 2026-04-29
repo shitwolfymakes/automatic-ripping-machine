@@ -1,19 +1,19 @@
-import { defineStore } from "pinia";
-import { api } from "../api/client";
+import { defineStore } from 'pinia'
+import { api } from '../api/client'
 import type {
   MediaType,
   RipPresetCreateRequest,
   RipPresetUpdateRequest,
   RipPresetView,
-} from "../api/types";
+} from '../api/types'
 
 interface RipPresetsState {
-  presets: RipPresetView[];
-  loading: boolean;
-  error: string | null;
+  presets: RipPresetView[]
+  loading: boolean
+  error: string | null
 }
 
-export const useRipPresetsStore = defineStore("ripPresets", {
+export const useRipPresetsStore = defineStore('ripPresets', {
   state: (): RipPresetsState => ({
     presets: [],
     loading: false,
@@ -24,32 +24,32 @@ export const useRipPresetsStore = defineStore("ripPresets", {
   },
   actions: {
     async fetchAll(): Promise<void> {
-      this.loading = true;
+      this.loading = true
       try {
-        this.presets = await api.get<RipPresetView[]>("/api/rip-presets");
-        this.error = null;
+        this.presets = await api.get<RipPresetView[]>('/api/rip-presets')
+        this.error = null
       } catch (e) {
-        this.error = e instanceof Error ? e.message : String(e);
+        this.error = e instanceof Error ? e.message : String(e)
       } finally {
-        this.loading = false;
+        this.loading = false
       }
     },
     async getById(id: string): Promise<RipPresetView> {
-      return await api.get<RipPresetView>(`/api/rip-presets/${id}`);
+      return await api.get<RipPresetView>(`/api/rip-presets/${id}`)
     },
     async create(req: RipPresetCreateRequest): Promise<RipPresetView> {
-      const created = await api.post<RipPresetView>("/api/rip-presets", req);
-      this.presets = [...this.presets, created].sort((a, b) => a.name.localeCompare(b.name));
-      return created;
+      const created = await api.post<RipPresetView>('/api/rip-presets', req)
+      this.presets = [...this.presets, created].sort((a, b) => a.name.localeCompare(b.name))
+      return created
     },
     async update(id: string, req: RipPresetUpdateRequest): Promise<RipPresetView> {
-      const updated = await api.patch<RipPresetView>(`/api/rip-presets/${id}`, req);
-      this.presets = this.presets.map((p) => (p.id === id ? updated : p));
-      return updated;
+      const updated = await api.patch<RipPresetView>(`/api/rip-presets/${id}`, req)
+      this.presets = this.presets.map((p) => (p.id === id ? updated : p))
+      return updated
     },
     async remove(id: string): Promise<void> {
-      await api.del(`/api/rip-presets/${id}`);
-      this.presets = this.presets.filter((p) => p.id !== id);
+      await api.del(`/api/rip-presets/${id}`)
+      this.presets = this.presets.filter((p) => p.id !== id)
     },
   },
-});
+})

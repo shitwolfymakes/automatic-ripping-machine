@@ -34,3 +34,24 @@ repos:
           - arm_ripper
         files: ^v3/
         types: [python]
+
+      # ESLint + Prettier run as local hooks against the UI's own
+      # node_modules (no global install needed). Both run the whole UI
+      # tree per-invocation rather than per-file — same pattern as mypy
+      # above — because ESLint flat config + Prettier need cwd inside
+      # services/ui to discover their configs.
+      #
+      # First-time setup: `npm install --prefix v3/services/ui` once.
+      - id: eslint-ui
+        name: eslint (ui)
+        entry: bash -c 'cd v3/services/ui && npm run --silent lint:fix'
+        language: system
+        pass_filenames: false
+        files: ^v3/services/ui/.+\.(ts|mts|tsx|vue|js|cjs|mjs)$
+
+      - id: prettier-ui
+        name: prettier (ui)
+        entry: bash -c 'cd v3/services/ui && npm run --silent format'
+        language: system
+        pass_filenames: false
+        files: ^v3/services/ui/.+\.(ts|mts|tsx|vue|js|cjs|mjs|json|css|md|html)$

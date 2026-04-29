@@ -1,41 +1,41 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
-import { ApiError } from "../api/client";
-import { useSessionsStore } from "../stores/sessions";
+import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { ApiError } from '../api/client'
+import { useSessionsStore } from '../stores/sessions'
 
-const sessions = useSessionsStore();
-const router = useRouter();
-const error = ref<string | null>(null);
-const cloneTarget = ref<string | null>(null);
-const cloneName = ref("");
+const sessions = useSessionsStore()
+const router = useRouter()
+const error = ref<string | null>(null)
+const cloneTarget = ref<string | null>(null)
+const cloneName = ref('')
 
 onMounted(async () => {
-  await sessions.fetchAll();
-});
+  await sessions.fetchAll()
+})
 
 async function deleteSession(id: string, name: string): Promise<void> {
-  if (!confirm(`Delete session "${name}"?`)) return;
+  if (!confirm(`Delete session "${name}"?`)) return
   try {
-    await sessions.remove(id);
+    await sessions.remove(id)
   } catch (e) {
-    error.value = e instanceof ApiError ? e.message : "Delete failed";
+    error.value = e instanceof ApiError ? e.message : 'Delete failed'
   }
 }
 
 function openClone(id: string, name: string): void {
-  cloneTarget.value = id;
-  cloneName.value = `${name} (copy)`;
+  cloneTarget.value = id
+  cloneName.value = `${name} (copy)`
 }
 
 async function submitClone(): Promise<void> {
-  if (cloneTarget.value === null) return;
+  if (cloneTarget.value === null) return
   try {
-    const created = await sessions.clone(cloneTarget.value, { name: cloneName.value });
-    cloneTarget.value = null;
-    await router.push(`/sessions/${created.id}/edit`);
+    const created = await sessions.clone(cloneTarget.value, { name: cloneName.value })
+    cloneTarget.value = null
+    await router.push(`/sessions/${created.id}/edit`)
   } catch (e) {
-    error.value = e instanceof ApiError ? e.message : "Clone failed";
+    error.value = e instanceof ApiError ? e.message : 'Clone failed'
   }
 }
 </script>
@@ -65,12 +65,18 @@ async function submitClone(): Promise<void> {
         <tr v-for="s in sessions.sessions" :key="s.id">
           <td>{{ s.name }}</td>
           <td>{{ s.media_type }}</td>
-          <td>{{ s.is_builtin ? "yes" : "no" }}</td>
-          <td><code>{{ s.output_path_template }}</code></td>
+          <td>{{ s.is_builtin ? 'yes' : 'no' }}</td>
           <td>
-            <RouterLink :to="`/sessions/${s.id}/edit`"><button class="secondary">Edit</button></RouterLink>
+            <code>{{ s.output_path_template }}</code>
+          </td>
+          <td>
+            <RouterLink :to="`/sessions/${s.id}/edit`"
+              ><button class="secondary">Edit</button></RouterLink
+            >
             <button class="secondary" @click="openClone(s.id, s.name)">Clone</button>
-            <button v-if="!s.is_builtin" class="secondary" @click="deleteSession(s.id, s.name)">Delete</button>
+            <button v-if="!s.is_builtin" class="secondary" @click="deleteSession(s.id, s.name)">
+              Delete
+            </button>
           </td>
         </tr>
       </tbody>

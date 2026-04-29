@@ -1,59 +1,61 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
-import { useRoute } from "vue-router";
-import { api, ApiError } from "../api/client";
-import ApplySessionDialog from "../components/ApplySessionDialog.vue";
-import { useTranscodesStore } from "../stores/transcodes";
-import type { ApplySessionResponse, JobDetailView, JobStatus } from "../api/types";
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { api, ApiError } from '../api/client'
+import ApplySessionDialog from '../components/ApplySessionDialog.vue'
+import { useTranscodesStore } from '../stores/transcodes'
+import type { ApplySessionResponse, JobDetailView, JobStatus } from '../api/types'
 
-const route = useRoute();
-const detail = ref<JobDetailView | null>(null);
-const error = ref<string | null>(null);
-const showApply = ref(false);
-const lastApplied = ref<ApplySessionResponse | null>(null);
-const transcodes = useTranscodesStore();
+const route = useRoute()
+const detail = ref<JobDetailView | null>(null)
+const error = ref<string | null>(null)
+const showApply = ref(false)
+const lastApplied = ref<ApplySessionResponse | null>(null)
+const transcodes = useTranscodesStore()
 
-const APPLY_OK: JobStatus[] = ["identified", "ripped", "ripped_partial", "awaiting_user_id"];
-const canApply = computed(() => detail.value !== null && APPLY_OK.includes(detail.value.job.status));
+const APPLY_OK: JobStatus[] = ['identified', 'ripped', 'ripped_partial', 'awaiting_user_id']
+const canApply = computed(() => detail.value !== null && APPLY_OK.includes(detail.value.job.status))
 
 const jobTasks = computed(() => {
-  if (detail.value === null) return [];
-  const trackIds = new Set(detail.value.tracks.map((t) => t.id));
-  return transcodes.tasks.filter((t) => trackIds.has(t.source_track_id));
-});
+  if (detail.value === null) return []
+  const trackIds = new Set(detail.value.tracks.map((t) => t.id))
+  return transcodes.tasks.filter((t) => trackIds.has(t.source_track_id))
+})
 
 function progressOf(taskId: string, fallback: number): number {
-  return transcodes.liveProgress[taskId]?.progress_pct ?? fallback;
+  return transcodes.liveProgress[taskId]?.progress_pct ?? fallback
 }
 
 async function load(): Promise<void> {
   try {
-    const id = route.params.id as string;
-    detail.value = await api.get<JobDetailView>(`/api/jobs/${id}`);
-    await transcodes.fetchAll();
-    transcodes.startWS();
+    const id = route.params.id as string
+    detail.value = await api.get<JobDetailView>(`/api/jobs/${id}`)
+    await transcodes.fetchAll()
+    transcodes.startWS()
   } catch (e) {
-    error.value = e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to load";
+    error.value =
+      e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Failed to load'
   }
 }
 
 async function cancelTask(id: string): Promise<void> {
   try {
-    await transcodes.cancel(id);
+    await transcodes.cancel(id)
   } catch (e) {
-    error.value = e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Cancel failed";
+    error.value =
+      e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Cancel failed'
   }
 }
 
-onMounted(load);
+onMounted(load)
 onUnmounted(() => {
-  transcodes.stopWS();
-});
+  transcodes.stopWS()
+})
 
 function onApplied(resp: ApplySessionResponse): void {
-  lastApplied.value = resp;
-  showApply.value = false;
-  void transcodes.fetchAll();
+  lastApplied.value = resp
+  showApply.value = false
+  void transcodes.fetchAll()
 }
 </script>
 
@@ -64,11 +66,15 @@ function onApplied(resp: ApplySessionResponse): void {
     <div class="row" style="gap: 24px; flex-wrap: wrap">
       <div>
         <div class="muted">Job ID</div>
-        <div><code>{{ detail.job.id }}</code></div>
+        <div>
+          <code>{{ detail.job.id }}</code>
+        </div>
       </div>
       <div>
         <div class="muted">Status</div>
-        <div><span class="badge">{{ detail.job.status }}</span></div>
+        <div>
+          <span class="badge">{{ detail.job.status }}</span>
+        </div>
       </div>
       <div>
         <div class="muted">Disc type</div>
@@ -76,7 +82,9 @@ function onApplied(resp: ApplySessionResponse): void {
       </div>
       <div>
         <div class="muted">Title</div>
-        <div>{{ detail.job.title ?? "—" }}<span v-if="detail.job.year"> ({{ detail.job.year }})</span></div>
+        <div>
+          {{ detail.job.title ?? '—' }}<span v-if="detail.job.year"> ({{ detail.job.year }})</span>
+        </div>
       </div>
       <div class="spacer" />
       <button v-if="canApply && !showApply" @click="showApply = true">Apply session</button>
@@ -93,7 +101,9 @@ function onApplied(resp: ApplySessionResponse): void {
   <div v-if="lastApplied" class="card">
     <h3 style="margin-top: 0">
       Session queued
-      <span v-if="lastApplied.idempotent" class="muted">(already applied — same response returned)</span>
+      <span v-if="lastApplied.idempotent" class="muted"
+        >(already applied — same response returned)</span
+      >
     </h3>
     <p>
       Application <code>{{ lastApplied.session_application.id }}</code> in status
@@ -122,23 +132,36 @@ function onApplied(resp: ApplySessionResponse): void {
       </thead>
       <tbody>
         <tr v-for="t in jobTasks" :key="t.id">
-          <td><code>{{ t.id.slice(-12) }}</code></td>
-          <td><span class="badge">{{ t.status }}</span></td>
+          <td>
+            <code>{{ t.id.slice(-12) }}</code>
+          </td>
+          <td>
+            <span class="badge">{{ t.status }}</span>
+          </td>
           <td>
             <div v-if="t.status === 'in_progress'" class="progress-cell">
-              <div class="progress-bar"><div class="progress-fill" :style="{ width: `${progressOf(t.id, t.progress_pct)}%` }" /></div>
+              <div class="progress-bar">
+                <div
+                  class="progress-fill"
+                  :style="{ width: `${progressOf(t.id, t.progress_pct)}%` }"
+                />
+              </div>
               <span>{{ progressOf(t.id, t.progress_pct) }}%</span>
             </div>
             <span v-else-if="t.status === 'done'">100%</span>
             <span v-else class="muted">—</span>
           </td>
-          <td><code>{{ t.output_path ?? "—" }}</code></td>
+          <td>
+            <code>{{ t.output_path ?? '—' }}</code>
+          </td>
           <td>{{ t.attempts }}</td>
           <td>
             <button
               v-if="t.status === 'queued' || t.status === 'in_progress'"
               @click="cancelTask(t.id)"
-            >Cancel</button>
+            >
+              Cancel
+            </button>
             <span v-else-if="t.last_error" class="muted" :title="t.last_error">error</span>
           </td>
         </tr>
@@ -165,9 +188,11 @@ function onApplied(resp: ApplySessionResponse): void {
           <td>{{ t.index }}</td>
           <td>{{ t.kind }}</td>
           <td>{{ t.source_ref }}</td>
-          <td><span class="badge">{{ t.status }}</span></td>
-          <td>{{ t.output_path ?? "—" }}</td>
-          <td>{{ t.size_bytes ? `${Math.round(t.size_bytes / 1024 / 1024)} MB` : "—" }}</td>
+          <td>
+            <span class="badge">{{ t.status }}</span>
+          </td>
+          <td>{{ t.output_path ?? '—' }}</td>
+          <td>{{ t.size_bytes ? `${Math.round(t.size_bytes / 1024 / 1024)} MB` : '—' }}</td>
         </tr>
       </tbody>
     </table>

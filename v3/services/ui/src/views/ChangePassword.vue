@@ -1,40 +1,40 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import { useRouter } from "vue-router";
-import { useAuthStore } from "../stores/auth";
-import { ApiError } from "../api/client";
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
+import { ApiError } from '../api/client'
 
-const auth = useAuthStore();
-const router = useRouter();
+const auth = useAuthStore()
+const router = useRouter()
 
-const currentPassword = ref("");
-const newPassword = ref("");
-const confirmPassword = ref("");
-const error = ref<string | null>(null);
-const submitting = ref(false);
+const currentPassword = ref('')
+const newPassword = ref('')
+const confirmPassword = ref('')
+const error = ref<string | null>(null)
+const submitting = ref(false)
 
 async function submit() {
-  error.value = null;
+  error.value = null
   if (newPassword.value !== confirmPassword.value) {
-    error.value = "New passwords do not match";
-    return;
+    error.value = 'New passwords do not match'
+    return
   }
   if (newPassword.value.length < 8) {
-    error.value = "New password must be at least 8 characters";
-    return;
+    error.value = 'New password must be at least 8 characters'
+    return
   }
-  submitting.value = true;
+  submitting.value = true
   try {
     await auth.changePassword({
       current_password: currentPassword.value,
       new_password: newPassword.value,
-    });
-    await router.push("/jobs");
+    })
+    await router.push('/jobs')
   } catch (e) {
     error.value =
-      e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Password change failed";
+      e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Password change failed'
   } finally {
-    submitting.value = false;
+    submitting.value = false
   }
 }
 </script>
@@ -48,7 +48,12 @@ async function submit() {
       </p>
       <div class="field">
         <label for="current">Current password</label>
-        <input id="current" v-model="currentPassword" type="password" autocomplete="current-password" />
+        <input
+          id="current"
+          v-model="currentPassword"
+          type="password"
+          autocomplete="current-password"
+        />
       </div>
       <div class="field">
         <label for="new">New password</label>
@@ -60,7 +65,7 @@ async function submit() {
       </div>
       <p v-if="error" class="error">{{ error }}</p>
       <button :disabled="submitting" type="submit">
-        {{ submitting ? "Saving…" : "Save" }}
+        {{ submitting ? 'Saving…' : 'Save' }}
       </button>
     </form>
   </div>

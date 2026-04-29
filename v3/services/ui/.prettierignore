@@ -1,0 +1,7 @@
+dist
+dist-ssr
+coverage
+node_modules
+src/api/generated.ts
+openapi.snapshot.json
+package-lock.json

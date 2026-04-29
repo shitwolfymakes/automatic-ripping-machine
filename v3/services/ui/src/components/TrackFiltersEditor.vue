@@ -1,35 +1,35 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import type { TrackFilters } from "../api/types";
+import { computed } from 'vue'
+import type { TrackFilters } from '../api/types'
 
-const props = defineProps<{ modelValue: TrackFilters }>();
-const emit = defineEmits<(e: "update:modelValue", v: TrackFilters) => void>();
+const props = defineProps<{ modelValue: TrackFilters }>()
+const emit = defineEmits<(e: 'update:modelValue', v: TrackFilters) => void>()
 
 function update<K extends keyof TrackFilters>(key: K, value: TrackFilters[K]): void {
-  emit("update:modelValue", { ...props.modelValue, [key]: value });
+  emit('update:modelValue', { ...props.modelValue, [key]: value })
 }
 
 const allowList = computed({
-  get: () => (props.modelValue.title_indices ?? []).join(", "),
+  get: () => (props.modelValue.title_indices ?? []).join(', '),
   set: (v: string) => {
     const parsed = v
       .split(/[ ,]+/)
       .map((s) => Number(s))
-      .filter((n) => Number.isInteger(n) && n > 0);
-    update("title_indices", parsed.length ? parsed : null);
+      .filter((n) => Number.isInteger(n) && n > 0)
+    update('title_indices', parsed.length ? parsed : null)
   },
-});
+})
 
 const blockList = computed({
-  get: () => (props.modelValue.title_indices_exclude ?? []).join(", "),
+  get: () => (props.modelValue.title_indices_exclude ?? []).join(', '),
   set: (v: string) => {
     const parsed = v
       .split(/[ ,]+/)
       .map((s) => Number(s))
-      .filter((n) => Number.isInteger(n) && n > 0);
-    update("title_indices_exclude", parsed.length ? parsed : null);
+      .filter((n) => Number.isInteger(n) && n > 0)
+    update('title_indices_exclude', parsed.length ? parsed : null)
   },
-});
+})
 </script>
 
 <template>
@@ -43,7 +43,15 @@ const blockList = computed({
       <input
         type="number"
         :value="modelValue.min_duration_seconds ?? ''"
-        @input="(e) => update('min_duration_seconds', (e.target as HTMLInputElement).value ? Number((e.target as HTMLInputElement).value) : null)"
+        @input="
+          (e) =>
+            update(
+              'min_duration_seconds',
+              (e.target as HTMLInputElement).value
+                ? Number((e.target as HTMLInputElement).value)
+                : null,
+            )
+        "
       />
     </div>
     <div class="field">
@@ -51,7 +59,15 @@ const blockList = computed({
       <input
         type="number"
         :value="modelValue.max_duration_seconds ?? ''"
-        @input="(e) => update('max_duration_seconds', (e.target as HTMLInputElement).value ? Number((e.target as HTMLInputElement).value) : null)"
+        @input="
+          (e) =>
+            update(
+              'max_duration_seconds',
+              (e.target as HTMLInputElement).value
+                ? Number((e.target as HTMLInputElement).value)
+                : null,
+            )
+        "
       />
     </div>
     <div class="field">
