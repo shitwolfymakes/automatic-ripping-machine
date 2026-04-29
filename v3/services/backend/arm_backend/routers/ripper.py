@@ -1,26 +1,45 @@
 import asyncio
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.auth import require_service_token
+from arm_backend.auth import (
+    require_drive_owner_by_job,
+    require_drive_owner_by_track,
+    require_service_token,
+)
 from arm_backend.db import get_session
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
 from arm_backend.seeders import CONFIG_SINGLETON_ID
-from arm_common import Config, Drive, DriveStatus, Job, JobStatus
-from arm_common.schemas import IdentifyRequest, JobView, RegisterRequest
+from arm_backend.track_selection import select_tracks
+from arm_common import Config, DiscType, Drive, DriveStatus, Job, JobStatus, RipPreset, TrackStatus
+from arm_common.models import Track
+from arm_common.schemas import (
+    IdentifyRequest,
+    JobCompleteRequest,
+    JobView,
+    RegisterRequest,
+    RipStartResponse,
+    ScanResult,
+    TrackUpdateRequest,
+    TrackView,
+)
 
 logger = logging.getLogger("arm_backend.routers.ripper")
 
-router = APIRouter(
-    prefix="/api/ripper",
-    tags=["ripper"],
-    dependencies=[Depends(require_service_token)],
-)
+router = APIRouter(prefix="/api/ripper", tags=["ripper"])
+
+_DEFAULT_RIP_PRESET_BY_DISC_TYPE: dict[DiscType, str] = {
+    DiscType.DVD: "rpr_builtin_movie_archive",
+    DiscType.BLURAY: "rpr_builtin_movie_archive",
+    DiscType.CD: "rpr_builtin_music_standard",
+    DiscType.DATA: "rpr_builtin_data_copy",
+}
 
 
 def _get_dispatcher(request: Request) -> MetadataDispatcher:
@@ -28,7 +47,7 @@ def _get_dispatcher(request: Request) -> MetadataDispatcher:
     return dispatcher
 
 
-@router.post("/register", response_model=Drive)
+@router.post("/register", response_model=Drive, dependencies=[Depends(require_service_token)])
 async def register(req: RegisterRequest, session: AsyncSession = Depends(get_session)) -> Drive:
     stmt = (
         pg_insert(Drive)
@@ -54,7 +73,7 @@ async def register(req: RegisterRequest, session: AsyncSession = Depends(get_ses
     return drive
 
 
-@router.post("/identify", response_model=Job)
+@router.post("/identify", response_model=Job, dependencies=[Depends(require_service_token)])
 async def identify(
     req: IdentifyRequest,
     session: AsyncSession = Depends(get_session),
@@ -105,15 +124,184 @@ async def identify(
             job.title = scan.volume_label
             job.metadata_json = {"unidentified": True, **diagnostic}
 
+    job.metadata_json = {
+        **(job.metadata_json or {}),
+        "scan_result": scan.model_dump(mode="json"),
+    }
+
     await session.commit()
     await session.refresh(job)
     logger.info("identify job_id=%s status=%s title=%s", job.id, job.status.value, job.title)
     return job
 
 
-@router.get("/jobs/{job_id}", response_model=JobView)
+@router.get("/jobs/{job_id}", response_model=JobView, dependencies=[Depends(require_service_token)])
 async def get_job(job_id: str, session: AsyncSession = Depends(get_session)) -> Job:
     job = (await session.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
     return job
+
+
+@router.post("/jobs/{job_id}/rip-start", response_model=RipStartResponse)
+async def rip_start(
+    job: Job = Depends(require_drive_owner_by_job),
+    session: AsyncSession = Depends(get_session),
+) -> RipStartResponse:
+    preset_id = _DEFAULT_RIP_PRESET_BY_DISC_TYPE.get(job.disc_type)
+    if preset_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"no default rip preset for disc_type={job.disc_type.value}",
+        )
+
+    existing = (
+        (await session.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index))))
+        .scalars()
+        .all()
+    )
+    if existing:
+        return RipStartResponse(
+            job_id=job.id,
+            rip_preset_id=preset_id,
+            tracks=[TrackView.model_validate(t) for t in existing],
+        )
+
+    if job.status != JobStatus.IDENTIFIED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"job not in identified state: status={job.status.value}",
+        )
+
+    scan_dict = (job.metadata_json or {}).get("scan_result")
+    if not scan_dict:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="job missing scan_result in metadata_json",
+        )
+    scan = ScanResult.model_validate(scan_dict)
+
+    preset = (await session.execute(select(RipPreset).where(col(RipPreset.id) == preset_id))).scalar_one_or_none()
+    if preset is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"built-in rip preset {preset_id} not seeded",
+        )
+
+    new_tracks = select_tracks(job.id, scan, preset)
+    if not new_tracks:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="track selection produced zero tracks",
+        )
+
+    session.add_all(new_tracks)
+    job.status = JobStatus.RIPPING
+    job.started_at = datetime.now(timezone.utc)
+    await session.commit()
+
+    refreshed = (
+        (await session.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index))))
+        .scalars()
+        .all()
+    )
+    logger.info(
+        "rip-start job_id=%s preset=%s tracks=%d",
+        job.id,
+        preset_id,
+        len(refreshed),
+    )
+    return RipStartResponse(
+        job_id=job.id,
+        rip_preset_id=preset_id,
+        tracks=[TrackView.model_validate(t) for t in refreshed],
+    )
+
+
+@router.patch("/tracks/{track_id}", response_model=TrackView)
+async def update_track(
+    req: TrackUpdateRequest,
+    track: Track = Depends(require_drive_owner_by_track),
+    session: AsyncSession = Depends(get_session),
+) -> TrackView:
+    new_status = req.status
+    current = track.status
+
+    if new_status == TrackStatus.IN_PROGRESS:
+        if current != TrackStatus.QUEUED:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"cannot move {current.value} -> in_progress",
+            )
+        track.attempts += 1
+    elif new_status == TrackStatus.DONE:
+        if current != TrackStatus.IN_PROGRESS:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"cannot move {current.value} -> done",
+            )
+        if req.output_path is not None:
+            track.output_path = req.output_path
+        if req.size_bytes is not None:
+            track.size_bytes = req.size_bytes
+        if req.sha256 is not None:
+            track.sha256 = req.sha256
+        if req.duration_seconds is not None:
+            track.duration_seconds = req.duration_seconds
+    elif new_status == TrackStatus.FAILED:
+        if current != TrackStatus.IN_PROGRESS:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"cannot move {current.value} -> failed",
+            )
+        if req.last_error is not None:
+            track.last_error = req.last_error
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"target status {new_status.value} not allowed via PATCH",
+        )
+
+    track.status = new_status
+    await session.commit()
+    await session.refresh(track)
+    return TrackView.model_validate(track)
+
+
+@router.post("/jobs/{job_id}/rip-complete", response_model=JobView)
+async def rip_complete(
+    _: JobCompleteRequest,
+    job: Job = Depends(require_drive_owner_by_job),
+    session: AsyncSession = Depends(get_session),
+) -> JobView:
+    if job.status != JobStatus.RIPPING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"job not in ripping state: status={job.status.value}",
+        )
+
+    tracks = (await session.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
+
+    done = sum(1 for t in tracks if t.status == TrackStatus.DONE)
+    failed = sum(1 for t in tracks if t.status == TrackStatus.FAILED)
+    total = len(tracks)
+
+    if total == 0 or done == 0:
+        job.status = JobStatus.FAILED
+    elif failed == 0:
+        job.status = JobStatus.RIPPED
+    else:
+        job.status = JobStatus.RIPPED_PARTIAL
+
+    job.ripped_at = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(job)
+    logger.info(
+        "rip-complete job_id=%s status=%s done=%d failed=%d total=%d",
+        job.id,
+        job.status.value,
+        done,
+        failed,
+        total,
+    )
+    return JobView.model_validate(job)

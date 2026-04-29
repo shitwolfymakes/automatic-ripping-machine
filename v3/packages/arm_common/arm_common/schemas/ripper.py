@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from arm_common.enums import DiscType
+from arm_common.enums import DiscType, TrackStatus
 
 
 class RegisterRequest(BaseModel):
@@ -31,3 +31,26 @@ class ScanResult(BaseModel):
 class IdentifyRequest(BaseModel):
     drive_id: str
     scan_result: ScanResult
+
+
+class TrackUpdateRequest(BaseModel):
+    """PATCH /api/ripper/tracks/{track_id} body.
+
+    Only fields that are non-None are written. Backend validates the
+    state-machine transition implied by `status`.
+    """
+
+    status: TrackStatus
+    output_path: str | None = None
+    size_bytes: int | None = None
+    sha256: str | None = None
+    duration_seconds: int | None = None
+    last_error: str | None = None
+
+
+class JobCompleteRequest(BaseModel):
+    """POST /api/ripper/jobs/{job_id}/rip-complete body.
+
+    Empty for now; backend computes the final job status from the track
+    outcomes. Reserved for future flags (e.g. user-initiated abort).
+    """
