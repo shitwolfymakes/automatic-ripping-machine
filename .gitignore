@@ -198,3 +198,4 @@ v3/.env
 # never commit private keys. Prior committed copies were purged via
 # `git filter-branch` before force-push.
 v3/certs/
+.claude/scheduled_tasks.lock
