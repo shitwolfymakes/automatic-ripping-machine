@@ -36,7 +36,7 @@ repo-root/
     │   │   ├── arm_transcode/
     │   │   ├── Dockerfile
     │   │   └── pyproject.toml
-    │   └── ui/                      # Vue or React + Vite
+    │   └── ui/                      # Vue 3 + Vite
     │       ├── src/
     │       ├── package.json
     │       └── Dockerfile

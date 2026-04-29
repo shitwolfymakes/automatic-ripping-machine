@@ -129,7 +129,7 @@ Realignment landed alongside the data model:
 **Exit criteria.** `https://host:8081/` → login → forced password change → jobs list that auto-updates every N seconds via REST polling. Built-in sessions visible (read-only UI). JWTs signed with `config.session_signing_key`.
 
 **Deliverables:**
-1. **Framework decision** (resolves [07-open-questions.md OQ-2](../arch/07-open-questions.md#oq-2-frontend-framework--vue-vs-react)). Scaffold `services/ui/` with Vite, nginx Dockerfile, OpenAPI client generation from the Backend spec.
+1. **UI scaffold** — Vue 3 (Composition API + `<script setup>`) + Vite + Pinia + vue-router. Scaffold `services/ui/` with the nginx Dockerfile and OpenAPI client generation from the Backend spec.
 2. **Auth endpoints:** `POST /api/auth/login`, `POST /api/auth/logout`, `POST /api/auth/password`, argon2id hasher wrapper in `arm_common`, `session_signing_key` auto-generation on first Backend boot.
 3. **UI JWT principal plumbing** — REST middleware that routes a `Bearer` header to either the service token or UI JWT and enforces the split rules in [05-cross-cutting.md § Authorization rules](../arch/05-cross-cutting.md#authorization-rules).
 4. **UI pages (MVP):** Login, Force-Change-Password, Jobs List, Job Detail (static — tracks + metadata from `GET /api/jobs/{id}`), Drives list, Config form, Sessions list (read-only).
@@ -372,7 +372,6 @@ Key realizations from this graph:
 ## Open risks to this plan
 
 - **OQ-1 (queue mechanism) stays deferred.** The plan assumes DB-as-queue throughout. If a bottleneck appears during Phase 7 testing, the state machine is designed to swap in Redis/RQ/NATS without reshaping services — but a pivot would still insert a Phase 7.5.
-- **OQ-2 (frontend framework) blocks Phase 5.** Not a technical blocker but a contributor-recruiting one. Decide before starting Phase 5; if no lead steps up, pick one arbitrarily and move on rather than let Phase 5 stall everything downstream.
 - **MakeMKV licensing** may block CI (noted in [05-cross-cutting.md § Integration rig](../arch/05-cross-cutting.md#integration-rig--big-buck-bunny)). Phase 15 plans a loopback `dd`-based stub as fallback; verify early.
 - **Transcode container startup latency** may make the "ephemeral one-per-task" model feel sluggish. If measured startup > ~3s per task becomes a problem, a long-running transcode worker with a task-per-invocation contract is the escape hatch — same state machine, different container lifetime.
 - **Browser-facing TLS UX.** Every LAN client needs to trust `arm-ca.crt` once or click through a warning forever. Phase 13 installer should print the import instructions prominently; otherwise the first-run UX degrades.
