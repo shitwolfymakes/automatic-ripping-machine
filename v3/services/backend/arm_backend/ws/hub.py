@@ -71,7 +71,8 @@ class WSHub:
         track_id: str | None = None,
         session: AsyncSession | None = None,
     ) -> None:
-        if topic.startswith("ripper.progress.") and not self._allow_progress_tick(topic, track_id):
+        is_progress = topic.startswith("ripper.progress.") or topic.startswith("transcode.progress.")
+        if is_progress and not self._allow_progress_tick(topic, track_id):
             return
 
         envelope = WSEnvelope(

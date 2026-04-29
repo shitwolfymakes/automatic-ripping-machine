@@ -44,14 +44,40 @@ services:
       TLS_KEY_PATH: /etc/ssl/arm/tls.key
       PUID: ${PUID:-1000}
       PGID: ${PGID:-1000}
+      # Phase 7 — transcode dispatcher needs host paths (the docker daemon
+      # interprets these, NOT the Backend container's filesystem).
+      MEDIA_ROOT: /media
+      MAX_PARALLEL_TRANSCODES: ${MAX_PARALLEL_TRANSCODES:-1}
+      ARM_TRANSCODE_IMAGE: ${ARM_TRANSCODE_IMAGE:-arm-transcode:dev}
+      ARM_HOST_RAW_PATH: ${ARM_HOST_RAW_PATH}
+      ARM_HOST_MEDIA_PATH: ${ARM_HOST_MEDIA_PATH}
+      ARM_HOST_LOGS_PATH: ${ARM_HOST_LOGS_PATH}
+      ARM_HOST_CERTS_PATH: ${ARM_HOST_CERTS_PATH}
+      ARM_DOCKER_NETWORK: ${ARM_DOCKER_NETWORK:-armv3_default}
     volumes:
       - ./logs:/logs
+      - ./media:/media
       - ./certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
       - ./certs/arm-backend.crt:/etc/ssl/arm/tls.crt:ro
       - ./certs/arm-backend.key:/etc/ssl/arm/tls.key:ro
+      # Phase 7 — Backend spawns arm-transcode-* containers via the socket.
+      # Acceptable per docs/arch/06-deployment.md (root-equivalent on host).
+      - /var/run/docker.sock:/var/run/docker.sock
     # Uncomment to reach Backend directly from the host for verification curl:
     # ports:
     #   - "8443:8443"
+
+  # Build-only service for the arm-transcode image. Never started — the
+  # Backend dispatcher spawns short-lived transcoder containers per task
+  # via the docker socket. Build with:
+  #   docker compose --profile build-transcode build arm-transcode-builder
+  arm-transcode-builder:
+    profiles: ["build-transcode"]
+    image: ${ARM_TRANSCODE_IMAGE:-arm-transcode:dev}
+    build:
+      context: .
+      dockerfile: services/transcode/Dockerfile
+    command: ["/bin/true"]
 
   arm-ripper-sr0:
     build:

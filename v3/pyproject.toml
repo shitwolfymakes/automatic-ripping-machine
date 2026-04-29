@@ -3,6 +3,7 @@ members = [
     "packages/arm_common",
     "services/backend",
     "services/ripper",
+    "services/transcode",
 ]
 
 [tool.uv.sources]
@@ -25,11 +26,11 @@ target-version = "py314"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["services/backend/tests", "services/ripper/tests"]
+testpaths = ["services/backend/tests", "services/ripper/tests", "services/transcode/tests"]
 
 [tool.mypy]
 python_version = "3.14"
-mypy_path = "packages/arm_common:services/backend:services/ripper"
+mypy_path = "packages/arm_common:services/backend:services/ripper:services/transcode"
 exclude = [
     "\\.venv/.*",
     "migrations/.*",

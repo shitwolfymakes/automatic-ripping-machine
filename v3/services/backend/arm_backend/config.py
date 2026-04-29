@@ -39,5 +39,41 @@ class Settings(BaseSettings):
             return [s.strip() for s in v.split(",") if s.strip()]
         return v
 
+    # --- Phase 7: transcode dispatcher --------------------------------------
+    # How many transcode containers may run in parallel. A 1080p HandBrake
+    # transcode pegs every CPU core, so the default is conservative; bump it
+    # on a many-core host. Counted live against `transcode_tasks WHERE status
+    # = 'in_progress'` so the value survives Backend restarts.
+    MAX_PARALLEL_TRANSCODES: int = 1
+
+    # The image name the dispatcher passes to docker. The dev compose file
+    # builds it via `docker compose build arm-transcode-builder`; production
+    # installs pull a tagged image.
+    ARM_TRANSCODE_IMAGE: str = "arm-transcode:dev"
+
+    # Stale-claim sweep tunables. 90 s = 3× heartbeat interval (the
+    # transcoder POSTs heartbeat every 30 s). After MAX_ATTEMPTS stale resets
+    # the task is hard-failed with `last_error="exceeded retry limit ..."`.
+    ARM_TRANSCODE_STALE_THRESHOLD_SECONDS: int = 90
+    ARM_TRANSCODE_MAX_ATTEMPTS: int = 3
+
+    # Dispatcher tick interval — how often the spawn/sweep loop runs.
+    ARM_TRANSCODE_DISPATCH_INTERVAL_SECONDS: int = 5
+
+    # Backend container's own host-side mount paths. Required to spawn
+    # transcoders via the docker socket: paths in `client.containers.run`'s
+    # `volumes=` arg are interpreted by the host docker daemon, NOT by the
+    # Backend container. Compose sets these from `${PWD}/{raw,media,...}`
+    # at parse time. Empty string disables the dispatcher (used in tests).
+    ARM_HOST_RAW_PATH: str = ""
+    ARM_HOST_MEDIA_PATH: str = ""
+    ARM_HOST_LOGS_PATH: str = ""
+    ARM_HOST_CERTS_PATH: str = ""
+
+    # Docker network the spawned transcoder joins so it can reach
+    # `https://arm-backend:8443`. Compose default project network is
+    # `<project>_default`.
+    ARM_DOCKER_NETWORK: str = "armv3_default"
+
 
 settings = Settings()  # type: ignore[call-arg]  # fields loaded from env by pydantic-settings

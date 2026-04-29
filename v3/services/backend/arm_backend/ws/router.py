@@ -68,6 +68,7 @@ async def ws_endpoint(
     origin: str | None = Header(default=None),
     sec_websocket_protocol: str | None = Header(default=None),
     x_arm_hostname: str | None = Header(default=None),
+    x_arm_task_id: str | None = Header(default=None),
 ) -> None:
     subprotocols = [p.strip() for p in (sec_websocket_protocol or "").split(",") if p.strip()]
 
@@ -82,7 +83,7 @@ async def ws_endpoint(
 
     signing_key: bytes | None = getattr(websocket.app.state, "signing_key", None)
     try:
-        principal = await _do_auth(websocket, x_arm_hostname, signing_key)
+        principal = await _do_auth(websocket, x_arm_hostname, x_arm_task_id, signing_key)
     except _AuthFailure as e:
         await _send_error(websocket, e.code, e.reason)
         await websocket.close(code=e.code, reason=e.reason)
@@ -108,6 +109,7 @@ class _AuthFailure(Exception):
 async def _do_auth(
     websocket: WebSocket,
     x_arm_hostname: str | None,
+    x_arm_task_id: str | None,
     signing_key: bytes | None,
 ) -> Principal:
     try:
@@ -126,7 +128,12 @@ async def _do_auth(
         raise _AuthFailure(CLOSE_UNAUTHORIZED, "first message must be auth")
 
     try:
-        return resolve_principal(msg.token, x_arm_hostname, signing_key=signing_key)
+        return resolve_principal(
+            msg.token,
+            x_arm_hostname,
+            task_id_hint=x_arm_task_id,
+            signing_key=signing_key,
+        )
     except AuthError as e:
         raise _AuthFailure(CLOSE_UNAUTHORIZED, str(e)) from e
 
@@ -176,13 +183,19 @@ async def _dispatch(
         # Service-published progress is fire-and-forget — never persisted, never blocks the publisher.
         is_progress = msg.topic.startswith("ripper.progress.") or msg.topic.startswith("transcode.progress.")
         job_id = _extract_id(msg.topic, "ripper.progress.")
+        # transcode.progress.{task_id} → use the task_id as the throttle scope (same role as track_id).
+        track_id: str | None = None
+        if isinstance(msg.payload, dict):
+            track_id = msg.payload.get("track_id")
+        if track_id is None:
+            track_id = _extract_id(msg.topic, "transcode.progress.")
         await hub.emit(
             topic=msg.topic,
             event_type=msg.event_type,
             payload=msg.payload,
             persist=not is_progress,
             job_id=job_id,
-            track_id=msg.payload.get("track_id") if isinstance(msg.payload, dict) else None,
+            track_id=track_id,
             session=session if not is_progress else None,
         )
         if not is_progress:

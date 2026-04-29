@@ -1936,6 +1936,391 @@
         }
       }
     },
+    "/api/transcoder/register": {
+      "post": {
+        "tags": [
+          "transcoder"
+        ],
+        "summary": "Register",
+        "operationId": "register_api_transcoder_register_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterTranscoderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterTranscoderResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcoder/tasks/{task_id}/claim": {
+      "post": {
+        "tags": [
+          "transcoder"
+        ],
+        "summary": "Claim",
+        "operationId": "claim_api_transcoder_tasks__task_id__claim_post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "x-arm-hostname",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Arm-Hostname"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimTaskResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcoder/tasks/{task_id}/heartbeat": {
+      "patch": {
+        "tags": [
+          "transcoder"
+        ],
+        "summary": "Heartbeat",
+        "operationId": "heartbeat_api_transcoder_tasks__task_id__heartbeat_patch",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "x-arm-hostname",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Arm-Hostname"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscodeTaskView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcoder/tasks/{task_id}/complete": {
+      "patch": {
+        "tags": [
+          "transcoder"
+        ],
+        "summary": "Complete",
+        "operationId": "complete_api_transcoder_tasks__task_id__complete_patch",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "x-arm-hostname",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Arm-Hostname"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscodeTaskView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcoder/tasks/{task_id}/fail": {
+      "patch": {
+        "tags": [
+          "transcoder"
+        ],
+        "summary": "Fail",
+        "operationId": "fail_api_transcoder_tasks__task_id__fail_patch",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "x-arm-hostname",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Arm-Hostname"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FailTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscodeTaskView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/transcodes": {
       "get": {
         "tags": [
@@ -2281,6 +2666,18 @@
         ],
         "title": "ApplySessionResponse"
       },
+      "ClaimTaskResponse": {
+        "properties": {
+          "task": {
+            "$ref": "#/components/schemas/TranscodeTaskView"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task"
+        ],
+        "title": "ClaimTaskResponse"
+      },
       "CollisionInfo": {
         "properties": {
           "output_path": {
@@ -2310,6 +2707,54 @@
           "on_filesystem"
         ],
         "title": "CollisionInfo"
+      },
+      "CompleteTaskRequest": {
+        "properties": {
+          "output_path": {
+            "type": "string",
+            "title": "Output Path"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          }
+        },
+        "type": "object",
+        "required": [
+          "output_path"
+        ],
+        "title": "CompleteTaskRequest"
       },
       "ConfigUpdateRequest": {
         "properties": {
@@ -2661,6 +3106,20 @@
         ],
         "title": "DriveStatus"
       },
+      "FailTaskRequest": {
+        "properties": {
+          "last_error": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Last Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "last_error"
+        ],
+        "title": "FailTaskRequest"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2674,6 +3133,36 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HardwareCaps": {
+        "properties": {
+          "cpu_count": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Cpu Count"
+          },
+          "has_vaapi": {
+            "type": "boolean",
+            "title": "Has Vaapi",
+            "default": false
+          },
+          "has_nvenc": {
+            "type": "boolean",
+            "title": "Has Nvenc",
+            "default": false
+          },
+          "has_qsv": {
+            "type": "boolean",
+            "title": "Has Qsv",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "cpu_count"
+        ],
+        "title": "HardwareCaps",
+        "description": "Self-reported transcoder capabilities. Phase 7 (CPU-only) ignores these;\nPhase 7b consumes them for GPU dispatch + `gpus` row writes."
+      },
       "HealthResponse": {
         "properties": {
           "status": {
@@ -2686,6 +3175,44 @@
           "status"
         ],
         "title": "HealthResponse"
+      },
+      "HeartbeatRequest": {
+        "properties": {
+          "progress_pct": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Progress Pct"
+          },
+          "current_pass": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Pass"
+          },
+          "eta_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eta Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "progress_pct"
+        ],
+        "title": "HeartbeatRequest"
       },
       "HwPreference": {
         "type": "string",
@@ -3068,6 +3595,70 @@
           "ripper_version"
         ],
         "title": "RegisterRequest"
+      },
+      "RegisterTranscoderRequest": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "hostname": {
+            "type": "string",
+            "title": "Hostname"
+          },
+          "hw_caps": {
+            "$ref": "#/components/schemas/HardwareCaps"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "hostname",
+          "hw_caps"
+        ],
+        "title": "RegisterTranscoderRequest"
+      },
+      "RegisterTranscoderResponse": {
+        "properties": {
+          "task": {
+            "$ref": "#/components/schemas/TranscodeTaskView"
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionView"
+          },
+          "transcode_preset": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscodePresetView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_track": {
+            "$ref": "#/components/schemas/TrackView"
+          },
+          "raw_input_path": {
+            "type": "string",
+            "title": "Raw Input Path"
+          },
+          "media_root": {
+            "type": "string",
+            "title": "Media Root"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task",
+          "session",
+          "transcode_preset",
+          "source_track",
+          "raw_input_path",
+          "media_root"
+        ],
+        "title": "RegisterTranscoderResponse",
+        "description": "Bootstrap bundle the transcoder needs before it can claim + run.\n\n`raw_input_path` is the absolute path the transcoder should read from\n(`/raw/<job>/title_tNN.mkv` for video, `/raw/<job>/track_NN.wav` for\naudio, `/raw/<job>/dump.iso` for data). `media_root` plus the task's\n`output_path` is where the final file lands."
       },
       "ResolveRequest": {
         "properties": {
@@ -4289,6 +4880,29 @@
             "type": "integer",
             "title": "Attempts"
           },
+          "claimed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed By"
+          },
+          "claim_heartbeat_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Heartbeat At"
+          },
           "last_error": {
             "anyOf": [
               {
@@ -4334,6 +4948,8 @@
           "output_path",
           "progress_pct",
           "attempts",
+          "claimed_by",
+          "claim_heartbeat_at",
           "last_error",
           "created_at",
           "updated_at"

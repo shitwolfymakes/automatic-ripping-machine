@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import subprocess
 from collections.abc import AsyncIterator
@@ -23,9 +24,11 @@ from arm_backend.routers import (
     ripper,
     sessions,
     transcode_presets,
+    transcoder,
     transcodes,
 )
 from arm_backend.seeders import CONFIG_SINGLETON_ID, run_seeders
+from arm_backend.transcode_dispatcher import TranscodeDispatcher
 from arm_backend.ws import WSHub
 from arm_backend.ws.router import router as ws_router
 from arm_common import Config
@@ -55,6 +58,19 @@ async def _run_seeders() -> None:
     logger.info("seeders complete")
 
 
+def _build_docker_client() -> object | None:
+    """Construct a docker-py client. Returns None if the socket isn't reachable
+    (dev environments without `/var/run/docker.sock` mounted)."""
+    try:
+        import docker  # type: ignore[import-untyped]
+
+        client: object = docker.from_env()
+        return client
+    except Exception as exc:
+        logger.warning("docker-py client unavailable: %s — transcode dispatcher disabled", exc)
+        return None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _run_migrations()
@@ -67,9 +83,37 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     http = httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=10.0))
     app.state.dispatcher = MetadataDispatcher(http, omdb_api_key_override=settings.OMDB_API_KEY)
     app.state.ws_hub = WSHub()
+
+    docker_client = _build_docker_client()
+    transcode_dispatcher: TranscodeDispatcher | None = None
+    dispatcher_task: asyncio.Task[None] | None = None
+    if docker_client is not None:
+        transcode_dispatcher = TranscodeDispatcher(
+            settings=settings,
+            db_factory=SessionLocal,
+            docker_client=docker_client,
+            hub=app.state.ws_hub,
+        )
+        # One-shot orphan sweep before the dispatcher loop starts.
+        try:
+            swept = await transcode_dispatcher.sweep_arm_inprogress(Path(settings.MEDIA_ROOT))
+            if swept:
+                logger.info("backend startup: swept %d .arm-inprogress orphans", swept)
+        except Exception as exc:
+            logger.exception("startup .arm-inprogress sweep failed: %s", exc)
+        dispatcher_task = asyncio.create_task(transcode_dispatcher.run())
+    app.state.transcode_dispatcher = transcode_dispatcher
+
     try:
         yield
     finally:
+        if transcode_dispatcher is not None:
+            transcode_dispatcher.stop()
+        if dispatcher_task is not None:
+            try:
+                await asyncio.wait_for(dispatcher_task, timeout=10.0)
+            except asyncio.TimeoutError:
+                dispatcher_task.cancel()
         await app.state.dispatcher.aclose()
 
 
@@ -82,6 +126,7 @@ app.include_router(drives.router)
 app.include_router(sessions.router)
 app.include_router(rip_presets.router)
 app.include_router(transcode_presets.router)
+app.include_router(transcoder.router)
 app.include_router(transcodes.router)
 app.include_router(config_router.router)
 app.include_router(diagnostics.router)
