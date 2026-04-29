@@ -97,8 +97,21 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 ```
 
 The overlay adds `/dev/dri:/dev/dri:ro` (so Backend can list Intel/AMD
-render nodes) and `runtime: nvidia` + `device_requests` (so `nvidia-smi`
-works inside Backend and the toolkit attaches NVIDIA driver libraries).
+render nodes) and `runtime: nvidia` + `device_requests` (so the NVIDIA
+driver libraries are accessible from within the Backend container).
+
+`nvidia-smi` itself ships **inside the Backend image** via apt
+(`nvidia-utils-535` from Debian `non-free` / `bookworm-backports`). The
+default branch is 535; override at build time if your host driver is on
+a different major version:
+
+```sh
+docker compose build --build-arg NVIDIA_UTILS_VERSION=525 arm-backend
+```
+
+If the in-image `nvidia-smi` major version doesn't match the host
+driver, NVIDIA refuses the call and the probe records nothing for
+NVENC — the host falls through to CPU.
 
 Backend probes the host once at lifespan startup and populates the
 `gpus` table:
