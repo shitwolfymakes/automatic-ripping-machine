@@ -1,5 +1,7 @@
+from typing import Annotated
+
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -21,8 +23,9 @@ class Settings(BaseSettings):
     # Comma-separated list of `Origin` header values the WS endpoint accepts
     # from browser clients. Service-token connections (rippers, transcoders)
     # mark themselves with the `arm-service-token` subprotocol and skip this
-    # check. Phase 5 must populate this when the UI ships.
-    ARM_ALLOWED_ORIGINS: list[str] = []
+    # check. `NoDecode` opts the field out of pydantic-settings' default
+    # JSON parsing so the validator below sees the raw string.
+    ARM_ALLOWED_ORIGINS: Annotated[list[str], NoDecode] = []
 
     @field_validator("ARM_ALLOWED_ORIGINS", mode="before")
     @classmethod

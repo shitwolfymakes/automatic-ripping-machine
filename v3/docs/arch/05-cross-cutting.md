@@ -93,7 +93,7 @@ No YAML files. No mounted `/etc/arm/*.conf`. The v2 `arm.yaml` pattern is retire
 ### User-facing (UI → Backend)
 
 - **Local users** stored in the `users` table. Passwords hashed with argon2id.
-- One `admin` account is seeded on first boot with a random generated password printed to the Backend's stdout. First login forces a password change.
+- One `admin` account is seeded on first boot with the default password `admin` and `password_must_change=true`. The login response surfaces that flag, the UI redirects to `/change-password`, and `require_jwt` 403s every endpoint except `/api/auth/password` + `/api/auth/logout` until it's cleared. So the well-known default is not a security regression — it's a usability win (no risk of locking the operator out by losing the first-boot console printout) backed by the same gate that closed the v2 default-creds footgun.
 - **Auth is JWT-based, not cookie-based.** `POST /api/auth/login` with `{username, password}` → `{access_token, expires_at}`. UI stores the token in `localStorage` and sends it on every REST call as `Authorization: Bearer <jwt>`. WS auth is a first-message handshake (`{"op": "auth", "token": "<jwt>"}`); Backend closes the connection if auth doesn't arrive within 5 seconds.
 - Tokens are signed HS256 with the value of `config.session_signing_key` (auto-generated on first Backend boot). Symmetric signing is fine because Backend is both issuer and verifier.
 - Token TTL: 7 days, non-refreshing. User re-logs in once a week. No refresh token in v3.0 — simpler, and the friction is low for a single-user homelab.

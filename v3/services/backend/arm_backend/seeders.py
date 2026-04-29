@@ -39,6 +39,7 @@ FIRST_BOOT_LOG = Path("/logs/first-boot.log")
 # --- Admin user ---------------------------------------------------------------
 
 ADMIN_USERNAME = "admin"
+ADMIN_DEFAULT_PASSWORD = "admin"
 
 
 async def _seed_admin_user(session: AsyncSession) -> None:
@@ -46,11 +47,10 @@ async def _seed_admin_user(session: AsyncSession) -> None:
     if existing is not None:
         return
 
-    password = secrets.token_urlsafe(18)
     hasher = PasswordHasher()
     user = User(
         username=ADMIN_USERNAME,
-        password_hash=hasher.hash(password),
+        password_hash=hasher.hash(ADMIN_DEFAULT_PASSWORD),
         password_must_change=True,
     )
     session.add(user)
@@ -60,11 +60,11 @@ async def _seed_admin_user(session: AsyncSession) -> None:
         f"\n{'=' * 72}\n"
         f" ARM v3 first-boot: default admin credentials\n"
         f" username: {ADMIN_USERNAME}\n"
-        f" password: {password}\n"
-        f" You will be forced to change this on first login.\n"
+        f" password: {ADMIN_DEFAULT_PASSWORD}\n"
+        f" You MUST change this on first login — the rest of the API is\n"
+        f" 403'd until you do.\n"
         f"{'=' * 72}\n"
     )
-    # stdout via logger at WARNING so it survives default log levels.
     logger.warning(banner)
     try:
         FIRST_BOOT_LOG.parent.mkdir(parents=True, exist_ok=True)

@@ -80,8 +80,9 @@ async def ws_endpoint(
 
     hub: WSHub = websocket.app.state.ws_hub
 
+    signing_key: bytes | None = getattr(websocket.app.state, "signing_key", None)
     try:
-        principal = await _do_auth(websocket, x_arm_hostname)
+        principal = await _do_auth(websocket, x_arm_hostname, signing_key)
     except _AuthFailure as e:
         await _send_error(websocket, e.code, e.reason)
         await websocket.close(code=e.code, reason=e.reason)
@@ -104,7 +105,11 @@ class _AuthFailure(Exception):
         self.reason = reason
 
 
-async def _do_auth(websocket: WebSocket, x_arm_hostname: str | None) -> Principal:
+async def _do_auth(
+    websocket: WebSocket,
+    x_arm_hostname: str | None,
+    signing_key: bytes | None,
+) -> Principal:
     try:
         raw = await asyncio.wait_for(websocket.receive_json(), timeout=AUTH_TIMEOUT_SECONDS)
     except asyncio.TimeoutError as e:
@@ -121,7 +126,7 @@ async def _do_auth(websocket: WebSocket, x_arm_hostname: str | None) -> Principa
         raise _AuthFailure(CLOSE_UNAUTHORIZED, "first message must be auth")
 
     try:
-        return resolve_principal(msg.token, x_arm_hostname)
+        return resolve_principal(msg.token, x_arm_hostname, signing_key=signing_key)
     except AuthError as e:
         raise _AuthFailure(CLOSE_UNAUTHORIZED, str(e)) from e
 
