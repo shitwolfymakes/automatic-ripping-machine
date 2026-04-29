@@ -3,19 +3,45 @@
 # Run with:
 #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 #
-# What this enables:
-# - Backend mounts /dev/dri so it can probe Intel (QSV) and AMD (VAAPI) GPUs.
-# - Backend gets the NVIDIA runtime so `nvidia-smi` works inside the container,
-#   the probe sees NVENC GPUs, and spawned transcoder containers can also
-#   request the runtime via docker-py `device_requests`.
-# - Backend probes once at startup, populates the `gpus` table, and the
-#   dispatcher claims a row per task before spawning.
+# Why this file exists separately from the base compose:
+# `runtime: nvidia` on a host without NVIDIA Container Toolkit causes
+# `docker compose up` to fail outright. Splitting the GPU bits into an
+# overlay keeps the base compose universal — CPU-only users never see the
+# overlay and get vanilla startup; GPU users opt in by loading both files.
 #
-# If you only have Intel/AMD (no NVIDIA), strip the `runtime: nvidia` and
-# `deploy.resources.reservations.devices` sections — the `/dev/dri` mount is
-# all you need.
+# Why each section is here AND why it can't be replaced by the
+# `nvidia-utils-535` apt-install in the Backend Dockerfile:
 #
-# If you only have NVIDIA, strip the `devices: [/dev/dri:...]` line.
+#   `devices: [/dev/dri:/dev/dri:ro]`
+#     Intel iGPU (QSV) and AMD GPU (VAAPI) detection only. The probe lists
+#     `/dev/dri/renderD*` and reads `/sys/class/drm/<n>/device/vendor` to
+#     match `0x8086`/`0x1002`. Has nothing to do with NVIDIA. No apt package
+#     substitutes for a /dev mount.
+#
+#   `runtime: nvidia`
+#     The image ships `nvidia-smi` (apt-installed `nvidia-utils-535`), but
+#     the binary needs the host's NVIDIA driver libraries (libcuda.so etc.)
+#     to actually talk to the kernel driver. Those libraries are injected
+#     by the NVIDIA Container Toolkit at runtime. Without `runtime: nvidia`,
+#     `nvidia-smi -L` exits non-zero with "couldn't communicate with the
+#     NVIDIA driver" — installed but unusable. The probe degrades to "no
+#     NVENC" cleanly, but the GPU is invisible to ARM.
+#
+#   `deploy.resources.reservations.devices: [{driver: nvidia, ...}]`
+#     Pass-through for `/dev/nvidia0`, `/dev/nvidia-uvm`, `/dev/nvidiactl`,
+#     plus the cgroup permissions to use them. Without this the runtime
+#     hook injects libraries but no actual GPU device files; `nvidia-smi`
+#     finds zero devices. `count: all` exposes every GPU; pin to a specific
+#     index by replacing with `device_ids: ["0"]` if you want to reserve
+#     others for other workloads.
+#
+# Trimming for your hardware:
+# - VAAPI/QSV-only host (no NVIDIA): strip `runtime: nvidia` and the entire
+#   `deploy:` block. The `/dev/dri` mount is all you need. (Note: if Backend
+#   was built with `nvidia-utils-535`, that's harmless image bloat — the
+#   apt package is dormant without the runtime.)
+# - NVIDIA-only host (no Intel/AMD): strip the `devices:` line.
+# - Mixed host: leave everything; the probe handles each path independently.
 
 services:
   arm-backend:
