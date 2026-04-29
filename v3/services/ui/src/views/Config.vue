@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { api, ApiError } from "../api/client";
-import type { ConfigUpdateRequest, ConfigView } from "../api/types";
+import { onMounted, ref } from 'vue'
+import { api, ApiError } from '../api/client'
+import type { ConfigUpdateRequest, ConfigView } from '../api/types'
 
-const cfg = ref<ConfigView | null>(null);
-const error = ref<string | null>(null);
-const saved = ref(false);
-const submitting = ref(false);
+const cfg = ref<ConfigView | null>(null)
+const error = ref<string | null>(null)
+const saved = ref(false)
+const submitting = ref(false)
 
-const form = ref<ConfigUpdateRequest>({});
-const appriseInput = ref<string>("");
+const form = ref<ConfigUpdateRequest>({})
+const appriseInput = ref<string>('')
 
 async function reload() {
-  cfg.value = await api.get<ConfigView>("/api/config");
+  cfg.value = await api.get<ConfigView>('/api/config')
   form.value = {
     tmdb_api_key: cfg.value.tmdb_api_key,
     omdb_api_key: cfg.value.omdb_api_key,
@@ -21,33 +21,33 @@ async function reload() {
     block_on_miss: cfg.value.block_on_miss,
     default_retention_policy: cfg.value.default_retention_policy,
     notification_apprise_urls: [...cfg.value.notification_apprise_urls],
-  };
-  appriseInput.value = (cfg.value.notification_apprise_urls ?? []).join("\n");
+  }
+  appriseInput.value = (cfg.value.notification_apprise_urls ?? []).join('\n')
 }
 
 onMounted(async () => {
   try {
-    await reload();
+    await reload()
   } catch (e) {
-    error.value = e instanceof ApiError ? e.message : "Failed to load";
+    error.value = e instanceof ApiError ? e.message : 'Failed to load'
   }
-});
+})
 
 async function save() {
-  saved.value = false;
-  error.value = null;
-  submitting.value = true;
+  saved.value = false
+  error.value = null
+  submitting.value = true
   try {
     form.value.notification_apprise_urls = appriseInput.value
-      .split("\n")
+      .split('\n')
       .map((s) => s.trim())
-      .filter(Boolean);
-    cfg.value = await api.patch<ConfigView>("/api/config", form.value);
-    saved.value = true;
+      .filter(Boolean)
+    cfg.value = await api.patch<ConfigView>('/api/config', form.value)
+    saved.value = true
   } catch (e) {
-    error.value = e instanceof ApiError ? e.message : "Save failed";
+    error.value = e instanceof ApiError ? e.message : 'Save failed'
   } finally {
-    submitting.value = false;
+    submitting.value = false
   }
 }
 </script>
@@ -93,7 +93,7 @@ async function save() {
       <textarea v-model="appriseInput" rows="4" />
     </div>
     <div class="row">
-      <button :disabled="submitting" type="submit">{{ submitting ? "Saving…" : "Save" }}</button>
+      <button :disabled="submitting" type="submit">{{ submitting ? 'Saving…' : 'Save' }}</button>
       <span v-if="saved" class="muted">Saved.</span>
     </div>
   </form>

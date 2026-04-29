@@ -1,19 +1,19 @@
-import { defineStore } from "pinia";
-import { api } from "../api/client";
+import { defineStore } from 'pinia'
+import { api } from '../api/client'
 import type {
   MediaType,
   TranscodePresetCreateRequest,
   TranscodePresetUpdateRequest,
   TranscodePresetView,
-} from "../api/types";
+} from '../api/types'
 
 interface TranscodePresetsState {
-  presets: TranscodePresetView[];
-  loading: boolean;
-  error: string | null;
+  presets: TranscodePresetView[]
+  loading: boolean
+  error: string | null
 }
 
-export const useTranscodePresetsStore = defineStore("transcodePresets", {
+export const useTranscodePresetsStore = defineStore('transcodePresets', {
   state: (): TranscodePresetsState => ({
     presets: [],
     loading: false,
@@ -24,32 +24,32 @@ export const useTranscodePresetsStore = defineStore("transcodePresets", {
   },
   actions: {
     async fetchAll(): Promise<void> {
-      this.loading = true;
+      this.loading = true
       try {
-        this.presets = await api.get<TranscodePresetView[]>("/api/transcode-presets");
-        this.error = null;
+        this.presets = await api.get<TranscodePresetView[]>('/api/transcode-presets')
+        this.error = null
       } catch (e) {
-        this.error = e instanceof Error ? e.message : String(e);
+        this.error = e instanceof Error ? e.message : String(e)
       } finally {
-        this.loading = false;
+        this.loading = false
       }
     },
     async getById(id: string): Promise<TranscodePresetView> {
-      return await api.get<TranscodePresetView>(`/api/transcode-presets/${id}`);
+      return await api.get<TranscodePresetView>(`/api/transcode-presets/${id}`)
     },
     async create(req: TranscodePresetCreateRequest): Promise<TranscodePresetView> {
-      const created = await api.post<TranscodePresetView>("/api/transcode-presets", req);
-      this.presets = [...this.presets, created].sort((a, b) => a.name.localeCompare(b.name));
-      return created;
+      const created = await api.post<TranscodePresetView>('/api/transcode-presets', req)
+      this.presets = [...this.presets, created].sort((a, b) => a.name.localeCompare(b.name))
+      return created
     },
     async update(id: string, req: TranscodePresetUpdateRequest): Promise<TranscodePresetView> {
-      const updated = await api.patch<TranscodePresetView>(`/api/transcode-presets/${id}`, req);
-      this.presets = this.presets.map((p) => (p.id === id ? updated : p));
-      return updated;
+      const updated = await api.patch<TranscodePresetView>(`/api/transcode-presets/${id}`, req)
+      this.presets = this.presets.map((p) => (p.id === id ? updated : p))
+      return updated
     },
     async remove(id: string): Promise<void> {
-      await api.del(`/api/transcode-presets/${id}`);
-      this.presets = this.presets.filter((p) => p.id !== id);
+      await api.del(`/api/transcode-presets/${id}`)
+      this.presets = this.presets.filter((p) => p.id !== id)
     },
   },
-});
+})

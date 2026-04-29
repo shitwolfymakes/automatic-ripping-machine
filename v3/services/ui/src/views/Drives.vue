@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { api, ApiError } from "../api/client";
-import type { DriveView } from "../api/types";
+import { onMounted, ref } from 'vue'
+import { api, ApiError } from '../api/client'
+import type { DriveView } from '../api/types'
 
-const drives = ref<DriveView[]>([]);
-const error = ref<string | null>(null);
+const drives = ref<DriveView[]>([])
+const error = ref<string | null>(null)
 
 onMounted(async () => {
   try {
-    drives.value = await api.get<DriveView[]>("/api/drives");
+    drives.value = await api.get<DriveView[]>('/api/drives')
   } catch (e) {
-    error.value = e instanceof ApiError ? e.message : "Failed to load";
+    error.value = e instanceof ApiError ? e.message : 'Failed to load'
   }
-});
+})
 </script>
 
 <template>
@@ -32,10 +32,14 @@ onMounted(async () => {
       <tbody>
         <tr v-for="d in drives" :key="d.id">
           <td>{{ d.hostname }}</td>
-          <td><code>{{ d.device_path }}</code></td>
-          <td>{{ d.display_name ?? "—" }}</td>
-          <td><span class="badge">{{ d.status }}</span></td>
-          <td>{{ d.last_seen_at ?? "—" }}</td>
+          <td>
+            <code>{{ d.device_path }}</code>
+          </td>
+          <td>{{ d.display_name ?? '—' }}</td>
+          <td>
+            <span class="badge">{{ d.status }}</span>
+          </td>
+          <td>{{ d.last_seen_at ?? '—' }}</td>
         </tr>
       </tbody>
     </table>

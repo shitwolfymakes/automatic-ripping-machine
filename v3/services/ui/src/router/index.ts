@@ -1,112 +1,112 @@
-import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router";
-import { useAuthStore } from "../stores/auth";
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 
 const routes: RouteRecordRaw[] = [
   {
-    path: "/login",
-    component: () => import("../views/Login.vue"),
+    path: '/login',
+    component: () => import('../views/Login.vue'),
     meta: { requiresAuth: false },
   },
   {
-    path: "/change-password",
-    component: () => import("../views/ChangePassword.vue"),
+    path: '/change-password',
+    component: () => import('../views/ChangePassword.vue'),
     meta: { requiresAuth: true },
   },
   {
-    path: "/",
-    redirect: "/jobs",
+    path: '/',
+    redirect: '/jobs',
   },
   {
-    path: "/jobs",
-    component: () => import("../views/Jobs.vue"),
+    path: '/jobs',
+    component: () => import('../views/Jobs.vue'),
     meta: { requiresAuth: true },
   },
   {
-    path: "/jobs/:id",
-    component: () => import("../views/JobDetail.vue"),
+    path: '/jobs/:id',
+    component: () => import('../views/JobDetail.vue'),
     meta: { requiresAuth: true },
   },
   {
-    path: "/drives",
-    component: () => import("../views/Drives.vue"),
+    path: '/drives',
+    component: () => import('../views/Drives.vue'),
     meta: { requiresAuth: true },
   },
   {
-    path: "/sessions",
-    component: () => import("../views/Sessions.vue"),
+    path: '/sessions',
+    component: () => import('../views/Sessions.vue'),
     meta: { requiresAuth: true },
   },
   {
-    path: "/sessions/new",
-    component: () => import("../views/SessionForm.vue"),
+    path: '/sessions/new',
+    component: () => import('../views/SessionForm.vue'),
     meta: { requiresAuth: true },
   },
   {
-    path: "/sessions/:id/edit",
-    component: () => import("../views/SessionForm.vue"),
+    path: '/sessions/:id/edit',
+    component: () => import('../views/SessionForm.vue'),
     meta: { requiresAuth: true },
   },
   {
-    path: "/rip-presets",
-    component: () => import("../views/RipPresets.vue"),
+    path: '/rip-presets',
+    component: () => import('../views/RipPresets.vue'),
     meta: { requiresAuth: true },
   },
   {
-    path: "/rip-presets/new",
-    component: () => import("../views/RipPresetForm.vue"),
+    path: '/rip-presets/new',
+    component: () => import('../views/RipPresetForm.vue'),
     meta: { requiresAuth: true },
   },
   {
-    path: "/rip-presets/:id/edit",
-    component: () => import("../views/RipPresetForm.vue"),
+    path: '/rip-presets/:id/edit',
+    component: () => import('../views/RipPresetForm.vue'),
     meta: { requiresAuth: true },
   },
   {
-    path: "/transcode-presets",
-    component: () => import("../views/TranscodePresets.vue"),
+    path: '/transcode-presets',
+    component: () => import('../views/TranscodePresets.vue'),
     meta: { requiresAuth: true },
   },
   {
-    path: "/transcode-presets/new",
-    component: () => import("../views/TranscodePresetForm.vue"),
+    path: '/transcode-presets/new',
+    component: () => import('../views/TranscodePresetForm.vue'),
     meta: { requiresAuth: true },
   },
   {
-    path: "/transcode-presets/:id/edit",
-    component: () => import("../views/TranscodePresetForm.vue"),
+    path: '/transcode-presets/:id/edit',
+    component: () => import('../views/TranscodePresetForm.vue'),
     meta: { requiresAuth: true },
   },
   {
-    path: "/config",
-    component: () => import("../views/Config.vue"),
+    path: '/config',
+    component: () => import('../views/Config.vue'),
     meta: { requiresAuth: true },
   },
   {
-    path: "/diagnostics",
-    component: () => import("../views/Diagnostics.vue"),
+    path: '/diagnostics',
+    component: () => import('../views/Diagnostics.vue'),
     meta: { requiresAuth: true },
   },
   {
-    path: "/:pathMatch(.*)*",
-    redirect: "/jobs",
+    path: '/:pathMatch(.*)*',
+    redirect: '/jobs',
   },
-];
+]
 
 export const router = createRouter({
   history: createWebHistory(),
   routes,
-});
+})
 
 router.beforeEach((to) => {
-  const auth = useAuthStore();
+  const auth = useAuthStore()
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
-    return { path: "/login" };
+    return { path: '/login' }
   }
-  if (auth.isAuthenticated && auth.passwordMustChange && to.path !== "/change-password") {
-    return { path: "/change-password" };
+  if (auth.isAuthenticated && auth.passwordMustChange && to.path !== '/change-password') {
+    return { path: '/change-password' }
   }
-  if (to.path === "/login" && auth.isAuthenticated && !auth.passwordMustChange) {
-    return { path: "/jobs" };
+  if (to.path === '/login' && auth.isAuthenticated && !auth.passwordMustChange) {
+    return { path: '/jobs' }
   }
-  return true;
-});
+  return true
+})

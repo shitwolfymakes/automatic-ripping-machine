@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from "vue";
-import { useJobsStore } from "../stores/jobs";
+import { onMounted, onUnmounted } from 'vue'
+import { useJobsStore } from '../stores/jobs'
 
-const store = useJobsStore();
+const store = useJobsStore()
 
 onMounted(() => {
-  store.startPolling();
-});
+  store.startPolling()
+})
 onUnmounted(() => {
-  store.stopPolling();
-});
+  store.stopPolling()
+})
 </script>
 
 <template>
@@ -30,10 +30,16 @@ onUnmounted(() => {
       </thead>
       <tbody>
         <tr v-for="j in store.jobs" :key="j.id">
-          <td><RouterLink :to="`/jobs/${j.id}`">{{ j.id.slice(0, 12) }}…</RouterLink></td>
-          <td>{{ j.title ?? "—" }}<span v-if="j.year"> ({{ j.year }})</span></td>
+          <td>
+            <RouterLink :to="`/jobs/${j.id}`">{{ j.id.slice(0, 12) }}…</RouterLink>
+          </td>
+          <td>
+            {{ j.title ?? '—' }}<span v-if="j.year"> ({{ j.year }})</span>
+          </td>
           <td>{{ j.disc_type }}</td>
-          <td><span class="badge">{{ j.status }}</span></td>
+          <td>
+            <span class="badge">{{ j.status }}</span>
+          </td>
         </tr>
       </tbody>
     </table>
@@ -42,6 +48,6 @@ onUnmounted(() => {
 </template>
 
 <script lang="ts">
-import { RouterLink } from "vue-router";
-export default { components: { RouterLink } };
+import { RouterLink } from 'vue-router'
+export default { components: { RouterLink } }
 </script>
