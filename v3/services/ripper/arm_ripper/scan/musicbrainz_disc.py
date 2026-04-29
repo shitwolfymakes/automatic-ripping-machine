@@ -2,7 +2,7 @@ import asyncio
 import logging
 
 from arm_common import DiscType
-from arm_common.schemas import ScanResult
+from arm_common.schemas import ScanResult, ScanTitle
 
 logger = logging.getLogger("arm_ripper.scan.musicbrainz_disc")
 
@@ -20,10 +20,11 @@ async def scan_cd(device_path: str) -> ScanResult | None:
         logger.warning("python-discid not installed; CD identification skipped")
         return None
 
-    def _read() -> tuple[str, int] | None:
+    def _read() -> tuple[str, list[tuple[int, int]]] | None:
         try:
             with discid.read(device_path) as disc:
-                return disc.id, len(disc.tracks)
+                tracks = [(t.number, int(t.seconds)) for t in disc.tracks]
+                return disc.id, tracks
         except Exception as e:  # libdiscid raises a bare DiscError
             logger.info("discid read failed device=%s err=%s", device_path, e)
             return None
@@ -31,12 +32,14 @@ async def scan_cd(device_path: str) -> ScanResult | None:
     result = await asyncio.to_thread(_read)
     if result is None:
         return None
-    disc_id, track_count = result
-    if track_count == 0:
+    disc_id, tracks = result
+    if not tracks:
         return None
 
+    titles = [ScanTitle(index=number, duration_seconds=seconds) for number, seconds in tracks]
     return ScanResult(
         disc_type=DiscType.CD,
         musicbrainz_disc_id=disc_id,
-        raw={"track_count": track_count},
+        titles=titles,
+        raw={"track_count": len(tracks)},
     )

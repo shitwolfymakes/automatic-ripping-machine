@@ -62,7 +62,11 @@ async def poll_loop(controller: JobController) -> None:
 
 
 async def amain() -> None:
-    client = BackendClient(settings.ARM_BACKEND_URL, settings.ARM_SERVICE_TOKEN)
+    client = BackendClient(
+        settings.ARM_BACKEND_URL,
+        settings.ARM_SERVICE_TOKEN,
+        hostname=settings.HOSTNAME,
+    )
     try:
         drive_id = await register_with_retry(client)
         controller = JobController(client, drive_id)

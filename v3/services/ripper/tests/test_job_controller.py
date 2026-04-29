@@ -8,7 +8,7 @@ import pytest
 
 import arm_ripper.job_controller as jc_module
 from arm_common import DiscType, Job, JobStatus
-from arm_common.schemas import JobView, ScanResult
+from arm_common.schemas import JobView, RipStartResponse, ScanResult, TrackView
 from arm_ripper.job_controller import JobController
 
 
@@ -47,6 +47,8 @@ class FakeClient:
         self.get_job_responses: deque[JobView] = deque()
         self.identify_calls: list[ScanResult] = []
         self.get_job_calls: list[str] = []
+        self.rip_start_calls: list[str] = []
+        self.rip_complete_calls: list[str] = []
 
     async def identify(self, *, drive_id: str, scan_result: ScanResult) -> Job:
         self.identify_calls.append(scan_result)
@@ -56,12 +58,37 @@ class FakeClient:
         self.get_job_calls.append(job_id)
         return self.get_job_responses.popleft()
 
+    async def rip_start(self, job_id: str) -> RipStartResponse:
+        self.rip_start_calls.append(job_id)
+        return RipStartResponse(
+            job_id=job_id,
+            rip_preset_id="rpr_builtin_movie_archive",
+            tracks=[],
+        )
+
+    async def update_track(self, track_id: str, **fields: object) -> TrackView:  # pragma: no cover
+        raise AssertionError("update_track should not be called when track list is empty")
+
+    async def rip_complete(self, job_id: str) -> JobView:
+        self.rip_complete_calls.append(job_id)
+        return _view(JobStatus.RIPPED)
+
 
 @pytest.fixture(autouse=True)
-def fast_polls(monkeypatch):
-    """Don't wait 5+ seconds between polls in tests."""
+def fast_polls(monkeypatch, tmp_path):
+    """Don't wait 5+ seconds between polls; write under tmp_path, not /raw."""
     monkeypatch.setattr(jc_module, "POLL_INITIAL_SECONDS", 0.0)
     monkeypatch.setattr(jc_module, "POLL_MAX_SECONDS", 0.01)
+    monkeypatch.setattr(jc_module, "EJECT_GRACE_SECONDS", 0.0)
+    monkeypatch.setattr(jc_module, "RAW_ROOT", tmp_path)
+
+
+@pytest.fixture
+def stub_eject(monkeypatch):
+    async def _noop_eject(self, device_path: str) -> None:
+        return None
+
+    monkeypatch.setattr(jc_module.JobController, "_eject_with_retry", _noop_eject)
 
 
 @pytest.fixture
@@ -72,7 +99,7 @@ def stub_scan(monkeypatch):
     monkeypatch.setattr(jc_module, "scan_disc", _scan)
 
 
-async def test_identified_returns_immediately(stub_scan):
+async def test_identified_runs_rip_with_empty_tracks(stub_scan, stub_eject):
     client = FakeClient()
     client.identify_responses.append(_job(JobStatus.IDENTIFIED, title="Test Movie"))
     controller = JobController(client, "drv_test")
@@ -80,10 +107,11 @@ async def test_identified_returns_immediately(stub_scan):
     await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
 
     assert len(client.identify_calls) == 1
-    assert client.get_job_calls == []
+    assert client.rip_start_calls == ["job_test"]
+    assert client.rip_complete_calls == ["job_test"]
 
 
-async def test_awaiting_polls_until_resolved(stub_scan):
+async def test_awaiting_polls_until_resolved_then_rips(stub_scan, stub_eject):
     client = FakeClient()
     client.identify_responses.append(_job(JobStatus.AWAITING_USER_ID))
     client.get_job_responses.extend(
@@ -97,11 +125,11 @@ async def test_awaiting_polls_until_resolved(stub_scan):
 
     await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
 
-    assert len(client.identify_calls) == 1
-    assert client.get_job_calls == ["job_test"] * 3
+    assert client.rip_start_calls == ["job_test"]
+    assert client.rip_complete_calls == ["job_test"]
 
 
-async def test_unexpected_status_stops_polling(stub_scan):
+async def test_unexpected_status_stops_without_rip(stub_scan, stub_eject):
     client = FakeClient()
     client.identify_responses.append(_job(JobStatus.AWAITING_USER_ID))
     client.get_job_responses.append(_view(JobStatus.ABANDONED))
@@ -109,4 +137,38 @@ async def test_unexpected_status_stops_polling(stub_scan):
 
     await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
 
-    assert client.get_job_calls == ["job_test"]
+    assert client.rip_start_calls == []
+    assert client.rip_complete_calls == []
+
+
+async def test_eject_runs_umount_then_eject_until_success(monkeypatch):
+    monkeypatch.setattr(jc_module, "EJECT_RETRY_DELAYS", (0.0, 0.0, 0.0))
+
+    invocations: list[tuple[str, ...]] = []
+    rc_sequence = iter([1, 1, 1, 0])  # umount fails, eject 1+2 fail, eject 3 succeeds
+
+    async def _fake_run(*argv: str, log_failure: bool = True) -> tuple[int | None, str]:
+        invocations.append(argv)
+        return next(rc_sequence), "Device or resource busy"
+
+    monkeypatch.setattr(JobController, "_run_command", staticmethod(_fake_run))
+    controller = JobController(FakeClient(), "drv_test")
+    await controller._eject_with_retry("/dev/sr0")
+
+    assert invocations[0] == ("umount", "/dev/sr0")
+    assert all(call[0] == "eject" for call in invocations[1:])
+    assert len(invocations) == 4
+
+
+async def test_eject_gives_up_after_all_attempts(monkeypatch, caplog):
+    monkeypatch.setattr(jc_module, "EJECT_RETRY_DELAYS", (0.0, 0.0))
+
+    async def _always_busy(*argv: str, log_failure: bool = True) -> tuple[int | None, str]:
+        return 1, "Device or resource busy"
+
+    monkeypatch.setattr(JobController, "_run_command", staticmethod(_always_busy))
+    controller = JobController(FakeClient(), "drv_test")
+    with caplog.at_level("ERROR", logger="arm_ripper.job_controller"):
+        await controller._eject_with_retry("/dev/sr0")
+
+    assert any("check host auto-mount config" in r.message for r in caplog.records)

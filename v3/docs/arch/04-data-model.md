@@ -62,7 +62,7 @@ One row per disc insertion the ripper detected (via its `ioctl(CDROM_DRIVE_STATU
 - `aacs_disc_id` (text, nullable — 40-hex-char AACS Disc ID from libaacs. Blu-ray only, populated only when `AACS/` is present and libaacs can read it. Identifies the licensing master, not the structural pressing — coexists with `disc_fingerprint`.)
 - `title` (text, nullable — from metadata lookup, editable in UI)
 - `year` (int, nullable)
-- `metadata_json` (jsonb — full lookup result: artwork URLs, cast, synopsis)
+- `metadata_json` (jsonb — full lookup result: artwork URLs, cast, synopsis, plus a load-bearing `scan_result` key holding the full `ScanResult` Pydantic dump from identify time. The rip-start handler in Phase 3+ reads `metadata_json["scan_result"]` to drive track selection; consumers must treat unknown keys as opaque.)
 - `status` (enum: created | awaiting_user_id | identified | ripping | ripped | ripped_partial | abandoned | failed)
 - `resumed_from_crash` (bool, default false — set by Backend-startup sweep or by `POST /api/ripper/jobs/{job_id}/resume`; cleared when the job next reaches a terminal state)
 - `started_at`, `ripped_at`

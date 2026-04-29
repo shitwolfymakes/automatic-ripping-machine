@@ -74,22 +74,32 @@ Realignment landed alongside the data model:
 
 ---
 
-## Phase 3 — Rip pipeline (MVP end-to-end)
+## Phase 3 — Rip pipeline (MVP end-to-end, shipped)
 
-**Goal.** From disc insertion to `/raw/<job_id>/title_tNN.mkv` on disk, with the job in `ripped` state. This is the **"bits first" MVP** and the first real demo.
+**Delivered** on `wolfy/v3-improvments`:
 
-**Exit criteria.** Identified DVD rips to `/raw/<job_id>/`, all tracks transition `queued → in_progress → done`, job transitions `identified → ripping → ripped`. CD equivalent via abcde. No UI yet — verified by `psql` and `ls /raw/`.
+1. Typed `TrackUpdateRequest` / `JobCompleteRequest` / `RipStartResponse` / `TrackView` in [packages/arm_common/arm_common/schemas/](../../packages/arm_common/arm_common/schemas/).
+2. New `arm_backend/track_selection.py` applies `rip_presets.track_selection` rules — `main_feature` (longest title ≥ 45 min, fallback to longest), `all_tracks` (≥ 60 s), `archive` (every title), `custom` raises `NotImplementedError` (Phase 6). DVD/BD → `VIDEO_TITLE` rows with `source_ref = title.index`; CD → `AUDIO_TRACK` rows from libdiscid track list; DATA → single `DATA_DUMP`.
+3. Three new backend endpoints under `/api/ripper/`:
+   - `POST /jobs/{job_id}/rip-start` — hardcoded preset by `disc_type` (DVD/BD → `rpr_builtin_movie_archive`, CD → `rpr_builtin_music_standard`, DATA → `rpr_builtin_data_copy`); reads `metadata_json["scan_result"]`; selects tracks; transitions `IDENTIFIED → RIPPING`. Idempotent.
+   - `PATCH /tracks/{track_id}` — validates legal `queued → in_progress → done|failed` transitions; writes `output_path`/`size_bytes`/`sha256`/`duration_seconds`/`last_error`.
+   - `POST /jobs/{job_id}/rip-complete` — aggregates track outcomes into `RIPPED` / `RIPPED_PARTIAL` / `FAILED`.
+4. Drive-scoping via `X-ARM-Hostname` header. New `require_drive_owner_by_job` / `require_drive_owner_by_track` deps load the row's drive and 403 on mismatch ([05-cross-cutting.md § Authorization rules](../arch/05-cross-cutting.md#authorization-rules)). `register` and `identify` stay bearer-only (no `drive_id` available at call time). Per-drive defaults in `Drive.default_session_id` arrive in Phase 8.
+5. Identify handler now persists `scan_result` into `metadata_json["scan_result"]` so rip-start can re-derive the title list without requiring the ripper to re-send it.
+6. Ripper rip stack at [services/ripper/arm_ripper/rip/](../../services/ripper/arm_ripper/rip/):
+   - `makemkv_rip.rip_title` shells `makemkvcon mkv --robot --progress=-stdout`, streams PRGV/PRGT/MSG records, calls a progress callback, captures `title_tNN.mkv` size + SHA-256.
+   - `abcde_rip.rip_cd` rips a whole audio CD via `abcde -o wav -a read,move -n -N` with a generated config that pins `OUTPUTFORMAT=track_${TRACKNUM}` (no encoding, no CDDB); maps output WAVs back to per-track `RipResult`s.
+   - `data_rip.rip_data` `dd`s a raw image to `/raw/<job>/dump.iso`.
+   - `dispatcher.rip_all` routes per `disc_type`, invoking on_track_start / on_track_done / on_track_progress callbacks the orchestrator uses to drive the wire-side state machine.
+7. `JobController._run_rip` orchestrates: rip-start (with retry-on-503), per-track PATCH-with-retry on transitions, rip-complete (with retry), `eject`, then a 3 s grace before returning so the poll loop's `DRIVE_NOT_READY` flicker doesn't re-trigger.
+8. CD scan path now populates `ScanResult.titles` from libdiscid (track number + seconds), so the same `select_tracks` rule fans out per-song Track rows for CDs.
+9. Tests: 8 backend track-selection tests + 5 makemkvcon mkv parser tests + extended JobController tests (rip-start/rip-complete/eject), all passing under `uv run pytest` (38 tests total). Live-disc integration testing deferred to manual verification per Phase 2's precedent — JSONB columns on `rip_presets` block in-memory SQLite, and testcontainers is a Phase 14 deliverable.
 
-**Deliverables:**
-1. **`POST /api/ripper/jobs/{job_id}/tracks`** — ripper creates track rows from the MakeMKV scan.
-2. **Ripper rip loop:** shell out `makemkvcon mkv --robot` per selected title; parse progress; write to `/raw/<job_id>/`. Sequential per-job (no parallelism within one drive).
-3. **`PATCH /api/ripper/tracks/{track_id}/complete`** + **`/fail`** + **`POST /api/ripper/jobs/{job_id}/complete`** — wire each state transition. Retry with exponential backoff ([02-job-lifecycle.md § What this buys us](../arch/02-job-lifecycle.md#what-this-buys-us)).
-4. **Track-selection rules** (initial): respect `rip_presets.track_selection = main_feature | all_tracks | archive`. `custom` deferred to Phase 6.
-5. **Eject on completion**, resume polling (`ioctl(CDROM_DRIVE_STATUS)`).
-6. **Auth scoping:** Backend verifies the caller's registered hostname owns the drive that owns the job ([05-cross-cutting.md § Authorization rules](../arch/05-cross-cutting.md#authorization-rules)).
-7. **CD path:** abcde wrapper writing WAV/FLAC to `/raw/<job_id>/`.
+`/raw/<job_id>/` retention is no-op until Phase 7's transcode landing; document loudly so dev disks don't fill silently.
 
-**Depends on:** Phase 1 (`tracks`, `rip_presets`), Phase 2 (a job is identified before rip begins, except under placeholder mode — deferred).
+**Crash recovery is NOT in Phase 3.** `rip-start` is idempotent (returns existing tracks on re-call), but a power cut mid-rip leaves the job in `ripping` until the Phase 9 Backend-startup sweep wipes `/raw/<job>/` and resets every track to `queued`. Documented as a known gap.
+
+**Depends on:** Phase 1 (`tracks`, `rip_presets`), Phase 2 (`metadata_json["scan_result"]` is now load-bearing — Phase 2's identify handler was extended to persist it before commit).
 
 ---
 
@@ -263,9 +273,10 @@ Split out so CPU-only can ship first.
 **Deliverables:**
 1. **`v3/install.sh`** — prereq check, prefix creation, CA generation (EC P-384, 10y), drive probe, leaf cert generation, `.env` seed, compose generation from template with one ripper block per detected drive.
 2. **Per-drive SCSI-generic auto-detect.** Every ripper service in the generated compose needs both `/dev/sr<N>` *and* the matching `/dev/sg<M>` passed in `devices:`. The two are paired via the kernel device path — discover with `ls /sys/class/block/sr<N>/device/scsi_generic/` (returns `sgM`). MakeMKV does its drive enumeration via SCSI-generic ioctls; without the sg node it logs `Unknown device - '/dev/srN'` and emits zero titles, silently degrading to the data-disc fallback. Found during Phase 2 verification on Big Buck Bunny BD; the workaround is hardcoded for the dev host in [v3/docker-compose.yml](../../docker-compose.yml) until the installer auto-detects.
-3. **`--rotate-ca`, `--prefix`, `--start`** flags.
-4. **Idempotent rerun** — preserves `.env` and CA, appends new drive blocks, regenerates leaves.
-5. **Retire `v3/devtools/bootstrap-certs.sh`** (the skeleton scaffolding) or fold its logic into `install.sh`.
+3. **Per-drive `UDISKS_AUTO=0` udev rule** — `/etc/udev/rules.d/99-arm-no-automount.rules`, idempotent (overwrite on rerun, never appended). One stanza per enrolled drive, scoped by `ID_PATH` (or `ID_SERIAL` fallback) read from `udevadm info /dev/sr<N>`. Followed by `udevadm control --reload-rules && udevadm trigger`. Required for auto-eject to work on desktop hosts running `udisks2` + `gvfs`; no-op on headless hosts. Without it, the ripper's `eject -sv` after rip-complete fails with EBUSY because the host auto-mounted the disc and the container can't reach the host mount namespace. Found during Phase 3 verification on a Sintel DVD with a GNOME host; documented in [06-deployment.md § Host-side auto-mount must be disabled](../arch/06-deployment.md#host-side-auto-mount-must-be-disabled). Until the installer ships, desktop-host users follow the doc's manual rule install. The installer must run with sudo for this step (the cert/compose steps don't need it; gate cleanly).
+4. **`--rotate-ca`, `--prefix`, `--start`** flags.
+5. **Idempotent rerun** — preserves `.env` and CA, appends new drive blocks, regenerates leaves, regenerates the udev rule from current enrolled-drive set.
+6. **Retire `v3/devtools/bootstrap-certs.sh`** (the skeleton scaffolding) or fold its logic into `install.sh`.
 
 **Depends on:** Phase 7 (installer needs the full compose topology it's generating to be correct).
 

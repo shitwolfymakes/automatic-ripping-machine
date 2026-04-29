@@ -173,6 +173,29 @@ ls /sys/class/block/sr0/device/scsi_generic/   # → e.g. "sg5"
 
 Phase 13's installer auto-detects this per drive and emits the right `devices:` entries. Until then, the dev compose file at [v3/docker-compose.yml](../../docker-compose.yml) hardcodes the pairing for one host — change it (or add more entries for multi-drive setups) before bringing the stack up on a different machine.
 
+### Host-side auto-mount must be disabled
+
+Desktop hosts (any with a GNOME / KDE / XFCE session) run `udisks2` + `gvfs` to auto-mount removable media as soon as the kernel sees a new disc. That host-side mount holds `/dev/srN` exclusively — the ripper container can scan and rip (`makemkvcon` opens the SCSI generic node, not the block device), but **post-rip `eject` fails with "Device or resource busy"** because the container can't reach the host's mount namespace to unmount first. The ripper logs `eject /dev/srN failed after 4 attempts; check host auto-mount config` and the disc stays in the drive until the user manually ejects.
+
+Server / headless installs do not have this problem (no `udisks2` running, no `gvfs`). Desktop hosts need a one-time host config change to disable auto-mount for the ARM drive(s) **only** — leaving every other drive untouched. The canonical udisks2 knob for this is `UDISKS_AUTO=0` ([udisks(8)](https://manpages.debian.org/trixie/udisks2/udisks.8.en.html)) — the drive stays visible in Files / Nautilus and the user can still mount it on demand, but the desktop's auto-mounter skips it on insert.
+
+Match the rule to the specific drive by `ID_PATH` or `ID_SERIAL` so it doesn't disable auto-mount on every optical drive on the host:
+
+```sh
+# Discover the drive's stable identifier first:
+udevadm info /dev/sr0 | grep -E 'ID_PATH=|ID_SERIAL='
+
+# /etc/udev/rules.d/99-arm-no-automount.rules
+# Replace ID_PATH with the value from the udevadm output above.
+SUBSYSTEM=="block", KERNEL=="sr[0-9]*", \
+    ENV{ID_PATH}=="pci-0000:00:14.0-ata-3", \
+    ENV{UDISKS_AUTO}="0"
+```
+
+Reload with `sudo udevadm control --reload-rules && sudo udevadm trigger`. After this, eject from inside the ripper container succeeds normally. Phase 13's installer auto-discovers `ID_PATH` for each enrolled drive and writes the rule alongside the compose file.
+
+Why `UDISKS_AUTO=0` and not `UDISKS_IGNORE=1`: the latter hides the drive from the udisks2 device tree entirely (no entry in Files, no `udisksctl status` row), which is friendlier to set-it-and-forget-it server installs but breaks the desktop user's expectation that they can still browse the disc manually. `UDISKS_AUTO=0` is the documented per-device "skip auto-mount" toggle. Why a host-side rule instead of bind-mounting the host's DBus into the container: DBus passthrough adds a runtime dependency that fails open on headless hosts (no `udisks2` running) and ties container behaviour to the host's session bus — fragile across distros and reboots. Why not raw SCSI eject through `/dev/sgM`: `udisks2` sets PREVENT MEDIUM REMOVAL on mount, the drive firmware refuses STOP UNIT until ALLOW is sent, and even on success the host's `/media/<label>/` mountpoint stays stale and races the next disc insertion. Multiple containerized rip projects ([jlesage/docker-makemkv #84](https://github.com/jlesage/docker-makemkv/issues/84), [#138](https://github.com/jlesage/docker-makemkv/issues/138), [ARM v2 #1558](https://github.com/automatic-ripping-machine/automatic-ripping-machine/issues/1558)) hit this same wall and none of them solve it in-container — the host-udev approach is the converged industry pattern.
+
 ## Why one ripper service per drive
 
 Ripper-per-drive is explicit and declarative: users see which drives they have by reading compose, device pass-through is one line per service, and a failing ripper doesn't take down its siblings. Each ripper watches its own drive via a 2s `ioctl(CDROM_DRIVE_STATUS)` poll — no udev rules on host or in container, no distro-specific wiring. This is the trade-off we accepted vs. dynamic ripper spawning — one line of config per drive is a small price for "it's all visible in one file."
