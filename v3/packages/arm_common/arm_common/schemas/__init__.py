@@ -8,6 +8,16 @@ from arm_common.schemas.ripper import (
     ScanTitle,
     TrackUpdateRequest,
 )
+from arm_common.schemas.ws import (
+    WSAck,
+    WSAuthRequest,
+    WSEnvelope,
+    WSError,
+    WSInboundMessage,
+    WSPublishRequest,
+    WSSubscribeRequest,
+    WSUnsubscribeRequest,
+)
 
 __all__ = [
     "ErrorResponse",
@@ -22,4 +32,12 @@ __all__ = [
     "ScanTitle",
     "TrackUpdateRequest",
     "TrackView",
+    "WSAck",
+    "WSAuthRequest",
+    "WSEnvelope",
+    "WSError",
+    "WSInboundMessage",
+    "WSPublishRequest",
+    "WSSubscribeRequest",
+    "WSUnsubscribeRequest",
 ]

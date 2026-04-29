@@ -8,7 +8,7 @@ import pytest
 
 import arm_ripper.job_controller as jc_module
 from arm_common import DiscType, Job, JobStatus
-from arm_common.schemas import JobView, RipStartResponse, ScanResult, TrackView
+from arm_common.schemas import JobView, RipStartResponse, ScanResult, TrackView, WSEnvelope
 from arm_ripper.job_controller import JobController
 
 
@@ -81,6 +81,11 @@ def fast_polls(monkeypatch, tmp_path):
     monkeypatch.setattr(jc_module, "POLL_MAX_SECONDS", 0.01)
     monkeypatch.setattr(jc_module, "EJECT_GRACE_SECONDS", 0.0)
     monkeypatch.setattr(jc_module, "RAW_ROOT", tmp_path)
+    # WS-driven resolution path: collapse the boot-race grace window so
+    # tests fall straight through to the REST fallback path that the
+    # FakeClient feeds.
+    monkeypatch.setattr(jc_module, "RESOLUTION_WS_FIRST_WAIT_SECONDS", 0.0)
+    monkeypatch.setattr(jc_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 1.0)
 
 
 @pytest.fixture
@@ -139,6 +144,46 @@ async def test_unexpected_status_stops_without_rip(stub_scan, stub_eject):
 
     assert client.rip_start_calls == []
     assert client.rip_complete_calls == []
+
+
+async def test_ws_event_unblocks_resolution_faster_than_rest(monkeypatch, stub_scan, stub_eject):
+    """An identify.resolved WS event makes _await_resolution return immediately.
+
+    Confirms the new WS-driven path: registering the handler is enough; we
+    don't need the slow REST fallback to do the work.
+    """
+    monkeypatch.setattr(jc_module, "RESOLUTION_WS_FIRST_WAIT_SECONDS", 5.0)
+    monkeypatch.setattr(jc_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 30.0)
+
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.AWAITING_USER_ID))
+    # Once the WS handler fires, we still verify via REST get_job — feed identified.
+    client.get_job_responses.append(_view(JobStatus.IDENTIFIED, title="Resolved"))
+    controller = JobController(client, "drv_test")
+
+    async def fire_ws_event_after_a_tick() -> None:
+        # Yield twice so handle_disc_inserted reaches _wait_for_resolution.
+        await asyncio.sleep(0.05)
+        envelope = WSEnvelope(
+            event_id="evt_test",
+            event_type="identify.resolved",
+            emitted_at=datetime.now(timezone.utc),
+            topic="ripper.commands.drv_test",
+            job_id="job_test",
+            payload={"job_id": "job_test", "title": "Resolved"},
+        )
+        await controller.on_ws_command(envelope)
+
+    await asyncio.wait_for(
+        asyncio.gather(
+            controller.handle_disc_inserted("/dev/sr0"),
+            fire_ws_event_after_a_tick(),
+        ),
+        timeout=2.0,
+    )
+
+    assert client.rip_start_calls == ["job_test"]
+    assert client.rip_complete_calls == ["job_test"]
 
 
 async def test_eject_runs_umount_then_eject_until_success(monkeypatch):

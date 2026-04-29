@@ -177,6 +177,7 @@ dependencies = [
     { name = "discid" },
     { name = "httpx" },
     { name = "pydantic-settings" },
+    { name = "websockets" },
 ]
 
 [package.metadata]
@@ -185,6 +186,7 @@ requires-dist = [
     { name = "discid", specifier = ">=1.2" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "pydantic-settings", specifier = ">=2.5" },
+    { name = "websockets", specifier = ">=12" },
 ]
 
 [[package]]

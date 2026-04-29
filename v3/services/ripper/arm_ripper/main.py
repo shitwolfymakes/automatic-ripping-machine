@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import ssl
 
 import httpx
 
@@ -7,6 +8,9 @@ from arm_ripper.backend_client import BackendClient
 from arm_ripper.config import settings
 from arm_ripper.drive_poll import DriveState, read_drive_status
 from arm_ripper.job_controller import JobController
+from arm_ripper.ws_client import WSClient
+
+CA_BUNDLE_PATH = "/etc/ssl/certs/ca-certificates.crt"
 
 RIPPER_VERSION = "0.0.0-skeleton"
 
@@ -61,16 +65,33 @@ async def poll_loop(controller: JobController) -> None:
         await asyncio.sleep(settings.POLL_INTERVAL_SECONDS)
 
 
+def _ws_url_from_backend_url(base: str) -> str:
+    if base.startswith("https://"):
+        return "wss://" + base[len("https://") :].rstrip("/") + "/ws"
+    if base.startswith("http://"):
+        return "ws://" + base[len("http://") :].rstrip("/") + "/ws"
+    return base.rstrip("/") + "/ws"
+
+
 async def amain() -> None:
     client = BackendClient(
         settings.ARM_BACKEND_URL,
         settings.ARM_SERVICE_TOKEN,
         hostname=settings.HOSTNAME,
     )
+    ssl_ctx = ssl.create_default_context(cafile=CA_BUNDLE_PATH)
+    ws_url = _ws_url_from_backend_url(settings.ARM_BACKEND_URL)
     try:
         drive_id = await register_with_retry(client)
-        controller = JobController(client, drive_id)
-        await poll_loop(controller)
+        async with WSClient(
+            ws_url,
+            settings.ARM_SERVICE_TOKEN,
+            hostname=settings.HOSTNAME,
+            ssl_context=ssl_ctx,
+        ) as ws:
+            controller = JobController(client, drive_id, ws=ws)
+            await ws.subscribe(f"ripper.commands.{drive_id}", controller.on_ws_command)
+            await poll_loop(controller)
     finally:
         await client.close()
 

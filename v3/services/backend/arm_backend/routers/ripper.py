@@ -17,6 +17,7 @@ from arm_backend.metadata import MetadataDispatcher
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_backend.track_selection import select_tracks
+from arm_backend.ws import WSHub
 from arm_common import Config, DiscType, Drive, DriveStatus, Job, JobStatus, RipPreset, TrackStatus
 from arm_common.models import Track
 from arm_common.schemas import (
@@ -45,6 +46,11 @@ _DEFAULT_RIP_PRESET_BY_DISC_TYPE: dict[DiscType, str] = {
 def _get_dispatcher(request: Request) -> MetadataDispatcher:
     dispatcher: MetadataDispatcher = request.app.state.dispatcher
     return dispatcher
+
+
+def _get_hub(request: Request) -> WSHub:
+    hub: WSHub = request.app.state.ws_hub
+    return hub
 
 
 @router.post("/register", response_model=Drive, dependencies=[Depends(require_service_token)])
@@ -78,6 +84,7 @@ async def identify(
     req: IdentifyRequest,
     session: AsyncSession = Depends(get_session),
     dispatcher: MetadataDispatcher = Depends(_get_dispatcher),
+    hub: WSHub = Depends(_get_hub),
 ) -> Job:
     drive = (await session.execute(select(Drive).where(col(Drive.id) == req.drive_id))).scalar_one_or_none()
     if drive is None:
@@ -132,6 +139,21 @@ async def identify(
     await session.commit()
     await session.refresh(job)
     logger.info("identify job_id=%s status=%s title=%s", job.id, job.status.value, job.title)
+
+    if job.status == JobStatus.AWAITING_USER_ID:
+        await hub.emit(
+            topic="ripper.events",
+            event_type="rip.needs_user_input",
+            payload={
+                "job_id": job.id,
+                "drive_id": job.drive_id,
+                "volume_label": scan.volume_label,
+                "disc_type": job.disc_type.value,
+            },
+            job_id=job.id,
+            session=session,
+        )
+        await session.commit()
     return job
 
 
@@ -147,6 +169,7 @@ async def get_job(job_id: str, session: AsyncSession = Depends(get_session)) -> 
 async def rip_start(
     job: Job = Depends(require_drive_owner_by_job),
     session: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
 ) -> RipStartResponse:
     preset_id = _DEFAULT_RIP_PRESET_BY_DISC_TYPE.get(job.disc_type)
     if preset_id is None:
@@ -211,6 +234,21 @@ async def rip_start(
         preset_id,
         len(refreshed),
     )
+
+    await hub.emit(
+        topic="ripper.events",
+        event_type="rip.started",
+        payload={
+            "job_id": job.id,
+            "drive_id": job.drive_id,
+            "rip_preset_id": preset_id,
+            "track_count": len(refreshed),
+        },
+        job_id=job.id,
+        session=session,
+    )
+    await session.commit()
+
     return RipStartResponse(
         job_id=job.id,
         rip_preset_id=preset_id,
@@ -223,6 +261,7 @@ async def update_track(
     req: TrackUpdateRequest,
     track: Track = Depends(require_drive_owner_by_track),
     session: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
 ) -> TrackView:
     new_status = req.status
     current = track.status
@@ -265,6 +304,38 @@ async def update_track(
     track.status = new_status
     await session.commit()
     await session.refresh(track)
+
+    if new_status == TrackStatus.DONE:
+        await hub.emit(
+            topic="ripper.events",
+            event_type="track.completed",
+            payload={
+                "track_id": track.id,
+                "job_id": track.job_id,
+                "output_path": track.output_path,
+                "size_bytes": track.size_bytes,
+                "duration_seconds": track.duration_seconds,
+            },
+            job_id=track.job_id,
+            track_id=track.id,
+            session=session,
+        )
+        await session.commit()
+    elif new_status == TrackStatus.FAILED:
+        await hub.emit(
+            topic="ripper.events",
+            event_type="track.failed",
+            payload={
+                "track_id": track.id,
+                "job_id": track.job_id,
+                "last_error": track.last_error,
+            },
+            job_id=track.job_id,
+            track_id=track.id,
+            session=session,
+        )
+        await session.commit()
+
     return TrackView.model_validate(track)
 
 
@@ -273,6 +344,7 @@ async def rip_complete(
     _: JobCompleteRequest,
     job: Job = Depends(require_drive_owner_by_job),
     session: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
 ) -> JobView:
     if job.status != JobStatus.RIPPING:
         raise HTTPException(
@@ -304,4 +376,26 @@ async def rip_complete(
         failed,
         total,
     )
+
+    event_type = {
+        JobStatus.RIPPED: "rip.completed",
+        JobStatus.RIPPED_PARTIAL: "rip.partial",
+        JobStatus.FAILED: "rip.failed",
+    }.get(job.status, "rip.completed")
+    await hub.emit(
+        topic="ripper.events",
+        event_type=event_type,
+        payload={
+            "job_id": job.id,
+            "drive_id": job.drive_id,
+            "status": job.status.value,
+            "tracks_done": done,
+            "tracks_failed": failed,
+            "tracks_total": total,
+        },
+        job_id=job.id,
+        session=session,
+    )
+    await session.commit()
+
     return JobView.model_validate(job)
