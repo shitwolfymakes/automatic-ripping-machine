@@ -928,6 +928,74 @@
         }
       }
     },
+    "/api/drives/{drive_id}": {
+      "patch": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Update Drive",
+        "operationId": "update_drive_api_drives__drive_id__patch",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriveUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Drive"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sessions": {
       "get": {
         "tags": [
@@ -3105,6 +3173,36 @@
           "error"
         ],
         "title": "DriveStatus"
+      },
+      "DriveUpdateRequest": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "default_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Session Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DriveUpdateRequest",
+        "description": "PATCH /api/drives/{id} body. Both fields optional + nullable.\n\n`default_session_id=None` (explicit null) clears the field; omitting it\nleaves it untouched. `extra=\"forbid\"` keeps the API honest \u2014 UI typos\nsurface as 422 instead of being silently dropped."
       },
       "FailTaskRequest": {
         "properties": {

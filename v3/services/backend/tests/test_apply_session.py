@@ -111,14 +111,40 @@ def _seed(db: FakeSession, *, job_status: JobStatus = JobStatus.RIPPED) -> None:
     db.rows["drives"] = []
 
 
-def _make_app(signing_key: bytes, db: FakeSession, tmp_media_root: Path) -> tuple[FastAPI, str]:
+class _CapturingHub:
+    """Minimal hub stand-in that records emit calls for assertions."""
+
+    def __init__(self) -> None:
+        self.events: list[dict[str, object]] = []
+
+    async def emit(
+        self,
+        topic: str,
+        event_type: str,
+        payload: dict[str, object],
+        *,
+        persist: bool = True,
+        job_id: str | None = None,
+        track_id: str | None = None,
+        session: object = None,
+    ) -> None:
+        self.events.append({"topic": topic, "event_type": event_type, "payload": payload})
+
+
+def _make_app(
+    signing_key: bytes,
+    db: FakeSession,
+    tmp_media_root: Path,
+    *,
+    hub: object | None = None,
+) -> tuple[FastAPI, str]:
     from arm_backend import config as bcfg
 
     bcfg.settings.MEDIA_ROOT = str(tmp_media_root)
 
     app = FastAPI()
     app.state.signing_key = signing_key
-    app.state.ws_hub = None
+    app.state.ws_hub = hub
     app.include_router(jobs_router.router)
 
     async def _override_session() -> FakeSession:
@@ -311,3 +337,23 @@ def test_apply_integrity_race_returns_409(signing_key: bytes, tmp_path: Path) ->
         )
     assert r.status_code == 409
     assert "concurrent" in r.json()["detail"].lower()
+
+
+def test_apply_emits_session_queued_with_manual_source(signing_key: bytes, tmp_path: Path) -> None:
+    db = FakeSession()
+    _seed(db)
+    hub = _CapturingHub()
+    app, token = _make_app(signing_key, db, tmp_path, hub=hub)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_x/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    queued = [e for e in hub.events if e["event_type"] == "session.queued"]
+    assert len(queued) == 1
+    payload = queued[0]["payload"]
+    assert payload["source"] == "manual"
+    assert payload["job_id"] == "job_x"
+    assert payload["task_count"] == 1

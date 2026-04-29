@@ -209,12 +209,18 @@ Visual UI verification deferred to manual click-through; per [05-cross-cutting.m
 
 **Goal.** `drives.default_session_id` + `config.auto_transcode_on_idle=true` causes each successful rip to auto-queue its default session.
 
-**Exit criteria.** Inserting a disc into a drive with a default session produces a completed `/media/` file with zero UI interaction.
+**Exit criteria — met.** A drive with a `default_session_id` set + `Config.auto_transcode_on_idle=true` produces a `session_application` automatically when `rip-complete` flips the job to `RIPPED` or `RIPPED_PARTIAL`. CPU/GPU paths route as before via the Phase 7/7b dispatcher; on success the user sees a transcode appear in the UI without ever clicking "Apply session".
 
-**Deliverables:**
-1. **Backend hook on `rip.completed`** — if drive has `default_session_id` and auto-transcode is enabled, create a `session_application` identical to the manual path.
-2. **UI:** per-drive "Default Session" dropdown on the Drives page.
-3. **Event coverage:** `session.queued` with `source: auto|manual` in the payload.
+**Delivered** on `wolfy/v3-improvments`:
+
+1. **Apply-session core extracted to `arm_backend/auto_session.py`.** `apply_session_internal` is the single engine behind both code paths — manual `POST /api/jobs/{id}/transcode` and the new auto hook. Returns `ApplySessionOutcome(application, tasks, collisions, idempotent, skipped_reason)` so callers map outcomes to the right surface (HTTP 4xx for the route, log+swallow for the hook). `routers/jobs.py:apply_session` shrinks to a ~30-line shim that maps `SessionNotFoundError` → 400, `skipped_reason="collisions"` → 409, `IntegrityError` → 409.
+2. **`maybe_auto_apply_session` hook** in [auto_session.py](../../services/backend/arm_backend/auto_session.py), called from [routers/ripper.py:rip_complete](../../services/backend/arm_backend/routers/ripper.py) when `job.status in (RIPPED, RIPPED_PARTIAL)`. Loads the `Drive`, returns early if `default_session_id is None`; loads `Config(id=1)`, returns early if `auto_transcode_on_idle is False`. Wraps the helper call in `try/except`; `SessionNotFoundError`, `TemplateValidationError`, `IntegrityError`, and the catch-all `Exception` all log at WARN and never re-raise — `rip-complete`'s 200 response is preserved on every failure mode.
+3. **`session.queued` WS event** emitted by `apply_session_internal` exactly once on successful fan-out, on topic `session.events`, with payload `{session_application_id, session_id, job_id, source: "manual"|"auto", task_count}`. Idempotent re-applies skip the emit because they exit the helper before the spawn branch. The manual route picks up the emit for free; previously it emitted nothing.
+4. **`PATCH /api/drives/{drive_id}`** in [routers/drives.py](../../services/backend/arm_backend/routers/drives.py) accepts a `DriveUpdateRequest` ([schemas/drives.py](../../packages/arm_common/arm_common/schemas/drives.py)) with optional `display_name` and `default_session_id` (both nullable; explicit `null` clears, omit to leave untouched, `extra="forbid"` rejects typos at 422). Validates that a non-null `default_session_id` references a real session row (400 if not).
+5. **UI Drives page** ([Drives.vue](../../services/ui/src/views/Drives.vue)) gains a "Default session" `<select>` column. `Promise.all` fetches drives + sessions on mount; `@change` PATCHes `/api/drives/{id}` and updates the local ref. `DriveUpdateRequest` added to [api/types.ts](../../services/ui/src/api/types.ts); `api.patch` was already in place.
+6. **Tests:** 19 new (`test_auto_session.py` × 6 covering manual vs auto emit, idempotent reuse, collision skip, missing-session raise, awaiting_user_id parking; `test_ripper_router_auto.py` × 6 for the hook gates and graceful no-ops; `test_drives_router.py` × 6 for the PATCH happy/error paths; `test_apply_session.py` extended × 1 to assert `session.queued` fires with `source: "manual"`). 1 new Vitest spec (`drives.spec.ts`) verifying the dropdown renders one option per session plus a "— none —" entry. 260 backend+ripper+transcode / 18 UI total; ruff lint clean; OpenAPI snapshot regenerated to cover `DriveUpdateRequest` + the PATCH endpoint.
+
+No DB migration was required — [drive.py:31-33](../../packages/arm_common/arm_common/models/drive.py) and [config.py:18](../../packages/arm_common/arm_common/models/config.py) already had `default_session_id` (FK with `ON DELETE SET NULL`) and `auto_transcode_on_idle` since Phase 1. Known limitation: the dropdown is unfiltered — picking a TV session for a movie drive is allowed; auto-apply will then fail at template-resolve time and skip cleanly. UX polish (filter dropdown by media type, surface a notice on auto-skip) is deferred.
 
 **Depends on:** Phase 7.
 

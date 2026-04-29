@@ -70,6 +70,11 @@ export interface DriveView {
   default_session_id: string | null
 }
 
+export interface DriveUpdateRequest {
+  display_name?: string | null
+  default_session_id?: string | null
+}
+
 export type MediaType = 'movie' | 'tv' | 'music' | 'data' | 'iso'
 
 export type TrackSelection = 'main_feature' | 'all_tracks' | 'archive' | 'custom'
