@@ -1,39 +1,47 @@
-# ARM v3 — Walking Skeleton
+# ARM v3
 
 Greenfield rebuild. Architecture lives in [docs/arch/](docs/arch/). This directory is the code; everything at the repo root belongs to frozen v2.
 
-## First run (skeleton)
-
-From the repo root:
+## Install (one-liner)
 
 ```bash
-bash v3/devtools/bootstrap-certs.sh
-cp v3/.env.example v3/.env
-# edit POSTGRES_PASSWORD and ARM_SERVICE_TOKEN to real values
-docker compose -f v3/docker-compose.yml up -d --build
+curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/v3/install.sh | bash
 ```
 
-## What this skeleton does
+For users who want a TTY before the script runs: `bash -c "$(curl -fsSL .../v3/install.sh)"`. Override the prefix with `--prefix /srv/arm`; auto-start with `--start`; rotate the CA with `--rotate-ca`. See `bash v3/install.sh --help` for everything.
 
-- Backend boots on `https://arm-backend:8443` (internal-CA-signed leaf cert), runs the first Alembic migration.
-- One ripper container (`arm-ripper-sr0`) registers itself via `POST /api/ripper/register` and polls `ioctl(CDROM_DRIVE_STATUS)` on `/dev/sr0` every 2s.
-- `POST /api/ripper/identify` creates a `Job` row in `status='created'`. No TMDB lookup, no MakeMKV, no transcode.
+The installer drops everything under `~/arm/` (or `--prefix`):
 
-See [docs/arch/README.md](docs/arch/README.md) for the full target architecture and what's intentionally absent here.
+- `certs/` — internal CA + per-service leaf certs (EC P-384, 10y).
+- `.env` — bootstrap secrets, generated random on first run.
+- `docker-compose.yml` — one ripper service per detected drive (with the right `/dev/sg<M>` SCSI-generic pairing). Image-based; pulls `docker.io/automaticrippingmachine/arm-<svc>:v3.x.y`.
+- `docker-compose.gpu.yml` — overlay for VAAPI/QSV/NVENC hosts.
+- `raw/`, `media/`, `logs/` — bind-mounted into the stack.
 
-## Verification
+After install: `cd ~/arm && docker compose up -d`. First-boot credentials are `admin` / `admin` (printed in `docker exec armv3-backend cat /logs/first-boot.log` on every boot until you change it). Open `https://localhost:8081`; you'll be forced to set a real password on first login. See [docs/arch/06-deployment.md § Install](docs/arch/06-deployment.md#install) for the full UX.
 
-See the "Verification" section of the plan that produced this scaffold, or:
+> ⚠️ Until Phase 14 (CI + image release) lands, the registry images aren't yet published. To run today, build locally — see "Local development" below — and tag the result so the installer's compose finds it.
 
-1. `docker compose -f v3/docker-compose.yml exec arm-backend curl -fsS --cacert /etc/ssl/certs/ca-certificates.crt https://arm-backend:8443/api/health`
-2. `docker compose -f v3/docker-compose.yml exec arm-db psql -U arm -d arm -c "\dt"`
-3. `docker compose -f v3/docker-compose.yml logs arm-ripper-sr0`
+## Local development
 
-## Layout
+For contributors editing v3 source. From the repo root:
 
-- `packages/arm_common/` — shared Pydantic schemas, enums, ULID helper
-- `services/backend/` — FastAPI app + Alembic migrations
-- `services/ripper/` — drive poller + Backend client
+```bash
+bash v3/devtools/setup-dev.sh                            # uv sync, certs, .env
+docker compose -f v3/docker-compose.yml up -d --build    # build + start
+```
+
+`setup-dev.sh` delegates cert generation to `install.sh --certs-only`; the dev compose at [docker-compose.yml](docker-compose.yml) keeps its `build:` blocks (vs. the installer's `image:` references) so you iterate against your own working tree.
+
+## What's in this tree
+
+- `packages/arm_common/` — shared Pydantic schemas, enums, ULID helper, structured-logging helpers
+- `services/backend/` — FastAPI app + Alembic migrations + WS hub + dispatchers (transcode, notification, log-tail)
+- `services/ripper/` — drive poller + Backend client + makemkv/HandBrake/abcde drivers
+- `services/transcode/` — ephemeral per-task transcoder spawned by Backend
+- `services/ui/` — Vue 3 SPA served by nginx
 - `services/_common/docker-entrypoint.sh` — shared CA-merge + PUID drop + tini exec
-- `services/{ui,transcode}/` — stub placeholders for deferred PRs
-- `devtools/bootstrap-certs.sh` — manual CA + leaf generator (replaces `install.sh` for the skeleton)
+- `install.sh` — end-user installer (image-based, generates `~/arm/`)
+- `devtools/setup-dev.sh` — developer bootstrap (against `v3/`)
+
+See [docs/arch/README.md](docs/arch/README.md) for the architecture overview and [docs/plans/MASTER_IMPLEMENTATION_PLAN.md](docs/plans/MASTER_IMPLEMENTATION_PLAN.md) for the per-phase rollout.

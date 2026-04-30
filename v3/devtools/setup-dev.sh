@@ -32,8 +32,13 @@ echo "==> syncing host venv via uv"
 if [[ -f "${V3_DIR}/certs/arm-ca.crt" ]]; then
     echo "==> certs already present in v3/certs/ — skipping bootstrap"
 else
-    echo "==> generating internal CA + leaves"
-    bash "${SCRIPT_DIR}/bootstrap-certs.sh"
+    echo "==> generating internal CA + leaves via install.sh --certs-only"
+    bash "${V3_DIR}/install.sh" \
+        --prefix "${V3_DIR}" \
+        --certs-only \
+        --no-env \
+        --no-compose \
+        --no-udev
 fi
 
 ENV_FILE="${V3_DIR}/.env"

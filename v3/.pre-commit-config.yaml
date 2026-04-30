@@ -55,3 +55,9 @@ repos:
         language: system
         pass_filenames: false
         files: ^v3/services/ui/.+\.(ts|mts|tsx|vue|js|cjs|mjs|json|css|md|html)$
+
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.10.0
+    hooks:
+      - id: shellcheck
+        files: ^v3/.+\.sh$
