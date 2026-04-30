@@ -30,3 +30,54 @@ updates:
       interval: "daily"
     # Allow up to 10 open pull requests for pip dependencies
     open-pull-requests-limit: 20
+
+  # ---------------------------------------------------------------
+  # v3 entries (Phase 14). Cutover (Phase 16) removes the v2 entries
+  # above and rebases these directories to repo root.
+  # Weekly + grouped to keep PR volume sane while v3 is in flux.
+  # ---------------------------------------------------------------
+
+  # v3 Python — uv workspace at v3/uv.lock covers all 4 services.
+  - package-ecosystem: "uv"
+    directory: "/v3"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels: ["v3", "dependencies"]
+    groups:
+      v3-python:
+        patterns: ["*"]
+
+  # v3 UI npm deps.
+  - package-ecosystem: "npm"
+    directory: "/v3/services/ui"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels: ["v3", "dependencies"]
+    groups:
+      v3-ui:
+        patterns: ["*"]
+
+  # v3 service base images — one entry per Dockerfile dir so
+  # dependabot can pin each service independently.
+  - package-ecosystem: "docker"
+    directory: "/v3/services/backend"
+    schedule:
+      interval: "weekly"
+    labels: ["v3", "dependencies"]
+  - package-ecosystem: "docker"
+    directory: "/v3/services/ripper"
+    schedule:
+      interval: "weekly"
+    labels: ["v3", "dependencies"]
+  - package-ecosystem: "docker"
+    directory: "/v3/services/transcode"
+    schedule:
+      interval: "weekly"
+    labels: ["v3", "dependencies"]
+  - package-ecosystem: "docker"
+    directory: "/v3/services/ui"
+    schedule:
+      interval: "weekly"
+    labels: ["v3", "dependencies"]
