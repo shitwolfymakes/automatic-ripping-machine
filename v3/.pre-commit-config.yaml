@@ -56,6 +56,16 @@ repos:
         pass_filenames: false
         files: ^v3/services/ui/.+\.(ts|mts|tsx|vue|js|cjs|mjs|json|css|md|html)$
 
+      # vue-tsc is the UI's mypy — strict TypeScript + Vue SFC typecheck.
+      # Slower than eslint/prettier but still fast enough for pre-commit;
+      # catches real bugs that lint misses (wrong props, missing keys, etc.)
+      - id: typecheck-ui
+        name: typecheck (ui, vue-tsc)
+        entry: bash -c 'cd v3/services/ui && npm run --silent typecheck'
+        language: system
+        pass_filenames: false
+        files: ^v3/services/ui/.+\.(ts|mts|tsx|vue)$
+
   - repo: https://github.com/koalaman/shellcheck-precommit
     rev: v0.10.0
     hooks:
