@@ -1,0 +1,180 @@
+# v3 CI — lint, test, build, OpenAPI drift detection.
+#
+# Scoped to v3/** so v2 PRs are untouched. Also fires on changes to this
+# workflow itself so workflow edits are exercised before merge.
+#
+# At cutover (Phase 16) this file gets renamed to drop the v3- prefix and
+# the paths filter is removed (everything below repo root will be v3).
+name: v3 CI
+
+on:
+  pull_request:
+    paths:
+      - 'v3/**'
+      - '.github/workflows/v3-ci.yml'
+  push:
+    branches: [main, 'wolfy/**']
+    paths:
+      - 'v3/**'
+      - '.github/workflows/v3-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: '0.11.x'
+  NODE_VERSION: '24'
+
+jobs:
+  lint-python:
+    name: lint (python — ruff + mypy)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          version: ${{ env.UV_VERSION }}
+      - run: uv sync --frozen
+      - run: uv run ruff format --check .
+      - run: uv run ruff check .
+      - name: mypy
+        run: |
+          uv run mypy \
+            -p arm_common \
+            -p arm_backend \
+            -p arm_ripper \
+            -p arm_transcode
+
+  lint-ui:
+    name: lint (ui — eslint + prettier + vue-tsc)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v3/services/ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: v3/services/ui/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+
+  lint-shell:
+    name: lint (shell — shellcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends shellcheck
+      - name: Run shellcheck on all v3 shell scripts
+        run: |
+          mapfile -t files < <(find v3 -type f -name '*.sh')
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No shell scripts found under v3/"
+            exit 0
+          fi
+          shellcheck "${files[@]}"
+
+  test-python:
+    name: test (python — pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          version: ${{ env.UV_VERSION }}
+      - run: uv sync --frozen
+      - run: uv run pytest -v
+
+  test-ui:
+    name: test (ui — vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v3/services/ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: v3/services/ui/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  openapi-drift:
+    # Live OpenAPI from the FastAPI app must match the committed snapshot
+    # consumed by the UI's openapi-typescript codegen. Drift = stale types.
+    # Regenerate locally with: cd v3 && uv run python -c \
+    #   'import json; from arm_backend.main import app; \
+    #    print(json.dumps(app.openapi()))' > services/ui/openapi.snapshot.json
+    name: openapi snapshot drift
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v3
+    env:
+      ARM_SERVICE_TOKEN: ci-dummy-token
+      POSTGRES_URL: postgresql+asyncpg://arm:arm@localhost:5432/arm
+      ARM_LOG_LEVEL: warning
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          version: ${{ env.UV_VERSION }}
+      - run: uv sync --frozen
+      - name: Generate live OpenAPI from FastAPI app
+        run: |
+          uv run python -c '
+          import json
+          from arm_backend.main import app
+          print(json.dumps(app.openapi()))
+          ' > /tmp/openapi.live.json
+      - name: Compare against snapshot
+        run: |
+          jq -S . services/ui/openapi.snapshot.json > /tmp/snapshot.norm.json
+          jq -S . /tmp/openapi.live.json           > /tmp/live.norm.json
+          if ! diff -u /tmp/snapshot.norm.json /tmp/live.norm.json; then
+            echo "::error::OpenAPI snapshot drift — regenerate services/ui/openapi.snapshot.json"
+            exit 1
+          fi
+
+  build-images:
+    # PR-time sanity build: every Dockerfile must build cleanly. No push.
+    # Release publishing lives in v3-release.yml.
+    name: build (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [backend, ripper, transcode, ui]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: v3
+          file: v3/services/${{ matrix.service }}/Dockerfile
+          push: false
+          load: false
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}

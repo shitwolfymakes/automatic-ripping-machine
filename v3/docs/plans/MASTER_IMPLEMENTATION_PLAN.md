@@ -332,20 +332,30 @@ No DB migration was required — `Job.resumed_from_crash` ([job.py:34](../../pac
 
 ---
 
-## Phase 14 — Supply chain + CI
+## Phase 14 — Supply chain + CI (shipped)
 
 **Goal.** Every published image is pinned-by-digest, has a signed SBOM, and is rebuilt weekly for security updates.
 
-**Exit criteria.** `cosign verify docker.io/automaticrippingmachine/arm-<service>:v3.0.0` succeeds with OIDC identity `https://token.actions.githubusercontent.com`. `syft` SBOM is attached to each image. Weekly scheduled rebuild runs and ships green.
+**Exit criteria.** `cosign verify docker.io/<namespace>/arm-<service>:<tag>` succeeds with OIDC identity `https://token.actions.githubusercontent.com/<owner>/<repo>/.github/workflows/v3-release.yml@refs/tags/<tag>`. `syft` SBOM is attached to each image as a cosign attestation. Weekly scheduled rebuild runs and ships green. (`cosign verify` user-facing docs land at cutover per § Phase 16 — until the upstream namespace exists, the README points at the fork's namespace.)
 
-**Deliverables:**
-1. **`.github/workflows/v3-ci.yml`** — builds, per-service pytest, contract tests, lint. `paths: v3/**` filter so v2 CI stays untouched ([08-v2-isolation-and-cutover.md § CI](../arch/08-v2-isolation-and-cutover.md#ci)).
-2. **`.github/workflows/v3-release.yml`** — tagged build, cosign keyless signing, syft SBOM, cosign-attach-sbom, push.
-3. **`.github/workflows/v3-weekly-rebuild.yml`** — scheduled weekly on `main` tag; pushes image with same tag.
-4. **Renovate / Dependabot config** pinned to base digests.
-5. **`cosign verify` documented in `README.md`** (lands in Phase 16).
+**What shipped:**
+
+1. **`.github/workflows/v3-ci.yml`** ([../../../.github/workflows/v3-ci.yml](../../../.github/workflows/v3-ci.yml)) — `paths: v3/**` scope so v2 PRs stay green via the existing v2 workflows. Seven parallel jobs: `lint-python` (ruff format-check, ruff lint, mypy on all 4 packages), `lint-ui` (eslint, prettier --check, vue-tsc), `lint-shell` (shellcheck on every `*.sh` under `v3/`), `test-python` (pytest covering all 3 service test dirs via the workspace `[tool.pytest.ini_options].testpaths`), `test-ui` (vitest), `openapi-drift` (live-import `arm_backend.main:app`, `app.openapi()`, `jq -S` diff against `services/ui/openapi.snapshot.json`), and `build-images` (matrix over backend/ripper/transcode/ui — Dockerfile sanity, no push, GHA cache scoped per service). Concurrency group cancels superseded runs per ref.
+2. **`.github/workflows/v3-release.yml`** ([../../../.github/workflows/v3-release.yml](../../../.github/workflows/v3-release.yml)) — fires on `v3.*` tag push. Matrix over the 4 services. Each service: `docker/login-action` → `docker/metadata-action` (computes `:<tag>` plus `:latest` only when ref doesn't contain `-` so pre-releases don't move the moving tag) → `docker/build-push-action` (push by digest, `provenance: true`) → `sigstore/cosign-installer@v3` → `anchore/sbom-action` (SPDX JSON) → `cosign sign --yes` (keyless, OIDC token from `id-token: write` permission) → `cosign attest --type spdxjson` (SBOM as in-toto attestation). Concurrency group does **not** cancel mid-publish. Workflow no-ops with a clear error if `vars.DOCKERHUB_NAMESPACE` / `secrets.DOCKERHUB_USERNAME` / `secrets.DOCKERHUB_TOKEN` are missing.
+3. **`.github/workflows/v3-weekly-rebuild.yml`** ([../../../.github/workflows/v3-weekly-rebuild.yml](../../../.github/workflows/v3-weekly-rebuild.yml)) — `cron: '17 3 * * 0'` (Sundays 03:17 UTC) + `workflow_dispatch` with optional `tag` override. `resolve-tag` job finds the newest stable `v3.*` tag (excludes `-alpha`/`-rc`) and gates the rebuild on its existence; if no stable tag exists yet (current state) the job no-ops cleanly. `rebuild` job checks out that tag, builds with `no-cache: true` (the entire point — pull fresh base layers + apt indices), repushes the same tag, re-signs and re-attests SBOM (Sigstore accepts multiple sigs per image).
+4. **`.github/dependabot.yml`** updated additively — v2 entries (root `pip` daily) untouched. New v3 entries: `uv` ecosystem on `/v3` (single workspace lock covers all Python deps), `npm` on `/v3/services/ui`, `docker` per service Dockerfile dir (4 entries), all on weekly cadence + grouped (`v3-python`, `v3-ui`) so PR volume stays bounded. Labelled `["v3", "dependencies"]` for filtering. The cutover PR (Phase 16) removes the v2 entries and rebases these to repo root.
+5. **Configuration handoff to user** — workflows reference `vars.DOCKERHUB_NAMESPACE` (repo variable) + `secrets.DOCKERHUB_{USERNAME,TOKEN}`. Drop-in cutover plan: fork ships under personal namespace; cutover commit flips the repo variable to `automaticrippingmachine`. Cosign keyless needs no secrets (uses GHA OIDC token).
+6. **Verification:** `python -c 'import yaml; yaml.safe_load(open(...))'` clean on all four files; pre-commit shellcheck clean; manual review against actionlint reference (no `actionlint` binary in sandbox, deferred to first push). The release/rebuild jobs are exit-criterion-validated only on first tagged release; CI exit-criterion is validated on first push to `wolfy/v3-improvments`.
 
 **Depends on:** Phase 0 onward — CI tracks the critical path; setting it up has no phase dependency beyond "there is something to build."
+
+**Cutover follow-ups (Phase 16):**
+
+- Rename `.github/workflows/v3-*.yml` → `.github/workflows/*.yml` (drop prefix); strip `paths: v3/**` filter; rename `branches: [main, 'wolfy/**']` → `[main]`.
+- Flip `vars.DOCKERHUB_NAMESPACE` from fork value to `automaticrippingmachine`.
+- Remove v2 dependabot entries; rebase v3 entries from `/v3/...` → `/...`.
+- Delete v2 workflow files (per [08-v2-isolation-and-cutover.md § Cutover step 5](../arch/08-v2-isolation-and-cutover.md#5-retire-v2-ci-workflows)).
+- Add `cosign verify ...` block to README.md.
 
 ---
 
