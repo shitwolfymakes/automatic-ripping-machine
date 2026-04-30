@@ -1,4 +1,9 @@
-"""Read-only diagnostics surface for the UI. Phase 12 will enrich it."""
+"""Read-only diagnostics surface for the UI.
+
+Per-job log download lives on the logs router (`/api/logs/{job_id}.zip`)
+— this endpoint stays scope-agnostic and just reports per-service log
+levels.
+"""
 
 from fastapi import APIRouter, Depends
 
@@ -14,5 +19,4 @@ router = APIRouter(prefix="/api/diagnostics", tags=["diagnostics"])
 async def get_diagnostics(_: User = Depends(require_jwt)) -> DiagnosticsResponse:
     return DiagnosticsResponse(
         services=[DiagnosticsServiceView(name="arm-backend", log_level=settings.ARM_LOG_LEVEL)],
-        bug_report_zip_url=None,  # Phase 12
     )

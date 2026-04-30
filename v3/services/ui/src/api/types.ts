@@ -312,5 +312,15 @@ export interface DiagnosticsServiceView {
 
 export interface DiagnosticsResponse {
   services: DiagnosticsServiceView[]
-  bug_report_zip_url: string | null
+}
+
+export interface LogLine {
+  ts: string
+  level: string
+  service: string
+  job_id: string | null
+  track_id: string | null
+  session_application_id: string | null
+  msg: string
+  extra: Record<string, unknown>
 }

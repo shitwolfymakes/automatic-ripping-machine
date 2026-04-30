@@ -4,7 +4,7 @@ from pathlib import Path
 
 import httpx
 
-from arm_common import DiscType, Job, JobStatus, TrackStatus
+from arm_common import DiscType, Job, JobStatus, TrackStatus, with_log_context
 from arm_common.schemas import JobView, RipStartResponse, ScanResult, TrackView, WSEnvelope
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.rip import RipResult, rip_all
@@ -72,17 +72,19 @@ class JobController:
 
         job = await self._identify_with_retry(scan_result)
 
-        if job.status == JobStatus.AWAITING_USER_ID:
-            resolved = await self._await_resolution(job.id)
-            if resolved is None:
+        # Phase 12 — every log line below carries job_id once identify lands.
+        with with_log_context(job_id=job.id):
+            if job.status == JobStatus.AWAITING_USER_ID:
+                resolved = await self._await_resolution(job.id)
+                if resolved is None:
+                    return
+                job.status = resolved.status
+
+            if job.status != JobStatus.IDENTIFIED:
+                logger.info("job %s in unexpected status %s; not ripping", job.id, job.status.value)
                 return
-            job.status = resolved.status
 
-        if job.status != JobStatus.IDENTIFIED:
-            logger.info("job %s in unexpected status %s; not ripping", job.id, job.status.value)
-            return
-
-        await self._run_rip(job, device_path)
+            await self._run_rip(job, device_path)
 
     async def _identify_with_retry(self, scan_result: ScanResult) -> Job:
         delay = IDENTIFY_RETRY_INITIAL_SECONDS
@@ -204,14 +206,15 @@ class JobController:
         sets `resumed_from_crash=True`; we then run the same rip-loop
         as a fresh disc would.
         """
-        rip_start = await self._client.resume(job.id)
-        logger.info("rip-resume job_id=%s tracks=%d", job.id, len(rip_start.tracks))
-        await self._execute_rip(
-            job_id=job.id,
-            disc_type=job.disc_type,
-            device_path=device_path,
-            rip_start=rip_start,
-        )
+        with with_log_context(job_id=job.id):
+            rip_start = await self._client.resume(job.id)
+            logger.info("rip-resume job_id=%s tracks=%d", job.id, len(rip_start.tracks))
+            await self._execute_rip(
+                job_id=job.id,
+                disc_type=job.disc_type,
+                device_path=device_path,
+                rip_start=rip_start,
+            )
 
     async def _execute_rip(
         self,
@@ -227,45 +230,48 @@ class JobController:
         async def on_track_start(track: TrackView) -> None:
             if track.status != TrackStatus.QUEUED:
                 return
-            await self._patch_track_with_retry(track.id, status=TrackStatus.IN_PROGRESS)
+            with with_log_context(track_id=track.id):
+                await self._patch_track_with_retry(track.id, status=TrackStatus.IN_PROGRESS)
 
         async def on_track_done(track: TrackView, result: RipResult) -> None:
-            if result.ok:
-                fields: dict[str, object] = {"status": TrackStatus.DONE}
-                if result.output_path is not None:
-                    fields["output_path"] = str(result.output_path)
-                if result.size_bytes is not None:
-                    fields["size_bytes"] = result.size_bytes
-                if result.sha256 is not None:
-                    fields["sha256"] = result.sha256
-                if result.duration_seconds is not None:
-                    fields["duration_seconds"] = result.duration_seconds
-                await self._patch_track_with_retry(track.id, **fields)
-                logger.info(
-                    "track %s done size=%s duration=%s",
-                    track.id,
-                    result.size_bytes,
-                    result.duration_seconds,
-                )
-            else:
-                await self._patch_track_with_retry(
-                    track.id,
-                    status=TrackStatus.FAILED,
-                    last_error=result.error or "unknown error",
-                )
-                logger.warning("track %s failed err=%s", track.id, result.error)
+            with with_log_context(track_id=track.id):
+                if result.ok:
+                    fields: dict[str, object] = {"status": TrackStatus.DONE}
+                    if result.output_path is not None:
+                        fields["output_path"] = str(result.output_path)
+                    if result.size_bytes is not None:
+                        fields["size_bytes"] = result.size_bytes
+                    if result.sha256 is not None:
+                        fields["sha256"] = result.sha256
+                    if result.duration_seconds is not None:
+                        fields["duration_seconds"] = result.duration_seconds
+                    await self._patch_track_with_retry(track.id, **fields)
+                    logger.info(
+                        "track %s done size=%s duration=%s",
+                        track.id,
+                        result.size_bytes,
+                        result.duration_seconds,
+                    )
+                else:
+                    await self._patch_track_with_retry(
+                        track.id,
+                        status=TrackStatus.FAILED,
+                        last_error=result.error or "unknown error",
+                    )
+                    logger.warning("track %s failed err=%s", track.id, result.error)
 
         async def on_track_progress(track: TrackView, fraction: float) -> None:
-            logger.debug("track %s progress=%.2f", track.id, fraction)
-            if self._ws is not None:
-                await self._ws.publish(
-                    topic=f"ripper.progress.{job_id}",
-                    event_type="ripper.progress",
-                    payload={
-                        "track_id": track.id,
-                        "progress_pct": round(fraction * 100, 1),
-                    },
-                )
+            with with_log_context(track_id=track.id):
+                logger.debug("track %s progress=%.2f", track.id, fraction)
+                if self._ws is not None:
+                    await self._ws.publish(
+                        topic=f"ripper.progress.{job_id}",
+                        event_type="ripper.progress",
+                        payload={
+                            "track_id": track.id,
+                            "progress_pct": round(fraction * 100, 1),
+                        },
+                    )
 
         await rip_all(
             disc_type=disc_type,

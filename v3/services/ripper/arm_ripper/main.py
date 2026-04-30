@@ -1,9 +1,11 @@
 import asyncio
 import logging
 import ssl
+from pathlib import Path
 
 import httpx
 
+from arm_common import configure_service_logging
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.config import settings
 from arm_ripper.drive_poll import DriveState, read_drive_status
@@ -15,10 +17,10 @@ CA_BUNDLE_PATH = "/etc/ssl/certs/ca-certificates.crt"
 
 RIPPER_VERSION = "0.0.0-skeleton"
 
-logging.basicConfig(
-    level=settings.ARM_LOG_LEVEL.upper(),
-    format='{"ts":"%(asctime)s","level":"%(levelname)s","service":"arm-ripper","msg":%(message)r}',
-)
+# Each ripper container owns one optical drive — name the log file by the
+# device basename so multiple ripper containers (sr0, sr1, ...) don't
+# collide on the shared `./logs` host volume.
+configure_service_logging(f"arm-ripper-{Path(settings.ARM_DRIVE_DEV).name}", level=settings.ARM_LOG_LEVEL)
 logger = logging.getLogger("arm_ripper")
 
 

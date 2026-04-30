@@ -43,7 +43,7 @@ from sqlmodel import col, select
 from arm_backend.config import Settings
 from arm_backend.notification_format import format_event
 from arm_backend.seeders import CONFIG_SINGLETON_ID
-from arm_common import Config, Event, Job
+from arm_common import Config, Event, Job, with_log_context
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -184,25 +184,29 @@ class NotificationDispatcher:
 
             redacted = [redact_apprise_url(u) for u in urls]
             for event in unsent:
-                job = await self._load_job(db, event.job_id)
-                title, body = format_event(event, job)
-                try:
-                    await self._notifier.notify(urls, title, body)
-                    logger.info(
-                        "notification sent: event_id=%s type=%s urls=%s",
-                        event.id,
-                        event.event_type,
-                        redacted,
-                    )
-                except Exception as exc:
-                    logger.exception(
-                        "notification failed: event_id=%s type=%s urls=%s err=%s",
-                        event.id,
-                        event.event_type,
-                        redacted,
-                        exc,
-                    )
-                event.notified_at = datetime.now(UTC)
+                with with_log_context(
+                    job_id=event.job_id,
+                    session_application_id=event.session_application_id,
+                ):
+                    job = await self._load_job(db, event.job_id)
+                    title, body = format_event(event, job)
+                    try:
+                        await self._notifier.notify(urls, title, body)
+                        logger.info(
+                            "notification sent: event_id=%s type=%s urls=%s",
+                            event.id,
+                            event.event_type,
+                            redacted,
+                        )
+                    except Exception as exc:
+                        logger.exception(
+                            "notification failed: event_id=%s type=%s urls=%s err=%s",
+                            event.id,
+                            event.event_type,
+                            redacted,
+                            exc,
+                        )
+                    event.notified_at = datetime.now(UTC)
             await db.commit()
 
     async def _load_job(self, db: AsyncSession, job_id: str | None) -> Job | None:

@@ -24,6 +24,7 @@ import os
 import sys
 from pathlib import Path
 
+from arm_common import configure_service_logging, with_log_context
 from arm_common.schemas import (
     HardwareCaps,
     TranscodePresetView,
@@ -124,12 +125,7 @@ async def _run_encoder(
 
 async def run() -> int:
     cfg = TranscoderConfig()
-    logging.basicConfig(
-        level=cfg.log_level,
-        format='{"ts":"%(asctime)s","level":"%(levelname)s","service":"arm-transcode","task_id":"'
-        + cfg.task_id
-        + '","msg":%(message)r}',
-    )
+    configure_service_logging(cfg.service_name, level=cfg.log_level)
     logger.info("transcoder starting task_id=%s host=%s", cfg.task_id, cfg.hostname)
 
     api = BackendClient(
@@ -157,44 +153,52 @@ async def run() -> int:
             await ws.wait_until_connected(timeout=10.0)
 
             registered = await api.register(task_id=cfg.task_id, hw_caps=_detect_hw_caps())
-            await api.claim(cfg.task_id)
+            # Phase 12 — once register lands we have job_id / track_id /
+            # session_application_id; everything below logs with full context.
+            # `job_id` lives on `source_track`, not on the task row.
+            with with_log_context(
+                job_id=registered.source_track.job_id,
+                track_id=registered.task.source_track_id,
+                session_application_id=registered.task.session_application_id,
+            ):
+                await api.claim(cfg.task_id)
 
-            raw_input = Path(registered.raw_input_path)
-            final_output = Path(registered.media_root) / (registered.task.output_path or "")
-            preset = registered.transcode_preset
-            tool = preset.tool if preset is not None else TranscodeTool.NONE
-            duration = registered.source_track.duration_seconds
+                raw_input = Path(registered.raw_input_path)
+                final_output = Path(registered.media_root) / (registered.task.output_path or "")
+                preset = registered.transcode_preset
+                tool = preset.tool if preset is not None else TranscodeTool.NONE
+                duration = registered.source_track.duration_seconds
 
-            state = ProgressState()
-            try:
-                async with HeartbeatPump(api=api, ws=ws, task_id=cfg.task_id, state=state):
-                    size = await _run_encoder(
-                        tool=tool,
-                        preset=preset,
-                        raw_input=raw_input,
-                        final_output=final_output,
+                state = ProgressState()
+                try:
+                    async with HeartbeatPump(api=api, ws=ws, task_id=cfg.task_id, state=state):
+                        size = await _run_encoder(
+                            tool=tool,
+                            preset=preset,
+                            raw_input=raw_input,
+                            final_output=final_output,
+                            duration_seconds=duration,
+                            state=state,
+                            cancel_event=cancel_event,
+                        )
+                except CancelRequested:
+                    await api.fail(cfg.task_id, last_error="cancelled by user")
+                    logger.info("task cancelled cleanly")
+                    rc = 0
+                except Exception as exc:
+                    logger.exception("encoder failed: %s", exc)
+                    await api.fail(cfg.task_id, last_error=str(exc)[:500])
+                    rc = 1
+                else:
+                    relative = final_output.relative_to(registered.media_root).as_posix()
+                    await api.complete(
+                        cfg.task_id,
+                        output_path=relative,
+                        size_bytes=size,
                         duration_seconds=duration,
-                        state=state,
-                        cancel_event=cancel_event,
                     )
-            except CancelRequested:
-                await api.fail(cfg.task_id, last_error="cancelled by user")
-                logger.info("task cancelled cleanly")
-                rc = 0
-            except Exception as exc:
-                logger.exception("encoder failed: %s", exc)
-                await api.fail(cfg.task_id, last_error=str(exc)[:500])
-                rc = 1
-            else:
-                relative = final_output.relative_to(registered.media_root).as_posix()
-                await api.complete(
-                    cfg.task_id,
-                    output_path=relative,
-                    size_bytes=size,
-                    duration_seconds=duration,
-                )
-                logger.info("task complete output=%s size=%d", relative, size)
-                rc = 0
+                    logger.info("task complete output=%s size=%d", relative, size)
+                    rc = 0
     finally:
         await api.close()
 

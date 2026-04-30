@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { api, ApiError } from '../api/client'
 import ApplySessionDialog from '../components/ApplySessionDialog.vue'
+import JobLogsCard from '../components/JobLogsCard.vue'
 import { useTranscodesStore } from '../stores/transcodes'
 import type { ApplySessionResponse, JobDetailView, JobStatus } from '../api/types'
 import { isTerminalJobStatus } from '../utils/jobStatus'
@@ -205,6 +206,8 @@ function onApplied(resp: ApplySessionResponse): void {
       </tbody>
     </table>
   </div>
+
+  <JobLogsCard v-if="detail" :job-id="detail.job.id" />
 </template>
 
 <style scoped>

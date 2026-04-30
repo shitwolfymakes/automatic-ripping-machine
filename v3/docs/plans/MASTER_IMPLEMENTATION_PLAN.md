@@ -288,18 +288,22 @@ No DB migration was required — `Job.resumed_from_crash` ([job.py:34](../../pac
 
 ---
 
-## Phase 12 — Logs persistence + per-job log view
+## Phase 12 — Logs persistence + per-job log view (shipped)
 
 **Goal.** Every service's JSONL log is queryable by `job_id`; UI per-job view shows correlated lines; bug-report zip endpoint works.
 
 **Exit criteria.** `GET /api/logs/{job_id}.zip` returns a zip containing the per-job slice of every service log. UI log viewer live-tails via `logs.{job_id}` WS topic.
 
-**Deliverables:**
-1. **Structured logging helpers** in `arm_common` — shape from [05-cross-cutting.md § Logging](../arch/05-cross-cutting.md#logging). Enforced via a lint rule or test.
-2. **Per-service log files** at `/logs/<service>.log` with size-based rotation (10MB × 5).
-3. **Backend log-query** — grep across `/logs/*.log` for `job_id`; streaming response.
-4. **WS `logs.{job_id}` topic** via file-tail.
-5. **Zip endpoint** + UI download button on job detail page.
+**What shipped:**
+
+1. **Shared structured-logging helper** at [packages/arm_common/arm_common/logging.py](../../packages/arm_common/arm_common/logging.py) — `configure_service_logging(service_name)` installs a `JsonFormatter` on stdout *and* a `RotatingFileHandler(/logs/<service>.log, 10 MB × 5)`. Each line carries `{ts, level, service, job_id, track_id, session_application_id, msg, extra}` per [05-cross-cutting.md § Logging](../arch/05-cross-cutting.md#logging). Backend / ripper / transcode all replaced their `logging.basicConfig` blocks with one call. The file handler is best-effort — outside a container `/logs` may be unwritable, in which case stdout still carries every line so the openapi-snapshot regen and tests don't blow up.
+2. **`with_log_context(job_id=..., track_id=..., session_application_id=...)`** uses `contextvars` so async work inside the block stamps the correlation IDs without ceremony at every `logger.*` call site. Wrapped at the operation entry points: ripper `JobController.handle_disc_inserted` + per-track callbacks + `resume_inflight_job`; transcoder `amain` after register; `auto_session.apply_session_internal`; `transcode_dispatcher.spawn_pending` and `sweep_stale_claims` per-task; `notification_dispatcher._tick` per-event. Documented gotcha: `loop.run_in_executor` does NOT copy contextvars — wrap with `contextvars.copy_context().run(...)` at the executor boundary.
+3. **Per-task transcode log filename** — dispatcher injects `ARM_SERVICE_NAME=arm-transcode-{task_id_short}` at spawn so parallel transcoders don't clobber a shared `/logs/arm-transcode.log` rotation. Same convention as the existing container hostname.
+4. **Singleton `LogTailer`** at [services/backend/arm_backend/log_tailer.py](../../services/backend/arm_backend/log_tailer.py) — one asyncio task started in lifespan. Per drain it scandirs `/logs`, follows every `*.log` in append mode (seek-to-end on open so historical lines aren't replayed), parses each appended line as JSON, gates on `hub.subscriber_count(f"logs.{job_id}")`, and emits `log.line` envelopes via `hub.emit(persist=False, ...)`. Detects rotation via `st_ino` mismatch, drains the freshly-opened file in the same tick. Loop guard skips records whose `extra.logger` starts with `arm_backend.ws.hub` so the hub's own emit-failure logs don't feed back.
+5. **Backend logs router** at [services/backend/arm_backend/routers/logs.py](../../services/backend/arm_backend/routers/logs.py): `GET /api/logs/{job_id}` streams `application/x-ndjson` (per-file `?limit=` default 1000 / hard cap 10000, files alphabetical, no cross-file resort) and `GET /api/logs/{job_id}.zip` returns an in-memory `ZIP_DEFLATED` archive with one entry per service that contributed lines (per-entry caps: 5000 lines / 5 MB). Both gated on `require_jwt`; service tokens are rejected. The `.zip` route is declared first because FastAPI would otherwise let `/{job_id}` swallow `job_x.zip`.
+6. **`bug_report_zip_url` removed from `DiagnosticsResponse`** ([schemas/auth.py:69](../../packages/arm_common/arm_common/schemas/auth.py)) — it was a Phase-1 placeholder. The diagnostics endpoint is global; the zip URL is per-job. UI now hardcodes `/api/logs/{jobId}.zip` against the dedicated logs router instead of threading `?job_id=` through diagnostics.
+7. **UI log pane** at [services/ui/src/components/JobLogsCard.vue](../../services/ui/src/components/JobLogsCard.vue) — mounted on `JobDetail.vue` below the tracks card. On mount: GET `/api/logs/{jobId}?limit=200` to seed, then `wsClient.subscribe(\`logs.${jobId}\`, ...)` for live tail. "Download zip" button uses a fetch+blob+anchor pattern in [api/logs.ts](../../services/ui/src/api/logs.ts) so the JWT can ride on the request (a plain anchor `href` can't carry an `Authorization` header). 2000-line cap on the in-memory pane bounds memory; earlier lines remain in the zip.
+8. **Tests:** 23 new backend (`test_logging.py` × 7 covering JSONL shape + contextvar propagation + nesting + extra-override + asyncio.create_task inheritance + run_in_executor gotcha + extra.logger stamp; `test_log_tailer.py` × 7 covering subscriber gating + null/missing/bad-JSON / loop guard / rotation / new-file pickup; `test_logs_router.py` × 9 covering ndjson + per-file limit + hard cap + bad-JSON skip + zip per-entry cap + JWT enforcement + filename stamp). 3 new UI (`JobLogsCard.spec.ts` covering seed + live-tail append + zip-download). 324 backend/ripper/transcode + 26 UI; ruff format / lint / mypy clean on touched files; UI eslint + prettier clean; vue-tsc + vite build green; OpenAPI snapshot regenerated (added `/api/logs/{job_id}` and `/api/logs/{job_id}.zip`, dropped `bug_report_zip_url` from `DiagnosticsResponse`).
 
 **Depends on:** Phase 4 (WS hub), Phase 5 (UI).
 
