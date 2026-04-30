@@ -45,6 +45,7 @@ class ConfigView(BaseModel):
     block_on_miss: bool
     default_retention_policy: RetentionPolicy
     notification_apprise_urls: list[str]
+    notifications_enabled: bool
     updated_by_user_id: str | None
     updated_at: datetime | None
 
@@ -57,6 +58,7 @@ class ConfigUpdateRequest(BaseModel):
     block_on_miss: bool | None = None
     default_retention_policy: RetentionPolicy | None = None
     notification_apprise_urls: list[str] | None = None
+    notifications_enabled: bool | None = None
 
 
 class DiagnosticsServiceView(BaseModel):

@@ -265,17 +265,24 @@ No DB migration was required — `Job.resumed_from_crash` ([job.py:34](../../pac
 
 ---
 
-## Phase 11 — Notifications
+## Phase 11 — Notifications (shipped)
 
 **Goal.** Apprise dispatcher consumes typed events and fires outbound webhooks.
 
-**Exit criteria.** Adding an Apprise URL (`discord://...`, `mailto://...`, etc.) in the UI causes `rip.completed`, `rip.failed`, `session.completed` events to trigger notifications end-to-end.
+**Exit criteria.** With `notifications_enabled=true` and at least one Apprise URL configured, `rip.{completed,failed,partial}` and `session.{completed,failed,partial}` events trigger outbound notifications end-to-end. Disabled (the default) → no traffic.
 
-**Deliverables:**
-1. **`NotificationDispatcher` interface** + `AppriseDispatcher` implementation; iterates `config.notification_apprise_urls` on each event.
-2. **UI textarea** for Apprise URLs with validation on save.
-3. **Event payload shapes** frozen for the events we actually emit (new events welcome; existing ones never change shape — [03-protocol.md § Versioning](../arch/03-protocol.md#versioning)).
-4. **Redacting logger** — `config` row reads never log URLs / API keys.
+**What shipped:**
+
+1. **Polling dispatcher** at [services/backend/arm_backend/notification_dispatcher.py](../../services/backend/arm_backend/notification_dispatcher.py) — single asyncio task started in lifespan, mirrors `TranscodeDispatcher`. Each tick reads unsent notifiable events from `events`, loads the `Config` singleton, and either fires Apprise (when enabled + URLs present) or marks `notified_at` without dispatching (the "off out of the box" path). `AppriseNotifier` is a `Protocol` with `_RealAppriseNotifier` wrapping `apprise.Apprise().async_notify`; tests inject a fake.
+2. **`Config.notifications_enabled: bool` master toggle** ([config.py:31-34](../../packages/arm_common/arm_common/models/config.py)) defaults False. The URL list alone is not consent — the user must actively check "Enable notifications" in the UI before any traffic is generated. Surfaced in `ConfigView` / `ConfigUpdateRequest` and edited via a checkbox in [Config.vue](../../services/ui/src/views/Config.vue) above the existing Apprise textarea.
+3. **`Event.notified_at: datetime | None` watermark** ([event.py:34](../../packages/arm_common/arm_common/models/event.py)). Migration [0003_notifications.py](../../services/backend/migrations/versions/0003_notifications.py) adds the column + index, backfills `notified_at = emitted_at` on existing rows (avoids dumping the historical event log on first deploy), and adds `notifications_enabled` to `config` with `server_default=false`.
+4. **Server-side URL validation** in [routers/config.py](../../services/backend/arm_backend/routers/config.py) — `_first_invalid_apprise_url` runs each pasted URL through a fresh `apprise.Apprise().add(url)`. Failure returns 400 with a redacted detail (`"invalid apprise URL: <scheme>://****"`) so a 400 response is safe to paste into a bug report. Validation runs whether `notifications_enabled` is True or False.
+5. **Scheme-only redaction** via `redact_apprise_url(url) → "<scheme>://****"`. Apprise stashes credentials in netloc/path/query depending on the provider, so surgical masking is fragile. The dispatcher logs only redacted URLs; the config router logs nothing about config bodies. Asserted by a `caplog`-based test that ensures no raw credential token (`"AAA"` / `"BBB"`) ever appears in a log line.
+6. **Notifiable event types** are a frozen set: `rip.{completed,failed,partial}` + `session.{completed,failed,partial}`. Existing emit sites are untouched; payload shapes are frozen per [03-protocol.md § Versioning](../arch/03-protocol.md#versioning).
+7. **Best-effort semantics.** `notified_at` is set whether or not Apprise succeeded — a permanently-broken URL drops one notification rather than logspamming forever. Empty URL list and disabled state both still mark `notified_at` so events do not pile up while notifications are off.
+8. **Tests:** 20 new (`test_notification_dispatcher.py` × 9 covering disabled/enabled/empty/non-notifiable/already-notified/raises/multi-event/redaction; `test_notification_format.py` × 5 for title and body shapes; `test_config_apprise_validation.py` × 6 for round-trip and 400 redaction). 252 backend / 30 ripper / 23 UI; ruff format + ruff lint clean; mypy clean on the touched files (pre-existing test-file errors are unchanged); OpenAPI snapshot regenerated.
+
+**Depends on:** Phase 4 (events persist), Phase 5 (UI config form).
 
 **Depends on:** Phase 4 (events persist).
 

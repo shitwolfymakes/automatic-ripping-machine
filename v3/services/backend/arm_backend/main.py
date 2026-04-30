@@ -17,6 +17,10 @@ from arm_backend.crash_recovery import sweep_in_flight_jobs
 from arm_backend.db import SessionLocal
 from arm_backend.gpu_probe import probe_gpus
 from arm_backend.metadata import MetadataDispatcher
+from arm_backend.notification_dispatcher import (
+    NotificationDispatcher,
+    _RealAppriseNotifier,
+)
 from arm_backend.routers import (
     auth,
     config as config_router,
@@ -151,9 +155,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         dispatcher_task = asyncio.create_task(transcode_dispatcher.run())
     app.state.transcode_dispatcher = transcode_dispatcher
 
+    # Phase 11 — outbound Apprise notifications. Off out of the box; the
+    # dispatcher polls but no-ops until the user enables notifications in
+    # the UI and saves at least one valid Apprise URL.
+    notification_dispatcher = NotificationDispatcher(
+        settings=settings,
+        db_factory=SessionLocal,
+        notifier=_RealAppriseNotifier(),
+    )
+    notification_task = asyncio.create_task(notification_dispatcher.run())
+    app.state.notification_dispatcher = notification_dispatcher
+
     try:
         yield
     finally:
+        notification_dispatcher.stop()
+        try:
+            await asyncio.wait_for(notification_task, timeout=10.0)
+        except asyncio.TimeoutError:
+            notification_task.cancel()
         if transcode_dispatcher is not None:
             transcode_dispatcher.stop()
         if dispatcher_task is not None:

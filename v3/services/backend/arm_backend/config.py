@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     # Dispatcher tick interval — how often the spawn/sweep loop runs.
     ARM_TRANSCODE_DISPATCH_INTERVAL_SECONDS: int = 5
 
+    # Notification dispatcher tick interval — how often we poll the events
+    # table for unsent notifiable events and fire Apprise.
+    ARM_NOTIFICATION_DISPATCH_INTERVAL_SECONDS: int = 5
+
     # Backend container's own host-side mount paths. Required to spawn
     # transcoders via the docker socket: paths in `client.containers.run`'s
     # `volumes=` arg are interpreted by the host docker daemon, NOT by the

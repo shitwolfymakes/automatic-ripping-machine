@@ -21,6 +21,7 @@ async function reload() {
     block_on_miss: cfg.value.block_on_miss,
     default_retention_policy: cfg.value.default_retention_policy,
     notification_apprise_urls: [...cfg.value.notification_apprise_urls],
+    notifications_enabled: cfg.value.notifications_enabled,
   }
   appriseInput.value = (cfg.value.notification_apprise_urls ?? []).join('\n')
 }
@@ -88,9 +89,22 @@ async function save() {
         block on identify miss (otherwise rip immediately as placeholder)
       </label>
     </div>
+    <div class="row" style="margin-bottom: 12px">
+      <label class="row" style="gap: 6px">
+        <input
+          type="checkbox"
+          v-model="form.notifications_enabled"
+          data-testid="notifications-enabled"
+        />
+        Enable notifications (Apprise)
+      </label>
+    </div>
     <div class="field">
       <label>Apprise URLs (one per line)</label>
       <textarea v-model="appriseInput" rows="4" />
+      <p class="muted">
+        Notifications are off by default. Add URLs and check the box above to enable.
+      </p>
     </div>
     <div class="row">
       <button :disabled="submitting" type="submit">{{ submitting ? 'Saving…' : 'Save' }}</button>
