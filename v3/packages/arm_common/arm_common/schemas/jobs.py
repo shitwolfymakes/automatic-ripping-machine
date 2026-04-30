@@ -21,6 +21,7 @@ class JobView(BaseModel):
     title: str | None
     year: int | None
     metadata_json: dict[str, Any]
+    resumed_from_crash: bool
 
 
 class TrackView(BaseModel):

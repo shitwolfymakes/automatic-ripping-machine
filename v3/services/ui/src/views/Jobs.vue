@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
 import { useJobsStore } from '../stores/jobs'
+import { isTerminalJobStatus } from '../utils/jobStatus'
 
 const store = useJobsStore()
 
@@ -39,6 +40,13 @@ onUnmounted(() => {
           <td>{{ j.disc_type }}</td>
           <td>
             <span class="badge">{{ j.status }}</span>
+            <span
+              v-if="j.resumed_from_crash && !isTerminalJobStatus(j.status)"
+              :data-testid="`resumed-badge-${j.id}`"
+              class="badge"
+              style="margin-left: 4px"
+              >resumed from crash</span
+            >
           </td>
         </tr>
       </tbody>

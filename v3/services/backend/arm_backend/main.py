@@ -13,6 +13,7 @@ from sqlalchemy import delete
 from sqlmodel import col, select
 
 from arm_backend.config import settings
+from arm_backend.crash_recovery import sweep_in_flight_jobs
 from arm_backend.db import SessionLocal
 from arm_backend.gpu_probe import probe_gpus
 from arm_backend.metadata import MetadataDispatcher
@@ -120,6 +121,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # GPU probe — truncate-and-fill the gpus table so the dispatcher's first
     # tick sees a consistent inventory. Runs before the dispatcher starts.
     await _refresh_gpu_inventory(app.state.ws_hub)
+
+    # Phase 9 — reset every RIPPING job's tracks to queued and stamp
+    # resumed_from_crash. Idempotent across boots; no-op when nothing crashed.
+    try:
+        swept = await sweep_in_flight_jobs(SessionLocal)
+        if swept:
+            logger.info("backend startup: resumed %d crashed rip(s)", swept)
+    except Exception as exc:
+        logger.exception("startup crash-recovery sweep failed: %s", exc)
 
     docker_client = _build_docker_client()
     transcode_dispatcher: TranscodeDispatcher | None = None

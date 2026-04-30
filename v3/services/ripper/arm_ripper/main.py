@@ -8,6 +8,7 @@ from arm_ripper.backend_client import BackendClient
 from arm_ripper.config import settings
 from arm_ripper.drive_poll import DriveState, read_drive_status
 from arm_ripper.job_controller import JobController
+from arm_ripper.recovery import boot_probe
 from arm_ripper.ws_client import WSClient
 
 CA_BUNDLE_PATH = "/etc/ssl/certs/ca-certificates.crt"
@@ -91,6 +92,12 @@ async def amain() -> None:
         ) as ws:
             controller = JobController(client, drive_id, ws=ws)
             await ws.subscribe(f"ripper.commands.{drive_id}", controller.on_ws_command)
+            # Phase 9 — recover a crashed in-flight rip on this drive, if any.
+            # Logs + swallows all errors so a misbehaving probe never blocks boot.
+            try:
+                await boot_probe(client, drive_id, settings.ARM_DRIVE_DEV, controller)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("boot probe failed: %s", exc)
             await poll_loop(controller)
     finally:
         await client.close()

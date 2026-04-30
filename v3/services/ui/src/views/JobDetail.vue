@@ -5,6 +5,7 @@ import { api, ApiError } from '../api/client'
 import ApplySessionDialog from '../components/ApplySessionDialog.vue'
 import { useTranscodesStore } from '../stores/transcodes'
 import type { ApplySessionResponse, JobDetailView, JobStatus } from '../api/types'
+import { isTerminalJobStatus } from '../utils/jobStatus'
 
 const route = useRoute()
 const detail = ref<JobDetailView | null>(null)
@@ -74,6 +75,13 @@ function onApplied(resp: ApplySessionResponse): void {
         <div class="muted">Status</div>
         <div>
           <span class="badge">{{ detail.job.status }}</span>
+          <span
+            v-if="detail.job.resumed_from_crash && !isTerminalJobStatus(detail.job.status)"
+            data-testid="resumed-badge"
+            class="badge"
+            style="margin-left: 4px"
+            >resumed from crash</span
+          >
         </div>
       </div>
       <div>

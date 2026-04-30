@@ -38,6 +38,7 @@ def _view(status: JobStatus, *, title: str | None = None) -> JobView:
         title=title,
         year=None,
         metadata_json={},
+        resumed_from_crash=False,
     )
 
 
