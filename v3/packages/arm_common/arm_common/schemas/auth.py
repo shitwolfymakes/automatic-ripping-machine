@@ -68,4 +68,3 @@ class DiagnosticsServiceView(BaseModel):
 
 class DiagnosticsResponse(BaseModel):
     services: list[DiagnosticsServiceView]
-    bug_report_zip_url: str | None = None

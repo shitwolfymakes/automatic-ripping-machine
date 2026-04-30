@@ -44,6 +44,7 @@ from arm_common import (
     TranscodePreset,
     TranscodeTask,
     TranscodeTaskStatus,
+    with_log_context,
 )
 from arm_common.schemas import CollisionInfo
 
@@ -87,6 +88,28 @@ async def apply_session_internal(
         `skipped_reason` to surface collisions to the client.
       * Auto hook: catch all exceptions, log at WARN, swallow.
     """
+    with with_log_context(job_id=job.id):
+        return await _apply_session_internal(
+            db,
+            job=job,
+            session_id=session_id,
+            overwrite=overwrite,
+            created_by_user_id=created_by_user_id,
+            source=source,
+            hub=hub,
+        )
+
+
+async def _apply_session_internal(
+    db: AsyncSession,
+    *,
+    job: Job,
+    session_id: str,
+    overwrite: bool,
+    created_by_user_id: str | None,
+    source: ApplySource,
+    hub: WSHub | None,
+) -> ApplySessionOutcome:
     sess = (await db.execute(select(Session).where(col(Session.id) == session_id))).scalar_one_or_none()
     if sess is None:
         raise SessionNotFoundError(session_id)

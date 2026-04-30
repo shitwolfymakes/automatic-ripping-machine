@@ -38,6 +38,7 @@ from arm_common import (
     TranscodePreset,
     TranscodeTask,
     TranscodeTaskStatus,
+    with_log_context,
 )
 
 if TYPE_CHECKING:
@@ -139,49 +140,67 @@ class TranscodeDispatcher:
             return 0
         touched = 0
         for task in stale:
-            # Release any GPU this task held; a stale claim cannot be holding
-            # a real container any more.
-            await release_gpu_for_task(db, task.id)
-            if task.attempts >= self._settings.ARM_TRANSCODE_MAX_ATTEMPTS:
-                task.status = TranscodeTaskStatus.FAILED
-                task.last_error = f"exceeded retry limit after stale claim (attempts={task.attempts})"
-                logger.error(
-                    "transcode task hard-failed after %d stale resets task_id=%s",
-                    task.attempts,
-                    task.id,
+            # Per-task wrap so the per-job log view picks up every line emitted
+            # for this task. job_id is loaded once via application.
+            stale_application = (
+                await db.execute(
+                    select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id)
                 )
-                await self._emit_task_failed(db, task)
-                application = (
-                    await db.execute(
-                        select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id)
+            ).scalar_one_or_none()
+            stale_job_id = stale_application.job_id if stale_application is not None else None
+            with with_log_context(
+                job_id=stale_job_id,
+                track_id=task.source_track_id,
+                session_application_id=task.session_application_id,
+            ):
+                # Release any GPU this task held; a stale claim cannot be holding
+                # a real container any more.
+                await release_gpu_for_task(db, task.id)
+                if task.attempts >= self._settings.ARM_TRANSCODE_MAX_ATTEMPTS:
+                    task.status = TranscodeTaskStatus.FAILED
+                    task.last_error = f"exceeded retry limit after stale claim (attempts={task.attempts})"
+                    logger.error(
+                        "transcode task hard-failed after %d stale resets task_id=%s",
+                        task.attempts,
+                        task.id,
                     )
-                ).scalar_one()
-                from arm_backend.transcode_apply import aggregate_session_application
+                    await self._emit_task_failed(db, task)
+                    if stale_application is None:
+                        # Re-load defensively in case the row appeared between checks.
+                        stale_application = (
+                            await db.execute(
+                                select(SessionApplication).where(
+                                    col(SessionApplication.id) == task.session_application_id
+                                )
+                            )
+                        ).scalar_one()
+                    application = stale_application
+                    from arm_backend.transcode_apply import aggregate_session_application
 
-                outcome = await aggregate_session_application(db, application)
-                if outcome.event_type is not None:
-                    await self._hub.emit(
-                        topic="transcode.events",
-                        event_type=outcome.event_type,
-                        payload={
-                            "session_application_id": application.id,
-                            "session_id": application.session_id,
-                            "job_id": application.job_id,
-                            "status": application.status.value,
-                        },
-                        job_id=application.job_id,
-                        session=db,
+                    outcome = await aggregate_session_application(db, application)
+                    if outcome.event_type is not None:
+                        await self._hub.emit(
+                            topic="transcode.events",
+                            event_type=outcome.event_type,
+                            payload={
+                                "session_application_id": application.id,
+                                "session_id": application.session_id,
+                                "job_id": application.job_id,
+                                "status": application.status.value,
+                            },
+                            job_id=application.job_id,
+                            session=db,
+                        )
+                else:
+                    task.status = TranscodeTaskStatus.QUEUED
+                    task.claimed_by = None
+                    task.claim_heartbeat_at = None
+                    logger.warning(
+                        "transcode task reset to queued after stale claim task_id=%s attempts=%d",
+                        task.id,
+                        task.attempts,
                     )
-            else:
-                task.status = TranscodeTaskStatus.QUEUED
-                task.claimed_by = None
-                task.claim_heartbeat_at = None
-                logger.warning(
-                    "transcode task reset to queued after stale claim task_id=%s attempts=%d",
-                    task.id,
-                    task.attempts,
-                )
-            touched += 1
+                touched += 1
         await db.commit()
         return touched
 
@@ -248,24 +267,33 @@ class TranscodeDispatcher:
         queued = list(queued_all)[:slots]
         spawned = 0
         for task in queued:
-            preset = await self._resolve_preset_for_task(db, task)
-            assignment = await self._claim_gpu_for_task(db, task, preset)
-            if assignment.action == "queue":
-                logger.info(
-                    "transcode task waiting for GPU codec=%s task_id=%s",
-                    assignment.codec,
-                    task.id,
+            # Load the owning application once so the spawn log lines carry
+            # job_id for the per-job log view (Phase 12).
+            application = (
+                await db.execute(
+                    select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id)
                 )
-                continue
-            try:
-                self._spawn_container(task, assignment=assignment)
-                spawned += 1
-            except Exception as exc:
-                logger.exception("transcode spawn failed task_id=%s: %s", task.id, exc)
-                # Release the GPU claim so the task can retry on a later tick.
-                if assignment.gpu is not None:
-                    assignment.gpu.status = GpuStatus.AVAILABLE
-                    assignment.gpu.claimed_by_task_id = None
+            ).scalar_one_or_none()
+            job_id = application.job_id if application is not None else None
+            with with_log_context(job_id=job_id, session_application_id=task.session_application_id):
+                preset = await self._resolve_preset_for_task(db, task)
+                assignment = await self._claim_gpu_for_task(db, task, preset)
+                if assignment.action == "queue":
+                    logger.info(
+                        "transcode task waiting for GPU codec=%s task_id=%s",
+                        assignment.codec,
+                        task.id,
+                    )
+                    continue
+                try:
+                    self._spawn_container(task, assignment=assignment)
+                    spawned += 1
+                except Exception as exc:
+                    logger.exception("transcode spawn failed task_id=%s: %s", task.id, exc)
+                    # Release the GPU claim so the task can retry on a later tick.
+                    if assignment.gpu is not None:
+                        assignment.gpu.status = GpuStatus.AVAILABLE
+                        assignment.gpu.claimed_by_task_id = None
         await db.commit()
         return spawned
 
@@ -338,6 +366,9 @@ class TranscodeDispatcher:
             "ARM_BACKEND_URL": "https://arm-backend:8443",
             "ARM_SERVICE_TOKEN": self._settings.ARM_SERVICE_TOKEN,
             "ARM_LOG_LEVEL": self._settings.ARM_LOG_LEVEL,
+            # Phase 12 — per-task log filename so parallel transcoders don't
+            # clobber a shared `/logs/arm-transcode.log` rotation.
+            "ARM_SERVICE_NAME": f"arm-transcode-{task.id[-12:]}",
         }
         certs_root = Path(self._settings.ARM_HOST_CERTS_PATH)
         volumes = {

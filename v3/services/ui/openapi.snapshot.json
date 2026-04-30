@@ -2813,6 +2813,130 @@
           }
         }
       }
+    },
+    "/api/logs/{job_id}.zip": {
+      "get": {
+        "tags": [
+          "logs"
+        ],
+        "summary": "Download Job Logs Zip",
+        "description": "In-memory zip with one entry per service that has matching lines.\n\nEmpty entries are omitted \u2014 a service whose log has zero lines for\nthis job does not show up at all.",
+        "operationId": "download_job_logs_zip_api_logs__job_id__zip_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/logs/{job_id}": {
+      "get": {
+        "tags": [
+          "logs"
+        ],
+        "summary": "Stream Job Logs",
+        "description": "NDJSON stream of every `/logs/*.log` line whose `job_id` matches.\n\nFiles are read in alphabetical order; within a file, lines are\nyielded in append order. No cross-file resort \u2014 the consumer can\nsort by `ts` if global ordering matters.",
+        "operationId": "stream_job_logs_api_logs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1000,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3173,17 +3297,6 @@
             },
             "type": "array",
             "title": "Services"
-          },
-          "bug_report_zip_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Bug Report Zip Url"
           }
         },
         "type": "object",

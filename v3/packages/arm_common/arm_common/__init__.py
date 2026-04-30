@@ -1,3 +1,8 @@
+from arm_common.logging import (
+    JsonFormatter,
+    configure_service_logging,
+    with_log_context,
+)
 from arm_common.enums import (
     ContainerFormat,
     DiscType,
@@ -48,6 +53,7 @@ __all__ = [
     "IdentificationMode",
     "Job",
     "JobStatus",
+    "JsonFormatter",
     "MediaType",
     "OutputMode",
     "RetentionPolicy",
@@ -65,5 +71,7 @@ __all__ = [
     "TranscodeTool",
     "User",
     "VideoCodec",
+    "configure_service_logging",
     "new_id",
+    "with_log_context",
 ]

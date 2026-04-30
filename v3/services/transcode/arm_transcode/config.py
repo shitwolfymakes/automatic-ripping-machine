@@ -23,6 +23,10 @@ class TranscoderConfig:
         self.service_token = _required("ARM_SERVICE_TOKEN")
         self.log_level = os.environ.get("ARM_LOG_LEVEL", "info").upper()
         self.hostname = os.environ.get("HOSTNAME") or socket.gethostname()
+        # Phase 12 — dispatcher injects per-task to keep parallel transcoders
+        # from clobbering a shared `arm-transcode.log`. Direct invocation
+        # (CI / `docker run`) falls back to the bare service name.
+        self.service_name = os.environ.get("ARM_SERVICE_NAME", "arm-transcode")
 
     @property
     def ws_url(self) -> str:

@@ -16,6 +16,7 @@ from arm_backend.config import settings
 from arm_backend.crash_recovery import sweep_in_flight_jobs
 from arm_backend.db import SessionLocal
 from arm_backend.gpu_probe import probe_gpus
+from arm_backend.log_tailer import LogTailer
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.notification_dispatcher import (
     NotificationDispatcher,
@@ -28,6 +29,7 @@ from arm_backend.routers import (
     drives,
     health,
     jobs,
+    logs as logs_router,
     rip_presets,
     ripper,
     sessions,
@@ -39,12 +41,9 @@ from arm_backend.seeders import CONFIG_SINGLETON_ID, run_seeders
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
 from arm_backend.ws import WSHub
 from arm_backend.ws.router import router as ws_router
-from arm_common import Config, Gpu, GpuStatus
+from arm_common import Config, Gpu, GpuStatus, configure_service_logging
 
-logging.basicConfig(
-    level=settings.ARM_LOG_LEVEL.upper(),
-    format='{"ts":"%(asctime)s","level":"%(levelname)s","service":"arm-backend","msg":%(message)r}',
-)
+configure_service_logging("arm-backend", level=settings.ARM_LOG_LEVEL)
 logger = logging.getLogger("arm_backend")
 
 
@@ -166,9 +165,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     notification_task = asyncio.create_task(notification_dispatcher.run())
     app.state.notification_dispatcher = notification_dispatcher
 
+    # Phase 12 — singleton tail of `/logs/*.log` → `logs.{job_id}` WS topic.
+    log_tailer = LogTailer(app.state.ws_hub)
+    log_tailer_task = asyncio.create_task(log_tailer.run())
+    app.state.log_tailer = log_tailer
+
     try:
         yield
     finally:
+        log_tailer.stop()
+        try:
+            await asyncio.wait_for(log_tailer_task, timeout=10.0)
+        except asyncio.TimeoutError:
+            log_tailer_task.cancel()
         notification_dispatcher.stop()
         try:
             await asyncio.wait_for(notification_task, timeout=10.0)
@@ -197,6 +206,7 @@ app.include_router(transcoder.router)
 app.include_router(transcodes.router)
 app.include_router(config_router.router)
 app.include_router(diagnostics.router)
+app.include_router(logs_router.router)
 app.include_router(ws_router)
 
 
