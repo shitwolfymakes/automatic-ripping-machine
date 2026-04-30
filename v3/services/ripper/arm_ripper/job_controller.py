@@ -4,7 +4,7 @@ from pathlib import Path
 
 import httpx
 
-from arm_common import Job, JobStatus, TrackStatus
+from arm_common import DiscType, Job, JobStatus, TrackStatus
 from arm_common.schemas import JobView, RipStartResponse, ScanResult, TrackView, WSEnvelope
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.rip import RipResult, rip_all
@@ -190,8 +190,38 @@ class JobController:
             rip_start.rip_preset_id,
             len(rip_start.tracks),
         )
+        await self._execute_rip(
+            job_id=job.id,
+            disc_type=job.disc_type,
+            device_path=device_path,
+            rip_start=rip_start,
+        )
 
-        output_dir = RAW_ROOT / job.id
+    async def resume_inflight_job(self, job: JobView, device_path: str) -> None:
+        """Phase 9 — drive a crash-recovered rip from the boot probe.
+
+        The backend's `/resume` endpoint resets tracks to QUEUED and
+        sets `resumed_from_crash=True`; we then run the same rip-loop
+        as a fresh disc would.
+        """
+        rip_start = await self._client.resume(job.id)
+        logger.info("rip-resume job_id=%s tracks=%d", job.id, len(rip_start.tracks))
+        await self._execute_rip(
+            job_id=job.id,
+            disc_type=job.disc_type,
+            device_path=device_path,
+            rip_start=rip_start,
+        )
+
+    async def _execute_rip(
+        self,
+        *,
+        job_id: str,
+        disc_type: DiscType,
+        device_path: str,
+        rip_start: RipStartResponse,
+    ) -> None:
+        output_dir = RAW_ROOT / job_id
         output_dir.mkdir(parents=True, exist_ok=True)
 
         async def on_track_start(track: TrackView) -> None:
@@ -229,7 +259,7 @@ class JobController:
             logger.debug("track %s progress=%.2f", track.id, fraction)
             if self._ws is not None:
                 await self._ws.publish(
-                    topic=f"ripper.progress.{job.id}",
+                    topic=f"ripper.progress.{job_id}",
                     event_type="ripper.progress",
                     payload={
                         "track_id": track.id,
@@ -238,7 +268,7 @@ class JobController:
                 )
 
         await rip_all(
-            disc_type=job.disc_type,
+            disc_type=disc_type,
             device_path=device_path,
             tracks=list(rip_start.tracks),
             output_dir=output_dir,
@@ -247,8 +277,8 @@ class JobController:
             on_track_progress=on_track_progress,
         )
 
-        completed = await self._rip_complete_with_retry(job.id)
-        logger.info("rip-complete job_id=%s status=%s", job.id, completed.status.value)
+        completed = await self._rip_complete_with_retry(job_id)
+        logger.info("rip-complete job_id=%s status=%s", job_id, completed.status.value)
 
         await self._eject_with_retry(device_path)
         await asyncio.sleep(EJECT_GRACE_SECONDS)

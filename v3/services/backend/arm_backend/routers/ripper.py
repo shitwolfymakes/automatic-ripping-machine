@@ -13,6 +13,7 @@ from arm_backend.auth import (
     require_service_token,
 )
 from arm_backend.auto_session import maybe_auto_apply_session
+from arm_backend.crash_recovery import reset_job_for_recovery
 from arm_backend.db import get_session
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
@@ -255,6 +256,94 @@ async def rip_start(
         rip_preset_id=preset_id,
         tracks=[TrackView.model_validate(t) for t in refreshed],
     )
+
+
+@router.post("/jobs/{job_id}/resume", response_model=RipStartResponse)
+async def resume(
+    job: Job = Depends(require_drive_owner_by_job),
+    session: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
+) -> RipStartResponse:
+    """Phase 9 — per-job crash-recovery reset for the 'only ripper crashed'
+    case. Idempotent: re-running on an already-reset job is a no-op.
+    Returns the same shape as `rip-start` so the ripper's existing flow
+    continues unchanged.
+    """
+    if job.status != JobStatus.RIPPING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"job not in ripping state: status={job.status.value}",
+        )
+
+    preset_id = _DEFAULT_RIP_PRESET_BY_DISC_TYPE.get(job.disc_type)
+    if preset_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"no default rip preset for disc_type={job.disc_type.value}",
+        )
+
+    await reset_job_for_recovery(session, job)
+    await session.commit()
+
+    refreshed = (
+        (await session.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index))))
+        .scalars()
+        .all()
+    )
+    logger.info("rip-resume job_id=%s tracks=%d", job.id, len(refreshed))
+
+    await hub.emit(
+        topic="ripper.events",
+        event_type="rip.resumed",
+        payload={
+            "job_id": job.id,
+            "drive_id": job.drive_id,
+            "track_count": len(refreshed),
+            "resumed_from_crash": True,
+        },
+        job_id=job.id,
+        session=session,
+    )
+    await session.commit()
+
+    return RipStartResponse(
+        job_id=job.id,
+        rip_preset_id=preset_id,
+        tracks=[TrackView.model_validate(t) for t in refreshed],
+    )
+
+
+@router.get(
+    "/drives/{drive_id}/in-flight-job",
+    response_model=JobView,
+    dependencies=[Depends(require_service_token)],
+)
+async def get_in_flight_job(drive_id: str, session: AsyncSession = Depends(get_session)) -> Job:
+    """Phase 9 — boot-probe lookup. Returns the single RIPPING job assigned
+    to this drive, if any. 404 if the drive is unknown or no in-flight job
+    exists. Multiple matches (data-model violation) log + return the first.
+    """
+    drive = (await session.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
+    if drive is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {drive_id}")
+    rows = (
+        (
+            await session.execute(
+                select(Job).where(col(Job.drive_id) == drive_id).where(col(Job.status) == JobStatus.RIPPING)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no in-flight job on this drive")
+    if len(rows) > 1:
+        logger.error(
+            "data-model violation: %d RIPPING jobs on drive_id=%s; returning first",
+            len(rows),
+            drive_id,
+        )
+    return rows[0]
 
 
 @router.patch("/tracks/{track_id}", response_model=TrackView)

@@ -39,6 +39,7 @@ export interface JobView {
   title: string | null
   year: number | null
   metadata_json: Record<string, unknown>
+  resumed_from_crash: boolean
 }
 
 export interface TrackView {

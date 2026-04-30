@@ -75,3 +75,19 @@ class BackendClient:
         )
         r.raise_for_status()
         return JobView.model_validate(r.json())
+
+    async def get_in_flight_job(self, drive_id: str) -> JobView | None:
+        """Phase 9 — boot-probe lookup. Returns None on 404."""
+        r = await self._client.get(f"/api/ripper/drives/{drive_id}/in-flight-job")
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        return JobView.model_validate(r.json())
+
+    async def resume(self, job_id: str) -> RipStartResponse:
+        """Phase 9 — per-job crash-recovery reset. Same response shape as
+        rip-start so the ripper's existing flow continues unchanged.
+        """
+        r = await self._client.post(f"/api/ripper/jobs/{job_id}/resume")
+        r.raise_for_status()
+        return RipStartResponse.model_validate(r.json())
