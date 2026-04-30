@@ -15,6 +15,7 @@ dependencies = [
     "argon2-cffi>=23.1",
     "pyjwt>=2.9",
     "docker>=7.1",
+    "apprise>=1.9",
     "arm_common",
 ]
 

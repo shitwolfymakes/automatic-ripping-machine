@@ -31,3 +31,4 @@ class Event(SQLModel, table=True):
         default_factory=dict,
         sa_column=Column(JSONB, nullable=False, server_default="{}"),
     )
+    notified_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True, index=True))

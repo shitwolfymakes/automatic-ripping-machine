@@ -28,6 +28,10 @@ class Config(SQLModel, table=True):
         default_factory=list,
         sa_column=Column(ARRAY(String), nullable=False, server_default="{}"),
     )
+    notifications_enabled: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default="false"),
+    )
     session_signing_key: bytes | None = Field(sa_column=Column(LargeBinary, nullable=True))
     updated_by_user_id: str | None = Field(
         sa_column=Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)

@@ -289,6 +289,7 @@ export interface ConfigView {
   block_on_miss: boolean
   default_retention_policy: string
   notification_apprise_urls: string[]
+  notifications_enabled: boolean
   updated_by_user_id: string | null
   updated_at: string | null
 }
@@ -301,6 +302,7 @@ export interface ConfigUpdateRequest {
   block_on_miss?: boolean
   default_retention_policy?: string
   notification_apprise_urls?: string[]
+  notifications_enabled?: boolean
 }
 
 export interface DiagnosticsServiceView {
