@@ -29,6 +29,7 @@ env:
   UV_VERSION: '0.11.x'
   PYTHON_VERSION: '3.14'   # must match v3/pyproject.toml requires-python
   NODE_VERSION: '24'
+  RUFF_VERSION: '0.15.11'  # must match v3/.pre-commit-config.yaml rev
 
 jobs:
   lint-python:
@@ -45,8 +46,10 @@ jobs:
           version: ${{ env.UV_VERSION }}
           python-version: ${{ env.PYTHON_VERSION }}
       - run: uv sync --frozen
-      - run: uv run ruff format --check .
-      - run: uv run ruff check .
+      # ruff is managed by pre-commit (not in v3 dev-deps) — match the
+      # pre-commit-config.yaml pin via uvx so local + CI agree.
+      - run: uvx --from "ruff==${RUFF_VERSION}" ruff format --check .
+      - run: uvx --from "ruff==${RUFF_VERSION}" ruff check .
       - name: mypy
         run: |
           uv run mypy \
@@ -136,7 +139,7 @@ jobs:
         working-directory: v3
     env:
       ARM_SERVICE_TOKEN: ci-dummy-token
-      POSTGRES_URL: postgresql+asyncpg://arm:arm@localhost:5432/arm
+      DATABASE_URL: postgresql+asyncpg://arm:arm@localhost:5432/arm
       ARM_LOG_LEVEL: warning
     steps:
       - uses: actions/checkout@v4
