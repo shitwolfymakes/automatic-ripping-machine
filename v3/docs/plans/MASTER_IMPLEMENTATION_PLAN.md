@@ -359,17 +359,28 @@ No DB migration was required — `Job.resumed_from_crash` ([job.py:34](../../pac
 
 ---
 
-## Phase 15 — Integration rig + full exit criteria
+## Phase 15 — Integration rig + full exit criteria (partial — see status below)
 
 **Goal.** Big Buck Bunny ISO end-to-end rip + transcode on a developer's machine, plus the crash-recovery exercise, plus one real BD/DVD/CD rip done on a contributor's machine.
 
 **Exit criteria.** Every checkbox in [08-v2-isolation-and-cutover.md § Readiness criteria](../arch/08-v2-isolation-and-cutover.md#readiness-criteria-for-cutover) is ticked.
 
-**Deliverables:**
-1. **`devtools/arm-test-rip`** — mounts BBB ISO as a loop device in a disposable ripper container; asserts `/raw/<job_id>/` layout + metadata.
-2. **Contract test suite** — OpenAPI published from Backend vs `arm_common.schemas` on every PR.
-3. **Crash drill** — scripted "kill -9 arm-backend mid-rip-batch; docker compose up -d; assert recovery."
-4. **Real-disc smoke doc** — checklist for contributors running a physical BD/DVD/CD rip before cutover.
+**What shipped:**
+
+1. **Crash drill — `devtools/crash-drill.sh`** ([../../devtools/crash-drill.sh](../../devtools/crash-drill.sh)) — bash drill that injects a synthetic `ripping` job + `in_progress` track via psql, force-kills `armv3-backend` (`docker kill -s KILL`), brings it back via `docker compose up -d`, and asserts the lifespan-startup sweep flipped the track to `queued`/`attempts=1` and stamped `resumed_from_crash=true`. Idempotent cleanup via `trap EXIT`. Prompts before destructive action; `--yes` skips. Drill **passed live** against the dev stack on first proper run.
+2. **OpenAPI snapshot regen — `devtools/regen-openapi-snapshot.sh`** ([../../devtools/regen-openapi-snapshot.sh](../../devtools/regen-openapi-snapshot.sh)) — formalizes the path the CI `openapi-drift` job's failure message points at. Imports `arm_backend.main:app`, dumps `app.openapi()` to `services/ui/openapi.snapshot.json`, then `npm run openapi-types` if the UI's `node_modules` is present. Smoke-tested clean (no diff → snapshot already current).
+3. **Real-disc smoke checklist — `docs/contributors/real-disc-smoke.md`** ([../contributors/real-disc-smoke.md](../contributors/real-disc-smoke.md)) — host prep, fresh-install vs dev-stack run paths, what to verify (detection / identification / rip / transcode / terminal status / logs zip), what to capture for the PR, known gotchas (MakeMKV beta key rotation, copy-protected discs, slow MusicBrainz, lazy transcode-image pull), and the BD/DVD/CD results table that gates cutover.
+4. **Contract test surface** — OpenAPI drift detection ships in `v3-ci.yml` (Phase 14) as the `openapi-drift` job; the regen helper above closes the loop. The "Contract test suite" deliverable per the original plan is largely covered by this drift check plus the existing pytest in `services/backend/tests/` (which exercises router shapes via `TestClient`); a separate framework was not added.
+
+**Validated end-to-end on this dev stack:**
+
+- DVD rip path — **proven 4×** against Sintel DVD: 5 video tracks each, all `done`, ~3.4 GB raw output per rip (`v3/raw/job_*/title_t0[0-4].mkv`). Disc identification (OMDB) populates `title='Sintel' year=2010` cleanly.
+
+**Outstanding (gates cutover):**
+
+- **BBB ISO rig (`devtools/arm-test-rip`)** — **deferred to v3.1**. The plan envisioned mounting BBB.iso as a loop device into a ripper container, but `read_drive_status` does a SCSI ioctl that fails on `/dev/loop*`. A clean fix is a small ripper code change: `--manual-trigger /path/to/iso.iso` mode that bypasses the poll loop and calls `JobController.handle_disc_inserted` directly. Tracked at [07-open-questions.md](../arch/07-open-questions.md) as a v3.1 follow-up. **Cutover impact:** the readiness criterion at [08-v2-isolation-and-cutover.md § Readiness](../arch/08-v2-isolation-and-cutover.md#readiness-criteria-for-cutover) line 200 ("produces a transcoded file using the Big Buck Bunny ISO fixture") needs to be revisited or fulfilled by a real-DVD substitute.
+- **BD + CD smoke** — neither has been executed on this dev stack. Sintel covers the DVD column of the smoke matrix; a Blu-ray and an audio CD still need a real rip on a contributor's machine.
+- **Transcode-against-real-rip end-to-end** — `transcode_tasks` table is empty across all 4 successful Sintel rips; no `session_applications` were ever created for them. The dispatcher → ephemeral transcoder → media-output path has unit-test coverage but no integration evidence against a real ripped tree. To validate: apply a session to one of the existing `ripped` jobs via `POST /api/jobs/{job_id}/transcode` (UI form) and watch a transcoder spawn.
 
 **Depends on:** Phases 3, 7, 9.
 
