@@ -27,6 +27,7 @@ concurrency:
 
 env:
   UV_VERSION: '0.11.x'
+  PYTHON_VERSION: '3.14'   # must match v3/pyproject.toml requires-python
   NODE_VERSION: '24'
 
 jobs:
@@ -42,6 +43,7 @@ jobs:
         with:
           enable-cache: true
           version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
       - run: uv sync --frozen
       - run: uv run ruff format --check .
       - run: uv run ruff check .
@@ -101,6 +103,7 @@ jobs:
         with:
           enable-cache: true
           version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
       - run: uv sync --frozen
       - run: uv run pytest -v
 
@@ -141,6 +144,7 @@ jobs:
         with:
           enable-cache: true
           version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
       - run: uv sync --frozen
       - name: Generate live OpenAPI from FastAPI app
         run: |
