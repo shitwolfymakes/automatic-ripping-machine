@@ -2,8 +2,8 @@
 #
 # Trigger: pushing a tag matching `v3.*` (e.g. v3.0.0, v3.0.0-alpha-2).
 # Per-service images publish to:
-#   docker.io/${{ vars.DOCKERHUB_NAMESPACE }}/arm-<service>:<tag>
-#   docker.io/${{ vars.DOCKERHUB_NAMESPACE }}/arm-<service>:latest  (only on stable tags)
+#   docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-<service>:<tag>
+#   docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-<service>:latest  (only on stable tags)
 #
 # Each image is:
 #   1. Built from v3/services/<service>/Dockerfile (context = v3/).
@@ -16,11 +16,12 @@
 #     --certificate-identity=https://github.com/<owner>/<repo>/.github/workflows/v3-release.yml@refs/tags/<tag> \
 #     --certificate-oidc-issuer=https://token.actions.githubusercontent.com
 #
-# Required repo configuration:
+# Required repo configuration (all under secrets, even the namespace —
+# could be a `vars.` if not for fork convenience; cutover will revisit):
 #   secrets.DOCKERHUB_USERNAME    — Docker Hub login (username, not email)
 #   secrets.DOCKERHUB_TOKEN       — Docker Hub access token (Read & Write scope)
-#   vars.DOCKERHUB_NAMESPACE      — repo variable, e.g. "shitwolfymakes"
-#                                   (cutover commit will flip this to "automaticrippingmachine")
+#   secrets.DOCKERHUB_NAMESPACE   — Docker Hub namespace, e.g. "shitwolfymakes"
+#                                   (cutover commit flips to "automaticrippingmachine")
 name: v3 release
 
 on:
@@ -54,12 +55,12 @@ jobs:
 
       - name: Verify required repo configuration
         env:
-          NS: ${{ vars.DOCKERHUB_NAMESPACE }}
+          NS: ${{ secrets.DOCKERHUB_NAMESPACE }}
           USER: ${{ secrets.DOCKERHUB_USERNAME }}
           TOK: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           missing=()
-          [[ -z "$NS"   ]] && missing+=("vars.DOCKERHUB_NAMESPACE")
+          [[ -z "$NS"   ]] && missing+=("secrets.DOCKERHUB_NAMESPACE")
           [[ -z "$USER" ]] && missing+=("secrets.DOCKERHUB_USERNAME")
           [[ -z "$TOK"  ]] && missing+=("secrets.DOCKERHUB_TOKEN")
           if (( ${#missing[@]} )); then
@@ -77,7 +78,7 @@ jobs:
         # `latest` tag only for stable releases (no pre-release suffix).
         uses: docker/metadata-action@v5
         with:
-          images: docker.io/${{ vars.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}
+          images: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}
           tags: |
             type=ref,event=tag
             type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
@@ -103,7 +104,7 @@ jobs:
       - uses: anchore/sbom-action@v0
         id: sbom
         with:
-          image: docker.io/${{ vars.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}@${{ steps.build.outputs.digest }}
+          image: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}@${{ steps.build.outputs.digest }}
           format: spdx-json
           output-file: /tmp/sbom-${{ matrix.service }}.spdx.json
           upload-artifact: false
@@ -111,13 +112,13 @@ jobs:
       - name: Sign image (cosign keyless)
         env:
           COSIGN_EXPERIMENTAL: '1'
-          IMAGE: docker.io/${{ vars.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}@${{ steps.build.outputs.digest }}
+          IMAGE: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}@${{ steps.build.outputs.digest }}
         run: cosign sign --yes "$IMAGE"
 
       - name: Attest SBOM (cosign keyless)
         env:
           COSIGN_EXPERIMENTAL: '1'
-          IMAGE: docker.io/${{ vars.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}@${{ steps.build.outputs.digest }}
+          IMAGE: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}@${{ steps.build.outputs.digest }}
         run: |
           cosign attest --yes \
             --predicate /tmp/sbom-${{ matrix.service }}.spdx.json \

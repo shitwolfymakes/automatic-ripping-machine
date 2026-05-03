@@ -87,12 +87,12 @@ jobs:
 
       - name: Verify required repo configuration
         env:
-          NS: ${{ vars.DOCKERHUB_NAMESPACE }}
+          NS: ${{ secrets.DOCKERHUB_NAMESPACE }}
           USER: ${{ secrets.DOCKERHUB_USERNAME }}
           TOK: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           missing=()
-          [[ -z "$NS"   ]] && missing+=("vars.DOCKERHUB_NAMESPACE")
+          [[ -z "$NS"   ]] && missing+=("secrets.DOCKERHUB_NAMESPACE")
           [[ -z "$USER" ]] && missing+=("secrets.DOCKERHUB_USERNAME")
           [[ -z "$TOK"  ]] && missing+=("secrets.DOCKERHUB_TOKEN")
           if (( ${#missing[@]} )); then
@@ -109,7 +109,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: docker.io/${{ vars.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}
+          images: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}
           tags: |
             type=raw,value=${{ needs.resolve-tag.outputs.tag }}
             type=raw,value=latest
@@ -135,7 +135,7 @@ jobs:
 
       - uses: anchore/sbom-action@v0
         with:
-          image: docker.io/${{ vars.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}@${{ steps.build.outputs.digest }}
+          image: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}@${{ steps.build.outputs.digest }}
           format: spdx-json
           output-file: /tmp/sbom-${{ matrix.service }}.spdx.json
           upload-artifact: false
@@ -143,13 +143,13 @@ jobs:
       - name: Sign image (cosign keyless)
         env:
           COSIGN_EXPERIMENTAL: '1'
-          IMAGE: docker.io/${{ vars.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}@${{ steps.build.outputs.digest }}
+          IMAGE: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}@${{ steps.build.outputs.digest }}
         run: cosign sign --yes "$IMAGE"
 
       - name: Attest SBOM (cosign keyless)
         env:
           COSIGN_EXPERIMENTAL: '1'
-          IMAGE: docker.io/${{ vars.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}@${{ steps.build.outputs.digest }}
+          IMAGE: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}@${{ steps.build.outputs.digest }}
         run: |
           cosign attest --yes \
             --predicate /tmp/sbom-${{ matrix.service }}.spdx.json \
