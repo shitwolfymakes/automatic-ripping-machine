@@ -14,6 +14,7 @@ async function logout() {
 <template>
   <nav class="topnav">
     <strong>ARM</strong>
+    <RouterLink to="/dashboard" active-class="active">Dashboard</RouterLink>
     <RouterLink to="/jobs" active-class="active">Jobs</RouterLink>
     <RouterLink to="/drives" active-class="active">Drives</RouterLink>
     <RouterLink to="/sessions" active-class="active">Sessions</RouterLink>
