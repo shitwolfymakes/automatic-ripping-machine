@@ -116,6 +116,16 @@ async def rip_title(
         streamer.cancel()
         return RipResult(ok=False, error=f"makemkvcon timed out after {RIP_TIMEOUT_SECONDS}s")
     finally:
+        # Cancel-safe cleanup: if the parent task was cancelled (abandon
+        # flow), the subprocess is still running and holding fds on the raw
+        # dir. Kill it before letting CancelledError propagate so rmtree
+        # can finish clean.
+        if proc.returncode is None:
+            proc.kill()
+            try:
+                await proc.wait()
+            except BaseException:
+                pass
         streamer.cancel()
 
     if proc.returncode != 0:

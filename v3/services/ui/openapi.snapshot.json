@@ -929,7 +929,7 @@
           "jobs"
         ],
         "summary": "Abandon Job",
-        "description": "Move a non-terminal job to `abandoned`. Used to clear a job parked at\n`awaiting_user_id` (or any other in-flight state) so the drive's\nsingle-flight lock releases and a fresh manual rip can run.\n\nWakes any ripper waiter (`_await_resolution`) by emitting\n`identify.resolved` on the drive's commands topic; the waiter polls,\nsees the non-IDENTIFIED status, and exits the pipeline cleanly.",
+        "description": "Move a non-terminal job to `abandoned` and tell the ripper to clean up.\n\nTwo cases the ripper handles via the `job.abandoned` WS command:\n  * AWAITING_USER_ID \u2014 the ripper is parked in `_await_resolution`;\n    the waiter polls, sees the non-IDENTIFIED status, exits cleanly.\n  * RIPPING \u2014 the ripper has an active scan/identify/rip pipeline. The\n    WS handler cancels the asyncio task, which kills the makemkvcon\n    subprocess so file handles release on `/raw/<id>/`.\n\n`delete_raw` is plumbed in the WS payload because only the ripper has\n`/raw` mounted; doing the rmtree here would silently no-op (and used to,\npre-fix). Even when there's no active task, the ripper still runs the\nrmtree against any orphaned partial-rip directory.",
         "operationId": "abandon_job_api_jobs__job_id__abandon_post",
         "parameters": [
           {

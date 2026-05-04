@@ -39,6 +39,16 @@ async def rip_data(device_path: str, output_dir: Path) -> RipResult:
         proc.kill()
         await proc.wait()
         return RipResult(ok=False, error=f"dd timed out after {DATA_RIP_TIMEOUT_SECONDS}s")
+    finally:
+        # Cancel-safe: if the parent task was cancelled (abandon flow),
+        # dd is still running. Kill it before letting CancelledError
+        # propagate so /raw/<id>/ rmtree finishes clean.
+        if proc.returncode is None:
+            proc.kill()
+            try:
+                await proc.wait()
+            except BaseException:
+                pass
 
     if proc.returncode != 0:
         stderr = b""

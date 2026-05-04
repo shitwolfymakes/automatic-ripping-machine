@@ -67,6 +67,15 @@ async def rip_cd(
             idx: RipResult(ok=False, error=f"abcde timed out after {CD_RIP_TIMEOUT_SECONDS}s") for idx in track_indexes
         }
     finally:
+        # Cancel-safe: if the parent task was cancelled (abandon flow),
+        # abcde is still running and writing to the raw dir. Kill it
+        # before letting CancelledError propagate.
+        if proc.returncode is None:
+            proc.kill()
+            try:
+                await proc.wait()
+            except BaseException:
+                pass
         conf_path.unlink(missing_ok=True)
 
     stdout = stdout_b.decode(errors="replace")

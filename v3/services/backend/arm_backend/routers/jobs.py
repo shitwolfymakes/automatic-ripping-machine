@@ -1,6 +1,4 @@
 import logging
-import shutil
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
@@ -91,11 +89,6 @@ _NON_TERMINAL_STATUSES: frozenset[JobStatus] = frozenset(
     }
 )
 
-# Backend mounts the same `./raw` host volume as the ripper at `/raw`, so
-# we can wipe a job's partial-rip directory directly. Path is computed
-# rather than constant so tests can monkeypatch.
-RAW_ROOT = Path("/raw")
-
 
 @router.post("/{job_id}/abandon", response_model=JobView)
 async def abandon_job(
@@ -105,13 +98,19 @@ async def abandon_job(
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> Job:
-    """Move a non-terminal job to `abandoned`. Used to clear a job parked at
-    `awaiting_user_id` (or any other in-flight state) so the drive's
-    single-flight lock releases and a fresh manual rip can run.
+    """Move a non-terminal job to `abandoned` and tell the ripper to clean up.
 
-    Wakes any ripper waiter (`_await_resolution`) by emitting
-    `identify.resolved` on the drive's commands topic; the waiter polls,
-    sees the non-IDENTIFIED status, and exits the pipeline cleanly.
+    Two cases the ripper handles via the `job.abandoned` WS command:
+      * AWAITING_USER_ID — the ripper is parked in `_await_resolution`;
+        the waiter polls, sees the non-IDENTIFIED status, exits cleanly.
+      * RIPPING — the ripper has an active scan/identify/rip pipeline. The
+        WS handler cancels the asyncio task, which kills the makemkvcon
+        subprocess so file handles release on `/raw/<id>/`.
+
+    `delete_raw` is plumbed in the WS payload because only the ripper has
+    `/raw` mounted; doing the rmtree here would silently no-op (and used to,
+    pre-fix). Even when there's no active task, the ripper still runs the
+    rmtree against any orphaned partial-rip directory.
     """
     job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
     if job is None:
@@ -126,13 +125,20 @@ async def abandon_job(
     db.add(job)
     await db.flush()
 
-    payload = {"job_id": job.id, "drive_id": job.drive_id, "status": job.status.value}
-    # Wake any in-process waiter (handle_disc_inserted parked at
-    # _await_resolution); reuse the existing event type since the waiter's
-    # decision branches on the post-poll job status, not the event name.
+    delete_raw = bool(req and req.delete_raw)
+    payload = {
+        "job_id": job.id,
+        "drive_id": job.drive_id,
+        "status": job.status.value,
+        "delete_raw": delete_raw,
+    }
+    # Tell the ripper: cancel any active rip on this drive matching the
+    # job, optionally rmtree /raw/<id>/. Also wakes a parked
+    # `_await_resolution` waiter (handler treats the message as a generic
+    # "drive state changed; re-poll" signal).
     await hub.emit(
         topic=f"ripper.commands.{job.drive_id}",
-        event_type="identify.resolved",
+        event_type="job.abandoned",
         payload=payload,
         job_id=job.id,
         session=db,
@@ -146,19 +152,6 @@ async def abandon_job(
     )
     await db.commit()
     await db.refresh(job)
-
-    delete_raw = bool(req and req.delete_raw)
-    if delete_raw:
-        target = RAW_ROOT / job.id
-        try:
-            shutil.rmtree(target, ignore_errors=False)
-            logger.info("abandon job_id=%s deleted raw dir=%s", job.id, target)
-        except FileNotFoundError:
-            logger.info("abandon job_id=%s raw dir already absent (path=%s)", job.id, target)
-        except OSError as exc:
-            # Status change already committed; surface the cleanup miss but
-            # don't roll the job back to a non-terminal state.
-            logger.warning("abandon job_id=%s raw-dir cleanup failed (path=%s): %s", job.id, target, exc)
 
     logger.info("abandon job_id=%s delete_raw=%s", job.id, delete_raw)
     return job
