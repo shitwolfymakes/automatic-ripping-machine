@@ -14,7 +14,12 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/',
-    redirect: '/jobs',
+    redirect: '/dashboard',
+  },
+  {
+    path: '/dashboard',
+    component: () => import('../views/Dashboard.vue'),
+    meta: { requiresAuth: true },
   },
   {
     path: '/jobs',
@@ -93,7 +98,7 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/jobs',
+    redirect: '/dashboard',
   },
 ]
 
@@ -111,7 +116,7 @@ router.beforeEach((to) => {
     return { path: '/change-password' }
   }
   if (to.path === '/login' && auth.isAuthenticated && !auth.passwordMustChange) {
-    return { path: '/jobs' }
+    return { path: '/dashboard' }
   }
   return true
 })

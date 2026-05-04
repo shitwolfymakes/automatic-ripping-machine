@@ -20,7 +20,7 @@ async function submit() {
     if (resp.password_must_change) {
       await router.push('/change-password')
     } else {
-      await router.push('/jobs')
+      await router.push('/dashboard')
     }
   } catch (e) {
     error.value =

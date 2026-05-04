@@ -34,7 +34,7 @@ describe('router guards', () => {
     expect(router.currentRoute.value.path).toBe('/jobs')
   })
 
-  it('/login bounces an authenticated user to /jobs', async () => {
+  it('/login bounces an authenticated user to /dashboard', async () => {
     const auth = useAuthStore()
     auth.hydrate()
     auth.token = 'aaa.bbb.ccc'
@@ -43,6 +43,6 @@ describe('router guards', () => {
     // same-route navigations and skips guards otherwise).
     await router.push('/jobs')
     await router.push('/login')
-    expect(router.currentRoute.value.path).toBe('/jobs')
+    expect(router.currentRoute.value.path).toBe('/dashboard')
   })
 })
