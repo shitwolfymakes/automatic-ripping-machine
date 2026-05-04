@@ -31,6 +31,10 @@ class ScanResult(BaseModel):
 class IdentifyRequest(BaseModel):
     drive_id: str
     scan_result: ScanResult
+    # Set by the ripper when it's running a manual-trigger flow; backend
+    # stamps it into job.metadata_json so `maybe_auto_apply_session` can
+    # prefer it over the drive's persistent default_session_id.
+    pending_session_id: str | None = None
 
 
 class TrackUpdateRequest(BaseModel):
@@ -54,3 +58,13 @@ class JobCompleteRequest(BaseModel):
     Empty for now; backend computes the final job status from the track
     outcomes. Reserved for future flags (e.g. user-initiated abort).
     """
+
+
+class RipperConfigView(BaseModel):
+    """Subset of `Config` the ripper reads to gate its automatic behaviour.
+
+    Polled on disc-insert before the pipeline kicks off; small enough to
+    keep cheap. Does not include any UI-only fields.
+    """
+
+    auto_rip_on_insert: bool

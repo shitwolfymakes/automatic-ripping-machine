@@ -16,6 +16,7 @@ class Config(SQLModel, table=True):
     omdb_api_key: str | None = Field(default=None)
     musicbrainz_user_agent: str | None = Field(default=None)
     auto_transcode_on_idle: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
+    auto_rip_on_insert: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
     block_on_miss: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
     default_retention_policy: RetentionPolicy = Field(
         sa_column=enum_column(

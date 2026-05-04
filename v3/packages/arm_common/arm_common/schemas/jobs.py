@@ -11,6 +11,30 @@ class ResolveRequest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ManualTriggerRequest(BaseModel):
+    """POST /api/jobs/manual — kick off a rip on a drive that already has a
+    disc in the tray. The ripper picks it up via WS command and runs the
+    normal scan→identify→rip flow; the optional `session_id` is stamped on
+    the resulting Job's metadata so `rip-complete` auto-applies it.
+    """
+
+    drive_id: str
+    session_id: str | None = None
+
+
+class ManualTriggerResponse(BaseModel):
+    drive_id: str
+    session_id: str | None
+
+
+class AbandonJobRequest(BaseModel):
+    """POST /api/jobs/{id}/abandon body. `delete_raw=true` also wipes
+    `/raw/{job_id}/` so the drive can be reused without leftover partial
+    rips on disk. The DB row stays (status=abandoned) for audit."""
+
+    delete_raw: bool = False
+
+
 class JobView(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

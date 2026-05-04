@@ -87,6 +87,7 @@ async def _seed_config_singleton(session: AsyncSession) -> None:
             Config(
                 id=CONFIG_SINGLETON_ID,
                 auto_transcode_on_idle=False,
+                auto_rip_on_insert=True,
                 block_on_miss=True,
                 default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
                 notification_apprise_urls=[],

@@ -14,11 +14,17 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <h2>Jobs</h2>
+  <div class="row" style="align-items: center; gap: 8px; margin-bottom: 8px">
+    <h2 style="margin: 0">Jobs</h2>
+    <span class="spacer" />
+    <RouterLink to="/jobs/manual">
+      <button type="button">+ Manual rip</button>
+    </RouterLink>
+  </div>
   <div class="card">
     <p v-if="store.error" class="error">{{ store.error }}</p>
     <p v-if="store.jobs.length === 0 && !store.loading" class="muted">
-      No jobs yet. Insert a disc to start one.
+      No jobs yet. Insert a disc — or click "+ Manual rip" — to start one.
     </p>
     <table v-else>
       <thead>

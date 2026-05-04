@@ -283,19 +283,27 @@ async def maybe_auto_apply_session(
 ) -> None:
     """Hook invoked from `rip-complete`. Silent on every failure mode.
 
-    Only fires when:
-      * the drive has a `default_session_id`,
-      * `Config.auto_transcode_on_idle` is True.
+    Resolution order for the session to apply:
+      1. `job.metadata_json["pending_session_id"]` — set by the ripper when
+         the rip was kicked off via `POST /api/jobs/manual` with a chosen
+         session. Always wins; bypasses `auto_transcode_on_idle` since the
+         user explicitly opted in for this one rip.
+      2. `drive.default_session_id` — the persistent per-drive default,
+         only honoured when `Config.auto_transcode_on_idle` is True.
     """
-    drive = (await db.execute(select(Drive).where(col(Drive.id) == job.drive_id))).scalar_one_or_none()
-    if drive is None or drive.default_session_id is None:
-        return
+    pending = (job.metadata_json or {}).get("pending_session_id")
+    if isinstance(pending, str) and pending:
+        session_id = pending
+    else:
+        drive = (await db.execute(select(Drive).where(col(Drive.id) == job.drive_id))).scalar_one_or_none()
+        if drive is None or drive.default_session_id is None:
+            return
 
-    config_row = (await db.execute(select(Config).where(col(Config.id) == 1))).scalar_one_or_none()
-    if config_row is None or not config_row.auto_transcode_on_idle:
-        return
+        config_row = (await db.execute(select(Config).where(col(Config.id) == 1))).scalar_one_or_none()
+        if config_row is None or not config_row.auto_transcode_on_idle:
+            return
 
-    session_id = drive.default_session_id
+        session_id = drive.default_session_id
     try:
         outcome = await apply_session_internal(
             db,
@@ -308,9 +316,8 @@ async def maybe_auto_apply_session(
         )
     except SessionNotFoundError:
         logger.warning(
-            "auto-apply skipped: session_id=%s missing for drive_id=%s job_id=%s",
+            "auto-apply skipped: session_id=%s missing for job_id=%s",
             session_id,
-            drive.id,
             job.id,
         )
         return

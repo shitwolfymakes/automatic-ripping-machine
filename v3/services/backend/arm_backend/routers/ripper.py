@@ -27,6 +27,7 @@ from arm_common.schemas import (
     JobCompleteRequest,
     JobView,
     RegisterRequest,
+    RipperConfigView,
     RipStartResponse,
     ScanResult,
     TrackUpdateRequest,
@@ -53,6 +54,19 @@ def _get_dispatcher(request: Request) -> MetadataDispatcher:
 def _get_hub(request: Request) -> WSHub:
     hub: WSHub = request.app.state.ws_hub
     return hub
+
+
+@router.get("/config", response_model=RipperConfigView, dependencies=[Depends(require_service_token)])
+async def get_ripper_config(session: AsyncSession = Depends(get_session)) -> RipperConfigView:
+    """Subset of the global Config the ripper reads on each disc insert to
+    decide whether to fire its scan/identify/rip pipeline. Cheap enough to
+    poll per-insert; avoids the WS-event invalidation dance for a single
+    boolean.
+    """
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    if cfg is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="config singleton missing")
+    return RipperConfigView(auto_rip_on_insert=cfg.auto_rip_on_insert)
 
 
 @router.post("/register", response_model=Drive, dependencies=[Depends(require_service_token)])
@@ -137,6 +151,11 @@ async def identify(
         **(job.metadata_json or {}),
         "scan_result": scan.model_dump(mode="json"),
     }
+    if req.pending_session_id is not None:
+        job.metadata_json = {
+            **(job.metadata_json or {}),
+            "pending_session_id": req.pending_session_id,
+        }
 
     await session.commit()
     await session.refresh(job)
