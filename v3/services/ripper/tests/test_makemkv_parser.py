@@ -67,3 +67,20 @@ def test_classifies_unknown_cinfo_string_as_none():
     lines = ['CINFO:1,9999,"Mystery format"']
     _, _, disc_type = parse_makemkvcon_info(lines)
     assert disc_type is None
+
+
+def test_classifies_dvd_disc_suffix_from_cinfo():
+    # MakeMKV v1.18 emits "DVD disc" rather than the "DVD" string v1.17 emitted.
+    # Real example from a region-locked Blood Diamond DVD-9 we saw in prod.
+    lines = ['CINFO:1,6206,"DVD disc"', 'CINFO:2,0,"BLOOD DIAMOND"']
+    volume_label, _, disc_type = parse_makemkvcon_info(lines)
+    assert volume_label == "BLOOD DIAMOND"
+    assert disc_type == DiscType.DVD
+
+
+def test_hd_dvd_does_not_match_dvd_branch():
+    # "HD-DVD" contains "dvd" — the HD-DVD branch must be checked first
+    # so we don't silently treat HD-DVD as a regular DVD.
+    lines = ['CINFO:1,6207,"HD-DVD"']
+    _, _, disc_type = parse_makemkvcon_info(lines)
+    assert disc_type is None  # no enum yet — caller falls back to probe/heuristic

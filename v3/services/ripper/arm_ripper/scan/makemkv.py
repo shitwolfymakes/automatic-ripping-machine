@@ -35,14 +35,19 @@ def _parse_duration(value: str) -> int | None:
 def _classify_from_cinfo(disc_type_text: str) -> DiscType | None:
     """Map MakeMKV's `CINFO:1` text value to our DiscType enum.
 
-    MakeMKV emits one of (case-sensitive in practice but we lowercase for
-    safety): "DVD", "Blu-ray disc", "HD-DVD", "Audio CD". Anything else
-    is treated as None so callers fall back to other signals.
+    Observed values vary across MakeMKV versions:
+      - "DVD" (v1.17.x) and "DVD disc" (v1.18.x) for DVD-Video
+      - "Blu-ray disc" for BD-Video
+      - "Audio CD" for CDDA
+      - "HD-DVD" / "HD DVD" for HD-DVD (no v3 enum yet — return None)
+    Match HD-DVD before DVD because "hd-dvd" contains "dvd".
     """
     s = disc_type_text.strip().lower()
-    if "blu-ray" in s or s == "bd":
+    if "blu-ray" in s or "bluray" in s or s == "bd":
         return DiscType.BLURAY
-    if s == "dvd" or "dvd-video" in s:
+    if "hd-dvd" in s or "hd dvd" in s:
+        return None
+    if "dvd" in s:
         return DiscType.DVD
     if "audio cd" in s or s == "cd":
         return DiscType.CD
