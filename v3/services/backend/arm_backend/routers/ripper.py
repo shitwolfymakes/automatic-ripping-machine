@@ -16,11 +16,22 @@ from arm_backend.auto_session import maybe_auto_apply_session
 from arm_backend.crash_recovery import reset_job_for_recovery
 from arm_backend.db import get_session
 from arm_backend.metadata import MetadataDispatcher
+from arm_backend.metadata.base import extract_poster_url
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_backend.track_selection import select_tracks
 from arm_backend.ws import WSHub
-from arm_common import Config, DiscType, Drive, DriveStatus, Job, JobStatus, RipPreset, TrackStatus
+from arm_common import (
+    Config,
+    DiscFingerprint,
+    DiscType,
+    Drive,
+    DriveStatus,
+    Job,
+    JobStatus,
+    RipPreset,
+    TrackStatus,
+)
 from arm_common.models import Track
 from arm_common.schemas import (
     IdentifyRequest,
@@ -117,6 +128,20 @@ async def identify(
     session.add(job)
     await session.flush()
 
+    # Persist every fingerprint the ripper computed. The (job_id, algo)
+    # unique constraint plus per-scan dedup means re-runs of identify on
+    # the same disc are idempotent.
+    seen_algos: set[str] = set()
+    for fp in scan.fingerprints:
+        if not fp.algo or not fp.value:
+            continue
+        algo = fp.algo.lower()
+        if algo in seen_algos:
+            continue
+        seen_algos.add(algo)
+        session.add(DiscFingerprint(job_id=job.id, algo=algo, value=fp.value))
+    await session.flush()
+
     try:
         result = await asyncio.wait_for(
             dispatcher.identify(scan, cfg),
@@ -131,6 +156,7 @@ async def identify(
     if result is not None:
         job.title = result.title
         job.year = result.year
+        job.poster_url = extract_poster_url(result)
         job.metadata_json = result.payload
         job.status = JobStatus.IDENTIFIED
     else:

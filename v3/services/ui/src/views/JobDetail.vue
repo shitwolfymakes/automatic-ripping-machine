@@ -5,6 +5,8 @@ import { api, ApiError } from '../api/client'
 import AbandonJobDialog from '../components/AbandonJobDialog.vue'
 import ApplySessionDialog from '../components/ApplySessionDialog.vue'
 import JobLogsCard from '../components/JobLogsCard.vue'
+import Poster from '../components/Poster.vue'
+import { useJobsStore } from '../stores/jobs'
 import { useTranscodesStore } from '../stores/transcodes'
 import type { ApplySessionResponse, JobDetailView, JobStatus, JobView } from '../api/types'
 import { isTerminalJobStatus } from '../utils/jobStatus'
@@ -15,6 +17,10 @@ const error = ref<string | null>(null)
 const showApply = ref(false)
 const showAbandon = ref(false)
 const lastApplied = ref<ApplySessionResponse | null>(null)
+const editingPoster = ref(false)
+const posterDraft = ref('')
+const savingPoster = ref(false)
+const jobs = useJobsStore()
 const transcodes = useTranscodesStore()
 
 const APPLY_OK: JobStatus[] = ['identified', 'ripped', 'ripped_partial', 'awaiting_user_id']
@@ -69,13 +75,38 @@ function onAbandoned(updated: JobView): void {
   if (detail.value) detail.value = { ...detail.value, job: updated }
   showAbandon.value = false
 }
+
+function startEditPoster(): void {
+  if (!detail.value) return
+  posterDraft.value = detail.value.job.poster_url_manual ?? ''
+  editingPoster.value = true
+}
+
+async function savePoster(): Promise<void> {
+  if (!detail.value) return
+  savingPoster.value = true
+  error.value = null
+  try {
+    const trimmed = posterDraft.value.trim()
+    const updated = await jobs.update(detail.value.job.id, {
+      poster_url_manual: trimmed === '' ? null : trimmed,
+    })
+    detail.value = { ...detail.value, job: updated }
+    editingPoster.value = false
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.message : 'Save failed'
+  } finally {
+    savingPoster.value = false
+  }
+}
 </script>
 
 <template>
   <h2>Job detail</h2>
   <p v-if="error" class="error">{{ error }}</p>
   <div v-if="detail" class="card">
-    <div class="row" style="gap: 24px; flex-wrap: wrap">
+    <div class="row" style="gap: 24px; flex-wrap: wrap; align-items: flex-start">
+      <Poster :job="detail.job" :width="160" />
       <div>
         <div class="muted">Job ID</div>
         <div>
@@ -115,6 +146,49 @@ function onAbandoned(updated: JobView): void {
       >
         Abandon job
       </button>
+    </div>
+
+    <div class="row" style="margin-top: 12px; gap: 8px; align-items: center; flex-wrap: wrap">
+      <span class="muted">Poster</span>
+      <code v-if="!editingPoster" style="flex: 1; min-width: 280px; overflow-wrap: anywhere">
+        {{ detail.job.poster_url_manual || detail.job.poster_url || '—' }}
+      </code>
+      <input
+        v-else
+        v-model="posterDraft"
+        type="url"
+        placeholder="Paste a custom poster URL, or leave blank to clear"
+        :disabled="savingPoster"
+        style="flex: 1; min-width: 280px"
+        data-testid="poster-url-input"
+      />
+      <button
+        v-if="!editingPoster"
+        class="secondary"
+        type="button"
+        data-testid="poster-edit"
+        @click="startEditPoster"
+      >
+        Override…
+      </button>
+      <template v-else>
+        <button
+          :disabled="savingPoster"
+          type="button"
+          data-testid="poster-save"
+          @click="savePoster"
+        >
+          {{ savingPoster ? 'Saving…' : 'Save' }}
+        </button>
+        <button
+          class="secondary"
+          type="button"
+          :disabled="savingPoster"
+          @click="editingPoster = false"
+        >
+          Cancel
+        </button>
+      </template>
     </div>
   </div>
 

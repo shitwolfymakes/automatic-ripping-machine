@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -35,6 +36,14 @@ class AbandonJobRequest(BaseModel):
     delete_raw: bool = False
 
 
+class DiscFingerprintView(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    algo: str
+    value: str
+    created_at: datetime | None = None
+
+
 class JobView(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -44,8 +53,19 @@ class JobView(BaseModel):
     status: JobStatus
     title: str | None
     year: int | None
+    # Computed at identify; UI prefers `poster_url_manual` if set.
+    poster_url: str | None = None
+    poster_url_manual: str | None = None
     metadata_json: dict[str, Any]
     resumed_from_crash: bool
+
+
+class JobUpdateRequest(BaseModel):
+    """PATCH /api/jobs/{id} body. Currently only the manual poster override
+    is editable — title/year live behind the identify/resolve flow.
+    """
+
+    poster_url_manual: str | None = None
 
 
 class TrackView(BaseModel):

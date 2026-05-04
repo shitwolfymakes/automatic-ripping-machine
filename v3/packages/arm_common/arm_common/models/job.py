@@ -19,11 +19,18 @@ class Job(SQLModel, table=True):
     id: str = Field(default_factory=_job_id, primary_key=True)
     drive_id: str = Field(sa_column=Column(String, ForeignKey("drives.id"), nullable=False, index=True))
     disc_type: DiscType = Field(sa_column=enum_column(DiscType, "disc_type"))
-    disc_fingerprint: str | None = Field(default=None)
-    disc_fingerprint_algo: str | None = Field(default=None)
-    aacs_disc_id: str | None = Field(default=None)
+    # Fingerprints (CRC64, AACS Disc ID, MusicBrainz Disc ID, matrix256, …)
+    # live in `disc_fingerprints` keyed by (job_id, algo) — see
+    # arm_common.models.disc_fingerprint. Old single-value columns
+    # (disc_fingerprint, disc_fingerprint_algo, aacs_disc_id) were dropped
+    # in migration 0006 to make the multi-fingerprint design first-class.
     title: str | None = Field(default=None)
     year: int | None = Field(sa_column=Column(Integer, nullable=True))
+    # Poster shown in the UI. `poster_url` is computed at identify time
+    # (TMDB / OMDB / Cover Art Archive). `poster_url_manual` is a user
+    # override editable from JobDetail; the UI prefers it when set.
+    poster_url: str | None = Field(sa_column=Column(String, nullable=True))
+    poster_url_manual: str | None = Field(sa_column=Column(String, nullable=True))
     metadata_json: dict[str, Any] = Field(
         default_factory=dict,
         sa_column=Column(JSON, nullable=False, server_default="{}"),

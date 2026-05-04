@@ -60,6 +60,7 @@ RUN apt-get update \
         libavcodec59 \
         libexpat1 \
         libssl3 \
+        udftools \
     && rm -rf /var/lib/apt/lists/*
 
 # Pull MakeMKV binaries + libs from the build stage. The bin tarball installs

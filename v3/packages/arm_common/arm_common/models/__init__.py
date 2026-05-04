@@ -1,4 +1,5 @@
 from arm_common.models.config import Config
+from arm_common.models.disc_fingerprint import DiscFingerprint
 from arm_common.models.drive import Drive
 from arm_common.models.event import Event
 from arm_common.models.gpu import Gpu
@@ -13,6 +14,7 @@ from arm_common.models.user import User
 
 __all__ = [
     "Config",
+    "DiscFingerprint",
     "Drive",
     "Event",
     "Gpu",

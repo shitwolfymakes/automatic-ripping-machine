@@ -11,6 +11,7 @@ from arm_backend.db import get_session
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.ws import WSHub
 from arm_common import (
+    DiscFingerprint,
     Drive,
     Job,
     JobStatus,
@@ -22,7 +23,9 @@ from arm_common.schemas import (
     AbandonJobRequest,
     ApplySessionRequest,
     ApplySessionResponse,
+    DiscFingerprintView,
     JobDetailView,
+    JobUpdateRequest,
     JobView,
     ManualTriggerRequest,
     ManualTriggerResponse,
@@ -74,9 +77,19 @@ async def get_job_detail(
         .scalars()
         .all()
     )
+    fingerprints = (
+        (
+            await session.execute(
+                select(DiscFingerprint).where(col(DiscFingerprint.job_id) == job_id).order_by(col(DiscFingerprint.algo))
+            )
+        )
+        .scalars()
+        .all()
+    )
     return JobDetailView(
         job=JobView.model_validate(job),
         tracks=[TrackView.model_validate(t) for t in tracks],
+        fingerprints=[DiscFingerprintView.model_validate(fp) for fp in fingerprints],
     )
 
 
@@ -201,6 +214,29 @@ async def manual_trigger(
     await db.commit()
     logger.info("manual trigger drive_id=%s session_id=%s", req.drive_id, req.session_id)
     return ManualTriggerResponse(drive_id=req.drive_id, session_id=req.session_id)
+
+
+@router.patch("/{job_id}", response_model=JobView)
+async def update_job(
+    job_id: str,
+    req: JobUpdateRequest,
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> Job:
+    """Edit user-controlled fields on a Job. Currently `poster_url_manual`
+    only — title/year are owned by the identify/resolve flow.
+    """
+    job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
+
+    fields = req.model_dump(exclude_unset=True)
+    for key, value in fields.items():
+        setattr(job, key, value)
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
+    return job
 
 
 @router.post("/{job_id}/resolve", response_model=JobView)
