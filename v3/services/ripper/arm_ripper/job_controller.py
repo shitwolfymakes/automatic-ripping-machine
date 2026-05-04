@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import shutil
 from pathlib import Path
 
 import httpx
@@ -61,6 +62,11 @@ class JobController:
         # trigger) runs at a time per drive. Ensures the WS-triggered manual
         # path can't race with an in-progress disc-inserted task.
         self._active_lock = asyncio.Lock()
+        # Backend abandons a job by emitting `job.abandoned` over WS; the
+        # handler cancels this task to kill the running makemkvcon and free
+        # the raw dir for cleanup. Set inside `_run_pipeline` only.
+        self._active_task: asyncio.Task[None] | None = None
+        self._active_job_id: str | None = None
 
     @property
     def is_active(self) -> bool:
@@ -86,8 +92,44 @@ class JobController:
                 logger.warning("manual.trigger with non-string session_id: %r", session_id)
                 session_id = None
             asyncio.create_task(self.handle_manual_trigger(session_id))
+        elif envelope.event_type == "job.abandoned":
+            payload = envelope.payload if isinstance(envelope.payload, dict) else {}
+            job_id = payload.get("job_id")
+            delete_raw = bool(payload.get("delete_raw"))
+            if not isinstance(job_id, str):
+                logger.warning("job.abandoned without job_id payload: %s", payload)
+                return
+            self._handle_abandon(job_id, delete_raw=delete_raw)
+            # Also wake any `_await_resolution` waiter — abandoning a parked
+            # job needs to unstick the pipeline the same way `identify.resolved`
+            # does. The waiter polls and decides based on the new job status.
+            event = self._resolution_events.get(job_id)
+            if event is not None:
+                event.set()
         else:
             logger.debug("ws command ignored: type=%s", envelope.event_type)
+
+    def _handle_abandon(self, job_id: str, *, delete_raw: bool) -> None:
+        """Cancel the active pipeline if it owns this job, then optionally
+        wipe `/raw/<job_id>/`. Runs synchronously from the WS handler;
+        cancel + rmtree are both fast and don't need awaitable plumbing.
+
+        rmtree on Linux is safe even if makemkvcon still has file handles
+        open: the directory entries are removed, existing fds keep working
+        (writing to nowhere) until the cancelled subprocess dies.
+        """
+        if self._active_job_id == job_id and self._active_task is not None and not self._active_task.done():
+            logger.info("job.abandoned: cancelling active task for job_id=%s", job_id)
+            self._active_task.cancel()
+        if delete_raw:
+            target = RAW_ROOT / job_id
+            try:
+                shutil.rmtree(target)
+                logger.info("wiped raw dir job_id=%s path=%s", job_id, target)
+            except FileNotFoundError:
+                logger.info("raw dir already absent job_id=%s path=%s", job_id, target)
+            except OSError as exc:
+                logger.warning("raw-dir cleanup failed job_id=%s path=%s: %s", job_id, target, exc)
 
     async def handle_manual_trigger(self, session_id: str | None) -> None:
         """Run the normal scan→identify→rip flow on demand, threading
@@ -121,27 +163,42 @@ class JobController:
 
     async def _run_pipeline(self, device_path: str, *, pending_session_id: str | None) -> None:
         async with self._active_lock:
+            self._active_task = asyncio.current_task()
             try:
-                scan_result = await scan_disc(device_path)
-            except ScanError as e:
-                logger.error("scan failed device=%s err=%s", device_path, e)
-                return
-
-            job = await self._identify_with_retry(scan_result, pending_session_id=pending_session_id)
-
-            # Phase 12 — every log line below carries job_id once identify lands.
-            with with_log_context(job_id=job.id):
-                if job.status == JobStatus.AWAITING_USER_ID:
-                    resolved = await self._await_resolution(job.id)
-                    if resolved is None:
-                        return
-                    job.status = resolved.status
-
-                if job.status != JobStatus.IDENTIFIED:
-                    logger.info("job %s in unexpected status %s; not ripping", job.id, job.status.value)
+                try:
+                    scan_result = await scan_disc(device_path)
+                except ScanError as e:
+                    logger.error("scan failed device=%s err=%s", device_path, e)
                     return
 
-                await self._run_rip(job, device_path)
+                job = await self._identify_with_retry(scan_result, pending_session_id=pending_session_id)
+                self._active_job_id = job.id
+
+                # Phase 12 — every log line below carries job_id once identify lands.
+                with with_log_context(job_id=job.id):
+                    if job.status == JobStatus.AWAITING_USER_ID:
+                        resolved = await self._await_resolution(job.id)
+                        if resolved is None:
+                            return
+                        job.status = resolved.status
+
+                    if job.status != JobStatus.IDENTIFIED:
+                        logger.info("job %s in unexpected status %s; not ripping", job.id, job.status.value)
+                        return
+
+                    try:
+                        await self._run_rip(job, device_path)
+                    except asyncio.CancelledError:
+                        # Backend abandon → WS `job.abandoned` → task cancel.
+                        # makemkvcon (or the abcde/dd subprocess) gets killed
+                        # by its own finally-block subprocess cleanup; we just
+                        # log and let the cancellation propagate so the lock
+                        # releases without calling rip-complete.
+                        logger.info("rip cancelled job_id=%s", job.id)
+                        raise
+            finally:
+                self._active_task = None
+                self._active_job_id = None
 
     async def _identify_with_retry(
         self,

@@ -2,20 +2,19 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { api, ApiError } from '../api/client'
+import AbandonJobDialog from '../components/AbandonJobDialog.vue'
 import ApplySessionDialog from '../components/ApplySessionDialog.vue'
 import JobLogsCard from '../components/JobLogsCard.vue'
-import { useJobsStore } from '../stores/jobs'
 import { useTranscodesStore } from '../stores/transcodes'
-import type { ApplySessionResponse, JobDetailView, JobStatus } from '../api/types'
+import type { ApplySessionResponse, JobDetailView, JobStatus, JobView } from '../api/types'
 import { isTerminalJobStatus } from '../utils/jobStatus'
 
 const route = useRoute()
 const detail = ref<JobDetailView | null>(null)
 const error = ref<string | null>(null)
 const showApply = ref(false)
+const showAbandon = ref(false)
 const lastApplied = ref<ApplySessionResponse | null>(null)
-const abandoning = ref(false)
-const jobs = useJobsStore()
 const transcodes = useTranscodesStore()
 
 const APPLY_OK: JobStatus[] = ['identified', 'ripped', 'ripped_partial', 'awaiting_user_id']
@@ -66,26 +65,9 @@ function onApplied(resp: ApplySessionResponse): void {
   void transcodes.fetchAll()
 }
 
-async function abandon(): Promise<void> {
-  if (!detail.value) return
-  if (!window.confirm('Abandon this job? The drive will be free for a fresh rip.')) return
-  // Second prompt: opt-in raw cleanup. Cancel here keeps the partial files
-  // on disk under /raw/<job_id>/ — useful if the user wants to recover any.
-  const deleteRaw = window.confirm(
-    'Also delete the raw rip files at /raw/<job_id>/?\n\n' +
-      'OK = delete partial files (drive ready for fresh rip).\n' +
-      'Cancel = keep them on disk.',
-  )
-  abandoning.value = true
-  error.value = null
-  try {
-    const updated = await jobs.abandon(detail.value.job.id, { delete_raw: deleteRaw })
-    detail.value = { ...detail.value, job: updated }
-  } catch (e) {
-    error.value = e instanceof ApiError ? e.message : 'Abandon failed'
-  } finally {
-    abandoning.value = false
-  }
+function onAbandoned(updated: JobView): void {
+  if (detail.value) detail.value = { ...detail.value, job: updated }
+  showAbandon.value = false
 }
 </script>
 
@@ -126,16 +108,22 @@ async function abandon(): Promise<void> {
       <div class="spacer" />
       <button v-if="canApply && !showApply" @click="showApply = true">Apply session</button>
       <button
-        v-if="canAbandon"
+        v-if="canAbandon && !showAbandon"
         class="secondary"
-        :disabled="abandoning"
         data-testid="abandon-job"
-        @click="abandon"
+        @click="showAbandon = true"
       >
-        {{ abandoning ? 'Abandoning…' : 'Abandon job' }}
+        Abandon job
       </button>
     </div>
   </div>
+
+  <AbandonJobDialog
+    v-if="detail && showAbandon"
+    :job="detail.job"
+    @close="showAbandon = false"
+    @abandoned="onAbandoned"
+  />
 
   <ApplySessionDialog
     v-if="detail && showApply"
