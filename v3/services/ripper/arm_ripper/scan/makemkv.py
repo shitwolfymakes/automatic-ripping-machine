@@ -5,7 +5,7 @@ from typing import Iterable
 
 from arm_common import DiscType
 from arm_common.schemas import DiscFingerprintInput, ScanResult, ScanTitle
-from arm_ripper.scan.dvdid import compute_dvd_crc64
+from arm_ripper.scan.disc_probe import probe_disc
 
 logger = logging.getLogger("arm_ripper.scan.makemkv")
 
@@ -112,16 +112,18 @@ def parse_makemkvcon_info(lines: Iterable[str]) -> tuple[str | None, list[ScanTi
     return volume_label, parsed
 
 
-def _classify_disc(titles: list[ScanTitle]) -> DiscType:
+def _classify_from_titles(titles: list[ScanTitle]) -> DiscType:
+    """Heuristic fallback when the mount probe couldn't determine a disc type
+    (e.g. mount failed: missing CAP_SYS_ADMIN, fs type kernel can't mount,
+    or no marker dir present). Last-ditch effort — title size > 4.7GB is
+    unreliable (DVD-9s exceed it routinely) but better than UNKNOWN.
+    """
     if not titles:
         return DiscType.UNKNOWN
     longest = max(t.duration_seconds for t in titles)
     return (
         DiscType.BLURAY
-        if longest >= 60 * 60 * 1.5
-        and any(  # heuristic stub; real BD detect lands later
-            t.size_bytes is not None and t.size_bytes > 4_700_000_000 for t in titles
-        )
+        if longest >= 60 * 60 * 1.5 and any(t.size_bytes is not None and t.size_bytes > 4_700_000_000 for t in titles)
         else DiscType.DVD
     )
 
@@ -152,16 +154,18 @@ async def scan_disc(device_path: str) -> ScanResult:
 
     lines = stdout.decode(errors="replace").splitlines()
     volume_label, titles = parse_makemkvcon_info(lines)
-    disc_type = _classify_disc(titles)
+
+    # Mount-probe is authoritative when it can detect VIDEO_TS / BDMV.
+    # Fall back to the title-size heuristic only if the probe couldn't
+    # mount (no CAP_SYS_ADMIN, exotic fs) or saw no marker dir. The probe
+    # also computes the CRC64 in the same mount cycle when it identifies
+    # the disc as DVD, so we don't double-mount.
+    probe = await probe_disc(device_path)
+    disc_type = probe.disc_type if probe.disc_type is not None else _classify_from_titles(titles)
 
     fingerprints: list[DiscFingerprintInput] = []
-    if disc_type == DiscType.DVD:
-        # Best-effort; failures (no SYS_ADMIN, mount EBUSY, pydvdid miss)
-        # log and proceed without the fingerprint — dispatcher falls
-        # through to volume-label-based TMDB/OMDB lookups.
-        crc64 = await compute_dvd_crc64(device_path)
-        if crc64:
-            fingerprints.append(DiscFingerprintInput(algo="crc64", value=crc64))
+    if probe.crc64:
+        fingerprints.append(DiscFingerprintInput(algo="crc64", value=probe.crc64))
 
     return ScanResult(
         disc_type=disc_type,
