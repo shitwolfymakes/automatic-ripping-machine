@@ -40,6 +40,7 @@ def _seed(db: FakeSession, *, enabled: bool = False, urls: list[str] | None = No
             omdb_api_key=None,
             musicbrainz_user_agent=None,
             auto_transcode_on_idle=False,
+            auto_rip_on_insert=True,
             block_on_miss=True,
             default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
             notification_apprise_urls=urls or [],

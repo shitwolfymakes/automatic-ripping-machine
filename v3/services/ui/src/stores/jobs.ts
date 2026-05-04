@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia'
 import { api } from '../api/client'
-import type { JobView } from '../api/types'
+import type {
+  AbandonJobRequest,
+  JobView,
+  ManualTriggerRequest,
+  ManualTriggerResponse,
+} from '../api/types'
 
 const POLL_INTERVAL_MS = Number(import.meta.env.VITE_JOBS_POLL_MS ?? 5000)
 
@@ -42,6 +47,12 @@ export const useJobsStore = defineStore('jobs', {
         window.clearInterval(this._timer)
         this._timer = null
       }
+    },
+    async triggerManual(req: ManualTriggerRequest): Promise<ManualTriggerResponse> {
+      return await api.post<ManualTriggerResponse>('/api/jobs/manual', req)
+    },
+    async abandon(jobId: string, req: AbandonJobRequest = {}): Promise<JobView> {
+      return await api.post<JobView>(`/api/jobs/${jobId}/abandon`, req)
     },
   },
 })

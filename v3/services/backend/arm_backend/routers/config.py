@@ -32,6 +32,7 @@ def _to_view(cfg: Config) -> ConfigView:
         omdb_api_key=cfg.omdb_api_key,
         musicbrainz_user_agent=cfg.musicbrainz_user_agent,
         auto_transcode_on_idle=cfg.auto_transcode_on_idle,
+        auto_rip_on_insert=cfg.auto_rip_on_insert,
         block_on_miss=cfg.block_on_miss,
         default_retention_policy=cfg.default_retention_policy,
         notification_apprise_urls=list(cfg.notification_apprise_urls or []),

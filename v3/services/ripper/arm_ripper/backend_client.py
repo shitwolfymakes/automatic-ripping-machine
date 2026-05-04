@@ -8,6 +8,7 @@ from arm_common.schemas import (
     JobCompleteRequest,
     JobView,
     RegisterRequest,
+    RipperConfigView,
     RipStartResponse,
     ScanResult,
     TrackUpdateRequest,
@@ -42,8 +43,18 @@ class BackendClient:
         r.raise_for_status()
         return Drive.model_validate(r.json())
 
-    async def identify(self, *, drive_id: str, scan_result: ScanResult) -> Job:
-        req = IdentifyRequest(drive_id=drive_id, scan_result=scan_result)
+    async def identify(
+        self,
+        *,
+        drive_id: str,
+        scan_result: ScanResult,
+        pending_session_id: str | None = None,
+    ) -> Job:
+        req = IdentifyRequest(
+            drive_id=drive_id,
+            scan_result=scan_result,
+            pending_session_id=pending_session_id,
+        )
         r = await self._client.post("/api/ripper/identify", json=req.model_dump(mode="json"))
         r.raise_for_status()
         return Job.model_validate(r.json())
@@ -83,6 +94,16 @@ class BackendClient:
             return None
         r.raise_for_status()
         return JobView.model_validate(r.json())
+
+    async def get_ripper_config(self) -> RipperConfigView:
+        """Tiny config snapshot polled before each disc-insert pipeline.
+
+        On any HTTP error, callers should fail-open (treat as `auto_rip=True`)
+        — a flapping backend should not silently disable ripping.
+        """
+        r = await self._client.get("/api/ripper/config")
+        r.raise_for_status()
+        return RipperConfigView.model_validate(r.json())
 
     async def resume(self, job_id: str) -> RipStartResponse:
         """Phase 9 — per-job crash-recovery reset. Same response shape as

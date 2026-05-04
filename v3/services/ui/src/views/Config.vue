@@ -18,6 +18,7 @@ async function reload() {
     omdb_api_key: cfg.value.omdb_api_key,
     musicbrainz_user_agent: cfg.value.musicbrainz_user_agent,
     auto_transcode_on_idle: cfg.value.auto_transcode_on_idle,
+    auto_rip_on_insert: cfg.value.auto_rip_on_insert,
     block_on_miss: cfg.value.block_on_miss,
     default_retention_policy: cfg.value.default_retention_policy,
     notification_apprise_urls: [...cfg.value.notification_apprise_urls],
@@ -76,6 +77,12 @@ async function save() {
         <option value="prune_after_session">prune_after_session</option>
         <option value="custom">custom</option>
       </select>
+    </div>
+    <div class="row" style="margin-bottom: 12px">
+      <label class="row" style="gap: 6px">
+        <input type="checkbox" v-model="form.auto_rip_on_insert" data-testid="auto-rip-on-insert" />
+        auto-rip on disc insert (uncheck to rip only via "+ Manual rip")
+      </label>
     </div>
     <div class="row" style="margin-bottom: 12px">
       <label class="row" style="gap: 6px">

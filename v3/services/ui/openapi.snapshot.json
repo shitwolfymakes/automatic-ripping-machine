@@ -155,6 +155,56 @@
         }
       }
     },
+    "/api/ripper/config": {
+      "get": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Get Ripper Config",
+        "description": "Subset of the global Config the ripper reads on each disc insert to\ndecide whether to fire its scan/identify/rip pipeline. Cheap enough to\npoll per-insert; avoids the WS-event invalidation dance for a single\nboolean.",
+        "operationId": "get_ripper_config_api_ripper_config_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RipperConfigView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ripper/register": {
       "post": {
         "tags": [
@@ -856,6 +906,142 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/JobDetailView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/abandon": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Abandon Job",
+        "description": "Move a non-terminal job to `abandoned`. Used to clear a job parked at\n`awaiting_user_id` (or any other in-flight state) so the drive's\nsingle-flight lock releases and a fresh manual rip can run.\n\nWakes any ripper waiter (`_await_resolution`) by emitting\n`identify.resolved` on the drive's commands topic; the waiter polls,\nsees the non-IDENTIFIED status, and exits the pipeline cleanly.",
+        "operationId": "abandon_job_api_jobs__job_id__abandon_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AbandonJobRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Req"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/manual": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Manual Trigger",
+        "description": "Kick the ripper to run a job on a drive that already has a disc in\nthe tray. The ripper handles the WS command, scans the disc, and\nthreads `pending_session_id` through identify so the resulting Job's\nmetadata carries it. `rip-complete` then auto-applies that session.",
+        "operationId": "manual_trigger_api_jobs_manual_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualTriggerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManualTriggerResponse"
                 }
               }
             }
@@ -2941,6 +3127,18 @@
   },
   "components": {
     "schemas": {
+      "AbandonJobRequest": {
+        "properties": {
+          "delete_raw": {
+            "type": "boolean",
+            "title": "Delete Raw",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "AbandonJobRequest",
+        "description": "POST /api/jobs/{id}/abandon body. `delete_raw=true` also wipes\n`/raw/{job_id}/` so the drive can be reused without leftover partial\nrips on disk. The DB row stays (status=abandoned) for audit."
+      },
       "ApplySessionRequest": {
         "properties": {
           "session_id": {
@@ -3128,6 +3326,17 @@
             ],
             "title": "Auto Transcode On Idle"
           },
+          "auto_rip_on_insert": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Rip On Insert"
+          },
           "block_on_miss": {
             "anyOf": [
               {
@@ -3217,6 +3426,10 @@
             "type": "boolean",
             "title": "Auto Transcode On Idle"
           },
+          "auto_rip_on_insert": {
+            "type": "boolean",
+            "title": "Auto Rip On Insert"
+          },
           "block_on_miss": {
             "type": "boolean",
             "title": "Block On Miss"
@@ -3265,6 +3478,7 @@
           "omdb_api_key",
           "musicbrainz_user_agent",
           "auto_transcode_on_idle",
+          "auto_rip_on_insert",
           "block_on_miss",
           "default_retention_policy",
           "notification_apprise_urls",
@@ -3600,6 +3814,17 @@
           },
           "scan_result": {
             "$ref": "#/components/schemas/ScanResult"
+          },
+          "pending_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Session Id"
           }
         },
         "type": "object",
@@ -3894,6 +4119,56 @@
           "password_must_change"
         ],
         "title": "LoginResponse"
+      },
+      "ManualTriggerRequest": {
+        "properties": {
+          "drive_id": {
+            "type": "string",
+            "title": "Drive Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drive_id"
+        ],
+        "title": "ManualTriggerRequest",
+        "description": "POST /api/jobs/manual \u2014 kick off a rip on a drive that already has a\ndisc in the tray. The ripper picks it up via WS command and runs the\nnormal scan\u2192identify\u2192rip flow; the optional `session_id` is stamped on\nthe resulting Job's metadata so `rip-complete` auto-applies it."
+      },
+      "ManualTriggerResponse": {
+        "properties": {
+          "drive_id": {
+            "type": "string",
+            "title": "Drive Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drive_id",
+          "session_id"
+        ],
+        "title": "ManualTriggerResponse"
       },
       "MediaType": {
         "type": "string",
@@ -4281,6 +4556,20 @@
           "tracks"
         ],
         "title": "RipStartResponse"
+      },
+      "RipperConfigView": {
+        "properties": {
+          "auto_rip_on_insert": {
+            "type": "boolean",
+            "title": "Auto Rip On Insert"
+          }
+        },
+        "type": "object",
+        "required": [
+          "auto_rip_on_insert"
+        ],
+        "title": "RipperConfigView",
+        "description": "Subset of `Config` the ripper reads to gate its automatic behaviour.\n\nPolled on disc-insert before the pipeline kicks off; small enough to\nkeep cheap. Does not include any UI-only fields."
       },
       "ScanResult": {
         "properties": {

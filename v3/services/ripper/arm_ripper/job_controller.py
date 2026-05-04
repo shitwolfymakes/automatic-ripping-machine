@@ -38,14 +38,33 @@ RAW_ROOT = Path("/raw")
 class JobController:
     """Drives one disc through scan → identify → rip → eject."""
 
-    def __init__(self, client: BackendClient, drive_id: str, *, ws: WSClient | None = None) -> None:
+    def __init__(
+        self,
+        client: BackendClient,
+        drive_id: str,
+        *,
+        ws: WSClient | None = None,
+        device_path: str | None = None,
+    ) -> None:
         self._client = client
         self._drive_id = drive_id
         self._ws = ws
+        # Each ripper container owns exactly one optical drive; storing the
+        # device path here lets `handle_manual_trigger` run without re-reading
+        # settings (which a unit test environment may not have populated).
+        self._device_path = device_path
         # job_id → asyncio.Event signalled when an `identify.resolved`
         # arrives over WS. Populated by `_await_resolution`, drained by
         # `on_ws_command`.
         self._resolution_events: dict[str, asyncio.Event] = {}
+        # Single-flight gate: only one rip pipeline (insert-driven OR manual-
+        # trigger) runs at a time per drive. Ensures the WS-triggered manual
+        # path can't race with an in-progress disc-inserted task.
+        self._active_lock = asyncio.Lock()
+
+    @property
+    def is_active(self) -> bool:
+        return self._active_lock.locked()
 
     async def on_ws_command(self, envelope: WSEnvelope) -> None:
         """Handler registered for `ripper.commands.{drive_id}` topic."""
@@ -60,37 +79,84 @@ class JobController:
                 logger.info("ws identify.resolved received for job_id=%s", job_id)
             else:
                 logger.debug("identify.resolved for job_id=%s but no waiter registered", job_id)
+        elif envelope.event_type == "manual.trigger":
+            payload = envelope.payload if isinstance(envelope.payload, dict) else {}
+            session_id = payload.get("session_id")
+            if session_id is not None and not isinstance(session_id, str):
+                logger.warning("manual.trigger with non-string session_id: %r", session_id)
+                session_id = None
+            asyncio.create_task(self.handle_manual_trigger(session_id))
         else:
             logger.debug("ws command ignored: type=%s", envelope.event_type)
 
-    async def handle_disc_inserted(self, device_path: str) -> None:
-        try:
-            scan_result = await scan_disc(device_path)
-        except ScanError as e:
-            logger.error("scan failed device=%s err=%s", device_path, e)
+    async def handle_manual_trigger(self, session_id: str | None) -> None:
+        """Run the normal scan→identify→rip flow on demand, threading
+        `session_id` (if any) into identify so it lands on the Job's
+        metadata as `pending_session_id`. Caller is the WS dispatcher,
+        which fires-and-forgets; we own all error handling.
+        """
+        if self.is_active:
+            logger.info("manual.trigger ignored: drive busy with another rip")
             return
+        if self._device_path is None:
+            logger.warning("manual.trigger ignored: no device_path bound to controller")
+            return
+        await self._run_pipeline(self._device_path, pending_session_id=session_id)
 
-        job = await self._identify_with_retry(scan_result)
+    async def handle_disc_inserted(self, device_path: str) -> None:
+        if self.is_active:
+            logger.debug("disc-inserted ignored: drive already busy")
+            return
+        # Auto-rip-on-insert is the global Config switch; default true so
+        # this is a no-op on standard deployments. Fail-open on lookup
+        # error: a flapping backend must not silently halt ripping.
+        try:
+            cfg = await self._client.get_ripper_config()
+            if not cfg.auto_rip_on_insert:
+                logger.info("disc-inserted ignored: auto_rip_on_insert=false; trigger via UI to start a rip")
+                return
+        except httpx.HTTPError as e:
+            logger.warning("auto-rip config lookup failed (%s); proceeding fail-open", e)
+        await self._run_pipeline(device_path, pending_session_id=None)
 
-        # Phase 12 — every log line below carries job_id once identify lands.
-        with with_log_context(job_id=job.id):
-            if job.status == JobStatus.AWAITING_USER_ID:
-                resolved = await self._await_resolution(job.id)
-                if resolved is None:
-                    return
-                job.status = resolved.status
-
-            if job.status != JobStatus.IDENTIFIED:
-                logger.info("job %s in unexpected status %s; not ripping", job.id, job.status.value)
+    async def _run_pipeline(self, device_path: str, *, pending_session_id: str | None) -> None:
+        async with self._active_lock:
+            try:
+                scan_result = await scan_disc(device_path)
+            except ScanError as e:
+                logger.error("scan failed device=%s err=%s", device_path, e)
                 return
 
-            await self._run_rip(job, device_path)
+            job = await self._identify_with_retry(scan_result, pending_session_id=pending_session_id)
 
-    async def _identify_with_retry(self, scan_result: ScanResult) -> Job:
+            # Phase 12 — every log line below carries job_id once identify lands.
+            with with_log_context(job_id=job.id):
+                if job.status == JobStatus.AWAITING_USER_ID:
+                    resolved = await self._await_resolution(job.id)
+                    if resolved is None:
+                        return
+                    job.status = resolved.status
+
+                if job.status != JobStatus.IDENTIFIED:
+                    logger.info("job %s in unexpected status %s; not ripping", job.id, job.status.value)
+                    return
+
+                await self._run_rip(job, device_path)
+
+    async def _identify_with_retry(
+        self,
+        scan_result: ScanResult,
+        *,
+        pending_session_id: str | None = None,
+    ) -> Job:
         delay = IDENTIFY_RETRY_INITIAL_SECONDS
         while True:
             try:
-                return await self._client.identify(drive_id=self._drive_id, scan_result=scan_result)
+                return await self._client.identify(
+                    drive_id=self._drive_id,
+                    scan_result=scan_result,
+                    pending_session_id=pending_session_id,
+                )
             except httpx.HTTPError as e:
                 logger.warning("identify failed (%s); retrying in %.1fs", e, delay)
                 await asyncio.sleep(delay)

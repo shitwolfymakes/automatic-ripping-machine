@@ -10,11 +10,20 @@ from arm_common.schemas.auth import (
 )
 from arm_common.schemas.common import ErrorResponse, HealthResponse
 from arm_common.schemas.drives import DriveUpdateRequest
-from arm_common.schemas.jobs import JobView, ResolveRequest, RipStartResponse, TrackView
+from arm_common.schemas.jobs import (
+    AbandonJobRequest,
+    JobView,
+    ManualTriggerRequest,
+    ManualTriggerResponse,
+    ResolveRequest,
+    RipStartResponse,
+    TrackView,
+)
 from arm_common.schemas.ripper import (
     IdentifyRequest,
     JobCompleteRequest,
     RegisterRequest,
+    RipperConfigView,
     ScanResult,
     ScanTitle,
     TrackUpdateRequest,
@@ -60,6 +69,7 @@ from arm_common.schemas.ws import (
 )
 
 __all__ = [
+    "AbandonJobRequest",
     "ApplySessionRequest",
     "ApplySessionResponse",
     "ClaimTaskResponse",
@@ -81,10 +91,13 @@ __all__ = [
     "JobView",
     "LoginRequest",
     "LoginResponse",
+    "ManualTriggerRequest",
+    "ManualTriggerResponse",
     "PasswordChangeRequest",
     "RegisterRequest",
     "RegisterTranscoderRequest",
     "RegisterTranscoderResponse",
+    "RipperConfigView",
     "ResolveRequest",
     "RipPresetCreateRequest",
     "RipPresetUpdateRequest",

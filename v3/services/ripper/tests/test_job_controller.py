@@ -8,7 +8,14 @@ import pytest
 
 import arm_ripper.job_controller as jc_module
 from arm_common import DiscType, Job, JobStatus
-from arm_common.schemas import JobView, RipStartResponse, ScanResult, TrackView, WSEnvelope
+from arm_common.schemas import (
+    JobView,
+    RipperConfigView,
+    RipStartResponse,
+    ScanResult,
+    TrackView,
+    WSEnvelope,
+)
 from arm_ripper.job_controller import JobController
 
 
@@ -47,12 +54,22 @@ class FakeClient:
         self.identify_responses: deque[Job] = deque()
         self.get_job_responses: deque[JobView] = deque()
         self.identify_calls: list[ScanResult] = []
+        self.identify_pending_session_ids: list[str | None] = []
         self.get_job_calls: list[str] = []
         self.rip_start_calls: list[str] = []
         self.rip_complete_calls: list[str] = []
+        self.auto_rip_on_insert: bool = True
+        self.get_ripper_config_calls: int = 0
 
-    async def identify(self, *, drive_id: str, scan_result: ScanResult) -> Job:
+    async def identify(
+        self,
+        *,
+        drive_id: str,
+        scan_result: ScanResult,
+        pending_session_id: str | None = None,
+    ) -> Job:
         self.identify_calls.append(scan_result)
+        self.identify_pending_session_ids.append(pending_session_id)
         return self.identify_responses.popleft()
 
     async def get_job(self, job_id: str) -> JobView:
@@ -73,6 +90,10 @@ class FakeClient:
     async def rip_complete(self, job_id: str) -> JobView:
         self.rip_complete_calls.append(job_id)
         return _view(JobStatus.RIPPED)
+
+    async def get_ripper_config(self) -> RipperConfigView:
+        self.get_ripper_config_calls += 1
+        return RipperConfigView(auto_rip_on_insert=self.auto_rip_on_insert)
 
 
 @pytest.fixture(autouse=True)
@@ -183,6 +204,36 @@ async def test_ws_event_unblocks_resolution_faster_than_rest(monkeypatch, stub_s
         timeout=2.0,
     )
 
+    assert client.rip_start_calls == ["job_test"]
+    assert client.rip_complete_calls == ["job_test"]
+
+
+async def test_disc_inserted_skipped_when_auto_rip_disabled(stub_scan, stub_eject):
+    """auto_rip_on_insert=False short-circuits the pipeline before scan."""
+    client = FakeClient()
+    client.auto_rip_on_insert = False
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert client.get_ripper_config_calls == 1
+    assert client.identify_calls == []
+    assert client.rip_start_calls == []
+    assert client.rip_complete_calls == []
+
+
+async def test_manual_trigger_runs_even_when_auto_rip_disabled(stub_scan, stub_eject):
+    """manual.trigger is an explicit user action and bypasses the auto_rip switch."""
+    client = FakeClient()
+    client.auto_rip_on_insert = False
+    client.identify_responses.append(_job(JobStatus.IDENTIFIED, title="Manual Movie"))
+    controller = JobController(client, "drv_test", device_path="/dev/sr0")
+
+    await asyncio.wait_for(controller.handle_manual_trigger("sess_test"), timeout=2.0)
+
+    # No config lookup on the manual path — user already opted in.
+    assert client.get_ripper_config_calls == 0
+    assert client.identify_pending_session_ids == ["sess_test"]
     assert client.rip_start_calls == ["job_test"]
     assert client.rip_complete_calls == ["job_test"]
 

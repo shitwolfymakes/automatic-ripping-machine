@@ -61,6 +61,20 @@ export interface JobDetailView {
   tracks: TrackView[]
 }
 
+export interface ManualTriggerRequest {
+  drive_id: string
+  session_id?: string | null
+}
+
+export interface AbandonJobRequest {
+  delete_raw?: boolean
+}
+
+export interface ManualTriggerResponse {
+  drive_id: string
+  session_id: string | null
+}
+
 export interface DriveView {
   id: string
   hostname: string
@@ -286,6 +300,7 @@ export interface ConfigView {
   omdb_api_key: string | null
   musicbrainz_user_agent: string | null
   auto_transcode_on_idle: boolean
+  auto_rip_on_insert: boolean
   block_on_miss: boolean
   default_retention_policy: string
   notification_apprise_urls: string[]
@@ -299,6 +314,7 @@ export interface ConfigUpdateRequest {
   omdb_api_key?: string | null
   musicbrainz_user_agent?: string | null
   auto_transcode_on_idle?: boolean
+  auto_rip_on_insert?: boolean
   block_on_miss?: boolean
   default_retention_policy?: string
   notification_apprise_urls?: string[]
