@@ -26,10 +26,21 @@ RUN apt-get update \
         wget \
         zlib1g-dev \
         openjdk-17-jre-headless \
+        cargo \
+        libclang-dev \
+        libtesseract-dev \
+        libleptonica-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY services/ripper/install/install_makemkv.sh /install_makemkv.sh
 RUN chmod +x /install_makemkv.sh && /install_makemkv.sh
+
+# ccextractor is built in the same stage so MakeMKV can call it as
+# /usr/local/bin/mmccextr at runtime for closed-caption SRT extraction.
+# Skipped by Debian since buster — built from upstream v0.94 with the
+# OCR/hardsubx/rust/sharing features stripped (only CC extraction is used).
+COPY services/ripper/install/install_ccextractor.sh /install_ccextractor.sh
+RUN chmod +x /install_ccextractor.sh && /install_ccextractor.sh
 
 # ---------- Stage 2: runtime image ----------
 FROM python:3.14-slim-bookworm
@@ -61,6 +72,8 @@ RUN apt-get update \
         libexpat1 \
         libssl3 \
         udftools \
+        libtesseract5 \
+        liblept5 \
     && rm -rf /var/lib/apt/lists/*
 
 # Pull MakeMKV binaries + libs from the build stage. The bin tarball installs
@@ -71,6 +84,11 @@ RUN apt-get update \
 # fail, even though simpler discs scan/rip fine.
 COPY --from=mkv-build /usr/local/bin/makemkvcon /usr/local/bin/makemkvcon
 COPY --from=mkv-build /usr/local/bin/mmgplsrv /usr/local/bin/mmgplsrv
+COPY --from=mkv-build /usr/local/bin/ccextractor /usr/local/bin/ccextractor
+# mmccextr is the path MakeMKV calls; recreate as a symlink here rather than
+# COPYing the symlink (BuildKit dereferences single-file symlink COPYs and
+# would duplicate the binary).
+RUN ln -sfn /usr/local/bin/ccextractor /usr/local/bin/mmccextr
 COPY --from=mkv-build /usr/local/lib/ /usr/local/lib/
 COPY --from=mkv-build /usr/local/share/MakeMKV /usr/local/share/MakeMKV
 RUN ldconfig
