@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from arm_common import DiscType
 from arm_ripper.scan.makemkv import parse_makemkvcon_info
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -7,9 +8,10 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 def test_parses_dvd_with_two_titles():
     lines = (FIXTURES / "makemkvcon_dvd_short.txt").read_text().splitlines()
-    volume_label, titles = parse_makemkvcon_info(lines)
+    volume_label, titles, disc_type = parse_makemkvcon_info(lines)
 
     assert volume_label == "THE_MATRIX_1999"  # CINFO:2 wins (first match)
+    assert disc_type == DiscType.DVD  # CINFO:1,"DVD"
     assert len(titles) == 2
 
     feature = titles[0]
@@ -26,20 +28,42 @@ def test_parses_dvd_with_two_titles():
 
 def test_handles_disc_with_no_titles():
     lines = (FIXTURES / "makemkvcon_no_titles.txt").read_text().splitlines()
-    volume_label, titles = parse_makemkvcon_info(lines)
+    volume_label, titles, disc_type = parse_makemkvcon_info(lines)
 
     assert volume_label is None
     assert titles == []
+    assert disc_type is None
 
 
 def test_skips_titles_without_duration():
     lines = ['TINFO:5,8,0,"4"', 'TINFO:5,27,0,"title05.mkv"']
-    _, titles = parse_makemkvcon_info(lines)
+    _, titles, _ = parse_makemkvcon_info(lines)
     assert titles == []
 
 
 def test_ignores_unknown_message_types():
     lines = ['MSG:1005,0,1,"hello"', "DRV:0,2,...", "BOGUS:nope"]
-    volume_label, titles = parse_makemkvcon_info(lines)
+    volume_label, titles, disc_type = parse_makemkvcon_info(lines)
     assert volume_label is None
     assert titles == []
+    assert disc_type is None
+
+
+def test_classifies_blu_ray_from_cinfo():
+    # CINFO:1,N,"Blu-ray disc" is the upstream value for BD-Video discs.
+    lines = ['CINFO:1,6210,"Blu-ray disc"', 'CINFO:2,0,"GUARDIANS_OF_THE_GALAXY"']
+    volume_label, _, disc_type = parse_makemkvcon_info(lines)
+    assert volume_label == "GUARDIANS_OF_THE_GALAXY"
+    assert disc_type == DiscType.BLURAY
+
+
+def test_classifies_audio_cd_from_cinfo():
+    lines = ['CINFO:1,6201,"Audio CD"']
+    _, _, disc_type = parse_makemkvcon_info(lines)
+    assert disc_type == DiscType.CD
+
+
+def test_classifies_unknown_cinfo_string_as_none():
+    lines = ['CINFO:1,9999,"Mystery format"']
+    _, _, disc_type = parse_makemkvcon_info(lines)
+    assert disc_type is None

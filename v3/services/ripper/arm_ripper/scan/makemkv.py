@@ -32,12 +32,34 @@ def _parse_duration(value: str) -> int | None:
     return h * 3600 + mn * 60 + s
 
 
-def parse_makemkvcon_info(lines: Iterable[str]) -> tuple[str | None, list[ScanTitle]]:
+def _classify_from_cinfo(disc_type_text: str) -> DiscType | None:
+    """Map MakeMKV's `CINFO:1` text value to our DiscType enum.
+
+    MakeMKV emits one of (case-sensitive in practice but we lowercase for
+    safety): "DVD", "Blu-ray disc", "HD-DVD", "Audio CD". Anything else
+    is treated as None so callers fall back to other signals.
+    """
+    s = disc_type_text.strip().lower()
+    if "blu-ray" in s or s == "bd":
+        return DiscType.BLURAY
+    if s == "dvd" or "dvd-video" in s:
+        return DiscType.DVD
+    if "audio cd" in s or s == "cd":
+        return DiscType.CD
+    return None
+
+
+def parse_makemkvcon_info(
+    lines: Iterable[str],
+) -> tuple[str | None, list[ScanTitle], DiscType | None]:
     """Parse the robot-mode output of `makemkvcon -r info`.
 
-    Returns (volume_label, titles).
+    Returns (volume_label, titles, mkv_disc_type).
 
     MakeMKV codes used:
+    - CINFO:1,...    — disc-type text ("DVD" / "Blu-ray disc" / "HD-DVD" /
+                       "Audio CD") — authoritative signal regardless of
+                       region-locks or kernel-mount failures
     - CINFO:2,...    — disc name (volume label)
     - CINFO:30,...   — disc tree info (sometimes the only place with the label)
     - TINFO:t,9,...  — title duration (HH:MM:SS)
@@ -48,6 +70,7 @@ def parse_makemkvcon_info(lines: Iterable[str]) -> tuple[str | None, list[ScanTi
     Reference: https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/MakeMKV-Codes
     """
     volume_label: str | None = None
+    mkv_disc_type: DiscType | None = None
     titles: dict[int, dict[str, object]] = {}
 
     for raw in lines:
@@ -62,7 +85,9 @@ def parse_makemkvcon_info(lines: Iterable[str]) -> tuple[str | None, list[ScanTi
                 code = int(fields[0])
             except ValueError:
                 continue
-            if code in (2, 30) and not volume_label:
+            if code == 1 and mkv_disc_type is None:
+                mkv_disc_type = _classify_from_cinfo(_strip_quotes(",".join(fields[2:])))
+            elif code in (2, 30) and not volume_label:
                 volume_label = _strip_quotes(",".join(fields[2:]))
 
         elif msg_type == "TINFO" and len(fields) >= 4:
@@ -109,14 +134,14 @@ def parse_makemkvcon_info(lines: Iterable[str]) -> tuple[str | None, list[ScanTi
             )
         )
 
-    return volume_label, parsed
+    return volume_label, parsed, mkv_disc_type
 
 
 def _classify_from_titles(titles: list[ScanTitle]) -> DiscType:
-    """Heuristic fallback when the mount probe couldn't determine a disc type
-    (e.g. mount failed: missing CAP_SYS_ADMIN, fs type kernel can't mount,
-    or no marker dir present). Last-ditch effort — title size > 4.7GB is
-    unreliable (DVD-9s exceed it routinely) but better than UNKNOWN.
+    """Last-resort fallback used only when MakeMKV's CINFO:1 disc-type
+    string was missing AND the mount-probe couldn't read VIDEO_TS / BDMV.
+    Title size > 4.7GB is unreliable (DVD-9s exceed it routinely) but
+    better than UNKNOWN.
     """
     if not titles:
         return DiscType.UNKNOWN
@@ -153,15 +178,21 @@ async def scan_disc(device_path: str) -> ScanResult:
         raise ScanError(f"makemkvcon exited {proc.returncode}: {msg}")
 
     lines = stdout.decode(errors="replace").splitlines()
-    volume_label, titles = parse_makemkvcon_info(lines)
+    volume_label, titles, mkv_disc_type = parse_makemkvcon_info(lines)
 
-    # Mount-probe is authoritative when it can detect VIDEO_TS / BDMV.
-    # Fall back to the title-size heuristic only if the probe couldn't
-    # mount (no CAP_SYS_ADMIN, exotic fs) or saw no marker dir. The probe
-    # also computes the CRC64 in the same mount cycle when it identifies
-    # the disc as DVD, so we don't double-mount.
+    # MakeMKV's CINFO:1 is the authoritative disc-type signal — works on
+    # region-locked discs that the kernel refuses to mount, and on UDF
+    # quirks where blkid reads the FS but mount returns "cannot mount
+    # read-only". The mount-probe is still useful for computing CRC64 (and
+    # for catching the rare case where MakeMKV doesn't emit CINFO:1), but
+    # it doesn't override what MakeMKV says.
     probe = await probe_disc(device_path)
-    disc_type = probe.disc_type if probe.disc_type is not None else _classify_from_titles(titles)
+    if mkv_disc_type is not None:
+        disc_type = mkv_disc_type
+    elif probe.disc_type is not None:
+        disc_type = probe.disc_type
+    else:
+        disc_type = _classify_from_titles(titles)
 
     fingerprints: list[DiscFingerprintInput] = []
     if probe.crc64:
