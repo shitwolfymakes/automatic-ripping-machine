@@ -66,7 +66,11 @@ RUN apt-get update \
 # Pull MakeMKV binaries + libs from the build stage. The bin tarball installs
 # libmakemkv*, libdriveio*, and libmmbd* under /usr/local/lib/; nothing else
 # in the build stage targets /usr/local/lib/, so copying the whole tree is safe.
+# `mmgplsrv` is built by makemkv-oss and invoked by makemkvcon for libavcodec-
+# backed decode paths — without it, some Blu-rays log MSG:4041 and degrade or
+# fail, even though simpler discs scan/rip fine.
 COPY --from=mkv-build /usr/local/bin/makemkvcon /usr/local/bin/makemkvcon
+COPY --from=mkv-build /usr/local/bin/mmgplsrv /usr/local/bin/mmgplsrv
 COPY --from=mkv-build /usr/local/lib/ /usr/local/lib/
 COPY --from=mkv-build /usr/local/share/MakeMKV /usr/local/share/MakeMKV
 RUN ldconfig

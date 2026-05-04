@@ -20,7 +20,30 @@ curl -fsSLO "https://www.makemkv.com/download/makemkv-sha-${MAKEMKV_VERSION}.txt
 mv "makemkv-sha-${MAKEMKV_VERSION}.txt" sha256sums.txt.sig
 
 GNUPGHOME="$(mktemp -d)" && export GNUPGHOME
-gpg --batch --keyserver keyserver.ubuntu.com --recv-keys 2ECF23305F1FC0B32001673394E3083A18042697
+# Fetch the MakeMKV signing key (DSA 2ECF23305F1FC0B32001673394E3083A18042697,
+# owned by GuinpinSoft). `keys.openpgp.org` strips user IDs by policy which
+# makes the key unusable for signature verification, so it's the LAST
+# fallback after the keyservers that preserve UIDs. Each attempt retries
+# 3× with 5s sleep to ride out transient DNS / connection blips.
+KEY_FPR="2ECF23305F1FC0B32001673394E3083A18042697"
+got_key=0
+for ks in keyserver.ubuntu.com pgp.mit.edu; do
+    for attempt in 1 2 3; do
+        if gpg --batch --keyserver "hkps://$ks" --recv-keys "$KEY_FPR"; then
+            # Confirm the key has at least one user ID — keys.openpgp.org's
+            # UID-stripping behaviour would silently break verification below.
+            if gpg --batch --list-keys "$KEY_FPR" | grep -q "^uid"; then
+                got_key=1
+                break 2
+            fi
+            echo "keyserver $ks returned key without UIDs; trying next"
+            break
+        fi
+        echo "keyserver $ks attempt $attempt failed"
+        sleep 5
+    done
+done
+[[ $got_key -eq 1 ]] || { echo "all keyservers failed"; exit 1; }
 gpg --batch --decrypt --output sha256sums.txt sha256sums.txt.sig
 gpgconf --kill all
 rm -rf "$GNUPGHOME" sha256sums.txt.sig
