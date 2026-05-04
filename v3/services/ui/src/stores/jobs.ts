@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { api } from '../api/client'
 import type {
   AbandonJobRequest,
+  JobUpdateRequest,
   JobView,
   ManualTriggerRequest,
   ManualTriggerResponse,
@@ -53,6 +54,9 @@ export const useJobsStore = defineStore('jobs', {
     },
     async abandon(jobId: string, req: AbandonJobRequest = {}): Promise<JobView> {
       return await api.post<JobView>(`/api/jobs/${jobId}/abandon`, req)
+    },
+    async update(jobId: string, req: JobUpdateRequest): Promise<JobView> {
+      return await api.patch<JobView>(`/api/jobs/${jobId}`, req)
     },
   },
 })

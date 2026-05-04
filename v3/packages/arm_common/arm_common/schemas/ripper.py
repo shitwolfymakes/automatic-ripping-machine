@@ -20,11 +20,27 @@ class ScanTitle(BaseModel):
     source_file: str | None = None
 
 
+class DiscFingerprintInput(BaseModel):
+    """One (algo, value) pair on a scanned disc.
+
+    Canonical algo names: `crc64` (pydvdid DVD), `aacs` (Blu-ray AACS
+    Disc ID), `musicbrainz` (CD disc id), `matrix256` (ARM-native).
+    Free-form to permit new algos without a schema bump.
+    """
+
+    algo: str
+    value: str
+
+
 class ScanResult(BaseModel):
     disc_type: DiscType
     volume_label: str | None = None
     titles: list[ScanTitle] = Field(default_factory=list)
     musicbrainz_disc_id: str | None = None
+    # All disc fingerprints the scan was able to compute. Drives 1337server
+    # lookup (crc64), and reverse "have we seen this disc before?" lookup
+    # in future flows. Empty when nothing fingerprintable.
+    fingerprints: list[DiscFingerprintInput] = Field(default_factory=list)
     raw: dict[str, Any] = Field(default_factory=dict)
 
 

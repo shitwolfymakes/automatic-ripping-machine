@@ -38,8 +38,14 @@ export interface JobView {
   status: JobStatus
   title: string | null
   year: number | null
+  poster_url: string | null
+  poster_url_manual: string | null
   metadata_json: Record<string, unknown>
   resumed_from_crash: boolean
+}
+
+export interface JobUpdateRequest {
+  poster_url_manual?: string | null
 }
 
 export interface TrackView {

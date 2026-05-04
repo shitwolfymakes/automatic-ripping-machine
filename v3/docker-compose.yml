@@ -95,6 +95,12 @@ services:
       #   readlink -f /sys/class/block/sr0/device | xargs -I{} ls {}/scsi_generic/
       # Phase 13 (installer) will auto-detect this; for now it's per-host.
       - "/dev/sg5:/dev/sg5"
+    # CAP_SYS_ADMIN is needed for `mount` inside the container so the scan
+    # flow can read VIDEO_TS for the pydvdid CRC64 (which feeds the
+    # 1337server lookup). The mount is read-only, ephemeral, and unmounted
+    # before the scan returns.
+    cap_add:
+      - SYS_ADMIN
     group_add:
       - "${CDROM_GID:-44}"
     environment:

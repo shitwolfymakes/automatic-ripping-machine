@@ -25,6 +25,7 @@ from arm_common.enums import (
 )
 from arm_common.models import (
     Config,
+    DiscFingerprint,
     Drive,
     Event,
     Gpu,
@@ -42,6 +43,7 @@ from arm_common.ulid import new_id
 __all__ = [
     "Config",
     "ContainerFormat",
+    "DiscFingerprint",
     "DiscType",
     "Drive",
     "DriveStatus",

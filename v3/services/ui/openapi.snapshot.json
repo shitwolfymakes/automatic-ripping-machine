@@ -921,6 +921,73 @@
             }
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Update Job",
+        "description": "Edit user-controlled fields on a Job. Currently `poster_url_manual`\nonly \u2014 title/year are owned by the identify/resolve flow.",
+        "operationId": "update_job_api_jobs__job_id__patch",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/jobs/{job_id}/abandon": {
@@ -3537,6 +3604,55 @@
         ],
         "title": "DiagnosticsServiceView"
       },
+      "DiscFingerprintInput": {
+        "properties": {
+          "algo": {
+            "type": "string",
+            "title": "Algo"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "algo",
+          "value"
+        ],
+        "title": "DiscFingerprintInput",
+        "description": "One (algo, value) pair on a scanned disc.\n\nCanonical algo names: `crc64` (pydvdid DVD), `aacs` (Blu-ray AACS\nDisc ID), `musicbrainz` (CD disc id), `matrix256` (ARM-native).\nFree-form to permit new algos without a schema bump."
+      },
+      "DiscFingerprintView": {
+        "properties": {
+          "algo": {
+            "type": "string",
+            "title": "Algo"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "algo",
+          "value"
+        ],
+        "title": "DiscFingerprintView"
+      },
       "DiscType": {
         "type": "string",
         "enum": [
@@ -3847,39 +3963,6 @@
           "disc_type": {
             "$ref": "#/components/schemas/DiscType"
           },
-          "disc_fingerprint": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Disc Fingerprint"
-          },
-          "disc_fingerprint_algo": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Disc Fingerprint Algo"
-          },
-          "aacs_disc_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Aacs Disc Id"
-          },
           "title": {
             "anyOf": [
               {
@@ -3901,6 +3984,28 @@
               }
             ],
             "title": "Year"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "poster_url_manual": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url Manual"
           },
           "metadata_json": {
             "additionalProperties": true,
@@ -3968,6 +4073,8 @@
           "drive_id",
           "disc_type",
           "year",
+          "poster_url",
+          "poster_url_manual",
           "status",
           "resumed_from_crash",
           "started_at",
@@ -3994,6 +4101,13 @@
             },
             "type": "array",
             "title": "Tracks"
+          },
+          "fingerprints": {
+            "items": {
+              "$ref": "#/components/schemas/DiscFingerprintView"
+            },
+            "type": "array",
+            "title": "Fingerprints"
           }
         },
         "type": "object",
@@ -4016,6 +4130,24 @@
           "failed"
         ],
         "title": "JobStatus"
+      },
+      "JobUpdateRequest": {
+        "properties": {
+          "poster_url_manual": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url Manual"
+          }
+        },
+        "type": "object",
+        "title": "JobUpdateRequest",
+        "description": "PATCH /api/jobs/{id} body. Currently only the manual poster override\nis editable \u2014 title/year live behind the identify/resolve flow."
       },
       "JobView": {
         "properties": {
@@ -4054,6 +4186,28 @@
               }
             ],
             "title": "Year"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "poster_url_manual": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url Manual"
           },
           "metadata_json": {
             "additionalProperties": true,
@@ -4604,6 +4758,13 @@
               }
             ],
             "title": "Musicbrainz Disc Id"
+          },
+          "fingerprints": {
+            "items": {
+              "$ref": "#/components/schemas/DiscFingerprintInput"
+            },
+            "type": "array",
+            "title": "Fingerprints"
           },
           "raw": {
             "additionalProperties": true,

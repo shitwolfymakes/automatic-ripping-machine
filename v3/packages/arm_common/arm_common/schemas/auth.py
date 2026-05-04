@@ -11,7 +11,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from arm_common.enums import RetentionPolicy
-from arm_common.schemas.jobs import JobView, TrackView
+from arm_common.schemas.jobs import DiscFingerprintView, JobView, TrackView
 
 
 class LoginRequest(BaseModel):
@@ -33,6 +33,7 @@ class PasswordChangeRequest(BaseModel):
 class JobDetailView(BaseModel):
     job: JobView
     tracks: list[TrackView]
+    fingerprints: list[DiscFingerprintView] = Field(default_factory=list)
 
 
 class ConfigView(BaseModel):

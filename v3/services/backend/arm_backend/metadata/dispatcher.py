@@ -4,6 +4,7 @@ import re
 
 import httpx
 
+from arm_backend.metadata.arm_server import ArmServerClient
 from arm_backend.metadata.base import LookupError, MetadataResult
 from arm_backend.metadata.musicbrainz import MusicBrainzClient
 from arm_backend.metadata.omdb import OMDBClient
@@ -56,6 +57,20 @@ class MetadataDispatcher:
         return await self._call("musicbrainz", client.lookup_disc_id(scan.musicbrainz_disc_id))
 
     async def _identify_video(self, scan: ScanResult, cfg: Config) -> MetadataResult | None:
+        # 1337server first when we have a DVD CRC64. This is the
+        # community-maintained crc64 → title DB; a hit beats fuzzy
+        # title matching on TMDB/OMDB because the fingerprint is unique
+        # to the disc and there's no false-positive risk.
+        crc64 = next(
+            (fp.value for fp in scan.fingerprints if fp.algo == "crc64" and fp.value),
+            None,
+        )
+        if crc64:
+            arm = ArmServerClient(self._http)
+            hit = await self._call("arm_server", arm.lookup_by_crc64(crc64))
+            if hit is not None:
+                return hit
+
         if not scan.volume_label:
             return None
         title, year = _normalize_volume_label(scan.volume_label)

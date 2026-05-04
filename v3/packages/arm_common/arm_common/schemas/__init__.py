@@ -12,6 +12,8 @@ from arm_common.schemas.common import ErrorResponse, HealthResponse
 from arm_common.schemas.drives import DriveUpdateRequest
 from arm_common.schemas.jobs import (
     AbandonJobRequest,
+    DiscFingerprintView,
+    JobUpdateRequest,
     JobView,
     ManualTriggerRequest,
     ManualTriggerResponse,
@@ -20,6 +22,7 @@ from arm_common.schemas.jobs import (
     TrackView,
 )
 from arm_common.schemas.ripper import (
+    DiscFingerprintInput,
     IdentifyRequest,
     JobCompleteRequest,
     RegisterRequest,
@@ -71,6 +74,8 @@ from arm_common.schemas.ws import (
 __all__ = [
     "AbandonJobRequest",
     "ApplySessionRequest",
+    "DiscFingerprintInput",
+    "DiscFingerprintView",
     "ApplySessionResponse",
     "ClaimTaskResponse",
     "CollisionInfo",
@@ -88,6 +93,7 @@ __all__ = [
     "IdentifyRequest",
     "JobCompleteRequest",
     "JobDetailView",
+    "JobUpdateRequest",
     "JobView",
     "LoginRequest",
     "LoginResponse",

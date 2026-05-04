@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api, ApiError } from '../api/client'
+import Poster from '../components/Poster.vue'
 import { useTranscodesStore } from '../stores/transcodes'
 import type {
   DiagnosticsResponse,
@@ -107,6 +108,7 @@ onUnmounted(() => {
     <table v-else>
       <thead>
         <tr>
+          <th></th>
           <th>Job</th>
           <th>Title</th>
           <th>Disc</th>
@@ -116,6 +118,9 @@ onUnmounted(() => {
       </thead>
       <tbody>
         <tr v-for="j in activeJobs" :key="j.id">
+          <td>
+            <Poster :job="j" :width="48" />
+          </td>
           <td>
             <RouterLink :to="`/jobs/${j.id}`">{{ j.id.slice(0, 12) }}…</RouterLink>
           </td>
@@ -232,6 +237,7 @@ onUnmounted(() => {
     <table>
       <thead>
         <tr>
+          <th></th>
           <th>Job</th>
           <th>Title</th>
           <th>Disc</th>
@@ -240,6 +246,9 @@ onUnmounted(() => {
       </thead>
       <tbody>
         <tr v-for="j in recentTerminalJobs" :key="j.id">
+          <td>
+            <Poster :job="j" :width="48" />
+          </td>
           <td>
             <RouterLink :to="`/jobs/${j.id}`">{{ j.id.slice(0, 12) }}…</RouterLink>
           </td>

@@ -4,7 +4,8 @@ import re
 from typing import Iterable
 
 from arm_common import DiscType
-from arm_common.schemas import ScanResult, ScanTitle
+from arm_common.schemas import DiscFingerprintInput, ScanResult, ScanTitle
+from arm_ripper.scan.dvdid import compute_dvd_crc64
 
 logger = logging.getLogger("arm_ripper.scan.makemkv")
 
@@ -153,8 +154,18 @@ async def scan_disc(device_path: str) -> ScanResult:
     volume_label, titles = parse_makemkvcon_info(lines)
     disc_type = _classify_disc(titles)
 
+    fingerprints: list[DiscFingerprintInput] = []
+    if disc_type == DiscType.DVD:
+        # Best-effort; failures (no SYS_ADMIN, mount EBUSY, pydvdid miss)
+        # log and proceed without the fingerprint — dispatcher falls
+        # through to volume-label-based TMDB/OMDB lookups.
+        crc64 = await compute_dvd_crc64(device_path)
+        if crc64:
+            fingerprints.append(DiscFingerprintInput(algo="crc64", value=crc64))
+
     return ScanResult(
         disc_type=disc_type,
         volume_label=volume_label,
         titles=titles,
+        fingerprints=fingerprints,
     )
