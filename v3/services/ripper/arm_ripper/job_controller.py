@@ -201,6 +201,18 @@ class JobController:
 
                     try:
                         await self._run_rip(job, device_path)
+                    except httpx.HTTPStatusError as e:
+                        # Backend rejected a state transition (e.g. rip-start
+                        # 422 because identify produced an empty scan_result).
+                        # Retrying won't fix it — log clearly and let the
+                        # pipeline exit so the operator can abandon the job.
+                        logger.error(
+                            "rip pipeline aborted: backend returned %s for %s — abandon job_id=%s manually",
+                            e.response.status_code,
+                            e.request.url,
+                            job.id,
+                        )
+                        return
                     except asyncio.CancelledError:
                         # Backend abandon → WS `job.abandoned` → task cancel.
                         # makemkvcon (or the abcde/dd subprocess) gets killed
@@ -485,12 +497,26 @@ class JobController:
             return None, "timeout"
         return proc.returncode, stderr_b.decode(errors="replace").strip()
 
+    @staticmethod
+    def _is_retryable(exc: httpx.HTTPError) -> bool:
+        """A 4xx response is the backend telling us the request itself
+        is wrong (validation error, missing job, conflict). Retrying
+        won't fix it and will keep hammering the backend forever — so
+        bail. Transport errors and 5xx responses are transient and
+        should keep retrying with backoff."""
+        if isinstance(exc, httpx.HTTPStatusError) and 400 <= exc.response.status_code < 500:
+            return False
+        return True
+
     async def _rip_start_with_retry(self, job_id: str) -> RipStartResponse:
         delay = PATCH_RETRY_INITIAL_SECONDS
         while True:
             try:
                 return await self._client.rip_start(job_id)
             except httpx.HTTPError as e:
+                if not self._is_retryable(e):
+                    logger.error("rip-start %s rejected by backend (%s); giving up", job_id, e)
+                    raise
                 logger.warning("rip-start %s failed (%s); retrying in %.1fs", job_id, e, delay)
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, PATCH_RETRY_MAX_SECONDS)
@@ -501,6 +527,9 @@ class JobController:
             try:
                 return await self._client.rip_complete(job_id)
             except httpx.HTTPError as e:
+                if not self._is_retryable(e):
+                    logger.error("rip-complete %s rejected by backend (%s); giving up", job_id, e)
+                    raise
                 logger.warning("rip-complete %s failed (%s); retrying in %.1fs", job_id, e, delay)
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, PATCH_RETRY_MAX_SECONDS)
@@ -512,6 +541,9 @@ class JobController:
                 await self._client.update_track(track_id, **fields)
                 return
             except httpx.HTTPError as e:
+                if not self._is_retryable(e):
+                    logger.error("PATCH track %s rejected by backend (%s); giving up", track_id, e)
+                    raise
                 logger.warning("PATCH track %s failed (%s); retrying in %.1fs", track_id, e, delay)
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, PATCH_RETRY_MAX_SECONDS)
