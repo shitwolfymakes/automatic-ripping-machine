@@ -16,6 +16,19 @@ class DriveStatus(StrEnum):
     ERROR = "error"
 
 
+class DriveMediaStatus(StrEnum):
+    """What the drive thinks is in its tray. Reported by each ripper
+    on a heartbeat so the backend can fail manual-trigger requests
+    fast when the user clicks Start without loading a disc."""
+
+    LOADED = "loaded"  # CDS_DISC_OK
+    NO_DISC = "no_disc"  # CDS_NO_DISC
+    TRAY_OPEN = "tray_open"  # CDS_TRAY_OPEN
+    NOT_READY = "not_ready"  # CDS_DRIVE_NOT_READY (medium spinning up)
+    UNAVAILABLE = "unavailable"  # open() failed — kernel ENODEV / device file gone
+    UNKNOWN = "unknown"  # CDS_NO_INFO, or ioctl unsupported on a probed device
+
+
 class JobStatus(StrEnum):
     CREATED = "created"
     AWAITING_USER_ID = "awaiting_user_id"

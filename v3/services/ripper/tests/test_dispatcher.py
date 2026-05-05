@@ -17,12 +17,14 @@ from pathlib import Path
 from typing import Any
 
 
+import arm_ripper.drive_status as drive_status_module
 import arm_ripper.rip.dispatcher as dispatcher_module
-from arm_common import DiscType
+from arm_common import DiscType, DriveMediaStatus
 from arm_common.enums import TrackKind, TrackStatus
 from arm_common.schemas import TrackView
 
-from arm_ripper.rip.dispatcher import _drive_status, _wait_for_drive_ready, rip_all
+from arm_ripper.drive_status import probe_drive_media
+from arm_ripper.rip.dispatcher import _wait_for_drive_ready, rip_all
 from arm_ripper.rip.makemkv_rip import RipResult
 
 
@@ -66,49 +68,53 @@ def _patch_open_close_ioctl(monkeypatch, *, open_result, ioctl_result):
 
     monkeypatch.setattr(os, "open", fake_open)
     monkeypatch.setattr(os, "close", fake_close)
-    monkeypatch.setattr(dispatcher_module.fcntl, "ioctl", fake_ioctl)
+    monkeypatch.setattr(drive_status_module.fcntl, "ioctl", fake_ioctl)
 
 
-def test_drive_status_ready_when_open_and_disc_ok(monkeypatch):
+def test_probe_returns_loaded_when_disc_ok(monkeypatch):
     _patch_open_close_ioctl(monkeypatch, open_result=11, ioctl_result=4)  # CDS_DISC_OK
-    ready, reason = _drive_status("/dev/sr0")
-    assert ready is True
-    assert "CDS_DISC_OK" in reason
+    status, reason = probe_drive_media("/dev/sr0")
+    assert status is DriveMediaStatus.LOADED
+    assert "loaded" in reason
 
 
-def test_drive_status_not_ready_when_open_fails(monkeypatch):
+def test_probe_returns_unavailable_when_open_fails(monkeypatch):
     _patch_open_close_ioctl(
         monkeypatch,
         open_result=OSError(errno.ENODEV, "No such device"),
         ioctl_result=4,
     )
-    ready, reason = _drive_status("/dev/sr0")
-    assert ready is False
+    status, reason = probe_drive_media("/dev/sr0")
+    assert status is DriveMediaStatus.UNAVAILABLE
     assert "errno=19" in reason
 
 
-def test_drive_status_not_ready_when_disc_becoming_ready(monkeypatch):
-    """SCSI 'IS IN PROCESS OF BECOMING READY' — open() works, ioctl
-    returns CDS_DRIVE_NOT_READY (3). This is the second failure mode
-    seen in production; the previous fix only checked open()."""
-    _patch_open_close_ioctl(monkeypatch, open_result=11, ioctl_result=3)
-    ready, reason = _drive_status("/dev/sr0")
-    assert ready is False
-    assert "CDROM_DRIVE_STATUS=3" in reason
+def test_probe_returns_not_ready_when_disc_becoming_ready(monkeypatch):
+    _patch_open_close_ioctl(monkeypatch, open_result=11, ioctl_result=3)  # CDS_DRIVE_NOT_READY
+    status, reason = probe_drive_media("/dev/sr0")
+    assert status is DriveMediaStatus.NOT_READY
 
 
-def test_drive_status_assumes_ready_when_ioctl_unsupported(monkeypatch):
-    """A non-CDROM block device backing /dev/sr0 (rare; happens in
-    container test setups) returns ENOTTY from CDROM_DRIVE_STATUS.
-    Better to proceed than to deadlock — makemkvcon will give us a
-    real signal."""
+def test_probe_returns_tray_open(monkeypatch):
+    _patch_open_close_ioctl(monkeypatch, open_result=11, ioctl_result=2)  # CDS_TRAY_OPEN
+    status, _ = probe_drive_media("/dev/sr0")
+    assert status is DriveMediaStatus.TRAY_OPEN
+
+
+def test_probe_returns_no_disc(monkeypatch):
+    _patch_open_close_ioctl(monkeypatch, open_result=11, ioctl_result=1)  # CDS_NO_DISC
+    status, _ = probe_drive_media("/dev/sr0")
+    assert status is DriveMediaStatus.NO_DISC
+
+
+def test_probe_returns_unknown_when_ioctl_unsupported(monkeypatch):
     _patch_open_close_ioctl(
         monkeypatch,
         open_result=11,
         ioctl_result=OSError(errno.ENOTTY, "Inappropriate ioctl for device"),
     )
-    ready, reason = _drive_status("/dev/sr0")
-    assert ready is True
+    status, reason = probe_drive_media("/dev/sr0")
+    assert status is DriveMediaStatus.UNKNOWN
     assert "ioctl unsupported" in reason
 
 
@@ -148,7 +154,7 @@ async def test_wait_polls_through_not_ready_until_ok(monkeypatch):
 
     monkeypatch.setattr(os, "open", fake_open)
     monkeypatch.setattr(os, "close", lambda fd: None)
-    monkeypatch.setattr(dispatcher_module.fcntl, "ioctl", fake_ioctl)
+    monkeypatch.setattr(drive_status_module.fcntl, "ioctl", fake_ioctl)
 
     sleeps = 0
 

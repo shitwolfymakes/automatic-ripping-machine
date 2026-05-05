@@ -9,6 +9,7 @@ from arm_common import configure_service_logging
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.config import settings
 from arm_ripper.drive_poll import DriveState, read_drive_status
+from arm_ripper.drive_status import probe_drive_media
 from arm_ripper.job_controller import JobController
 from arm_ripper.recovery import boot_probe
 from arm_ripper.ws_client import WSClient
@@ -16,6 +17,14 @@ from arm_ripper.ws_client import WSClient
 CA_BUNDLE_PATH = "/etc/ssl/certs/ca-certificates.crt"
 
 RIPPER_VERSION = "0.0.0-skeleton"
+
+# Heartbeat carries the current CDROM_DRIVE_STATUS reading to the
+# backend so the manual-trigger endpoint can refuse clicks made
+# against an empty / open tray. 30s gives a click-time check that's
+# at most ~30s stale; a stale heartbeat (older than the backend's
+# freshness window) falls back to "unknown" and the request is
+# allowed through to identify (which will fail visibly).
+HEARTBEAT_INTERVAL_SECONDS = 30.0
 
 # Each ripper container owns one optical drive — name the log file by the
 # device basename so multiple ripper containers (sr0, sr1, ...) don't
@@ -39,6 +48,20 @@ async def register_with_retry(client: BackendClient) -> str:
             logger.warning("register failed (%s); retrying in %.1fs", exc, delay)
             await asyncio.sleep(delay)
             delay = min(delay * 2, 30.0)
+
+
+async def heartbeat_loop(client: BackendClient, drive_id: str) -> None:
+    """Post the current media status to the backend every
+    HEARTBEAT_INTERVAL_SECONDS. Errors are logged + swallowed —
+    the heartbeat is best-effort and stale rows fall back to
+    "unknown" on the manual-trigger pre-check."""
+    while True:
+        try:
+            status, _ = probe_drive_media(settings.ARM_DRIVE_DEV)
+            await client.heartbeat(drive_id=drive_id, media_status=status)
+        except (httpx.HTTPError, OSError) as exc:
+            logger.warning("heartbeat failed: %s", exc)
+        await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
 
 
 async def poll_loop(controller: JobController) -> None:
@@ -100,7 +123,11 @@ async def amain() -> None:
                 await boot_probe(client, drive_id, settings.ARM_DRIVE_DEV, controller)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("boot probe failed: %s", exc)
-            await poll_loop(controller)
+            heartbeat_task = asyncio.create_task(heartbeat_loop(client, drive_id))
+            try:
+                await poll_loop(controller)
+            finally:
+                heartbeat_task.cancel()
     finally:
         await client.close()
 

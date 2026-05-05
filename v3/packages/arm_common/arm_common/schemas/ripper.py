@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from arm_common.enums import DiscType, TrackStatus
+from arm_common.enums import DiscType, DriveMediaStatus, TrackStatus
 
 
 class RegisterRequest(BaseModel):
@@ -10,6 +10,20 @@ class RegisterRequest(BaseModel):
     device_path: str
     ripper_version: str
     hw_caps: dict[str, Any] = Field(default_factory=dict)
+
+
+class RipperHeartbeatRequest(BaseModel):
+    """POST /api/ripper/heartbeat body. Each ripper sends one of these
+    every HEARTBEAT_INTERVAL_SECONDS so the backend can refuse manual-
+    trigger requests against drives whose tray is open / empty without
+    waiting for a doomed identify.
+
+    Named distinctly from the transcoder HeartbeatRequest because the
+    two services post completely different payloads to different paths.
+    """
+
+    drive_id: str
+    media_status: DriveMediaStatus
 
 
 class ScanTitle(BaseModel):

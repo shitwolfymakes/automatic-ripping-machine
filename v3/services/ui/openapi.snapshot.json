@@ -205,6 +205,59 @@
         }
       }
     },
+    "/api/ripper/heartbeat": {
+      "post": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Heartbeat",
+        "description": "Each ripper posts here every HEARTBEAT_INTERVAL_SECONDS with the\ncurrent CDROM_DRIVE_STATUS reading. The manual-trigger endpoint\nreads `media_status` + `media_status_at` to refuse clicks made\nagainst an empty / open tray, instead of letting identify land an\nempty scan_result.\n\n`last_seen_at` is bumped on every call so the drive's online state\nis implicitly refreshed too \u2014 no separate liveness ping needed.",
+        "operationId": "heartbeat_api_ripper_heartbeat_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RipperHeartbeatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ripper/register": {
       "post": {
         "tags": [
@@ -3847,6 +3900,28 @@
             ],
             "title": "Last Seen At"
           },
+          "media_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveMediaStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "media_status_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Status At"
+          },
           "rip_params_json": {
             "additionalProperties": true,
             "type": "object",
@@ -3894,11 +3969,26 @@
           "device_path",
           "status",
           "last_seen_at",
+          "media_status",
+          "media_status_at",
           "default_session_id",
           "created_at",
           "updated_at"
         ],
         "title": "Drive"
+      },
+      "DriveMediaStatus": {
+        "type": "string",
+        "enum": [
+          "loaded",
+          "no_disc",
+          "tray_open",
+          "not_ready",
+          "unavailable",
+          "unknown"
+        ],
+        "title": "DriveMediaStatus",
+        "description": "What the drive thinks is in its tray. Reported by each ripper\non a heartbeat so the backend can fail manual-trigger requests\nfast when the user clicks Start without loading a disc."
       },
       "DriveStatus": {
         "type": "string",
@@ -4867,6 +4957,24 @@
         ],
         "title": "RipperConfigView",
         "description": "Subset of `Config` the ripper reads to gate its automatic behaviour.\n\nPolled on disc-insert before the pipeline kicks off; small enough to\nkeep cheap. Does not include any UI-only fields."
+      },
+      "RipperHeartbeatRequest": {
+        "properties": {
+          "drive_id": {
+            "type": "string",
+            "title": "Drive Id"
+          },
+          "media_status": {
+            "$ref": "#/components/schemas/DriveMediaStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drive_id",
+          "media_status"
+        ],
+        "title": "RipperHeartbeatRequest",
+        "description": "POST /api/ripper/heartbeat body. Each ripper sends one of these\nevery HEARTBEAT_INTERVAL_SECONDS so the backend can refuse manual-\ntrigger requests against drives whose tray is open / empty without\nwaiting for a doomed identify.\n\nNamed distinctly from the transcoder HeartbeatRequest because the\ntwo services post completely different payloads to different paths."
       },
       "ScanResult": {
         "properties": {
