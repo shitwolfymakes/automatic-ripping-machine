@@ -1,14 +1,13 @@
 import asyncio
-import fcntl
 import logging
-import os
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-from arm_common import DiscType
+from arm_common import DiscType, DriveMediaStatus
 from arm_common.schemas import TrackView
 
+from arm_ripper.drive_status import probe_drive_media
 from arm_ripper.rip.abcde_rip import rip_cd
 from arm_ripper.rip.data_rip import rip_data
 from arm_ripper.rip.makemkv_rip import RipResult, rip_title
@@ -34,37 +33,12 @@ OnTrackProgress = Callable[[TrackView, float], Awaitable[None]]
 DRIVE_READY_TIMEOUT_SECONDS = 60.0
 DRIVE_READY_POLL_INTERVAL_SECONDS = 0.5
 
-# Linux <linux/cdrom.h>. CDS_DISC_OK is the only status that means
-# "medium loaded and ready for I/O".
-_CDROM_DRIVE_STATUS = 0x5326
-_CDS_DISC_OK = 4
 
-
-def _drive_status(device_path: str) -> tuple[bool, str]:
-    """Probe the device once and return (is_ready, reason).
-
-    is_ready is True only when (a) the device node is openable AND
-    (b) CDROM_DRIVE_STATUS reports CDS_DISC_OK. Any other state — node
-    missing, kernel ENODEV, tray open, NO_DISC, drive not ready — is
-    treated as "not yet" and surfaces in `reason` for logging.
-    """
-    try:
-        fd = os.open(device_path, os.O_RDONLY | os.O_NONBLOCK)
-    except OSError as exc:
-        return False, f"open: errno={exc.errno} {exc.strerror or exc}"
-    try:
-        try:
-            status = fcntl.ioctl(fd, _CDROM_DRIVE_STATUS, 0)
-        except OSError as exc:
-            # Some virtual / non-CDROM block devices don't implement
-            # CDROM_DRIVE_STATUS. Treat that as "ready" — better than
-            # blocking the rip queue forever on a device we can't probe.
-            return True, f"ioctl unsupported (errno={exc.errno}); assuming ready"
-    finally:
-        os.close(fd)
-    if status == _CDS_DISC_OK:
-        return True, "CDS_DISC_OK"
-    return False, f"CDROM_DRIVE_STATUS={status}"
+def _is_rip_ready(status: DriveMediaStatus) -> bool:
+    """Disc loaded → ready. UNKNOWN is a fall-through bucket (ioctl
+    unsupported, virt drive in a test rig); we accept it rather than
+    deadlock the rip queue, and let makemkvcon report any real failure."""
+    return status in (DriveMediaStatus.LOADED, DriveMediaStatus.UNKNOWN)
 
 
 async def _wait_for_drive_ready(
@@ -85,8 +59,8 @@ async def _wait_for_drive_ready(
     waited = 0.0
     last_reason = "no probes attempted"
     while True:
-        ready, last_reason = _drive_status(device_path)
-        if ready:
+        status, last_reason = probe_drive_media(device_path)
+        if _is_rip_ready(status):
             if waited > 0:
                 logger.info("drive %s ready after %.1fs (%s)", device_path, waited, last_reason)
             return True

@@ -2,13 +2,14 @@ from typing import Any
 
 import httpx
 
-from arm_common import Drive, Job
+from arm_common import Drive, DriveMediaStatus, Job
 from arm_common.schemas import (
     IdentifyRequest,
     JobCompleteRequest,
     JobView,
     RegisterRequest,
     RipperConfigView,
+    RipperHeartbeatRequest,
     RipStartResponse,
     ScanResult,
     TrackUpdateRequest,
@@ -42,6 +43,11 @@ class BackendClient:
         r = await self._client.post("/api/ripper/register", json=req.model_dump())
         r.raise_for_status()
         return Drive.model_validate(r.json())
+
+    async def heartbeat(self, *, drive_id: str, media_status: DriveMediaStatus) -> None:
+        req = RipperHeartbeatRequest(drive_id=drive_id, media_status=media_status)
+        r = await self._client.post("/api/ripper/heartbeat", json=req.model_dump(mode="json"))
+        r.raise_for_status()
 
     async def identify(
         self,

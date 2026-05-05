@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
@@ -13,6 +14,7 @@ from arm_backend.ws import WSHub
 from arm_common import (
     DiscFingerprint,
     Drive,
+    DriveMediaStatus,
     Job,
     JobStatus,
     Session,
@@ -44,6 +46,20 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 def _get_hub(request: Request) -> WSHub:
     hub: WSHub = request.app.state.ws_hub
     return hub
+
+
+# Manual-trigger pre-check (drive media status). The ripper posts every
+# HEARTBEAT_INTERVAL_SECONDS (currently 30s); a 90s window forgives
+# heartbeats delayed by transient network blips while still catching
+# tray-open/no-disc clicks made seconds after the ripper noticed.
+_MEDIA_STATUS_FRESHNESS = timedelta(seconds=90)
+_MEDIA_STATUS_READY: frozenset[DriveMediaStatus] = frozenset({DriveMediaStatus.LOADED, DriveMediaStatus.UNKNOWN})
+_MEDIA_STATUS_DETAIL: dict[DriveMediaStatus, str] = {
+    DriveMediaStatus.NO_DISC: "no disc loaded in the drive",
+    DriveMediaStatus.TRAY_OPEN: "drive tray is open — close it before starting a rip",
+    DriveMediaStatus.NOT_READY: "drive is busy / spinning up — try again in a moment",
+    DriveMediaStatus.UNAVAILABLE: "drive device node is gone — check the host /dev mount",
+}
 
 
 @router.get("", response_model=list[JobView])
@@ -292,6 +308,18 @@ async def manual_trigger(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"drive {req.drive_id} already has an in-flight RIPPING job",
         )
+
+    # Fast-fail when the user clicks Start without loading a disc.
+    # Heartbeat-fed; we only honour readings that arrived within the
+    # freshness window (a stale row is equivalent to "we don't know" —
+    # let the request through and let identify do the talking).
+    if drive.media_status_at is not None and drive.media_status is not None:
+        age = datetime.now(timezone.utc) - drive.media_status_at
+        if age < _MEDIA_STATUS_FRESHNESS and drive.media_status not in _MEDIA_STATUS_READY:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=_MEDIA_STATUS_DETAIL[drive.media_status],
+            )
 
     if req.session_id is not None:
         sess = (await db.execute(select(Session).where(col(Session.id) == req.session_id))).scalar_one_or_none()

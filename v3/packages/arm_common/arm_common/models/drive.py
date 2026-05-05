@@ -5,7 +5,7 @@ from sqlalchemy import JSON, Column, DateTime, ForeignKey, String
 from sqlmodel import Field, SQLModel
 
 from arm_common.models._columns import created_at_column, enum_column, updated_at_column
-from arm_common.enums import DriveStatus
+from arm_common.enums import DriveMediaStatus, DriveStatus
 from arm_common.ulid import new_id
 
 
@@ -24,6 +24,15 @@ class Drive(SQLModel, table=True):
         sa_column=enum_column(DriveStatus, "drive_status", server_default=DriveStatus.ONLINE.value)
     )
     last_seen_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
+    # Reported by each ripper on a heartbeat. Lets the backend reject a
+    # manual-rip request fast when the user clicks Start without loading
+    # a disc, instead of letting identify land an empty scan_result.
+    # Stale rows (older than HEARTBEAT_FRESHNESS_SECONDS in the manual-
+    # trigger endpoint) are treated as UNKNOWN.
+    media_status: DriveMediaStatus | None = Field(
+        sa_column=enum_column(DriveMediaStatus, "drive_media_status", nullable=True)
+    )
+    media_status_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
     rip_params_json: dict[str, Any] = Field(
         default_factory=dict,
         sa_column=Column(JSON, nullable=False, server_default="{}"),

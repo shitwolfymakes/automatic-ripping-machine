@@ -116,6 +116,9 @@ class _Result:
     def scalars(self) -> "_Scalars":
         return _Scalars(self.rows)
 
+    def first(self) -> Any | None:
+        return self.rows[0] if self.rows else None
+
     def all(self) -> list[Any]:
         if self.scalar_columns:
             named = []

@@ -39,6 +39,7 @@ from arm_common.schemas import (
     JobView,
     RegisterRequest,
     RipperConfigView,
+    RipperHeartbeatRequest,
     RipStartResponse,
     ScanResult,
     TrackUpdateRequest,
@@ -78,6 +79,27 @@ async def get_ripper_config(session: AsyncSession = Depends(get_session)) -> Rip
     if cfg is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="config singleton missing")
     return RipperConfigView(auto_rip_on_insert=cfg.auto_rip_on_insert)
+
+
+@router.post("/heartbeat", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_service_token)])
+async def heartbeat(req: RipperHeartbeatRequest, session: AsyncSession = Depends(get_session)) -> None:
+    """Each ripper posts here every HEARTBEAT_INTERVAL_SECONDS with the
+    current CDROM_DRIVE_STATUS reading. The manual-trigger endpoint
+    reads `media_status` + `media_status_at` to refuse clicks made
+    against an empty / open tray, instead of letting identify land an
+    empty scan_result.
+
+    `last_seen_at` is bumped on every call so the drive's online state
+    is implicitly refreshed too — no separate liveness ping needed."""
+    drive = (await session.execute(select(Drive).where(col(Drive.id) == req.drive_id))).scalar_one_or_none()
+    if drive is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
+    now = datetime.now(timezone.utc)
+    drive.media_status = req.media_status
+    drive.media_status_at = now
+    drive.last_seen_at = now
+    session.add(drive)
+    await session.commit()
 
 
 @router.post("/register", response_model=Drive, dependencies=[Depends(require_service_token)])
