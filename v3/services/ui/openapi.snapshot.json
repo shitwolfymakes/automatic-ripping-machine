@@ -863,6 +863,64 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Delete All Jobs",
+        "description": "Hard-delete every job in a terminal status. Non-terminal jobs are\nskipped and reported in `skipped_non_terminal` so the caller can\nabandon-then-retry them.\n\n`delete_raw=true` emits one `job.deleted` WS command per job to its\ndrive's ripper before the row is removed. Each rmtree is independent;\na failure on one ripper doesn't block deletes for the others.",
+        "operationId": "delete_all_jobs_api_jobs_delete",
+        "parameters": [
+          {
+            "name": "delete_raw",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Delete Raw"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkDeleteJobsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/jobs/{job_id}": {
@@ -909,6 +967,66 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Delete Job",
+        "description": "Hard-delete a Job. Tracks, fingerprints, session_applications,\ntranscode_tasks, and events cascade via Postgres FK ondelete=CASCADE.\n\nRefuses non-terminal jobs (CREATED / AWAITING_USER_ID / IDENTIFIED /\nRIPPING) \u2014 caller must `POST /abandon` first if they want a job in\nflight gone. This keeps the active-rip cancel logic in one place.\n\n`delete_raw=true` also wipes `/raw/{job_id}/` on the ripper that\nowns the drive (sent over WS \u2014 only the ripper has `/raw` mounted).\nThe DB delete proceeds regardless of whether the rmtree succeeds.",
+        "operationId": "delete_job_api_jobs__job_id__delete",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "delete_raw",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Delete Raw"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -3256,6 +3374,31 @@
           "idempotent"
         ],
         "title": "ApplySessionResponse"
+      },
+      "BulkDeleteJobsResponse": {
+        "properties": {
+          "deleted_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Deleted Ids"
+          },
+          "skipped_non_terminal": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skipped Non Terminal"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deleted_ids",
+          "skipped_non_terminal"
+        ],
+        "title": "BulkDeleteJobsResponse",
+        "description": "DELETE /api/jobs response. `deleted_ids` lists the jobs whose DB\nrows were removed; `skipped_non_terminal` lists job IDs that were\nrefused because they were still in flight (caller should abandon\nthem first if they really want them gone)."
       },
       "ClaimTaskResponse": {
         "properties": {

@@ -76,6 +76,11 @@ export interface AbandonJobRequest {
   delete_raw?: boolean
 }
 
+export interface BulkDeleteJobsResponse {
+  deleted_ids: string[]
+  skipped_non_terminal: string[]
+}
+
 export interface ManualTriggerResponse {
   drive_id: string
   session_id: string | null

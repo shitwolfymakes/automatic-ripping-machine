@@ -23,6 +23,7 @@ from arm_common.schemas import (
     AbandonJobRequest,
     ApplySessionRequest,
     ApplySessionResponse,
+    BulkDeleteJobsResponse,
     DiscFingerprintView,
     JobDetailView,
     JobUpdateRequest,
@@ -168,6 +169,101 @@ async def abandon_job(
 
     logger.info("abandon job_id=%s delete_raw=%s", job.id, delete_raw)
     return job
+
+
+_TERMINAL_STATUSES: frozenset[JobStatus] = frozenset(
+    {
+        JobStatus.RIPPED,
+        JobStatus.RIPPED_PARTIAL,
+        JobStatus.ABANDONED,
+        JobStatus.FAILED,
+    }
+)
+
+
+async def _emit_delete_raw(hub: WSHub, db: AsyncSession, job: Job) -> None:
+    """Tell the ripper that owns this job's drive to rmtree `/raw/{id}/`.
+    Backend has no `/raw` mount; the WS hop is the only way to reach the
+    files. If the ripper for that drive is offline, the rmtree silently
+    no-ops (subscriber list is empty) — acceptable: leftover raw files
+    from a destroyed drive aren't taking up space on a live drive."""
+    payload = {"job_id": job.id, "drive_id": job.drive_id, "delete_raw": True}
+    await hub.emit(
+        topic=f"ripper.commands.{job.drive_id}",
+        event_type="job.deleted",
+        payload=payload,
+        job_id=job.id,
+        session=db,
+    )
+
+
+@router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_job(
+    job_id: str,
+    delete_raw: bool = Query(default=False),
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
+) -> None:
+    """Hard-delete a Job. Tracks, fingerprints, session_applications,
+    transcode_tasks, and events cascade via Postgres FK ondelete=CASCADE.
+
+    Refuses non-terminal jobs (CREATED / AWAITING_USER_ID / IDENTIFIED /
+    RIPPING) — caller must `POST /abandon` first if they want a job in
+    flight gone. This keeps the active-rip cancel logic in one place.
+
+    `delete_raw=true` also wipes `/raw/{job_id}/` on the ripper that
+    owns the drive (sent over WS — only the ripper has `/raw` mounted).
+    The DB delete proceeds regardless of whether the rmtree succeeds.
+    """
+    job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
+    if job.status not in _TERMINAL_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"job in non-terminal status {job.status.value}; abandon it first",
+        )
+
+    if delete_raw:
+        await _emit_delete_raw(hub, db, job)
+
+    await db.delete(job)
+    await db.commit()
+    logger.info("delete job_id=%s delete_raw=%s", job_id, delete_raw)
+
+
+@router.delete("", response_model=BulkDeleteJobsResponse)
+async def delete_all_jobs(
+    delete_raw: bool = Query(default=False),
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
+) -> BulkDeleteJobsResponse:
+    """Hard-delete every job in a terminal status. Non-terminal jobs are
+    skipped and reported in `skipped_non_terminal` so the caller can
+    abandon-then-retry them.
+
+    `delete_raw=true` emits one `job.deleted` WS command per job to its
+    drive's ripper before the row is removed. Each rmtree is independent;
+    a failure on one ripper doesn't block deletes for the others.
+    """
+    rows = (await db.execute(select(Job))).scalars().all()
+
+    deleted_ids: list[str] = []
+    skipped: list[str] = []
+    for job in rows:
+        if job.status not in _TERMINAL_STATUSES:
+            skipped.append(job.id)
+            continue
+        if delete_raw:
+            await _emit_delete_raw(hub, db, job)
+        await db.delete(job)
+        deleted_ids.append(job.id)
+
+    await db.commit()
+    logger.info("delete-all jobs deleted=%d skipped=%d delete_raw=%s", len(deleted_ids), len(skipped), delete_raw)
+    return BulkDeleteJobsResponse(deleted_ids=deleted_ids, skipped_non_terminal=skipped)
 
 
 @router.post("/manual", response_model=ManualTriggerResponse, status_code=status.HTTP_202_ACCEPTED)

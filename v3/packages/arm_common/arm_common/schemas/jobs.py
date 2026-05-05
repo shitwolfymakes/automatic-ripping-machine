@@ -36,6 +36,16 @@ class AbandonJobRequest(BaseModel):
     delete_raw: bool = False
 
 
+class BulkDeleteJobsResponse(BaseModel):
+    """DELETE /api/jobs response. `deleted_ids` lists the jobs whose DB
+    rows were removed; `skipped_non_terminal` lists job IDs that were
+    refused because they were still in flight (caller should abandon
+    them first if they really want them gone)."""
+
+    deleted_ids: list[str]
+    skipped_non_terminal: list[str]
+
+
 class DiscFingerprintView(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
