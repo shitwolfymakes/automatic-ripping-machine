@@ -1,4 +1,5 @@
 import asyncio
+import fcntl
 import logging
 import os
 import time
@@ -19,14 +20,51 @@ OnTrackDone = Callable[[TrackView, RipResult], Awaitable[None]]
 OnTrackProgress = Callable[[TrackView, float], Awaitable[None]]
 
 # Drive-recovery window between titles. External USB Blu-ray drives
-# (e.g. LG BP50NB40) can vanish from the kernel after a long sustained
-# read — autosuspend kicks in, the SCSI device is unbound, and the next
-# makemkvcon invocation fails instantly with ENODEV / "no usable
-# optical drives". 30s is well over the typical USB re-enumeration time
-# (<5s in practice) and well under any sane per-title rip duration, so
-# the worst-case overhead is bounded if the drive really is dead.
-DRIVE_READY_TIMEOUT_SECONDS = 30.0
+# (e.g. LG BP50NB40) misbehave in two ways after a long sustained read:
+# (1) the kernel unbinds /dev/sr0 entirely (USB autosuspend); subsequent
+#     opens fail with ENODEV. open() is what catches this.
+# (2) the device re-binds quickly but the medium reports SCSI NOT_READY
+#     ("LOGICAL UNIT IS IN PROCESS OF BECOMING READY") for another
+#     30-60s while the drive re-spins and re-reads the BD discovery
+#     structures. CDROM_DRIVE_STATUS catches this — the ioctl returns
+#     CDS_DRIVE_NOT_READY until the medium is actually rip-ready.
+# 60s covers the slow USB-BD case observed in production; if the drive
+# really is dead we fail-open and let makemkvcon's exit=11 error carry
+# the user-visible failure rather than hanging the rip queue.
+DRIVE_READY_TIMEOUT_SECONDS = 60.0
 DRIVE_READY_POLL_INTERVAL_SECONDS = 0.5
+
+# Linux <linux/cdrom.h>. CDS_DISC_OK is the only status that means
+# "medium loaded and ready for I/O".
+_CDROM_DRIVE_STATUS = 0x5326
+_CDS_DISC_OK = 4
+
+
+def _drive_status(device_path: str) -> tuple[bool, str]:
+    """Probe the device once and return (is_ready, reason).
+
+    is_ready is True only when (a) the device node is openable AND
+    (b) CDROM_DRIVE_STATUS reports CDS_DISC_OK. Any other state — node
+    missing, kernel ENODEV, tray open, NO_DISC, drive not ready — is
+    treated as "not yet" and surfaces in `reason` for logging.
+    """
+    try:
+        fd = os.open(device_path, os.O_RDONLY | os.O_NONBLOCK)
+    except OSError as exc:
+        return False, f"open: errno={exc.errno} {exc.strerror or exc}"
+    try:
+        try:
+            status = fcntl.ioctl(fd, _CDROM_DRIVE_STATUS, 0)
+        except OSError as exc:
+            # Some virtual / non-CDROM block devices don't implement
+            # CDROM_DRIVE_STATUS. Treat that as "ready" — better than
+            # blocking the rip queue forever on a device we can't probe.
+            return True, f"ioctl unsupported (errno={exc.errno}); assuming ready"
+    finally:
+        os.close(fd)
+    if status == _CDS_DISC_OK:
+        return True, "CDS_DISC_OK"
+    return False, f"CDROM_DRIVE_STATUS={status}"
 
 
 async def _wait_for_drive_ready(
@@ -35,33 +73,29 @@ async def _wait_for_drive_ready(
     timeout_seconds: float = DRIVE_READY_TIMEOUT_SECONDS,
     poll_interval_seconds: float = DRIVE_READY_POLL_INTERVAL_SECONDS,
 ) -> bool:
-    """Poll `device_path` until a non-blocking open() succeeds, or
+    """Poll `device_path` until the medium is rip-ready, or
     `timeout_seconds` elapses. Returns True on success, False on
     timeout.
 
     A healthy drive returns immediately on the first probe (no sleep).
-    A drive that's mid-re-enumeration after USB autosuspend typically
-    returns within a couple of poll intervals.
+    A drive that's mid-re-enumeration or mid-spin-up returns within a
+    few poll intervals.
     """
     deadline = time.monotonic() + timeout_seconds
     waited = 0.0
+    last_reason = "no probes attempted"
     while True:
-        try:
-            fd = os.open(device_path, os.O_RDONLY | os.O_NONBLOCK)
-        except OSError as exc:
-            last_err = exc
-        else:
-            os.close(fd)
+        ready, last_reason = _drive_status(device_path)
+        if ready:
             if waited > 0:
-                logger.info("drive %s ready after %.1fs", device_path, waited)
+                logger.info("drive %s ready after %.1fs (%s)", device_path, waited, last_reason)
             return True
         if time.monotonic() >= deadline:
             logger.warning(
-                "drive %s did not become ready within %.0fs (last errno=%s: %s)",
+                "drive %s did not become ready within %.0fs (last status: %s)",
                 device_path,
                 timeout_seconds,
-                getattr(last_err, "errno", None),
-                last_err,
+                last_reason,
             )
             return False
         await asyncio.sleep(poll_interval_seconds)

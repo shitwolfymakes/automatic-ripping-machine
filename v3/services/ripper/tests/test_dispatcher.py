@@ -1,11 +1,12 @@
 """Dispatcher between-titles drive-readiness wait.
 
-Reproduces the scenario from the LG BP50NB40 USB Blu-ray drive: after a
-long, successful rip of title 0, the drive vanishes from the kernel and
-subsequent makemkvcon invocations fail with ENODEV. The fix polls
-`/dev/sr0` for a re-open between titles so the bounded wait can rescue
-the rip. These tests cover the readiness probe in isolation plus its
-integration into rip_all.
+Reproduces two failure modes seen on an LG BP50NB40 USB Blu-ray drive
+after a long, successful rip of title 0:
+  (1) the kernel unbinds /dev/sr0 entirely (open returns ENODEV), and
+  (2) the device re-binds but the medium stays in SCSI "becoming
+      ready" state for another 30-60s.
+The fix polls (open + CDROM_DRIVE_STATUS) between titles. Tests cover
+the probe + the wait + the rip_all integration.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from arm_common import DiscType
 from arm_common.enums import TrackKind, TrackStatus
 from arm_common.schemas import TrackView
 
-from arm_ripper.rip.dispatcher import _wait_for_drive_ready, rip_all
+from arm_ripper.rip.dispatcher import _drive_status, _wait_for_drive_ready, rip_all
 from arm_ripper.rip.makemkv_rip import RipResult
 
 
@@ -41,22 +42,81 @@ def _track(idx: int) -> TrackView:
     )
 
 
-# --- _wait_for_drive_ready ---------------------------------------------------
+# --- _drive_status (single probe) -------------------------------------------
 
 
-async def test_wait_returns_immediately_when_drive_is_open(monkeypatch, tmp_path):
-    opens: list[str] = []
-    closes: list[int] = []
+def _patch_open_close_ioctl(monkeypatch, *, open_result, ioctl_result):
+    """Helper: stub os.open/os.close/fcntl.ioctl together so a single
+    test can describe one probe's worth of behaviour. open_result is
+    either a fake fd (int) or an Exception to raise; ioctl_result is
+    either an int CDS_* status or an Exception."""
 
     def fake_open(path: str, flags: int) -> int:
-        opens.append(path)
-        return 99
+        if isinstance(open_result, Exception):
+            raise open_result
+        return open_result
 
     def fake_close(fd: int) -> None:
-        closes.append(fd)
+        return None
+
+    def fake_ioctl(fd: int, request: int, arg: int) -> int:
+        if isinstance(ioctl_result, Exception):
+            raise ioctl_result
+        return ioctl_result
 
     monkeypatch.setattr(os, "open", fake_open)
     monkeypatch.setattr(os, "close", fake_close)
+    monkeypatch.setattr(dispatcher_module.fcntl, "ioctl", fake_ioctl)
+
+
+def test_drive_status_ready_when_open_and_disc_ok(monkeypatch):
+    _patch_open_close_ioctl(monkeypatch, open_result=11, ioctl_result=4)  # CDS_DISC_OK
+    ready, reason = _drive_status("/dev/sr0")
+    assert ready is True
+    assert "CDS_DISC_OK" in reason
+
+
+def test_drive_status_not_ready_when_open_fails(monkeypatch):
+    _patch_open_close_ioctl(
+        monkeypatch,
+        open_result=OSError(errno.ENODEV, "No such device"),
+        ioctl_result=4,
+    )
+    ready, reason = _drive_status("/dev/sr0")
+    assert ready is False
+    assert "errno=19" in reason
+
+
+def test_drive_status_not_ready_when_disc_becoming_ready(monkeypatch):
+    """SCSI 'IS IN PROCESS OF BECOMING READY' — open() works, ioctl
+    returns CDS_DRIVE_NOT_READY (3). This is the second failure mode
+    seen in production; the previous fix only checked open()."""
+    _patch_open_close_ioctl(monkeypatch, open_result=11, ioctl_result=3)
+    ready, reason = _drive_status("/dev/sr0")
+    assert ready is False
+    assert "CDROM_DRIVE_STATUS=3" in reason
+
+
+def test_drive_status_assumes_ready_when_ioctl_unsupported(monkeypatch):
+    """A non-CDROM block device backing /dev/sr0 (rare; happens in
+    container test setups) returns ENOTTY from CDROM_DRIVE_STATUS.
+    Better to proceed than to deadlock — makemkvcon will give us a
+    real signal."""
+    _patch_open_close_ioctl(
+        monkeypatch,
+        open_result=11,
+        ioctl_result=OSError(errno.ENOTTY, "Inappropriate ioctl for device"),
+    )
+    ready, reason = _drive_status("/dev/sr0")
+    assert ready is True
+    assert "ioctl unsupported" in reason
+
+
+# --- _wait_for_drive_ready (loop) -------------------------------------------
+
+
+async def test_wait_returns_immediately_when_drive_is_ready(monkeypatch):
+    _patch_open_close_ioctl(monkeypatch, open_result=11, ioctl_result=4)
 
     sleep_calls: list[float] = []
 
@@ -67,51 +127,45 @@ async def test_wait_returns_immediately_when_drive_is_open(monkeypatch, tmp_path
 
     ok = await _wait_for_drive_ready("/dev/sr0", timeout_seconds=5.0, poll_interval_seconds=0.01)
     assert ok is True
-    assert opens == ["/dev/sr0"]
-    assert closes == [99]
     # No sleeps because the very first probe succeeded.
     assert sleep_calls == []
 
 
-async def test_wait_polls_then_succeeds(monkeypatch):
-    """Drive returns ENODEV twice, then re-binds. Wait succeeds on the third probe."""
-    sequence = iter([OSError(errno.ENODEV, "No such device"), OSError(errno.ENODEV, "No such device"), 7])
+async def test_wait_polls_through_not_ready_until_ok(monkeypatch):
+    """ENODEV → CDS_DRIVE_NOT_READY → CDS_DISC_OK. Three probes, two sleeps."""
+    open_seq = iter([OSError(errno.ENODEV, "No such device"), 11, 11])
+    # Probe 1 fails on open, ioctl never called. Probes 2-3 hit ioctl: first NOT_READY, then OK.
+    ioctl_seq = iter([3, 4])
 
     def fake_open(path: str, flags: int) -> int:
-        result = next(sequence)
+        result = next(open_seq)
         if isinstance(result, Exception):
             raise result
         return result
 
-    closed: list[int] = []
+    def fake_ioctl(fd: int, request: int, arg: int) -> int:
+        return next(ioctl_seq)
 
     monkeypatch.setattr(os, "open", fake_open)
-    monkeypatch.setattr(os, "close", lambda fd: closed.append(fd))
+    monkeypatch.setattr(os, "close", lambda fd: None)
+    monkeypatch.setattr(dispatcher_module.fcntl, "ioctl", fake_ioctl)
 
-    sleep_count = 0
+    sleeps = 0
 
     async def fake_sleep(delay: float) -> None:
-        nonlocal sleep_count
-        sleep_count += 1
+        nonlocal sleeps
+        sleeps += 1
 
     monkeypatch.setattr(dispatcher_module.asyncio, "sleep", fake_sleep)
 
     ok = await _wait_for_drive_ready("/dev/sr0", timeout_seconds=5.0, poll_interval_seconds=0.01)
     assert ok is True
-    # Two failures + one success → two intermediate sleeps.
-    assert sleep_count == 2
-    assert closed == [7]
+    assert sleeps == 2
 
 
 async def test_wait_returns_false_on_timeout(monkeypatch, caplog):
-    def fake_open(path: str, flags: int) -> int:
-        raise OSError(errno.ENODEV, "No such device")
+    _patch_open_close_ioctl(monkeypatch, open_result=11, ioctl_result=3)  # forever NOT_READY
 
-    monkeypatch.setattr(os, "open", fake_open)
-
-    # Drive monotonic() forward a bit each call so the deadline is hit
-    # after a couple of iterations regardless of how many times the
-    # function probes the clock.
     counter = {"n": 0}
 
     def fake_monotonic() -> float:
@@ -132,7 +186,6 @@ async def test_wait_returns_false_on_timeout(monkeypatch, caplog):
 
     assert ok is False
     assert any("did not become ready" in r.message for r in caplog.records)
-    # Each iteration except the last (which sees the deadline crossed) sleeps.
     assert len(sleeps) >= 1
 
 
