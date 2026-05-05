@@ -47,11 +47,10 @@ def _track(idx: int) -> TrackView:
 # --- _drive_status (single probe) -------------------------------------------
 
 
-def _patch_open_close_ioctl(monkeypatch, *, open_result, ioctl_result):
-    """Helper: stub os.open/os.close/fcntl.ioctl together so a single
-    test can describe one probe's worth of behaviour. open_result is
-    either a fake fd (int) or an Exception to raise; ioctl_result is
-    either an int CDS_* status or an Exception."""
+def _patch_open_close_ioctl(monkeypatch, *, open_result, ioctl_result, read_result: Any = b"\0" * 2048):
+    """Helper: stub os.open/os.close/os.lseek/os.read/fcntl.ioctl
+    together so a single test can describe one probe's worth of
+    behaviour. *_result accepts either a value or an Exception."""
 
     def fake_open(path: str, flags: int) -> int:
         if isinstance(open_result, Exception):
@@ -66,8 +65,18 @@ def _patch_open_close_ioctl(monkeypatch, *, open_result, ioctl_result):
             raise ioctl_result
         return ioctl_result
 
+    def fake_lseek(fd: int, offset: int, whence: int) -> int:
+        return offset
+
+    def fake_read(fd: int, n: int) -> bytes:
+        if isinstance(read_result, Exception):
+            raise read_result
+        return read_result
+
     monkeypatch.setattr(os, "open", fake_open)
     monkeypatch.setattr(os, "close", fake_close)
+    monkeypatch.setattr(os, "lseek", fake_lseek)
+    monkeypatch.setattr(os, "read", fake_read)
     monkeypatch.setattr(drive_status_module.fcntl, "ioctl", fake_ioctl)
 
 
@@ -118,6 +127,65 @@ def test_probe_returns_unknown_when_ioctl_unsupported(monkeypatch):
     assert "ioctl unsupported" in reason
 
 
+def test_probe_verify_read_downgrades_to_not_ready_on_eio(monkeypatch):
+    """CDS_DISC_OK + EIO on read = drive recognises the disc but the
+    medium is parked / spinning up. The previous CDS-only probe
+    declared this drive ready; the verify-read catches it and the
+    wait loop keeps polling instead of handing off to makemkvcon."""
+    _patch_open_close_ioctl(
+        monkeypatch,
+        open_result=11,
+        ioctl_result=4,  # CDS_DISC_OK
+        read_result=OSError(errno.EIO, "Input/output error"),
+    )
+    status, reason = probe_drive_media("/dev/sr0", verify_read=True)
+    assert status is DriveMediaStatus.NOT_READY
+    assert "errno=5" in reason
+
+
+def test_probe_verify_read_returns_loaded_when_read_succeeds(monkeypatch):
+    _patch_open_close_ioctl(
+        monkeypatch,
+        open_result=11,
+        ioctl_result=4,  # CDS_DISC_OK
+        read_result=b"\x01" * 2048,
+    )
+    status, _ = probe_drive_media("/dev/sr0", verify_read=True)
+    assert status is DriveMediaStatus.LOADED
+
+
+def test_probe_verify_read_skipped_when_status_already_not_ready(monkeypatch):
+    """No point doing a verify read if the ioctl already says the
+    medium is not ready; would just block the loop unnecessarily."""
+
+    def boom(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("os.read must not be called when status is already NOT_READY")
+
+    monkeypatch.setattr(os, "open", lambda path, flags: 11)
+    monkeypatch.setattr(os, "close", lambda fd: None)
+    monkeypatch.setattr(os, "read", boom)
+    monkeypatch.setattr(drive_status_module.fcntl, "ioctl", lambda fd, req, arg: 3)
+
+    status, _ = probe_drive_media("/dev/sr0", verify_read=True)
+    assert status is DriveMediaStatus.NOT_READY
+
+
+def test_probe_default_does_not_call_read(monkeypatch):
+    """Heartbeat callers pass verify_read=False (default) — confirm
+    the cheap path doesn't issue an actual disc read."""
+
+    def boom(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("os.read must not be called when verify_read=False")
+
+    monkeypatch.setattr(os, "open", lambda path, flags: 11)
+    monkeypatch.setattr(os, "close", lambda fd: None)
+    monkeypatch.setattr(os, "read", boom)
+    monkeypatch.setattr(drive_status_module.fcntl, "ioctl", lambda fd, req, arg: 4)
+
+    status, _ = probe_drive_media("/dev/sr0")
+    assert status is DriveMediaStatus.LOADED
+
+
 # --- _wait_for_drive_ready (loop) -------------------------------------------
 
 
@@ -154,6 +222,8 @@ async def test_wait_polls_through_not_ready_until_ok(monkeypatch):
 
     monkeypatch.setattr(os, "open", fake_open)
     monkeypatch.setattr(os, "close", lambda fd: None)
+    monkeypatch.setattr(os, "lseek", lambda fd, offset, whence: offset)
+    monkeypatch.setattr(os, "read", lambda fd, n: b"\0" * n)
     monkeypatch.setattr(drive_status_module.fcntl, "ioctl", fake_ioctl)
 
     sleeps = 0
