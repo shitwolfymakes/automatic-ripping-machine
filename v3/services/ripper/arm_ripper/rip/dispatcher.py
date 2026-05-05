@@ -1,4 +1,7 @@
+import asyncio
 import logging
+import os
+import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -14,6 +17,55 @@ logger = logging.getLogger("arm_ripper.rip.dispatcher")
 OnTrackStart = Callable[[TrackView], Awaitable[None]]
 OnTrackDone = Callable[[TrackView, RipResult], Awaitable[None]]
 OnTrackProgress = Callable[[TrackView, float], Awaitable[None]]
+
+# Drive-recovery window between titles. External USB Blu-ray drives
+# (e.g. LG BP50NB40) can vanish from the kernel after a long sustained
+# read — autosuspend kicks in, the SCSI device is unbound, and the next
+# makemkvcon invocation fails instantly with ENODEV / "no usable
+# optical drives". 30s is well over the typical USB re-enumeration time
+# (<5s in practice) and well under any sane per-title rip duration, so
+# the worst-case overhead is bounded if the drive really is dead.
+DRIVE_READY_TIMEOUT_SECONDS = 30.0
+DRIVE_READY_POLL_INTERVAL_SECONDS = 0.5
+
+
+async def _wait_for_drive_ready(
+    device_path: str,
+    *,
+    timeout_seconds: float = DRIVE_READY_TIMEOUT_SECONDS,
+    poll_interval_seconds: float = DRIVE_READY_POLL_INTERVAL_SECONDS,
+) -> bool:
+    """Poll `device_path` until a non-blocking open() succeeds, or
+    `timeout_seconds` elapses. Returns True on success, False on
+    timeout.
+
+    A healthy drive returns immediately on the first probe (no sleep).
+    A drive that's mid-re-enumeration after USB autosuspend typically
+    returns within a couple of poll intervals.
+    """
+    deadline = time.monotonic() + timeout_seconds
+    waited = 0.0
+    while True:
+        try:
+            fd = os.open(device_path, os.O_RDONLY | os.O_NONBLOCK)
+        except OSError as exc:
+            last_err = exc
+        else:
+            os.close(fd)
+            if waited > 0:
+                logger.info("drive %s ready after %.1fs", device_path, waited)
+            return True
+        if time.monotonic() >= deadline:
+            logger.warning(
+                "drive %s did not become ready within %.0fs (last errno=%s: %s)",
+                device_path,
+                timeout_seconds,
+                getattr(last_err, "errno", None),
+                last_err,
+            )
+            return False
+        await asyncio.sleep(poll_interval_seconds)
+        waited += poll_interval_seconds
 
 
 async def rip_all(
@@ -34,7 +86,14 @@ async def rip_all(
     - DATA: a single dd dump assigned to the first (only) track.
     """
     if disc_type in (DiscType.DVD, DiscType.BLURAY):
-        for track in tracks:
+        for i, track in enumerate(tracks):
+            # Between-titles drive-recovery wait. Skipped on the first
+            # title (the scan just opened the drive) and on the disc-type
+            # branches that rip in one shot (CD/DATA below). See
+            # _wait_for_drive_ready for the why.
+            if i > 0:
+                await _wait_for_drive_ready(device_path)
+
             await on_track_start(track)
 
             async def _on_progress(fraction: float, t: TrackView = track) -> None:
