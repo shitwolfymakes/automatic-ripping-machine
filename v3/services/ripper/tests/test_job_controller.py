@@ -4,6 +4,7 @@ import asyncio
 from collections import deque
 from datetime import datetime, timezone
 
+import httpx
 import pytest
 
 import arm_ripper.job_controller as jc_module
@@ -269,6 +270,72 @@ async def test_eject_gives_up_after_all_attempts(monkeypatch, caplog):
         await controller._eject_with_retry("/dev/sr0")
 
     assert any("check host auto-mount config" in r.message for r in caplog.records)
+
+
+def _http_status_error(status_code: int, *, url: str = "https://x/api") -> httpx.HTTPStatusError:
+    request = httpx.Request("POST", url)
+    response = httpx.Response(status_code, request=request)
+    return httpx.HTTPStatusError(f"HTTP {status_code}", request=request, response=response)
+
+
+async def test_rip_start_4xx_aborts_pipeline_without_retry(monkeypatch, stub_scan, stub_eject, caplog):
+    """A 422 from rip-start (e.g. backend rejected an empty scan_result)
+    must not loop forever — log + exit so the operator can abandon."""
+
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.IDENTIFIED, title=None))
+
+    call_count = 0
+
+    async def boom(_job_id: str) -> RipStartResponse:
+        nonlocal call_count
+        call_count += 1
+        raise _http_status_error(422, url="https://arm-backend:8443/api/ripper/jobs/job_test/rip-start")
+
+    # Patch the bound method on the client instance (not the class) so
+    # the existing FakeClient stays usable elsewhere.
+    monkeypatch.setattr(client, "rip_start", boom)
+    controller = JobController(client, "drv_test")
+
+    with caplog.at_level("ERROR", logger="arm_ripper.job_controller"):
+        await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    # One attempt, no retry.
+    assert call_count == 1
+    # rip-complete is NOT called when rip-start aborts.
+    assert client.rip_complete_calls == []
+    assert any("rejected by backend" in r.message for r in caplog.records)
+    assert any("abandon job_id=job_test" in r.message for r in caplog.records)
+
+
+async def test_rip_start_5xx_keeps_retrying(monkeypatch, stub_scan, stub_eject):
+    """A 5xx is transient (backend restart, brief overload) — keep
+    retrying until it clears, then proceed."""
+
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.IDENTIFIED, title="X"))
+
+    call_count = 0
+
+    real_rip_start = client.rip_start
+
+    async def flaky(job_id: str) -> RipStartResponse:
+        nonlocal call_count
+        call_count += 1
+        if call_count < 3:
+            raise _http_status_error(503)
+        return await real_rip_start(job_id)
+
+    monkeypatch.setattr(client, "rip_start", flaky)
+    # Don't actually sleep between retries.
+    monkeypatch.setattr(jc_module, "PATCH_RETRY_INITIAL_SECONDS", 0.0)
+    monkeypatch.setattr(jc_module, "PATCH_RETRY_MAX_SECONDS", 0.0)
+
+    controller = JobController(client, "drv_test")
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert call_count == 3
+    assert client.rip_complete_calls == ["job_test"]
 
 
 async def test_job_deleted_ws_event_wipes_raw_dir(tmp_path):
