@@ -12,6 +12,7 @@ from arm_common.schemas.common import ErrorResponse, HealthResponse
 from arm_common.schemas.drives import DriveUpdateRequest
 from arm_common.schemas.jobs import (
     AbandonJobRequest,
+    BulkDeleteJobsResponse,
     DiscFingerprintView,
     JobUpdateRequest,
     JobView,
@@ -74,6 +75,7 @@ from arm_common.schemas.ws import (
 __all__ = [
     "AbandonJobRequest",
     "ApplySessionRequest",
+    "BulkDeleteJobsResponse",
     "DiscFingerprintInput",
     "DiscFingerprintView",
     "ApplySessionResponse",

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { api, ApiError } from '../api/client'
 import AbandonJobDialog from '../components/AbandonJobDialog.vue'
 import ApplySessionDialog from '../components/ApplySessionDialog.vue'
+import DeleteJobDialog from '../components/DeleteJobDialog.vue'
 import JobLogsCard from '../components/JobLogsCard.vue'
 import Poster from '../components/Poster.vue'
 import { useJobsStore } from '../stores/jobs'
@@ -12,10 +13,12 @@ import type { ApplySessionResponse, JobDetailView, JobStatus, JobView } from '..
 import { isTerminalJobStatus } from '../utils/jobStatus'
 
 const route = useRoute()
+const router = useRouter()
 const detail = ref<JobDetailView | null>(null)
 const error = ref<string | null>(null)
 const showApply = ref(false)
 const showAbandon = ref(false)
+const showDelete = ref(false)
 const lastApplied = ref<ApplySessionResponse | null>(null)
 const editingPoster = ref(false)
 const posterDraft = ref('')
@@ -27,6 +30,11 @@ const APPLY_OK: JobStatus[] = ['identified', 'ripped', 'ripped_partial', 'awaiti
 const canApply = computed(() => detail.value !== null && APPLY_OK.includes(detail.value.job.status))
 const canAbandon = computed(
   () => detail.value !== null && !isTerminalJobStatus(detail.value.job.status),
+)
+// API refuses delete on non-terminal jobs (must abandon first), so the button
+// only renders when the row is safely deletable.
+const canDelete = computed(
+  () => detail.value !== null && isTerminalJobStatus(detail.value.job.status),
 )
 
 const jobTasks = computed(() => {
@@ -74,6 +82,11 @@ function onApplied(resp: ApplySessionResponse): void {
 function onAbandoned(updated: JobView): void {
   if (detail.value) detail.value = { ...detail.value, job: updated }
   showAbandon.value = false
+}
+
+function onDeleted(): void {
+  showDelete.value = false
+  void router.push('/')
 }
 
 function startEditPoster(): void {
@@ -146,6 +159,14 @@ async function savePoster(): Promise<void> {
       >
         Abandon job
       </button>
+      <button
+        v-if="canDelete && !showDelete"
+        class="secondary"
+        data-testid="delete-job"
+        @click="showDelete = true"
+      >
+        Delete job
+      </button>
     </div>
 
     <div class="row" style="margin-top: 12px; gap: 8px; align-items: center; flex-wrap: wrap">
@@ -197,6 +218,13 @@ async function savePoster(): Promise<void> {
     :job="detail.job"
     @close="showAbandon = false"
     @abandoned="onAbandoned"
+  />
+
+  <DeleteJobDialog
+    v-if="detail && showDelete"
+    :job="detail.job"
+    @close="showDelete = false"
+    @deleted="onDeleted"
   />
 
   <ApplySessionDialog

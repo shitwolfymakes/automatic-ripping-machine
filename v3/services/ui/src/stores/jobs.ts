@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { api } from '../api/client'
 import type {
   AbandonJobRequest,
+  BulkDeleteJobsResponse,
   JobUpdateRequest,
   JobView,
   ManualTriggerRequest,
@@ -57,6 +58,18 @@ export const useJobsStore = defineStore('jobs', {
     },
     async update(jobId: string, req: JobUpdateRequest): Promise<JobView> {
       return await api.patch<JobView>(`/api/jobs/${jobId}`, req)
+    },
+    async deleteJob(jobId: string, opts: { deleteRaw?: boolean } = {}): Promise<void> {
+      const qs = opts.deleteRaw ? '?delete_raw=true' : ''
+      await api.del(`/api/jobs/${jobId}${qs}`)
+      this.jobs = this.jobs.filter((j) => j.id !== jobId)
+    },
+    async deleteAll(opts: { deleteRaw?: boolean } = {}): Promise<BulkDeleteJobsResponse> {
+      const qs = opts.deleteRaw ? '?delete_raw=true' : ''
+      const result = await api.delJson<BulkDeleteJobsResponse>(`/api/jobs${qs}`)
+      const deleted = new Set(result.deleted_ids)
+      this.jobs = this.jobs.filter((j) => !deleted.has(j.id))
+      return result
     },
   },
 })
