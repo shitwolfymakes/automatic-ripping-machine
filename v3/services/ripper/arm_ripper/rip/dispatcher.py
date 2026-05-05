@@ -59,7 +59,11 @@ async def _wait_for_drive_ready(
     waited = 0.0
     last_reason = "no probes attempted"
     while True:
-        status, last_reason = probe_drive_media(device_path)
+        # `verify_read=True` so a parked disc that reports CDS_DISC_OK
+        # but returns SCSI NOT_READY on the first SCSI read is caught
+        # *before* we hand off to makemkvcon. Run via to_thread because
+        # a read on a recovering drive can briefly block.
+        status, last_reason = await asyncio.to_thread(probe_drive_media, device_path, verify_read=True)
         if _is_rip_ready(status):
             if waited > 0:
                 logger.info("drive %s ready after %.1fs (%s)", device_path, waited, last_reason)
