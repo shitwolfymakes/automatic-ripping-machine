@@ -346,14 +346,14 @@ async function savePoster(): Promise<void> {
 .progress-bar {
   flex: 1;
   height: 8px;
-  background: var(--c-border, #ddd);
+  background: var(--border);
   border-radius: 4px;
   overflow: hidden;
   min-width: 80px;
 }
 .progress-fill {
   height: 100%;
-  background: var(--c-accent, #0aa);
+  background: var(--accent);
   transition: width 200ms linear;
 }
 </style>

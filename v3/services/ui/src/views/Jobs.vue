@@ -48,7 +48,7 @@ onUnmounted(() => {
   <div
     v-if="deleteAllResult"
     class="card"
-    style="border-color: var(--c-accent, #0aa)"
+    style="border-color: var(--accent)"
     data-testid="delete-all-result"
   >
     <h3 style="margin-top: 0">Bulk delete complete</h3>
