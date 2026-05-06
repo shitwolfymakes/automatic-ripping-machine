@@ -30,6 +30,7 @@ from arm_common import (
     Job,
     JobStatus,
     RipPreset,
+    Session,
     TrackStatus,
 )
 from arm_common.models import Track
@@ -56,6 +57,32 @@ _DEFAULT_RIP_PRESET_BY_DISC_TYPE: dict[DiscType, str] = {
     DiscType.CD: "rpr_builtin_music_standard",
     DiscType.DATA: "rpr_builtin_data_copy",
 }
+
+
+async def _resolve_min_length_override(db: AsyncSession, job: Job) -> int | None:
+    """Look up `Session.overrides_json["min_length_seconds"]` for a job
+    that has a pending_session_id, returning None when no override
+    applies. The ripper falls back to its host-side
+    `ARM_MIN_LENGTH_SECONDS` baseline when this is None.
+
+    Auto-rip-on-insert jobs typically don't have a pending_session_id
+    until rip-complete (`maybe_auto_apply_session` fires after the rip)
+    so they always use the baseline; manual-trigger jobs that selected
+    a session up front get their override here.
+    """
+    md = job.metadata_json or {}
+    sess_id = md.get("pending_session_id")
+    if not isinstance(sess_id, str):
+        return None
+    sess = (await db.execute(select(Session).where(col(Session.id) == sess_id))).scalar_one_or_none()
+    if sess is None or not sess.overrides_json:
+        return None
+    raw = sess.overrides_json.get("min_length_seconds")
+    if isinstance(raw, bool):  # bool is an int subclass — reject explicitly
+        return None
+    if isinstance(raw, int) and raw >= 0:
+        return raw
+    return None
 
 
 def _get_dispatcher(request: Request) -> MetadataDispatcher:
@@ -257,6 +284,7 @@ async def rip_start(
             job_id=job.id,
             rip_preset_id=preset_id,
             tracks=[TrackView.model_validate(t) for t in existing],
+            min_length_seconds=await _resolve_min_length_override(session, job),
         )
 
     if job.status != JobStatus.IDENTIFIED:
@@ -322,6 +350,7 @@ async def rip_start(
         job_id=job.id,
         rip_preset_id=preset_id,
         tracks=[TrackView.model_validate(t) for t in refreshed],
+        min_length_seconds=await _resolve_min_length_override(session, job),
     )
 
 
@@ -377,6 +406,7 @@ async def resume(
         job_id=job.id,
         rip_preset_id=preset_id,
         tracks=[TrackView.model_validate(t) for t in refreshed],
+        min_length_seconds=await _resolve_min_length_override(session, job),
     )
 
 

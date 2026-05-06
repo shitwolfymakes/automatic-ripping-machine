@@ -4934,6 +4934,17 @@
             },
             "type": "array",
             "title": "Tracks"
+          },
+          "min_length_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Length Seconds"
           }
         },
         "type": "object",

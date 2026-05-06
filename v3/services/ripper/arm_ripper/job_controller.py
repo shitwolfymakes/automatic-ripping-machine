@@ -9,6 +9,7 @@ from arm_common import DiscType, Job, JobStatus, TrackStatus, with_log_context
 from arm_common.schemas import JobView, RipStartResponse, ScanResult, TrackView, WSEnvelope
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.rip import RipResult, rip_all
+from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS
 from arm_ripper.scan import ScanError, scan as scan_disc
 from arm_ripper.ws_client import WSClient
 
@@ -46,6 +47,7 @@ class JobController:
         *,
         ws: WSClient | None = None,
         device_path: str | None = None,
+        default_min_length_seconds: int = DEFAULT_MIN_LENGTH_SECONDS,
     ) -> None:
         self._client = client
         self._drive_id = drive_id
@@ -54,6 +56,13 @@ class JobController:
         # device path here lets `handle_manual_trigger` run without re-reading
         # settings (which a unit test environment may not have populated).
         self._device_path = device_path
+        # Host-side baseline `--minlength` for `makemkvcon mkv all`. The
+        # backend can override per-rip via `RipStartResponse.min_length_seconds`
+        # (resolved from the Session's `overrides_json["min_length_seconds"]`);
+        # when no override is sent we fall back to this value. Injected by
+        # `main.py` from `ARM_MIN_LENGTH_SECONDS`; tests get the dispatcher
+        # default (600).
+        self._default_min_length_seconds = default_min_length_seconds
         # job_id → asyncio.Event signalled when an `identify.resolved`
         # arrives over WS. Populated by `_await_resolution`, drained by
         # `on_ws_command`.
@@ -429,6 +438,11 @@ class JobController:
             on_track_start=on_track_start,
             on_track_done=on_track_done,
             on_track_progress=on_track_progress,
+            min_length_seconds=(
+                rip_start.min_length_seconds
+                if rip_start.min_length_seconds is not None
+                else self._default_min_length_seconds
+            ),
         )
 
         completed = await self._rip_complete_with_retry(job_id)

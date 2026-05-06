@@ -98,3 +98,9 @@ class RipStartResponse(BaseModel):
     job_id: str
     rip_preset_id: str
     tracks: list[TrackView]
+    # Per-rip `--minlength` override resolved from the Session's
+    # `overrides_json["min_length_seconds"]`. None means "use the
+    # ripper's host-side baseline" (`ARM_MIN_LENGTH_SECONDS`, default
+    # 600). Surfaced here so the ripper doesn't have to read Session
+    # state itself.
+    min_length_seconds: int | None = None
