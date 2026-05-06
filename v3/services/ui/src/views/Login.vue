@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { ApiError } from '../api/client'
+import PasswordInput from '../components/PasswordInput.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -45,7 +46,7 @@ async function submit() {
       </div>
       <div class="field">
         <label for="password">Password</label>
-        <input id="password" v-model="password" type="password" autocomplete="current-password" />
+        <PasswordInput id="password" v-model="password" autocomplete="current-password" />
       </div>
       <p v-if="error" class="error">{{ error }}</p>
       <button :disabled="submitting || !username || !password" type="submit">

@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { ApiError } from '../api/client'
+import PasswordInput from '../components/PasswordInput.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -48,20 +49,15 @@ async function submit() {
       </p>
       <div class="field">
         <label for="current">Current password</label>
-        <input
-          id="current"
-          v-model="currentPassword"
-          type="password"
-          autocomplete="current-password"
-        />
+        <PasswordInput id="current" v-model="currentPassword" autocomplete="current-password" />
       </div>
       <div class="field">
         <label for="new">New password</label>
-        <input id="new" v-model="newPassword" type="password" autocomplete="new-password" />
+        <PasswordInput id="new" v-model="newPassword" autocomplete="new-password" />
       </div>
       <div class="field">
         <label for="confirm">Confirm new password</label>
-        <input id="confirm" v-model="confirmPassword" type="password" autocomplete="new-password" />
+        <PasswordInput id="confirm" v-model="confirmPassword" autocomplete="new-password" />
       </div>
       <p v-if="error" class="error">{{ error }}</p>
       <button :disabled="submitting" type="submit">
