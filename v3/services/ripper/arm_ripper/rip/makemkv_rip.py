@@ -37,6 +37,13 @@ RIP_TIMEOUT_SECONDS = 6 * 60 * 60  # 6 hours: worst-case BD
 
 OnTitleStart = Callable[[int], Awaitable[None]]
 OnTitleProgress = Callable[[int, float], Awaitable[None]]
+# Fired with the disc-overall PRGV `total/max` fraction whenever no
+# per-title PRGT has identified the title currently being written.
+# `mkv all` mode is opaque per-title (a single "Saving all titles to
+# MKV files" PRGT and that's it), so this callback is the only signal
+# the dashboard ever gets during the rip phase. See dispatcher's
+# `_on_disc_progress` for attribution to a track id.
+OnDiscProgress = Callable[[float], Awaitable[None]]
 
 _PRGV_RE = re.compile(r"^PRGV:(\d+),(\d+),(\d+)$")
 _PRGT_RE = re.compile(r'^PRGT:(\d+),(\d+),"(.*)"$')
@@ -92,7 +99,14 @@ class _ParserState:
 
 
 def parse_progress_line(line: str) -> float | None:
-    """Return the fractional progress [0, 1] from a PRGV line, or None."""
+    """Return the per-operation fractional progress [0, 1] from a PRGV
+    line (`current/max`), or None.
+
+    Used to drive per-title progress when a "Saving title #N" PRGT
+    has previously identified the in-flight title. In `mkv all` mode
+    the per-title PRGT never fires; see `parse_progress_totals` for
+    the disc-overall fallback.
+    """
     m = _PRGV_RE.match(line.strip())
     if not m:
         return None
@@ -100,6 +114,26 @@ def parse_progress_line(line: str) -> float | None:
     if max_ <= 0:
         return None
     return min(1.0, max(0.0, _current / max_))
+
+
+def parse_progress_totals(line: str) -> tuple[float, float] | None:
+    """Return (current/max, total/max) from a PRGV line, or None.
+
+    `current/max` is per-operation progress (resets between titles in
+    `mkv ... all` mode); `total/max` is disc-overall progress that
+    advances monotonically across the whole rip. The streamer uses the
+    `total` channel as the disc-level signal when no per-title PRGT
+    has set `current_title`.
+    """
+    m = _PRGV_RE.match(line.strip())
+    if not m:
+        return None
+    current, total, max_ = (int(g) for g in m.groups())
+    if max_ <= 0:
+        return None
+    cur_frac = min(1.0, max(0.0, current / max_))
+    tot_frac = min(1.0, max(0.0, total / max_))
+    return cur_frac, tot_frac
 
 
 def parse_msg_args(line: str) -> tuple[int, list[str]] | None:
@@ -176,6 +210,7 @@ async def _stream_output(
     state: _ParserState,
     on_title_start: OnTitleStart | None,
     on_title_progress: OnTitleProgress | None,
+    on_disc_progress: OnDiscProgress | None,
 ) -> None:
     assert proc.stdout is not None
     while True:
@@ -186,18 +221,30 @@ async def _stream_output(
         if not line:
             continue
 
-        # PRGV — fractional progress for the current operation. We
-        # attribute it to `current_title` (set by the most recent
-        # "Saving title N" PRGT). Pre-rip operations (analysing /
-        # hashing) emit PRGV too; we skip those by gating on
-        # current_title being set.
-        progress = parse_progress_line(line)
-        if progress is not None:
+        # PRGV — two channels in one line:
+        #   `current/max` advances per-operation (resets per title)
+        #   `total/max`   advances disc-overall (monotonic)
+        # If a "Saving title #N" PRGT has identified the in-flight
+        # title, fire the per-title callback with `current/max` —
+        # the established v2-parity behaviour. Otherwise (the common
+        # case for `mkv all`, which emits no per-title PRGT) fall
+        # back to the disc-overall callback so the dashboard bar
+        # still advances. Pre-rip ops (analysing / hashing) emit
+        # PRGV too; the disc-level callback is gated on its presence
+        # which the dispatcher only wires once the rip phase starts.
+        totals = parse_progress_totals(line)
+        if totals is not None:
+            cur_frac, tot_frac = totals
             if state.current_title is not None and on_title_progress is not None:
                 try:
-                    await on_title_progress(state.current_title, progress)
+                    await on_title_progress(state.current_title, cur_frac)
                 except Exception as exc:
                     logger.debug("title progress callback raised: %s", exc)
+            elif on_disc_progress is not None:
+                try:
+                    await on_disc_progress(tot_frac)
+                except Exception as exc:
+                    logger.debug("disc progress callback raised: %s", exc)
             continue
 
         # PRGT — milestone text. Watch for "Saving title N" to update
@@ -306,6 +353,7 @@ async def rip_disc(
     eligible_source_indexes: list[int] | None = None,
     on_title_start: OnTitleStart | None = None,
     on_title_progress: OnTitleProgress | None = None,
+    on_disc_progress: OnDiscProgress | None = None,
 ) -> RipDiscResult:
     """Rip every title with duration ≥ `minlength_seconds` from the disc
     in `device_path` to `output_dir`. Single makemkvcon invocation; the
@@ -357,7 +405,7 @@ async def rip_disc(
         return RipDiscResult(overall_error=f"makemkvcon not on PATH: {e}", titles={})
 
     state = _ParserState()
-    streamer = asyncio.create_task(_stream_output(proc, state, on_title_start, on_title_progress))
+    streamer = asyncio.create_task(_stream_output(proc, state, on_title_start, on_title_progress, on_disc_progress))
     try:
         await asyncio.wait_for(proc.wait(), timeout=RIP_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:

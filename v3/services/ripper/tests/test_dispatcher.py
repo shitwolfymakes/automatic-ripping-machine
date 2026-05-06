@@ -150,6 +150,7 @@ def _stub_rip_disc(
     *,
     captured: dict[str, Any] | None = None,
     fire_per_title_start: bool = True,
+    fire_disc_progress: list[float] | None = None,
 ):
     """Replace dispatcher's rip_disc with a fake that captures kwargs
     and returns the canned RipDiscResult. Optionally invokes
@@ -159,7 +160,11 @@ def _stub_rip_disc(
     `fire_per_title_start=False` simulates MakeMKV's `mkv all` mode,
     where no per-title PRGT fires — the dispatcher must still drive
     the on_track_start → on_track_done sequence post-rip for every
-    track the user selected."""
+    track the user selected.
+
+    `fire_disc_progress=[0.1, 0.5, ...]` invokes on_disc_progress with
+    each fraction in order, simulating the disc-overall PRGV stream
+    that's the only progress signal in `mkv all` mode."""
 
     async def fake_rip_disc(
         *,
@@ -169,6 +174,7 @@ def _stub_rip_disc(
         eligible_source_indexes: list[int] | None = None,
         on_title_start: Any | None = None,
         on_title_progress: Any | None = None,
+        on_disc_progress: Any | None = None,
     ) -> RipDiscResult:
         if captured is not None:
             captured["device_path"] = device_path
@@ -178,10 +184,20 @@ def _stub_rip_disc(
         if fire_per_title_start and on_title_start is not None:
             for idx in fake_result.titles:
                 await on_title_start(idx)
-        if on_title_progress is not None:
+        # Per-title progress can only fire when the streamer has
+        # established `current_title` from a "Saving title #N" PRGT —
+        # i.e. the same condition that gates `fire_per_title_start`.
+        # `mkv all` mode (fire_per_title_start=False) emits no
+        # per-title PRGT and therefore no per-title progress; skipping
+        # it here keeps the fake's behaviour aligned with the real
+        # streamer in [makemkv_rip.py].
+        if fire_per_title_start and on_title_progress is not None:
             for idx in fake_result.titles:
                 await on_title_progress(idx, 0.5)
                 await on_title_progress(idx, 1.0)
+        if fire_disc_progress is not None and on_disc_progress is not None:
+            for frac in fire_disc_progress:
+                await on_disc_progress(frac)
         return fake_result
 
     monkeypatch.setattr(dispatcher_module, "rip_disc", fake_rip_disc)
@@ -408,6 +424,94 @@ async def test_rip_all_synthesises_start_when_prgt_misses(monkeypatch, tmp_path)
     assert len(by_track) == 8
     for tid, seq in by_track.items():
         assert seq == ["start", "done"], f"track {tid} had bad lifecycle: {seq}"
+
+
+async def test_rip_all_disc_progress_attributes_to_first_eligible_track(monkeypatch, tmp_path):
+    """`mkv all` emits no per-title PRGT, so `on_title_progress` never
+    fires from the stream. The dispatcher must surface PRGV's
+    `total/max` (disc-overall) channel via `on_disc_progress`,
+    attributed to the first eligible track. The UI's rips store keys
+    live progress by job_id and renders one bar per disc, so the
+    track_id chosen is purely a wire-format detail — what matters is
+    that the bar advances 0 → 100 % across the rip."""
+    fake_result = RipDiscResult(
+        overall_error=None,
+        titles={
+            0: RipResult(ok=True, output_path=tmp_path / "title_t00.mkv", size_bytes=100, sha256="a"),
+            2: RipResult(ok=True, output_path=tmp_path / "title_t01.mkv", size_bytes=200, sha256="b"),
+        },
+    )
+    _stub_rip_disc(
+        monkeypatch,
+        fake_result,
+        fire_per_title_start=False,
+        fire_disc_progress=[0.05, 0.4, 0.7, 1.0],
+    )
+
+    progress: list[tuple[str, float]] = []
+
+    async def on_progress(track: TrackView, fraction: float) -> None:
+        progress.append((track.id, fraction))
+
+    async def noop_start(_track: TrackView) -> None:
+        return None
+
+    async def noop_done(_track: TrackView, _result: RipResult) -> None:
+        return None
+
+    # 4 selected tracks; first eligible is track index 0 (`trk_0`).
+    tracks = [_track(i) for i in range(4)]
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=tracks,
+        output_dir=tmp_path,
+        on_track_start=noop_start,
+        on_track_done=noop_done,
+        on_track_progress=on_progress,
+        min_length_seconds=600,
+    )
+
+    # Every disc-progress sample lands on the first eligible track,
+    # in order, with the supplied fractions intact.
+    assert progress == [("trk_0", 0.05), ("trk_0", 0.4), ("trk_0", 0.7), ("trk_0", 1.0)]
+
+
+async def test_rip_all_disc_progress_no_op_when_no_progress_callback(monkeypatch, tmp_path):
+    """If the caller doesn't wire `on_track_progress`, the dispatcher's
+    disc-progress fallback must be a silent no-op rather than crashing
+    on a None call."""
+    fake_result = RipDiscResult(
+        overall_error=None,
+        titles={
+            0: RipResult(ok=True, output_path=tmp_path / "title_t00.mkv", size_bytes=100, sha256="a"),
+        },
+    )
+    _stub_rip_disc(
+        monkeypatch,
+        fake_result,
+        fire_per_title_start=False,
+        fire_disc_progress=[0.5, 1.0],
+    )
+
+    async def noop_start(_track: TrackView) -> None:
+        return None
+
+    async def noop_done(_track: TrackView, _result: RipResult) -> None:
+        return None
+
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=[_track(0)],
+        output_dir=tmp_path,
+        on_track_start=noop_start,
+        on_track_done=noop_done,
+        on_track_progress=None,
+        min_length_seconds=600,
+    )
+    # No assertions on progress because no callback was wired; reaching
+    # here without raising is the success criterion.
 
 
 async def test_rip_all_disc_error_path_drives_full_lifecycle(monkeypatch, tmp_path):

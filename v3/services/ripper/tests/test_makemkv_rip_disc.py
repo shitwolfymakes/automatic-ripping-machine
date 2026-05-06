@@ -241,6 +241,101 @@ async def test_rip_disc_extra_output_files_left_unclaimed(monkeypatch, tmp_path)
 
 
 @pytest.mark.asyncio
+async def test_rip_disc_falls_back_to_disc_progress_when_no_per_title_prgt(monkeypatch, tmp_path):
+    """`mkv all` emits only the overall "Saving all titles to MKV files"
+    PRGT — no per-title milestones. PRGV lines that arrive while
+    `current_title is None` must drive `on_disc_progress` via the
+    `total/max` channel, not get silently dropped.
+
+    This is the regression that made the dashboard bar stay at 0 % for
+    the entire rip even though the file was being written: the streamer
+    gated `on_title_progress` on `current_title is not None` and had no
+    fallback for the disc-overall case."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'PRGT:0,5018,"Saving all titles to MKV files"',
+            # current/max = 0.10, total/max = 0.05  →  expect disc-level 0.05
+            "PRGV:1000,500,10000",
+            "PRGV:5000,2500,10000",
+            "PRGV:9000,9500,10000",
+        ],
+    )
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
+
+    title_progress: list[tuple[int, float]] = []
+    disc_progress: list[float] = []
+
+    async def on_title_start(_idx: int) -> None:
+        return None
+
+    async def on_title_progress(idx: int, frac: float) -> None:
+        title_progress.append((idx, frac))
+
+    async def on_disc_progress(frac: float) -> None:
+        disc_progress.append(frac)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[0],
+        on_title_start=on_title_start,
+        on_title_progress=on_title_progress,
+        on_disc_progress=on_disc_progress,
+    )
+
+    assert result.overall_error is None
+    # No "Saving title N" PRGT → on_title_progress must never have fired.
+    assert title_progress == []
+    # Disc-level callback got the `total/max` channel (not `current/max`).
+    assert disc_progress == [0.05, 0.25, 0.95]
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_per_title_progress_takes_precedence_over_disc(monkeypatch, tmp_path):
+    """When a per-title "Saving title #N" PRGT has identified the
+    in-flight title, PRGV drives `on_title_progress` (per-op channel)
+    and the disc-level callback stays silent — the per-title
+    behaviour established in v2 is preserved unchanged."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'PRGT:0,5018,"Saving title #0 to MKV file"',
+            "PRGV:5000,1000,10000",  # per-op 0.5, disc-overall 0.1
+            "PRGV:10000,5000,10000",  # per-op 1.0, disc-overall 0.5
+        ],
+    )
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
+
+    title_progress: list[tuple[int, float]] = []
+    disc_progress: list[float] = []
+
+    async def on_title_start(_idx: int) -> None:
+        return None
+
+    async def on_title_progress(idx: int, frac: float) -> None:
+        title_progress.append((idx, frac))
+
+    async def on_disc_progress(frac: float) -> None:
+        disc_progress.append(frac)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[0],
+        on_title_start=on_title_start,
+        on_title_progress=on_title_progress,
+        on_disc_progress=on_disc_progress,
+    )
+
+    assert result.overall_error is None
+    assert title_progress == [(0, 0.5), (0, 1.0)]
+    assert disc_progress == []
+
+
+@pytest.mark.asyncio
 async def test_rip_disc_returns_unavailable_when_makemkvcon_missing(monkeypatch, tmp_path):
     async def fake_create_subprocess_exec(*_args: Any, **_kwargs: Any):
         raise FileNotFoundError("makemkvcon")

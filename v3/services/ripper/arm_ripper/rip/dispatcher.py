@@ -176,6 +176,30 @@ async def _rip_optical(
             return
         await on_track_progress(track, fraction)
 
+    async def _on_disc_progress(fraction: float) -> None:
+        """Disc-overall PRGV fallback for `mkv all`.
+
+        MakeMKV in `mkv all` mode emits no per-title PRGT, so the
+        streamer's `current_title` stays None and no `_on_title_progress`
+        ever fires. Without this fallback the dashboard bar would stay
+        at 0 % for the whole rip even though the file is being written.
+
+        We attribute disc-level progress to the first eligible track —
+        the WS payload requires a track_id, but the UI's rips store
+        keys live progress by `job_id` and only ever displays a single
+        bar per disc (see [v3/services/ui/src/components/JobCard.vue]),
+        so the choice of track_id is purely a wire-format detail. The
+        bar fills smoothly 0→100 % across the whole rip via the PRGV
+        `total/max` channel. Per-title attribution still happens
+        post-rip in the attribution loop below.
+        """
+        if on_track_progress is None or not eligible_source_indexes:
+            return
+        first_track = track_by_index.get(eligible_source_indexes[0])
+        if first_track is None:
+            return
+        await on_track_progress(first_track, fraction)
+
     async def _ensure_started(title_idx: int, track: TrackView) -> None:
         """Guarantee on_track_start has fired for this track before any
         terminal PATCH. In `mkv all` mode the stream-driven PRGT often
@@ -193,6 +217,7 @@ async def _rip_optical(
         eligible_source_indexes=eligible_source_indexes,
         on_title_start=_on_title_start,
         on_title_progress=_on_title_progress,
+        on_disc_progress=_on_disc_progress,
     )
 
     if disc_result.overall_error is not None:
