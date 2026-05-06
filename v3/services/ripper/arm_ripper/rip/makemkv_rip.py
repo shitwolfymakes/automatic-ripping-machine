@@ -6,10 +6,17 @@ the between-titles SCSI NOT_READY / USB-autosuspend gap that plagued
 the per-title implementation simply doesn't exist anymore.
 
 Per-title attribution is reconstructed from the robot stream:
-  - PRGT lines whose text starts with "Saving title N" tell us which
-    title is currently being written → fire `on_title_start`.
-  - PRGV gives [0..1] fractional progress for the current operation →
-    fire `on_title_progress(current_title, fraction)`.
+  - PRGC:5017 ("Saving to MKV file") lines fire once at the start of
+    every title save; the second field is the *output position* (0-based)
+    that matches the `_tNN.mkv` filename suffix and indexes into
+    `eligible_source_indexes` to recover the source title index. This
+    is the primary per-title milestone in `mkv all` mode (confirmed
+    empirically against MakeMKV 1.18.3 — the older PRGT "Saving title
+    #N" milestone never fires in this mode).
+  - PRGV gives [0..1] fractional progress; `current/max` is per-title
+    (drives `on_title_progress`), `total/max` is disc-overall (used as
+    a fallback `on_disc_progress` for the brief window before the first
+    PRGC:5017 arrives).
   - MSG:5003 lines tell us a title failed (with reason). We capture the
     title index from the args.
   - Post-exit, we walk `output_dir` for `title_tNN.mkv` files: a file
@@ -47,12 +54,16 @@ OnDiscProgress = Callable[[float], Awaitable[None]]
 
 _PRGV_RE = re.compile(r"^PRGV:(\d+),(\d+),(\d+)$")
 _PRGT_RE = re.compile(r'^PRGT:(\d+),(\d+),"(.*)"$')
+# PRGC:5017,N,"Saving to MKV file" fires once per title save start in
+# `mkv all` mode. N is the 0-based *output position* (matches the
+# `_tNN.mkv` filename suffix and `eligible_source_indexes[N]`).
+_PRGC_SAVE_TITLE_RE = re.compile(r'^PRGC:5017,(\d+),"')
 _MSG_HEADER_RE = re.compile(r"^MSG:(\d+),(\d+),(\d+),")
 _QUOTED_ARG_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
-# PRGT text for the "now saving title N" milestone. Empirically
-# emitted by MakeMKV at the start of every per-title save in `mkv all`
-# mode; format is "Saving title #N to MKV file" or "Saving title N
-# to MKV file" depending on version. The `#?` makes both work.
+# PRGT text for the "now saving title N" milestone. Older MakeMKV builds
+# in per-title invocation mode emit "Saving title #N to MKV file"; in
+# `mkv all` mode on 1.18.3+ this never fires (PRGC:5017 is the per-title
+# signal there). The PRGT path is kept for defensive compatibility.
 _PRGT_SAVING_TITLE_RE = re.compile(r"\btitle\s+#?(\d+)\b", re.IGNORECASE)
 
 # MakeMKV codes worth surfacing in disc-level error text.
@@ -96,6 +107,16 @@ class _ParserState:
     titles: dict[int, _TitleState] = field(default_factory=dict)
     current_title: int | None = None
     diagnostics: list[str] = field(default_factory=list)
+    # Flips True when MakeMKV emits PRGT:5024 "Saving all titles to MKV
+    # files" (the save phase boundary). Pre-rip PRGV events have a
+    # `total/max` channel that reaches ~70-80% during analyse/decrypt
+    # but isn't *rip* progress; firing the disc-overall fallback for
+    # those would publish a misleading 70-80% to the dashboard then
+    # snap to 0% when the first PRGC:5017 fires, breaking the ETA
+    # baseline (rips store sees a sustained negative pctDelta and
+    # holds ETA null until per-title progress climbs back past the
+    # pre-rip peak — ~hours for a long main feature).
+    save_phase_started: bool = False
 
 
 def parse_progress_line(line: str) -> float | None:
@@ -175,10 +196,10 @@ def parse_prgt_title(line: str) -> int | None:
     """If `line` is a PRGT whose text announces "Saving title N to
     MKV file", return N. Otherwise None.
 
-    PRGT is MakeMKV's "current operation text" channel. When MakeMKV
-    starts writing a title in `mkv all` mode it emits a PRGT like
-    `PRGT:5018,0,"Saving title #2 to MKV file"`. We use that as the
-    transition signal for current-title state.
+    Defensive — empirically silent in `mkv all` mode on MakeMKV 1.18.3
+    (PRGC:5017 is the actual per-title signal there; see
+    `parse_prgc_save_position`). Kept for older versions / per-title
+    invocation modes that may still emit this milestone.
     """
     m = _PRGT_RE.match(line.strip())
     if not m:
@@ -193,6 +214,23 @@ def parse_prgt_title(line: str) -> int | None:
     return int(title_match.group(1))
 
 
+def parse_prgc_save_position(line: str) -> int | None:
+    """If `line` is a PRGC:5017 ("Saving to MKV file") line, return the
+    0-based output position from its second field. Otherwise None.
+
+    In `mkv all` mode MakeMKV emits one PRGC:5017 per title save start,
+    with the second field stepping 0, 1, 2, … through the eligible
+    titles in rip order. That position matches the `_tNN.mkv` filename
+    suffix and indexes into the dispatcher's `eligible_source_indexes`.
+    Reference v2's parser at arm/ui/jobs/json_api.py:116 which uses the
+    same field.
+    """
+    m = _PRGC_SAVE_TITLE_RE.match(line.strip())
+    if not m:
+        return None
+    return int(m.group(1))
+
+
 def _extract_title_index_from_msg5003(args: list[str]) -> int | None:
     """MSG:5003 args vary slightly across MakeMKV versions but always
     include the title index as one of the integer-string arguments.
@@ -205,14 +243,34 @@ def _extract_title_index_from_msg5003(args: list[str]) -> int | None:
     return None
 
 
+async def _emit_title_start(
+    state: _ParserState,
+    title_idx: int,
+    on_title_start: OnTitleStart | None,
+) -> None:
+    """Set current_title and fire on_title_start exactly once per title."""
+    state.current_title = title_idx
+    ts = state.titles.setdefault(title_idx, _TitleState())
+    if ts.started_emitted:
+        return
+    ts.started_emitted = True
+    if on_title_start is not None:
+        try:
+            await on_title_start(title_idx)
+        except Exception as exc:
+            logger.debug("title start callback raised: %s", exc)
+
+
 async def _stream_output(
     proc: asyncio.subprocess.Process,
     state: _ParserState,
     on_title_start: OnTitleStart | None,
     on_title_progress: OnTitleProgress | None,
     on_disc_progress: OnDiscProgress | None,
+    eligible_source_indexes: list[int] | None = None,
 ) -> None:
     assert proc.stdout is not None
+    eligible = eligible_source_indexes or []
     while True:
         raw = await proc.stdout.readline()
         if not raw:
@@ -223,15 +281,18 @@ async def _stream_output(
 
         # PRGV — two channels in one line:
         #   `current/max` advances per-operation (resets per title)
-        #   `total/max`   advances disc-overall (monotonic)
-        # If a "Saving title #N" PRGT has identified the in-flight
-        # title, fire the per-title callback with `current/max` —
-        # the established v2-parity behaviour. Otherwise (the common
-        # case for `mkv all`, which emits no per-title PRGT) fall
-        # back to the disc-overall callback so the dashboard bar
-        # still advances. Pre-rip ops (analysing / hashing) emit
-        # PRGV too; the disc-level callback is gated on its presence
-        # which the dispatcher only wires once the rip phase starts.
+        #   `total/max`   advances disc-overall (monotonic *within
+        #                 each makemkvcon phase*; pre-rip analyse can
+        #                 itself reach 70-80% before the save phase
+        #                 starts and resets it back to 0)
+        # When PRGC:5017 has identified the current title, drive the
+        # per-title callback with `current/max`. Otherwise — only
+        # if we've entered the save phase — fall back to the
+        # disc-overall callback so the dashboard bar still advances
+        # in the brief window before the first PRGC:5017 (or for the
+        # whole save phase on hypothetical MakeMKV builds that don't
+        # emit PRGC:5017). Pre-rip PRGV is silently dropped to keep
+        # the rips-store ETA baseline anchored at per-title 0%.
         totals = parse_progress_totals(line)
         if totals is not None:
             cur_frac, tot_frac = totals
@@ -240,31 +301,46 @@ async def _stream_output(
                     await on_title_progress(state.current_title, cur_frac)
                 except Exception as exc:
                     logger.debug("title progress callback raised: %s", exc)
-            elif on_disc_progress is not None:
+            elif state.save_phase_started and on_disc_progress is not None:
                 try:
                     await on_disc_progress(tot_frac)
                 except Exception as exc:
                     logger.debug("disc progress callback raised: %s", exc)
             continue
 
-        # PRGT — milestone text. Watch for "Saving title N" to update
-        # current_title and fire on_title_start exactly once per title.
-        title_idx = parse_prgt_title(line)
-        if title_idx is not None:
-            state.current_title = title_idx
-            ts = state.titles.setdefault(title_idx, _TitleState())
-            if not ts.started_emitted:
-                ts.started_emitted = True
-                if on_title_start is not None:
-                    try:
-                        await on_title_start(title_idx)
-                    except Exception as exc:
-                        logger.debug("title start callback raised: %s", exc)
+        # PRGC:5017 — primary per-title signal in `mkv all` mode. The
+        # second field is the output position (0-based) which we map
+        # back to a source title index via the eligible list.
+        out_pos = parse_prgc_save_position(line)
+        if out_pos is not None:
+            if 0 <= out_pos < len(eligible):
+                source_idx = eligible[out_pos]
+                await _emit_title_start(state, source_idx, on_title_start)
+            else:
+                logger.warning(
+                    "PRGC:5017 output position %d out of range (eligible has %d entries)",
+                    out_pos,
+                    len(eligible),
+                )
             continue
 
-        # Generic PRGT (other milestones) — log only.
+        # PRGT — defensive fallback for older MakeMKV / per-title mode
+        # which sometimes emits "Saving title N" instead of (or in
+        # addition to) PRGC:5017. Guarded by `started_emitted` so a
+        # late PRGT doesn't reset progress on a title PRGC already
+        # opened.
+        title_idx = parse_prgt_title(line)
+        if title_idx is not None:
+            await _emit_title_start(state, title_idx, on_title_start)
+            continue
+
+        # Generic PRGT (other milestones) — log; also detect the save
+        # phase boundary (PRGT:5024 "Saving all titles to MKV files")
+        # which gates the disc-overall PRGV fallback.
         prgt = _PRGT_RE.match(line.strip())
         if prgt:
+            if prgt.group(1) == "5024":
+                state.save_phase_started = True
             logger.info("makemkvcon milestone: %s", prgt.group(3))
             continue
 
@@ -405,7 +481,16 @@ async def rip_disc(
         return RipDiscResult(overall_error=f"makemkvcon not on PATH: {e}", titles={})
 
     state = _ParserState()
-    streamer = asyncio.create_task(_stream_output(proc, state, on_title_start, on_title_progress, on_disc_progress))
+    streamer = asyncio.create_task(
+        _stream_output(
+            proc,
+            state,
+            on_title_start,
+            on_title_progress,
+            on_disc_progress,
+            eligible_source_indexes=eligible_source_indexes,
+        )
+    )
     try:
         await asyncio.wait_for(proc.wait(), timeout=RIP_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:

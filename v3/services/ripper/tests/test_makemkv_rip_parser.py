@@ -5,6 +5,7 @@ from arm_ripper.rip.makemkv_rip import (
     _extract_title_index_from_msg5003,
     parse_diagnostic_msg,
     parse_msg_args,
+    parse_prgc_save_position,
     parse_prgt_title,
     parse_progress_line,
     parse_progress_totals,
@@ -187,3 +188,36 @@ def test_extract_title_index_returns_none_for_no_int_args():
     # Defensive — if MakeMKV ever changes 5003's arg order so no int
     # appears, the parser must not crash; the dispatcher logs a warn.
     assert _extract_title_index_from_msg5003(["foo", "bar.mkv"]) is None
+
+
+# --- PRGC:5017 — primary per-title signal in `mkv all` mode ------------------
+
+
+def test_prgc_save_position_extracts_zero_based_index():
+    # Empirical: MakeMKV 1.18.3 in `mkv all` mode emits PRGC:5017,N,...
+    # at the start of every title save, with N stepping 0,1,2,…
+    # through the eligible titles in rip order.
+    assert parse_prgc_save_position('PRGC:5017,0,"Saving to MKV file"') == 0
+    assert parse_prgc_save_position('PRGC:5017,1,"Saving to MKV file"') == 1
+    assert parse_prgc_save_position('PRGC:5017,10,"Saving to MKV file"') == 10
+
+
+def test_prgc_save_position_tolerates_whitespace():
+    assert parse_prgc_save_position('  PRGC:5017,3,"Saving to MKV file"  ') == 3
+
+
+def test_prgc_save_position_returns_none_for_other_prgc_codes():
+    # PRGC:5057 ("Analyzing seamless segments") is the per-title pre-save
+    # phase — also indexed but NOT a save-start signal. Only 5017 must match.
+    assert parse_prgc_save_position('PRGC:5057,2,"Analyzing seamless segments"') is None
+    # PRGC:3402 ("Decrypting") is a pre-rip phase, second field is 0
+    # but unrelated to title position.
+    assert parse_prgc_save_position('PRGC:3402,0,"Decrypting"') is None
+
+
+def test_prgc_save_position_returns_none_for_non_prgc_lines():
+    assert parse_prgc_save_position("PRGV:1,2,4") is None
+    assert parse_prgc_save_position('PRGT:5024,0,"Saving all titles to MKV files"') is None
+    assert parse_prgc_save_position('MSG:5003,0,2,"Failed to save title 2"') is None
+    assert parse_prgc_save_position("") is None
+    assert parse_prgc_save_position("garbage") is None
