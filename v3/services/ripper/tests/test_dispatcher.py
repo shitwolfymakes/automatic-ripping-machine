@@ -518,3 +518,51 @@ async def test_rip_all_carries_duration_from_track_view(monkeypatch, tmp_path):
     )
 
     assert seen_duration == [7321]
+
+
+async def test_rip_all_falls_back_to_expected_duration(monkeypatch, tmp_path):
+    """At rip-start, `track.duration_seconds` is null (it's the post-rip
+    actual). `track.expected_duration_seconds` carries the scan-time
+    estimate. The dispatcher must fall back to the latter so the
+    backend's PATCH-DONE row gets a non-null duration. (This was the
+    ripped-but-null bug surfaced by job_01KQXA9JM3RX2SV8SB7S4CP6NX.)"""
+    fake_result = RipDiscResult(
+        overall_error=None,
+        titles={
+            0: RipResult(ok=True, output_path=tmp_path / "t.mkv", size_bytes=100, sha256="a"),
+        },
+    )
+    _stub_rip_disc(monkeypatch, fake_result)
+
+    seen_duration: list[int | None] = []
+
+    async def noop(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        seen_duration.append(result.duration_seconds)
+
+    track = TrackView(
+        id="trk_0",
+        job_id="j",
+        kind=TrackKind.VIDEO_TITLE,
+        index=0,
+        source_ref="0",
+        status=TrackStatus.QUEUED,
+        output_path=None,
+        size_bytes=None,
+        duration_seconds=None,
+        expected_duration_seconds=6708,
+        attempts=0,
+        last_error=None,
+    )
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=[track],
+        output_dir=tmp_path,
+        on_track_start=noop,
+        on_track_done=on_done,
+    )
+
+    assert seen_duration == [6708]

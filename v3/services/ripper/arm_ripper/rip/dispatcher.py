@@ -228,13 +228,18 @@ async def _rip_optical(
             await on_track_done(track, RipResult(ok=False, error=err))
             continue
         # Carry duration_seconds through from the scan when MakeMKV
-        # produced the file successfully; rip_disc doesn't know it.
+        # produced the file successfully. rip_disc doesn't measure
+        # durations from the .mkv files, so we forward the scan-time
+        # estimate. `track.duration_seconds` is the post-rip actual
+        # (null until a previous rip set it — usually null here);
+        # `track.expected_duration_seconds` is the scan-time estimate
+        # populated by `select_tracks` at rip-start.
         if result.ok and result.duration_seconds is None:
             result = RipResult(
                 ok=True,
                 output_path=result.output_path,
                 size_bytes=result.size_bytes,
-                duration_seconds=track.duration_seconds,
+                duration_seconds=track.duration_seconds or track.expected_duration_seconds,
                 sha256=result.sha256,
             )
         await on_track_done(track, result)

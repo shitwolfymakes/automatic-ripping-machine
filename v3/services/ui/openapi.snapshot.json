@@ -5607,6 +5607,17 @@
             ],
             "title": "Duration Seconds"
           },
+          "expected_duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Duration Seconds"
+          },
           "attempts": {
             "type": "integer",
             "title": "Attempts"

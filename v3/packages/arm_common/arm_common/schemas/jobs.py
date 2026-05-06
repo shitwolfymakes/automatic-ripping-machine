@@ -89,7 +89,13 @@ class TrackView(BaseModel):
     status: TrackStatus
     output_path: str | None
     size_bytes: int | None
+    # `duration_seconds` is the post-rip actual; `expected_duration_seconds`
+    # is the scan-time estimate (set by `select_tracks` at rip-start).
+    # Until the ripper measures real durations from the produced files,
+    # the dispatcher copies expected → actual at PATCH-DONE time so the
+    # UI / transcoder don't see null durations on completed tracks.
     duration_seconds: int | None
+    expected_duration_seconds: int | None = None
     attempts: int
     last_error: str | None
 
