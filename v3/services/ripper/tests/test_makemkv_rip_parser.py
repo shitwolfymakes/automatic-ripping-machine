@@ -7,6 +7,7 @@ from arm_ripper.rip.makemkv_rip import (
     parse_msg_args,
     parse_prgt_title,
     parse_progress_line,
+    parse_progress_totals,
 )
 
 
@@ -32,6 +33,27 @@ def test_non_progress_lines_return_none():
 
 def test_whitespace_tolerated():
     assert parse_progress_line("  PRGV:1,2,4  ") == 0.25
+
+
+def test_progress_totals_returns_both_channels():
+    # current=2500, total=5000, max=10000  →  per-op 0.25, disc-overall 0.5.
+    # The disc-overall channel (`total/max`) is what drives the dashboard
+    # bar in `mkv all` mode where no per-title PRGT ever fires.
+    assert parse_progress_totals("PRGV:2500,5000,10000") == (0.25, 0.5)
+
+
+def test_progress_totals_clamps_to_one():
+    assert parse_progress_totals("PRGV:10001,10001,10000") == (1.0, 1.0)
+
+
+def test_progress_totals_handles_zero_max():
+    assert parse_progress_totals("PRGV:0,0,0") is None
+
+
+def test_progress_totals_returns_none_for_non_prgv():
+    assert parse_progress_totals('PRGT:5018,1,"Saving title #2"') is None
+    assert parse_progress_totals("MSG:5036,0,2,...") is None
+    assert parse_progress_totals("") is None
 
 
 def test_diagnostic_msg_extracts_known_codes():
