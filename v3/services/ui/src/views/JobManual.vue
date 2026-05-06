@@ -40,7 +40,7 @@ async function submit(): Promise<void> {
       drive_id: driveId.value,
       session_id: sessionId.value || null,
     })
-    await router.push('/jobs')
+    await router.push('/dashboard')
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : 'Trigger failed'
   } finally {
