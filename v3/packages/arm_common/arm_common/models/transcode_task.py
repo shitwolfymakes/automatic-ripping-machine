@@ -24,7 +24,7 @@ class TranscodeTask(SQLModel, table=True):
             index=True,
         )
     )
-    source_track_id: str = Field(sa_column=Column(String, ForeignKey("tracks.id", ondelete="RESTRICT"), nullable=False))
+    source_track_id: str = Field(sa_column=Column(String, ForeignKey("tracks.id", ondelete="CASCADE"), nullable=False))
     status: TranscodeTaskStatus = Field(
         sa_column=enum_column(
             TranscodeTaskStatus,
