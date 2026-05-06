@@ -2,7 +2,9 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api, ApiError } from '../api/client'
+import JobCard from '../components/JobCard.vue'
 import Poster from '../components/Poster.vue'
+import { useRipsStore } from '../stores/rips'
 import { useTranscodesStore } from '../stores/transcodes'
 import type {
   DiagnosticsResponse,
@@ -23,6 +25,7 @@ const diagnostics = ref<DiagnosticsResponse | null>(null)
 const error = ref<string | null>(null)
 const loading = ref(true)
 const transcodes = useTranscodesStore()
+const rips = useRipsStore()
 
 let timer: number | null = null
 
@@ -56,6 +59,11 @@ async function refresh(): Promise<void> {
     jobs.value = j
     diagnostics.value = diag
     await transcodes.fetchAll()
+    // Subscribe to ripper.progress.{job_id} for jobs currently ripping;
+    // unsubscribe automatically when they leave that set.
+    rips.reconcileSubscriptions(
+      activeJobs.value.filter((job) => job.status === 'ripping').map((job) => job.id),
+    )
     error.value = null
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : 'Failed to refresh'
@@ -67,12 +75,14 @@ async function refresh(): Promise<void> {
 onMounted(() => {
   void refresh()
   transcodes.startWS()
+  rips.startWS()
   timer = window.setInterval(() => void refresh(), REFRESH_MS)
 })
 
 onUnmounted(() => {
   if (timer !== null) window.clearInterval(timer)
   transcodes.stopWS()
+  rips.stopWS()
 })
 </script>
 
@@ -105,43 +115,16 @@ onUnmounted(() => {
     <p v-if="activeJobs.length === 0" class="muted">
       No rips in flight. Insert a disc — or click "+ Manual rip" — to start one.
     </p>
-    <table v-else>
-      <thead>
-        <tr>
-          <th></th>
-          <th>Job</th>
-          <th>Title</th>
-          <th>Disc</th>
-          <th>Drive</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="j in activeJobs" :key="j.id">
-          <td>
-            <Poster :job="j" :width="48" />
-          </td>
-          <td>
-            <RouterLink :to="`/jobs/${j.id}`">{{ j.id.slice(0, 12) }}…</RouterLink>
-          </td>
-          <td>
-            {{ j.title ?? '—' }}<span v-if="j.year"> ({{ j.year }})</span>
-          </td>
-          <td>{{ j.disc_type }}</td>
-          <td>{{ jobDriveLabel(j.drive_id) }}</td>
-          <td>
-            <span class="badge">{{ j.status }}</span>
-            <span
-              v-if="j.resumed_from_crash"
-              class="badge"
-              style="margin-left: 4px"
-              :data-testid="`resumed-badge-${j.id}`"
-              >resumed from crash</span
-            >
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <div v-else class="job-card-grid">
+      <JobCard
+        v-for="j in activeJobs"
+        :key="j.id"
+        :job="j"
+        :drive-label="jobDriveLabel(j.drive_id)"
+        :live-progress-pct="rips.liveProgress[j.id]?.progress_pct ?? null"
+        :live-eta-seconds="rips.liveProgress[j.id]?.eta_seconds ?? null"
+      />
+    </div>
   </div>
 
   <div v-if="activeTranscodes.length > 0" class="card">
@@ -294,5 +277,10 @@ onUnmounted(() => {
   height: 100%;
   background: var(--c-accent, #0aa);
   transition: width 200ms linear;
+}
+.job-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 12px;
 }
 </style>

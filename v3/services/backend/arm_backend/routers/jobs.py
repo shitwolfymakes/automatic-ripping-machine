@@ -18,6 +18,7 @@ from arm_common import (
     Job,
     JobStatus,
     Session,
+    TrackStatus,
     User,
 )
 from arm_common.models import Track
@@ -33,6 +34,7 @@ from arm_common.schemas import (
     ManualTriggerRequest,
     ManualTriggerResponse,
     ResolveRequest,
+    RipProgressSummary,
     SessionApplicationView,
     TrackView,
     TranscodeTaskView,
@@ -62,6 +64,34 @@ _MEDIA_STATUS_DETAIL: dict[DriveMediaStatus, str] = {
 }
 
 
+def _summarize_rip_progress(tracks: list[Track]) -> RipProgressSummary:
+    """Aggregate `tracks` (one job's worth) into a `RipProgressSummary`.
+
+    `current_track_index` is the 1-based ordinal among tracks sorted by
+    `Track.index` of the row in `IN_PROGRESS`. The dispatcher transitions
+    one track at a time, so at most one is `IN_PROGRESS` per job; if more
+    than one ever appeared (e.g. mid-rewrite of the dispatcher) we'd pick
+    the lowest-index one as a sane default.
+    """
+    sorted_tracks = sorted(tracks, key=lambda t: t.index)
+    done = sum(1 for t in sorted_tracks if t.status == TrackStatus.DONE)
+    failed = sum(1 for t in sorted_tracks if t.status == TrackStatus.FAILED)
+    current_track_id: str | None = None
+    current_track_index: int | None = None
+    for ordinal, t in enumerate(sorted_tracks, start=1):
+        if t.status == TrackStatus.IN_PROGRESS:
+            current_track_id = t.id
+            current_track_index = ordinal
+            break
+    return RipProgressSummary(
+        tracks_total=len(sorted_tracks),
+        tracks_done=done,
+        tracks_failed=failed,
+        current_track_id=current_track_id,
+        current_track_index=current_track_index,
+    )
+
+
 @router.get("", response_model=list[JobView])
 async def list_jobs(
     _: User = Depends(require_jwt),
@@ -70,14 +100,43 @@ async def list_jobs(
     drive_id: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-) -> list[Job]:
+) -> list[JobView]:
     stmt = select(Job).order_by(col(Job.created_at).desc()).limit(limit).offset(offset)
     if status_filter is not None:
         stmt = stmt.where(col(Job.status) == status_filter)
     if drive_id is not None:
         stmt = stmt.where(col(Job.drive_id) == drive_id)
     result = await session.execute(stmt)
-    return list(result.scalars().all())
+    jobs = list(result.scalars().all())
+
+    # One batched track lookup keyed on the ripping-job IDs feeds the
+    # dashboard's "Track N of M" line without an N+1 fetch. Skipped
+    # entirely when no job in the page is ripping (which is the common
+    # case on the recent-jobs slice).
+    ripping_ids = [j.id for j in jobs if j.status == JobStatus.RIPPING]
+    tracks_by_job: dict[str, list[Track]] = {}
+    if ripping_ids:
+        track_rows = (
+            (
+                await session.execute(
+                    select(Track)
+                    .where(col(Track.job_id).in_(ripping_ids))
+                    .order_by(col(Track.job_id), col(Track.index))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for tr in track_rows:
+            tracks_by_job.setdefault(tr.job_id, []).append(tr)
+
+    views: list[JobView] = []
+    for j in jobs:
+        view = JobView.model_validate(j)
+        if j.status == JobStatus.RIPPING:
+            view.rip_progress = _summarize_rip_progress(tracks_by_job.get(j.id, []))
+        views.append(view)
+    return views
 
 
 @router.get("/{job_id}", response_model=JobDetailView)

@@ -19,6 +19,7 @@ from arm_common.schemas.jobs import (
     ManualTriggerRequest,
     ManualTriggerResponse,
     ResolveRequest,
+    RipProgressSummary,
     RipStartResponse,
     TrackView,
 )
@@ -112,6 +113,7 @@ __all__ = [
     "RipPresetCreateRequest",
     "RipPresetUpdateRequest",
     "RipPresetView",
+    "RipProgressSummary",
     "RipStartResponse",
     "ScanResult",
     "ScanTitle",

@@ -31,6 +31,14 @@ export type JobStatus =
 
 export type DiscType = 'dvd' | 'bluray' | 'cd' | 'data' | 'unknown'
 
+export interface RipProgressSummary {
+  tracks_total: number
+  tracks_done: number
+  tracks_failed: number
+  current_track_id: string | null
+  current_track_index: number | null
+}
+
 export interface JobView {
   id: string
   drive_id: string
@@ -42,6 +50,15 @@ export interface JobView {
   poster_url_manual: string | null
   metadata_json: Record<string, unknown>
   resumed_from_crash: boolean
+  // Populated only by GET /api/jobs for ripping jobs.
+  rip_progress?: RipProgressSummary | null
+}
+
+// Payload of `ripper.progress.{job_id}` WS frames. Backend throttles to
+// 1 Hz per (topic, track_id) — see hub.py.
+export interface RipperProgressPayload {
+  track_id: string
+  progress_pct: number
 }
 
 export interface JobUpdateRequest {
