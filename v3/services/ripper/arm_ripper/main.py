@@ -115,7 +115,13 @@ async def amain() -> None:
             hostname=settings.HOSTNAME,
             ssl_context=ssl_ctx,
         ) as ws:
-            controller = JobController(client, drive_id, ws=ws, device_path=settings.ARM_DRIVE_DEV)
+            controller = JobController(
+                client,
+                drive_id,
+                ws=ws,
+                device_path=settings.ARM_DRIVE_DEV,
+                default_min_length_seconds=settings.ARM_MIN_LENGTH_SECONDS,
+            )
             await ws.subscribe(f"ripper.commands.{drive_id}", controller.on_ws_command)
             # Phase 9 — recover a crashed in-flight rip on this drive, if any.
             # Logs + swallows all errors so a misbehaving probe never blocks boot.

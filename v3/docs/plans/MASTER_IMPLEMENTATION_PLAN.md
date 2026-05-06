@@ -87,7 +87,7 @@ Realignment landed alongside the data model:
 4. Drive-scoping via `X-ARM-Hostname` header. New `require_drive_owner_by_job` / `require_drive_owner_by_track` deps load the row's drive and 403 on mismatch ([05-cross-cutting.md § Authorization rules](../arch/05-cross-cutting.md#authorization-rules)). `register` and `identify` stay bearer-only (no `drive_id` available at call time). Per-drive defaults in `Drive.default_session_id` arrive in Phase 8.
 5. Identify handler now persists `scan_result` into `metadata_json["scan_result"]` so rip-start can re-derive the title list without requiring the ripper to re-send it.
 6. Ripper rip stack at [services/ripper/arm_ripper/rip/](../../services/ripper/arm_ripper/rip/):
-   - `makemkv_rip.rip_title` shells `makemkvcon mkv --robot --progress=-stdout`, streams PRGV/PRGT/MSG records, calls a progress callback, captures `title_tNN.mkv` size + SHA-256.
+   - `makemkv_rip.rip_disc` shells `makemkvcon mkv ... all <outdir> --minlength=N` exactly once per disc (Phase 15.5 reverted from per-title invocations — see § Phase 15.5 below), streams PRGV/PRGT/MSG records, attributes per-title outcomes from `MSG:5018`/`MSG:5003` + post-exit output-dir walk, captures `title_tNN.mkv` size + SHA-256 per surviving title.
    - `abcde_rip.rip_cd` rips a whole audio CD via `abcde -o wav -a read,move -n -N` with a generated config that pins `OUTPUTFORMAT=track_${TRACKNUM}` (no encoding, no CDDB); maps output WAVs back to per-track `RipResult`s.
    - `data_rip.rip_data` `dd`s a raw image to `/raw/<job>/dump.iso`.
    - `dispatcher.rip_all` routes per `disc_type`, invoking on_track_start / on_track_done / on_track_progress callbacks the orchestrator uses to drive the wire-side state machine.
@@ -387,6 +387,30 @@ No DB migration was required — `Job.resumed_from_crash` ([job.py:34](../../pac
 - **Transcode-against-real-rip end-to-end** — `transcode_tasks` table is empty across all 4 successful Sintel rips; no `session_applications` were ever created for them. The dispatcher → ephemeral transcoder → media-output path has unit-test coverage but no integration evidence against a real ripped tree. To validate: apply a session to one of the existing `ripped` jobs via `POST /api/jobs/{job_id}/transcode` (UI form) and watch a transcoder spawn.
 
 **Depends on:** Phases 3, 7, 9.
+
+---
+
+## Phase 15.5 — Ripper single-invocation reversion (shipped)
+
+**Goal.** Stop the recurring drive-stability failures that surfaced during Phase-12-era live rips on the LG BP50NB40 USB Blu-ray drive.
+
+**The problem.** Phase 3's rip pipeline ran one `makemkvcon mkv title=N` invocation per title in a Python loop ([dispatcher.py § per-title loop, before this phase](../../services/ripper/arm_ripper/rip/dispatcher.py)). Between titles the drive briefly idled — kernel autosuspend would drop the device node, then the medium would report SCSI `NOT_READY` (`LOGICAL UNIT IS IN PROCESS OF BECOMING READY`) for another 30–60s. Four production rips over ~a week ended in partial failures or hangs. Each subsequent fix shipped (a between-titles wait + `CDROM_DRIVE_STATUS` ioctl + a `verify_read=True` real-block read probe) was a bandaid on a symptom — the gap itself.
+
+**v2 never had this failure mode** because [arm/ripper/main/makemkv.py:103-106](../../../arm/ripper/main/makemkv.py#L103) shells out exactly once per disc — `makemkvcon mkv ... dev:{job.devpath} all {rawpath} --minlength={MINLENGTH}` — and the drive stays open from first byte to last.
+
+**What shipped:**
+
+1. **`makemkv_rip.rip_disc`** replaces `rip_title`. One `makemkvcon mkv ... all <outdir>` invocation per disc. The robot stream is parsed for per-title attribution: PRGT `Saving title #N` transitions current_title and fires `on_title_start`; PRGV gives fractional progress; MSG:5003 captures per-title failures with reasons; post-exit the output dir is walked for `title_tNN.mkv` files to confirm successful saves.
+2. **Dispatcher rewrite.** `rip_all` for DVD/BD now calls `rip_disc` once and fans the lifecycle hooks (`on_track_start` / `on_track_done` / `on_track_progress`) out from the rip-side stream events through a `source_ref → TrackView` lookup. Tracks the user selected but MakeMKV skipped (below `--minlength`) get FAILED with a clear reason rather than silently disappearing.
+3. **Drive-readiness machinery deleted.** `_wait_for_drive_ready`, `_is_rip_ready`, `DRIVE_READY_*` constants, and the `verify_read=True` block in `drive_status.py` (along with `_NOT_READY_READ_ERRNOS`) are gone. `probe_drive_media` is now a pure ioctl probe — still used by the heartbeat task and the manual-trigger pre-check, neither of which needs the read-verify.
+4. **MINLENGTH baseline + Session override.** New ripper env var `ARM_MIN_LENGTH_SECONDS` (default 600 — matches v2). Backend's `rip_start` resolves `Session.overrides_json["min_length_seconds"]` (when the job has a `pending_session_id`) and threads it through `RipStartResponse.min_length_seconds`; the ripper falls back to its env baseline when the field is None. No schema change — `Session.overrides_json` is already JSONB.
+5. **Tests.** 12 dispatcher tests rewritten for the single-invocation flow; 9 new parser tests covering `MSG:5018` / `MSG:5003` / `parse_msg_args` / per-title attribution; 6 new `rip_disc` integration tests against a fake makemkvcon binary that streams a canned robot trace; 9 backend tests for the `_resolve_min_length_override` path. All 69 ripper + 305 backend tests pass.
+
+**The deliberate tradeoff.** One long blocking rip + log-parsing burden, in exchange for never seeing the between-titles failure mode again. **No per-title rip capability remains** — even MAIN_FEATURE rips go through `mkv all` filtered by `--minlength`. TRACKS-mode rips of a few titles waste IO ripping unselected ones (deleted post-rip), but the drive stays open and stable. The dev-box LG BP50NB40 was the catalyst; other USB-BD drives reportedly behave similarly.
+
+**Memory.** [.claude/memory/feedback_ripper_no_per_title.md](../../../.claude/memory/feedback_ripper_no_per_title.md) captures the rationale so the next contributor doesn't re-introduce per-title invocations without the context.
+
+**Depends on:** Phase 3 (rip pipeline shape), Phase 12 (heartbeat + manual-trigger pre-check, both untouched).
 
 ---
 
