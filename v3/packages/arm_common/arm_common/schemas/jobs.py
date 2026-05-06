@@ -54,6 +54,24 @@ class DiscFingerprintView(BaseModel):
     created_at: datetime | None = None
 
 
+class RipProgressSummary(BaseModel):
+    """Per-job rip-phase summary surfaced on `JobView` so the dashboard can
+    render `Track 3 / 8` without an N+1 fetch against `/api/jobs/{id}`.
+
+    Populated only for jobs in `JobStatus.RIPPING`. `current_track_index`
+    is the 1-based ordinal among `tracks` sorted by `Track.index` of the
+    row currently in `IN_PROGRESS` (None if the rip is between tracks
+    or just got going). Live progress percent for that track flows on
+    the `ripper.progress.{job_id}` WS topic — not stored here.
+    """
+
+    tracks_total: int
+    tracks_done: int
+    tracks_failed: int
+    current_track_id: str | None
+    current_track_index: int | None
+
+
 class JobView(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -68,6 +86,9 @@ class JobView(BaseModel):
     poster_url_manual: str | None = None
     metadata_json: dict[str, Any]
     resumed_from_crash: bool
+    # Populated only by the list endpoint for ripping jobs; None on
+    # detail responses and on terminal/early-state jobs.
+    rip_progress: RipProgressSummary | None = None
 
 
 class JobUpdateRequest(BaseModel):

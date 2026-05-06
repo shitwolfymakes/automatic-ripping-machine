@@ -4450,6 +4450,16 @@
           "resumed_from_crash": {
             "type": "boolean",
             "title": "Resumed From Crash"
+          },
+          "rip_progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RipProgressSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -4917,6 +4927,54 @@
           "updated_at"
         ],
         "title": "RipPresetView"
+      },
+      "RipProgressSummary": {
+        "properties": {
+          "tracks_total": {
+            "type": "integer",
+            "title": "Tracks Total"
+          },
+          "tracks_done": {
+            "type": "integer",
+            "title": "Tracks Done"
+          },
+          "tracks_failed": {
+            "type": "integer",
+            "title": "Tracks Failed"
+          },
+          "current_track_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Track Id"
+          },
+          "current_track_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Track Index"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tracks_total",
+          "tracks_done",
+          "tracks_failed",
+          "current_track_id",
+          "current_track_index"
+        ],
+        "title": "RipProgressSummary",
+        "description": "Per-job rip-phase summary surfaced on `JobView` so the dashboard can\nrender `Track 3 / 8` without an N+1 fetch against `/api/jobs/{id}`.\n\nPopulated only for jobs in `JobStatus.RIPPING`. `current_track_index`\nis the 1-based ordinal among `tracks` sorted by `Track.index` of the\nrow currently in `IN_PROGRESS` (None if the rip is between tracks\nor just got going). Live progress percent for that track flows on\nthe `ripper.progress.{job_id}` WS topic \u2014 not stored here."
       },
       "RipStartResponse": {
         "properties": {
