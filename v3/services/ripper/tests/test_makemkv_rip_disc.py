@@ -95,7 +95,7 @@ async def test_rip_disc_attributes_files_to_eligible_source_indexes(monkeypatch,
         monkeypatch,
         [
             'MSG:1005,0,1,"MakeMKV started","%1 started","..."',
-            'PRGT:0,5018,"Saving all titles to MKV files"',
+            'PRGT:5024,0,"Saving all titles to MKV files"',
             "PRGV:5000,5000,10000",
             'MSG:5036,0,2,"Copy complete. 2 titles saved.","Copy complete. %1 %2","2","titles"',
         ],
@@ -133,7 +133,7 @@ async def test_rip_disc_eligible_without_file_marked_failed(monkeypatch, tmp_pat
     _stub_subprocess(
         monkeypatch,
         [
-            'PRGT:0,5018,"Saving all titles to MKV files"',
+            'PRGT:5024,0,"Saving all titles to MKV files"',
             'MSG:5036,0,2,"Copy complete. 1 titles saved.","Copy complete. %1 %2","1","titles"',
         ],
     )
@@ -162,7 +162,7 @@ async def test_rip_disc_failed_title_carries_msg5003_reason(monkeypatch, tmp_pat
     _stub_subprocess(
         monkeypatch,
         [
-            'PRGT:0,5018,"Saving all titles to MKV files"',
+            'PRGT:5024,0,"Saving all titles to MKV files"',
             'MSG:5003,0,2,"Failed to save title 1 to file title_t01.mkv",'
             '"Failed to save title %1 to file %2","1","title_t01.mkv"',
         ],
@@ -254,7 +254,7 @@ async def test_rip_disc_falls_back_to_disc_progress_when_no_per_title_prgt(monke
     _stub_subprocess(
         monkeypatch,
         [
-            'PRGT:0,5018,"Saving all titles to MKV files"',
+            'PRGT:5024,0,"Saving all titles to MKV files"',
             # current/max = 0.10, total/max = 0.05  →  expect disc-level 0.05
             "PRGV:1000,500,10000",
             "PRGV:5000,2500,10000",
@@ -293,6 +293,64 @@ async def test_rip_disc_falls_back_to_disc_progress_when_no_per_title_prgt(monke
 
 
 @pytest.mark.asyncio
+async def test_rip_disc_pre_save_phase_prgv_is_silently_dropped(monkeypatch, tmp_path):
+    """Pre-rip PRGV lines (analyse / decrypt / BD+ phases) have a
+    `total/max` channel that climbs to 70-80% within those phases,
+    then resets to 0 when MakeMKV enters the save phase.
+
+    If the streamer fired `on_disc_progress` for those, the rips
+    store would publish a 70-80% bar to the dashboard, then snap to
+    0% when PRGC:5017,0 fires per-title progress — and the ETA
+    baseline (anchored at the first sample) would treat the snap as
+    a sustained negative pctDelta, holding ETA null until per-title
+    progress climbs back past the pre-rip peak (basically forever
+    on a long main feature). Gate fixes the regression: PRGV before
+    PRGT:5024 is silent."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            # Pre-rip phase — analyse total climbs to ~78%, then resets.
+            "PRGV:51819,46899,65536",
+            "PRGV:65536,51200,65536",
+            "PRGV:0,0,65536",
+            # Save phase begins.
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            'PRGC:5017,0,"Saving to MKV file"',
+            "PRGV:5000,1000,10000",  # per-op 0.5, attributed to title
+        ],
+    )
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
+
+    title_progress: list[tuple[int, float]] = []
+    disc_progress: list[float] = []
+
+    async def on_title_start(_idx: int) -> None:
+        return None
+
+    async def on_title_progress(idx: int, frac: float) -> None:
+        title_progress.append((idx, frac))
+
+    async def on_disc_progress(frac: float) -> None:
+        disc_progress.append(frac)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[0],
+        on_title_start=on_title_start,
+        on_title_progress=on_title_progress,
+        on_disc_progress=on_disc_progress,
+    )
+
+    assert result.overall_error is None
+    # Pre-rip PRGV → silent. Per-title PRGV after PRGC:5017,0 fires for source 0.
+    assert title_progress == [(0, 0.5)]
+    # Disc-level fallback never fired — pre-rip gated, save phase had PRGC:5017.
+    assert disc_progress == []
+
+
+@pytest.mark.asyncio
 async def test_rip_disc_per_title_progress_takes_precedence_over_disc(monkeypatch, tmp_path):
     """When a per-title "Saving title #N" PRGT has identified the
     in-flight title, PRGV drives `on_title_progress` (per-op channel)
@@ -301,7 +359,7 @@ async def test_rip_disc_per_title_progress_takes_precedence_over_disc(monkeypatc
     _stub_subprocess(
         monkeypatch,
         [
-            'PRGT:0,5018,"Saving title #0 to MKV file"',
+            'PRGT:5018,0,"Saving title #0 to MKV file"',
             "PRGV:5000,1000,10000",  # per-op 0.5, disc-overall 0.1
             "PRGV:10000,5000,10000",  # per-op 1.0, disc-overall 0.5
         ],
@@ -333,6 +391,104 @@ async def test_rip_disc_per_title_progress_takes_precedence_over_disc(monkeypatc
     assert result.overall_error is None
     assert title_progress == [(0, 0.5), (0, 1.0)]
     assert disc_progress == []
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_prgc_5017_fires_on_title_start_with_mapped_source_idx(monkeypatch, tmp_path):
+    """PRGC:5017 is the primary per-title milestone in `mkv all` mode
+    (confirmed against MakeMKV 1.18.3). The second field is the 0-based
+    *output position* — it indexes into `eligible_source_indexes` to
+    recover the source title index the dispatcher knows about.
+
+    With a sparse eligible list (e.g. {3, 7} after some sub-minlength
+    titles dropped), PRGC:5017,0 must fire `on_title_start(3)` and
+    PRGC:5017,1 must fire `on_title_start(7)` — and PRGV between
+    them must attribute progress to the right source index."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            'PRGC:5017,0,"Saving to MKV file"',
+            "PRGV:5000,1000,10000",  # per-op 0.5 of title at output pos 0
+            'PRGC:5017,1,"Saving to MKV file"',
+            "PRGV:9000,5000,10000",  # per-op 0.9 of title at output pos 1
+            'MSG:5036,0,2,"Copy complete. 2 titles saved.","Copy complete. %1 %2","2","titles"',
+        ],
+    )
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
+    (tmp_path / "Disc_t01.mkv").write_bytes(b"y" * 64)
+
+    starts: list[int] = []
+    title_progress: list[tuple[int, float]] = []
+    disc_progress: list[float] = []
+
+    async def on_title_start(idx: int) -> None:
+        starts.append(idx)
+
+    async def on_title_progress(idx: int, frac: float) -> None:
+        title_progress.append((idx, frac))
+
+    async def on_disc_progress(frac: float) -> None:
+        disc_progress.append(frac)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[3, 7],
+        on_title_start=on_title_start,
+        on_title_progress=on_title_progress,
+        on_disc_progress=on_disc_progress,
+    )
+
+    assert result.overall_error is None
+    # output positions 0,1 mapped via eligible_source_indexes → 3,7
+    assert starts == [3, 7]
+    # PRGV between PRGC:5017 events attributed to the active source idx
+    assert title_progress == [(3, 0.5), (7, 0.9)]
+    # disc-overall fallback never fires because PRGC:5017 set current_title
+    assert disc_progress == []
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_prgc_5017_out_of_range_position_is_skipped(monkeypatch, tmp_path):
+    """If MakeMKV ever emits a PRGC:5017 with an output position past
+    the eligible list (shouldn't happen, but mismatched scan/rip state
+    could cause it), the streamer logs a warning and skips rather than
+    crashing or attributing progress to a wrong track."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            'PRGC:5017,5,"Saving to MKV file"',  # out of range — only 1 eligible
+            "PRGV:5000,2500,10000",  # has no current_title → falls to disc-level
+            'MSG:5036,0,2,"done","%1 %2","0","titles"',
+        ],
+    )
+
+    starts: list[int] = []
+    disc_progress: list[float] = []
+
+    async def on_title_start(idx: int) -> None:
+        starts.append(idx)
+
+    async def on_disc_progress(frac: float) -> None:
+        disc_progress.append(frac)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[0],
+        on_title_start=on_title_start,
+        on_disc_progress=on_disc_progress,
+    )
+
+    assert result.overall_error is None
+    # No on_title_start fired — out-of-range was skipped.
+    assert starts == []
+    # current_title stayed None → PRGV fell through to disc-level callback.
+    assert disc_progress == [0.25]
 
 
 @pytest.mark.asyncio

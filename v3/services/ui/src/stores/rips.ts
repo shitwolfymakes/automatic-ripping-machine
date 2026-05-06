@@ -79,7 +79,16 @@ export const useRipsStore = defineStore('rips', {
       const baseline = this._baseline[jobId]
       // First tick for this track (or track changed) → reset baseline,
       // ETA stays null until enough has accumulated.
-      if (baseline === undefined || baseline.trackId !== payload.track_id) {
+      // Also reset on a sustained backwards jump (>1 pp): defensive
+      // catch for any case where the publisher emits a non-monotonic
+      // sequence under a stable track_id (e.g. an unexpected stream
+      // discontinuity). Without this, pctDelta goes negative and ETA
+      // hangs at null until progress climbs back past the old baseline.
+      if (
+        baseline === undefined ||
+        baseline.trackId !== payload.track_id ||
+        payload.progress_pct < baseline.atPct - 1
+      ) {
         this._baseline[jobId] = {
           trackId: payload.track_id,
           atMs: now,
