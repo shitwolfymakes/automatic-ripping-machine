@@ -53,7 +53,7 @@ const placeholder = computed(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--c-border, #ddd);
+  background: var(--border);
   border-radius: 4px;
   overflow: hidden;
   flex-shrink: 0;

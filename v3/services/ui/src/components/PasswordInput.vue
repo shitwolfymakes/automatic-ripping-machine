@@ -52,15 +52,17 @@ function onInput(e: Event): void {
 }
 .toggle-visibility {
   flex-shrink: 0;
-  background: transparent;
-  border: 1px solid var(--c-border, #ddd);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0 10px;
   font-size: 12px;
-  color: var(--c-muted, #666);
+  font-weight: 500;
+  color: var(--muted);
   cursor: pointer;
 }
 .toggle-visibility:hover {
-  background: var(--c-border, #eee);
+  color: var(--text);
+  border-color: var(--accent);
 }
 </style>

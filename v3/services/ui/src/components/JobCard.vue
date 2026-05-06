@@ -75,9 +75,9 @@ const etaLabel = computed(() => {
   grid-template-columns: 120px 1fr auto;
   gap: 16px;
   padding: 12px;
-  border: 1px solid var(--c-border, #ddd);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--c-bg, #fff);
+  background: var(--panel-2);
 }
 .poster-col {
   display: flex;
@@ -102,7 +102,7 @@ const etaLabel = computed(() => {
   text-overflow: ellipsis;
 }
 .year {
-  color: var(--c-muted, #888);
+  color: var(--muted);
   font-weight: 400;
 }
 .meta-line {
@@ -111,7 +111,7 @@ const etaLabel = computed(() => {
   font-size: 13px;
 }
 .meta-label {
-  color: var(--c-muted, #888);
+  color: var(--muted);
 }
 .badge-row {
   display: flex;
@@ -135,18 +135,18 @@ const etaLabel = computed(() => {
   font-variant-numeric: tabular-nums;
 }
 .eta {
-  color: var(--c-muted, #888);
+  color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 .progress-bar {
   height: 8px;
-  background: var(--c-border, #ddd);
+  background: var(--border);
   border-radius: 4px;
   overflow: hidden;
 }
 .progress-fill {
   height: 100%;
-  background: var(--c-accent, #0aa);
+  background: var(--accent);
   transition: width 200ms linear;
 }
 .actions-col {
@@ -161,9 +161,9 @@ const etaLabel = computed(() => {
 }
 .job-id {
   font-size: 11px;
-  color: var(--c-muted, #888);
+  color: var(--muted);
 }
 .muted {
-  color: var(--c-muted, #888);
+  color: var(--muted);
 }
 </style>
