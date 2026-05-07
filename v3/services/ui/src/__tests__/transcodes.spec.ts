@@ -112,12 +112,28 @@ describe('transcodes store', () => {
     expect(store.tasks[0].last_error).toBe('HandBrakeCLI exited rc=1')
   })
 
-  it('cancel on a queued task marks it failed without DELETE round-trip wiping the row', async () => {
+  it('cancel drops the row locally (cancel = delete on the backend too)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 204 })))
     const store = useTranscodesStore()
-    store.tasks = [task('txt_q', 'queued')]
+    store.tasks = [task('txt_q', 'queued'), task('txt_other', 'queued')]
     await store.cancel('txt_q')
-    expect(store.tasks[0].status).toBe('failed')
-    expect(store.tasks[0].last_error).toBe('cancelled by user')
+    expect(store.tasks.map((t) => t.id)).toEqual(['txt_other'])
+  })
+
+  it('task.deleted WS event drops the row (reconciles tabs that did not initiate)', () => {
+    const store = useTranscodesStore()
+    store.tasks = [task('txt_1', 'in_progress'), task('txt_2', 'queued')]
+    const env: WSEnvelope = {
+      op: 'event',
+      event_id: 'evt_1',
+      event_type: 'task.deleted',
+      emitted_at: 'now',
+      topic: 'transcode.events',
+      job_id: 'job_1',
+      track_id: 'trk_txt_1',
+      payload: { task_id: 'txt_1', session_application_id: 'sap_1' },
+    }
+    store.onEvent(env)
+    expect(store.tasks.map((t) => t.id)).toEqual(['txt_2'])
   })
 })

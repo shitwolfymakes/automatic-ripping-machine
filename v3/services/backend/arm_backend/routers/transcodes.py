@@ -1,9 +1,12 @@
-"""Transcode-task list + cancel.
+"""Transcode-task list + delete.
 
-`QUEUED` tasks soft-cancel synchronously (status → FAILED with
-`last_error="cancelled by user"`). `IN_PROGRESS` tasks delegate to the
-dispatcher's WS-cancel-then-docker-stop flow — non-blocking; the
-dispatcher emits `task.failed` over WS when the transcoder dies.
+`DELETE /api/transcodes/{id}` is a true delete: the row vanishes from
+the DB whatever its prior state. For `IN_PROGRESS` we first kick off
+`cancel_running` (WS cancel + grace + docker-stop fallback) so the
+spawned container actually dies; the dispatcher's tail then deletes
+the row instead of marking it FAILED. For other states the delete is
+synchronous. In every case we emit `task.deleted` over WS so the UI
+removes the row immediately.
 """
 
 import asyncio
@@ -14,7 +17,7 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
-from arm_common import TranscodeTaskStatus, User
+from arm_common import SessionApplication, TranscodeTaskStatus, User
 from arm_common.models import TranscodeTask
 from arm_common.schemas import TranscodeTaskView
 
@@ -38,7 +41,7 @@ async def list_transcodes(
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def cancel_transcode(
+async def delete_transcode(
     task_id: str,
     request: Request,
     _: User = Depends(require_jwt),
@@ -53,18 +56,31 @@ async def cancel_transcode(
         if dispatcher is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="transcode dispatcher unavailable; cannot cancel a running task",
+                detail="transcode dispatcher unavailable; cannot stop a running task",
             )
-        # Non-blocking: WS cancel + grace + docker-stop fallback all happen
-        # off the request path. The UI sees task.failed via WS when it lands.
+        # Non-blocking. cancel_running's tail deletes the row + emits
+        # task.deleted; we return 204 right away so the UI updates fast.
         asyncio.create_task(dispatcher.cancel_running(task_id))
         return
 
-    if row.status != TranscodeTaskStatus.QUEUED:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"task already terminal in status={row.status.value}",
+    # QUEUED or terminal (DONE/FAILED): delete synchronously and emit.
+    application = (
+        await db.execute(select(SessionApplication).where(col(SessionApplication.id) == row.session_application_id))
+    ).scalar_one_or_none()
+    job_id = application.job_id if application is not None else None
+    track_id = row.source_track_id
+    application_id = row.session_application_id
+
+    await db.delete(row)
+
+    hub = getattr(request.app.state, "ws_hub", None)
+    if hub is not None:
+        await hub.emit(
+            topic="transcode.events",
+            event_type="task.deleted",
+            payload={"task_id": task_id, "session_application_id": application_id},
+            job_id=job_id,
+            track_id=track_id,
+            session=db,
         )
-    row.status = TranscodeTaskStatus.FAILED
-    row.last_error = "cancelled by user"
     await db.commit()

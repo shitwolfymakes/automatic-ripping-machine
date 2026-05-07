@@ -485,7 +485,13 @@ class TranscodeDispatcher:
 
     async def cancel_running(self, task_id: str) -> None:
         """Send `task.cancel` over WS, wait `_CANCEL_GRACE_SECONDS`, then
-        docker-stop any survivor matching `arm.task_id=<task_id>`.
+        docker-stop any survivor and delete the row.
+
+        Cancel = delete: the row vanishes from the DB and `task.deleted`
+        fires over WS. If the transcoder honoured the cancel cleanly by
+        calling `/fail` during the grace window the row was already
+        marked FAILED — we delete it anyway, since the user's intent was
+        to remove it entirely.
         """
         async with self._db_factory() as db:
             await self._hub.emit(
@@ -499,54 +505,48 @@ class TranscodeDispatcher:
 
         await asyncio.sleep(_CANCEL_GRACE_SECONDS)
 
+        # Fetch once to decide whether docker-stop is still needed and to
+        # capture the metadata we need for the task.deleted emit.
+        async with self._db_factory() as db:
+            row = (await db.execute(select(TranscodeTask).where(col(TranscodeTask.id) == task_id))).scalar_one_or_none()
+            if row is None:
+                return  # already gone (race with another delete or rollback)
+            still_running = row.status == TranscodeTaskStatus.IN_PROGRESS
+            application_id = row.session_application_id
+            track_id = row.source_track_id
+
+        # Force-stop the container if the transcoder didn't honour the WS
+        # cancel inside the grace window.
+        if still_running:
+            try:
+                survivors = self._docker.containers.list(filters={"label": f"{_DOCKER_LABEL_KEY}={task_id}"})
+                for container in survivors:
+                    logger.warning(
+                        "force-stopping unresponsive transcoder task_id=%s container=%s",
+                        task_id,
+                        container.id,
+                    )
+                    container.stop(timeout=5)
+            except Exception as exc:
+                logger.exception("docker-stop fallback failed for task_id=%s: %s", task_id, exc)
+
+        # Delete the row + emit task.deleted. Re-select fresh in case the
+        # transcoder /fail call mutated the row between our fetch and now.
         async with self._db_factory() as db:
             row = (await db.execute(select(TranscodeTask).where(col(TranscodeTask.id) == task_id))).scalar_one_or_none()
             if row is None:
                 return
-            if row.status != TranscodeTaskStatus.IN_PROGRESS:
-                return  # transcoder honoured the WS cancel via /fail
-
-        # Fallback: docker-stop any container with this task label.
-        try:
-            survivors = self._docker.containers.list(filters={"label": f"{_DOCKER_LABEL_KEY}={task_id}"})
-            for container in survivors:
-                logger.warning(
-                    "force-stopping unresponsive transcoder task_id=%s container=%s",
-                    task_id,
-                    container.id,
-                )
-                container.stop(timeout=5)
-        except Exception as exc:
-            logger.exception("docker-stop fallback failed for task_id=%s: %s", task_id, exc)
-
-        # Mark the task failed if it's still in_progress (transcoder never
-        # called /fail). Same shape as a graceful cancel.
-        async with self._db_factory() as db:
-            row = (await db.execute(select(TranscodeTask).where(col(TranscodeTask.id) == task_id))).scalar_one_or_none()
-            if row is None or row.status != TranscodeTaskStatus.IN_PROGRESS:
-                return
-            row.status = TranscodeTaskStatus.FAILED
-            row.last_error = "cancelled by user (force-stopped)"
-            await self._emit_task_failed(db, row)
-            from arm_backend.transcode_apply import aggregate_session_application
-
             application = (
-                await db.execute(
-                    select(SessionApplication).where(col(SessionApplication.id) == row.session_application_id)
-                )
-            ).scalar_one()
-            outcome = await aggregate_session_application(db, application)
-            if outcome.event_type is not None:
-                await self._hub.emit(
-                    topic="transcode.events",
-                    event_type=outcome.event_type,
-                    payload={
-                        "session_application_id": application.id,
-                        "session_id": application.session_id,
-                        "job_id": application.job_id,
-                        "status": application.status.value,
-                    },
-                    job_id=application.job_id,
-                    session=db,
-                )
+                await db.execute(select(SessionApplication).where(col(SessionApplication.id) == application_id))
+            ).scalar_one_or_none()
+            job_id = application.job_id if application is not None else None
+            await db.delete(row)
+            await self._hub.emit(
+                topic="transcode.events",
+                event_type="task.deleted",
+                payload={"task_id": task_id, "session_application_id": application_id},
+                job_id=job_id,
+                track_id=track_id,
+                session=db,
+            )
             await db.commit()

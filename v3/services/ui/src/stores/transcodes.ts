@@ -55,15 +55,20 @@ export const useTranscodesStore = defineStore('transcodes', {
     },
     async cancel(id: string): Promise<void> {
       await api.del(`/api/transcodes/${id}`)
-      // Don't drop the row — for IN_PROGRESS, the backend kicks off a
-      // WS-driven cancel; the `task.failed` event handler will update the
-      // status. For QUEUED, the row goes to FAILED synchronously and
-      // refetch can pick it up.
-      const task = this.tasks.find((t) => t.id === id)
-      if (task !== undefined && task.status === 'queued') {
-        task.status = 'failed'
-        task.last_error = 'cancelled by user'
+      // Cancel = delete: backend removed the row (synchronously for
+      // QUEUED/terminal, async for IN_PROGRESS via cancel_running's tail).
+      // Drop locally now so the UI updates immediately; the `task.deleted`
+      // WS event reconciles for tabs that didn't initiate the action.
+      this._dropTask(id)
+    },
+    _dropTask(id: string): void {
+      this.tasks = this.tasks.filter((t) => t.id !== id)
+      const unsub = this._progressUnsubs[id]
+      if (unsub !== undefined) {
+        unsub()
+        delete this._progressUnsubs[id]
       }
+      delete this.liveProgress[id]
     },
     startWS(): void {
       wsClient.start()
@@ -137,6 +142,11 @@ export const useTranscodesStore = defineStore('transcodes', {
             if (p.last_error) task.last_error = p.last_error
             this.reconcileSubscriptions()
           }
+          break
+        }
+        case 'task.deleted': {
+          const p = env.payload as unknown as TranscodeTaskEventPayload
+          this._dropTask(p.task_id)
           break
         }
         case 'session.started':
