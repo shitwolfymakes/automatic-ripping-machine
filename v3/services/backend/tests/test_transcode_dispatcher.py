@@ -300,7 +300,9 @@ async def test_arm_inprogress_sweep_skips_when_media_root_missing(tmp_path: Path
 # ---- cancel running ----------------------------------------------------------
 
 
-async def test_cancel_running_emits_ws_then_docker_stop_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_cancel_running_emits_ws_then_docker_stop_fallback_then_deletes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     db = _app_with_one_task(
         TranscodeTaskStatus.IN_PROGRESS,
         claimed_by="zombie-host",
@@ -324,12 +326,16 @@ async def test_cancel_running_emits_ws_then_docker_stop_fallback(monkeypatch: py
 
     docker.containers.list.assert_called_once_with(filters={"label": "arm.task_id=txt_1"})
     container.stop.assert_called_once()
-    task = db.rows["transcode_tasks"][0]
-    assert task.status == TranscodeTaskStatus.FAILED
-    assert "force-stopped" in (task.last_error or "")
+    # New semantics: row is gone, not marked FAILED.
+    assert db.rows["transcode_tasks"] == []
 
 
-async def test_cancel_running_no_op_when_task_already_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_cancel_running_skips_docker_stop_but_still_deletes_when_terminal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Transcoder honoured the WS cancel during the grace window: row is
+    already terminal (DONE/FAILED) so docker-stop is unnecessary, but the
+    user's intent was to remove it — delete the row anyway."""
     db = _app_with_one_task(TranscodeTaskStatus.DONE)
     docker = MagicMock()
 
@@ -342,5 +348,5 @@ async def test_cancel_running_no_op_when_task_already_terminal(monkeypatch: pyte
 
     disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
     await disp.cancel_running("txt_1")
-    # No docker.stop call — the task ended itself before the grace expired.
     docker.containers.list.assert_not_called()
+    assert db.rows["transcode_tasks"] == []
