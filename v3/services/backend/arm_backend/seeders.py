@@ -204,11 +204,15 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
         "hw_preference": None,
     },
     {
+        # Pure copy of the MakeMKV-produced .mkv onto /media — `tool=none`
+        # routes through `transcode_none` which renames the file. HandBrake
+        # has no real "Matroska Passthrough" preset (it's a transcoder, not
+        # a remuxer); using TranscodeTool.NONE is the correct expression.
         "id": "tpr_builtin_passthrough_mkv",
         "name": "MKV Passthrough",
         "media_type": MediaType.MOVIE,
-        "tool": TranscodeTool.HANDBRAKE,
-        "preset_ref": "Matroska Passthrough",
+        "tool": TranscodeTool.NONE,
+        "preset_ref": None,
         "container": ContainerFormat.MKV,
         "codec": None,
         "hw_preference": None,
