@@ -3244,7 +3244,7 @@
           "logs"
         ],
         "summary": "Download Job Logs Zip",
-        "description": "In-memory zip with one entry per service that has matching lines.\n\nEmpty entries are omitted \u2014 a service whose log has zero lines for\nthis job does not show up at all.",
+        "description": "In-memory zip of every line tagged with `job_id`.\n\nSource preference:\n  1. `/logs/jobs/{job_id}.log` \u2014 the per-job aggregated file written\n     by `LogTailer`. Single zip entry, named `<job_id>.log`.\n  2. Fallback (per-job file absent, e.g. jobs predating the tailer's\n     per-job append): walk `/logs/*.log` and write one entry per\n     service that contributed any matching lines.",
         "operationId": "download_job_logs_zip_api_logs__job_id__zip_get",
         "parameters": [
           {
@@ -3301,7 +3301,7 @@
           "logs"
         ],
         "summary": "Stream Job Logs",
-        "description": "NDJSON stream of every `/logs/*.log` line whose `job_id` matches.\n\nFiles are read in alphabetical order; within a file, lines are\nyielded in append order. No cross-file resort \u2014 the consumer can\nsort by `ts` if global ordering matters.",
+        "description": "NDJSON stream of every line tagged with `job_id`.\n\nReads `/logs/jobs/{job_id}.log` directly when present; otherwise\nfalls back to scanning `/logs/*.log` (alphabetical order; lines\nwithin a file in append order; no cross-file resort \u2014 the consumer\ncan sort by `ts` if global ordering matters).",
         "operationId": "stream_job_logs_api_logs__job_id__get",
         "parameters": [
           {
@@ -5653,6 +5653,17 @@
               }
             ],
             "title": "Size Bytes"
+          },
+          "expected_size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Size Bytes"
           },
           "duration_seconds": {
             "anyOf": [

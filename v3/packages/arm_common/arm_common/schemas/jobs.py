@@ -110,6 +110,11 @@ class TrackView(BaseModel):
     status: TrackStatus
     output_path: str | None
     size_bytes: int | None
+    # `expected_size_bytes` is the scan-time MakeMKV estimate (TINFO:t,11);
+    # `size_bytes` is the post-rip actual from disk. UI prefers the actual
+    # when present, falls back to the estimate (prefixed `~`) before the
+    # rip starts so the tracks table isn't all em-dashes pre-rip.
+    expected_size_bytes: int | None = None
     # `duration_seconds` is the post-rip actual; `expected_duration_seconds`
     # is the scan-time estimate (set by `select_tracks` at rip-start).
     # Until the ripper measures real durations from the produced files,

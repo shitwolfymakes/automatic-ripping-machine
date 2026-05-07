@@ -25,6 +25,10 @@ class Track(SQLModel, table=True):
     role_source: str | None = Field(default=None)
     edition: str | None = Field(default=None)
     expected_duration_seconds: int | None = Field(sa_column=Column(Integer, nullable=True))
+    # Scan-time size estimate from MakeMKV TINFO:t,11. Lets the JobDetail
+    # tracks table show a "~26 GB" size before the rip starts; the
+    # post-rip actual `size_bytes` overrides it once the file lands.
+    expected_size_bytes: int | None = Field(sa_column=Column(BigInteger, nullable=True))
     status: TrackStatus = Field(
         sa_column=enum_column(TrackStatus, "track_status", server_default=TrackStatus.QUEUED.value)
     )
