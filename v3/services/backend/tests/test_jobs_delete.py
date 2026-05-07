@@ -23,6 +23,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import jobs as jobs_router  # noqa: E402
+from arm_backend.routers import logs as logs_router  # noqa: E402
 from arm_common import DiscType, Job, JobStatus, User  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
@@ -211,3 +212,69 @@ def test_bulk_delete_empty_db_returns_empty_lists(signing_key: bytes) -> None:
         r = client.delete("/api/jobs", headers=_auth(token))
     assert r.status_code == 200
     assert r.json() == {"deleted_ids": [], "skipped_non_terminal": []}
+
+
+def test_delete_removes_per_job_log(tmp_path: Any, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The per-job aggregated log at `/logs/jobs/<job_id>.log` is removed
+    when the Job row is hard-deleted. Cascade is filesystem-side, not
+    DB-side — the DB doesn't know the file exists."""
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    log_file = jobs_dir / "job_a.log"
+    log_file.write_text('{"msg": "rip start"}\n{"msg": "rip done"}\n')
+
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [_make_job("job_a", status=JobStatus.RIPPED)]
+    hub = _CapturingHub()
+    app, token = _make_app(signing_key, db, hub)
+    with TestClient(app) as client:
+        r = client.delete("/api/jobs/job_a", headers=_auth(token))
+    assert r.status_code == 204
+    assert not log_file.exists()
+
+
+def test_delete_succeeds_when_per_job_log_missing(
+    tmp_path: Any, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Older jobs that ran before the per-job append landed have no log
+    file. Delete must still succeed — no error, no 500."""
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    # Note: no /jobs/job_a.log exists.
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [_make_job("job_a", status=JobStatus.RIPPED)]
+    hub = _CapturingHub()
+    app, token = _make_app(signing_key, db, hub)
+    with TestClient(app) as client:
+        r = client.delete("/api/jobs/job_a", headers=_auth(token))
+    assert r.status_code == 204
+
+
+def test_bulk_delete_removes_per_job_logs(tmp_path: Any, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bulk delete removes the per-job log for every job that was actually
+    deleted. Skipped (non-terminal) jobs keep their logs."""
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    (jobs_dir / "job_a.log").write_text("{}\n")
+    (jobs_dir / "job_b.log").write_text("{}\n")
+    (jobs_dir / "job_active.log").write_text("{}\n")
+
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [
+        _make_job("job_a", status=JobStatus.RIPPED, drive_id="drv_1"),
+        _make_job("job_b", status=JobStatus.FAILED, drive_id="drv_2"),
+        _make_job("job_active", status=JobStatus.RIPPING, drive_id="drv_3"),
+    ]
+    hub = _CapturingHub()
+    app, token = _make_app(signing_key, db, hub)
+    with TestClient(app) as client:
+        r = client.delete("/api/jobs", headers=_auth(token))
+    assert r.status_code == 200
+    assert not (jobs_dir / "job_a.log").exists()
+    assert not (jobs_dir / "job_b.log").exists()
+    # The non-terminal job's log is preserved (job wasn't deleted).
+    assert (jobs_dir / "job_active.log").exists()

@@ -9,18 +9,21 @@ of `NotificationDispatcher`. Each tick:
 3. Detect rotation by comparing `os.stat(path).st_ino` to the cached
    inode. On a flip, drain remaining bytes from the old fd, close it,
    and reopen by path.
-4. For each parsed JSON line whose `job_id` has at least one subscriber
-   on `logs.{job_id}` (`hub.subscriber_count`), emit the line as a
+4. For each parsed JSON line carrying a `job_id`, append the raw line
+   to `/logs/jobs/{job_id}.log` — the per-job aggregated log used by
+   the zip / stream endpoints and removed on job-delete.
+5. For each line whose `job_id` has at least one subscriber on
+   `logs.{job_id}` (`hub.subscriber_count`), emit the line as a
    `log.line` event with `persist=False`.
 
 Loop guard: records emitted by the WS hub itself (`extra.logger`
-starting with `arm_backend.ws.hub`) are skipped. Without this, a hub
-emit failure would log a line, the tailer would re-emit it, and the
-re-emit could fail the same way — bounded but noisy.
+starting with `arm_backend.ws.hub`) are skipped before WS emit only —
+they're still appended to the per-job file (file writes have no
+feedback risk; the hub-emit-failure log is genuinely diagnostic).
 
 Subscriber sees only future lines after subscribing. Earlier lines are
 available via the `/api/logs/{job_id}` (NDJSON stream) and
-`/api/logs/{job_id}.zip` endpoints.
+`/api/logs/{job_id}.zip` endpoints, both backed by the per-job file.
 """
 
 from __future__ import annotations
@@ -64,6 +67,11 @@ class LogTailer:
     def __init__(self, hub: WSHub, log_dir: str = "/logs") -> None:
         self._hub = hub
         self._log_dir = Path(log_dir)
+        # Per-job aggregated logs live under `<log_dir>/jobs/<job_id>.log`.
+        # The dir itself is omitted from `_discover_files` because that
+        # only globs `<log_dir>/*.log` (non-recursive); `os.scandir`
+        # returns entries without descending.
+        self._per_job_dir = self._log_dir / "jobs"
         self._stop = asyncio.Event()
         self._files: dict[Path, _FileState] = {}
         self._tick_interval = _TICK_INTERVAL_SECONDS
@@ -182,6 +190,10 @@ class LogTailer:
         if not isinstance(job_id, str):
             return  # out-of-job-context line; nothing to fan out to
 
+        # Per-job aggregated log — append before WS emit so the file is
+        # the source of truth even if the hub fan-out fails.
+        self._append_per_job_log(job_id, line)
+
         # Loop guard: don't re-emit hub's own emit-failure logs.
         extra = record.get("extra")
         if isinstance(extra, dict):
@@ -202,3 +214,20 @@ class LogTailer:
             job_id=job_id,
             track_id=track_id,
         )
+
+    def _append_per_job_log(self, job_id: str, line: str) -> None:
+        """Append `line` (without trailing newline) to the per-job file.
+
+        Best-effort: a write failure logs a warning and drops the line.
+        Open-append-close per call avoids fd pressure across many active
+        jobs and survives file deletion (e.g. user deletes the job —
+        next line opens a fresh empty file rather than racing the unlink).
+        """
+        try:
+            self._per_job_dir.mkdir(parents=True, exist_ok=True)
+            target = self._per_job_dir / f"{job_id}.log"
+            with target.open("a", encoding="utf-8") as fh:
+                fh.write(line)
+                fh.write("\n")
+        except OSError as exc:
+            logger.warning("per-job log append failed job_id=%s err=%s", job_id, exc)

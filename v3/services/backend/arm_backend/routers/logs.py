@@ -2,15 +2,16 @@
 
 Two read-only endpoints scoped to a single `job_id`:
 
-- `GET /api/logs/{job_id}` — line-by-line grep across `/logs/*.log`,
-  streamed as `application/x-ndjson`. `?limit=N` is **per-file** (default
-  1000, hard cap 10000) so one chatty service can't starve out the
-  others.
+- `GET /api/logs/{job_id}` — NDJSON stream of every line tagged with
+  the requested `job_id`. Sourced from `/logs/jobs/{job_id}.log`
+  (written by `LogTailer`); falls back to scanning `/logs/*.log` when
+  the per-job file is absent (legacy jobs predating the tailer's
+  per-job append). `?limit=N` caps the line count.
 
-- `GET /api/logs/{job_id}.zip` — in-memory zip with one entry per
-  service that contributed any matching lines. Per-entry caps: 5000
-  lines or 5 MB, whichever hits first. The user grabs the zip from
-  the per-job UI page and drops it onto a github issue.
+- `GET /api/logs/{job_id}.zip` — in-memory zip. Single entry sourced
+  from the per-job file when present; legacy fallback walks the
+  service logs and writes one entry per service. Per-entry caps:
+  5000 lines or 5 MB, whichever hits first.
 
 Both endpoints require a UI JWT — service-token callers are rejected.
 The download URL the UI hardcodes is `/api/logs/{jobId}.zip`; there's
@@ -24,7 +25,7 @@ from __future__ import annotations
 import io
 import json
 import zipfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Response
@@ -34,7 +35,15 @@ from arm_backend.auth import require_jwt
 from arm_common import User
 
 # Resolved at import time so tests can monkeypatch this module attribute.
+# `per_job_log_path` reads `LOG_DIR` at call time so a `monkeypatch.setattr`
+# in a test flows through cleanly.
 LOG_DIR = Path("/logs")
+
+
+def per_job_log_path(job_id: str) -> Path:
+    """The aggregated-log file written by `LogTailer` for `job_id`."""
+    return LOG_DIR / "jobs" / f"{job_id}.log"
+
 
 # Defaults / caps for the streaming grep endpoint. Per-file (not global)
 # — see the module docstring.
@@ -58,31 +67,28 @@ async def download_job_logs_zip(
     job_id: str,
     _: User = Depends(require_jwt),
 ) -> Response:
-    """In-memory zip with one entry per service that has matching lines.
+    """In-memory zip of every line tagged with `job_id`.
 
-    Empty entries are omitted — a service whose log has zero lines for
-    this job does not show up at all.
+    Source preference:
+      1. `/logs/jobs/{job_id}.log` — the per-job aggregated file written
+         by `LogTailer`. Single zip entry, named `<job_id>.log`.
+      2. Fallback (per-job file absent, e.g. jobs predating the tailer's
+         per-job append): walk `/logs/*.log` and write one entry per
+         service that contributed any matching lines.
     """
     buf = io.BytesIO()
+    per_job = per_job_log_path(job_id)
+
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for path in sorted(LOG_DIR.glob("*.log")):
-            slice_lines: list[str] = []
-            byte_count = 0
-            try:
-                fh = path.open("r", encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            with fh:
-                for line in fh:
-                    if not _line_matches_job(line, job_id):
-                        continue
-                    out = line if line.endswith("\n") else line + "\n"
-                    slice_lines.append(out)
-                    byte_count += len(out)
-                    if len(slice_lines) >= ZIP_PER_ENTRY_LINE_CAP or byte_count >= ZIP_PER_ENTRY_BYTE_CAP:
-                        break
+        if per_job.is_file():
+            slice_lines = _read_capped_lines(per_job, lambda _: True)
             if slice_lines:
-                zf.writestr(path.name, "".join(slice_lines))
+                zf.writestr(per_job.name, "".join(slice_lines))
+        else:
+            for path in sorted(LOG_DIR.glob("*.log")):
+                slice_lines = _read_capped_lines(path, lambda line: _line_matches_job(line, job_id))
+                if slice_lines:
+                    zf.writestr(path.name, "".join(slice_lines))
 
     body = buf.getvalue()
     return Response(
@@ -101,15 +107,32 @@ async def stream_job_logs(
     limit: int = PER_FILE_DEFAULT,
     _: User = Depends(require_jwt),
 ) -> StreamingResponse:
-    """NDJSON stream of every `/logs/*.log` line whose `job_id` matches.
+    """NDJSON stream of every line tagged with `job_id`.
 
-    Files are read in alphabetical order; within a file, lines are
-    yielded in append order. No cross-file resort — the consumer can
-    sort by `ts` if global ordering matters.
+    Reads `/logs/jobs/{job_id}.log` directly when present; otherwise
+    falls back to scanning `/logs/*.log` (alphabetical order; lines
+    within a file in append order; no cross-file resort — the consumer
+    can sort by `ts` if global ordering matters).
     """
     cap = max(0, min(limit, PER_FILE_HARD_CAP))
 
     def gen() -> Iterator[bytes]:
+        per_job = per_job_log_path(job_id)
+        if per_job.is_file():
+            yielded = 0
+            try:
+                fh = per_job.open("r", encoding="utf-8", errors="replace")
+            except OSError:
+                return
+            with fh:
+                for line in fh:
+                    out = line if line.endswith("\n") else line + "\n"
+                    yield out.encode("utf-8")
+                    yielded += 1
+                    if yielded >= cap:
+                        return
+            return
+
         for path in sorted(LOG_DIR.glob("*.log")):
             yielded = 0
             try:
@@ -127,6 +150,26 @@ async def stream_job_logs(
                         break
 
     return StreamingResponse(gen(), media_type="application/x-ndjson")
+
+
+def _read_capped_lines(path: Path, predicate: Callable[[str], bool]) -> list[str]:
+    """Read lines from `path` matching `predicate`, capped by line+byte limits."""
+    out: list[str] = []
+    byte_count = 0
+    try:
+        fh = path.open("r", encoding="utf-8", errors="replace")
+    except OSError:
+        return out
+    with fh:
+        for line in fh:
+            if not predicate(line):
+                continue
+            normalised = line if line.endswith("\n") else line + "\n"
+            out.append(normalised)
+            byte_count += len(normalised)
+            if len(out) >= ZIP_PER_ENTRY_LINE_CAP or byte_count >= ZIP_PER_ENTRY_BYTE_CAP:
+                break
+    return out
 
 
 def _line_matches_job(line: str, job_id: str) -> bool:
