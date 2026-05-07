@@ -12,7 +12,7 @@ Conservative on user-modified built-ins: only updates rows that still
 carry the exact original template, so a hand-edited copy on someone's
 DB is left alone.
 
-Revision ID: 0011_add_track_token_to_plex_movie_sessions
+Revision ID: 0011_plex_movie_track_token
 Revises: 0010_fix_passthrough_mkv_preset
 Create Date: 2026-05-07
 
@@ -23,7 +23,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0011_add_track_token_to_plex_movie_sessions"
+revision: str = "0011_plex_movie_track_token"
 down_revision: Union[str, None] = "0010_fix_passthrough_mkv_preset"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
