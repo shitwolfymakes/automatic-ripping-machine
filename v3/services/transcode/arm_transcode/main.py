@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import ssl
 import sys
 from pathlib import Path
 
@@ -141,6 +142,13 @@ async def run() -> int:
             logger.warning("task.cancel received over WS; signalling encoder")
             cancel_event.set()
 
+    # The Backend serves wss:// with a cert chained to the install CA,
+    # which the entrypoint already merges into the system trust store
+    # (see api_client.py — same `/etc/ssl/certs/ca-certificates.crt` path
+    # the HTTP client uses). `websockets` refuses to connect over `wss://`
+    # without an explicit ssl context, so build one from the system store.
+    ssl_ctx = ssl.create_default_context()
+
     rc = 1
     try:
         async with WSClient(
@@ -148,6 +156,7 @@ async def run() -> int:
             service_token=cfg.service_token,
             hostname=cfg.hostname,
             task_id=cfg.task_id,
+            ssl_context=ssl_ctx,
         ) as ws:
             await ws.subscribe(f"transcoder.commands.{cfg.task_id}", _on_cancel)
             await ws.wait_until_connected(timeout=10.0)
