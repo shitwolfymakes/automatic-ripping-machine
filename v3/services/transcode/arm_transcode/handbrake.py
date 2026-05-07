@@ -119,22 +119,39 @@ async def transcode_handbrake(
 
 
 async def _drain_stderr(stream: asyncio.StreamReader, buf: list[str]) -> None:
+    """Read stderr line-by-line. Buffer the tail for the rc!=0 error
+    message and tee each line through the logger at DEBUG so the
+    per-job log captures the full stderr — same shape as the MakeMKV
+    `makemkv-raw` log lines.
+    """
     while True:
-        line = await stream.readline()
-        if not line:
+        raw = await stream.readline()
+        if not raw:
             break
-        buf.append(line.decode(errors="replace").rstrip())
+        line = raw.decode(errors="replace").rstrip()
+        buf.append(line)
+        logger.debug("handbrake-stderr: %s", line)
 
 
 async def _consume_progress(stream: asyncio.StreamReader, cb: ProgressCallback) -> None:
-    """Buffer stdout, hunt for `Progress:` JSON blocks, fire `cb` on each."""
+    """Read stdout line-by-line, log each line at DEBUG (so the per-job
+    log captures HandBrake's full stdout), and stitch lines into a
+    rolling buffer to look for `Progress:` JSON blocks. `--json` mode
+    pretty-prints over multiple lines so we can't parse a single line in
+    isolation, but capping the buffer to the last few KB keeps memory
+    bounded if the producer outruns the regex.
+    """
     pending = ""
     last_emitted = -1
+    max_pending = 65_536  # plenty for one JSON record; trims trailing noise
     while True:
-        chunk = await stream.read(4096)
-        if not chunk:
+        raw = await stream.readline()
+        if not raw:
             break
-        pending += chunk.decode(errors="replace")
+        line = raw.decode(errors="replace").rstrip("\n\r")
+        if line:
+            logger.debug("handbrake-stdout: %s", line)
+        pending += line + "\n"
         for match in _PROGRESS_BLOCK_RE.finditer(pending):
             try:
                 obj: dict[str, Any] = json.loads(match.group(1))
@@ -147,12 +164,14 @@ async def _consume_progress(stream: asyncio.StreamReader, cb: ProgressCallback) 
                     await cb(pct, eta, current_pass)
                 except Exception as exc:  # noqa: BLE001
                     logger.debug("progress_callback raised: %s", exc)
-        # Trim what we've fully matched to keep the buffer bounded.
+        # Trim what we've fully matched, then bound the residual buffer.
         last_match_end = 0
         for match in _PROGRESS_BLOCK_RE.finditer(pending):
             last_match_end = match.end()
         if last_match_end:
             pending = pending[last_match_end:]
+        if len(pending) > max_pending:
+            pending = pending[-max_pending:]
 
 
 def _extract_progress(obj: dict[str, Any]) -> tuple[int | None, int | None, str | None]:
