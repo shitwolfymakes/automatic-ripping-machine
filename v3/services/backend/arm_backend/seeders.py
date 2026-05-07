@@ -306,6 +306,18 @@ SESSIONS: list[dict[str, Any]] = [
         "output_path_template": "{title} ({year})/{title} ({year}) - Track {track} ({duration_human}) - {transcode_slug}.{ext}",
     },
     {
+        # Same `rpr_builtin_movie_archive` (every title), but each track is
+        # transcoded H.265 with `hw_preference=ANY` instead of remuxed —
+        # disc-equivalent contents in a smaller form, GPU-accelerated when
+        # the host has matching silicon and CPU otherwise.
+        "id": "ses_builtin_movie_archive_gpu",
+        "name": "Movie → Archive H.265 (GPU preferred)",
+        "media_type": MediaType.MOVIE,
+        "rip_preset_id": "rpr_builtin_movie_archive",
+        "transcode_preset_id": "tpr_builtin_plex_1080p_h265_gpu",
+        "output_path_template": "{title} ({year})/{title} ({year}) - Track {track} ({duration_human}) - {transcode_slug}.{ext}",
+    },
+    {
         "id": "ses_builtin_tv_plex_1080p",
         "name": "TV → Plex 1080p H.265",
         "media_type": MediaType.TV,
