@@ -179,7 +179,14 @@ def test_apply_happy_path_creates_application_and_tasks(signing_key: bytes, tmp_
     assert body["collisions"] == []
 
 
-def test_apply_idempotent_returns_existing_application(signing_key: bytes, tmp_path: Path) -> None:
+def test_manual_reapply_with_existing_done_returns_collisions_for_overwrite_prompt(
+    signing_key: bytes, tmp_path: Path
+) -> None:
+    """Manual apply is non-idempotent: re-clicking Apply on a job whose
+    previous application is DONE surfaces a collision (the existing DB row
+    at the same output_path), so the UI can show the overwrite confirm
+    dialog. The user can then post `overwrite=true` to redo the work
+    (separate test below)."""
     db = FakeSession()
     _seed(db)
     db.rows["session_applications"] = [
@@ -187,7 +194,7 @@ def test_apply_idempotent_returns_existing_application(signing_key: bytes, tmp_p
             id="sap_existing",
             session_id="ses_x",
             job_id="job_x",
-            status=SessionApplicationStatus.QUEUED,
+            status=SessionApplicationStatus.DONE,
             overwrite=False,
         )
     ]
@@ -196,10 +203,10 @@ def test_apply_idempotent_returns_existing_application(signing_key: bytes, tmp_p
             id="txt_existing",
             session_application_id="sap_existing",
             source_track_id="trk_1",
-            status=TranscodeTaskStatus.QUEUED,
+            status=TranscodeTaskStatus.DONE,
             output_path="Iron Man (2008)/Iron Man - plex-1080p-h-265.mkv",
-            attempts=0,
-            progress_pct=0,
+            attempts=1,
+            progress_pct=100,
         )
     ]
     app, token = _make_app(signing_key, db, tmp_path)
@@ -209,17 +216,18 @@ def test_apply_idempotent_returns_existing_application(signing_key: bytes, tmp_p
             json={"session_id": "ses_x"},
             headers=_auth(token),
         )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["idempotent"] is True
-    assert body["session_application"]["id"] == "sap_existing"
-    assert len(body["tasks"]) == 1
+    assert r.status_code == 409
+    detail = r.json()["detail"]
+    assert detail["collisions"][0]["existing_task_id"] == "txt_existing"
+    assert detail["collisions"][0]["reason"] == "existing_task"
 
 
-def test_apply_resets_failed_tasks_on_existing_application(signing_key: bytes, tmp_path: Path) -> None:
-    """Re-clicking Apply on a job whose existing application has FAILED tasks
-    should reset them to QUEUED — re-apply means "retry," not "no-op."
-    """
+def test_manual_reapply_with_overwrite_evicts_done_tasks_and_creates_new(signing_key: bytes, tmp_path: Path) -> None:
+    """`overwrite=true` on a manual re-apply should delete the colliding
+    DONE/QUEUED/FAILED tasks (they're history at this point) and create
+    a fresh application + tasks. The empty session_application left
+    behind also gets cleaned up so the JobDetail page doesn't accumulate
+    husk rows."""
     db = FakeSession()
     _seed(db)
     db.rows["session_applications"] = [
@@ -227,40 +235,69 @@ def test_apply_resets_failed_tasks_on_existing_application(signing_key: bytes, t
             id="sap_existing",
             session_id="ses_x",
             job_id="job_x",
-            status=SessionApplicationStatus.FAILED,
+            status=SessionApplicationStatus.DONE,
             overwrite=False,
         )
     ]
     db.rows["transcode_tasks"] = [
         TranscodeTask(
-            id="txt_failed",
+            id="txt_existing",
             session_application_id="sap_existing",
             source_track_id="trk_1",
-            status=TranscodeTaskStatus.FAILED,
+            status=TranscodeTaskStatus.DONE,
             output_path="Iron Man (2008)/Iron Man - plex-1080p-h-265.mkv",
-            attempts=2,
-            progress_pct=0,
-            last_error="HandBrakeCLI exited rc=1",
-            claimed_by="arm-transcode-old",
+            attempts=1,
+            progress_pct=100,
         )
     ]
     app, token = _make_app(signing_key, db, tmp_path)
     with TestClient(app) as client:
         r = client.post(
             "/api/jobs/job_x/transcode",
-            json={"session_id": "ses_x"},
+            json={"session_id": "ses_x", "overwrite": True},
             headers=_auth(token),
         )
     assert r.status_code == 200
     body = r.json()
-    assert body["idempotent"] is False  # work was actually done — tasks reset
-    task = db.rows["transcode_tasks"][0]
-    assert task.status == TranscodeTaskStatus.QUEUED
-    assert task.last_error is None
-    assert task.claimed_by is None
-    assert task.attempts == 2  # preserved as audit signal
-    application = db.rows["session_applications"][0]
-    assert application.status == SessionApplicationStatus.RUNNING
+    assert body["idempotent"] is False
+    # The new application is freshly created, not "sap_existing".
+    new_app_id = body["session_application"]["id"]
+    assert new_app_id != "sap_existing"
+    # Old task was deleted; only the new task remains at this path.
+    paths = [t.output_path for t in db.rows["transcode_tasks"]]
+    assert paths == ["Iron Man (2008)/Iron Man - plex-1080p-h-265.mkv"]
+    assert db.rows["transcode_tasks"][0].id != "txt_existing"
+    # Husk session_application got cleaned up.
+    assert all(a.id != "sap_existing" for a in db.rows["session_applications"])
+
+
+def test_manual_reapply_overwrite_refused_when_in_progress(signing_key: bytes, tmp_path: Path) -> None:
+    """Don't displace a transcoder that's actively writing — even with
+    `overwrite=true`, an IN_PROGRESS collision is a hard 409 telling the
+    user to cancel the running task explicitly first."""
+    db = FakeSession()
+    _seed(db)
+    db.rows["transcode_tasks"] = [
+        TranscodeTask(
+            id="txt_running",
+            session_application_id="sap_other",
+            source_track_id="trk_other",
+            status=TranscodeTaskStatus.IN_PROGRESS,
+            output_path="Iron Man (2008)/Iron Man - plex-1080p-h-265.mkv",
+            attempts=1,
+            progress_pct=42,
+            claimed_by="arm-transcode-running",
+        )
+    ]
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_x/transcode",
+            json={"session_id": "ses_x", "overwrite": True},
+            headers=_auth(token),
+        )
+    assert r.status_code == 409
+    assert "in_progress" in r.json()["detail"].lower()
 
 
 def test_apply_collision_409_lists_paths(signing_key: bytes, tmp_path: Path) -> None:

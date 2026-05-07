@@ -114,45 +114,51 @@ async def _apply_session_internal(
     if sess is None:
         raise SessionNotFoundError(session_id)
 
-    # Idempotency: same (session, job) → return the existing application.
-    # Refinement: if the existing application has any FAILED tasks, reset
-    # them back to QUEUED so the dispatcher retries that slice. The user's
-    # mental model for a re-click of Apply is "try again", not "no-op";
-    # idempotent here means "don't double-create rows," not "do nothing."
-    existing = (
-        await db.execute(
-            select(SessionApplication)
-            .where(col(SessionApplication.session_id) == session_id)
-            .where(col(SessionApplication.job_id) == job.id)
-        )
-    ).scalar_one_or_none()
-    if existing is not None:
-        tasks = await _load_tasks(db, existing.id)
-        retried = await _retry_failed_tasks(db, tasks)
-        if retried > 0:
-            # Application may have aggregated to FAILED/DONE_PARTIAL earlier.
-            # Bring it back to RUNNING since work is queued again.
-            if existing.status in (
-                SessionApplicationStatus.FAILED,
-                SessionApplicationStatus.DONE_PARTIAL,
-                SessionApplicationStatus.DONE,
-            ):
-                existing.status = SessionApplicationStatus.RUNNING
-                existing.completed_at = None
-            await db.commit()
-            tasks = await _load_tasks(db, existing.id)
-            logger.info(
-                "apply: reset %d failed task(s) on existing session_application=%s",
-                retried,
-                existing.id,
+    # `auto` keeps idempotency: rip-complete fires once per disc, but we
+    # don't want a flapping disc / repeated rip-complete event to spam new
+    # applications. A previously-applied session for this (session, job)
+    # is the answer; failed tasks get reset to QUEUED so the dispatcher
+    # retries that slice.
+    #
+    # `manual` is non-idempotent on purpose: every click of Apply means
+    # "do this work now". If it would write over an existing output, the
+    # collision flow surfaces a confirm dialog; on overwrite=True the
+    # colliding DONE/QUEUED tasks are deleted before we fan out fresh
+    # rows. IN_PROGRESS collisions are still refused — can't safely
+    # replace a transcoder that's actively writing.
+    if source == "auto":
+        existing = (
+            await db.execute(
+                select(SessionApplication)
+                .where(col(SessionApplication.session_id) == session_id)
+                .where(col(SessionApplication.job_id) == job.id)
             )
-        return ApplySessionOutcome(
-            application=existing,
-            tasks=tasks,
-            collisions=[],
-            idempotent=retried == 0,
-            skipped_reason=None,
-        )
+        ).scalar_one_or_none()
+        if existing is not None:
+            tasks = await _load_tasks(db, existing.id)
+            retried = await _retry_failed_tasks(db, tasks)
+            if retried > 0:
+                if existing.status in (
+                    SessionApplicationStatus.FAILED,
+                    SessionApplicationStatus.DONE_PARTIAL,
+                    SessionApplicationStatus.DONE,
+                ):
+                    existing.status = SessionApplicationStatus.RUNNING
+                    existing.completed_at = None
+                await db.commit()
+                tasks = await _load_tasks(db, existing.id)
+                logger.info(
+                    "apply (auto): reset %d failed task(s) on existing session_application=%s",
+                    retried,
+                    existing.id,
+                )
+            return ApplySessionOutcome(
+                application=existing,
+                tasks=tasks,
+                collisions=[],
+                idempotent=retried == 0,
+                skipped_reason=None,
+            )
 
     # `awaiting_user_id` → park as `waiting_identify` with no tasks.
     # In practice this only happens via the manual route — `rip-complete`
@@ -222,6 +228,9 @@ async def _apply_session_internal(
             skipped_reason="collisions",
         )
 
+    if overwrite and collisions:
+        await _evict_colliding_tasks(db, paths)
+
     application = SessionApplication(
         session_id=session_id,
         job_id=job.id,
@@ -281,6 +290,84 @@ async def _apply_session_internal(
         idempotent=False,
         skipped_reason=None,
     )
+
+
+async def _evict_colliding_tasks(db: AsyncSession, paths: list[str]) -> None:
+    """Delete live tasks that claim the soon-to-be-reused `paths`.
+
+    Called on the overwrite=True branch of manual apply. We delete the
+    QUEUED/DONE/FAILED rows at those paths so the new fan-out doesn't
+    trip the partial unique index on `output_path`. IN_PROGRESS at the
+    same path is a hard refusal — a live transcoder is actively writing
+    and can't be safely displaced; the user should cancel that task
+    explicitly first.
+
+    Empty `session_applications` left behind (all their tasks evicted)
+    get cleaned up here so the JobDetail page doesn't accumulate husk
+    rows on every re-apply.
+    """
+    in_progress_ids = (
+        (
+            await db.execute(
+                select(TranscodeTask.id)
+                .where(col(TranscodeTask.output_path).in_(paths))
+                .where(col(TranscodeTask.status) == TranscodeTaskStatus.IN_PROGRESS)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if in_progress_ids:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"refusing overwrite: {len(in_progress_ids)} task(s) still in_progress at "
+                "colliding paths — cancel them first, then re-apply"
+            ),
+        )
+
+    rows = (
+        (
+            await db.execute(
+                select(TranscodeTask)
+                .where(col(TranscodeTask.output_path).in_(paths))
+                .where(col(TranscodeTask.status).in_(_EVICTABLE_STATES))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        # FS-only collision (no DB row to evict) — atomic_output will
+        # clobber the on-disk file via the .arm-inprogress rename dance.
+        return
+
+    affected_app_ids = {r.session_application_id for r in rows}
+    for row in rows:
+        await db.delete(row)
+    await db.flush()
+
+    # Drop session_applications that now have zero remaining tasks. If any
+    # other tasks still link to the application, leave it alone.
+    for app_id in affected_app_ids:
+        remaining = (
+            await db.execute(select(TranscodeTask).where(col(TranscodeTask.session_application_id) == app_id).limit(1))
+        ).scalar_one_or_none()
+        if remaining is not None:
+            continue
+        app = (
+            await db.execute(select(SessionApplication).where(col(SessionApplication.id) == app_id))
+        ).scalar_one_or_none()
+        if app is not None:
+            await db.delete(app)
+    await db.flush()
+
+
+_EVICTABLE_STATES: tuple[TranscodeTaskStatus, ...] = (
+    TranscodeTaskStatus.QUEUED,
+    TranscodeTaskStatus.DONE,
+    TranscodeTaskStatus.FAILED,
+)
 
 
 async def _retry_failed_tasks(db: AsyncSession, tasks: list[TranscodeTask]) -> int:

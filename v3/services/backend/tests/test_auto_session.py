@@ -218,7 +218,11 @@ async def test_idempotent_reapply_does_not_re_emit(tmp_path: Path) -> None:
         session_id="ses_x",
         overwrite=False,
         created_by_user_id=None,
-        source="manual",
+        # Auto-source keeps the (session, job) idempotency contract — repeated
+        # rip-complete events for the same disc shouldn't fan out duplicate
+        # applications. Manual is intentionally non-idempotent (covered in
+        # test_apply_session.py).
+        source="auto",
         hub=hub,  # type: ignore[arg-type]
     )
 
