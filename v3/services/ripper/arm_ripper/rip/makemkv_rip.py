@@ -278,6 +278,10 @@ async def _stream_output(
         line = raw.decode(errors="replace").rstrip()
         if not line:
             continue
+        # Raw makemkvcon line → DEBUG service log, then per-job log via
+        # the backend's tailer. ~30 k lines per BD rip; gated on
+        # ARM_LOG_LEVEL=debug so it's free in INFO-mode operation.
+        logger.debug("makemkv-raw: %s", line)
 
         # PRGV — two channels in one line:
         #   `current/max` advances per-operation (resets per title)
