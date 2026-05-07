@@ -23,6 +23,7 @@ from arm_common.models import (
 )
 from arm_common import (
     ContainerFormat,
+    HwPreference,
     IdentificationMode,
     MediaType,
     OutputMode,
@@ -180,6 +181,19 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
         "hw_preference": None,
     },
     {
+        # GPU-preferred sibling: same HandBrake preset, but `hw_preference=ANY`
+        # so the dispatcher will hand it the first available NVENC/VAAPI/QSV
+        # GPU advertising H.265 and fall back to CPU if none is free.
+        "id": "tpr_builtin_plex_1080p_h265_gpu",
+        "name": "Plex 1080p H.265 (GPU preferred)",
+        "media_type": MediaType.MOVIE,
+        "tool": TranscodeTool.HANDBRAKE,
+        "preset_ref": "H.265 MKV 1080p30",
+        "container": ContainerFormat.MKV,
+        "codec": VideoCodec.H265,
+        "hw_preference": HwPreference.ANY,
+    },
+    {
         "id": "tpr_builtin_plex_2160p_hevc",
         "name": "Plex 2160p HEVC",
         "media_type": MediaType.MOVIE,
@@ -261,6 +275,14 @@ SESSIONS: list[dict[str, Any]] = [
         "media_type": MediaType.MOVIE,
         "rip_preset_id": "rpr_builtin_movie_main_feature",
         "transcode_preset_id": "tpr_builtin_plex_1080p_h265",
+        "output_path_template": "{title} ({year})/{title} ({year}) - {transcode_slug}.{ext}",
+    },
+    {
+        "id": "ses_builtin_movie_plex_1080p_gpu",
+        "name": "Movie → Plex 1080p H.265 (GPU preferred)",
+        "media_type": MediaType.MOVIE,
+        "rip_preset_id": "rpr_builtin_movie_main_feature",
+        "transcode_preset_id": "tpr_builtin_plex_1080p_h265_gpu",
         "output_path_template": "{title} ({year})/{title} ({year}) - {transcode_slug}.{ext}",
     },
     {
