@@ -41,7 +41,7 @@ ProgressCallback = Callable[[int, int | None, str | None], Awaitable[None]]
 # Anchored on `task N of M,` so we don't accidentally match `Scanning title 1
 # of 1, 70.00 %` (which is title-scan progress, not encode progress).
 _PROGRESS_LINE_RE = re.compile(
-    r"task\s+(?P<pass>\d+)\s+of\s+\d+,\s+(?P<pct>\d+(?:\.\d+)?)\s*%"
+    r"task\s+(?P<pass>\d+)\s+of\s+(?P<pass_total>\d+),\s+(?P<pct>\d+(?:\.\d+)?)\s*%"
     r"(?:.*?ETA\s+(?P<h>\d+)h(?P<m>\d+)m(?P<s>\d+)s)?",
     re.IGNORECASE,
 )
@@ -206,7 +206,10 @@ async def _process_progress_line(line: str, cb: ProgressCallback, last_emitted: 
     if pct == last_emitted:
         return last_emitted
     eta = _parse_eta(match)
-    current_pass = match.group("pass")
+    # `current_pass` ships as `"N/M"` so the UI can render the HandBrake
+    # internal pass count (e.g. `1/1` for a single-pass encode, `1/2`/`2/2`
+    # for a two-pass encode) without having to know the schema's history.
+    current_pass = f"{match.group('pass')}/{match.group('pass_total')}"
     try:
         await cb(pct, eta, current_pass)
     except Exception as exc:  # noqa: BLE001
