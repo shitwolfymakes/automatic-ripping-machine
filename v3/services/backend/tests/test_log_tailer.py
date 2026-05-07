@@ -227,3 +227,86 @@ async def test_new_file_picked_up_on_subsequent_tick(tmp_path: Path) -> None:
     # post-discovery lines reach the hub.
     assert "track done" in msgs
     assert "transcoder started" not in msgs
+
+
+@pytest.mark.asyncio
+async def test_per_job_log_appended_for_lines_with_job_id(tmp_path: Path) -> None:
+    """Every line carrying a `job_id` lands in `<log_dir>/jobs/<job_id>.log`,
+    not just the WS topic. This file is the source of truth for the zip /
+    stream endpoints and is removed on job-delete."""
+    log_path = tmp_path / "arm-backend.log"
+    log_path.touch()
+    hub = _FakeHub(subscriptions={"logs.job_x": 1})
+    tailer = LogTailer(hub, log_dir=str(tmp_path))  # type: ignore[arg-type]
+
+    await tailer.tick()
+    _append(log_path, _record(msg="line one"))
+    _append(log_path, _record(msg="line two"))
+    await tailer.tick()
+
+    per_job = tmp_path / "jobs" / "job_x.log"
+    assert per_job.is_file()
+    lines = [json.loads(line) for line in per_job.read_text().splitlines()]
+    assert [line["msg"] for line in lines] == ["line one", "line two"]
+
+
+@pytest.mark.asyncio
+async def test_per_job_log_aggregates_multiple_services(tmp_path: Path) -> None:
+    """Lines from different service log files but the same job_id all
+    end up in the same per-job file, in the order the tailer drains them."""
+    backend_log = tmp_path / "arm-backend.log"
+    ripper_log = tmp_path / "arm-ripper-sr0.log"
+    backend_log.touch()
+    ripper_log.touch()
+    hub = _FakeHub()  # no WS subscribers; per-job write is independent
+    tailer = LogTailer(hub, log_dir=str(tmp_path))  # type: ignore[arg-type]
+
+    await tailer.tick()
+    _append(backend_log, _record(service="arm-backend", msg="backend line"))
+    _append(ripper_log, _record(service="arm-ripper-sr0", msg="ripper line"))
+    await tailer.tick()
+
+    per_job = tmp_path / "jobs" / "job_x.log"
+    services = {json.loads(line)["service"] for line in per_job.read_text().splitlines()}
+    assert services == {"arm-backend", "arm-ripper-sr0"}
+
+
+@pytest.mark.asyncio
+async def test_per_job_log_skipped_for_lines_without_job_id(tmp_path: Path) -> None:
+    """Records with `job_id=None` are not file-persisted (there's no
+    file to write to). The jobs/ dir may or may not be created."""
+    log_path = tmp_path / "arm-backend.log"
+    log_path.touch()
+    hub = _FakeHub()
+    tailer = LogTailer(hub, log_dir=str(tmp_path))  # type: ignore[arg-type]
+
+    await tailer.tick()
+    _append(log_path, _record(job_id=None, msg="orphan"))
+    await tailer.tick()
+
+    jobs_dir = tmp_path / "jobs"
+    if jobs_dir.exists():
+        assert list(jobs_dir.iterdir()) == []
+
+
+@pytest.mark.asyncio
+async def test_per_job_log_records_hub_self_lines(tmp_path: Path) -> None:
+    """The WS-emit loop guard skips re-publishing hub-self records onto
+    the WS, but those records still hit the per-job file — the file is
+    a passive append-only store with no feedback risk, and a hub-emit
+    failure is genuinely useful diagnostic content."""
+    log_path = tmp_path / "arm-backend.log"
+    log_path.touch()
+    hub = _FakeHub(subscriptions={"logs.job_x": 1})
+    tailer = LogTailer(hub, log_dir=str(tmp_path))  # type: ignore[arg-type]
+
+    await tailer.tick()
+    _append(log_path, _record(logger_name="arm_backend.ws.hub.fanout", msg="hub self log"))
+    await tailer.tick()
+
+    # Loop guard kept this off the WS.
+    assert hub.emits == []
+    # But it's in the per-job file.
+    per_job = tmp_path / "jobs" / "job_x.log"
+    assert per_job.is_file()
+    assert "hub self log" in per_job.read_text()

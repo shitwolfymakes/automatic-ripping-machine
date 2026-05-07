@@ -206,3 +206,71 @@ def test_zip_requires_jwt(tmp_path: Path, signing_key: bytes, monkeypatch: pytes
     with TestClient(app) as client:
         r = client.get("/api/logs/job_x.zip")
     assert r.status_code in (401, 403)
+
+
+def _seed_per_job(log_dir: Path, *, job_id: str, lines: list[dict[str, object]]) -> Path:
+    """Write `lines` to `<log_dir>/jobs/<job_id>.log` — the file the
+    LogTailer writes at runtime."""
+    jobs_dir = log_dir / "jobs"
+    jobs_dir.mkdir(parents=True, exist_ok=True)
+    target = jobs_dir / f"{job_id}.log"
+    with target.open("w", encoding="utf-8") as fh:
+        for record in lines:
+            fh.write(json.dumps(record) + "\n")
+    return target
+
+
+def test_zip_uses_per_job_file_when_present(
+    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When `/logs/jobs/<job_id>.log` exists, the zip is served from it
+    directly (single entry) rather than scanning service logs. The
+    service-level files are ignored even if they have matching lines."""
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    # Seed a stale service log with a different message — it should NOT
+    # appear in the response because the per-job file is the source.
+    _seed(tmp_path, service="arm-backend", lines=[_line(msg="stale-service-line")])
+    _seed_per_job(tmp_path, job_id="job_x", lines=[_line(msg="per-job-line")])
+
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs/job_x.zip", headers=_auth(token))
+    assert r.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+        names = zf.namelist()
+        assert names == ["job_x.log"]
+        body = zf.read("job_x.log").decode("utf-8")
+    msgs = [json.loads(line)["msg"] for line in body.strip().splitlines()]
+    assert msgs == ["per-job-line"]
+
+
+def test_zip_falls_back_to_service_scan_when_per_job_file_absent(
+    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Legacy path: a job whose run predated the per-job append still
+    has its lines in service logs. The endpoint walks them as before."""
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    _seed(tmp_path, service="arm-backend", lines=[_line(msg="legacy-line")])
+    # No /jobs/job_x.log exists.
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs/job_x.zip", headers=_auth(token))
+    with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+        assert "arm-backend.log" in zf.namelist()
+        body = zf.read("arm-backend.log").decode("utf-8")
+    assert "legacy-line" in body
+
+
+def test_grep_uses_per_job_file_when_present(
+    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    _seed(tmp_path, service="arm-backend", lines=[_line(msg="stale-service-line")])
+    _seed_per_job(tmp_path, job_id="job_x", lines=[_line(msg="per-job-line")])
+
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs/job_x", headers=_auth(token))
+    assert r.status_code == 200
+    msgs = [json.loads(line)["msg"] for line in r.text.strip().splitlines()]
+    assert msgs == ["per-job-line"]

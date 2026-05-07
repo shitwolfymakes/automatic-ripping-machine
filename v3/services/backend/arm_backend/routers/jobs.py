@@ -10,6 +10,7 @@ from arm_backend.auth import require_jwt
 from arm_backend.auto_session import SessionNotFoundError, apply_session_internal
 from arm_backend.db import get_session
 from arm_backend.path_template import TemplateValidationError
+from arm_backend.routers.logs import per_job_log_path
 from arm_backend.ws import WSHub
 from arm_common import (
     DiscFingerprint,
@@ -272,6 +273,17 @@ async def _emit_delete_raw(hub: WSHub, db: AsyncSession, job: Job) -> None:
     )
 
 
+def _delete_per_job_log(job_id: str) -> None:
+    """Best-effort removal of `/logs/jobs/{job_id}.log`. Logged-but-swallowed
+    on any error — DB delete already succeeded by the time we reach here,
+    so a stale log file is far better than aborting the user's delete."""
+    path = per_job_log_path(job_id)
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning("per-job log delete failed job_id=%s path=%s err=%s", job_id, path, exc)
+
+
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_job(
     job_id: str,
@@ -305,6 +317,7 @@ async def delete_job(
 
     await db.delete(job)
     await db.commit()
+    _delete_per_job_log(job_id)
     logger.info("delete job_id=%s delete_raw=%s", job_id, delete_raw)
 
 
@@ -337,6 +350,8 @@ async def delete_all_jobs(
         deleted_ids.append(job.id)
 
     await db.commit()
+    for jid in deleted_ids:
+        _delete_per_job_log(jid)
     logger.info("delete-all jobs deleted=%d skipped=%d delete_raw=%s", len(deleted_ids), len(skipped), delete_raw)
     return BulkDeleteJobsResponse(deleted_ids=deleted_ids, skipped_non_terminal=skipped)
 
