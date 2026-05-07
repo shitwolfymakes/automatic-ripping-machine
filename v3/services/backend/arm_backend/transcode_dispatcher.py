@@ -421,32 +421,39 @@ class TranscodeDispatcher:
         if gpu.vendor == GpuVendor.NVENC:
             # device_path is "nvidia://N"; pass the index as a string ID so
             # `--gpus device=N` semantics select that single GPU.
+            #
+            # `count` and `device_ids` are mutually exclusive on the docker
+            # daemon side ("cannot set both Count and DeviceIDs on device
+            # request"). Pin to a specific GPU when we have an index;
+            # otherwise fall back to "count: 1 (any free GPU)".
             idx = gpu.device_path.removeprefix("nvidia://")
+            base_kwargs: dict[str, Any] = {
+                "driver": "nvidia",
+                "capabilities": [["gpu", "video"]],
+            }
+            if idx:
+                base_kwargs["device_ids"] = [idx]
+            else:
+                base_kwargs["count"] = 1
             try:
                 import docker  # type: ignore[import-untyped]
 
                 kwargs["runtime"] = "nvidia"
-                kwargs["device_requests"] = [
-                    docker.types.DeviceRequest(
-                        driver="nvidia",
-                        count=1,
-                        device_ids=[idx] if idx else None,
-                        capabilities=[["gpu", "video"]],
-                    )
-                ]
+                kwargs["device_requests"] = [docker.types.DeviceRequest(**base_kwargs)]
             except ImportError:
                 # Tests run without docker-py installed; the dispatcher's
                 # docker_client is a MagicMock anyway, so kwarg shape doesn't
                 # need to be exact for the test to pass.
                 kwargs["runtime"] = "nvidia"
-                kwargs["device_requests"] = [
-                    {
-                        "Driver": "nvidia",
-                        "Count": 1,
-                        "DeviceIDs": [idx] if idx else None,
-                        "Capabilities": [["gpu", "video"]],
-                    }
-                ]
+                fallback = {
+                    "Driver": base_kwargs["driver"],
+                    "Capabilities": base_kwargs["capabilities"],
+                }
+                if "device_ids" in base_kwargs:
+                    fallback["DeviceIDs"] = base_kwargs["device_ids"]
+                else:
+                    fallback["Count"] = base_kwargs["count"]
+                kwargs["device_requests"] = [fallback]
 
     # --- .arm-inprogress sweep ----------------------------------------------
 

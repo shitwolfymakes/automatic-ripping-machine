@@ -233,6 +233,14 @@ async def test_nvenc_available_uses_runtime_and_device_requests() -> None:
     assert kwargs["runtime"] == "nvidia"
     assert "device_requests" in kwargs
     assert kwargs["device_requests"]  # non-empty
+    # Pin to the specific GPU index (`nvidia://0` → DeviceIDs=["0"]). The
+    # docker daemon rejects requests that set BOTH Count > 0 AND DeviceIDs
+    # ("cannot set both Count and DeviceIDs on device request") — docker-py's
+    # DeviceRequest always serialises Count, but defaults it to 0, so we
+    # just need to never pass `count=1` when device_ids is set.
+    req = kwargs["device_requests"][0]
+    assert req["DeviceIDs"] == ["0"]
+    assert req.get("Count", 0) == 0
 
 
 # --- NULL hw_preference matrix -----------------------------------------------
