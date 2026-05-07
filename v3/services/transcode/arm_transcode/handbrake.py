@@ -149,36 +149,69 @@ async def _drain_stderr(stream: asyncio.StreamReader, buf: list[str]) -> None:
 
 
 async def _consume_progress(stream: asyncio.StreamReader, cb: ProgressCallback) -> None:
-    """Read stdout line-by-line, log each at DEBUG, fire `cb` on every
-    `task N of M, P %` progress line.
+    """Read stdout, split on the carriage return + newline HandBrake uses
+    as the progress separator, log each logical line at DEBUG, and fire
+    `cb` on every `task N of M, P %` match.
 
-    HandBrake reports progress at ~5 Hz; we suppress duplicate-pct ticks
-    so the callback (and its WS publish path) sees one event per percent
-    change.
+    HandBrake's text mode rewrites the progress line in-place using `\\r`:
+
+        Encoding: task 1 of 1, 0.87 %\\rEncoding: task 1 of 1, 1.81 %\\r…
+
+    `StreamReader.readline()` only honours `\\n`, so a naive readline loop
+    blocks until the trailing newline (effectively until the encode
+    finishes) and then handles ~hundreds of progress updates as a single
+    giant line — the regex `search()` finds only the first match (0 %)
+    and the UI bar never advances. Reading bounded chunks and re-
+    splitting on `\\r\\n` keeps both pathways working: progress updates
+    fire one-by-one, and `\\n`-terminated lines (HandBrake's startup
+    banner, JSON Title Set, the audio-encoder lines) still look like
+    discrete entries in the log.
     """
     last_emitted = -1
+    pending = ""
     while True:
-        raw = await stream.readline()
-        if not raw:
+        chunk = await stream.read(4096)
+        if not chunk:
+            # Process any trailing bit before exiting (rare — usually the
+            # final progress line is followed by `\n` so it's already drained).
+            if pending:
+                await _process_progress_line(pending, cb, last_emitted)
             break
-        line = raw.decode(errors="replace").rstrip("\n\r")
-        if not line:
-            continue
-        logger.debug("handbrake-stdout: %s", line)
+        pending += chunk.decode(errors="replace")
+        # Treat both `\r` and `\n` as line breaks. HandBrake uses `\r` between
+        # progress updates and `\n` for everything else.
+        parts = re.split(r"[\r\n]", pending)
+        # The final segment may be incomplete — keep it in `pending` until the
+        # next chunk delivers its terminator.
+        pending = parts[-1]
+        for line in parts[:-1]:
+            new_emitted = await _process_progress_line(line, cb, last_emitted)
+            if new_emitted >= 0:
+                last_emitted = new_emitted
 
-        match = _PROGRESS_LINE_RE.search(line)
-        if match is None:
-            continue
-        pct = int(round(float(match.group("pct"))))
-        eta = _parse_eta(match)
-        current_pass = match.group("pass")
-        if pct == last_emitted:
-            continue
-        last_emitted = pct
-        try:
-            await cb(pct, eta, current_pass)
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("progress_callback raised: %s", exc)
+
+async def _process_progress_line(line: str, cb: ProgressCallback, last_emitted: int) -> int:
+    """Log one logical line, fire `cb` if it's a new progress %, return the
+    pct that was emitted (or `last_emitted` unchanged when the line wasn't
+    a new tick). Returning the pct lets the caller chain the dedupe state
+    without globals.
+    """
+    if not line:
+        return last_emitted
+    logger.debug("handbrake-stdout: %s", line)
+    match = _PROGRESS_LINE_RE.search(line)
+    if match is None:
+        return last_emitted
+    pct = int(round(float(match.group("pct"))))
+    if pct == last_emitted:
+        return last_emitted
+    eta = _parse_eta(match)
+    current_pass = match.group("pass")
+    try:
+        await cb(pct, eta, current_pass)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("progress_callback raised: %s", exc)
+    return pct
 
 
 def _parse_eta(match: re.Match[str]) -> int | None:
