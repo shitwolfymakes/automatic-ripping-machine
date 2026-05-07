@@ -44,6 +44,13 @@ RIP_TIMEOUT_SECONDS = 6 * 60 * 60  # 6 hours: worst-case BD
 
 OnTitleStart = Callable[[int], Awaitable[None]]
 OnTitleProgress = Callable[[int, float], Awaitable[None]]
+# Fired the instant title N's save phase is known to be complete:
+# either when PRGC:5017,N+1 transitions us off title N (MakeMKV has
+# moved to the next title — N's file is finalised) or, for the last
+# title in the rip, when makemkvcon exits cleanly. The dispatcher uses
+# this to PATCH each Track DONE with size + output_path as it finishes
+# instead of waiting for the whole `mkv all` invocation to end.
+OnTitleDone = Callable[[int], Awaitable[None]]
 # Fired with the disc-overall PRGV `total/max` fraction whenever no
 # per-title PRGT has identified the title currently being written.
 # `mkv all` mode is opaque per-title (a single "Saving all titles to
@@ -96,6 +103,7 @@ class _TitleState:
 
     fail_reason: str | None = None
     started_emitted: bool = False
+    done_emitted: bool = False
 
 
 @dataclass
@@ -261,12 +269,30 @@ async def _emit_title_start(
             logger.debug("title start callback raised: %s", exc)
 
 
+async def _emit_title_done(
+    state: _ParserState,
+    title_idx: int,
+    on_title_done: OnTitleDone | None,
+) -> None:
+    """Fire on_title_done exactly once per title."""
+    ts = state.titles.setdefault(title_idx, _TitleState())
+    if ts.done_emitted:
+        return
+    ts.done_emitted = True
+    if on_title_done is not None:
+        try:
+            await on_title_done(title_idx)
+        except Exception as exc:
+            logger.debug("title done callback raised: %s", exc)
+
+
 async def _stream_output(
     proc: asyncio.subprocess.Process,
     state: _ParserState,
     on_title_start: OnTitleStart | None,
     on_title_progress: OnTitleProgress | None,
     on_disc_progress: OnDiscProgress | None,
+    on_title_done: OnTitleDone | None = None,
     eligible_source_indexes: list[int] | None = None,
 ) -> None:
     assert proc.stdout is not None
@@ -319,6 +345,13 @@ async def _stream_output(
         if out_pos is not None:
             if 0 <= out_pos < len(eligible):
                 source_idx = eligible[out_pos]
+                # Transition signal: the previous title (if any) is now
+                # finalised on disk — MakeMKV has closed its file and
+                # moved on. Fire on_title_done before the next start so
+                # the dispatcher can PATCH N=DONE before N+1 goes
+                # IN_PROGRESS, keeping the lifecycle ordering clean.
+                if state.current_title is not None and state.current_title != source_idx:
+                    await _emit_title_done(state, state.current_title, on_title_done)
                 await _emit_title_start(state, source_idx, on_title_start)
             else:
                 logger.warning(
@@ -434,6 +467,7 @@ async def rip_disc(
     on_title_start: OnTitleStart | None = None,
     on_title_progress: OnTitleProgress | None = None,
     on_disc_progress: OnDiscProgress | None = None,
+    on_title_done: OnTitleDone | None = None,
 ) -> RipDiscResult:
     """Rip every title with duration ≥ `minlength_seconds` from the disc
     in `device_path` to `output_dir`. Single makemkvcon invocation; the
@@ -492,6 +526,7 @@ async def rip_disc(
             on_title_start,
             on_title_progress,
             on_disc_progress,
+            on_title_done=on_title_done,
             eligible_source_indexes=eligible_source_indexes,
         )
     )
@@ -535,6 +570,15 @@ async def rip_disc(
             overall_error=_compose_error(f"makemkvcon failed: {msg}", state.diagnostics),
             titles={},
         )
+
+    # Final title's on_title_done — the streamer fires done at PRGC
+    # transitions, but the last title in the rip never gets a follow-up
+    # PRGC:5017,N+1. Catch any started-but-not-yet-done title here so
+    # the dispatcher PATCHes it DONE before rip_disc returns.
+    for source_idx in sorted(state.titles):
+        ts = state.titles[source_idx]
+        if ts.started_emitted and not ts.done_emitted:
+            await _emit_title_done(state, source_idx, on_title_done)
 
     # Attribute output files to source title indexes.
     #

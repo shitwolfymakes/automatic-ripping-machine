@@ -7,7 +7,7 @@ from arm_common.schemas import TrackView
 
 from arm_ripper.rip.abcde_rip import rip_cd
 from arm_ripper.rip.data_rip import rip_data
-from arm_ripper.rip.makemkv_rip import RipResult, rip_disc
+from arm_ripper.rip.makemkv_rip import RipResult, _output_files_in_rip_order, rip_disc
 
 logger = logging.getLogger("arm_ripper.rip.dispatcher")
 
@@ -156,6 +156,10 @@ async def _rip_optical(
     )
 
     started: set[int] = set()
+    # Source indexes whose Track has already been PATCHed DONE via the
+    # streamer's mid-rip on_title_done callback. The post-rip
+    # attribution loop skips these to avoid double-PATCHing.
+    done_emitted: set[int] = set()
 
     async def _on_title_start(title_idx: int) -> None:
         track = track_by_index.get(title_idx)
@@ -200,6 +204,62 @@ async def _rip_optical(
             return
         await on_track_progress(first_track, fraction)
 
+    async def _on_title_done(title_idx: int) -> None:
+        """Mid-rip per-title finalisation. Stat the .mkv produced for
+        this title's output position and PATCH the Track DONE with
+        size + output_path. SHA256 is intentionally skipped here —
+        hashing a 27 GB main feature would block the streamer for a
+        minute and starve the next title's PRGC of attention; if the
+        column is needed it can be filled in by a separate post-rip
+        pass.
+
+        Files are matched positionally to `eligible_source_indexes`
+        (same convention as the post-rip attribution loop): the file
+        whose `_tNN.mkv` suffix equals this title's position in the
+        eligible list is the one MakeMKV just finalised.
+        """
+        track = track_by_index.get(title_idx)
+        if track is None:
+            return
+        if title_idx in done_emitted:
+            return
+        try:
+            position = eligible_source_indexes.index(title_idx)
+        except ValueError:
+            # MakeMKV announced a title we didn't list as eligible —
+            # nothing to attribute live; the post-rip loop handles it.
+            return
+        files = _output_files_in_rip_order(output_dir)
+        if position >= len(files):
+            # File not on disk yet — defer to the post-rip loop. Should
+            # be rare: MakeMKV finalises before emitting the next PRGC.
+            logger.debug(
+                "on_title_done: file for source_idx=%d position=%d not on disk yet; deferring",
+                title_idx,
+                position,
+            )
+            return
+        file_path = files[position]
+        try:
+            size = file_path.stat().st_size
+        except OSError as exc:
+            logger.warning(
+                "on_title_done: stat failed source_idx=%d path=%s err=%s",
+                title_idx,
+                file_path,
+                exc,
+            )
+            return
+        await _ensure_started(title_idx, track)
+        result = RipResult(
+            ok=True,
+            output_path=file_path,
+            size_bytes=size,
+            duration_seconds=track.duration_seconds or track.expected_duration_seconds,
+        )
+        done_emitted.add(title_idx)
+        await on_track_done(track, result)
+
     async def _ensure_started(title_idx: int, track: TrackView) -> None:
         """Guarantee on_track_start has fired for this track before any
         terminal PATCH. In `mkv all` mode the stream-driven PRGT often
@@ -218,27 +278,40 @@ async def _rip_optical(
         on_title_start=_on_title_start,
         on_title_progress=_on_title_progress,
         on_disc_progress=_on_disc_progress,
+        on_title_done=_on_title_done,
     )
 
     if disc_result.overall_error is not None:
         # Rip-level failure — mark every selected track FAILED with the
         # disc-level error so the operator knows what happened. Each
         # track must transit IN_PROGRESS first per the backend's state
-        # machine.
+        # machine. Tracks already PATCHed DONE via the live path
+        # (titles that finalised before the rip aborted) keep their
+        # DONE status — partial success is still success for those
+        # files.
         logger.warning("rip_disc failed: %s", disc_result.overall_error)
         for title_idx, track in track_by_index.items():
+            if title_idx in done_emitted:
+                continue
             await _ensure_started(title_idx, track)
             await on_track_done(track, RipResult(ok=False, error=disc_result.overall_error))
         return
 
-    # Per-title attribution. For each selected track:
-    # - If rip_disc reports a result for it: use that. (Includes both
-    #   ok=True for files we matched positionally to eligible source
-    #   indexes, and ok=False for eligible titles that didn't render.)
+    # Per-title attribution for tracks the live path didn't already
+    # finalise (e.g. below-minlength tracks MakeMKV skipped, or
+    # eligible tracks that didn't produce a file). Tracks already in
+    # `done_emitted` were PATCHed DONE by `_on_title_done` mid-rip and
+    # are skipped here to avoid double-PATCHing.
+    # - If rip_disc reports a result for it: use that. (Includes
+    #   ok=False for eligible titles that didn't render — the live
+    #   path can't report failures since it's only triggered by PRGC
+    #   transitions on successful saves.)
     # - Otherwise: the track was below `min_length_seconds`, so MakeMKV
     #   never attempted it. FAILED with a clear reason so the operator
     #   can lower minlength and retry.
     for title_idx, track in track_by_index.items():
+        if title_idx in done_emitted:
+            continue
         await _ensure_started(title_idx, track)
         result = disc_result.titles.get(title_idx)
         if result is None:
