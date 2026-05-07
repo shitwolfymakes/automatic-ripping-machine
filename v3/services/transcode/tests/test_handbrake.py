@@ -21,6 +21,7 @@ def test_full_line_with_eta() -> None:
     assert int(round(float(m.group("pct")))) == 47
     assert _parse_eta(m) == 12 * 60 + 34
     assert m.group("pass") == "1"
+    assert m.group("pass_total") == "1"
 
 
 def test_zero_progress_no_eta_yet() -> None:
@@ -59,8 +60,23 @@ def test_pass_index_is_extracted() -> None:
     """Two-pass encodes report `task 1 of 2` then `task 2 of 2`."""
     m1 = _match("Encoding: task 1 of 2, 50.00 % (... ETA 00h05m00s)")
     m2 = _match("Encoding: task 2 of 2, 10.00 % (... ETA 00h08m00s)")
-    assert m1 is not None and m1.group("pass") == "1"
-    assert m2 is not None and m2.group("pass") == "2"
+    assert m1 is not None and m1.group("pass") == "1" and m1.group("pass_total") == "2"
+    assert m2 is not None and m2.group("pass") == "2" and m2.group("pass_total") == "2"
+
+
+@pytest.mark.asyncio
+async def test_current_pass_is_emitted_as_n_over_m() -> None:
+    """The progress callback's `current` parameter is `N/M` so the UI can
+    render HandBrake's internal pass count directly."""
+    raw = "Encoding: task 1 of 2, 50.00 % (... ETA 00h05m00s)\rEncoding: task 2 of 2, 10.00 % (... ETA 00h08m00s)\n"
+    stream = _FakeStream([raw.encode()])
+    seen: list[str | None] = []
+
+    async def cb(pct: int, eta: int | None, current: str | None) -> Awaitable[None]:  # type: ignore[return]
+        seen.append(current)
+
+    await _consume_progress(stream, cb)  # type: ignore[arg-type]
+    assert seen == ["1/2", "2/2"]
 
 
 # --- _consume_progress: the carriage-return splitter ------------------------

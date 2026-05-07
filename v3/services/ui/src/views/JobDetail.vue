@@ -11,7 +11,6 @@ import { useJobsStore } from '../stores/jobs'
 import { useTranscodesStore } from '../stores/transcodes'
 import type { ApplySessionResponse, JobDetailView, JobStatus, JobView } from '../api/types'
 import { isTerminalJobStatus } from '../utils/jobStatus'
-import { taskOrdinal } from '../utils/transcodeOrdinal'
 
 const route = useRoute()
 const router = useRouter()
@@ -56,8 +55,15 @@ function progressOf(taskId: string, fallback: number): number {
 }
 
 function ordinalOf(taskId: string): string | null {
-  const o = taskOrdinal(taskId, transcodes.tasks)
-  return o === null ? null : `${o.n}/${o.m}`
+  // Per-row N/M reflects the encoder's *internal* pass count (HandBrake
+  // emits `task 1 of 1` for single-pass, `task 1 of 2` then `task 2 of 2`
+  // for two-pass). The transcoder packs that as `current_pass="N/M"` on
+  // each progress tick — render it verbatim when present, blank otherwise.
+  // ffmpeg-audio sends `"encoding"` (no pass count) and passthrough sends
+  // nothing; both correctly fall through to nothing.
+  const cp = transcodes.liveProgress[taskId]?.current_pass
+  if (cp === undefined || cp === null) return null
+  return /^\d+\/\d+$/.test(cp) ? cp : null
 }
 
 function formatSizeMb(bytes: number): string {
