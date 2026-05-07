@@ -11,6 +11,7 @@ import { useJobsStore } from '../stores/jobs'
 import { useTranscodesStore } from '../stores/transcodes'
 import type { ApplySessionResponse, JobDetailView, JobStatus, JobView } from '../api/types'
 import { isTerminalJobStatus } from '../utils/jobStatus'
+import { taskOrdinal } from '../utils/transcodeOrdinal'
 
 const route = useRoute()
 const router = useRouter()
@@ -52,6 +53,11 @@ const jobTasks = computed(() => {
 
 function progressOf(taskId: string, fallback: number): number {
   return transcodes.liveProgress[taskId]?.progress_pct ?? fallback
+}
+
+function ordinalOf(taskId: string): string | null {
+  const o = taskOrdinal(taskId, transcodes.tasks)
+  return o === null ? null : `${o.n}/${o.m}`
 }
 
 function formatSizeMb(bytes: number): string {
@@ -324,6 +330,7 @@ async function savePoster(): Promise<void> {
           </td>
           <td>
             <div v-if="t.status === 'in_progress'" class="progress-cell">
+              <span v-if="ordinalOf(t.id) !== null" class="ordinal">{{ ordinalOf(t.id) }}</span>
               <div class="progress-bar">
                 <div
                   class="progress-fill"
@@ -390,6 +397,12 @@ async function savePoster(): Promise<void> {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.ordinal {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  min-width: 2.5em;
+  text-align: right;
 }
 .progress-bar {
   flex: 1;
