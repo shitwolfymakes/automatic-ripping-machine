@@ -156,22 +156,41 @@ async def find_collisions(
         seen.add(path)
         existing_id = db_hits.get(path)
         on_fs = (media_root / path).exists() if path else False
-        if existing_id is not None or on_fs:
+        if existing_id is not None:
             collisions.append(
                 CollisionInfo(
                     output_path=path,
                     existing_task_id=existing_id,
-                    on_filesystem=on_fs and existing_id is None,
+                    on_filesystem=False,
+                    reason="existing_task",
+                )
+            )
+        elif on_fs:
+            collisions.append(
+                CollisionInfo(
+                    output_path=path,
+                    existing_task_id=None,
+                    on_filesystem=True,
+                    reason="on_disk",
                 )
             )
 
-    # Cross-session collision *within this apply*: same path appears twice.
+    # Same path resolved twice in this apply — usually a template missing `{track}`
+    # for a multi-track rip. Surfaces distinctly so the user can fix the template
+    # rather than chase a non-existent on-disk file.
     seen_in_request: set[str] = set()
     for path in paths:
         if path in seen_in_request:
             already_flagged = any(c.output_path == path for c in collisions)
             if not already_flagged:
-                collisions.append(CollisionInfo(output_path=path, existing_task_id=None, on_filesystem=False))
+                collisions.append(
+                    CollisionInfo(
+                        output_path=path,
+                        existing_task_id=None,
+                        on_filesystem=False,
+                        reason="duplicate_in_request",
+                    )
+                )
         seen_in_request.add(path)
     return collisions
 

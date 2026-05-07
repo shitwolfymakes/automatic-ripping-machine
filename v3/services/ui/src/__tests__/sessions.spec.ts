@@ -118,6 +118,7 @@ describe('sessions store', () => {
                   output_path: 'Iron Man.mkv',
                   existing_task_id: 'txt_other',
                   on_filesystem: false,
+                  reason: 'existing_task',
                 },
               ],
             },

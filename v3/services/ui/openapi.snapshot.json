@@ -3485,13 +3485,23 @@
           "on_filesystem": {
             "type": "boolean",
             "title": "On Filesystem"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "existing_task",
+              "on_disk",
+              "duplicate_in_request"
+            ],
+            "title": "Reason"
           }
         },
         "type": "object",
         "required": [
           "output_path",
           "existing_task_id",
-          "on_filesystem"
+          "on_filesystem",
+          "reason"
         ],
         "title": "CollisionInfo"
       },

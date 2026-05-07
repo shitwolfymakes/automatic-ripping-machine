@@ -239,6 +239,7 @@ def test_apply_collision_409_lists_paths(signing_key: bytes, tmp_path: Path) -> 
     detail = r.json()["detail"]
     assert detail["message"] == "output_path collisions detected"
     assert detail["collisions"][0]["existing_task_id"] == "txt_other"
+    assert detail["collisions"][0]["reason"] == "existing_task"
 
 
 def test_apply_overwrite_true_clears_collision(signing_key: bytes, tmp_path: Path) -> None:
@@ -280,6 +281,44 @@ def test_apply_filesystem_collision_detected(signing_key: bytes, tmp_path: Path)
     assert r.status_code == 409
     detail = r.json()["detail"]
     assert detail["collisions"][0]["on_filesystem"] is True
+    assert detail["collisions"][0]["reason"] == "on_disk"
+
+
+def test_apply_duplicate_in_request_collision_for_multi_track_no_track_token(
+    signing_key: bytes, tmp_path: Path
+) -> None:
+    """Multi-track rip + template without `{track}` → all tracks resolve to same path.
+
+    Surfaces as `reason="duplicate_in_request"` (not `on_disk`), so the dialog
+    can tell the user to fix the template instead of pointing at a non-existent file.
+    """
+    db = FakeSession()
+    _seed(db)
+    db.rows["tracks"].append(
+        Track(
+            id="trk_2",
+            job_id="job_x",
+            kind=TrackKind.VIDEO_TITLE,
+            index=2,
+            source_ref="2",
+            expected_duration_seconds=7000,
+            status=TrackStatus.DONE,
+        )
+    )
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_x/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 409
+    detail = r.json()["detail"]
+    assert len(detail["collisions"]) == 1
+    c = detail["collisions"][0]
+    assert c["reason"] == "duplicate_in_request"
+    assert c["existing_task_id"] is None
+    assert c["on_filesystem"] is False
 
 
 def test_apply_to_unidentified_job_creates_waiting_identify(signing_key: bytes, tmp_path: Path) -> None:

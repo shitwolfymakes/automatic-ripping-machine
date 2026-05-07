@@ -2,7 +2,13 @@
 import { computed, onMounted, ref } from 'vue'
 import { ApiError } from '../api/client'
 import { useSessionsStore } from '../stores/sessions'
-import type { ApplySessionResponse, CollisionInfo, JobView, MediaType } from '../api/types'
+import type {
+  ApplySessionResponse,
+  CollisionInfo,
+  CollisionReason,
+  JobView,
+  MediaType,
+} from '../api/types'
 
 const props = defineProps<{ job: JobView }>()
 const emit = defineEmits<{
@@ -15,6 +21,16 @@ const selected = ref<string>('')
 const collisions = ref<CollisionInfo[]>([])
 const error = ref<string | null>(null)
 const submitting = ref(false)
+
+function collisionLabel(reason: CollisionReason): string {
+  if (reason === 'existing_task') return 'queued/done in DB'
+  if (reason === 'on_disk') return 'exists on disk'
+  return 'duplicate within this apply'
+}
+
+const hasDuplicateInRequest = computed(() =>
+  collisions.value.some((c) => c.reason === 'duplicate_in_request'),
+)
 
 function discTypeToMediaType(dt: string): MediaType | null {
   if (dt === 'dvd' || dt === 'bluray') return 'movie'
@@ -79,21 +95,25 @@ async function applyOnce(overwrite: boolean): Promise<void> {
     </div>
 
     <div v-else>
-      <p>This session would write paths that already exist:</p>
+      <p>This session can't be applied because of path collisions:</p>
       <ul>
-        <li v-for="c in collisions" :key="c.output_path">
+        <li v-for="c in collisions" :key="c.output_path + c.reason">
           <code>{{ c.output_path }}</code>
-          <span class="muted">
-            ({{ c.existing_task_id ? 'queued/done in DB' : 'exists on disk' }})
-          </span>
+          <span class="muted">({{ collisionLabel(c.reason) }})</span>
         </li>
       </ul>
-      <p class="muted">
+      <p v-if="hasDuplicateInRequest" class="muted">
+        Two or more tracks resolve to the same output path — the session's template doesn't
+        differentiate per track. Pick a session whose template includes <code>{track}</code> (e.g.
+        <em>Movie → Archive MKV</em>), or rip with a single-track preset.
+        <strong>Overwrite</strong> won't help here.
+      </p>
+      <p v-else class="muted">
         Confirm <strong>Overwrite</strong> to queue anyway. The transcoder writes to
         <code>.arm-inprogress</code> first, so partial writes never replace the existing file.
       </p>
       <div class="row" style="gap: 8px">
-        <button :disabled="submitting" @click="applyOnce(true)">
+        <button v-if="!hasDuplicateInRequest" :disabled="submitting" @click="applyOnce(true)">
           {{ submitting ? 'Applying…' : 'Overwrite' }}
         </button>
         <button class="secondary" @click="emit('close')">Cancel</button>

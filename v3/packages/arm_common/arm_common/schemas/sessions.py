@@ -7,7 +7,7 @@ be smuggled in.
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -205,6 +205,10 @@ class CollisionInfo(BaseModel):
     output_path: str
     existing_task_id: str | None
     on_filesystem: bool
+    # Why the path was flagged: an existing live task in the DB, an existing
+    # file on disk under MEDIA_ROOT, or two tracks in the same apply request
+    # resolving to the same path (template missing `{track}` for a multi-track rip).
+    reason: Literal["existing_task", "on_disk", "duplicate_in_request"]
 
 
 class ApplySessionResponse(BaseModel):

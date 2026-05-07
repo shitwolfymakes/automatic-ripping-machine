@@ -302,10 +302,13 @@ export interface ApplySessionRequest {
   overwrite?: boolean
 }
 
+export type CollisionReason = 'existing_task' | 'on_disk' | 'duplicate_in_request'
+
 export interface CollisionInfo {
   output_path: string
   existing_task_id: string | null
   on_filesystem: boolean
+  reason: CollisionReason
 }
 
 export interface ApplySessionResponse {
