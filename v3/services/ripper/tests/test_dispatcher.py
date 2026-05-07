@@ -150,6 +150,7 @@ def _stub_rip_disc(
     *,
     captured: dict[str, Any] | None = None,
     fire_per_title_start: bool = True,
+    fire_per_title_done: bool = False,
     fire_disc_progress: list[float] | None = None,
 ):
     """Replace dispatcher's rip_disc with a fake that captures kwargs
@@ -161,6 +162,12 @@ def _stub_rip_disc(
     where no per-title PRGT fires — the dispatcher must still drive
     the on_track_start → on_track_done sequence post-rip for every
     track the user selected.
+
+    `fire_per_title_done=True` invokes on_title_done for each title in
+    `fake_result.titles` — simulates the streamer's PRGC:5017
+    transitions that finalise each title mid-rip. With this on, the
+    dispatcher PATCHes DONE per-title via the live path and skips
+    those tracks in its post-rip attribution loop.
 
     `fire_disc_progress=[0.1, 0.5, ...]` invokes on_disc_progress with
     each fraction in order, simulating the disc-overall PRGV stream
@@ -175,6 +182,7 @@ def _stub_rip_disc(
         on_title_start: Any | None = None,
         on_title_progress: Any | None = None,
         on_disc_progress: Any | None = None,
+        on_title_done: Any | None = None,
     ) -> RipDiscResult:
         if captured is not None:
             captured["device_path"] = device_path
@@ -198,6 +206,9 @@ def _stub_rip_disc(
         if fire_disc_progress is not None and on_disc_progress is not None:
             for frac in fire_disc_progress:
                 await on_disc_progress(frac)
+        if fire_per_title_done and on_title_done is not None:
+            for idx in fake_result.titles:
+                await on_title_done(idx)
         return fake_result
 
     monkeypatch.setattr(dispatcher_module, "rip_disc", fake_rip_disc)
@@ -670,3 +681,126 @@ async def test_rip_all_falls_back_to_expected_duration(monkeypatch, tmp_path):
     )
 
     assert seen_duration == [6708]
+
+
+async def test_rip_all_live_per_title_done_patches_via_streamer_callback(monkeypatch, tmp_path):
+    """When the streamer fires on_title_done mid-rip (the new path),
+    the dispatcher's `_on_title_done` stats the file and PATCHes the
+    track DONE before rip_disc returns. The post-rip attribution loop
+    must then skip those tracks rather than emitting a duplicate
+    on_track_done."""
+    # Files MakeMKV would have produced — positional `_tNN.mkv` suffix
+    # matches eligible_source_indexes[N].
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 100)
+    (tmp_path / "Disc_t01.mkv").write_bytes(b"y" * 200)
+
+    fake_result = RipDiscResult(overall_error=None, titles={})
+    _stub_rip_disc(monkeypatch, fake_result, fire_per_title_start=True, fire_per_title_done=True)
+
+    events: list[tuple[str, str, int | None]] = []
+
+    async def on_start(track: TrackView) -> None:
+        events.append(("start", track.id, None))
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        events.append(("done", track.id, result.size_bytes))
+
+    # The fake fires on_title_done with the source idx (which our stub
+    # passes from `fake_result.titles` keys). Seed those so the fake
+    # has something to iterate.
+    fake_result.titles[0] = RipResult(ok=True, output_path=None, size_bytes=None)
+    fake_result.titles[1] = RipResult(ok=True, output_path=None, size_bytes=None)
+
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=[_track(0), _track(1)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        min_length_seconds=600,
+    )
+
+    # Each track exactly one start + one done — no duplicate from the
+    # post-rip attribution loop. Sizes come from the on-disk file
+    # (stat'd by `_on_title_done`), not from `fake_result.titles`.
+    by_track: dict[str, list[tuple[str, int | None]]] = {}
+    for kind, tid, size in events:
+        by_track.setdefault(tid, []).append((kind, size))
+    assert by_track["trk_0"] == [("start", None), ("done", 100)]
+    assert by_track["trk_1"] == [("start", None), ("done", 200)]
+
+
+async def test_rip_all_disc_error_keeps_already_done_tracks_done(monkeypatch, tmp_path):
+    """If the rip fails partway, tracks that already finalised via the
+    live path keep their DONE status — partial success is still
+    success for those files. Only the unfinished tracks transition to
+    FAILED with the disc-level reason."""
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 100)
+
+    # rip_disc failure path — but on_title_done was already called for
+    # source idx 0 before the disc-level error fired.
+    fake_result = RipDiscResult(
+        overall_error="makemkvcon failed mid-rip",
+        titles={0: RipResult(ok=True, output_path=None, size_bytes=None)},
+    )
+    _stub_rip_disc(monkeypatch, fake_result, fire_per_title_start=True, fire_per_title_done=True)
+
+    events: list[tuple[str, str, str | None]] = []
+
+    async def on_start(track: TrackView) -> None:
+        events.append(("start", track.id, None))
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        events.append(("done", track.id, result.error if not result.ok else None))
+
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=[_track(0), _track(1)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        min_length_seconds=600,
+    )
+
+    # Track 0 was finalised via the live path and stays DONE.
+    # Track 1 hadn't finalised; it gets the disc-level FAILED reason.
+    assert ("done", "trk_0", None) in events
+    failures = [e for e in events if e[0] == "done" and e[1] == "trk_1"]
+    assert len(failures) == 1
+    assert failures[0][2] == "makemkvcon failed mid-rip"
+
+
+async def test_rip_all_live_done_handles_unselected_titles_gracefully(monkeypatch, tmp_path):
+    """If MakeMKV's stream announces a title that isn't in the user's
+    track selection (rare but possible if `mkv all` picks up extras),
+    the dispatcher's `_on_title_done` no-ops cleanly without
+    crashing or PATCHing a non-existent track."""
+    fake_result = RipDiscResult(
+        overall_error=None,
+        titles={0: RipResult(ok=True), 5: RipResult(ok=True)},  # 5 not in track list
+    )
+    _stub_rip_disc(monkeypatch, fake_result, fire_per_title_start=True, fire_per_title_done=True)
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 50)
+
+    events: list[str] = []
+
+    async def on_start(track: TrackView) -> None:
+        events.append(f"start-{track.id}")
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        events.append(f"done-{track.id}")
+
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=[_track(0)],  # only track 0 selected
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        min_length_seconds=600,
+    )
+
+    # Track 0 went start → done. Title 5 was unselected; no events for it.
+    assert events == ["start-trk_0", "done-trk_0"]

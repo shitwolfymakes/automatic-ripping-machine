@@ -492,6 +492,157 @@ async def test_rip_disc_prgc_5017_out_of_range_position_is_skipped(monkeypatch, 
 
 
 @pytest.mark.asyncio
+async def test_rip_disc_fires_on_title_done_at_prgc_transitions(monkeypatch, tmp_path):
+    """Mid-rip per-title finalisation. When PRGC:5017,N+1 fires (next
+    title starts), the previous title's file is finalised on disk and
+    the streamer fires `on_title_done(prev_source_idx)` before
+    on_title_start for the new title — so the dispatcher can PATCH
+    track N=DONE before track N+1 goes IN_PROGRESS."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            'PRGC:5017,0,"Saving to MKV file"',
+            "PRGV:10000,3000,10000",  # title 0 nearly done
+            'PRGC:5017,1,"Saving to MKV file"',  # title 0 finalised → on_title_done(eligible[0])
+            "PRGV:10000,7000,10000",  # title 1 nearly done
+            'PRGC:5017,2,"Saving to MKV file"',  # title 1 finalised → on_title_done(eligible[1])
+            'MSG:5036,0,2,"done","%1 %2","2","titles"',
+        ],
+    )
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
+    (tmp_path / "Disc_t01.mkv").write_bytes(b"y" * 64)
+    (tmp_path / "Disc_t02.mkv").write_bytes(b"z" * 64)
+
+    starts: list[int] = []
+    dones: list[int] = []
+
+    async def on_title_start(idx: int) -> None:
+        starts.append(idx)
+
+    async def on_title_done(idx: int) -> None:
+        dones.append(idx)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[3, 7, 9],  # sparse to prove mapping
+        on_title_start=on_title_start,
+        on_title_done=on_title_done,
+    )
+
+    assert result.overall_error is None
+    # All three titles started; all three finalised — first two via
+    # PRGC transition, the last via clean-exit catch-up in rip_disc.
+    assert starts == [3, 7, 9]
+    assert dones == [3, 7, 9]
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_fires_on_title_done_for_last_title_at_clean_exit(monkeypatch, tmp_path):
+    """The last title in the rip never gets a follow-up PRGC:5017,N+1.
+    rip_disc catches it with a final on_title_done sweep after the
+    streamer drains and the process exits 0."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            'PRGC:5017,0,"Saving to MKV file"',
+            "PRGV:10000,10000,10000",
+            'MSG:5036,0,2,"done","%1 %2","1","titles"',
+        ],
+    )
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
+
+    dones: list[int] = []
+
+    async def on_title_done(idx: int) -> None:
+        dones.append(idx)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[5],
+        on_title_done=on_title_done,
+    )
+
+    assert result.overall_error is None
+    assert dones == [5]
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_on_title_done_fires_exactly_once_per_title(monkeypatch, tmp_path):
+    """Defensive guard: PRGC:5017,N can fire repeatedly if MakeMKV
+    re-emits a milestone (e.g. after a stream resync). on_title_done
+    must fire exactly once per title regardless."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            'PRGC:5017,0,"Saving to MKV file"',
+            'PRGC:5017,0,"Saving to MKV file"',  # spurious repeat — must NOT trigger on_title_done(0)
+            'PRGC:5017,1,"Saving to MKV file"',  # transitions off 0 → fires done(eligible[0])
+            'MSG:5036,0,2,"done","%1 %2","2","titles"',
+        ],
+    )
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
+    (tmp_path / "Disc_t01.mkv").write_bytes(b"y" * 64)
+
+    dones: list[int] = []
+
+    async def on_title_done(idx: int) -> None:
+        dones.append(idx)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[0, 1],
+        on_title_done=on_title_done,
+    )
+
+    assert result.overall_error is None
+    # eligible[0]=0 fires once at the 0→1 transition; eligible[1]=1 fires
+    # once at clean-exit. Two dones total, no duplicates.
+    assert dones == [0, 1]
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_on_title_done_skipped_on_overall_failure(monkeypatch, tmp_path):
+    """Non-zero exit aborts the rip; the final-title catch-up sweep is
+    skipped so a half-written file isn't reported as DONE. The
+    dispatcher's disc-error branch handles the FAILED transitions."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            'PRGC:5017,0,"Saving to MKV file"',
+            'MSG:1002,32,1,"LIBMKV_TRACE: Exception","LIBMKV_TRACE: %1","Exception"',
+        ],
+        returncode=1,
+    )
+
+    dones: list[int] = []
+
+    async def on_title_done(idx: int) -> None:
+        dones.append(idx)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[0],
+        on_title_done=on_title_done,
+    )
+
+    assert result.overall_error is not None
+    # No on_title_done emissions on disc-level failure — caller marks tracks FAILED.
+    assert dones == []
+
+
+@pytest.mark.asyncio
 async def test_rip_disc_returns_unavailable_when_makemkvcon_missing(monkeypatch, tmp_path):
     async def fake_create_subprocess_exec(*_args: Any, **_kwargs: Any):
         raise FileNotFoundError("makemkvcon")
