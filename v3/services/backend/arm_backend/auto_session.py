@@ -115,6 +115,10 @@ async def _apply_session_internal(
         raise SessionNotFoundError(session_id)
 
     # Idempotency: same (session, job) → return the existing application.
+    # Refinement: if the existing application has any FAILED tasks, reset
+    # them back to QUEUED so the dispatcher retries that slice. The user's
+    # mental model for a re-click of Apply is "try again", not "no-op";
+    # idempotent here means "don't double-create rows," not "do nothing."
     existing = (
         await db.execute(
             select(SessionApplication)
@@ -124,11 +128,29 @@ async def _apply_session_internal(
     ).scalar_one_or_none()
     if existing is not None:
         tasks = await _load_tasks(db, existing.id)
+        retried = await _retry_failed_tasks(db, tasks)
+        if retried > 0:
+            # Application may have aggregated to FAILED/DONE_PARTIAL earlier.
+            # Bring it back to RUNNING since work is queued again.
+            if existing.status in (
+                SessionApplicationStatus.FAILED,
+                SessionApplicationStatus.DONE_PARTIAL,
+                SessionApplicationStatus.DONE,
+            ):
+                existing.status = SessionApplicationStatus.RUNNING
+                existing.completed_at = None
+            await db.commit()
+            tasks = await _load_tasks(db, existing.id)
+            logger.info(
+                "apply: reset %d failed task(s) on existing session_application=%s",
+                retried,
+                existing.id,
+            )
         return ApplySessionOutcome(
             application=existing,
             tasks=tasks,
             collisions=[],
-            idempotent=True,
+            idempotent=retried == 0,
             skipped_reason=None,
         )
 
@@ -259,6 +281,29 @@ async def _apply_session_internal(
         idempotent=False,
         skipped_reason=None,
     )
+
+
+async def _retry_failed_tasks(db: AsyncSession, tasks: list[TranscodeTask]) -> int:
+    """Reset every FAILED task back to QUEUED so the dispatcher retries it.
+
+    Clears `last_error`, `claimed_by`, `claim_heartbeat_at`, and `progress_pct`
+    so a fresh spawn looks like a brand-new task. `attempts` is preserved —
+    it's a useful audit signal of how many tries have happened. Returns the
+    number of rows reset.
+    """
+    reset = 0
+    for task in tasks:
+        if task.status != TranscodeTaskStatus.FAILED:
+            continue
+        task.status = TranscodeTaskStatus.QUEUED
+        task.last_error = None
+        task.claimed_by = None
+        task.claim_heartbeat_at = None
+        task.progress_pct = 0
+        reset += 1
+    if reset:
+        await db.flush()
+    return reset
 
 
 async def _load_tasks(db: AsyncSession, session_application_id: str) -> list[TranscodeTask]:

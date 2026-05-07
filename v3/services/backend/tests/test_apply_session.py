@@ -216,6 +216,53 @@ def test_apply_idempotent_returns_existing_application(signing_key: bytes, tmp_p
     assert len(body["tasks"]) == 1
 
 
+def test_apply_resets_failed_tasks_on_existing_application(signing_key: bytes, tmp_path: Path) -> None:
+    """Re-clicking Apply on a job whose existing application has FAILED tasks
+    should reset them to QUEUED — re-apply means "retry," not "no-op."
+    """
+    db = FakeSession()
+    _seed(db)
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_existing",
+            session_id="ses_x",
+            job_id="job_x",
+            status=SessionApplicationStatus.FAILED,
+            overwrite=False,
+        )
+    ]
+    db.rows["transcode_tasks"] = [
+        TranscodeTask(
+            id="txt_failed",
+            session_application_id="sap_existing",
+            source_track_id="trk_1",
+            status=TranscodeTaskStatus.FAILED,
+            output_path="Iron Man (2008)/Iron Man - plex-1080p-h-265.mkv",
+            attempts=2,
+            progress_pct=0,
+            last_error="HandBrakeCLI exited rc=1",
+            claimed_by="arm-transcode-old",
+        )
+    ]
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_x/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["idempotent"] is False  # work was actually done — tasks reset
+    task = db.rows["transcode_tasks"][0]
+    assert task.status == TranscodeTaskStatus.QUEUED
+    assert task.last_error is None
+    assert task.claimed_by is None
+    assert task.attempts == 2  # preserved as audit signal
+    application = db.rows["session_applications"][0]
+    assert application.status == SessionApplicationStatus.RUNNING
+
+
 def test_apply_collision_409_lists_paths(signing_key: bytes, tmp_path: Path) -> None:
     db = FakeSession()
     _seed(db)
