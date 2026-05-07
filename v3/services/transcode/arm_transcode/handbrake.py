@@ -1,9 +1,17 @@
 """HandBrakeCLI wrapper.
 
-`HandBrakeCLI -i <input> -o <output> --preset "<preset_ref>" --json` emits
-two-section JSON output: a `JSON Title Set` block (info), then `Progress`
-records every ~1 s. We parse `Progress` records to surface % + ETA to the
-caller's `progress_callback`.
+`HandBrakeCLI -i <input> -o <output> --preset "<preset_ref>"` emits
+text-mode progress as one line per tick:
+
+    Encoding: task 1 of 1, 12.34 % (45.67 fps, avg 23.45 fps, ETA 00h12m34s)
+
+We parse each line as it streams in and surface % + ETA to the caller's
+`progress_callback`. Text mode beats `--json` here because HandBrake's
+JSON output pretty-prints every block over a dozen lines, which both
+floods the per-job log and defeats simple regex extraction (the
+non-greedy `\\{.*?\\}` regex stops at the first inner `}` instead of the
+outer one — `json.loads` then fails on truncated input and progress
+silently never advances). Text mode is naturally one-liner per tick.
 
 Phase 7b: when `ARM_GPU_VENDOR` and `ARM_GPU_CODEC` are set in the env
 (populated by the Backend dispatcher on spawn), `_hw_encoder_args()`
@@ -16,19 +24,27 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Awaitable, Callable
 
 logger = logging.getLogger("arm_transcode.handbrake")
 
 ProgressCallback = Callable[[int, int | None, str | None], Awaitable[None]]
 
 
-_PROGRESS_BLOCK_RE = re.compile(r"Progress:\s*(\{.*?\})", re.DOTALL)
+# `Encoding: task 2 of 3, 47.30 % (45.67 fps, avg 23.45 fps, ETA 00h12m34s)`
+# `Encoding: task 1 of 1, 0.00 %`           ← no ETA yet (HandBrake hasn't
+#                                              estimated frame rate)
+# Anchored on `task N of M,` so we don't accidentally match `Scanning title 1
+# of 1, 70.00 %` (which is title-scan progress, not encode progress).
+_PROGRESS_LINE_RE = re.compile(
+    r"task\s+(?P<pass>\d+)\s+of\s+\d+,\s+(?P<pct>\d+(?:\.\d+)?)\s*%"
+    r"(?:.*?ETA\s+(?P<h>\d+)h(?P<m>\d+)m(?P<s>\d+)s)?",
+    re.IGNORECASE,
+)
 
 
 # Vendor + codec → HandBrake `--encoder` ID. The names match HandBrakeCLI's
@@ -73,7 +89,7 @@ async def transcode_handbrake(
     extra_args: str | None,
     progress_callback: ProgressCallback,
 ) -> int:
-    """Run HandBrakeCLI; stream JSON progress; return final file size in bytes.
+    """Run HandBrakeCLI; stream text progress; return final file size in bytes.
 
     Raises `RuntimeError` on non-zero exit. The caller is responsible for
     catching and dispatching to `BackendClient.fail`.
@@ -86,7 +102,6 @@ async def transcode_handbrake(
         str(output_path),
         "--preset",
         preset_ref,
-        "--json",
     ]
     cmd.extend(_hw_encoder_args())
     if extra_args:
@@ -120,8 +135,8 @@ async def transcode_handbrake(
 
 async def _drain_stderr(stream: asyncio.StreamReader, buf: list[str]) -> None:
     """Read stderr line-by-line. Buffer the tail for the rc!=0 error
-    message and tee each line through the logger at DEBUG so the
-    per-job log captures the full stderr — same shape as the MakeMKV
+    message and tee each line through the logger at DEBUG so the per-job
+    log captures the full stderr — same shape as the MakeMKV
     `makemkv-raw` log lines.
     """
     while True:
@@ -134,63 +149,42 @@ async def _drain_stderr(stream: asyncio.StreamReader, buf: list[str]) -> None:
 
 
 async def _consume_progress(stream: asyncio.StreamReader, cb: ProgressCallback) -> None:
-    """Read stdout line-by-line, log each line at DEBUG (so the per-job
-    log captures HandBrake's full stdout), and stitch lines into a
-    rolling buffer to look for `Progress:` JSON blocks. `--json` mode
-    pretty-prints over multiple lines so we can't parse a single line in
-    isolation, but capping the buffer to the last few KB keeps memory
-    bounded if the producer outruns the regex.
+    """Read stdout line-by-line, log each at DEBUG, fire `cb` on every
+    `task N of M, P %` progress line.
+
+    HandBrake reports progress at ~5 Hz; we suppress duplicate-pct ticks
+    so the callback (and its WS publish path) sees one event per percent
+    change.
     """
-    pending = ""
     last_emitted = -1
-    max_pending = 65_536  # plenty for one JSON record; trims trailing noise
     while True:
         raw = await stream.readline()
         if not raw:
             break
         line = raw.decode(errors="replace").rstrip("\n\r")
-        if line:
-            logger.debug("handbrake-stdout: %s", line)
-        pending += line + "\n"
-        for match in _PROGRESS_BLOCK_RE.finditer(pending):
-            try:
-                obj: dict[str, Any] = json.loads(match.group(1))
-            except json.JSONDecodeError:
-                continue
-            pct, eta, current_pass = _extract_progress(obj)
-            if pct is not None and pct != last_emitted:
-                last_emitted = pct
-                try:
-                    await cb(pct, eta, current_pass)
-                except Exception as exc:  # noqa: BLE001
-                    logger.debug("progress_callback raised: %s", exc)
-        # Trim what we've fully matched, then bound the residual buffer.
-        last_match_end = 0
-        for match in _PROGRESS_BLOCK_RE.finditer(pending):
-            last_match_end = match.end()
-        if last_match_end:
-            pending = pending[last_match_end:]
-        if len(pending) > max_pending:
-            pending = pending[-max_pending:]
+        if not line:
+            continue
+        logger.debug("handbrake-stdout: %s", line)
+
+        match = _PROGRESS_LINE_RE.search(line)
+        if match is None:
+            continue
+        pct = int(round(float(match.group("pct"))))
+        eta = _parse_eta(match)
+        current_pass = match.group("pass")
+        if pct == last_emitted:
+            continue
+        last_emitted = pct
+        try:
+            await cb(pct, eta, current_pass)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("progress_callback raised: %s", exc)
 
 
-def _extract_progress(obj: dict[str, Any]) -> tuple[int | None, int | None, str | None]:
-    """HandBrake JSON progress record carries `Working` or `WorkDone` blocks.
-
-    `Working` example fields: `Progress` (0..1 float), `ETASeconds` (int),
-    `PassID`, `Pass` (1..N), `PassCount`. We surface a 0..100 int.
+def _parse_eta(match: re.Match[str]) -> int | None:
+    """Convert the regex match's `h/m/s` groups to total seconds, or None
+    if HandBrake hasn't surfaced an ETA yet (early ticks lack the fps/ETA tail).
     """
-    working = obj.get("Working") or {}
-    if not working:
-        return (None, None, None)
-    progress_frac = working.get("Progress")
-    if isinstance(progress_frac, (int, float)):
-        pct = int(round(float(progress_frac) * 100))
-    else:
-        pct = None
-    eta = working.get("ETASeconds")
-    if not isinstance(eta, int):
-        eta = None
-    pass_id = working.get("PassID")
-    current_pass = str(pass_id) if pass_id is not None else None
-    return (pct, eta, current_pass)
+    if match.group("h") is None:
+        return None
+    return int(match.group("h")) * 3600 + int(match.group("m")) * 60 + int(match.group("s"))
