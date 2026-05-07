@@ -74,7 +74,9 @@ export interface TrackView {
   status: string
   output_path: string | null
   size_bytes: number | null
+  expected_size_bytes: number | null
   duration_seconds: number | null
+  expected_duration_seconds: number | null
   attempts: number
   last_error: string | null
 }

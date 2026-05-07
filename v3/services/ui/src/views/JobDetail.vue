@@ -26,6 +26,13 @@ const savingPoster = ref(false)
 const jobs = useJobsStore()
 const transcodes = useTranscodesStore()
 
+// Poll while the job is still in flight so per-track output_path / size /
+// status reflect server state without forcing the user to refresh. The
+// ripper PATCHes Track rows the instant each track finishes; this loop
+// just observes those PATCHes.
+const POLL_MS = Number(import.meta.env.VITE_JOB_DETAIL_POLL_MS ?? 5000)
+let pollTimer: number | null = null
+
 const APPLY_OK: JobStatus[] = ['identified', 'ripped', 'ripped_partial', 'awaiting_user_id']
 const canApply = computed(() => detail.value !== null && APPLY_OK.includes(detail.value.job.status))
 const canAbandon = computed(
@@ -47,6 +54,18 @@ function progressOf(taskId: string, fallback: number): number {
   return transcodes.liveProgress[taskId]?.progress_pct ?? fallback
 }
 
+function formatSizeMb(bytes: number): string {
+  return `${Math.round(bytes / 1024 / 1024)} MB`
+}
+
+function trackSize(actual: number | null, expected: number | null): string {
+  // Post-rip actual wins; otherwise show MakeMKV's scan-time estimate
+  // prefixed with `~` so it's clear the file isn't on disk yet.
+  if (actual !== null) return formatSizeMb(actual)
+  if (expected !== null) return `~${formatSizeMb(expected)}`
+  return '—'
+}
+
 async function load(): Promise<void> {
   try {
     const id = route.params.id as string
@@ -59,6 +78,21 @@ async function load(): Promise<void> {
   }
 }
 
+async function refresh(): Promise<void> {
+  // Lighter than load(): re-fetch detail only; transcodes are kept fresh
+  // by their own WS subscription.
+  try {
+    const id = route.params.id as string
+    detail.value = await api.get<JobDetailView>(`/api/jobs/${id}`)
+  } catch (e) {
+    // Don't blow away the visible page on a single failed tick — transient
+    // 500/disconnect during a rip is normal. Persistent failure surfaces
+    // on the next user action (apply / abandon / delete).
+    error.value =
+      e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Refresh failed'
+  }
+}
+
 async function cancelTask(id: string): Promise<void> {
   try {
     await transcodes.cancel(id)
@@ -68,8 +102,22 @@ async function cancelTask(id: string): Promise<void> {
   }
 }
 
-onMounted(load)
+onMounted(async () => {
+  await load()
+  // Poll only while the job is still in flight. Once it lands in a
+  // terminal status the row stops changing; further ticks would burn
+  // backend cycles for nothing.
+  pollTimer = window.setInterval(() => {
+    if (detail.value === null) return
+    if (isTerminalJobStatus(detail.value.job.status)) return
+    void refresh()
+  }, POLL_MS)
+})
 onUnmounted(() => {
+  if (pollTimer !== null) {
+    window.clearInterval(pollTimer)
+    pollTimer = null
+  }
   transcodes.stopWS()
 })
 
@@ -328,7 +376,7 @@ async function savePoster(): Promise<void> {
             <span class="badge">{{ t.status }}</span>
           </td>
           <td>{{ t.output_path ?? '—' }}</td>
-          <td>{{ t.size_bytes ? `${Math.round(t.size_bytes / 1024 / 1024)} MB` : '—' }}</td>
+          <td>{{ trackSize(t.size_bytes, t.expected_size_bytes) }}</td>
         </tr>
       </tbody>
     </table>

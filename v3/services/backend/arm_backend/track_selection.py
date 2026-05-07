@@ -16,6 +16,7 @@ def _video_track(job_id: str, title: ScanTitle) -> Track:
         index=title.index,
         source_ref=str(title.index),
         expected_duration_seconds=title.duration_seconds,
+        expected_size_bytes=title.size_bytes,
     )
 
 
@@ -26,6 +27,7 @@ def _audio_track(job_id: str, title: ScanTitle) -> Track:
         index=title.index,
         source_ref=str(title.index),
         expected_duration_seconds=title.duration_seconds,
+        expected_size_bytes=title.size_bytes,
     )
 
 
