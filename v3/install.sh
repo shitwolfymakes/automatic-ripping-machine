@@ -351,8 +351,53 @@ ARM_HOST_CERTS_PATH=\${PWD}/certs
 
 # Docker network the spawned transcoder joins so it can reach the backend.
 ARM_DOCKER_NETWORK=armv3_default
+
+# Phase 7b: GPU transcoding (optional).
+# Uncomment to load docker-compose.gpu.yml as an overlay automatically; the
+# base compose stays CPU-only otherwise. NVIDIA hosts also need
+# nvidia-container-toolkit installed (see .env.example for the apt commands).
+# COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
 EOF
     chmod 600 "$env_file"
+}
+
+# ---------------------------------------------------- CTK detection (advisory)
+
+check_nvidia_container_toolkit() {
+    # Warn (don't fail) when the host has an NVIDIA GPU but the
+    # nvidia-container-toolkit isn't registered with docker. Without the
+    # toolkit, `docker compose -f docker-compose.gpu.yml up` fails with
+    # "could not select device driver \"nvidia\"" — installable, but most
+    # users won't connect that error to "you need an extra package."
+
+    # Cheap host detection: lspci has been on every Linux desktop since the 90s.
+    if ! command -v lspci >/dev/null 2>&1; then
+        return 0
+    fi
+    if ! lspci 2>/dev/null | grep -qi 'nvidia'; then
+        return 0  # No NVIDIA hardware → CTK irrelevant.
+    fi
+
+    if docker info 2>/dev/null | grep -q 'nvidia'; then
+        return 0  # `Runtimes:` line lists `nvidia` → CTK already wired up.
+    fi
+
+    warn "NVIDIA GPU detected but the docker 'nvidia' runtime isn't registered."
+    cat >&2 <<'CTK'
+    For NVENC transcoding you'll want nvidia-container-toolkit. Install:
+
+      curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+          | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+      curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+          | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+          | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+      sudo apt update && sudo apt install -y nvidia-container-toolkit
+      sudo nvidia-ctk runtime configure --runtime=docker
+      sudo systemctl restart docker
+
+    Then uncomment COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml in
+    your .env. Skipping for now — CPU transcoding still works.
+CTK
 }
 
 # ---------------------------------------------------- compose generation
@@ -602,8 +647,9 @@ Then open: https://localhost:8081
   (Import $PREFIX/certs/arm-ca.crt into your browser/OS trust store
    to silence the cert warning across every device on the LAN.)
 
-GPU host? Add the overlay:
-  docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+GPU host? Uncomment the COMPOSE_FILE line in $PREFIX/.env so the GPU
+overlay loads automatically (NVIDIA hosts also need nvidia-container-
+toolkit — see .env for the install commands).
 
 Heads-up: $ARM_IMAGE_TAG_DEFAULT is a pre-release tag. Until Phase 14 (CI
 + image release) lands, 'docker compose pull' may 404. To run today, build
@@ -616,6 +662,7 @@ EOF
 
 main() {
     check_prereqs
+    check_nvidia_container_toolkit
     ensure_prefix
 
     if [[ $ROTATE_CA -eq 1 ]]; then
