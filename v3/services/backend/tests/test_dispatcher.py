@@ -31,6 +31,15 @@ def test_normalize_no_year():
     assert year is None
 
 
+def test_normalize_strips_ntsc_token():
+    # `_NTSC` at end, before a year, and case-insensitively — all should drop out.
+    assert _normalize_volume_label("THE_MATRIX_NTSC") == ("THE MATRIX", None)
+    assert _normalize_volume_label("THE_MATRIX_NTSC_1999") == ("THE MATRIX", 1999)
+    assert _normalize_volume_label("the_matrix_ntsc") == ("the matrix", None)
+    # But not when it's a substring of a larger word.
+    assert _normalize_volume_label("MR_NTSCH") == ("MR NTSCH", None)
+
+
 @respx.mock
 async def test_dispatcher_dvd_tmdb_movie_hit():
     respx.get("https://api.themoviedb.org/3/search/movie").mock(

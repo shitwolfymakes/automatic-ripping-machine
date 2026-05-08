@@ -18,10 +18,16 @@ PROVIDER_TIMEOUT_SECONDS = 8.0
 DISPATCH_TIMEOUT_SECONDS = 25.0
 
 _YEAR_SUFFIX_RE = re.compile(r"[\s_\-.]*\(?\d{4}\)?\s*$")
+# DVDs commonly bake the broadcast standard into the volume label
+# (e.g. `THE_MATRIX_NTSC` or `MOVIE_NTSC_1999`). It's noise for title
+# matching — strip it before the underscore-to-space pass so OMDB/TMDB
+# searches don't see "MATRIX NTSC".
+_NTSC_TOKEN_RE = re.compile(r"_NTSC(?=[_.\s\-]|$)", re.IGNORECASE)
 
 
 def _normalize_volume_label(label: str) -> tuple[str, int | None]:
-    cleaned = label.replace("_", " ").replace(".", " ").strip()
+    cleaned = _NTSC_TOKEN_RE.sub("", label)
+    cleaned = cleaned.replace("_", " ").replace(".", " ").strip()
     year: int | None = None
     m = re.search(r"(\d{4})", cleaned)
     if m:
