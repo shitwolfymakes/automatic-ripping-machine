@@ -133,6 +133,18 @@ th {
 .muted {
   color: var(--muted);
 }
+.hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.hint-ok {
+  color: var(--ok);
+}
+.hint-bad {
+  color: var(--error);
+}
 .center-screen {
   min-height: 100vh;
   display: grid;

@@ -54,7 +54,7 @@ async function submit() {
       </button>
       <p class="muted" style="margin-top: 16px; font-size: 12px">
         First-boot default is <code>admin</code> / <code>admin</code>. You'll be required to change
-        it before anything else loads.
+        it (to a password of at least 8 characters) before anything else loads.
       </p>
     </form>
   </div>
