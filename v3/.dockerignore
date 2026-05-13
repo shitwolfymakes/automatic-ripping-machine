@@ -1,22 +1,44 @@
+# Docker build-context excludes for v3/.
+#
+# Every v3 service builds with `context: .` and `dockerfile: services/<svc>/Dockerfile`
+# (see docker-compose.yml), so this is the single .dockerignore that governs all four
+# image builds. Anything matched here never reaches the daemon, so it can't bloat
+# layers or leak into images.
+
+# ---- Git + version control --------------------------------------------
 .git/
 .gitignore
+.gitattributes
+.github/
 
+# ---- Python bytecode + virtualenv + sdist metadata --------------------
 **/__pycache__/
 **/*.pyc
 **/*.pyo
-
 **/.venv/
+**/*.egg-info/
+
+# Defensive `**/` — current tree has only top-level cache dirs, but
+# `cd services/backend && uv run pytest` will plant nested ones.
+**/.mypy_cache/
+**/.ruff_cache/
+**/.pytest_cache/
+**/.coverage
+**/.coverage.*
+**/htmlcov/
+
+# ---- Node + Vite ------------------------------------------------------
+**/node_modules/
+# Host-side `npm run build` output — the UI Dockerfile rebuilds inside
+# the container, so any pre-existing dist/ is stale noise.
+**/dist/
+**/.vite/
+**/*.tsbuildinfo
+
+# ---- Environment / secrets -------------------------------------------
 **/.env
 **/.env.*
 !**/.env.example
-
-**/node_modules/
-
-certs/
-db/
-raw/
-media/
-logs/
 
 # Stray key/cert material — defense in depth. No v3 image bakes certs in;
 # they are always bind-mounted at runtime. See docs/arch/06-deployment.md.
@@ -27,9 +49,40 @@ logs/
 **/*.p12
 **/*.pfx
 
+# ---- Persistent host state (compose bind-mounts these at runtime) ----
+certs/
+db/
+raw/
+media/
+logs/
+
+# ---- Repo metadata never read inside an image ------------------------
 docs/
 test_fixtures/
+devtools/
+install.sh
+docker-compose*.yml
+.pre-commit-config.yaml
+.editorconfig
 
-.mypy_cache/
-.ruff_cache/
-.pytest_cache/
+# ---- Test suites -----------------------------------------------------
+# Runtime images don't run tests. Vite's build only pulls files reachable
+# from main.ts so excluding spec dirs from the UI context is pure
+# context-shrink (the runtime nginx image wouldn't have seen them anyway).
+**/tests/
+**/__tests__/
+
+# ---- Markdown docs (not referenced by any build step) ----------------
+**/README.md
+**/CHANGELOG.md
+**/CONTRIBUTING.md
+
+# ---- IDE / editor / OS noise -----------------------------------------
+.vscode/
+.idea/
+**/.DS_Store
+**/Thumbs.db
+**/*.swp
+**/*.bak
+**/*.orig
+**/*~
