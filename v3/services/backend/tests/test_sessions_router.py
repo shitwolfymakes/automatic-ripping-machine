@@ -70,6 +70,30 @@ def _movie_transcode_preset() -> TranscodePreset:
     )
 
 
+def _tv_rip_preset() -> RipPreset:
+    return RipPreset(
+        id="rpr_tv",
+        name="TV all titles",
+        media_type=MediaType.TV,
+        is_builtin=True,
+        track_selection=TrackSelection.ALL_TRACKS,
+        identification_mode=IdentificationMode.REQUIRED,
+        output_mode=OutputMode.TRACKS,
+    )
+
+
+def _tv_transcode_preset() -> TranscodePreset:
+    return TranscodePreset(
+        id="tpr_tv",
+        name="Plex 720p H.265",
+        media_type=MediaType.TV,
+        is_builtin=True,
+        tool=TranscodeTool.HANDBRAKE,
+        container=ContainerFormat.MKV,
+        hw_preference=HwPreference.CPU_ONLY,
+    )
+
+
 def _builtin_session() -> Session:
     return Session(
         id="ses_builtin",
@@ -294,3 +318,273 @@ def test_preview_template_422_on_bad_token(signing_key: bytes) -> None:
             headers=_auth(token),
         )
     assert r.status_code == 422
+
+
+def test_get_session_happy_path(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get("/api/sessions/ses_builtin", headers=_auth(token))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["id"] == "ses_builtin"
+    assert body["name"] == "Movie → Plex 1080p"
+    assert body["is_builtin"] is True
+    assert body["rip_preset_id"] == "rpr_movie"
+    assert body["transcode_preset_id"] == "tpr_plex"
+
+
+def test_list_sessions_requires_auth(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, _token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get("/api/sessions")  # no Authorization header
+    assert r.status_code == 401
+
+
+def test_create_rejects_unknown_rip_preset(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {
+        "name": "Bogus rip preset",
+        "media_type": "movie",
+        "rip_preset_id": "rpr_does_not_exist",
+        "transcode_preset_id": "tpr_plex",
+        "output_path_template": "{title} ({year}).{ext}",
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/sessions", json=body, headers=_auth(token))
+    assert r.status_code == 400
+    assert "unknown rip_preset_id" in r.json()["detail"]
+
+
+def test_create_rejects_unknown_transcode_preset(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {
+        "name": "Bogus transcode preset",
+        "media_type": "movie",
+        "rip_preset_id": "rpr_movie",
+        "transcode_preset_id": "tpr_does_not_exist",
+        "output_path_template": "{title} ({year}).{ext}",
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/sessions", json=body, headers=_auth(token))
+    assert r.status_code == 400
+    assert "unknown transcode_preset_id" in r.json()["detail"]
+
+
+def test_create_rejects_transcode_media_mismatch(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["transcode_presets"].append(_tv_transcode_preset())
+    app, token = _make_app(signing_key, db)
+    body = {
+        "name": "Movie session w/ TV transcode",
+        "media_type": "movie",
+        "rip_preset_id": "rpr_movie",
+        "transcode_preset_id": "tpr_tv",
+        "output_path_template": "{title} ({year}).{ext}",
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/sessions", json=body, headers=_auth(token))
+    assert r.status_code == 400
+    assert "transcode_preset.media_type=tv" in r.json()["detail"]
+
+
+def test_create_without_transcode_preset(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {
+        "name": "Rip-only movie",
+        "media_type": "movie",
+        "rip_preset_id": "rpr_movie",
+        # transcode_preset_id omitted → None
+        "output_path_template": "{title} ({year})/{track}",
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/sessions", json=body, headers=_auth(token))
+    assert r.status_code == 201, r.text
+    out = r.json()
+    assert out["transcode_preset_id"] is None
+    assert out["is_builtin"] is False
+
+
+def test_patch_non_builtin_updates_all_fields(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["sessions"].append(
+        Session(
+            id="ses_user",
+            name="Original",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_movie",
+            transcode_preset_id="tpr_plex",
+            output_path_template="{title}.{ext}",
+            overrides_json=None,
+        )
+    )
+    app, token = _make_app(signing_key, db)
+    body = {
+        "name": "Renamed",
+        "output_path_template": "{title} ({year}).{ext}",
+        "overrides_json": {"crf": 22},
+    }
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_user", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["name"] == "Renamed"
+    assert out["output_path_template"] == "{title} ({year}).{ext}"
+    assert out["overrides_json"] == {"crf": 22}
+    assert out["is_builtin"] is False
+
+
+def test_patch_session_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/sessions/ses_missing",
+            json={"name": "Renamed"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 404
+
+
+def test_patch_template_revalidated_on_transcode_change(signing_key: bytes) -> None:
+    # Drop the transcode preset while the template still references {ext} →
+    # validate_template should reject because {ext} requires has_transcode_preset.
+    db = FakeSession()
+    _seed(db)
+    db.rows["sessions"].append(
+        Session(
+            id="ses_user",
+            name="Has transcode",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_movie",
+            transcode_preset_id="tpr_plex",
+            output_path_template="{title}.{ext}",
+            overrides_json=None,
+        )
+    )
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/sessions/ses_user",
+            json={"transcode_preset_id": None},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422
+    assert "{ext}" in r.json()["detail"]
+
+
+def test_patch_rejects_rip_preset_media_mismatch(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["rip_presets"].append(_tv_rip_preset())
+    db.rows["sessions"].append(
+        Session(
+            id="ses_user",
+            name="Movie session",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_movie",
+            transcode_preset_id="tpr_plex",
+            output_path_template="{title}.{ext}",
+            overrides_json=None,
+        )
+    )
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/sessions/ses_user",
+            json={"rip_preset_id": "rpr_tv"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 400
+    assert "rip_preset.media_type=tv" in r.json()["detail"]
+
+
+def test_delete_non_builtin_204(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["sessions"].append(
+        Session(
+            id="ses_user",
+            name="Disposable",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_movie",
+            transcode_preset_id="tpr_plex",
+            output_path_template="{title}.{ext}",
+            overrides_json=None,
+        )
+    )
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.delete("/api/sessions/ses_user", headers=_auth(token))
+    assert r.status_code == 204
+    assert all(s.id != "ses_user" for s in db.rows["sessions"])
+
+
+def test_delete_session_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.delete("/api/sessions/ses_missing", headers=_auth(token))
+    assert r.status_code == 404
+
+
+def test_clone_session_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/sessions/ses_missing/clone",
+            json={"name": "Won't get here"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 404
+
+
+def test_clone_preserves_overrides_json(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["sessions"].append(
+        Session(
+            id="ses_with_overrides",
+            name="With overrides",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_movie",
+            transcode_preset_id="tpr_plex",
+            output_path_template="{title}.{ext}",
+            overrides_json={"crf": 18, "preset": "veryslow"},
+        )
+    )
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/sessions/ses_with_overrides/clone",
+            json={"name": "Cloned"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 201, r.text
+    out = r.json()
+    assert out["overrides_json"] == {"crf": 18, "preset": "veryslow"}
+    # Clone should not share the same dict object as the source — router does
+    # `dict(src.overrides_json)` to defend against later mutation.
+    src = next(s for s in db.rows["sessions"] if s.id == "ses_with_overrides")
+    clone = next(s for s in db.rows["sessions"] if s.id == out["id"])
+    assert clone.overrides_json is not src.overrides_json

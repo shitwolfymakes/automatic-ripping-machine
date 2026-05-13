@@ -105,6 +105,83 @@ describe('sessions store', () => {
     expect(resp.idempotent).toBe(false)
   })
 
+  it('getById returns a single session by id', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(sessionRow)))
+    const store = useSessionsStore()
+    const row = await store.getById('ses_x')
+    expect(row.id).toBe('ses_x')
+    expect(row.name).toBe('My Plex 1080p')
+  })
+
+  it('update patches and replaces the row in state', async () => {
+    const renamed = { ...sessionRow, name: 'Renamed' }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse([sessionRow]))
+      .mockResolvedValueOnce(jsonResponse(renamed))
+    vi.stubGlobal('fetch', fetchMock)
+    const store = useSessionsStore()
+    await store.fetchAll()
+    const updated = await store.update('ses_x', { name: 'Renamed' })
+    expect(updated.name).toBe('Renamed')
+    expect(store.sessions[0].name).toBe('Renamed')
+    // PATCH call uses the correct verb against the per-id URL
+    const [, init] = fetchMock.mock.calls[1] as [string, RequestInit]
+    expect(init.method).toBe('PATCH')
+  })
+
+  it('remove deletes and prunes state', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse([sessionRow]))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const store = useSessionsStore()
+    await store.fetchAll()
+    expect(store.sessions.length).toBe(1)
+    await store.remove('ses_x')
+    expect(store.sessions.length).toBe(0)
+    const [, init] = fetchMock.mock.calls[1] as [string, RequestInit]
+    expect(init.method).toBe('DELETE')
+  })
+
+  it('clone inserts the new row sorted by name', async () => {
+    const cloned = { ...sessionRow, id: 'ses_a', name: 'Alpha Clone' }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse([sessionRow]))
+      .mockResolvedValueOnce(jsonResponse(cloned, 201))
+    vi.stubGlobal('fetch', fetchMock)
+    const store = useSessionsStore()
+    await store.fetchAll()
+    const out = await store.clone('ses_x', { name: 'Alpha Clone' })
+    expect(out.id).toBe('ses_a')
+    expect(store.sessions.map((s) => s.name)).toEqual(['Alpha Clone', 'My Plex 1080p'])
+  })
+
+  it('previewTemplate returns the expansion body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ expansion: 'Iron Man (2008).mkv' })),
+    )
+    const store = useSessionsStore()
+    const resp = await store.previewTemplate({
+      template: '{title} ({year}).{ext}',
+      media_type: 'movie',
+      has_transcode_preset: true,
+    })
+    expect(resp.expansion).toBe('Iron Man (2008).mkv')
+  })
+
+  it('fetchAll surfaces server error into store.error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ detail: 'kaboom' }, 500)))
+    const store = useSessionsStore()
+    await store.fetchAll()
+    expect(store.error).not.toBeNull()
+    expect(store.sessions.length).toBe(0)
+    expect(store.loading).toBe(false)
+  })
+
   it('apply 409 surfaces collisions in ApiError.body', async () => {
     vi.stubGlobal(
       'fetch',
