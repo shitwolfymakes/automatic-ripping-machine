@@ -69,7 +69,7 @@ async def _refresh_gpu_inventory(hub: WSHub) -> None:
     """Probe the host, truncate `gpus`, repopulate. Emit `transcode.hw_unavailable` on empty."""
     try:
         probed = probe_gpus()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001  # pragma: no cover — probe_gpus degrades internally; this is the last-resort guard
         logger.exception("gpu probe failed: %s", exc)
         probed = []
     now = datetime.now(UTC)
@@ -114,7 +114,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await _run_seeders()
     async with SessionLocal() as session:
         cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
-        if cfg.session_signing_key is None:
+        if cfg.session_signing_key is None:  # pragma: no cover — _run_seeders always populates this; defensive only
             raise RuntimeError("session_signing_key missing — seeders should have populated it")
         app.state.signing_key = cfg.session_signing_key
     http = httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=10.0))
@@ -129,15 +129,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # resumed_from_crash. Idempotent across boots; no-op when nothing crashed.
     try:
         swept = await sweep_in_flight_jobs(SessionLocal)
-        if swept:
+        if swept:  # pragma: no cover — only when a crashed RIPPING job is recovered; sweep logic is unit-tested in test_crash_recovery
             logger.info("backend startup: resumed %d crashed rip(s)", swept)
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover — startup-degradation guard; sweep failing is real-DB-only
         logger.exception("startup crash-recovery sweep failed: %s", exc)
 
     docker_client = _build_docker_client()
     transcode_dispatcher: TranscodeDispatcher | None = None
     dispatcher_task: asyncio.Task[None] | None = None
-    if docker_client is not None:
+    if docker_client is not None:  # pragma: no cover — needs a real docker socket; integration tier, not the SQLite e2e
         transcode_dispatcher = TranscodeDispatcher(
             settings=settings,
             db_factory=SessionLocal,
@@ -176,16 +176,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         log_tailer.stop()
         try:
             await asyncio.wait_for(log_tailer_task, timeout=10.0)
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError:  # pragma: no cover — only if the tailer hangs >10s on shutdown
             log_tailer_task.cancel()
         notification_dispatcher.stop()
         try:
             await asyncio.wait_for(notification_task, timeout=10.0)
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError:  # pragma: no cover — only if the dispatcher hangs >10s on shutdown
             notification_task.cancel()
-        if transcode_dispatcher is not None:
+        if transcode_dispatcher is not None:  # pragma: no cover — set only on the real-docker path above
             transcode_dispatcher.stop()
-        if dispatcher_task is not None:
+        if dispatcher_task is not None:  # pragma: no cover — set only on the real-docker path above
             try:
                 await asyncio.wait_for(dispatcher_task, timeout=10.0)
             except asyncio.TimeoutError:
