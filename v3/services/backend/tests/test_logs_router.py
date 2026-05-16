@@ -274,3 +274,83 @@ def test_grep_uses_per_job_file_when_present(
     assert r.status_code == 200
     msgs = [json.loads(line)["msg"] for line in r.text.strip().splitlines()]
     assert msgs == ["per-job-line"]
+
+
+# --- residual file-IO branch coverage ----------------------------------------
+
+
+def test_zip_per_job_present_but_empty(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    """per-job file exists but has no lines → _read_capped_lines returns [],
+    so no zip entry is written (85->93)."""
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    (tmp_path / "jobs").mkdir()
+    (tmp_path / "jobs" / "job_x.log").write_text("")
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs/job_x.zip", headers=_auth(token))
+    assert r.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+        assert zf.namelist() == []
+
+
+class _UnopenableFile:
+    name = "job_x.log"
+
+    def is_file(self) -> bool:
+        return True
+
+    def open(self, *_a: object, **_k: object) -> object:
+        raise OSError("permission denied")
+
+
+def test_stream_per_job_open_oserror(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(logs_router, "per_job_log_path", lambda _jid: _UnopenableFile())
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs/job_x", headers=_auth(token))
+    assert r.status_code == 200
+    assert r.content == b""  # generator returned immediately (125-126)
+
+
+def test_stream_per_job_respects_cap(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    (tmp_path / "jobs").mkdir()
+    with (tmp_path / "jobs" / "job_x.log").open("w", encoding="utf-8") as fh:
+        for i in range(5):
+            fh.write(json.dumps(_line(msg=f"l{i}")) + "\n")
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs/job_x?limit=2", headers=_auth(token))
+    assert r.status_code == 200
+    assert len([ln for ln in r.text.splitlines() if ln]) == 2  # capped (133)
+
+
+def test_stream_fallback_skips_unreadable_log(
+    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A directory named like a log file: glob picks it, .open() raises
+    OSError → the fallback `continue`s past it (140-141)."""
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    (tmp_path / "bad.log").mkdir()  # directory, not a file
+    _seed(tmp_path, service="arm-backend", lines=[_line(msg="hello")])
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs/job_x", headers=_auth(token))
+    assert r.status_code == 200
+    assert "hello" in r.text
+
+
+def test_zip_fallback_skips_unreadable_log(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    """_read_capped_lines hits OSError opening the dir-as-log and returns []
+    (161-162); the real log still lands in the zip."""
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    (tmp_path / "bad.log").mkdir()
+    _seed(tmp_path, service="arm-backend", lines=[_line(msg="zipme")])
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs/job_x.zip", headers=_auth(token))
+    assert r.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+        assert "arm-backend.log" in zf.namelist()
+        assert "bad.log" not in zf.namelist()
