@@ -165,7 +165,8 @@ class TranscodeDispatcher:
                         task.id,
                     )
                     await self._emit_task_failed(db, task)
-                    if stale_application is None:
+                    # Race guard: the app row appearing between the two checks.
+                    if stale_application is None:  # pragma: no cover
                         # Re-load defensively in case the row appeared between checks.
                         stale_application = (
                             await db.execute(
@@ -440,10 +441,10 @@ class TranscodeDispatcher:
 
                 kwargs["runtime"] = "nvidia"
                 kwargs["device_requests"] = [docker.types.DeviceRequest(**base_kwargs)]
-            except ImportError:
-                # Tests run without docker-py installed; the dispatcher's
-                # docker_client is a MagicMock anyway, so kwarg shape doesn't
-                # need to be exact for the test to pass.
+            # docker-py is a hard dependency (pyproject) — this fallback is dead.
+            except ImportError:  # pragma: no cover
+                # Legacy guard from when docker-py was test-optional. Kept
+                # so the kwarg shape stays correct if that ever regresses.
                 kwargs["runtime"] = "nvidia"
                 fallback = {
                     "Driver": base_kwargs["driver"],
@@ -541,7 +542,8 @@ class TranscodeDispatcher:
         # transcoder /fail call mutated the row between our fetch and now.
         async with self._db_factory() as db:
             row = (await db.execute(select(TranscodeTask).where(col(TranscodeTask.id) == task_id))).scalar_one_or_none()
-            if row is None:
+            # Race guard: row deleted between the post-grace fetch and here.
+            if row is None:  # pragma: no cover
                 return
             application = (
                 await db.execute(select(SessionApplication).where(col(SessionApplication.id) == application_id))
