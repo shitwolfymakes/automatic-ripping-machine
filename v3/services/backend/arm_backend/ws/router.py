@@ -176,7 +176,7 @@ async def _dispatch(
         await websocket.send_json(WSAck(topic=msg.topic).model_dump())
         return
 
-    if isinstance(msg, WSPublishRequest):
+    if isinstance(msg, WSPublishRequest):  # pragma: no branch — WSInboundMessage union is exhaustively handled above
         if not await can_publish(principal, msg.topic, session):
             await _send_error(websocket, CLOSE_FORBIDDEN, f"cannot publish to {msg.topic}")
             return
@@ -185,7 +185,7 @@ async def _dispatch(
         job_id = _extract_id(msg.topic, "ripper.progress.")
         # transcode.progress.{task_id} → use the task_id as the throttle scope (same role as track_id).
         track_id: str | None = None
-        if isinstance(msg.payload, dict):
+        if isinstance(msg.payload, dict):  # pragma: no branch — WSPublishRequest.payload is schema-constrained to dict
             track_id = msg.payload.get("track_id")
         if track_id is None:
             track_id = _extract_id(msg.topic, "transcode.progress.")
@@ -198,7 +198,10 @@ async def _dispatch(
             track_id=track_id,
             session=session if not is_progress else None,
         )
-        if not is_progress:
+        # Unreachable today: can_publish only permits `*.progress.*` topics,
+        # which are all is_progress=True. Kept for forward-compat if a
+        # persisted publishable topic is ever added to the authz surface.
+        if not is_progress:  # pragma: no cover
             await session.commit()
         return
 
@@ -213,7 +216,7 @@ async def _send_error(websocket: WebSocket, code: int, reason: str) -> None:
     err = WSError(code=code, reason=reason)
     try:
         await websocket.send_json(err.model_dump())
-    except Exception:
+    except Exception:  # pragma: no cover — best-effort send to a possibly-already-closed socket
         pass
 
 
