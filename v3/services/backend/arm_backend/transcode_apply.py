@@ -101,7 +101,7 @@ def _track_kinds_for_media(media_type: MediaType) -> set[TrackKind]:
         return {TrackKind.AUDIO_TRACK}
     if media_type in (MediaType.DATA, MediaType.ISO):
         return {TrackKind.DATA_DUMP, TrackKind.VIDEO_TITLE}
-    return set()
+    return set()  # pragma: no cover — MediaType is exhaustively handled above
 
 
 def compute_outputs(
