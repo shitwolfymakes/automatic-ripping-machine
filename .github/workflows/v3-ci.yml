@@ -108,7 +108,10 @@ jobs:
           version: ${{ env.UV_VERSION }}
           python-version: ${{ env.PYTHON_VERSION }}
       - run: uv sync --frozen
-      - run: uv run pytest -v
+      # Measure coverage but do not gate yet (no fail_under in pyproject) —
+      # the threshold is ratcheted up as the e2e suite fills the gaps.
+      - run: uv run coverage run -m pytest -v
+      - run: uv run coverage report
 
   test-ui:
     name: test (ui — vitest)

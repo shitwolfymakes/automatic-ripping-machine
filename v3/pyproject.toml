@@ -18,6 +18,7 @@ dev = [
     "respx>=0.21",
     "httpx>=0.27",
     "aiosqlite>=0.20",
+    "coverage>=7.6",
 ]
 
 [tool.ruff]
@@ -27,6 +28,24 @@ target-version = "py314"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["services/backend/tests", "services/ripper/tests", "services/transcode/tests"]
+
+[tool.coverage.run]
+# Backend API is the coverage target being driven to 100%. Add ripper /
+# transcode sources here as their suites mature.
+source = ["services/backend/arm_backend"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+# No `fail_under` yet — CI measures and prints but does not gate (the
+# threshold will be ratcheted up as the e2e suite fills the gaps).
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
 
 [tool.mypy]
 python_version = "3.14"
