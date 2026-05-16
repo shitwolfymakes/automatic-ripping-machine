@@ -79,7 +79,8 @@ def _select_video(scan: ScanResult, rip_preset: RipPreset, job_id: str) -> list[
     if rule == TrackSelection.CUSTOM:
         filters = _parse_filters(rip_preset)
         return [_video_track(job_id, t) for t in _apply_custom_filters(titles, filters)]
-    raise TrackSelectionError(f"unknown track_selection: {rule}")
+    # Unreachable: TrackSelection enum is exhaustively handled above.
+    raise TrackSelectionError(f"unknown track_selection: {rule}")  # pragma: no cover
 
 
 def _select_audio(scan: ScanResult, rip_preset: RipPreset, job_id: str) -> list[Track]:
