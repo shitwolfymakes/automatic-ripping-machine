@@ -37,6 +37,10 @@ engine = _build_engine(settings.DATABASE_URL)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 
-async def get_session() -> AsyncIterator[AsyncSession]:
+# Exercised only against a real database: every test overrides this
+# FastAPI dependency (fake-session unit tests) or rebinds SessionLocal to
+# a SQLite engine (e2e harness), so the production asyncpg path here is
+# never hit in CI. Covered for real in production / a real-Postgres tier.
+async def get_session() -> AsyncIterator[AsyncSession]:  # pragma: no cover
     async with SessionLocal() as session:
         yield session
