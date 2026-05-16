@@ -183,3 +183,153 @@ def test_filter_list_by_media_type(signing_key: bytes) -> None:
     rows = r.json()
     assert len(rows) == 1
     assert rows[0]["media_type"] == "movie"
+
+
+def _preset(
+    preset_id: str = "rpr_x",
+    *,
+    name: str = "x",
+    is_builtin: bool = False,
+    track_selection: TrackSelection = TrackSelection.MAIN_FEATURE,
+    track_filters_json: dict | None = None,
+) -> RipPreset:
+    return RipPreset(
+        id=preset_id,
+        name=name,
+        media_type=MediaType.MOVIE,
+        is_builtin=is_builtin,
+        track_selection=track_selection,
+        identification_mode=IdentificationMode.REQUIRED,
+        output_mode=OutputMode.TRACKS,
+        track_filters_json=track_filters_json,
+    )
+
+
+def test_list_without_media_filter(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["rip_presets"] = [_preset("rpr_a", name="a"), _preset("rpr_b", name="b")]
+    with TestClient(app) as client:
+        r = client.get("/api/rip-presets", headers=_auth(token))
+    assert r.status_code == 200
+    assert len(r.json()) == 2
+
+
+def test_get_found_and_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["rip_presets"] = [_preset("rpr_a", name="a")]
+    with TestClient(app) as client:
+        found = client.get("/api/rip-presets/rpr_a", headers=_auth(token))
+        missing = client.get("/api/rip-presets/rpr_missing", headers=_auth(token))
+    assert found.status_code == 200
+    assert found.json()["id"] == "rpr_a"
+    assert missing.status_code == 404
+    assert "unknown rip_preset_id" in missing.json()["detail"]
+
+
+def test_create_invalid_track_filters_422(signing_key: bytes) -> None:
+    """track_selection=custom with a structurally-invalid filter blob hits
+    the TrackFilters.model_validate ValidationError path."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    body = {
+        "name": "Bad filters",
+        "media_type": "movie",
+        "track_selection": "custom",
+        "identification_mode": "required",
+        "output_mode": "tracks",
+        "track_filters_json": {"min_duration_seconds": -5},
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/rip-presets", json=body, headers=_auth(token))
+    assert r.status_code == 422
+    assert "invalid track_filters_json" in r.json()["detail"]
+
+
+def test_update_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/rip-presets/rpr_missing", json={"name": "x"}, headers=_auth(token))
+    assert r.status_code == 404
+
+
+def test_update_builtin_name_only(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["rip_presets"] = [_preset("rpr_b", name="builtin", is_builtin=True)]
+    with TestClient(app) as client:
+        ok = client.patch("/api/rip-presets/rpr_b", json={"name": "renamed"}, headers=_auth(token))
+        bad = client.patch(
+            "/api/rip-presets/rpr_b",
+            json={"output_mode": "iso"},
+            headers=_auth(token),
+        )
+    assert ok.status_code == 200
+    assert ok.json()["name"] == "renamed"
+    assert bad.status_code == 409
+    assert "only `name` can be edited" in bad.json()["detail"]
+
+
+def test_update_revalidates_filters_on_selection_change(signing_key: bytes) -> None:
+    """Switching a preset to custom without supplying filters re-runs
+    _validate_filters and 422s."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["rip_presets"] = [_preset("rpr_e", name="e", track_selection=TrackSelection.MAIN_FEATURE)]
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/rip-presets/rpr_e",
+            json={"track_selection": "custom"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422
+    assert "track_filters_json is required" in r.json()["detail"]
+
+
+def test_update_success_changes_fields(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["rip_presets"] = [
+        _preset("rpr_c", name="c", track_selection=TrackSelection.CUSTOM, track_filters_json={"title_indices": [1]})
+    ]
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/rip-presets/rpr_c",
+            json={"name": "c2", "track_filters_json": {"title_indices": [2, 4]}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    assert r.json()["name"] == "c2"
+    assert r.json()["track_filters_json"] == {"title_indices": [2, 4]}
+
+
+def test_create_non_custom_without_filters_201(signing_key: bytes) -> None:
+    """Plain main_feature preset, no filters — _validate_filters' non-custom
+    branch returns cleanly (covers the 41->exit path)."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    body = {
+        "name": "Main feature",
+        "media_type": "movie",
+        "track_selection": "main_feature",
+        "identification_mode": "required",
+        "output_mode": "tracks",
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/rip-presets", json=body, headers=_auth(token))
+    assert r.status_code == 201
+    assert r.json()["track_filters_json"] is None
+
+
+def test_delete_success_204(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["rip_presets"] = [_preset("rpr_del", name="del")]
+    db.rows["sessions"] = []
+    with TestClient(app) as client:
+        missing = client.delete("/api/rip-presets/rpr_missing", headers=_auth(token))
+        ok = client.delete("/api/rip-presets/rpr_del", headers=_auth(token))
+    assert missing.status_code == 404
+    assert ok.status_code == 204
