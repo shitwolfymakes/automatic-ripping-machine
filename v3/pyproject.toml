@@ -45,6 +45,11 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "raise NotImplementedError",
     "if TYPE_CHECKING:",
+    # Protocol / overload / abstract stubs: bodies that are just `...`
+    # are never executed and shouldn't count against coverage.
+    ": \\.\\.\\.$",
+    "^\\s*\\.\\.\\.$",
+    "@(typing\\.)?overload",
 ]
 
 [tool.mypy]
