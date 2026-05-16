@@ -134,6 +134,17 @@ def app_client(_sqlite_url: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     monkeypatch.setattr(db_mod, "SessionLocal", test_sessionmaker)
     monkeypatch.setattr(main_mod, "SessionLocal", test_sessionmaker)
 
+    # Force the docker-less lifespan path deterministically: the transcode
+    # dispatcher needs a real docker socket, which the SQLite e2e tier can't
+    # provide. Without this the lifespan would branch on whatever the host
+    # happens to have, making main.py coverage environment-dependent.
+    monkeypatch.setattr(main_mod, "_build_docker_client", lambda: None)
+
+    # Deterministic GPU inventory: a test host may or may not have a render
+    # node, which would flip the `transcode.hw_unavailable` emit branch.
+    # CI has no GPU, so model that.
+    monkeypatch.setattr(main_mod, "probe_gpus", lambda: [])
+
     # Postgres Alembic revisions can't run on SQLite — create the schema from
     # model metadata instead. Same effect for the API surface under test. A
     # throwaway *sync* engine on the same file sidesteps event-loop juggling
