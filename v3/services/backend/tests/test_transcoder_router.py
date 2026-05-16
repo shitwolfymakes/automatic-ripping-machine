@@ -319,3 +319,85 @@ def test_jwt_rejected_on_transcoder_endpoint() -> None:
         )
     assert r.status_code == 401
     assert "service endpoint requires service token" in r.json()["detail"]
+
+
+# --- residual guard coverage -------------------------------------------------
+
+_NO_HOST_AUTH = {"Authorization": "Bearer tok-service"}
+
+
+def test_register_409_when_task_terminal() -> None:
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.DONE)
+    with TestClient(_make_app(db)) as client:
+        r = client.post(
+            "/api/transcoder/register",
+            json={"task_id": "txt_1", "hostname": _HOSTNAME, "hw_caps": {"cpu_count": 4}},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 409
+    assert "terminal status" in r.json()["detail"]
+
+
+def test_register_409_when_claimed_by_other_host_in_progress() -> None:
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.IN_PROGRESS)
+    db.rows["transcode_tasks"][0].claimed_by = "some-other-host"
+    with TestClient(_make_app(db)) as client:
+        r = client.post(
+            "/api/transcoder/register",
+            json={"task_id": "txt_1", "hostname": _HOSTNAME, "hw_caps": {"cpu_count": 4}},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 409
+    assert "claimed by a different host" in r.json()["detail"]
+
+
+def test_claim_400_missing_hostname() -> None:
+    db = FakeSession()
+    _seed(db)
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/transcoder/tasks/txt_1/claim", headers=_NO_HOST_AUTH)
+    assert r.status_code == 400
+    assert "missing X-ARM-Hostname" in r.json()["detail"]
+
+
+def test_heartbeat_400_missing_hostname() -> None:
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.IN_PROGRESS)
+    with TestClient(_make_app(db)) as client:
+        r = client.patch(
+            "/api/transcoder/tasks/txt_1/heartbeat",
+            json={"progress_pct": 10},
+            headers=_NO_HOST_AUTH,
+        )
+    assert r.status_code == 400
+    assert "missing X-ARM-Hostname" in r.json()["detail"]
+
+
+def test_heartbeat_409_when_not_in_progress() -> None:
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.QUEUED)
+    db.rows["transcode_tasks"][0].claimed_by = _HOSTNAME
+    with TestClient(_make_app(db)) as client:
+        r = client.patch(
+            "/api/transcoder/tasks/txt_1/heartbeat",
+            json={"progress_pct": 10},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 409
+    assert "not in_progress" in r.json()["detail"]
+
+
+def test_fail_409_when_not_in_progress() -> None:
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.QUEUED)
+    db.rows["transcode_tasks"][0].claimed_by = _HOSTNAME
+    with TestClient(_make_app(db)) as client:
+        r = client.patch(
+            "/api/transcoder/tasks/txt_1/fail",
+            json={"last_error": "boom"},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 409
+    assert "not in_progress" in r.json()["detail"]
