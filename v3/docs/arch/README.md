@@ -23,7 +23,7 @@ v3 is a **multi-container, Python-first** system built around a job/session stat
 2. [Job lifecycle & crash recovery](02-job-lifecycle.md)
 3. [Protocol: REST + WebSocket contract](03-protocol.md)
 4. [Data model](04-data-model.md)
-5. [Cross-cutting: config, auth, logging, code quality, testing](05-cross-cutting.md)
+5. [Cross-cutting: config, auth, logging, code quality](05-cross-cutting.md)
 6. [Deployment: compose, volumes, sockets](06-deployment.md)
 7. [Open questions & deferred decisions](07-open-questions.md)
 8. [v2 isolation & cutover plan](08-v2-isolation-and-cutover.md)
