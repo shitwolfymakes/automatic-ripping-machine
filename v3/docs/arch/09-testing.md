@@ -2,13 +2,13 @@
 
 As-built testing architecture for v3, as of 2026-05-16.
 
-[05-cross-cutting.md § Testing strategy](05-cross-cutting.md#testing-strategy)
-captured the *design intent* (Tier 1 against a real Postgres, Tier 2
-contract tests, a Big Buck Bunny integration rig). This document records
-what was actually built for the Backend and the principles behind it. Where
-the two differ, **this document is authoritative for the Backend**; 05
-remains the forward-looking plan for the ripper/transcode contract +
-integration rig, which are still open.
+This is the single source of truth for testing across v3. It records the
+principles, what was actually built for the Backend, and what is planned
+but not yet built (the ripper/transcode contract tier and the Big Buck
+Bunny integration rig — see [Planned tiers](#planned-tiers-not-yet-built)).
+The original design intent lived in
+[05-cross-cutting.md](05-cross-cutting.md); that section was retired in
+favour of this document once the Backend tiers diverged from it.
 
 ## Principles
 
@@ -82,16 +82,16 @@ explicit and accepted: **migration fidelity and Postgres-only query paths
 (`@>` array containment, `ON CONFLICT`) are out of scope for this tier**
 and belong to the integration rig in 05.
 
-### Why not the 05 plan (real Postgres in CI)?
+### Why not real Postgres in CI?
 
-Spinning Postgres in CI was the original Tier 1. It was abandoned for the
-Backend because it violates principle 1 for the 99% of tests that don't
-need real Postgres semantics — every contributor and every CI run would
-pay container-startup latency and flakiness to test routing logic that
-doesn't care what the database is. The few paths that *do* care (dialect
-SQL, migrations) are better served by a separate, explicitly-scoped
-integration tier than by taxing the whole suite. The contract-test and
-BBB-rig parts of the 05 plan remain valid and unbuilt.
+Spinning Postgres in CI was the original Tier 1 design. It was abandoned
+for the Backend because it violates principle 1 for the 99% of tests that
+don't need real Postgres semantics — every contributor and every CI run
+would pay container-startup latency and flakiness to test routing logic
+that doesn't care what the database is. The few paths that *do* care
+(dialect SQL, migrations) are better served by a separate, explicitly-
+scoped integration tier (see [Planned tiers](#planned-tiers-not-yet-built))
+than by taxing the whole suite.
 
 ## Coverage policy
 
@@ -120,16 +120,52 @@ BBB-rig parts of the 05 plan remain valid and unbuilt.
 
 ## What we don't test, and why
 
-- **Real Postgres dialect + Alembic migrations.** Deferred to an
-  integration tier (see 05). The SQLite e2e tier explicitly does not
-  assert these.
+- **Real Postgres dialect + Alembic migrations.** Deferred to the
+  integration tier ([Planned tiers](#planned-tiers-not-yet-built)). The
+  SQLite e2e tier explicitly does not assert these.
 - **Cross-service flows over real REST/WS between live containers.** The
-  contract-test tier in 05 is the intended home; not yet built.
-- **Browser e2e (Playwright).** Per 05: fragile, low return; the UI is
-  thin and reviewed visually + via vitest unit tests.
+  planned contract tier is the intended home; not yet built.
+- **Browser e2e (Playwright).** Fragile, low return; the UI is thin and
+  reviewed visually + via vitest unit tests.
 - **Hardware** — real drives, real GPUs, real MakeMKV/HandBrake against
-  arbitrary discs. GPU/docker probing is pinned deterministic; the BBB
-  loop-device rig in 05 is the planned home for real-pipeline assertions.
+  arbitrary discs. GPU/docker probing is pinned deterministic; the planned
+  Big Buck Bunny loop-device rig is the home for real-pipeline assertions.
+
+## Planned tiers (not yet built)
+
+These were specified in the original design and remain valid; they are not
+yet implemented. They are deliberately *separate* from the zero-infra
+suite above — they need infrastructure, so they run on demand / in a
+dedicated job, never as a tax on `uv run pytest`.
+
+### Contract tier
+
+- The published OpenAPI (from FastAPI) is checked against
+  `arm_common.schemas` on every PR — catches "schema changed, generated
+  client didn't" before runtime.
+- One contract test per ripper/transcoder call: frame a real request, post
+  it to a spun-up Backend in test mode, assert shape + status. Catches
+  "producer changed, consumer didn't".
+
+This is the intended home for the cross-service REST/WS flows that the
+in-process tiers deliberately don't cover.
+
+### Integration rig — Big Buck Bunny
+
+The project lead owns a copy of **Big Buck Bunny** (CC-BY, legally
+redistributable); a BBB ISO is the integration fixture:
+
+- A `devtools/arm-test-rip` script mounts the BBB ISO as a loop device in
+  a disposable ripper container, lets real MakeMKV (or a loopback
+  `dd`-based stub where MakeMKV's container licensing is awkward in CI)
+  process it, and asserts the output lands in `/raw/` with correct
+  metadata.
+- Runs on a developer machine; may be reduced in CI to a recorded fixture
+  if MakeMKV licensing is a blocker.
+- This is the home for the real-pipeline / real-Postgres-dialect /
+  Alembic-migration assertions the SQLite e2e tier explicitly skips.
+
+Arbitrary proprietary discs are never tested — obvious legal reasons.
 
 ## Conventions & sharp edges
 
@@ -158,7 +194,7 @@ These cost real debugging time; they are load-bearing, not trivia.
   describes its params, so a cheap hasher still round-trips the real
   verifier — cost changes, code path doesn't). ~80s → ~15s.
 
-See also: [05-cross-cutting.md § Testing strategy](05-cross-cutting.md#testing-strategy)
-(design intent + the still-open ripper/transcode contract & BBB rig),
+See also: [05-cross-cutting.md](05-cross-cutting.md) (the other cross-
+cutting concerns; testing was consolidated out of it into this document),
 [08-v2-isolation-and-cutover.md](08-v2-isolation-and-cutover.md) (why v3
 tests live entirely under `v3/`).

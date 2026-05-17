@@ -279,41 +279,12 @@ Pre-commit changes `cwd` to the git root before executing hooks, which is why th
 
 **Not yet in this gate.** `pytest` lands with the Tier 1 tests described below — quality gates and tests come online together.
 
-## Testing strategy
+## Testing
 
-> **As-built note.** This section is the original design intent. The
-> Backend testing architecture as actually built (a zero-infrastructure
-> two-tier model, coverage policy, conventions) is documented in
-> [09-testing.md](09-testing.md), which is authoritative for the Backend.
-> The contract-test tier and the Big Buck Bunny integration rig below
-> remain valid and not yet built.
-
-Two tiers, both in CI:
-
-### Tier 1 — per-service unit tests
-
-- `pytest` per service, no mocks for arm_common types.
-- Backend: tests against a real Postgres spun up in CI via the existing compose pattern (`docker compose up arm-db-test` equivalent).
-- Ripper: tests drive the ripper's Python logic with a fake Backend (httpx-mock + fake WS). Pure logic tests, no drive access.
-- Transcode: tests drive the wrapper with a synthetic input file; HandBrake is shelled out but can be replaced with a no-op for fast CI.
-
-### Tier 2 — contract tests
-
-- Published OpenAPI (from FastAPI) is checked against `arm_common.schemas` on every PR.
-- A contract test per ripper/transcoder call: the test frames a real request, posts it to a spun-up Backend in test mode, asserts shape + status.
-- This catches "producer changed, consumer didn't" before it hits runtime.
-
-### Integration rig — Big Buck Bunny
-
-The project lead owns a copy of **Big Buck Bunny** (CC-BY, legally redistributable). A BBB ISO serves as the integration fixture:
-
-- `devtools/arm-test-rip` script: mounts the BBB ISO as a loop device in a disposable ripper container, lets the real MakeMKV (or a loopback `dd`-based stub for CI where MakeMKV licensing is awkward) process it, and asserts the output lands in `/raw/` with correct metadata.
-- Works on a developer's machine; may be reduced in CI to a recorded fixture if MakeMKV's container licensing is a blocker.
-
-### What we don't test
-
-- Browser e2e with Playwright. Fragile; returns too little per unit of maintenance. WS+REST contract tests cover the data plane; the UI is thin enough to be reviewed visually.
-- Arbitrary proprietary discs. Obvious legal reasons.
+Testing has its own document: **[09-testing.md](09-testing.md)**. It covers
+the testing philosophy, the as-built Backend test architecture, the
+coverage policy and conventions, and the still-open ripper/transcode
+contract tier and Big Buck Bunny integration rig.
 
 ## Notifications
 
