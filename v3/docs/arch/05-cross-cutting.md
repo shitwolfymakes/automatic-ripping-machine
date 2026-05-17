@@ -281,6 +281,13 @@ Pre-commit changes `cwd` to the git root before executing hooks, which is why th
 
 ## Testing strategy
 
+> **As-built note.** This section is the original design intent. The
+> Backend testing architecture as actually built (a zero-infrastructure
+> two-tier model, coverage policy, conventions) is documented in
+> [09-testing.md](09-testing.md), which is authoritative for the Backend.
+> The contract-test tier and the Big Buck Bunny integration rig below
+> remain valid and not yet built.
+
 Two tiers, both in CI:
 
 ### Tier 1 — per-service unit tests

@@ -27,6 +27,7 @@ v3 is a **multi-container, Python-first** system built around a job/session stat
 6. [Deployment: compose, volumes, sockets](06-deployment.md)
 7. [Open questions & deferred decisions](07-open-questions.md)
 8. [v2 isolation & cutover plan](08-v2-isolation-and-cutover.md)
+9. [Testing philosophy (as-built)](09-testing.md)
 
 ## Non-goals
 
