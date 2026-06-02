@@ -393,6 +393,47 @@ def test_resolve_success_preserves_scan_and_emits(signing_key: bytes) -> None:
     assert {"identify.resolved", "rip.identify_resolved"} <= types
 
 
+def test_resolve_cd_writes_structured_metadata(signing_key: bytes) -> None:
+    """Resolve for a CD whose MusicBrainz lookup missed: the UI's
+    IdentifyDiscDialog posts artist + album + per-track tracks[]; the
+    resolve endpoint stores them verbatim under metadata_json so the
+    music path template (`{artist}/{album}/{track} - {track_title} - ...`)
+    can expand against them when transcode fans out."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [
+        _job(
+            status=JobStatus.AWAITING_USER_ID,
+            meta={"scan_result": {"disc_type": "cd", "titles": [{"index": 1}, {"index": 2}]}},
+        )
+    ]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_x/resolve",
+            json={
+                "title": "Animals",
+                "year": 1977,
+                "metadata": {
+                    "artist": "Pink Floyd",
+                    "album": "Animals",
+                    "tracks": [{"title": "Dogs"}, {"title": "Pigs"}],
+                },
+            },
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["job"]["status"] == "identified"
+    assert body["job"]["title"] == "Animals"
+    assert body["job"]["year"] == 1977
+    md = body["job"]["metadata_json"]
+    assert md["artist"] == "Pink Floyd"
+    assert md["album"] == "Animals"
+    assert md["tracks"] == [{"title": "Dogs"}, {"title": "Pigs"}]
+    # scan_result is still preserved alongside the user-supplied metadata.
+    assert md["scan_result"]["disc_type"] == "cd"
+
+
 def test_resolve_accepts_ripped_awaiting_identify(signing_key: bytes) -> None:
     """The new RIPPED_AWAITING_IDENTIFY status is accepted by resolve as
     groundwork for the future deferred-placeholder rip path."""

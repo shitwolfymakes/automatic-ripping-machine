@@ -24,9 +24,14 @@ logger = logging.getLogger("arm_transcode.ffmpeg_audio")
 ProgressCallback = Callable[[int, int | None, str | None], Awaitable[None]]
 
 
+# `-f <muxer>` is mandatory: the atomic-rename flow writes the output as
+# `<final>.arm-inprogress`, and ffmpeg infers the container from the
+# filename extension. Without `-f`, ffmpeg sees `.arm-inprogress` and
+# bails with "Unable to find a suitable output format" before encoding
+# anything. Same shape as ffmpeg_video.py.
 _CODEC_FLAGS: dict[str, list[str]] = {
-    "flac": ["-c:a", "flac", "-compression_level", "8"],
-    "mp3": ["-c:a", "libmp3lame", "-q:a", "0"],
+    "flac": ["-c:a", "flac", "-compression_level", "8", "-f", "flac"],
+    "mp3": ["-c:a", "libmp3lame", "-q:a", "0", "-f", "mp3"],
 }
 
 

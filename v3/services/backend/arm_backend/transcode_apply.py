@@ -19,6 +19,7 @@ from typing import NamedTuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
+from arm_backend.path_sanitize import sanitize_path_component
 from arm_backend.path_template import TemplateValidationError, expand_template, referenced_tokens
 from arm_backend.slugify import slugify
 from arm_common import (
@@ -74,17 +75,22 @@ def _build_track_ctx(
             if isinstance(raw_title, str):
                 track_title = raw_title
 
+    # Human-readable metadata fields land inside path segments; sanitise
+    # so titles like "Crown / She Said" don't introduce a phantom path
+    # level that ffmpeg fails to open. `track`, `transcode_slug`, and
+    # `ext` are already constrained by upstream code (zero-padded int,
+    # slugify(), enum).
     ctx: dict[str, str] = {
-        "title": job.title or "",
+        "title": sanitize_path_component(job.title or ""),
         "year": str(job.year) if job.year is not None else "",
-        "show": job.title or "",
-        "season": str(metadata.get("season") or ""),
-        "disc": str(metadata.get("disc") or ""),
+        "show": sanitize_path_component(job.title or ""),
+        "season": sanitize_path_component(str(metadata.get("season") or "")),
+        "disc": sanitize_path_component(str(metadata.get("disc") or "")),
         "track": track_index_padded,
         "duration_human": _format_duration_human(track.expected_duration_seconds or track.duration_seconds),
-        "artist": str(metadata.get("artist") or ""),
-        "album": str(metadata.get("album") or ""),
-        "track_title": track_title,
+        "artist": sanitize_path_component(str(metadata.get("artist") or "")),
+        "album": sanitize_path_component(str(metadata.get("album") or "")),
+        "track_title": sanitize_path_component(track_title),
         "transcode_slug": slugify(transcode_preset.name) if transcode_preset is not None else "",
         "ext": transcode_preset.container.value if transcode_preset is not None else "",
     }

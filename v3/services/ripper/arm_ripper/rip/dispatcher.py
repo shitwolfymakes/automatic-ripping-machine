@@ -61,17 +61,31 @@ async def rip_all(
     if disc_type == DiscType.CD:
         for track in tracks:
             await on_track_start(track)
+        track_by_index = {t.index: t for t in tracks}
+
+        async def _cd_on_track_done(idx: int, result: RipResult) -> None:
+            track = track_by_index.get(idx)
+            if track is None:
+                return
+            await on_track_done(track, result)
+
         results = await rip_cd(
             device_path=device_path,
             output_dir=output_dir,
             track_indexes=[t.index for t in tracks],
+            on_track_done=_cd_on_track_done,
         )
+        # Defensive: rip_cd's contract is to fire on_track_done for every
+        # track index it's given, so this loop is a no-op on the happy
+        # path. It only catches a track that fell through (e.g. a code
+        # path inside rip_cd that returned without firing the callback)
+        # so the row doesn't stay IN_PROGRESS forever.
         for track in tracks:
-            result = results.get(
-                track.index,
-                RipResult(ok=False, error=f"abcde produced no entry for track {track.index}"),
-            )
-            await on_track_done(track, result)
+            if track.index not in results:
+                await on_track_done(
+                    track,
+                    RipResult(ok=False, error=f"abcde produced no entry for track {track.index}"),
+                )
         return
 
     if disc_type == DiscType.DATA:
