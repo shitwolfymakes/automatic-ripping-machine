@@ -1347,7 +1347,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JobView"
+                  "$ref": "#/components/schemas/ResolveResponse"
                 }
               }
             }
@@ -3037,8 +3037,8 @@
         "tags": [
           "transcodes"
         ],
-        "summary": "Cancel Transcode",
-        "operationId": "cancel_transcode_api_transcodes__task_id__delete",
+        "summary": "Delete Transcode",
+        "operationId": "delete_transcode_api_transcodes__task_id__delete",
         "parameters": [
           {
             "name": "task_id",
@@ -4369,6 +4369,7 @@
           "ripping",
           "ripped",
           "ripped_partial",
+          "ripped_awaiting_identify",
           "abandoned",
           "failed"
         ],
@@ -4708,6 +4709,61 @@
         "title": "RegisterTranscoderResponse",
         "description": "Bootstrap bundle the transcoder needs before it can claim + run.\n\n`raw_input_path` is the absolute path the transcoder should read from\n(`/raw/<job>/title_tNN.mkv` for video, `/raw/<job>/track_NN.wav` for\naudio, `/raw/<job>/dump.iso` for data). `media_root` plus the task's\n`output_path` is where the final file lands."
       },
+      "ResolveFanOutOutcomeView": {
+        "properties": {
+          "session_application_id": {
+            "type": "string",
+            "title": "Session Application Id"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionApplicationStatus"
+          },
+          "task_count": {
+            "type": "integer",
+            "title": "Task Count"
+          },
+          "skipped_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "collisions",
+                  "template",
+                  "session_missing"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skipped Reason"
+          },
+          "error_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_application_id",
+          "session_id",
+          "status",
+          "task_count"
+        ],
+        "title": "ResolveFanOutOutcomeView",
+        "description": "One waiting_identify application's post-resolve outcome.\n\n`status='queued'` + `skipped_reason=None` \u2192 the application was\npromoted and `task_count` newly-created transcode tasks are queued.\nAnything else \u2192 the application stays parked in `waiting_identify`\nand `error_detail` carries the reason for the UI to surface."
+      },
       "ResolveRequest": {
         "properties": {
           "title": {
@@ -4736,6 +4792,27 @@
           "title"
         ],
         "title": "ResolveRequest"
+      },
+      "ResolveResponse": {
+        "properties": {
+          "job": {
+            "$ref": "#/components/schemas/JobView"
+          },
+          "fan_out": {
+            "items": {
+              "$ref": "#/components/schemas/ResolveFanOutOutcomeView"
+            },
+            "type": "array",
+            "title": "Fan Out"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job",
+          "fan_out"
+        ],
+        "title": "ResolveResponse",
+        "description": "POST /api/jobs/{id}/resolve response. The job always reflects the\njust-applied identity (status flipped to `identified`); `fan_out` lists\nthe per-application outcomes from the parked-applications promotion\npass \u2014 empty when no session was applied to the job before resolve."
       },
       "RetentionPolicy": {
         "type": "string",

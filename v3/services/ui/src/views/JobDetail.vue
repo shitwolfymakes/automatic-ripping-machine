@@ -5,11 +5,19 @@ import { api, ApiError } from '../api/client'
 import AbandonJobDialog from '../components/AbandonJobDialog.vue'
 import ApplySessionDialog from '../components/ApplySessionDialog.vue'
 import DeleteJobDialog from '../components/DeleteJobDialog.vue'
+import IdentifyDiscDialog from '../components/IdentifyDiscDialog.vue'
 import JobLogsCard from '../components/JobLogsCard.vue'
 import Poster from '../components/Poster.vue'
 import { useJobsStore } from '../stores/jobs'
 import { useTranscodesStore } from '../stores/transcodes'
-import type { ApplySessionResponse, JobDetailView, JobStatus, JobView } from '../api/types'
+import type {
+  ApplySessionResponse,
+  JobDetailView,
+  JobStatus,
+  JobView,
+  ResolveFanOutOutcomeView,
+  ResolveResponse,
+} from '../api/types'
 import { isTerminalJobStatus } from '../utils/jobStatus'
 
 const route = useRoute()
@@ -19,7 +27,9 @@ const error = ref<string | null>(null)
 const showApply = ref(false)
 const showAbandon = ref(false)
 const showDelete = ref(false)
+const showIdentify = ref(false)
 const lastApplied = ref<ApplySessionResponse | null>(null)
+const lastFanOutSkipped = ref<ResolveFanOutOutcomeView[]>([])
 const editingPoster = ref(false)
 const posterDraft = ref('')
 const savingPoster = ref(false)
@@ -35,6 +45,10 @@ let pollTimer: number | null = null
 
 const APPLY_OK: JobStatus[] = ['identified', 'ripped', 'ripped_partial', 'awaiting_user_id']
 const canApply = computed(() => detail.value !== null && APPLY_OK.includes(detail.value.job.status))
+const IDENTIFY_OK: JobStatus[] = ['awaiting_user_id', 'ripped_awaiting_identify']
+const canIdentify = computed(
+  () => detail.value !== null && IDENTIFY_OK.includes(detail.value.job.status),
+)
 const canAbandon = computed(
   () => detail.value !== null && !isTerminalJobStatus(detail.value.job.status),
 )
@@ -144,6 +158,16 @@ function onAbandoned(updated: JobView): void {
   showAbandon.value = false
 }
 
+function onIdentified(resp: ResolveResponse): void {
+  if (detail.value) detail.value = { ...detail.value, job: resp.job }
+  showIdentify.value = false
+  // Any parked applications that successfully promoted have already
+  // emitted session.queued events; refetching transcodes surfaces the
+  // new TranscodeTask rows in the table below.
+  void transcodes.fetchAll()
+  lastFanOutSkipped.value = resp.fan_out.filter((o) => o.skipped_reason !== null)
+}
+
 function onDeleted(): void {
   showDelete.value = false
   void router.push('/')
@@ -210,6 +234,13 @@ async function savePoster(): Promise<void> {
         </div>
       </div>
       <div class="spacer" />
+      <button
+        v-if="canIdentify && !showIdentify"
+        data-testid="identify-disc"
+        @click="showIdentify = true"
+      >
+        Identify disc
+      </button>
       <button v-if="canApply && !showApply" @click="showApply = true">Apply session</button>
       <button
         v-if="canAbandon && !showAbandon"
@@ -293,6 +324,34 @@ async function savePoster(): Promise<void> {
     @close="showApply = false"
     @applied="onApplied"
   />
+
+  <IdentifyDiscDialog
+    v-if="detail && showIdentify"
+    :job="detail.job"
+    @close="showIdentify = false"
+    @identified="onIdentified"
+  />
+
+  <div
+    v-if="lastFanOutSkipped.length > 0"
+    class="card"
+    data-testid="fan-out-warnings"
+    style="border-left: 4px solid var(--warn, #c08400)"
+  >
+    <h3 style="margin-top: 0">Some parked sessions could not be queued</h3>
+    <p>
+      The job identified successfully, but
+      {{ lastFanOutSkipped.length }} parked session application(s) could not be promoted. Fix the
+      issue (template tokens, output-path collisions) and click
+      <strong>Apply session</strong> again.
+    </p>
+    <ul>
+      <li v-for="o in lastFanOutSkipped" :key="o.session_application_id">
+        <code>{{ o.session_application_id }}</code> — {{ o.skipped_reason }}:
+        {{ o.error_detail ?? '(no detail)' }}
+      </li>
+    </ul>
+  </div>
 
   <div v-if="lastApplied" class="card">
     <h3 style="margin-top: 0">

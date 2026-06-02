@@ -349,14 +349,26 @@ def test_resolve_404(signing_key: bytes) -> None:
     assert r.status_code == 404
 
 
-def test_resolve_not_awaiting_409(signing_key: bytes) -> None:
+@pytest.mark.parametrize(
+    "bad_status",
+    [
+        JobStatus.CREATED,
+        JobStatus.IDENTIFIED,
+        JobStatus.RIPPING,
+        JobStatus.RIPPED,
+        JobStatus.RIPPED_PARTIAL,
+        JobStatus.ABANDONED,
+        JobStatus.FAILED,
+    ],
+)
+def test_resolve_not_in_resolvable_status_409(signing_key: bytes, bad_status: JobStatus) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
-    db.rows["jobs"] = [_job(status=JobStatus.RIPPED)]
+    db.rows["jobs"] = [_job(status=bad_status)]
     with TestClient(app) as client:
         r = client.post("/api/jobs/job_x/resolve", json={"title": "T"}, headers=_auth(token))
     assert r.status_code == 409
-    assert "not awaiting_user_id" in r.json()["detail"]
+    assert "not in an identify-resolvable status" in r.json()["detail"]
 
 
 def test_resolve_success_preserves_scan_and_emits(signing_key: bytes) -> None:
@@ -372,12 +384,32 @@ def test_resolve_success_preserves_scan_and_emits(signing_key: bytes) -> None:
         )
     assert r.status_code == 200
     body = r.json()
-    assert body["status"] == "identified"
-    assert body["title"] == "Blade Runner"
-    assert body["metadata_json"]["scan_result"] == {"disc_type": "dvd"}
-    assert body["metadata_json"]["tmdb_id"] == 78
+    assert body["job"]["status"] == "identified"
+    assert body["job"]["title"] == "Blade Runner"
+    assert body["job"]["metadata_json"]["scan_result"] == {"disc_type": "dvd"}
+    assert body["job"]["metadata_json"]["tmdb_id"] == 78
+    assert body["fan_out"] == []
     types = {e["event_type"] for e in hub.events}
     assert {"identify.resolved", "rip.identify_resolved"} <= types
+
+
+def test_resolve_accepts_ripped_awaiting_identify(signing_key: bytes) -> None:
+    """The new RIPPED_AWAITING_IDENTIFY status is accepted by resolve as
+    groundwork for the future deferred-placeholder rip path."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPED_AWAITING_IDENTIFY, meta={})]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_x/resolve",
+            json={"title": "Home Movie", "year": 2020},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["job"]["status"] == "identified"
+    assert body["job"]["title"] == "Home Movie"
+    assert body["fan_out"] == []
 
 
 def test_resolve_success_without_preserved_scan(signing_key: bytes) -> None:
@@ -393,8 +425,9 @@ def test_resolve_success_without_preserved_scan(signing_key: bytes) -> None:
             headers=_auth(token),
         )
     assert r.status_code == 200
-    assert "scan_result" not in r.json()["metadata_json"]
-    assert r.json()["metadata_json"]["k"] == "v"
+    body = r.json()
+    assert "scan_result" not in body["job"]["metadata_json"]
+    assert body["job"]["metadata_json"]["k"] == "v"
 
 
 # --- apply_session exception mapping (happy/collision in test_apply_session) --

@@ -7,7 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt
-from arm_backend.auto_session import SessionNotFoundError, apply_session_internal
+from arm_backend.auto_session import (
+    SessionNotFoundError,
+    apply_session_internal,
+    fan_out_waiting_identify_applications,
+)
 from arm_backend.db import get_session
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.routers.logs import per_job_log_path
@@ -34,7 +38,9 @@ from arm_common.schemas import (
     JobView,
     ManualTriggerRequest,
     ManualTriggerResponse,
+    ResolveFanOutOutcomeView,
     ResolveRequest,
+    ResolveResponse,
     RipProgressSummary,
     SessionApplicationView,
     TrackView,
@@ -437,21 +443,24 @@ async def update_job(
     return job
 
 
-@router.post("/{job_id}/resolve", response_model=JobView)
+_RESOLVABLE_STATUSES: frozenset[JobStatus] = frozenset({JobStatus.AWAITING_USER_ID, JobStatus.RIPPED_AWAITING_IDENTIFY})
+
+
+@router.post("/{job_id}/resolve", response_model=ResolveResponse)
 async def resolve(
     job_id: str,
     req: ResolveRequest,
     _: User = Depends(require_jwt),
     session: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
-) -> Job:
+) -> ResolveResponse:
     job = (await session.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
-    if job.status != JobStatus.AWAITING_USER_ID:
+    if job.status not in _RESOLVABLE_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"job {job_id} is in status {job.status.value}, not awaiting_user_id",
+            detail=f"job {job_id} is in status {job.status.value}, not in an identify-resolvable status",
         )
 
     # Preserve the persisted scan_result so rip-start can still find it after resolve overwrites metadata.
@@ -465,10 +474,15 @@ async def resolve(
     job.metadata_json = new_metadata
     job.status = JobStatus.IDENTIFIED
     session.add(job)
-    await session.commit()
-    await session.refresh(job)
 
-    logger.info("resolve job_id=%s -> identified title=%s", job.id, job.title)
+    fan_out_outcomes = await fan_out_waiting_identify_applications(session, job=job, hub=hub)
+
+    logger.info(
+        "resolve job_id=%s -> identified title=%s fan_out=%d",
+        job.id,
+        job.title,
+        len(fan_out_outcomes),
+    )
 
     payload = {
         "job_id": job.id,
@@ -490,9 +504,29 @@ async def resolve(
         job_id=job.id,
         session=session,
     )
-    await session.commit()
 
-    return job
+    # Single commit lands the job update, fan-out task rows, the fan-out's
+    # session.queued events, and identify.resolved + rip.identify_resolved
+    # events atomically.
+    await session.commit()
+    await session.refresh(job)
+    for outcome in fan_out_outcomes:
+        await session.refresh(outcome.application)
+
+    return ResolveResponse(
+        job=JobView.model_validate(job),
+        fan_out=[
+            ResolveFanOutOutcomeView(
+                session_application_id=outcome.application.id,
+                session_id=outcome.application.session_id,
+                status=outcome.application.status,
+                task_count=len(outcome.tasks),
+                skipped_reason=outcome.skipped_reason,
+                error_detail=outcome.error_detail,
+            )
+            for outcome in fan_out_outcomes
+        ],
+    )
 
 
 @router.post("/{job_id}/transcode", response_model=ApplySessionResponse)

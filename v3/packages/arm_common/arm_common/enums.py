@@ -36,6 +36,11 @@ class JobStatus(StrEnum):
     RIPPING = "ripping"
     RIPPED = "ripped"
     RIPPED_PARTIAL = "ripped_partial"
+    # Set by the (future) deferred-placeholder rip path when a disc rips
+    # successfully but identification never landed. Resolvable via the
+    # /resolve endpoint just like AWAITING_USER_ID. Inert today — no code
+    # path sets this yet.
+    RIPPED_AWAITING_IDENTIFY = "ripped_awaiting_identify"
     ABANDONED = "abandoned"
     FAILED = "failed"
 
