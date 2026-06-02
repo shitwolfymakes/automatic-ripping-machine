@@ -7,6 +7,8 @@ import type {
   JobView,
   ManualTriggerRequest,
   ManualTriggerResponse,
+  ResolveJobRequest,
+  ResolveResponse,
 } from '../api/types'
 
 const POLL_INTERVAL_MS = Number(import.meta.env.VITE_JOBS_POLL_MS ?? 5000)
@@ -58,6 +60,9 @@ export const useJobsStore = defineStore('jobs', {
     },
     async update(jobId: string, req: JobUpdateRequest): Promise<JobView> {
       return await api.patch<JobView>(`/api/jobs/${jobId}`, req)
+    },
+    async resolve(jobId: string, req: ResolveJobRequest): Promise<ResolveResponse> {
+      return await api.post<ResolveResponse>(`/api/jobs/${jobId}/resolve`, req)
     },
     async deleteJob(jobId: string, opts: { deleteRaw?: boolean } = {}): Promise<void> {
       const qs = opts.deleteRaw ? '?delete_raw=true' : ''

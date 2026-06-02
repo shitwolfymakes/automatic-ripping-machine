@@ -1,9 +1,9 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from arm_common.enums import DiscType, JobStatus, TrackKind, TrackStatus
+from arm_common.enums import DiscType, JobStatus, SessionApplicationStatus, TrackKind, TrackStatus
 
 
 class ResolveRequest(BaseModel):
@@ -136,3 +136,31 @@ class RipStartResponse(BaseModel):
     # 600). Surfaced here so the ripper doesn't have to read Session
     # state itself.
     min_length_seconds: int | None = None
+
+
+class ResolveFanOutOutcomeView(BaseModel):
+    """One waiting_identify application's post-resolve outcome.
+
+    `status='queued'` + `skipped_reason=None` → the application was
+    promoted and `task_count` newly-created transcode tasks are queued.
+    Anything else → the application stays parked in `waiting_identify`
+    and `error_detail` carries the reason for the UI to surface.
+    """
+
+    session_application_id: str
+    session_id: str
+    status: SessionApplicationStatus
+    task_count: int
+    skipped_reason: Literal["collisions", "template", "session_missing"] | None = None
+    error_detail: str | None = None
+
+
+class ResolveResponse(BaseModel):
+    """POST /api/jobs/{id}/resolve response. The job always reflects the
+    just-applied identity (status flipped to `identified`); `fan_out` lists
+    the per-application outcomes from the parked-applications promotion
+    pass — empty when no session was applied to the job before resolve.
+    """
+
+    job: JobView
+    fan_out: list[ResolveFanOutOutcomeView]

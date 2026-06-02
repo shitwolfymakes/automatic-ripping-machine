@@ -70,6 +70,21 @@ class ApplySessionOutcome(NamedTuple):
     skipped_reason: SkippedReason | None
 
 
+class ResolveFanOutOutcome(NamedTuple):
+    """One waiting_identify application's outcome from resolve's fan-out pass.
+
+    `skipped_reason=None` means the application was promoted to QUEUED and
+    `tasks` lists the newly-created TranscodeTask rows. A non-None reason
+    means the application stays in WAITING_IDENTIFY and `error_detail`
+    carries a human-readable explanation for the response body / UI.
+    """
+
+    application: SessionApplication
+    tasks: list[TranscodeTask]
+    skipped_reason: SkippedReason | None
+    error_detail: str | None
+
+
 async def apply_session_internal(
     db: AsyncSession,
     *,
@@ -214,6 +229,69 @@ async def _apply_session_internal(
         (await db.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index)))).scalars().all()
     )
 
+    outcome = await _fan_out_tasks_for_application(
+        db,
+        application=None,
+        job=job,
+        sess=sess,
+        transcode_preset=transcode_preset,
+        tracks=tracks,
+        hub=hub,
+        source=source,
+        overwrite=overwrite,
+        created_by_user_id=created_by_user_id,
+    )
+
+    if outcome.skipped_reason == "collisions":
+        # Nothing was persisted in the helper on this branch; no commit needed.
+        return outcome
+
+    await db.commit()
+    if outcome.application is not None:  # pragma: no branch — collision branch early-returns above
+        await db.refresh(outcome.application)
+    for task in outcome.tasks:
+        await db.refresh(task)
+
+    logger.info(
+        "apply session_id=%s job_id=%s tasks=%d overwrite=%s source=%s",
+        session_id,
+        job.id,
+        len(outcome.tasks),
+        overwrite,
+        source,
+    )
+
+    return outcome
+
+
+async def _fan_out_tasks_for_application(
+    db: AsyncSession,
+    *,
+    application: SessionApplication | None,
+    job: Job,
+    sess: Session,
+    transcode_preset: TranscodePreset | None,
+    tracks: list[Track],
+    hub: WSHub | None,
+    source: ApplySource,
+    overwrite: bool,
+    created_by_user_id: str | None,
+) -> ApplySessionOutcome:
+    """Compute outputs, check collisions, fan out TranscodeTask rows, emit session.queued.
+
+    Two call modes, controlled by `application`:
+      * Manual apply path (`application=None`): a fresh `SessionApplication`
+        is created in `QUEUED` state. On collision-without-overwrite no
+        application is created — caller sees `skipped_reason='collisions'`
+        with `application=None`.
+      * Resolve fan-out path (`application=<existing WAITING_IDENTIFY row>`):
+        the existing application is flipped to `QUEUED` on success; on
+        collision-without-overwrite it is left untouched (still
+        WAITING_IDENTIFY) and returned with `skipped_reason='collisions'`.
+
+    Caller is responsible for the commit. The helper only `flush`es so the
+    new application's id is populated for downstream task FKs.
+    """
     resolved = compute_outputs(job, tracks, sess, transcode_preset)
 
     paths = [r.output_path for r in resolved]
@@ -221,7 +299,7 @@ async def _apply_session_internal(
     collisions = await find_collisions(db, paths, media_root)
     if collisions and not overwrite:
         return ApplySessionOutcome(
-            application=None,
+            application=application,
             tasks=[],
             collisions=collisions,
             idempotent=False,
@@ -231,15 +309,18 @@ async def _apply_session_internal(
     if overwrite and collisions:
         await _evict_colliding_tasks(db, paths)
 
-    application = SessionApplication(
-        session_id=session_id,
-        job_id=job.id,
-        status=SessionApplicationStatus.QUEUED,
-        overwrite=overwrite,
-        created_by_user_id=created_by_user_id,
-    )
-    db.add(application)
-    await db.flush()
+    if application is None:
+        application = SessionApplication(
+            session_id=sess.id,
+            job_id=job.id,
+            status=SessionApplicationStatus.QUEUED,
+            overwrite=overwrite,
+            created_by_user_id=created_by_user_id,
+        )
+        db.add(application)
+        await db.flush()
+    else:
+        application.status = SessionApplicationStatus.QUEUED
 
     new_tasks = [
         TranscodeTask(
@@ -260,7 +341,7 @@ async def _apply_session_internal(
             event_type="session.queued",
             payload={
                 "session_application_id": application.id,
-                "session_id": session_id,
+                "session_id": sess.id,
                 "job_id": job.id,
                 "source": source,
                 "task_count": len(new_tasks),
@@ -269,20 +350,6 @@ async def _apply_session_internal(
             session=db,
         )
 
-    await db.commit()
-    await db.refresh(application)
-    for task in new_tasks:
-        await db.refresh(task)
-
-    logger.info(
-        "apply session_id=%s job_id=%s tasks=%d overwrite=%s source=%s",
-        session_id,
-        job.id,
-        len(new_tasks),
-        overwrite,
-        source,
-    )
-
     return ApplySessionOutcome(
         application=application,
         tasks=new_tasks,
@@ -290,6 +357,117 @@ async def _apply_session_internal(
         idempotent=False,
         skipped_reason=None,
     )
+
+
+async def fan_out_waiting_identify_applications(
+    db: AsyncSession,
+    *,
+    job: Job,
+    hub: WSHub | None,
+) -> list[ResolveFanOutOutcome]:
+    """For each waiting_identify application on `job`, attempt to promote it to queued.
+
+    Called from the resolve router after `job.status` is set to IDENTIFIED.
+    Per-application failures (missing session/preset, template error,
+    collision) are captured in the returned outcomes rather than raised —
+    identifying a disc should succeed even if downstream session fan-out
+    has problems. Caller is responsible for the commit.
+    """
+    apps = list(
+        (
+            await db.execute(
+                select(SessionApplication)
+                .where(col(SessionApplication.job_id) == job.id)
+                .where(col(SessionApplication.status) == SessionApplicationStatus.WAITING_IDENTIFY)
+                .order_by(col(SessionApplication.created_at).asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not apps:
+        return []
+
+    tracks = list(
+        (await db.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index)))).scalars().all()
+    )
+
+    outcomes: list[ResolveFanOutOutcome] = []
+    for app in apps:
+        sess = (await db.execute(select(Session).where(col(Session.id) == app.session_id))).scalar_one_or_none()
+        if sess is None:
+            outcomes.append(
+                ResolveFanOutOutcome(
+                    application=app,
+                    tasks=[],
+                    skipped_reason="session_missing",
+                    error_detail=f"session {app.session_id} no longer exists",
+                )
+            )
+            continue
+
+        transcode_preset: TranscodePreset | None = None
+        if sess.transcode_preset_id is not None:
+            transcode_preset = (
+                await db.execute(select(TranscodePreset).where(col(TranscodePreset.id) == sess.transcode_preset_id))
+            ).scalar_one_or_none()
+            if transcode_preset is None:
+                outcomes.append(
+                    ResolveFanOutOutcome(
+                        application=app,
+                        tasks=[],
+                        skipped_reason="session_missing",
+                        error_detail=f"transcode_preset {sess.transcode_preset_id} no longer exists",
+                    )
+                )
+                continue
+
+        try:
+            outcome = await _fan_out_tasks_for_application(
+                db,
+                application=app,
+                job=job,
+                sess=sess,
+                transcode_preset=transcode_preset,
+                tracks=tracks,
+                hub=hub,
+                source="manual",
+                overwrite=False,
+                created_by_user_id=None,
+            )
+        except TemplateValidationError as exc:
+            outcomes.append(
+                ResolveFanOutOutcome(
+                    application=app,
+                    tasks=[],
+                    skipped_reason="template",
+                    error_detail=str(exc),
+                )
+            )
+            continue
+
+        if outcome.skipped_reason == "collisions":
+            outcomes.append(
+                ResolveFanOutOutcome(
+                    application=app,
+                    tasks=[],
+                    skipped_reason="collisions",
+                    error_detail=f"output path collisions: {len(outcome.collisions)} path(s) already claimed",
+                )
+            )
+            continue
+
+        assert outcome.application is not None
+        outcomes.append(
+            ResolveFanOutOutcome(
+                application=outcome.application,
+                tasks=outcome.tasks,
+                skipped_reason=None,
+                error_detail=None,
+            )
+        )
+
+    return outcomes
 
 
 async def _evict_colliding_tasks(db: AsyncSession, paths: list[str]) -> None:

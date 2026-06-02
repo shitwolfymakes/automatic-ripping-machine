@@ -26,6 +26,7 @@ export type JobStatus =
   | 'ripping'
   | 'ripped'
   | 'ripped_partial'
+  | 'ripped_awaiting_identify'
   | 'abandoned'
   | 'failed'
 
@@ -316,6 +317,26 @@ export interface ApplySessionResponse {
   tasks: TranscodeTaskView[]
   collisions: CollisionInfo[]
   idempotent: boolean
+}
+
+export interface ResolveJobRequest {
+  title: string
+  year?: number | null
+  metadata?: Record<string, unknown>
+}
+
+export interface ResolveFanOutOutcomeView {
+  session_application_id: string
+  session_id: string
+  status: SessionApplicationStatus
+  task_count: number
+  skipped_reason: 'collisions' | 'template' | 'session_missing' | null
+  error_detail: string | null
+}
+
+export interface ResolveResponse {
+  job: JobView
+  fan_out: ResolveFanOutOutcomeView[]
 }
 
 export interface TemplatePreviewRequest {
