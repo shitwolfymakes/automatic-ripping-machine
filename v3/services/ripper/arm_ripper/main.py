@@ -149,7 +149,11 @@ async def amain() -> None:
             try:
                 if iso_mode:
                     logger.info("ARM_MANUAL_TRIGGER_ISO=%s; running one-shot pipeline", device_path)
-                    await controller.handle_disc_inserted(device_path)
+                    # handle_manual_trigger bypasses the auto_rip_on_insert
+                    # config check; handle_disc_inserted would no-op when
+                    # the operator has auto-rip disabled. The ISO env var
+                    # IS the explicit trigger so we want the manual path.
+                    await controller.handle_manual_trigger(session_id=None)
                     logger.info("manual-trigger ISO pipeline complete; idling for cancellation")
                     # Idle indefinitely so the WS stays subscribed and the
                     # container stays "up" for `docker compose ps` /
