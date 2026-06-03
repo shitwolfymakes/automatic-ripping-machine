@@ -31,7 +31,7 @@ bash v3/devtools/iso-smoke.sh
 
 Prereqs: dev stack up (`docker compose up -d arm-db arm-backend arm-ui`). The script stops the live `arm-ripper-sr0` for the duration of the run (it would conflict on the same `drive_id`) and prints the bring-it-back command when it's done.
 
-Defaults to caching the ISO under `~/arm-corpus/` (override with `ISO_CACHE_DIR`). MakeMKV key resolution: `MAKEMKV_PERMA_KEY` env first, then a single forum-scrape attempt. See [../docs/contributors/real-disc-smoke.md § Run the test (ISO fixture)](../docs/contributors/real-disc-smoke.md#run-the-test-iso-fixture--no-physical-disc-needed) for the full runbook and known gotchas.
+Defaults to caching the ISO under `~/arm-corpus/` (override with `ISO_CACHE_DIR`). MakeMKV key resolution: `MAKEMKV_KEY` env first (any value MakeMKV accepts — purchased perma-key or a beta you grabbed manually), then a single forum-scrape attempt. See [../docs/contributors/real-disc-smoke.md § Run the test (ISO fixture)](../docs/contributors/real-disc-smoke.md#run-the-test-iso-fixture--no-physical-disc-needed) for the full runbook and known gotchas.
 
 ## crash-drill.sh
 

@@ -12,9 +12,10 @@
 #      the BBB layer doesn't burn 8.5 GB of host disk. SHA-256 verified
 #      against the corpus.lock pin. Cache at ~/arm-corpus/ by default.
 #      Last-resort fallback: direct fetch from archive.org.
-#   2. MakeMKV key: env var first (MAKEMKV_PERMA_KEY), then a single
-#      forum-scrape attempt. Container-boot scrape is flaky (Cloudflare
-#      525), so an explicit key keeps the smoke deterministic.
+#   2. MakeMKV key: env var first (MAKEMKV_KEY — any value MakeMKV
+#      accepts, perma or beta), then a single forum-scrape attempt.
+#      The forum sits behind Cloudflare and rate-limits / 525s under
+#      load, so an explicit key keeps the smoke deterministic.
 #   3. The live `arm-ripper-sr0` service is stopped (poll-loop ripper
 #      and ISO-mode ripper conflict on the same drive_id registration).
 #   4. One-shot `docker run --privileged` of the ripper image with
@@ -65,7 +66,8 @@ Usage: iso-smoke.sh [--help]
 
 Environment variables:
   ISO_CACHE_DIR       Where the Sintel ISO is cached (default: ~/arm-corpus)
-  MAKEMKV_PERMA_KEY   MakeMKV beta key (overrides forum scrape)
+  MAKEMKV_KEY         MakeMKV app key (perma OR a beta you grabbed
+                      manually). Overrides the forum scrape.
 EOF
 }
 
@@ -138,9 +140,9 @@ resolve_makemkv_key() {
     # Caller captures stdout, so status messages MUST go to stderr or
     # they get spliced into the key. Only the bare key is printed to
     # stdout below.
-    if [[ -n "${MAKEMKV_PERMA_KEY:-}" ]]; then
-        ok "MAKEMKV_PERMA_KEY from environment" >&2
-        printf '%s\n' "${MAKEMKV_PERMA_KEY}"
+    if [[ -n "${MAKEMKV_KEY:-}" ]]; then
+        ok "MAKEMKV_KEY from environment" >&2
+        printf '%s\n' "${MAKEMKV_KEY}"
         return
     fi
     log "scraping monthly MakeMKV key from forum" >&2
@@ -157,7 +159,7 @@ resolve_makemkv_key() {
         err "  stderr: $(tr '\n' ' ' <"${curl_stderr}")"
         rm -f "${curl_stderr}"
         err "MakeMKV's forum sits behind Cloudflare and rate-limits / 525s under load."
-        err "Workaround: set MAKEMKV_PERMA_KEY=<key> and re-run (one-time per month)."
+        err "Workaround: set MAKEMKV_KEY=<key> and re-run (one-time per month)."
         err "Key lives at the bottom of: ${MAKEMKV_FORUM_URL}"
         exit 1
     fi
@@ -171,7 +173,7 @@ resolve_makemkv_key() {
         err "forum scrape returned HTTP ${http_code} but no T-... key matched in the page body"
         err "The forum may have changed the post format. Inspect:"
         err "  ${MAKEMKV_FORUM_URL}"
-        err "Workaround: set MAKEMKV_PERMA_KEY=<key> and re-run."
+        err "Workaround: set MAKEMKV_KEY=<key> and re-run."
         exit 1
     fi
     ok "scraped key: ${key:0:8}…${key: -8}" >&2
@@ -233,7 +235,7 @@ run_iso_ripper() {
         -e ARM_SERVICE_TOKEN="${ARM_SERVICE_TOKEN}" \
         -e ARM_LOG_LEVEL="${ARM_LOG_LEVEL:-info}" \
         -e ARM_MANUAL_TRIGGER_ISO=/corpus/sintel.iso \
-        -e MAKEMKV_PERMA_KEY="${key}" \
+        -e MAKEMKV_KEY="${key}" \
         -e PUID="${PUID:-1000}" -e PGID="${PGID:-1000}" -e CDROM_GID="${CDROM_GID:-24}" \
         -v "${CACHE_DIR}:/corpus:ro" \
         -v "${V3_DIR}/raw:/raw" \
