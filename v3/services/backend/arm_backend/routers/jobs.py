@@ -1,5 +1,8 @@
 import logging
+import shutil
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Iterable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
@@ -12,6 +15,7 @@ from arm_backend.auto_session import (
     apply_session_internal,
     fan_out_waiting_identify_applications,
 )
+from arm_backend.config import settings
 from arm_backend.db import get_session
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.routers.logs import per_job_log_path
@@ -26,7 +30,7 @@ from arm_common import (
     TrackStatus,
     User,
 )
-from arm_common.models import Track
+from arm_common.models import Track, TranscodeTask
 from arm_common.schemas import (
     AbandonJobRequest,
     ApplySessionRequest,
@@ -263,20 +267,93 @@ _TERMINAL_STATUSES: frozenset[JobStatus] = frozenset(
 )
 
 
-async def _emit_delete_raw(hub: WSHub, db: AsyncSession, job: Job) -> None:
-    """Tell the ripper that owns this job's drive to rmtree `/raw/{id}/`.
-    Backend has no `/raw` mount; the WS hop is the only way to reach the
-    files. If the ripper for that drive is offline, the rmtree silently
-    no-ops (subscriber list is empty) — acceptable: leftover raw files
-    from a destroyed drive aren't taking up space on a live drive."""
-    payload = {"job_id": job.id, "drive_id": job.drive_id, "delete_raw": True}
-    await hub.emit(
-        topic=f"ripper.commands.{job.drive_id}",
-        event_type="job.deleted",
-        payload=payload,
-        job_id=job.id,
-        session=db,
-    )
+async def _resolve_media_outputs(db: AsyncSession, job_id: str) -> list[Path]:
+    """Return absolute paths of every transcode output recorded against this
+    job's tracks. `output_path` is relative; join to MEDIA_ROOT. Tasks with
+    no output yet (queued / failed before disk landing) are skipped."""
+    media_root = Path(settings.MEDIA_ROOT)
+    rows = (
+        await db.execute(
+            select(TranscodeTask.output_path)
+            .join(Track, col(TranscodeTask.source_track_id) == col(Track.id))
+            .where(col(Track.job_id) == job_id)
+            .where(col(TranscodeTask.output_path).is_not(None))
+        )
+    ).all()
+    return [media_root / r[0] for r in rows]
+
+
+def _prune_empty_dirs(leaf_parent: Path, root: Path) -> int:
+    """rmdir empty ancestors of `leaf_parent` upward, stopping at (and not
+    removing) `root`. Returns count of dirs removed. Safe to call with a
+    `leaf_parent` outside `root` — returns 0 without touching the filesystem.
+    """
+    try:
+        leaf_parent.relative_to(root)
+    except ValueError:
+        return 0
+    pruned = 0
+    current = leaf_parent
+    while current != root and current != current.parent:
+        try:
+            current.rmdir()
+        except OSError:
+            # Non-empty, missing, or permission denied — stop walking up.
+            break
+        pruned += 1
+        current = current.parent
+    return pruned
+
+
+def _delete_job_files(
+    job_id: str,
+    media_outputs: Iterable[Path],
+    *,
+    raw_root: Path,
+    media_root: Path,
+) -> dict[str, int]:
+    """Delete `raw_root/<job_id>/` and every file in `media_outputs`, then
+    prune emptied media parent dirs.
+
+    Per-file unlink (rather than rmtree of the title dir) because re-rips of
+    the same disc land outputs in the same `media/<Title>/` parent — a sibling
+    job's bytes are not ours to delete.
+
+    Idempotent: missing raw dir, missing files, and missing parents are all
+    expected. Returns counters for the operator log.
+    """
+    raw_dir = raw_root / job_id
+    raw_removed = 0
+    if raw_dir.exists():
+        try:
+            shutil.rmtree(raw_dir)
+            raw_removed = 1
+            logger.info("delete: rmtree raw_dir=%s job_id=%s", raw_dir, job_id)
+        except OSError as exc:
+            logger.warning("delete: raw rmtree failed job_id=%s path=%s err=%s", job_id, raw_dir, exc)
+
+    files_removed = 0
+    parents_seen: set[Path] = set()
+    for path in media_outputs:
+        if not path.exists():
+            continue
+        try:
+            path.unlink()
+            files_removed += 1
+            parents_seen.add(path.parent)
+        except OSError as exc:
+            logger.warning("delete: media unlink failed path=%s err=%s", path, exc)
+
+    # Deepest-first so a leaf dir is checked for emptiness before its stem.
+    dirs_pruned = 0
+    for parent in sorted(parents_seen, key=lambda p: len(p.parts), reverse=True):
+        dirs_pruned += _prune_empty_dirs(parent, media_root)
+
+    return {
+        "raw_dir_removed": raw_removed,
+        "media_files_removed": files_removed,
+        "media_dirs_pruned": dirs_pruned,
+    }
 
 
 def _delete_per_job_log(job_id: str) -> None:
@@ -296,7 +373,6 @@ async def delete_job(
     delete_raw: bool = Query(default=False),
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
-    hub: WSHub = Depends(_get_hub),
 ) -> None:
     """Hard-delete a Job. Tracks, fingerprints, session_applications,
     transcode_tasks, and events cascade via Postgres FK ondelete=CASCADE.
@@ -305,9 +381,12 @@ async def delete_job(
     RIPPING) — caller must `POST /abandon` first if they want a job in
     flight gone. This keeps the active-rip cancel logic in one place.
 
-    `delete_raw=true` also wipes `/raw/{job_id}/` on the ripper that
-    owns the drive (sent over WS — only the ripper has `/raw` mounted).
-    The DB delete proceeds regardless of whether the rmtree succeeds.
+    `delete_raw=true` also unlinks every transcode output recorded for the
+    job and rmtrees `/raw/{job_id}/`. Backend mounts both bind paths
+    directly, so the cleanup runs synchronously here — no WS roundtrip,
+    no dependency on the ripper container being up. Per-file unlink for
+    media (sibling re-rips share the `media/<Title>/` parent dir); empty
+    parents are pruned after the unlink phase.
     """
     job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
     if job is None:
@@ -318,13 +397,29 @@ async def delete_job(
             detail=f"job in non-terminal status {job.status.value}; abandon it first",
         )
 
+    counters: dict[str, int] | None = None
     if delete_raw:
-        await _emit_delete_raw(hub, db, job)
+        media_outputs = await _resolve_media_outputs(db, job.id)
+        counters = _delete_job_files(
+            job.id,
+            media_outputs,
+            raw_root=Path(settings.RAW_ROOT),
+            media_root=Path(settings.MEDIA_ROOT),
+        )
 
     await db.delete(job)
     await db.commit()
     _delete_per_job_log(job_id)
-    logger.info("delete job_id=%s delete_raw=%s", job_id, delete_raw)
+    if counters is not None:
+        logger.info(
+            "delete job_id=%s delete_raw=True raw_dir_removed=%d media_files_removed=%d media_dirs_pruned=%d",
+            job_id,
+            counters["raw_dir_removed"],
+            counters["media_files_removed"],
+            counters["media_dirs_pruned"],
+        )
+    else:
+        logger.info("delete job_id=%s delete_raw=False", job_id)
 
 
 @router.delete("", response_model=BulkDeleteJobsResponse)
@@ -332,33 +427,53 @@ async def delete_all_jobs(
     delete_raw: bool = Query(default=False),
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
-    hub: WSHub = Depends(_get_hub),
 ) -> BulkDeleteJobsResponse:
     """Hard-delete every job in a terminal status. Non-terminal jobs are
     skipped and reported in `skipped_non_terminal` so the caller can
     abandon-then-retry them.
 
-    `delete_raw=true` emits one `job.deleted` WS command per job to its
-    drive's ripper before the row is removed. Each rmtree is independent;
-    a failure on one ripper doesn't block deletes for the others.
+    `delete_raw=true` runs the filesystem cleanup (raw rmtree + media file
+    unlink + empty-parent prune) for each deleted job. Cleanups are
+    independent — a failure on one job is logged and the next continues.
     """
     rows = (await db.execute(select(Job))).scalars().all()
 
+    raw_root = Path(settings.RAW_ROOT)
+    media_root = Path(settings.MEDIA_ROOT)
     deleted_ids: list[str] = []
     skipped: list[str] = []
+    totals = {"raw_dir_removed": 0, "media_files_removed": 0, "media_dirs_pruned": 0}
     for job in rows:
         if job.status not in _TERMINAL_STATUSES:
             skipped.append(job.id)
             continue
         if delete_raw:
-            await _emit_delete_raw(hub, db, job)
+            media_outputs = await _resolve_media_outputs(db, job.id)
+            counters = _delete_job_files(
+                job.id,
+                media_outputs,
+                raw_root=raw_root,
+                media_root=media_root,
+            )
+            for k, v in counters.items():
+                totals[k] += v
         await db.delete(job)
         deleted_ids.append(job.id)
 
     await db.commit()
     for jid in deleted_ids:
         _delete_per_job_log(jid)
-    logger.info("delete-all jobs deleted=%d skipped=%d delete_raw=%s", len(deleted_ids), len(skipped), delete_raw)
+    if delete_raw:
+        logger.info(
+            "delete-all jobs deleted=%d skipped=%d delete_raw=True raw_dirs=%d media_files=%d media_dirs_pruned=%d",
+            len(deleted_ids),
+            len(skipped),
+            totals["raw_dir_removed"],
+            totals["media_files_removed"],
+            totals["media_dirs_pruned"],
+        )
+    else:
+        logger.info("delete-all jobs deleted=%d skipped=%d delete_raw=False", len(deleted_ids), len(skipped))
     return BulkDeleteJobsResponse(deleted_ids=deleted_ids, skipped_non_terminal=skipped)
 
 

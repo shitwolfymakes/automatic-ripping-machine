@@ -116,19 +116,6 @@ class JobController:
             event = self._resolution_events.get(job_id)
             if event is not None:
                 event.set()
-        elif envelope.event_type == "job.deleted":
-            # Backend has no /raw mount; deleting a Job's row leaves any
-            # /raw/<id>/ leftovers behind unless the ripper that owns the
-            # drive runs rmtree. Backend only emits this when delete_raw
-            # was requested, so we always wipe (no flag check). The job
-            # is terminal by the time delete fires, so the cancel branch
-            # of _handle_abandon is a safe no-op.
-            payload = envelope.payload if isinstance(envelope.payload, dict) else {}
-            job_id = payload.get("job_id")
-            if not isinstance(job_id, str):
-                logger.warning("job.deleted without job_id payload: %s", payload)
-                return
-            self._handle_abandon(job_id, delete_raw=True)
         else:
             logger.debug("ws command ignored: type=%s", envelope.event_type)
 
