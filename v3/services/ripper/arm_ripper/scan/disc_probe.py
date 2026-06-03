@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import AsyncIterator
 
 from arm_common import DiscType
+from arm_ripper.source import is_iso_source
 
 logger = logging.getLogger("arm_ripper.scan.disc_probe")
 
@@ -107,7 +108,13 @@ async def _temp_mount(device_path: str) -> AsyncIterator[Path | None]:
     mount_dir = Path(tempfile.mkdtemp(prefix="arm-disc-probe-"))
     mounted = False
     try:
-        rc, stderr = await _run("mount", "-o", "ro", device_path, str(mount_dir))
+        # ISO sources need `-o loop` so the kernel allocates a loopback
+        # device for the file. Works inside the ripper container only when
+        # the run has access to /dev/loop-control (typically --privileged
+        # for one-off ARM_MANUAL_TRIGGER_ISO smokes; CAP_SYS_ADMIN alone
+        # is not enough). Block devices keep the original ro-only mount.
+        mount_opts = "ro,loop" if is_iso_source(device_path) else "ro"
+        rc, stderr = await _run("mount", "-o", mount_opts, device_path, str(mount_dir))
         if rc != 0:
             logger.info("mount %s failed (rc=%s): %s", device_path, rc, stderr)
             yield None

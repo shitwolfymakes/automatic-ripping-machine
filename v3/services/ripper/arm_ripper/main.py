@@ -5,13 +5,14 @@ from pathlib import Path
 
 import httpx
 
-from arm_common import configure_service_logging
+from arm_common import DriveMediaStatus, configure_service_logging
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.config import settings
 from arm_ripper.drive_poll import DriveState, read_drive_status
 from arm_ripper.drive_status import probe_drive_media
 from arm_ripper.job_controller import JobController
 from arm_ripper.recovery import boot_probe
+from arm_ripper.source import is_iso_source
 from arm_ripper.ws_client import WSClient
 
 CA_BUNDLE_PATH = "/etc/ssl/certs/ca-certificates.crt"
@@ -33,16 +34,16 @@ configure_service_logging(f"arm-ripper-{Path(settings.ARM_DRIVE_DEV).name}", lev
 logger = logging.getLogger("arm_ripper")
 
 
-async def register_with_retry(client: BackendClient) -> str:
+async def register_with_retry(client: BackendClient, device_path: str) -> str:
     delay = 1.0
     while True:
         try:
             drive = await client.register(
                 hostname=settings.HOSTNAME,
-                device_path=settings.ARM_DRIVE_DEV,
+                device_path=device_path,
                 ripper_version=RIPPER_VERSION,
             )
-            logger.info("registered drive_id=%s device=%s", drive.id, settings.ARM_DRIVE_DEV)
+            logger.info("registered drive_id=%s device=%s", drive.id, device_path)
             return drive.id
         except (httpx.HTTPError, OSError) as exc:
             logger.warning("register failed (%s); retrying in %.1fs", exc, delay)
@@ -50,14 +51,22 @@ async def register_with_retry(client: BackendClient) -> str:
             delay = min(delay * 2, 30.0)
 
 
-async def heartbeat_loop(client: BackendClient, drive_id: str) -> None:
+async def heartbeat_loop(client: BackendClient, drive_id: str, device_path: str) -> None:
     """Post the current media status to the backend every
     HEARTBEAT_INTERVAL_SECONDS. Errors are logged + swallowed —
     the heartbeat is best-effort and stale rows fall back to
-    "unknown" on the manual-trigger pre-check."""
+    "unknown" on the manual-trigger pre-check.
+
+    For ISO sources we skip the SCSI ioctl (it fails on regular files)
+    and report `loaded` unconditionally — the source is always present
+    by construction in manual-trigger mode.
+    """
     while True:
         try:
-            status, _ = probe_drive_media(settings.ARM_DRIVE_DEV)
+            if is_iso_source(device_path):
+                status = DriveMediaStatus.LOADED
+            else:
+                status, _ = probe_drive_media(device_path)
             await client.heartbeat(drive_id=drive_id, media_status=status)
         except (httpx.HTTPError, OSError) as exc:
             logger.warning("heartbeat failed: %s", exc)
@@ -107,8 +116,14 @@ async def amain() -> None:
     )
     ssl_ctx = ssl.create_default_context(cafile=CA_BUNDLE_PATH)
     ws_url = _ws_url_from_backend_url(settings.ARM_BACKEND_URL)
+    # In ISO mode the device_path is the ISO file; everything downstream
+    # (register, JobController, heartbeat) sees it as the bound device.
+    # Boot probe is also skipped — there's no crashed rip to recover.
+    iso_path = settings.ARM_MANUAL_TRIGGER_ISO
+    iso_mode = iso_path is not None
+    device_path: str = iso_path if iso_path is not None else settings.ARM_DRIVE_DEV
     try:
-        drive_id = await register_with_retry(client)
+        drive_id = await register_with_retry(client, device_path)
         async with WSClient(
             ws_url,
             settings.ARM_SERVICE_TOKEN,
@@ -119,19 +134,30 @@ async def amain() -> None:
                 client,
                 drive_id,
                 ws=ws,
-                device_path=settings.ARM_DRIVE_DEV,
+                device_path=device_path,
                 default_min_length_seconds=settings.ARM_MIN_LENGTH_SECONDS,
             )
             await ws.subscribe(f"ripper.commands.{drive_id}", controller.on_ws_command)
-            # Phase 9 — recover a crashed in-flight rip on this drive, if any.
-            # Logs + swallows all errors so a misbehaving probe never blocks boot.
+            if not iso_mode:
+                # Phase 9 — recover a crashed in-flight rip on this drive, if any.
+                # Logs + swallows all errors so a misbehaving probe never blocks boot.
+                try:
+                    await boot_probe(client, drive_id, device_path, controller)
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("boot probe failed: %s", exc)
+            heartbeat_task = asyncio.create_task(heartbeat_loop(client, drive_id, device_path))
             try:
-                await boot_probe(client, drive_id, settings.ARM_DRIVE_DEV, controller)
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("boot probe failed: %s", exc)
-            heartbeat_task = asyncio.create_task(heartbeat_loop(client, drive_id))
-            try:
-                await poll_loop(controller)
+                if iso_mode:
+                    logger.info("ARM_MANUAL_TRIGGER_ISO=%s; running one-shot pipeline", device_path)
+                    await controller.handle_disc_inserted(device_path)
+                    logger.info("manual-trigger ISO pipeline complete; idling for cancellation")
+                    # Idle indefinitely so the WS stays subscribed and the
+                    # container stays "up" for `docker compose ps` /
+                    # `docker compose logs` observation. Operator kills the
+                    # container when done inspecting.
+                    await asyncio.Event().wait()
+                else:
+                    await poll_loop(controller)
             finally:
                 heartbeat_task.cancel()
     finally:

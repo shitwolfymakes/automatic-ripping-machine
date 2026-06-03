@@ -11,6 +11,7 @@ from arm_ripper.backend_client import BackendClient
 from arm_ripper.rip import RipResult, rip_all
 from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS
 from arm_ripper.scan import ScanError, scan as scan_disc
+from arm_ripper.source import is_iso_source
 from arm_ripper.ws_client import WSClient
 
 logger = logging.getLogger("arm_ripper.job_controller")
@@ -467,6 +468,12 @@ class JobController:
         the case where a sibling container or the ripper's own
         scan-poster path mounted the device internally.
         """
+        # ISO sources have no tray to eject. The kernel auto-releases the
+        # loopback once probe_disc / makemkvcon close the file; the umount
+        # already happened inside _temp_mount's finally-block.
+        if is_iso_source(device_path):
+            logger.info("eject skipped: source is ISO file %s", device_path)
+            return
         await self._run_command("umount", device_path, log_failure=False)
         for attempt, delay in enumerate(EJECT_RETRY_DELAYS, start=1):
             if delay > 0:
