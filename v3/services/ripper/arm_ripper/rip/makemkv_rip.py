@@ -37,6 +37,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from arm_ripper.rip.hashing import sha256_file
+from arm_ripper.source import makemkv_source_url
 
 logger = logging.getLogger("arm_ripper.rip.makemkv")
 
@@ -498,7 +499,7 @@ async def rip_disc(
         "--robot",
         "--progress=-stdout",
         f"--minlength={minlength_seconds}",
-        f"dev:{device_path}",
+        makemkv_source_url(device_path),
         "all",
         str(output_dir),
     ]

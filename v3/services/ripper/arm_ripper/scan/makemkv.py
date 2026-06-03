@@ -6,6 +6,7 @@ from typing import Iterable
 from arm_common import DiscType
 from arm_common.schemas import DiscFingerprintInput, ScanResult, ScanTitle
 from arm_ripper.scan.disc_probe import probe_disc
+from arm_ripper.source import makemkv_source_url
 
 logger = logging.getLogger("arm_ripper.scan.makemkv")
 
@@ -159,7 +160,7 @@ def _classify_from_titles(titles: list[ScanTitle]) -> DiscType:
 
 
 async def scan_disc(device_path: str) -> ScanResult:
-    cmd = ["makemkvcon", "-r", "--cache=1", "info", f"dev:{device_path}"]
+    cmd = ["makemkvcon", "-r", "--cache=1", "info", makemkv_source_url(device_path)]
     logger.info("makemkvcon info device=%s", device_path)
 
     try:
