@@ -56,6 +56,62 @@ docker compose up -d
 docker compose logs -f arm-ripper-sr0 &        # watch ripper events
 ```
 
+## Run the test (ISO fixture — no physical disc needed)
+
+For hosts without a Blu-ray/DVD drive, or for fixture-driven CI-adjacent
+runs, the ripper accepts an `ARM_MANUAL_TRIGGER_ISO` env var that bypasses
+the poll loop and runs scan → identify → rip exactly once against an
+`.iso` file. [v3/devtools/iso-smoke.sh](../../devtools/iso-smoke.sh)
+orchestrates the full flow against the
+[matrix256-corpus](https://github.com/shitwolfymakes/matrix256-corpus)
+Sintel ISO:
+
+```bash
+cd v3
+docker compose up -d arm-db arm-backend arm-ui       # if not already up
+./devtools/iso-smoke.sh
+```
+
+The script:
+
+- Pulls `ghcr.io/shitwolfymakes/matrix256-corpus:latest` (falls back to
+  Docker Hub, then archive.org) and `docker cp`'s just `sintel.iso`
+  out — the BBB layer stays in the registry-side image cache, so only
+  ~3.7 GB lands on host disk. SHA-256 is verified against the
+  `corpus.lock.json` pin (`7ea69a0…`) on every run; cached at
+  `~/arm-corpus/sintel.iso` (override with `ISO_CACHE_DIR`).
+- Resolves a MakeMKV beta key: `MAKEMKV_PERMA_KEY` env wins, otherwise
+  a single forum-scrape attempt. Set `MAKEMKV_PERMA_KEY` explicitly if
+  the forum scrape is flaky (Cloudflare HTTP 525s the request
+  intermittently) — the in-container scrape that the ripper does on
+  boot has the same failure mode.
+- Stops the live `arm-ripper-sr0` (the ISO-mode ripper registers as the
+  same `drive_id`, so the two would conflict) and launches a one-shot
+  `docker run --privileged` of the ripper image with the ISO bind-mounted
+  at `/corpus`.
+- Tails the container logs until the `rip-complete` milestone fires,
+  then prints the `job_id` along with the `curl` to apply a GPU-preferred
+  Plex transcode session and the cleanup commands.
+
+The ripper container idles after the one-shot pipeline (the WS
+subscription stays open for cancellation) and the live ripper service
+stays stopped — bring it back with
+`docker compose up -d arm-ripper-sr0` once you're done with the ISO
+smoke.
+
+**Gotchas** (already in the matrix's ISO-row notes):
+
+- `mount -o ro,loop /corpus/sintel.iso ...` returns `EPERM` inside the
+  container even with `--privileged`. The CRC64 fingerprint silently
+  falls through; MakeMKV's `CINFO:1` from the `iso:` source URL is
+  authoritative for `disc_type`, so identify still proceeds via OMDB.
+  Loop-mount path needs follow-up work if you rely on the 1337server
+  community DB lookup.
+- The 11.5 GB matrix256-corpus image overflowed `/var/lib/docker` on the
+  dev box; the archive.org fallback exists for hosts with the same
+  constraint. The fallback is byte-equivalent (corpus.lock pins the same
+  archive.org URL the image was built from).
+
 ## What to verify
 
 For each disc you test, fill in a row and capture the artifacts.
