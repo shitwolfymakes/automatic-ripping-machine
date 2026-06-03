@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Phase 15 — ISO-source smoke test for the ripper.
+# Phase 15 — ISO-source smoke test for the ripper, end-to-end.
 #
-# Runs the full scan → identify → rip pipeline against a Sintel ISO
-# fixture (no physical disc required). Ticks the cutover criterion that
-# was deferred to v3.1 as "the BBB ISO rig" but pulled forward into v3.0
-# via the ARM_MANUAL_TRIGGER_ISO env var.
+# Runs the full scan → identify → rip → transcode pipeline against a
+# Sintel ISO fixture (no physical disc required). Ticks the cutover
+# criterion that was deferred to v3.1 as "the BBB ISO rig" but pulled
+# forward into v3.0 via the ARM_MANUAL_TRIGGER_ISO env var.
 #
 # Pipeline:
 #   1. Sintel ISO comes from the matrix256-corpus image — pulled from
@@ -20,14 +20,12 @@
 #      and ISO-mode ripper conflict on the same drive_id registration).
 #   4. One-shot `docker run --privileged` of the ripper image with
 #      ARM_MANUAL_TRIGGER_ISO and the ISO bind-mounted at /corpus.
-#   5. Logs are tailed until rip-complete; the script reports the job_id
-#      so the operator can chain `POST /api/jobs/{id}/transcode`.
-#   6. The ripper container is left running (it idles after the one-shot
-#      so the WS subscription stays open for cancellation). Stop with
-#      `docker stop armv3-ripper-iso` when done; the existing
-#      arm-ripper-sr0 service is NOT auto-restarted — bring it back with
-#      `docker compose up -d arm-ripper-sr0` when you're done with the
-#      ISO smoke.
+#      Logs are tailed until `rip-complete`.
+#   5. Admin JWT acquired (env vars or interactive prompt) and the
+#      GPU-preferred Plex H.265 session applied to the job. Transcode
+#      tasks are polled until all are done|failed.
+#   6. Cleanup: stop the ISO-mode ripper, restart the live
+#      arm-ripper-sr0 service. Opt out with `--no-cleanup`.
 #
 # Idempotent. Safe to re-run.
 
@@ -53,27 +51,58 @@ RIPPER_SERVICE="arm-ripper-sr0"
 COMPOSE_NETWORK="armv3_default"
 MAKEMKV_FORUM_URL="https://forum.makemkv.com/forum/viewtopic.php?f=5&t=1053"
 
+API_BASE="${ARM_API_BASE:-https://localhost:8081}"
+DEFAULT_SESSION_ID="ses_builtin_movie_plex_1080p_gpu"
+SESSION_ID="${DEFAULT_SESSION_ID}"
+DO_TRANSCODE=1
+DO_CLEANUP=1
+FORCE_REBUILD=0
+
 log() { printf '\033[1;36m→\033[0m %s\n' "$*"; }
 ok()  { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!\033[0m %s\n' "$*" >&2; }
 err() { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; }
 
 show_help() {
-    sed -n '2,32p' "$0" | sed 's/^# \?//'
+    sed -n '2,30p' "$0" | sed 's/^# \?//'
     cat <<'EOF'
 
-Usage: iso-smoke.sh [--help]
+Usage: iso-smoke.sh [options]
+
+Options:
+  --no-transcode      Stop after rip-complete; skip the transcode
+                      chain and the cleanup step.
+  --session=<id>      Override the default transcode session
+                      (default: ses_builtin_movie_plex_1080p_gpu —
+                      NVENC-preferred Plex H.265 1080p).
+  --no-cleanup        After the transcode, leave the ISO ripper idling
+                      and the live arm-ripper-sr0 stopped for manual
+                      inspection.
+  --rebuild           Force a fresh `docker compose build` of the ripper
+                      image before launching. Use after editing
+                      services/ripper/ — otherwise the in-flight image
+                      still carries the old code.
+  --help, -h          Show this message.
 
 Environment variables:
   ISO_CACHE_DIR       Where the Sintel ISO is cached (default: ~/arm-corpus)
   MAKEMKV_KEY         MakeMKV app key (perma OR a beta you grabbed
                       manually). Overrides the forum scrape.
+  ARM_ADMIN_USER      Admin username for the JWT-acquire step
+                      (default: admin). Used non-interactively when set.
+  ARM_ADMIN_PASSWORD  Admin password. If unset, the script prompts
+                      interactively at JWT-acquire time.
+  ARM_API_BASE        Backend / UI base URL (default: https://localhost:8081).
 EOF
 }
 
 for arg in "$@"; do
     case "$arg" in
         --help|-h) show_help; exit 0 ;;
+        --no-transcode) DO_TRANSCODE=0; DO_CLEANUP=0 ;;
+        --no-cleanup) DO_CLEANUP=0 ;;
+        --rebuild) FORCE_REBUILD=1 ;;
+        --session=*) SESSION_ID="${arg#--session=}" ;;
         *) err "unknown arg: $arg"; exit 2 ;;
     esac
 done
@@ -194,7 +223,10 @@ require_stack_up() {
 }
 
 require_ripper_image() {
-    if ! docker image inspect "${RIPPER_IMAGE}" >/dev/null 2>&1; then
+    if (( FORCE_REBUILD == 1 )); then
+        log "rebuilding ${RIPPER_IMAGE} (--rebuild)"
+        ( cd "${V3_DIR}" && "${COMPOSE[@]}" build "${RIPPER_SERVICE}" )
+    elif ! docker image inspect "${RIPPER_IMAGE}" >/dev/null 2>&1; then
         log "building ${RIPPER_IMAGE}"
         ( cd "${V3_DIR}" && "${COMPOSE[@]}" build "${RIPPER_SERVICE}" )
     fi
@@ -247,10 +279,12 @@ run_iso_ripper() {
     ok "${RIPPER_CTR} up"
 }
 
-# ---- Watch --------------------------------------------------------------
+# ---- Watch rip ----------------------------------------------------------
 
-watch_until_complete() {
-    log "tailing logs until rip-complete (or 15-min timeout)"
+watch_until_rip_complete() {
+    # Status messages to stderr; the job_id is the only stdout the
+    # caller captures.
+    log "tailing logs until rip-complete (or 15-min timeout)" >&2
     local deadline=$(( $(date +%s) + 900 ))
     local job_id=""
     # `docker logs -f` keeps streaming after rip-complete (container idles
@@ -260,10 +294,10 @@ watch_until_complete() {
         # rip-start carries the job_id; rip-complete is the terminal milestone.
         if [[ -z "${job_id}" && "${line}" == *'"msg": "rip-start'* ]]; then
             job_id=$(printf '%s' "${line}" | grep -oP 'job_id=\K[^ ]+' || true)
-            [[ -n "${job_id}" ]] && log "rip started: ${job_id}"
+            [[ -n "${job_id}" ]] && log "rip started: ${job_id}" >&2
         fi
         if [[ "${line}" == *'"msg": "rip-complete'* ]]; then
-            ok "rip-complete observed"
+            ok "rip-complete observed" >&2
             break
         fi
         if (( $(date +%s) > deadline )); then
@@ -273,25 +307,188 @@ watch_until_complete() {
     done < <(docker logs -f "${RIPPER_CTR}" 2>&1)
 
     if [[ -z "${job_id}" ]]; then
-        warn "rip-complete fired but no job_id observed in the stream — check the backend log"
+        err "rip-complete fired but no job_id observed in the stream — check the backend log"
+        exit 1
+    fi
+    printf '%s\n' "${job_id}"
+}
+
+# ---- Auth ---------------------------------------------------------------
+
+acquire_jwt() {
+    local user="${ARM_ADMIN_USER:-admin}"
+    local password="${ARM_ADMIN_PASSWORD:-}"
+    if [[ -z "${password}" ]]; then
+        log "ARM_ADMIN_PASSWORD not set; prompting for ${user}" >&2
+        read -rsp "  admin password: " password </dev/tty
+        printf '\n' >&2
+    fi
+    local payload
+    payload=$(printf '{"username":"%s","password":"%s"}' "${user}" "${password}")
+    local resp
+    if ! resp=$(curl -sfk --max-time 10 -X POST "${API_BASE}/api/auth/login" \
+        -H 'Content-Type: application/json' \
+        -d "${payload}" 2>&1); then
+        err "auth failed (curl rc=$?); ${resp:0:200}"
+        exit 1
+    fi
+    local jwt
+    jwt=$(printf '%s' "${resp}" | python3 -c \
+        'import sys,json; d=json.load(sys.stdin); print(d.get("access_token",""))' 2>/dev/null || true)
+    if [[ -z "${jwt}" ]]; then
+        err "auth response had no access_token: ${resp:0:200}"
+        exit 1
+    fi
+    ok "JWT acquired for ${user}" >&2
+    printf '%s\n' "${jwt}"
+}
+
+# ---- Transcode ----------------------------------------------------------
+
+apply_transcode() {
+    local jwt="$1" job_id="$2" session_id="$3"
+    log "applying transcode session ${session_id} to ${job_id} (overwrite=true)" >&2
+    # `-f` would swallow the error body that the API returns on 4xx (e.g.
+    # `output_path collisions detected`), leaving the script with a blank
+    # error. Instead we ask curl to print the http_code on its own line and
+    # parse it manually so we keep the body for diagnostics.
+    local body http_code
+    body=$(curl -sk --max-time 10 -X POST \
+        "${API_BASE}/api/jobs/${job_id}/transcode" \
+        -H "Authorization: Bearer ${jwt}" \
+        -H 'Content-Type: application/json' \
+        -d "$(printf '{"session_id":"%s","overwrite":true}' "${session_id}")" \
+        -w '\n%{http_code}' 2>/dev/null) || true
+    http_code="${body##*$'\n'}"
+    body="${body%$'\n'*}"
+    if [[ "${http_code}" != "200" ]]; then
+        err "apply_transcode HTTP ${http_code}"
+        err "  body: ${body:0:500}"
+        exit 1
+    fi
+    local resp="${body}"
+    local sap_id task_count
+    sap_id=$(printf '%s' "${resp}" | python3 -c \
+        'import sys,json; print(json.load(sys.stdin)["session_application"]["id"])' 2>/dev/null || true)
+    task_count=$(printf '%s' "${resp}" | python3 -c \
+        'import sys,json; print(len(json.load(sys.stdin)["tasks"]))' 2>/dev/null || echo 0)
+    if [[ -z "${sap_id}" ]]; then
+        err "apply_transcode returned no session_application id: ${resp:0:300}"
+        exit 1
+    fi
+    if (( task_count == 0 )); then
+        err "apply_transcode queued 0 tasks — the job has no transcode-eligible tracks."
+        err "Most common cause: MakeMKV failed to identify the disc and the ripper"
+        err "fell back to the data-copy path (one big ISO blob, no per-title MKVs)."
+        err "Hint: check the job's disc_type with:"
+        err "  curl -sk -H \"Authorization: Bearer <jwt>\" ${API_BASE}/api/jobs/${job_id} | python3 -m json.tool"
+        err "If disc_type=data, your MAKEMKV_KEY likely didn't reach update_key.sh —"
+        err "re-run with --rebuild after editing services/ripper/."
+        exit 1
+    fi
+    ok "session_application=${sap_id} with ${task_count} task(s) queued" >&2
+    printf '%s\n' "${sap_id}"
+}
+
+watch_transcode() {
+    local jwt="$1" sap_id="$2"
+    log "polling /api/transcodes until all tasks for ${sap_id} terminal" >&2
+    local deadline=$(( $(date +%s) + 1800 ))   # 30-min budget
+    local last_summary=""
+    while :; do
+        local resp summary terminal
+        if ! resp=$(curl -sfk --max-time 10 "${API_BASE}/api/transcodes" \
+            -H "Authorization: Bearer ${jwt}" 2>/dev/null); then
+            warn "transcode poll: curl failed; retrying in 10s"
+            sleep 10
+            continue
+        fi
+        # python prints a one-line summary on stdout and writes "TERMINAL"
+        # to stderr when every task in this sap is in {done, failed}.
+        # sap_id comes in via env to avoid bash-vs-python `$` confusion in
+        # the heredoc (the single-quoted delimiter blocks bash expansion,
+        # which would otherwise leak the literal ${sap_id} into python).
+        summary=$(printf '%s' "${resp}" | SAP_ID="${sap_id}" python3 -c "$(cat <<'PYEOF'
+import os, sys, json
+sap = os.environ["SAP_ID"]
+data = json.load(sys.stdin)
+rows = [t for t in data if t.get("session_application_id") == sap]
+buckets = {}
+for t in rows:
+    buckets[t["status"]] = buckets.get(t["status"], 0) + 1
+parts = [f"{k}={v}" for k, v in sorted(buckets.items())]
+print(f"{len(rows)} task(s): " + " ".join(parts))
+# Empty rows is treated as terminal-with-warning here. apply_transcode
+# refuses to return zero tasks, so reaching this branch means the API
+# briefly hid them — never seen in practice but a belt-and-braces guard
+# against an infinite poll.
+if all(t["status"] in ("done", "failed") for t in rows):
+    sys.stderr.write("TERMINAL\n")
+PYEOF
+)" 2>/tmp/iso_smoke_terminal) || true
+        terminal=$(<"/tmp/iso_smoke_terminal")
+        rm -f /tmp/iso_smoke_terminal
+        if [[ "${summary}" != "${last_summary}" ]]; then
+            log "$(date +%T) ${summary}" >&2
+            last_summary="${summary}"
+        fi
+        if [[ "${terminal}" == "TERMINAL"* ]]; then
+            ok "all transcode tasks terminal" >&2
+            return 0
+        fi
+        if (( $(date +%s) > deadline )); then
+            err "transcode poll exceeded 30 min; ${last_summary}"
+            return 1
+        fi
+        sleep 10
+    done
+}
+
+# ---- Cleanup ------------------------------------------------------------
+
+cleanup_stack() {
+    log "stopping ${RIPPER_CTR}"
+    docker stop "${RIPPER_CTR}" >/dev/null 2>&1 || true
+    log "restarting ${RIPPER_SERVICE}"
+    if ! ( cd "${V3_DIR}" && "${COMPOSE[@]}" up -d "${RIPPER_SERVICE}" >/dev/null 2>&1 ); then
+        warn "${RIPPER_SERVICE} did not come up cleanly; check /dev/sr0 is present on the host"
+        warn "  bring it back manually once the drive is attached:"
+        warn "    cd ${V3_DIR} && docker compose up -d ${RIPPER_SERVICE}"
         return
     fi
+    ok "${RIPPER_SERVICE} back up"
+}
 
+# ---- Summary ------------------------------------------------------------
+
+final_summary() {
+    local job_id="$1"
+    local rip_secs="$2"
+    local transcode_secs="${3:-}"
+    local raw_dir="${V3_DIR}/raw/${job_id}"
+    local raw_total
+    raw_total=$(du -cb "${raw_dir}"/*.mkv 2>/dev/null | tail -1 | awk '{print $1}' || echo 0)
     echo
-    ok "smoke complete — job_id=${job_id}"
-    echo "    raw output:   ${V3_DIR}/raw/${job_id}/"
-    echo "    apply transcode:"
-    echo "      JWT=\$(curl -sk https://localhost:8081/api/auth/login \\"
-    echo "        -H 'Content-Type: application/json' \\"
-    echo "        -d '{\"username\":\"admin\",\"password\":\"<your password>\"}' \\"
-    echo "        | python -c 'import sys,json; print(json.load(sys.stdin)[\"access_token\"])')"
-    echo "      curl -sk -X POST https://localhost:8081/api/jobs/${job_id}/transcode \\"
-    echo "        -H \"Authorization: Bearer \$JWT\" -H 'Content-Type: application/json' \\"
-    echo "        -d '{\"session_id\":\"ses_builtin_movie_plex_1080p_gpu\",\"overwrite\":false}'"
-    echo
-    echo "    cleanup when done:"
-    echo "      docker stop ${RIPPER_CTR}"
-    echo "      cd ${V3_DIR} && docker compose up -d ${RIPPER_SERVICE}"
+    ok "ISO smoke complete"
+    echo "    job_id        ${job_id}"
+    echo "    raw output    ${raw_dir}/  ($(numfmt --to=iec "${raw_total}" 2>/dev/null || echo "${raw_total}B") across $(find "${raw_dir}" -name '*.mkv' 2>/dev/null | wc -l) files)"
+    echo "    rip wall      ${rip_secs}s"
+    if [[ -n "${transcode_secs}" ]]; then
+        # Walk media/<Title> tree for the output of this run. We don't
+        # know the exact title path without an API roundtrip, so just
+        # report the most-recently-modified GPU-preferred batch.
+        local media_dir
+        media_dir=$(find "${V3_DIR}/media" -name '*-gpu-preferred.mkv' -newer "${raw_dir}" \
+            -printf '%h\n' 2>/dev/null | sort -u | head -1)
+        if [[ -n "${media_dir}" ]]; then
+            local media_total media_count
+            media_total=$(du -cb "${media_dir}"/*-gpu-preferred.mkv 2>/dev/null | tail -1 | awk '{print $1}')
+            media_count=$(find "${media_dir}" -name '*-gpu-preferred.mkv' | wc -l)
+            local pct=$(( raw_total > 0 ? 100 - (media_total * 100 / raw_total) : 0 ))
+            echo "    media output  ${media_dir}/  ($(numfmt --to=iec "${media_total}") across ${media_count} files, ${pct}% smaller)"
+        fi
+        echo "    transcode     ${transcode_secs}s"
+    fi
 }
 
 # ---- Main ---------------------------------------------------------------
@@ -301,5 +498,40 @@ require_ripper_image
 ensure_iso
 key=$(resolve_makemkv_key)
 stop_live_ripper
+
+rip_start=$(date +%s)
 run_iso_ripper "${key}"
-watch_until_complete
+job_id=$(watch_until_rip_complete)
+rip_end=$(date +%s)
+rip_secs=$(( rip_end - rip_start ))
+
+if (( DO_TRANSCODE == 0 )); then
+    final_summary "${job_id}" "${rip_secs}"
+    echo
+    echo "    apply transcode (skipped — --no-transcode):"
+    echo "      JWT=\$(curl -sk ${API_BASE}/api/auth/login \\"
+    echo "        -H 'Content-Type: application/json' \\"
+    echo "        -d '{\"username\":\"admin\",\"password\":\"<your password>\"}' \\"
+    echo "        | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"access_token\"])')"
+    echo "      curl -sk -X POST ${API_BASE}/api/jobs/${job_id}/transcode \\"
+    echo "        -H \"Authorization: Bearer \$JWT\" -H 'Content-Type: application/json' \\"
+    echo "        -d '{\"session_id\":\"${SESSION_ID}\",\"overwrite\":false}'"
+    echo
+    echo "    cleanup when done:"
+    echo "      docker stop ${RIPPER_CTR}"
+    echo "      cd ${V3_DIR} && docker compose up -d ${RIPPER_SERVICE}"
+    exit 0
+fi
+
+jwt=$(acquire_jwt)
+sap_id=$(apply_transcode "${jwt}" "${job_id}" "${SESSION_ID}")
+transcode_start=$(date +%s)
+watch_transcode "${jwt}" "${sap_id}"
+transcode_end=$(date +%s)
+transcode_secs=$(( transcode_end - transcode_start ))
+
+if (( DO_CLEANUP == 1 )); then
+    cleanup_stack
+fi
+
+final_summary "${job_id}" "${rip_secs}" "${transcode_secs}"
