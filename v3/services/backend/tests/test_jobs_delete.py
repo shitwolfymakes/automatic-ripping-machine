@@ -1,16 +1,19 @@
 """Tests for DELETE /api/jobs/{id} and DELETE /api/jobs.
 
-Covers the four real failure modes:
-  1. Single delete on a terminal job → 204, row gone, no WS emit when delete_raw=False.
-  2. Single delete with delete_raw=True → WS `job.deleted` fired on the drive's topic.
+Covers the real failure modes:
+  1. Single delete on a terminal job → 204, row gone, no filesystem touch when delete_raw=False.
+  2. Single delete with delete_raw=True → raw rmtree + media unlink + empty-dir prune, all in-process.
   3. Single delete on a non-terminal job → 409, row preserved.
   4. Bulk delete partitions terminal vs non-terminal correctly.
+  5. `_delete_job_files` helper: raw rmtree, per-file media unlink (sibling re-rips not clobbered),
+     empty title-dir prune, idempotent over missing files.
 """
 
 from __future__ import annotations
 
 import os
 import secrets
+from pathlib import Path
 from typing import Any
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
@@ -100,7 +103,32 @@ def test_delete_terminal_job_no_raw(signing_key: bytes) -> None:
     assert hub.events == []
 
 
-def test_delete_with_delete_raw_emits_ws(signing_key: bytes) -> None:
+def test_delete_with_delete_raw_runs_filesystem_cleanup(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """delete_raw=true unlinks every recorded transcode output and rmtrees
+    raw/<job_id>/. Runs in-process — no WS, no ripper dependency. (The
+    previous WS-hop made deletes silently no-op when the owning drive's
+    ripper was offline; this is the regression guard.)"""
+    raw_root = tmp_path / "raw"
+    media_root = tmp_path / "media"
+    raw_root.mkdir()
+    media_root.mkdir()
+    (raw_root / "job_a").mkdir()
+    (raw_root / "job_a" / "title00.mkv").write_bytes(b"x")
+    title_dir = media_root / "X (2000)"
+    title_dir.mkdir()
+    output_file = title_dir / "X (2000) - Track 01 - plex-1080p.mkv"
+    output_file.write_bytes(b"y")
+
+    monkeypatch.setattr(jobs_router.settings, "RAW_ROOT", str(raw_root))
+    monkeypatch.setattr(jobs_router.settings, "MEDIA_ROOT", str(media_root))
+
+    async def _fake_resolve(_db: Any, _job_id: str) -> list[Path]:
+        return [output_file]
+
+    monkeypatch.setattr(jobs_router, "_resolve_media_outputs", _fake_resolve)
+
     db = FakeSession()
     _seed_admin(db)
     db.rows["jobs"] = [_make_job("job_a", status=JobStatus.RIPPED, drive_id="drv_42")]
@@ -110,11 +138,12 @@ def test_delete_with_delete_raw_emits_ws(signing_key: bytes) -> None:
         r = client.delete("/api/jobs/job_a?delete_raw=true", headers=_auth(token))
     assert r.status_code == 204
     assert db.rows["jobs"] == []
-    assert len(hub.events) == 1
-    evt = hub.events[0]
-    assert evt["topic"] == "ripper.commands.drv_42"
-    assert evt["event_type"] == "job.deleted"
-    assert evt["payload"] == {"job_id": "job_a", "drive_id": "drv_42", "delete_raw": True}
+    assert not (raw_root / "job_a").exists()
+    assert not output_file.exists()
+    # Title dir is the only output's parent and is now empty — should be pruned.
+    assert not title_dir.exists()
+    # No WS dispatched for this path.
+    assert hub.events == []
 
 
 @pytest.mark.parametrize(
@@ -177,7 +206,27 @@ def test_bulk_delete_partitions_terminal_and_non_terminal(signing_key: bytes) ->
     assert hub.events == []
 
 
-def test_bulk_delete_with_raw_emits_one_ws_per_terminal_job(signing_key: bytes) -> None:
+def test_bulk_delete_with_raw_cleans_each_terminal_job(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bulk delete_raw=true runs the synchronous cleanup once per terminal
+    job. The in-flight job is skipped and its files are untouched."""
+    raw_root = tmp_path / "raw"
+    media_root = tmp_path / "media"
+    raw_root.mkdir()
+    media_root.mkdir()
+    for jid in ("job_a", "job_b", "job_active"):
+        (raw_root / jid).mkdir()
+        (raw_root / jid / "title00.mkv").write_bytes(b"x")
+
+    monkeypatch.setattr(jobs_router.settings, "RAW_ROOT", str(raw_root))
+    monkeypatch.setattr(jobs_router.settings, "MEDIA_ROOT", str(media_root))
+
+    async def _fake_resolve(_db: Any, _job_id: str) -> list[Path]:
+        return []
+
+    monkeypatch.setattr(jobs_router, "_resolve_media_outputs", _fake_resolve)
+
     db = FakeSession()
     _seed_admin(db)
     db.rows["jobs"] = [
@@ -193,13 +242,11 @@ def test_bulk_delete_with_raw_emits_one_ws_per_terminal_job(signing_key: bytes) 
     body = r.json()
     assert sorted(body["deleted_ids"]) == ["job_a", "job_b"]
     assert body["skipped_non_terminal"] == ["job_active"]
-    # One WS event per terminal job, on its own drive's topic; the
-    # in-flight job gets no event.
-    topics = sorted(evt["topic"] for evt in hub.events)
-    assert topics == ["ripper.commands.drv_1", "ripper.commands.drv_2"]
-    for evt in hub.events:
-        assert evt["event_type"] == "job.deleted"
-        assert evt["payload"]["delete_raw"] is True
+    # Terminal jobs' raw dirs are gone; in-flight job's raw dir is untouched.
+    assert not (raw_root / "job_a").exists()
+    assert not (raw_root / "job_b").exists()
+    assert (raw_root / "job_active").exists()
+    assert hub.events == []
 
 
 def test_bulk_delete_empty_db_returns_empty_lists(signing_key: bytes) -> None:
@@ -278,3 +325,107 @@ def test_bulk_delete_removes_per_job_logs(tmp_path: Any, signing_key: bytes, mon
     assert not (jobs_dir / "job_b.log").exists()
     # The non-terminal job's log is preserved (job wasn't deleted).
     assert (jobs_dir / "job_active.log").exists()
+
+
+# ---- _delete_job_files helper ---------------------------------------------
+
+
+def test_delete_job_files_rmtrees_raw_dir(tmp_path: Path) -> None:
+    raw_root = tmp_path / "raw"
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    (raw_root / "job_a").mkdir(parents=True)
+    (raw_root / "job_a" / "title00.mkv").write_bytes(b"x")
+    (raw_root / "job_a" / "manifest.json").write_text("{}")
+
+    counters = jobs_router._delete_job_files("job_a", [], raw_root=raw_root, media_root=media_root)
+    assert counters == {"raw_dir_removed": 1, "media_files_removed": 0, "media_dirs_pruned": 0}
+    assert not (raw_root / "job_a").exists()
+
+
+def test_delete_job_files_unlinks_media_files_individually(tmp_path: Path) -> None:
+    """Per-file unlink because re-rips of the same disc share `media/<Title>/`.
+    Track-A from a deleted job must not take Track-B from a sibling re-rip
+    down with it."""
+    raw_root = tmp_path / "raw"
+    media_root = tmp_path / "media"
+    raw_root.mkdir()
+    title_dir = media_root / "Sintel (2010)"
+    title_dir.mkdir(parents=True)
+    job_a_file = title_dir / "Sintel (2010) - Track 01 - plex-1080p.mkv"
+    sibling_file = title_dir / "Sintel (2010) - Track 01 - plex-1080p-gpu-preferred.mkv"
+    job_a_file.write_bytes(b"a")
+    sibling_file.write_bytes(b"b")
+
+    counters = jobs_router._delete_job_files("job_a", [job_a_file], raw_root=raw_root, media_root=media_root)
+    assert counters["media_files_removed"] == 1
+    assert not job_a_file.exists()
+    # Sibling re-rip's output is preserved; title dir is non-empty so survives prune.
+    assert sibling_file.exists()
+    assert title_dir.exists()
+    assert counters["media_dirs_pruned"] == 0
+
+
+def test_delete_job_files_prunes_empty_title_dir(tmp_path: Path) -> None:
+    """When the unlink leaves the title dir empty, rmdir it. Stops at
+    `media_root` — never removes the root itself."""
+    raw_root = tmp_path / "raw"
+    media_root = tmp_path / "media"
+    raw_root.mkdir()
+    title_dir = media_root / "Sintel (2010)"
+    title_dir.mkdir(parents=True)
+    only_file = title_dir / "Sintel (2010) - Track 01 - plex-1080p.mkv"
+    only_file.write_bytes(b"a")
+
+    counters = jobs_router._delete_job_files("job_a", [only_file], raw_root=raw_root, media_root=media_root)
+    assert counters["media_dirs_pruned"] >= 1
+    assert not title_dir.exists()
+    # The media root itself is intact.
+    assert media_root.exists()
+
+
+def test_delete_job_files_prunes_nested_dirs(tmp_path: Path) -> None:
+    """Shows like `media/<Show>/Season 01/episode.mkv` should prune from
+    the leaf upward until a non-empty stem is reached."""
+    raw_root = tmp_path / "raw"
+    media_root = tmp_path / "media"
+    raw_root.mkdir()
+    season_dir = media_root / "ShowName" / "Season 01"
+    season_dir.mkdir(parents=True)
+    ep = season_dir / "S01E01.mkv"
+    ep.write_bytes(b"a")
+
+    counters = jobs_router._delete_job_files("job_a", [ep], raw_root=raw_root, media_root=media_root)
+    assert counters["media_dirs_pruned"] == 2
+    assert not season_dir.exists()
+    assert not (media_root / "ShowName").exists()
+    assert media_root.exists()
+
+
+def test_delete_job_files_is_idempotent_over_missing_files(tmp_path: Path) -> None:
+    """All-missing inputs are a no-op return — same shape, all zeros."""
+    raw_root = tmp_path / "raw"
+    media_root = tmp_path / "media"
+    raw_root.mkdir()
+    media_root.mkdir()
+
+    counters = jobs_router._delete_job_files(
+        "job_never_was",
+        [media_root / "Ghost (1990)" / "Ghost (1990) - Track 01.mkv"],
+        raw_root=raw_root,
+        media_root=media_root,
+    )
+    assert counters == {"raw_dir_removed": 0, "media_files_removed": 0, "media_dirs_pruned": 0}
+
+
+def test_prune_empty_dirs_refuses_path_outside_root(tmp_path: Path) -> None:
+    """A media output path outside `media_root` must NOT cause a prune walk
+    that could ascend into unrelated parts of the filesystem."""
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    outside = tmp_path / "elsewhere" / "stuff"
+    outside.mkdir(parents=True)
+
+    pruned = jobs_router._prune_empty_dirs(outside, media_root)
+    assert pruned == 0
+    assert outside.exists()

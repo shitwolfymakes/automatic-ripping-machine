@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     # unique index on `transcode_tasks.output_path` is the safety net for races.
     MEDIA_ROOT: str = "/media"
 
+    # Per-job raw-rip tree; one `raw/<job_id>/` directory per job. Bind-mounted
+    # on backend and ripper alike so DELETE /api/jobs can rmtree without an
+    # online ripper (the previous WS-hop made deletes silently fail when the
+    # owning drive's ripper was offline).
+    RAW_ROOT: str = "/raw"
+
     # Optional .env override for the OMDB key. When set, takes precedence over
     # config.omdb_api_key on every identify call — useful in dev where the
     # secret lives in v3/.env and the Config row stays empty.

@@ -61,6 +61,7 @@ services:
     volumes:
       - ./logs:/logs
       - ./media:/media
+      - ./raw:/raw
       - ./certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
       - ./certs/arm-backend.crt:/etc/ssl/arm/tls.crt:ro
       - ./certs/arm-backend.key:/etc/ssl/arm/tls.key:ro
