@@ -144,12 +144,34 @@ resolve_makemkv_key() {
         return
     fi
     log "scraping monthly MakeMKV key from forum" >&2
+    # Run curl on its own so we can report HTTP/network errors with
+    # specifics, rather than reporting a generic "scrape failed" that
+    # could mean a Cloudflare 525, a DNS hiccup, or a forum-page format
+    # change. Each of those calls for a different operator response.
+    local body curl_rc curl_stderr
+    curl_stderr=$(mktemp)
+    body=$(curl -sfL --max-time 15 -w '%{http_code}' "${MAKEMKV_FORUM_URL}" 2>"${curl_stderr}") || curl_rc=$?
+    curl_rc=${curl_rc:-0}
+    if (( curl_rc != 0 )); then
+        err "forum scrape failed: curl exited ${curl_rc} (${MAKEMKV_FORUM_URL})"
+        err "  stderr: $(tr '\n' ' ' <"${curl_stderr}")"
+        rm -f "${curl_stderr}"
+        err "MakeMKV's forum sits behind Cloudflare and rate-limits / 525s under load."
+        err "Workaround: set MAKEMKV_PERMA_KEY=<key> and re-run (one-time per month)."
+        err "Key lives at the bottom of: ${MAKEMKV_FORUM_URL}"
+        exit 1
+    fi
+    rm -f "${curl_stderr}"
+    # `-w '%{http_code}'` appends the status code as the last 3 chars of $body.
+    local http_code="${body: -3}"
+    body="${body:0:${#body}-3}"
     local key
-    key=$(curl -sfL "${MAKEMKV_FORUM_URL}" 2>/dev/null \
-        | grep -oP 'T-[\w\d@]{66}' | head -1 || true)
+    key=$(printf '%s' "${body}" | grep -oP 'T-[\w\d@]{66}' | head -1 || true)
     if [[ -z "${key}" ]]; then
-        err "could not resolve a MakeMKV key (forum scrape failed and MAKEMKV_PERMA_KEY unset)"
-        err "either set MAKEMKV_PERMA_KEY=<key> and re-run, or wait for the forum to be reachable"
+        err "forum scrape returned HTTP ${http_code} but no T-... key matched in the page body"
+        err "The forum may have changed the post format. Inspect:"
+        err "  ${MAKEMKV_FORUM_URL}"
+        err "Workaround: set MAKEMKV_PERMA_KEY=<key> and re-run."
         exit 1
     fi
     ok "scraped key: ${key:0:8}…${key: -8}" >&2
