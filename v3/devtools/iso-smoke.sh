@@ -325,18 +325,33 @@ acquire_jwt() {
     fi
     local payload
     payload=$(printf '{"username":"%s","password":"%s"}' "${user}" "${password}")
-    local resp
-    if ! resp=$(curl -sfk --max-time 10 -X POST "${API_BASE}/api/auth/login" \
+    # `-f` would suppress the JSON error body on 4xx (e.g. 401 "invalid
+    # credentials"); we'd then print "rc=0" because $? after `if !` is the
+    # `!`'s status, not curl's. Parse http_code manually instead, same
+    # shape as apply_transcode.
+    local body http_code
+    body=$(curl -sk --max-time 10 -X POST "${API_BASE}/api/auth/login" \
         -H 'Content-Type: application/json' \
-        -d "${payload}" 2>&1); then
-        err "auth failed (curl rc=$?); ${resp:0:200}"
+        -d "${payload}" \
+        -w '\n%{http_code}' 2>/dev/null) || true
+    http_code="${body##*$'\n'}"
+    body="${body%$'\n'*}"
+    if [[ "${http_code}" != "200" ]]; then
+        err "auth HTTP ${http_code} for user '${user}' against ${API_BASE}/api/auth/login"
+        err "  body: ${body:0:300}"
+        if [[ "${http_code}" == "401" ]]; then
+            err "  hint: fresh-DB seed is admin/admin (forced-rotate on first login);"
+            err "        if you've already rotated, set ARM_ADMIN_PASSWORD to the new value."
+        elif [[ "${http_code}" == "000" ]]; then
+            err "  hint: HTTP 000 = curl never got a response. Is arm-backend/arm-ui up on ${API_BASE}?"
+        fi
         exit 1
     fi
     local jwt
-    jwt=$(printf '%s' "${resp}" | python3 -c \
+    jwt=$(printf '%s' "${body}" | python3 -c \
         'import sys,json; d=json.load(sys.stdin); print(d.get("access_token",""))' 2>/dev/null || true)
     if [[ -z "${jwt}" ]]; then
-        err "auth response had no access_token: ${resp:0:200}"
+        err "auth 200 but no access_token in body: ${body:0:300}"
         exit 1
     fi
     ok "JWT acquired for ${user}" >&2
