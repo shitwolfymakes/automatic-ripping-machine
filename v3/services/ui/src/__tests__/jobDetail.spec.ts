@@ -76,26 +76,24 @@ describe('JobDetail.vue identify-disc button', () => {
     vi.restoreAllMocks()
   })
 
-  it('shows the Identify disc button when job is awaiting_user_id', async () => {
-    const wrapper = await mountWithStatus('awaiting_user_id')
-    expect(wrapper.find('[data-testid="identify-disc"]').exists()).toBe(true)
-  })
-
-  it('shows the Identify disc button when job is ripped_awaiting_identify', async () => {
-    const wrapper = await mountWithStatus('ripped_awaiting_identify')
-    expect(wrapper.find('[data-testid="identify-disc"]').exists()).toBe(true)
-  })
-
-  it.each<JobStatus>([
-    'created',
-    'identified',
-    'ripping',
-    'ripped',
-    'ripped_partial',
-    'abandoned',
-    'failed',
-  ])('hides the Identify disc button when status is %s', async (status) => {
+  it.each<[JobStatus, string]>([
+    ['awaiting_user_id', 'Identify disc'],
+    ['ripped_awaiting_identify', 'Identify disc'],
+    ['identified', 'Edit identity'],
+    ['ripped', 'Edit identity'],
+    ['ripped_partial', 'Edit identity'],
+  ])('shows the identify button labelled "%s" when status is %s', async (status, expectedLabel) => {
     const wrapper = await mountWithStatus(status)
-    expect(wrapper.find('[data-testid="identify-disc"]').exists()).toBe(false)
+    const btn = wrapper.find('[data-testid="identify-disc"]')
+    expect(btn.exists()).toBe(true)
+    expect(btn.text()).toBe(expectedLabel)
   })
+
+  it.each<JobStatus>(['created', 'ripping', 'abandoned', 'failed'])(
+    'hides the identify button when status is %s',
+    async (status) => {
+      const wrapper = await mountWithStatus(status)
+      expect(wrapper.find('[data-testid="identify-disc"]').exists()).toBe(false)
+    },
+  )
 })

@@ -443,7 +443,20 @@ async def update_job(
     return job
 
 
-_RESOLVABLE_STATUSES: frozenset[JobStatus] = frozenset({JobStatus.AWAITING_USER_ID, JobStatus.RIPPED_AWAITING_IDENTIFY})
+# Two reasons a user may resolve identity:
+#   1. Auto-identify failed and the job parked at AWAITING_USER_ID / RIPPED_AWAITING_IDENTIFY.
+#      Resolving promotes it to IDENTIFIED and fan-out kicks any WAITING_IDENTIFY apps.
+#   2. Auto-identify "succeeded" but landed wrong metadata (MakeMKV volume-label fallback,
+#      stale TMDB entry, etc.) and the user wants to correct title/year/metadata after the
+#      fact — possibly post-rip. The status MUST NOT change in this case; fan-out is a no-op
+#      because there are no WAITING_IDENTIFY apps on an already-identified job.
+_RESOLVABLE_STATUSES_PROMOTE: frozenset[JobStatus] = frozenset(
+    {JobStatus.AWAITING_USER_ID, JobStatus.RIPPED_AWAITING_IDENTIFY}
+)
+_RESOLVABLE_STATUSES_PRESERVE: frozenset[JobStatus] = frozenset(
+    {JobStatus.IDENTIFIED, JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL}
+)
+_RESOLVABLE_STATUSES: frozenset[JobStatus] = _RESOLVABLE_STATUSES_PROMOTE | _RESOLVABLE_STATUSES_PRESERVE
 
 
 @router.post("/{job_id}/resolve", response_model=ResolveResponse)
@@ -463,16 +476,18 @@ async def resolve(
             detail=f"job {job_id} is in status {job.status.value}, not in an identify-resolvable status",
         )
 
-    # Preserve the persisted scan_result so rip-start can still find it after resolve overwrites metadata.
-    preserved_scan = (job.metadata_json or {}).get("scan_result")
-    new_metadata = dict(req.metadata)
-    if preserved_scan is not None and "scan_result" not in new_metadata:
-        new_metadata["scan_result"] = preserved_scan
+    # Merge semantics: req.metadata is overlaid on existing metadata_json, not a replacement.
+    # The partial-edit case ("just fix the title") sends `metadata: {}` and must NOT wipe
+    # auto-identified artist/album/scan_result keys. Callers that DO want to replace a field
+    # send it explicitly (None clears, missing leaves alone).
+    new_metadata = dict(job.metadata_json or {})
+    new_metadata.update(req.metadata)
 
     job.title = req.title
     job.year = req.year
     job.metadata_json = new_metadata
-    job.status = JobStatus.IDENTIFIED
+    if job.status in _RESOLVABLE_STATUSES_PROMOTE:
+        job.status = JobStatus.IDENTIFIED
     session.add(job)
 
     fan_out_outcomes = await fan_out_waiting_identify_applications(session, job=job, hub=hub)

@@ -89,13 +89,20 @@ def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _job(job_id: str = "job_x", *, status: JobStatus = JobStatus.RIPPED, meta: dict | None = None) -> Job:
+def _job(
+    job_id: str = "job_x",
+    *,
+    status: JobStatus = JobStatus.RIPPED,
+    title: str | None = "X",
+    year: int | None = 2000,
+    meta: dict | None = None,
+) -> Job:
     return Job(
         id=job_id,
         drive_id="drv_x",
         disc_type=DiscType.DVD,
-        title="X",
-        year=2000,
+        title=title,
+        year=year,
         status=status,
         metadata_json=meta if meta is not None else {},
         resumed_from_crash=False,
@@ -353,15 +360,17 @@ def test_resolve_404(signing_key: bytes) -> None:
     "bad_status",
     [
         JobStatus.CREATED,
-        JobStatus.IDENTIFIED,
         JobStatus.RIPPING,
-        JobStatus.RIPPED,
-        JobStatus.RIPPED_PARTIAL,
         JobStatus.ABANDONED,
         JobStatus.FAILED,
     ],
 )
 def test_resolve_not_in_resolvable_status_409(signing_key: bytes, bad_status: JobStatus) -> None:
+    """Statuses where a metadata correction would either be incoherent (CREATED — no scan
+    yet) or risk clobbering live state (RIPPING — makemkvcon already in flight) are still
+    refused. ABANDONED/FAILED are terminal-with-no-path-forward so a correction there is
+    pointless. The IDENTIFIED/RIPPED/RIPPED_PARTIAL post-rip-correction case has its own
+    happy-path test below."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [_job(status=bad_status)]
@@ -454,8 +463,7 @@ def test_resolve_accepts_ripped_awaiting_identify(signing_key: bytes) -> None:
 
 
 def test_resolve_success_without_preserved_scan(signing_key: bytes) -> None:
-    """job.metadata_json has no scan_result — the preserve branch is
-    skipped (covers the `preserved_scan is None` path)."""
+    """job.metadata_json starts empty — merge yields exactly what the caller sent."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID, meta={})]
@@ -469,6 +477,68 @@ def test_resolve_success_without_preserved_scan(signing_key: bytes) -> None:
     body = r.json()
     assert "scan_result" not in body["job"]["metadata_json"]
     assert body["job"]["metadata_json"]["k"] == "v"
+
+
+@pytest.mark.parametrize("status_in", [JobStatus.IDENTIFIED, JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL])
+def test_resolve_post_rip_correction_preserves_status(signing_key: bytes, status_in: JobStatus) -> None:
+    """The cutover-blocker case: a MakeMKV volume-label fallback (or stale TMDB hit) lands
+    a wrong title on a job that auto-identify considers successful. The user fixes title +
+    year via the same /resolve endpoint. Status must NOT flip back to IDENTIFIED — a RIPPED
+    job stays RIPPED. Fan-out is a no-op because there are no WAITING_IDENTIFY apps."""
+    db = FakeSession()
+    hub = _Hub()
+    app, token = _make_app(signing_key, db, hub)
+    db.rows["jobs"] = [
+        _job(
+            status=status_in,
+            title="Sintel_NTSC",
+            year=None,
+            meta={"tmdb_id": 99, "scan_result": {"disc_type": "dvd"}},
+        )
+    ]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_x/resolve",
+            json={"title": "Sintel", "year": 2010},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["job"]["status"] == status_in.value
+    assert body["job"]["title"] == "Sintel"
+    assert body["job"]["year"] == 2010
+    # Merge semantics: partial metadata (sent {}) did NOT wipe existing keys.
+    md = body["job"]["metadata_json"]
+    assert md["tmdb_id"] == 99
+    assert md["scan_result"]["disc_type"] == "dvd"
+    assert body["fan_out"] == []
+    # identify.resolved still fires so any WS subscriber learns about the correction.
+    types = {e["event_type"] for e in hub.events}
+    assert {"identify.resolved", "rip.identify_resolved"} <= types
+
+
+def test_resolve_metadata_merge_overlays_specific_keys(signing_key: bytes) -> None:
+    """req.metadata keys overlay existing metadata_json keys; non-overlapping keys are
+    preserved. Verifies the explicit-replace path (caller wants to overwrite tmdb_id)."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [
+        _job(
+            status=JobStatus.IDENTIFIED,
+            meta={"tmdb_id": 99, "scan_result": {"x": 1}, "extra": "keep-me"},
+        )
+    ]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_x/resolve",
+            json={"title": "T", "metadata": {"tmdb_id": 42}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    md = r.json()["job"]["metadata_json"]
+    assert md["tmdb_id"] == 42  # overwritten
+    assert md["extra"] == "keep-me"  # preserved
+    assert md["scan_result"] == {"x": 1}  # preserved
 
 
 # --- apply_session exception mapping (happy/collision in test_apply_session) --

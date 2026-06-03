@@ -214,4 +214,32 @@ describe('IdentifyDiscDialog.vue', () => {
       expect(wrapper.text()).toContain("couldn't be determined")
     })
   })
+
+  describe('edit mode (post-rip identity correction)', () => {
+    it.each(['identified', 'ripped', 'ripped_partial'] as const)(
+      'shows "Edit identity" heading + "Save" button + correction-flavoured body for status %s',
+      (status) => {
+        vi.stubGlobal('fetch', vi.fn())
+        const wrapper = mount(IdentifyDiscDialog, {
+          props: { job: makeJob({ status, title: 'Sintel_NTSC' }) },
+        })
+        expect(wrapper.find('h3').text()).toBe('Edit identity')
+        expect(wrapper.find('[data-testid="identify-submit"]').text()).toBe('Save')
+        expect(wrapper.text()).toContain('Update the title, year, and metadata')
+        // Fields prefill from the existing (wrong) values so the user only edits what's off.
+        const titleInput = wrapper.find<HTMLInputElement>('[data-testid="identify-title"]')
+        expect(titleInput.element.value).toBe('Sintel_NTSC')
+      },
+    )
+
+    it.each(['awaiting_user_id', 'ripped_awaiting_identify'] as const)(
+      'keeps the original "Identify" copy for status %s',
+      (status) => {
+        vi.stubGlobal('fetch', vi.fn())
+        const wrapper = mount(IdentifyDiscDialog, { props: { job: makeJob({ status }) } })
+        expect(wrapper.find('h3').text()).toBe('Identify this disc')
+        expect(wrapper.find('[data-testid="identify-submit"]').text()).toBe('Identify')
+      },
+    )
+  })
 })
