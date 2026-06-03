@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Refresh the MakeMKV app_Key in ~/.MakeMKV/settings.conf.
 #
-# - If MAKEMKV_PERMA_KEY is set in the environment (or passed as $1), use it.
+# - If MAKEMKV_KEY is set in the environment (or passed as $1), use it.
+#   Any value MakeMKV accepts — a purchased perma-key, a monthly beta
+#   pasted in by the operator, or a beta key already scraped externally.
 # - Otherwise scrape the current month's free beta key from the public
 #   MakeMKV forum thread, mirroring v2's behaviour
 #   (see scripts/update_key.sh in the v2 tree).
@@ -12,11 +14,11 @@
 set -euo pipefail
 
 makemkv_serial_url="https://forum.makemkv.com/forum/viewtopic.php?f=5&t=1053"
-PERMA_KEY="${MAKEMKV_PERMA_KEY:-${1:-}}"
+SUPPLIED_KEY="${MAKEMKV_KEY:-${1:-}}"
 
-if [[ -n "$PERMA_KEY" ]]; then
-    echo "update_key: using MAKEMKV_PERMA_KEY"
-    KEY="$PERMA_KEY"
+if [[ -n "$SUPPLIED_KEY" ]]; then
+    echo "update_key: using MAKEMKV_KEY from env"
+    KEY="$SUPPLIED_KEY"
 else
     echo "update_key: scraping monthly beta key from forum"
     KEY="$(curl -fsSL "$makemkv_serial_url" | grep -oP 'T-[\w\d@]{66}' | head -n1 || true)"
