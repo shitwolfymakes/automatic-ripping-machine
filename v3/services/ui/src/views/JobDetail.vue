@@ -45,10 +45,28 @@ let pollTimer: number | null = null
 
 const APPLY_OK: JobStatus[] = ['identified', 'ripped', 'ripped_partial', 'awaiting_user_id']
 const canApply = computed(() => detail.value !== null && APPLY_OK.includes(detail.value.job.status))
-const IDENTIFY_OK: JobStatus[] = ['awaiting_user_id', 'ripped_awaiting_identify']
+// The first two statuses are the "auto-identify failed, please fill in" case — a job
+// blocked on identity. The last three are the "auto-identify landed wrong metadata,
+// correct it" case (MakeMKV volume-label fallback, stale TMDB entry, etc.) — same
+// dialog, same endpoint, status stays as-is. Button label flips between the two
+// scenarios so the user understands which case they're in.
+const IDENTIFY_OK: JobStatus[] = [
+  'awaiting_user_id',
+  'ripped_awaiting_identify',
+  'identified',
+  'ripped',
+  'ripped_partial',
+]
 const canIdentify = computed(
   () => detail.value !== null && IDENTIFY_OK.includes(detail.value.job.status),
 )
+const identifyButtonLabel = computed(() => {
+  if (detail.value === null) return 'Identify disc'
+  const s = detail.value.job.status
+  return s === 'awaiting_user_id' || s === 'ripped_awaiting_identify'
+    ? 'Identify disc'
+    : 'Edit identity'
+})
 const canAbandon = computed(
   () => detail.value !== null && !isTerminalJobStatus(detail.value.job.status),
 )
@@ -239,7 +257,7 @@ async function savePoster(): Promise<void> {
         data-testid="identify-disc"
         @click="showIdentify = true"
       >
-        Identify disc
+        {{ identifyButtonLabel }}
       </button>
       <button v-if="canApply && !showApply" @click="showApply = true">Apply session</button>
       <button

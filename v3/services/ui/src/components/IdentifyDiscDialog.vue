@@ -18,6 +18,15 @@ const jobs = useJobsStore()
 // of which a title-only resolve can populate.
 const isCd = computed(() => props.job.disc_type === 'cd')
 
+// `isEditMode` distinguishes the "auto-identify failed, please fill in"
+// case (status awaiting_user_id / ripped_awaiting_identify) from the
+// "auto-identify landed wrong metadata, correct it" case (post-rip
+// status). The submit endpoint is the same; only the copy differs so
+// the user understands which scenario they're in.
+const isEditMode = computed(
+  () => props.job.status !== 'awaiting_user_id' && props.job.status !== 'ripped_awaiting_identify',
+)
+
 // CD-only: per-track count comes from the preserved scan_result on the
 // job's metadata_json (the identify endpoint preserves scan_result
 // across the resolve flow). If the scan_result is somehow absent (e.g.
@@ -81,9 +90,14 @@ async function submit(): Promise<void> {
 
 <template>
   <div class="card" style="max-width: 560px; margin-top: 16px">
-    <h3 style="margin-top: 0">Identify this disc</h3>
+    <h3 style="margin-top: 0">{{ isEditMode ? 'Edit identity' : 'Identify this disc' }}</h3>
     <p v-if="error" class="error">{{ error }}</p>
-    <p>
+    <p v-if="isEditMode">
+      Update the title, year, and metadata for this job. Status stays as-is. Existing transcoded
+      files keep their original filenames — re-apply a session if you want new outputs under the
+      corrected name.
+    </p>
+    <p v-else>
       The disc on drive <code>{{ job.drive_id }}</code> couldn't be identified automatically. Fill
       in the details so ARM can proceed. Any session you've already applied will pick up the
       resolved metadata and queue its transcode tasks.
@@ -182,7 +196,7 @@ async function submit(): Promise<void> {
       </template>
       <div class="row" style="gap: 8px">
         <button type="submit" :disabled="!canSubmit" data-testid="identify-submit">
-          {{ submitting ? 'Saving…' : 'Identify' }}
+          {{ submitting ? 'Saving…' : isEditMode ? 'Save' : 'Identify' }}
         </button>
         <button type="button" class="secondary" :disabled="submitting" @click="emit('close')">
           Cancel
