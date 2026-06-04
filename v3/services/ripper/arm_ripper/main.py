@@ -8,7 +8,7 @@ import httpx
 from arm_common import DriveMediaStatus, configure_service_logging
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.config import settings
-from arm_ripper.drive_poll import DriveState, read_drive_status
+from arm_ripper.drive_poll import DriveState, InsertDetector, read_drive_status
 from arm_ripper.drive_status import probe_drive_media
 from arm_ripper.job_controller import JobController
 from arm_ripper.recovery import boot_probe
@@ -74,6 +74,7 @@ async def heartbeat_loop(client: BackendClient, drive_id: str, device_path: str)
 
 
 async def poll_loop(controller: JobController) -> None:
+    detector = InsertDetector()
     last_state: DriveState | None = None
     active_task: asyncio.Task[None] | None = None
     while True:
@@ -85,18 +86,16 @@ async def poll_loop(controller: JobController) -> None:
 
         if state != last_state:
             logger.info("drive state %s -> %s", last_state, state)
+            last_state = state
 
         if active_task is not None and active_task.done():
             active_task = None
 
-        if (
-            state == DriveState.DISC_OK
-            and last_state not in (DriveState.DISC_OK, DriveState.NOT_READY)
-            and active_task is None
-        ):
+        # detector.update() must run every poll to track the NOT_READY
+        # streak; only act on the True edge when no rip is already running.
+        if detector.update(state) and active_task is None:
             active_task = asyncio.create_task(controller.handle_disc_inserted(settings.ARM_DRIVE_DEV))
 
-        last_state = state
         await asyncio.sleep(settings.POLL_INTERVAL_SECONDS)
 
 
