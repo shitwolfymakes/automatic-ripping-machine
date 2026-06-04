@@ -112,6 +112,19 @@ smoke.
   dev box; the archive.org fallback exists for hosts with the same
   constraint. The fallback is byte-equivalent (corpus.lock pins the same
   archive.org URL the image was built from).
+- **BBB BD ISO is blocked between MakeMKV beta releases.** `iso-smoke.sh
+  --iso=bbb` is wired up and the ISO extraction path works, but BD scans
+  require a non-expired MakeMKV binary — and beta binaries carry a hard
+  60-day kill-switch from release date. When upstream is between betas
+  (v1.18.3 released 2026-01-25 expired ~2026-03-26 with no v1.18.4 yet
+  as of 2026-06-04), every BD scan fails with `MSG:5021 "application
+  version is too old"` regardless of `MAKEMKV_KEY`. See
+  [../ops/makemkv.md § Failure modes](../ops/makemkv.md#failure-modes)
+  for the full diagnosis. DVD reads (Sintel) are unaffected because
+  CSS doesn't go through the binary's registration gate. The cutover
+  criterion at [08-v2-isolation-and-cutover.md § Readiness](../arch/08-v2-isolation-and-cutover.md#readiness-criteria-for-cutover)
+  line 200 is satisfied by the Sintel DVD-ISO row; BBB BD-ISO becomes a
+  v3.1 follow-up once a fresh beta binary ships.
 
 ## What to verify
 
