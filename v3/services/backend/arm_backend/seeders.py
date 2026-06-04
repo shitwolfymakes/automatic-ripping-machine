@@ -90,7 +90,7 @@ async def _seed_config_singleton(session: AsyncSession) -> None:
                 auto_transcode_on_idle=False,
                 auto_rip_on_insert=True,
                 block_on_miss=True,
-                default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
+                default_retention_policy=RetentionPolicy.KEEP_FOREVER,
                 notification_apprise_urls=[],
                 session_signing_key=secrets.token_bytes(32),
             )
