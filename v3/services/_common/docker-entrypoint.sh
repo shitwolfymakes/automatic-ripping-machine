@@ -56,13 +56,15 @@ for d in /logs /raw /media; do
     chown arm:arm "$d" 2>/dev/null || true
 done
 
-# Ripper-only: refresh the MakeMKV app_Key on every boot. The hook is
-# gated on update_key.sh + makemkvcon existing, so backend / transcode
-# containers no-op past it. Failures must not block boot.
+# Ripper-only: ensure the arm user owns its home + MakeMKV config dir so the
+# per-rip key refresh (arm_ripper/makemkv_key.py) can write settings.conf —
+# the Dockerfile chowns /home/arm to UID 1000 at build, so a PUID/PGID remap
+# would otherwise leave it unwritable. The key itself is no longer scraped at
+# boot; the JobController runs update_key.sh before every rip. Gated on the
+# ripper image's update_key.sh + makemkvcon so backend / transcode no-op past it.
 if [[ -x /usr/local/bin/update_key.sh ]] && command -v makemkvcon >/dev/null 2>&1; then
     [[ -d /home/arm/.MakeMKV ]] || install -d -o arm -g arm /home/arm/.MakeMKV
     chown arm:arm /home/arm /home/arm/.MakeMKV 2>/dev/null || true
-    gosu arm /usr/local/bin/update_key.sh || true
 fi
 
 umask 002

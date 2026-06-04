@@ -239,6 +239,25 @@ async def test_manual_trigger_runs_even_when_auto_rip_disabled(stub_scan, stub_e
     assert client.rip_complete_calls == ["job_test"]
 
 
+async def test_pipeline_refreshes_makemkv_key_before_scan(monkeypatch, stub_scan, stub_eject):
+    """The key is refreshed once, before the scan probe."""
+    calls: list[int] = []
+
+    async def _record() -> None:
+        calls.append(1)
+
+    monkeypatch.setattr(jc_module, "refresh_makemkv_key", _record)
+
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.IDENTIFIED, title="Test Movie"))
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert calls == [1]
+    assert client.rip_start_calls == ["job_test"]
+
+
 async def test_eject_runs_umount_then_eject_until_success(monkeypatch):
     monkeypatch.setattr(jc_module, "EJECT_RETRY_DELAYS", (0.0, 0.0, 0.0))
 

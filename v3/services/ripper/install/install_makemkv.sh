@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Build MakeMKV from upstream signed tarballs and install into /usr/local.
 #
-# Port of v2's temp_install_makemkv.sh, which itself is derived from
+# Derived from
 # https://github.com/tianon/dockerfiles/blob/master/makemkv/Dockerfile
 # (Expat/MIT). Same recipe: scrape the current version, fetch oss + bin
 # tarballs and the signed sha256 file, verify both, build oss, accept the
 # bin EULA, install bin. No license is bundled — the runtime container
-# acquires a working app_Key via update_key.sh on each boot.
+# acquires a working app_Key via update_key.sh, which the ripper runs
+# before every rip (arm_ripper/makemkv_key.py).
 set -euxo pipefail
 
 MAKEMKV_VERSION="$(curl -fsSL https://www.makemkv.com/download/ | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)"

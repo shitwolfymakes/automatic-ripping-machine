@@ -4,10 +4,10 @@ The ripper container builds MakeMKV from the upstream signed source tarballs in 
 
 ## Setting the key
 
-There are two paths, picked at container start:
+`update_key.sh` runs once before every rip (see [When the beta key rotates](#when-the-beta-key-rotates) below) and picks one of two paths each time:
 
-1. **Operator-supplied key** — set `MAKEMKV_KEY=T-…` in the ripper service environment (typically `v3/.env`). Any value MakeMKV accepts: a purchased perma-key, a monthly beta you grabbed yourself, whatever — the entrypoint just writes it into `~/.MakeMKV/settings.conf` on every boot, idempotently.
-2. **Scraped monthly beta key** — leave `MAKEMKV_KEY` unset. The entrypoint scrapes the current month's beta from the public MakeMKV forum thread (`https://forum.makemkv.com/forum/viewtopic.php?f=5&t=1053`) and writes that. This is the same approach v2 has shipped for years; no MakeMKV terms are violated as long as the beta key is openly published there. The scrape is brittle (the forum sits behind Cloudflare and rate-limits / 525s under load); operators hitting that should switch to path 1.
+1. **Operator-supplied key** — set `MAKEMKV_KEY=T-…` in the ripper service environment (typically `v3/.env`). Any value MakeMKV accepts: a purchased perma-key, a monthly beta you grabbed yourself, whatever — the script writes it into `~/.MakeMKV/settings.conf`, idempotently.
+2. **Scraped monthly beta key** — leave `MAKEMKV_KEY` unset. The script scrapes the current month's beta from the public MakeMKV forum thread (`https://forum.makemkv.com/forum/viewtopic.php?f=5&t=1053`) and writes that. This is the same approach v2 has shipped for years; no MakeMKV terms are violated as long as the beta key is openly published there. The scrape is brittle (the forum sits behind Cloudflare and rate-limits / 525s under load); operators hitting that should switch to path 1.
 
 The key path is `/home/arm/.MakeMKV/settings.conf` inside the container. The Dockerfile pre-creates the directory and chowns it to UID 1000; the shared entrypoint chowns again on `PUID` changes.
 
@@ -21,7 +21,9 @@ If the file is missing or has no `app_Key` line, check the ripper logs for `upda
 
 ## When the beta key rotates
 
-The free beta key rotates roughly monthly. The entrypoint runs `update_key.sh` on every container start, so a `docker compose restart ripper` (or any image rebuild) refreshes the key automatically. If you go a few months without restarting, MakeMKV will start refusing to scan protected discs until the next restart.
+The free beta key rotates roughly monthly. The ripper's `JobController` runs `update_key.sh` at the top of each disc's pipeline — before the makemkvcon scan probe, and again before a crash-resumed rip (which skips the scan). This is the v3 port of v2's `prep_mkv`; see [`makemkv_key.py`](../../services/ripper/arm_ripper/makemkv_key.py). A container left up across a key rotation therefore self-heals on the next disc — no restart needed. (Earlier v3 builds scraped only at container boot; that boot-time hook was dropped once the per-rip refresh covered every run.)
+
+The per-rip refresh is non-fatal: a transient forum-scrape failure leaves the existing key in place and lets makemkvcon proceed (it surfaces a genuinely dead key downstream as `App key incorrect` or, for binary expiry, `MSG:5021`). When `MAKEMKV_KEY` is set, the script writes that operator key instead of scraping, so there is no forum traffic per rip.
 
 ## Failure modes
 
@@ -46,4 +48,4 @@ If a fresh-host BD/UHD smoke fails with `MSG:5021` but DVD smokes pass on the sa
 ## What the install scripts do
 
 - [services/ripper/install/install_makemkv.sh](../../services/ripper/install/install_makemkv.sh) — port of v2's `temp_install_makemkv.sh` (itself derived from tianon/dockerfiles). Scrapes the current MakeMKV version, fetches the GPG-signed `sha256sums.txt`, downloads `makemkv-oss` and `makemkv-bin` tarballs, verifies both, builds OSS, accepts the bin EULA, installs to `/usr/local`. Runs only in the build stage of the Dockerfile; the runtime image just copies the resulting binary and shared libraries.
-- [services/ripper/install/update_key.sh](../../services/ripper/install/update_key.sh) — port of v2's `scripts/update_key.sh`. Idempotent. Called by the shared docker entrypoint when both `update_key.sh` and `makemkvcon` are present, so backend / transcode containers no-op past it.
+- [services/ripper/install/update_key.sh](../../services/ripper/install/update_key.sh) — port of v2's `scripts/update_key.sh`. Idempotent. Run once per disc by the ripper's `JobController` via [`makemkv_key.py`](../../services/ripper/arm_ripper/makemkv_key.py) — the v3 port of v2's `prep_mkv`. (The shared entrypoint no longer invokes it; it only normalizes `/home/arm/.MakeMKV` ownership so the per-rip refresh can write there.)
