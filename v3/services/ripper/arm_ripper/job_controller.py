@@ -8,6 +8,7 @@ import httpx
 from arm_common import DiscType, Job, JobStatus, TrackStatus, with_log_context
 from arm_common.schemas import JobView, RipStartResponse, ScanResult, TrackView, WSEnvelope
 from arm_ripper.backend_client import BackendClient
+from arm_ripper.makemkv_key import refresh_makemkv_key
 from arm_ripper.rip import RipResult, rip_all
 from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS
 from arm_ripper.scan import ScanError, scan as scan_disc
@@ -175,6 +176,11 @@ class JobController:
         async with self._active_lock:
             self._active_task = asyncio.current_task()
             try:
+                # Refresh the MakeMKV key before makemkvcon first touches
+                # the disc (the scan probe runs it for every disc), so a
+                # container up across a beta-key rotation doesn't scan/rip
+                # protected discs with a stale key.
+                await refresh_makemkv_key()
                 try:
                     scan_result = await scan_disc(device_path)
                 except ScanError as e:
@@ -352,6 +358,9 @@ class JobController:
         as a fresh disc would.
         """
         with with_log_context(job_id=job.id):
+            # Crash-resume skips the scan path, so refresh the key here too —
+            # a rip resumed days after a crash must not run on a stale key.
+            await refresh_makemkv_key()
             rip_start = await self._client.resume(job.id)
             logger.info("rip-resume job_id=%s tracks=%d", job.id, len(rip_start.tracks))
             await self._execute_rip(
@@ -451,9 +460,9 @@ class JobController:
           inside the container, so the retries will all fail. Document
           host-side disable in [06-deployment.md].
 
-        Best-effort `umount` first matches v2's eject() pattern — covers
-        the case where a sibling container or the ripper's own
-        scan-poster path mounted the device internally.
+        Best-effort `umount` first covers the case where a sibling
+        container or the ripper's own scan-poster path mounted the
+        device internally.
         """
         # ISO sources have no tray to eject. The kernel auto-releases the
         # loopback once probe_disc / makemkvcon close the file; the umount
