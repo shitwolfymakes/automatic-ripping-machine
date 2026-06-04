@@ -26,8 +26,6 @@ RUN apt-get update \
         wget \
         zlib1g-dev \
         openjdk-17-jre-headless \
-        cargo \
-        libclang-dev \
         libtesseract-dev \
         libleptonica-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -37,8 +35,10 @@ RUN chmod +x /install_makemkv.sh && /install_makemkv.sh
 
 # ccextractor is built in the same stage so MakeMKV can call it as
 # /usr/local/bin/mmccextr at runtime for closed-caption SRT extraction.
-# Skipped by Debian since buster — built from upstream v0.94 with the
-# OCR/hardsubx/rust/sharing features stripped (only CC extraction is used).
+# Skipped by Debian since buster — built from upstream v0.94 with -without-rust
+# to avoid the cargo toolchain + crates.io fetch (the slowest part of this
+# stage). OCR is compiled in unconditionally by upstream, hence the tesseract/
+# leptonica -dev deps above; see install_ccextractor.sh for the details.
 COPY services/ripper/install/install_ccextractor.sh /install_ccextractor.sh
 RUN chmod +x /install_ccextractor.sh && /install_ccextractor.sh
 
