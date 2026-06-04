@@ -175,7 +175,7 @@ v2 bundled rip strategy + transcode settings + output convention into a single "
 
 Rippers write to `/raw/{job_id}/`, one directory per disc insertion. Filenames inside follow MakeMKV's native output convention (`title_tNN.mkv`) plus any sidecars MakeMKV emits. This directory is internal to the pipeline and is never exposed to media scanners; users don't browse `/raw`.
 
-Cleanup: when every transcode task derived from a job reaches a terminal state and retention policy allows, the whole `/raw/{job_id}/` directory is removed. Retention is user-configurable; the default is "keep raw until all queued sessions complete, then remove."
+Cleanup: when every transcode task derived from a job reaches a terminal state and retention policy allows, the whole `/raw/{job_id}/` directory is removed. Retention is user-configurable; the default is `keep_forever` — the data-hoarder profile from [00-vision.md](00-vision.md) is the dominant user, so the safe default is to keep raw bits until the operator explicitly opts out (set `default_retention_policy=prune_after_session` in the Config singleton, or per-job).
 
 ### `/media` — user-facing library
 

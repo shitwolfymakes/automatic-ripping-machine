@@ -71,7 +71,7 @@ async function save() {
       <input v-model="form.musicbrainz_user_agent" placeholder="my-arm/1.0 (you@example.com)" />
     </div>
     <div class="field">
-      <label>Default retention policy</label>
+      <label>Default raw rip retention policy</label>
       <select v-model="form.default_retention_policy">
         <option value="keep_forever">keep_forever</option>
         <option value="prune_after_session">prune_after_session</option>
