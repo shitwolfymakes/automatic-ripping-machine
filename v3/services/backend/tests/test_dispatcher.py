@@ -40,6 +40,40 @@ def test_normalize_strips_ntsc_token():
     assert _normalize_volume_label("MR_NTSCH") == ("MR NTSCH", None)
 
 
+def test_normalize_strips_bluray_branding():
+    # Underscore-, hyphen-, and space-delimited forms, with/without the
+    # trademark glyph, case-insensitively — all should drop out.
+    assert _normalize_volume_label("THE_MATRIX_BLU_RAY") == ("THE MATRIX", None)
+    assert _normalize_volume_label("THE_MATRIX_BLU_RAY_1999") == ("THE MATRIX", 1999)
+    assert _normalize_volume_label("Movie - Blu-rayTM") == ("Movie", None)
+    assert _normalize_volume_label("Movie - BLU-RAY") == ("Movie", None)
+    assert _normalize_volume_label("Movie Blu-ray™") == ("Movie", None)
+    assert _normalize_volume_label("MOVIE_BLURAY") == ("MOVIE", None)
+    # But a title that merely starts with "Blu" is left intact.
+    assert _normalize_volume_label("BLUE_VELVET") == ("BLUE VELVET", None)
+
+
+def test_normalize_strips_bd_token():
+    # `_BD` at end and before a year drops out; substrings don't.
+    assert _normalize_volume_label("THE_MATRIX_BD") == ("THE MATRIX", None)
+    assert _normalize_volume_label("THE_MATRIX_BD_1999") == ("THE MATRIX", 1999)
+    assert _normalize_volume_label("the_matrix_bd") == ("the matrix", None)
+    # Not when it's a substring of a larger token (e.g. a BDRIP marker).
+    assert _normalize_volume_label("MOVIE_BDRIP") == ("MOVIE BDRIP", None)
+
+
+def test_normalize_preserves_unicode_titles():
+    # NFKC keeps accents and non-Latin scripts intact so worldwide titles
+    # still reach the providers (year still extracted where present).
+    assert _normalize_volume_label("Amélie_2001") == ("Amélie", 2001)
+    assert _normalize_volume_label("Café") == ("Café", None)
+    assert _normalize_volume_label("Война_и_мир") == ("Война и мир", None)
+    assert _normalize_volume_label("君の名は_2016") == ("君の名は", 2016)
+    # But compatibility glyphs still fold: ™ → "TM", full-width → half-width.
+    assert _normalize_volume_label("Movie Blu-ray™") == ("Movie", None)
+    assert _normalize_volume_label("ＴＨＥ_ＭＡＴＲＩＸ_1999") == ("THE MATRIX", 1999)
+
+
 @respx.mock
 async def test_dispatcher_dvd_tmdb_movie_hit():
     respx.get("https://api.themoviedb.org/3/search/movie").mock(
