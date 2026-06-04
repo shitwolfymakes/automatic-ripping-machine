@@ -922,7 +922,7 @@
           "jobs"
         ],
         "summary": "Delete All Jobs",
-        "description": "Hard-delete every job in a terminal status. Non-terminal jobs are\nskipped and reported in `skipped_non_terminal` so the caller can\nabandon-then-retry them.\n\n`delete_raw=true` emits one `job.deleted` WS command per job to its\ndrive's ripper before the row is removed. Each rmtree is independent;\na failure on one ripper doesn't block deletes for the others.",
+        "description": "Hard-delete every job in a terminal status. Non-terminal jobs are\nskipped and reported in `skipped_non_terminal` so the caller can\nabandon-then-retry them.\n\n`delete_raw=true` runs the filesystem cleanup (raw rmtree + media file\nunlink + empty-parent prune) for each deleted job. Cleanups are\nindependent \u2014 a failure on one job is logged and the next continues.",
         "operationId": "delete_all_jobs_api_jobs_delete",
         "parameters": [
           {
@@ -1038,7 +1038,7 @@
           "jobs"
         ],
         "summary": "Delete Job",
-        "description": "Hard-delete a Job. Tracks, fingerprints, session_applications,\ntranscode_tasks, and events cascade via Postgres FK ondelete=CASCADE.\n\nRefuses non-terminal jobs (CREATED / AWAITING_USER_ID / IDENTIFIED /\nRIPPING) \u2014 caller must `POST /abandon` first if they want a job in\nflight gone. This keeps the active-rip cancel logic in one place.\n\n`delete_raw=true` also wipes `/raw/{job_id}/` on the ripper that\nowns the drive (sent over WS \u2014 only the ripper has `/raw` mounted).\nThe DB delete proceeds regardless of whether the rmtree succeeds.",
+        "description": "Hard-delete a Job. Tracks, fingerprints, session_applications,\ntranscode_tasks, and events cascade via Postgres FK ondelete=CASCADE.\n\nRefuses non-terminal jobs (CREATED / AWAITING_USER_ID / IDENTIFIED /\nRIPPING) \u2014 caller must `POST /abandon` first if they want a job in\nflight gone. This keeps the active-rip cancel logic in one place.\n\n`delete_raw=true` also unlinks every transcode output recorded for the\njob and rmtrees `/raw/{job_id}/`. Backend mounts both bind paths\ndirectly, so the cleanup runs synchronously here \u2014 no WS roundtrip,\nno dependency on the ripper container being up. Per-file unlink for\nmedia (sibling re-rips share the `media/<Title>/` parent dir); empty\nparents are pruned after the unlink phase.",
         "operationId": "delete_job_api_jobs__job_id__delete",
         "parameters": [
           {
