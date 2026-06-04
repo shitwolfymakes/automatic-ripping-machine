@@ -14,7 +14,12 @@ class Config(SQLModel, table=True):
     id: int = Field(sa_column=Column(Integer, primary_key=True, autoincrement=False))
     tmdb_api_key: str | None = Field(default=None)
     omdb_api_key: str | None = Field(default=None)
-    musicbrainz_user_agent: str | None = Field(default=None)
+    # MusicBrainz requires a non-empty User-Agent (they 403 blank UAs); `armv3`
+    # is a reasonable shared default that won't blow up the first audio-CD rip
+    # on a fresh install. Operators are still encouraged to override with an
+    # app-name-plus-contact-info string per MB's etiquette guide — see the UI
+    # form's placeholder hint.
+    musicbrainz_user_agent: str | None = Field(default="armv3")
     auto_transcode_on_idle: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
     auto_rip_on_insert: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
     block_on_miss: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
