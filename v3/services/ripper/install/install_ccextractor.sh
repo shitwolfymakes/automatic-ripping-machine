@@ -4,10 +4,11 @@
 # caption extraction (MSG:4041 goes away when this binary is on disk).
 #
 # ccextractor was removed from Debian (last shipped in buster), so the only
-# reliable path is building from a pinned upstream tag. Built without OCR,
-# hardsubx, sharing, or rust extras — those would pull in tesseract,
-# leptonica, libcurl, rustc (+~300MB build deps) for features the MakeMKV
-# CC-extraction call doesn't use.
+# reliable path is building from a pinned upstream tag. Built with -without-rust
+# to skip the cargo crates.io index fetch + Rust compile (the slowest part of
+# this stage); the C code has DISABLE_RUST fallbacks, so 608/708 CC -> SRT
+# extraction — all MakeMKV asks for — is unaffected. OCR/tesseract is compiled
+# in unconditionally by upstream, so libtesseract-dev/libleptonica-dev stay.
 set -euxo pipefail
 
 CCEXTRACTOR_VERSION="${CCEXTRACTOR_VERSION:-v0.94}"
@@ -21,22 +22,12 @@ curl -fsSL "https://github.com/CCExtractor/ccextractor/archive/refs/tags/${CCEXT
 mkdir -p ccextractor
 tar -xf ccextractor.tar.gz -C ccextractor --strip-components=1
 
-# Trim the build:
-#   WITHOUT_HARDSUBX — skip hard-subtitle extraction (would pull in
-#                      ffmpeg+libav-dev, ~200MB build deps we don't need)
-#   NO_UPDATE_CHECK  — skip the version-check curl call at startup
-#   WITHOUT_SHARING  — skip the optional submission/sharing telemetry
-# Notes on what's NOT disabled:
-#   * Rust — the build script runs a hard cargo check before parsing
-#     flags, so we install cargo + libclang-dev and let it build.
-#   * OCR — same story (the script requires libtesseract-dev regardless).
-#     Keeping OCR is good for archival anyway: it lets ccextractor extract
-#     burned-in hard subtitles when MakeMKV asks for SRT output.
+# The upstream `build` script only ever inspects $1, and only to compare it
+# against "-without-rust"; BLD_FLAGS is otherwise hardcoded. Any other args
+# (e.g. the -DWITHOUT_HARDSUBX/-DNO_UPDATE_CHECK/-DWITHOUT_SHARING this used to
+# pass) are silently ignored, so don't bother. "-without-rust" must be $1.
 cd ccextractor/linux
-./build \
-    -DWITHOUT_HARDSUBX=1 \
-    -DNO_UPDATE_CHECK=1 \
-    -DWITHOUT_SHARING=1
+./build -without-rust
 
 install -m 0755 ccextractor /usr/local/bin/ccextractor
 ln -sfn /usr/local/bin/ccextractor /usr/local/bin/mmccextr
