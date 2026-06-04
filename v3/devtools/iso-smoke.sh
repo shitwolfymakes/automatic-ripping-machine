@@ -36,14 +36,40 @@ V3_DIR="$(cd -- "${SCRIPT_DIR}/.." &>/dev/null && pwd)"
 COMPOSE=( docker compose -f "${V3_DIR}/docker-compose.yml" )
 
 CACHE_DIR="${ISO_CACHE_DIR:-${HOME}/arm-corpus}"
-ISO_NAME="sintel.iso"
-ISO_PATH="${CACHE_DIR}/${ISO_NAME}"
-ISO_SHA256="7ea69a0215cdd7fff4acb48976677b2814a3d2e375b82b3288324bb356afe803"
-ISO_SIZE_BYTES=3881467904
 
 CORPUS_IMAGE_GHCR="ghcr.io/shitwolfymakes/matrix256-corpus:latest"
 CORPUS_IMAGE_HUB="docker.io/shitwolfymakes/matrix256-corpus:latest"
-ARCHIVE_URL="https://archive.org/download/sintel_20260427/sintel.iso"
+
+# Both fixtures are SHA-256-pinned in matrix256-corpus/corpus.lock.json
+# (CC-BY 3.0 sources). Pull either out of the corpus image, or fall back
+# to Internet Archive when the image is too big for local Docker storage.
+ISO_CHOICE="sintel"
+ISO_NAME=""
+ISO_PATH=""
+ISO_SHA256=""
+ISO_SIZE_BYTES=0
+ARCHIVE_URL=""
+configure_iso() {
+    case "${ISO_CHOICE}" in
+        sintel)
+            ISO_NAME="sintel.iso"
+            ISO_SHA256="7ea69a0215cdd7fff4acb48976677b2814a3d2e375b82b3288324bb356afe803"
+            ISO_SIZE_BYTES=3881467904
+            ARCHIVE_URL="https://archive.org/download/sintel_20260427/sintel.iso"
+            ;;
+        bbb|big_buck_bunny)
+            ISO_NAME="big_buck_bunny.iso"
+            ISO_SHA256="9691de650fa1aa09a537409b34898e747d5267ac68216c292bdd0dbea513f649"
+            ISO_SIZE_BYTES=8474263552
+            ARCHIVE_URL="https://archive.org/download/big_buck_bunny_202604/big_buck_bunny.iso"
+            ;;
+        *)
+            err "unknown --iso=${ISO_CHOICE}; expected 'sintel' or 'bbb'"
+            exit 2
+            ;;
+    esac
+    ISO_PATH="${CACHE_DIR}/${ISO_NAME}"
+}
 
 RIPPER_IMAGE="armv3-arm-ripper-sr0"
 RIPPER_CTR="armv3-ripper-iso"
@@ -70,6 +96,11 @@ show_help() {
 Usage: iso-smoke.sh [options]
 
 Options:
+  --iso=sintel|bbb    Pick the fixture ISO (default: sintel — DVD,
+                      ~3.7 GB). Use bbb for the Blu-ray fixture
+                      (~8 GB) — that's the cutover-readiness criterion
+                      at docs/arch/08-v2-isolation-and-cutover.md
+                      § Readiness line 200.
   --no-transcode      Stop after rip-complete; skip the transcode
                       chain and the cleanup step.
   --session=<id>      Override the default transcode session
@@ -103,9 +134,12 @@ for arg in "$@"; do
         --no-cleanup) DO_CLEANUP=0 ;;
         --rebuild) FORCE_REBUILD=1 ;;
         --session=*) SESSION_ID="${arg#--session=}" ;;
+        --iso=*) ISO_CHOICE="${arg#--iso=}" ;;
         *) err "unknown arg: $arg"; exit 2 ;;
     esac
 done
+
+configure_iso
 
 # ---- ISO fetch + verify --------------------------------------------------
 
@@ -266,7 +300,7 @@ run_iso_ripper() {
         -e ARM_BACKEND_URL=https://arm-backend:8443 \
         -e ARM_SERVICE_TOKEN="${ARM_SERVICE_TOKEN}" \
         -e ARM_LOG_LEVEL="${ARM_LOG_LEVEL:-info}" \
-        -e ARM_MANUAL_TRIGGER_ISO=/corpus/sintel.iso \
+        -e "ARM_MANUAL_TRIGGER_ISO=/corpus/${ISO_NAME}" \
         -e MAKEMKV_KEY="${key}" \
         -e PUID="${PUID:-1000}" -e PGID="${PGID:-1000}" -e CDROM_GID="${CDROM_GID:-24}" \
         -v "${CACHE_DIR}:/corpus:ro" \
