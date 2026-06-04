@@ -39,6 +39,9 @@ from arm_ripper.source import is_iso_source, makemkv_source_url  # noqa: E402
 
 
 class _FakeStream:
+    """Implements both `readline()` (rip_disc) and `async for` (scan_disc)
+    over the same line list, so a single fake serves both call sites."""
+
     def __init__(self, lines: list[bytes]) -> None:
         self._lines = list(lines)
 
@@ -50,20 +53,26 @@ class _FakeStream:
     async def read(self) -> bytes:
         return b""
 
+    def __aiter__(self) -> "_FakeStream":
+        return self
+
+    async def __anext__(self) -> bytes:
+        if not self._lines:
+            raise StopAsyncIteration
+        return self._lines.pop(0)
+
 
 class _FakeProc:
     def __init__(self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0) -> None:
-        self._stdout = stdout
-        self._stderr = stderr
         self._final_returncode = returncode
         self.returncode: int | None = None
-        # For rip_disc which streams line-by-line.
-        self.stdout = _FakeStream([])
-        self.stderr = _FakeStream([])
-
-    async def communicate(self) -> tuple[bytes, bytes]:
-        self.returncode = self._final_returncode
-        return self._stdout, self._stderr
+        # `stdout` arg may be a flat bytes blob (legacy) or already-split
+        # newline-terminated lines. Split here so both `async for` (scan)
+        # and `readline` (rip) yield one line at a time.
+        stdout_lines = [chunk + b"\n" for chunk in stdout.split(b"\n") if chunk] if stdout else []
+        stderr_lines = [chunk + b"\n" for chunk in stderr.split(b"\n") if chunk] if stderr else []
+        self.stdout = _FakeStream(stdout_lines)
+        self.stderr = _FakeStream(stderr_lines)
 
     async def wait(self) -> int:
         await asyncio.sleep(0)
