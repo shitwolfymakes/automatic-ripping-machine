@@ -27,7 +27,21 @@ The free beta key rotates roughly monthly. The entrypoint runs `update_key.sh` o
 
 - **Forum scrape returns nothing** — the script logs the scrape failure and exits 0; `settings.conf` keeps whatever key was there. Existing discs with the previous key continue to work; new MakeMKV releases may eventually invalidate the cached key.
 - **`MAKEMKV_KEY` is malformed** — MakeMKV rejects it on first scan. Symptom is a `makemkvcon` exit code with `App key incorrect` in the logs. Replace the env var and restart.
+- **Binary itself is expired (MSG:5021 "application version is too old")** — MakeMKV beta binaries carry a hard 60-day kill-switch from their release date. *No* registration key overrides this; the binary refuses to do protected-disc work before it even checks `settings.conf`. When upstream is between releases (binary expired, no newer source tarball published yet on <https://www.makemkv.com/download/>) the only fix is to wait for the next beta. Symptom: every `makemkvcon` invocation emits `MSG:5021,131332,1,"This application version is too old…"` and exits before any disc work happens, regardless of what `MAKEMKV_KEY` you set. **DVD reads are unaffected** — only operations that need the AACS-gated bits (BD, UHD, AACS-protected DVDs) trip the check. Workaround: rip DVDs as usual; defer BD/UHD work until the next beta drops, then rebuild the ripper image so `install_makemkv.sh` picks up the new version.
 - **`/home/arm` not writable** — only happens if the container runs with a `PUID` that doesn't own `/home/arm`. The shared entrypoint re-chowns on every boot, but if the directory is bind-mounted from a host with mismatched ownership, fix the host permissions.
+
+## DVD vs BD: where the key matters
+
+Useful asymmetry to remember while debugging:
+
+| Disc type | Needs valid MakeMKV key? | Why |
+| --- | --- | --- |
+| DVD (CSS or unprotected) | No | CSS support is built into the OSS half of MakeMKV; no per-binary licensing gate. |
+| BD (AACS) | Yes | AACS support is shipped in the closed-source `makemkv-bin` blob and gated by registration + binary validity. |
+| UHD BD (AACS 2.0) | Yes | Same path; also requires a friendly UHD drive. |
+| Audio CD | No | Doesn't touch makemkvcon at all; uses `abcde` + cdparanoia. |
+
+If a fresh-host BD/UHD smoke fails with `MSG:5021` but DVD smokes pass on the same stack, the binary is expired and the only fix is upstream. If both DVD and BD fail, the key is wrong or `settings.conf` isn't being read — see the verify step above.
 
 ## What the install scripts do
 
