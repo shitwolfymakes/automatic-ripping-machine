@@ -677,3 +677,40 @@ async def test_rip_disc_passes_minlength_to_makemkvcon(monkeypatch, tmp_path):
     # The output dir is the last positional after `all`.
     argv = list(captured["argv"])
     assert argv[argv.index("all") + 1] == str(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_msg_5021_surfaces_distinct_error_and_kills_proc(monkeypatch, tmp_path):
+    """When MakeMKV emits MSG:5021 (binary kill-switch), rip_disc kills
+    the subprocess from inside the streamer and returns a distinct
+    `overall_error` that names the docs entry — so operators don't wait
+    out the 6-hour RIP_TIMEOUT_SECONDS for a known upstream-blocked state.
+    See docs/ops/makemkv.md § Failure modes."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'MSG:1005,0,1,"MakeMKV v1.18.3 started","%1 started","..."',
+            'MSG:5021,131332,1,"This application version is too old.","...","..."',
+            # Lines after the kill must not be parsed — the streamer
+            # short-circuits the loop and proc.kill() ends the stream.
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            "PRGV:5000,5000,10000",
+            'MSG:5036,0,2,"Copy complete. 2 titles saved.","Copy complete.","2","titles"',
+        ],
+        returncode=1,
+    )
+
+    result = await rip_disc(
+        device_path="iso:/fake/big.iso",
+        output_dir=tmp_path,
+        minlength_seconds=600,
+        eligible_source_indexes=[0],
+    )
+
+    assert result.overall_error is not None
+    assert "MSG:5021" in result.overall_error
+    assert "docs/ops/makemkv.md" in result.overall_error
+    assert result.titles == {}
+    # The MSG:5021 line is preserved in the composed-error diagnostics so
+    # operators can see the exact line that fired the guard.
+    assert "131332" in result.overall_error

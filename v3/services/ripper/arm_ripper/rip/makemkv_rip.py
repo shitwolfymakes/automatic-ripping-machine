@@ -126,6 +126,11 @@ class _ParserState:
     # holds ETA null until per-title progress climbs back past the
     # pre-rip peak — ~hours for a long main feature).
     save_phase_started: bool = False
+    # Set when MakeMKV emits MSG:5021 (the binary's hard-coded 60-day
+    # beta kill-switch). The streamer kills the subprocess as soon as
+    # this is seen so a 6-hour RIP_TIMEOUT_SECONDS doesn't run out.
+    # See docs/ops/makemkv.md § Failure modes.
+    binary_expired: bool = False
 
 
 def parse_progress_line(line: str) -> float | None:
@@ -309,6 +314,16 @@ async def _stream_output(
         # the backend's tailer. ~30 k lines per BD rip; gated on
         # ARM_LOG_LEVEL=debug so it's free in INFO-mode operation.
         logger.debug("makemkv-raw: %s", line)
+
+        # Hard-coded 60-day kill-switch in the makemkv-bin blob. Kill the
+        # subprocess so the 6-hour RIP_TIMEOUT_SECONDS doesn't fire — the
+        # caller checks state.binary_expired to surface a distinct error.
+        # See docs/ops/makemkv.md § Failure modes.
+        if not state.binary_expired and line.startswith("MSG:5021,"):
+            state.binary_expired = True
+            state.diagnostics.append(line)
+            proc.kill()
+            continue
 
         # PRGV — two channels in one line:
         #   `current/max` advances per-operation (resets per title)
@@ -561,6 +576,21 @@ async def rip_disc(
         await streamer
     except asyncio.CancelledError:
         pass
+
+    # Distinct error for the binary-expired path so operators see "rebuild
+    # against a fresher upstream tarball" instead of a generic exit code.
+    # The streamer already killed the proc, so we hit this branch fast.
+    if state.binary_expired:
+        return RipDiscResult(
+            overall_error=_compose_error(
+                "makemkvcon refused: binary is past its hard-coded expiry "
+                "(MSG:5021). MakeMKV beta binaries carry a 60-day kill-switch; "
+                "rebuild the ripper image after upstream ships a fresher tarball. "
+                "See docs/ops/makemkv.md § Failure modes.",
+                state.diagnostics,
+            ),
+            titles={},
+        )
 
     if proc.returncode != 0:
         stderr = b""

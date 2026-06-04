@@ -12,12 +12,23 @@ logger = logging.getLogger("arm_ripper.scan.makemkv")
 
 SCAN_TIMEOUT_SECONDS = 300.0
 
+# MakeMKV emits this when its hard-coded 60-day beta kill-switch has fired.
+# No registration key overrides it; the binary refuses all protected-disc
+# work and the only fix is rebuilding against a fresher upstream tarball.
+# See docs/ops/makemkv.md § Failure modes.
+_MAKEMKV_EXPIRED_PREFIX = b"MSG:5021,"
+
 _DURATION_RE = re.compile(r"^(\d+):(\d{1,2}):(\d{1,2})$")
 _QUOTED_RE = re.compile(r'^"(.*)"$')
 
 
 class ScanError(Exception):
     pass
+
+
+class MakemkvBinaryExpiredError(ScanError):
+    """Distinct subtype so callers / operators can match this specifically
+    and route to the upstream-blocked playbook instead of a generic retry."""
 
 
 def _strip_quotes(value: str) -> str:
@@ -159,6 +170,46 @@ def _classify_from_titles(titles: list[ScanTitle]) -> DiscType:
     )
 
 
+async def _read_makemkvcon_stream(proc: asyncio.subprocess.Process) -> tuple[bytes, bytes, bool]:
+    """Drain stdout + stderr concurrently. Returns (stdout, stderr, expired).
+
+    Watches stdout line-by-line; on `MSG:5021,` (binary kill-switch fired)
+    kills the subprocess so the caller short-circuits the SCAN_TIMEOUT_SECONDS
+    ceiling. With an expired binary makemkvcon can either exit instantly
+    (`info disc:9999`) or spin against the ISO/disc structure for the full
+    5 minutes (`info iso:/big.iso`) — the early-kill turns the slow path
+    into a deterministic ~few-second failure.
+    """
+    assert proc.stdout is not None
+    assert proc.stderr is not None
+    stdout_chunks: list[bytes] = []
+    expired = False
+
+    async def _read_stdout() -> None:
+        nonlocal expired
+        assert proc.stdout is not None
+        async for raw in proc.stdout:
+            stdout_chunks.append(raw)
+            if not expired and raw.startswith(_MAKEMKV_EXPIRED_PREFIX):
+                expired = True
+                proc.kill()
+                # Keep draining the pipe so the kernel doesn't block on
+                # buffered writes between SIGKILL and process teardown.
+
+    async def _drain_stderr() -> bytes:
+        assert proc.stderr is not None
+        chunks: list[bytes] = []
+        async for chunk in proc.stderr:
+            chunks.append(chunk)
+        return b"".join(chunks)
+
+    stdout_task = asyncio.create_task(_read_stdout())
+    stderr_task = asyncio.create_task(_drain_stderr())
+    await stdout_task
+    stderr_bytes = await stderr_task
+    return b"".join(stdout_chunks), stderr_bytes, expired
+
+
 async def scan_disc(device_path: str) -> ScanResult:
     cmd = ["makemkvcon", "-r", "--cache=1", "info", makemkv_source_url(device_path)]
     logger.info("makemkvcon info device=%s", device_path)
@@ -173,11 +224,23 @@ async def scan_disc(device_path: str) -> ScanResult:
         raise ScanError("makemkvcon binary not found on PATH") from e
 
     try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=SCAN_TIMEOUT_SECONDS)
+        stdout, stderr, expired = await asyncio.wait_for(_read_makemkvcon_stream(proc), timeout=SCAN_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
         proc.kill()
         await proc.wait()
         raise ScanError(f"makemkvcon timed out after {SCAN_TIMEOUT_SECONDS}s") from None
+
+    await proc.wait()
+
+    if expired:
+        raise MakemkvBinaryExpiredError(
+            "makemkvcon refused: binary is past its hard-coded expiry "
+            "(MSG:5021 'application version is too old'). MakeMKV beta "
+            "binaries carry a 60-day kill-switch from release date that "
+            "no registration key overrides; the only fix is rebuilding the "
+            "ripper image after upstream ships a fresher tarball. See "
+            "docs/ops/makemkv.md § Failure modes."
+        )
 
     if proc.returncode != 0:
         msg = stderr.decode(errors="replace").strip() or stdout.decode(errors="replace")[:200]
