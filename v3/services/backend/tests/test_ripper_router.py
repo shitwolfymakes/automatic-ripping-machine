@@ -118,7 +118,11 @@ def _drive() -> Drive:
 
 
 def _job(
-    job_id: str = "job_x", *, status: JobStatus, disc_type: DiscType = DiscType.DVD, meta: dict | None = None
+    job_id: str = "job_01JZXR7K3M5Q8N4VWA00000001",
+    *,
+    status: JobStatus,
+    disc_type: DiscType = DiscType.DVD,
+    meta: dict | None = None,
 ) -> Job:
     return Job(
         id=job_id,
@@ -132,7 +136,9 @@ def _job(
     )
 
 
-def _track(track_id: str, *, status: TrackStatus, job_id: str = "job_x", index: int = 1) -> Track:
+def _track(
+    track_id: str, *, status: TrackStatus, job_id: str = "job_01JZXR7K3M5Q8N4VWA00000001", index: int = 1
+) -> Track:
     return Track(
         id=track_id,
         job_id=job_id,
@@ -324,10 +330,10 @@ def test_get_job_found_and_404() -> None:
     db = FakeSession()
     db.rows["jobs"] = [_job(status=JobStatus.IDENTIFIED)]
     with TestClient(_make_app(db)) as client:
-        found = client.get("/api/ripper/jobs/job_x", headers=_SERVICE_AUTH)
-        missing = client.get("/api/ripper/jobs/job_missing", headers=_SERVICE_AUTH)
+        found = client.get("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001", headers=_SERVICE_AUTH)
+        missing = client.get("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA0000000M", headers=_SERVICE_AUTH)
     assert found.status_code == 200
-    assert found.json()["id"] == "job_x"
+    assert found.json()["id"] == "job_01JZXR7K3M5Q8N4VWA00000001"
     assert missing.status_code == 404
 
 
@@ -353,25 +359,25 @@ def test_in_flight_no_job_404() -> None:
 def test_in_flight_single_returns_job() -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]
-    db.rows["jobs"] = [_job("job_a", status=JobStatus.RIPPING)]
+    db.rows["jobs"] = [_job("job_01JZXR7K3M5Q8N4VWA00000002", status=JobStatus.RIPPING)]
     with TestClient(_make_app(db)) as client:
         r = client.get("/api/ripper/drives/drv_x/in-flight-job", headers=_SERVICE_AUTH)
     assert r.status_code == 200
-    assert r.json()["id"] == "job_a"
+    assert r.json()["id"] == "job_01JZXR7K3M5Q8N4VWA00000002"
 
 
 def test_in_flight_single_and_multi(caplog: pytest.LogCaptureFixture) -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["jobs"] = [
-        _job("job_a", status=JobStatus.RIPPING),
-        _job("job_b", status=JobStatus.RIPPING),
+        _job("job_01JZXR7K3M5Q8N4VWA00000002", status=JobStatus.RIPPING),
+        _job("job_01JZXR7K3M5Q8N4VWA00000003", status=JobStatus.RIPPING),
     ]
     with TestClient(_make_app(db)) as client:
         with caplog.at_level("ERROR", logger="arm_backend.routers.ripper"):
             r = client.get("/api/ripper/drives/drv_x/in-flight-job", headers=_SERVICE_AUTH)
     assert r.status_code == 200
-    assert r.json()["id"] == "job_a"
+    assert r.json()["id"] == "job_01JZXR7K3M5Q8N4VWA00000002"
     assert any("data-model violation" in rec.message for rec in caplog.records)
 
 
@@ -383,7 +389,7 @@ def test_rip_start_no_default_preset_422() -> None:
     db.rows["drives"] = [_drive()]
     db.rows["jobs"] = [_job(status=JobStatus.IDENTIFIED, disc_type=DiscType.UNKNOWN)]
     with TestClient(_make_app(db)) as client:
-        r = client.post("/api/ripper/jobs/job_x/rip-start", headers=_OWNER_HEADERS)
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 422
     assert "no default rip preset" in r.json()["detail"]
 
@@ -394,7 +400,7 @@ def test_rip_start_returns_existing_tracks() -> None:
     db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
     db.rows["tracks"] = [_track("trk_1", status=TrackStatus.IN_PROGRESS)]
     with TestClient(_make_app(db)) as client:
-        r = client.post("/api/ripper/jobs/job_x/rip-start", headers=_OWNER_HEADERS)
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 200
     assert [t["id"] for t in r.json()["tracks"]] == ["trk_1"]
 
@@ -405,7 +411,7 @@ def test_rip_start_not_identified_409() -> None:
     db.rows["jobs"] = [_job(status=JobStatus.CREATED)]
     db.rows["tracks"] = []
     with TestClient(_make_app(db)) as client:
-        r = client.post("/api/ripper/jobs/job_x/rip-start", headers=_OWNER_HEADERS)
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 409
     assert "not in identified state" in r.json()["detail"]
 
@@ -416,7 +422,7 @@ def test_rip_start_missing_scan_result_409() -> None:
     db.rows["jobs"] = [_job(status=JobStatus.IDENTIFIED, meta={})]
     db.rows["tracks"] = []
     with TestClient(_make_app(db)) as client:
-        r = client.post("/api/ripper/jobs/job_x/rip-start", headers=_OWNER_HEADERS)
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 409
     assert "missing scan_result" in r.json()["detail"]
 
@@ -428,7 +434,7 @@ def test_rip_start_preset_not_seeded_500() -> None:
     db.rows["tracks"] = []
     db.rows["rip_presets"] = []
     with TestClient(_make_app(db)) as client:
-        r = client.post("/api/ripper/jobs/job_x/rip-start", headers=_OWNER_HEADERS)
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 500
     assert "not seeded" in r.json()["detail"]
 
@@ -440,7 +446,7 @@ def test_rip_start_zero_tracks_422() -> None:
     db.rows["tracks"] = []
     db.rows["rip_presets"] = [_movie_preset()]
     with TestClient(_make_app(db)) as client, _patch_select_tracks([]):
-        r = client.post("/api/ripper/jobs/job_x/rip-start", headers=_OWNER_HEADERS)
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 422
     assert "zero tracks" in r.json()["detail"]
 
@@ -455,7 +461,7 @@ def test_rip_start_success_creates_tracks_and_emits() -> None:
     app = _make_app(db, hub=hub)
     new = [_track("trk_new", status=TrackStatus.QUEUED)]
     with TestClient(app) as client, _patch_select_tracks(new):
-        r = client.post("/api/ripper/jobs/job_x/rip-start", headers=_OWNER_HEADERS)
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 200
     assert [t["id"] for t in r.json()["tracks"]] == ["trk_new"]
     assert any(e["event_type"] == "rip.started" for e in hub.events)
@@ -469,7 +475,7 @@ def test_resume_no_default_preset_422() -> None:
     db.rows["drives"] = [_drive()]
     db.rows["jobs"] = [_job(status=JobStatus.RIPPING, disc_type=DiscType.UNKNOWN)]
     with TestClient(_make_app(db)) as client:
-        r = client.post("/api/ripper/jobs/job_x/resume", headers=_OWNER_HEADERS)
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resume", headers=_OWNER_HEADERS)
     assert r.status_code == 422
     assert "no default rip preset" in r.json()["detail"]
 
@@ -585,7 +591,9 @@ def _rip_complete(db: FakeSession, hub: _Hub, monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(ripper_router, "maybe_auto_apply_session", _noop)
     app = _make_app(db, hub=hub)
     with TestClient(app) as client:
-        return client.post("/api/ripper/jobs/job_x/rip-complete", json={}, headers=_OWNER_HEADERS)
+        return client.post(
+            "/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-complete", json={}, headers=_OWNER_HEADERS
+        )
 
 
 def test_rip_complete_not_ripping_409(monkeypatch: pytest.MonkeyPatch) -> None:

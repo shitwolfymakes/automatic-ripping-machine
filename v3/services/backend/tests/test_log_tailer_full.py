@@ -34,7 +34,7 @@ class _Hub:
 
 
 def _rec(**over: Any) -> str:
-    base = {"job_id": "job_x", "msg": "hi", "extra": {"logger": "arm_backend.x"}}
+    base = {"job_id": "job_01JZXR7K3M5Q8N4VWA00000001", "msg": "hi", "extra": {"logger": "arm_backend.x"}}
     base.update(over)
     return json.dumps(base)
 
@@ -207,4 +207,4 @@ def test_append_per_job_log_oserror(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     afile.write_text("x")
     t = LogTailer(_Hub(), log_dir=str(tmp_path))
     t._per_job_dir = afile / "jobs"  # mkdir(parents=True) under a file → OSError
-    t._append_per_job_log("job_x", "line")  # swallowed, no raise
+    t._append_per_job_log("job_01JZXR7K3M5Q8N4VWA00000001", "line")  # swallowed, no raise

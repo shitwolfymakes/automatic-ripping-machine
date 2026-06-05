@@ -90,7 +90,7 @@ def _auth(token: str) -> dict[str, str]:
 
 
 def _job(
-    job_id: str = "job_x",
+    job_id: str = "job_01JZXR7K3M5Q8N4VWA00000001",
     *,
     status: JobStatus = JobStatus.RIPPED,
     title: str | None = "X",
@@ -109,7 +109,9 @@ def _job(
     )
 
 
-def _track(track_id: str, *, status: TrackStatus, index: int = 1, job_id: str = "job_x") -> Track:
+def _track(
+    track_id: str, *, status: TrackStatus, index: int = 1, job_id: str = "job_01JZXR7K3M5Q8N4VWA00000001"
+) -> Track:
     return Track(
         id=track_id,
         job_id=job_id,
@@ -128,13 +130,13 @@ def test_list_jobs_filters_and_rip_progress(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [
-        _job("job_rip", status=JobStatus.RIPPING),
-        _job("job_done", status=JobStatus.RIPPED),
+        _job("job_01JZXR7K3M5Q8N4VWA0000000B", status=JobStatus.RIPPING),
+        _job("job_01JZXR7K3M5Q8N4VWA00000007", status=JobStatus.RIPPED),
     ]
     db.rows["tracks"] = [
-        _track("t1", status=TrackStatus.DONE, index=1, job_id="job_rip"),
-        _track("t2", status=TrackStatus.IN_PROGRESS, index=2, job_id="job_rip"),
-        _track("t3", status=TrackStatus.QUEUED, index=3, job_id="job_rip"),
+        _track("t1", status=TrackStatus.DONE, index=1, job_id="job_01JZXR7K3M5Q8N4VWA0000000B"),
+        _track("t2", status=TrackStatus.IN_PROGRESS, index=2, job_id="job_01JZXR7K3M5Q8N4VWA0000000B"),
+        _track("t3", status=TrackStatus.QUEUED, index=3, job_id="job_01JZXR7K3M5Q8N4VWA0000000B"),
     ]
     with TestClient(app) as client:
         all_jobs = client.get("/api/jobs", headers=_auth(token))
@@ -142,12 +144,12 @@ def test_list_jobs_filters_and_rip_progress(signing_key: bytes) -> None:
         by_drive = client.get("/api/jobs?drive_id=drv_x", headers=_auth(token))
     assert all_jobs.status_code == 200
     assert len(all_jobs.json()) == 2
-    ripping = next(j for j in all_jobs.json() if j["id"] == "job_rip")
+    ripping = next(j for j in all_jobs.json() if j["id"] == "job_01JZXR7K3M5Q8N4VWA0000000B")
     assert ripping["rip_progress"]["tracks_total"] == 3
     assert ripping["rip_progress"]["tracks_done"] == 1
     assert ripping["rip_progress"]["current_track_id"] == "t2"
     assert ripping["rip_progress"]["current_track_index"] == 2
-    assert [j["id"] for j in by_status.json()] == ["job_rip"]
+    assert [j["id"] for j in by_status.json()] == ["job_01JZXR7K3M5Q8N4VWA0000000B"]
     assert len(by_drive.json()) == 2
 
 
@@ -157,14 +159,16 @@ def test_list_jobs_filters_and_rip_progress(signing_key: bytes) -> None:
 def test_get_job_detail_found(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
-    db.rows["jobs"] = [_job("job_x", status=JobStatus.RIPPED)]
+    db.rows["jobs"] = [_job("job_01JZXR7K3M5Q8N4VWA00000001", status=JobStatus.RIPPED)]
     db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
-    db.rows["disc_fingerprints"] = [DiscFingerprint(id="dfp_1", job_id="job_x", algo="crc64", value="abc")]
+    db.rows["disc_fingerprints"] = [
+        DiscFingerprint(id="dfp_1", job_id="job_01JZXR7K3M5Q8N4VWA00000001", algo="crc64", value="abc")
+    ]
     with TestClient(app) as client:
-        r = client.get("/api/jobs/job_x", headers=_auth(token))
+        r = client.get("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001", headers=_auth(token))
     assert r.status_code == 200
     body = r.json()
-    assert body["job"]["id"] == "job_x"
+    assert body["job"]["id"] == "job_01JZXR7K3M5Q8N4VWA00000001"
     assert [t["id"] for t in body["tracks"]] == ["t1"]
     assert [f["algo"] for f in body["fingerprints"]] == ["crc64"]
 
@@ -173,7 +177,7 @@ def test_get_job_detail_404(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
-        r = client.get("/api/jobs/missing", headers=_auth(token))
+        r = client.get("/api/jobs/job_01JZXR7K3M5Q8N4VWA0000000M", headers=_auth(token))
     assert r.status_code == 404
 
 
@@ -184,7 +188,7 @@ def test_abandon_404(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
-        r = client.post("/api/jobs/missing/abandon", headers=_auth(token))
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA0000000M/abandon", headers=_auth(token))
     assert r.status_code == 404
 
 
@@ -193,7 +197,7 @@ def test_abandon_terminal_409(signing_key: bytes) -> None:
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [_job(status=JobStatus.RIPPED)]
     with TestClient(app) as client:
-        r = client.post("/api/jobs/job_x/abandon", headers=_auth(token))
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/abandon", headers=_auth(token))
     assert r.status_code == 409
     assert "terminal status" in r.json()["detail"]
 
@@ -204,7 +208,9 @@ def test_abandon_success_emits_with_delete_raw(signing_key: bytes) -> None:
     app, token = _make_app(signing_key, db, hub)
     db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
     with TestClient(app) as client:
-        r = client.post("/api/jobs/job_x/abandon", json={"delete_raw": True}, headers=_auth(token))
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/abandon", json={"delete_raw": True}, headers=_auth(token)
+        )
     assert r.status_code == 200
     assert r.json()["status"] == "abandoned"
     types = {e["event_type"] for e in hub.events}
@@ -229,7 +235,7 @@ def test_delete_job_swallows_log_unlink_error(
     monkeypatch.setattr(jobs_router, "per_job_log_path", lambda _jid: _BadPath())
     with TestClient(app) as client:
         with caplog.at_level("WARNING", logger="arm_backend.routers.jobs"):
-            r = client.delete("/api/jobs/job_x", headers=_auth(token))
+            r = client.delete("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001", headers=_auth(token))
     assert r.status_code == 204
     assert any("per-job log delete failed" in rec.message for rec in caplog.records)
 
@@ -327,7 +333,11 @@ def test_update_job_404(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
-        r = client.patch("/api/jobs/missing", json={"poster_url_manual": "http://x/y.jpg"}, headers=_auth(token))
+        r = client.patch(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA0000000M",
+            json={"poster_url_manual": "http://x/y.jpg"},
+            headers=_auth(token),
+        )
     assert r.status_code == 404
 
 
@@ -337,7 +347,7 @@ def test_update_job_sets_poster(signing_key: bytes) -> None:
     db.rows["jobs"] = [_job(status=JobStatus.RIPPED)]
     with TestClient(app) as client:
         r = client.patch(
-            "/api/jobs/job_x",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001",
             json={"poster_url_manual": "http://x/y.jpg"},
             headers=_auth(token),
         )
@@ -352,7 +362,7 @@ def test_resolve_404(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
-        r = client.post("/api/jobs/missing/resolve", json={"title": "T"}, headers=_auth(token))
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA0000000M/resolve", json={"title": "T"}, headers=_auth(token))
     assert r.status_code == 404
 
 
@@ -375,7 +385,7 @@ def test_resolve_not_in_resolvable_status_409(signing_key: bytes, bad_status: Jo
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [_job(status=bad_status)]
     with TestClient(app) as client:
-        r = client.post("/api/jobs/job_x/resolve", json={"title": "T"}, headers=_auth(token))
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve", json={"title": "T"}, headers=_auth(token))
     assert r.status_code == 409
     assert "not in an identify-resolvable status" in r.json()["detail"]
 
@@ -387,7 +397,7 @@ def test_resolve_success_preserves_scan_and_emits(signing_key: bytes) -> None:
     db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID, meta={"scan_result": {"disc_type": "dvd"}})]
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/resolve",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
             json={"title": "Blade Runner", "year": 1982, "metadata": {"tmdb_id": 78}},
             headers=_auth(token),
         )
@@ -418,7 +428,7 @@ def test_resolve_cd_writes_structured_metadata(signing_key: bytes) -> None:
     ]
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/resolve",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
             json={
                 "title": "Animals",
                 "year": 1977,
@@ -451,7 +461,7 @@ def test_resolve_accepts_ripped_awaiting_identify(signing_key: bytes) -> None:
     db.rows["jobs"] = [_job(status=JobStatus.RIPPED_AWAITING_IDENTIFY, meta={})]
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/resolve",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
             json={"title": "Home Movie", "year": 2020},
             headers=_auth(token),
         )
@@ -469,7 +479,7 @@ def test_resolve_success_without_preserved_scan(signing_key: bytes) -> None:
     db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID, meta={})]
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/resolve",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
             json={"title": "Solaris", "metadata": {"k": "v"}},
             headers=_auth(token),
         )
@@ -498,7 +508,7 @@ def test_resolve_post_rip_correction_preserves_status(signing_key: bytes, status
     ]
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/resolve",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
             json={"title": "Sintel", "year": 2010},
             headers=_auth(token),
         )
@@ -530,7 +540,7 @@ def test_resolve_metadata_merge_overlays_specific_keys(signing_key: bytes) -> No
     ]
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/resolve",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
             json={"title": "T", "metadata": {"tmdb_id": 42}},
             headers=_auth(token),
         )
@@ -555,7 +565,9 @@ def test_apply_session_job_404(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
-        r = client.post("/api/jobs/missing/transcode", json={"session_id": "s"}, headers=_auth(token))
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA0000000M/transcode", json={"session_id": "s"}, headers=_auth(token)
+        )
     assert r.status_code == 404
 
 
@@ -567,7 +579,9 @@ def test_apply_session_unknown_session_400(signing_key: bytes, monkeypatch: pyte
 
     app, token = _apply_app(signing_key, db, monkeypatch, _raise)
     with TestClient(app) as client:
-        r = client.post("/api/jobs/job_x/transcode", json={"session_id": "s"}, headers=_auth(token))
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode", json={"session_id": "s"}, headers=_auth(token)
+        )
     assert r.status_code == 400
     assert "unknown session_id" in r.json()["detail"]
 
@@ -580,7 +594,9 @@ def test_apply_session_template_error_422(signing_key: bytes, monkeypatch: pytes
 
     app, token = _apply_app(signing_key, db, monkeypatch, _raise)
     with TestClient(app) as client:
-        r = client.post("/api/jobs/job_x/transcode", json={"session_id": "s"}, headers=_auth(token))
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode", json={"session_id": "s"}, headers=_auth(token)
+        )
     assert r.status_code == 422
     assert "bad template" in r.json()["detail"]
 
@@ -593,7 +609,9 @@ def test_apply_session_integrity_error_409(signing_key: bytes, monkeypatch: pyte
 
     app, token = _apply_app(signing_key, db, monkeypatch, _raise)
     with TestClient(app) as client:
-        r = client.post("/api/jobs/job_x/transcode", json={"session_id": "s"}, headers=_auth(token))
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode", json={"session_id": "s"}, headers=_auth(token)
+        )
     assert r.status_code == 409
     assert "concurrent application" in r.json()["detail"]
 
@@ -620,7 +638,9 @@ def test_apply_session_collisions_409(signing_key: bytes, monkeypatch: pytest.Mo
 
     app, token = _apply_app(signing_key, db, monkeypatch, _outcome)
     with TestClient(app) as client:
-        r = client.post("/api/jobs/job_x/transcode", json={"session_id": "s"}, headers=_auth(token))
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode", json={"session_id": "s"}, headers=_auth(token)
+        )
     assert r.status_code == 409
     assert r.json()["detail"]["message"] == "output_path collisions detected"
     assert r.json()["detail"]["collisions"][0]["output_path"] == "a.mkv"
@@ -634,7 +654,7 @@ def test_apply_session_success(signing_key: bytes, monkeypatch: pytest.MonkeyPat
             application=SessionApplication(
                 id="sap_1",
                 session_id="ses_1",
-                job_id="job_x",
+                job_id="job_01JZXR7K3M5Q8N4VWA00000001",
                 status=SessionApplicationStatus.QUEUED,
                 overwrite=False,
             ),
@@ -646,7 +666,9 @@ def test_apply_session_success(signing_key: bytes, monkeypatch: pytest.MonkeyPat
 
     app, token = _apply_app(signing_key, db, monkeypatch, _outcome)
     with TestClient(app) as client:
-        r = client.post("/api/jobs/job_x/transcode", json={"session_id": "ses_1"}, headers=_auth(token))
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode", json={"session_id": "ses_1"}, headers=_auth(token)
+        )
     assert r.status_code == 200
     body = r.json()
     assert body["session_application"]["id"] == "sap_1"

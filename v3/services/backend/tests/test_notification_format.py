@@ -10,7 +10,7 @@ from arm_common import DiscType, Event, Job, JobStatus
 
 def _job(title: str | None = "Iron Man", year: int | None = 2008) -> Job:
     return Job(
-        id="job_x",
+        id="job_01JZXR7K3M5Q8N4VWA00000001",
         drive_id="drv_x",
         disc_type=DiscType.DVD,
         title=title,
@@ -26,7 +26,7 @@ def _event(event_type: str, payload: dict[str, object]) -> Event:
         id="evt_x",
         event_type=event_type,
         emitted_at=datetime.now(UTC),
-        job_id="job_x",
+        job_id="job_01JZXR7K3M5Q8N4VWA00000001",
         track_id=None,
         session_application_id=None,
         payload_json=payload,
@@ -59,7 +59,12 @@ def test_rip_partial_lists_failed_count() -> None:
 def test_session_completed_includes_session_id_and_status() -> None:
     event = _event(
         "session.completed",
-        {"session_id": "ses_x", "session_application_id": "sap_x", "job_id": "job_x", "status": "done"},
+        {
+            "session_id": "ses_x",
+            "session_application_id": "sap_x",
+            "job_id": "job_01JZXR7K3M5Q8N4VWA00000001",
+            "status": "done",
+        },
     )
     title, body = format_event(event, _job())
     assert title == "ARM: session completed"
@@ -75,7 +80,7 @@ def test_falls_back_to_payload_when_job_is_none() -> None:
     title, body = format_event(event, None)
     assert title == "ARM: rip completed"
     # No job → use the job_id stamped on the event row.
-    assert "job=job_x" in body
+    assert "job=job_01JZXR7K3M5Q8N4VWA00000001" in body
 
 
 def test_year_omitted_when_none() -> None:

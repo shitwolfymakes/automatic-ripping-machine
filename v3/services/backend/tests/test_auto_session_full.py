@@ -233,7 +233,7 @@ async def test_overwrite_evicts_but_app_keeps_remaining_task(tmp_path: Path) -> 
         SessionApplication(
             id="sap_other",
             session_id="ses_other",
-            job_id="job_other",
+            job_id="job_01JZXR7K3M5Q8N4VWA0000000J",
             status=SessionApplicationStatus.RUNNING,
             overwrite=False,
         )

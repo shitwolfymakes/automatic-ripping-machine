@@ -74,7 +74,7 @@ def _seed(
     db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
     db.rows["jobs"] = [
         Job(
-            id="job_x",
+            id="job_01JZXR7K3M5Q8N4VWA00000001",
             drive_id="drv_x",
             disc_type=DiscType.DVD,
             title=job_title,
@@ -121,7 +121,7 @@ def _seed(
         SessionApplication(
             id="sap_x",
             session_id="ses_x",
-            job_id="job_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             status=SessionApplicationStatus.WAITING_IDENTIFY,
             overwrite=False,
         )
@@ -142,7 +142,7 @@ def _seed(
             SessionApplication(
                 id=f"sap_extra_{i}",
                 session_id=f"ses_extra_{i}",
-                job_id="job_x",
+                job_id="job_01JZXR7K3M5Q8N4VWA00000001",
                 status=SessionApplicationStatus.WAITING_IDENTIFY,
                 overwrite=False,
             )
@@ -151,7 +151,7 @@ def _seed(
     db.rows["tracks"] = [
         Track(
             id="trk_1",
-            job_id="job_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             kind=TrackKind.VIDEO_TITLE,
             index=1,
             source_ref="1",
@@ -216,7 +216,7 @@ def test_resolve_promotes_waiting_identify_to_queued(signing_key: bytes, tmp_pat
     app, token = _make_app(signing_key, db, tmp_path, hub)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/resolve",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
             json={"title": "Iron Man", "year": 2008},
             headers=_auth(token),
         )
@@ -259,7 +259,7 @@ def test_resolve_fans_out_multiple_waiting_identify_applications(signing_key: by
     app, token = _make_app(signing_key, db, tmp_path, hub)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/resolve",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
             json={"title": "Iron Man", "year": 2008},
             headers=_auth(token),
         )
@@ -284,7 +284,7 @@ def test_resolve_ripped_awaiting_identify_status_fans_out(signing_key: bytes, tm
     app, token = _make_app(signing_key, db, tmp_path, hub)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/resolve",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
             json={"title": "Iron Man", "year": 2008},
             headers=_auth(token),
         )
@@ -306,7 +306,7 @@ def test_resolve_fan_out_template_error_returns_outcome_not_500(signing_key: byt
     app, token = _make_app(signing_key, db, tmp_path, hub)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/resolve",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
             json={"title": "Iron Man", "year": 2008},  # no album in metadata
             headers=_auth(token),
         )
@@ -348,7 +348,7 @@ def test_resolve_fan_out_collision_returns_outcome_not_409(signing_key: bytes, t
     app, token = _make_app(signing_key, db, tmp_path, hub)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/resolve",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
             json={"title": "Iron Man", "year": 2008},
             headers=_auth(token),
         )
@@ -387,7 +387,7 @@ def test_resolve_partial_fan_out_mixed_success_and_failure(signing_key: bytes, t
         SessionApplication(
             id="sap_bad",
             session_id="ses_bad",
-            job_id="job_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             status=SessionApplicationStatus.WAITING_IDENTIFY,
             overwrite=False,
         )
@@ -395,7 +395,7 @@ def test_resolve_partial_fan_out_mixed_success_and_failure(signing_key: bytes, t
     app, token = _make_app(signing_key, db, tmp_path, hub)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/resolve",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
             json={"title": "Iron Man", "year": 2008},
             headers=_auth(token),
         )
@@ -427,7 +427,7 @@ def test_resolve_fan_out_session_missing_returns_outcome(signing_key: bytes, tmp
     app, token = _make_app(signing_key, db, tmp_path, hub)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/resolve",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
             json={"title": "Iron Man", "year": 2008},
             headers=_auth(token),
         )
@@ -453,7 +453,7 @@ def test_resolve_fan_out_session_without_transcode_preset(signing_key: bytes, tm
     app, token = _make_app(signing_key, db, tmp_path, hub)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/resolve",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
             json={"title": "Iron Man", "year": 2008},
             headers=_auth(token),
         )
@@ -475,7 +475,7 @@ def test_resolve_fan_out_transcode_preset_missing_returns_outcome(signing_key: b
     app, token = _make_app(signing_key, db, tmp_path, hub)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/resolve",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
             json={"title": "Iron Man", "year": 2008},
             headers=_auth(token),
         )

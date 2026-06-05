@@ -32,7 +32,7 @@ from tests._fakes import FakeSession  # noqa: E402
 
 def _make_job(metadata_json: dict | None = None) -> Job:
     return Job(
-        id="job_x",
+        id="job_01JZXR7K3M5Q8N4VWA00000001",
         drive_id="drv_x",
         disc_type=DiscType.BLURAY,
         title=None,

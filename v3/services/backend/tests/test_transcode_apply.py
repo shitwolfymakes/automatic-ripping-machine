@@ -46,7 +46,7 @@ def _movie_preset() -> TranscodePreset:
 
 def _job(title: str | None = "Iron Man", year: int | None = 2008, status: JobStatus = JobStatus.RIPPED) -> Job:
     return Job(
-        id="job_x",
+        id="job_01JZXR7K3M5Q8N4VWA00000001",
         drive_id="drv_x",
         disc_type=DiscType.DVD,
         title=title,
@@ -58,7 +58,7 @@ def _job(title: str | None = "Iron Man", year: int | None = 2008, status: JobSta
 def _video_track(idx: int, duration: int = 8000) -> Track:
     return Track(
         id=f"trk_{idx}",
-        job_id="job_x",
+        job_id="job_01JZXR7K3M5Q8N4VWA00000001",
         kind=TrackKind.VIDEO_TITLE,
         index=idx,
         source_ref=str(idx),
@@ -80,7 +80,9 @@ def test_compute_outputs_skips_non_relevant_track_kinds() -> None:
     job = _job()
     sess = _movie_session("{title} ({year})/{title} - {transcode_slug}.{ext}")
     tp = _movie_preset()
-    audio = Track(id="trk_a", job_id="job_x", kind=TrackKind.AUDIO_TRACK, index=2, source_ref="2")
+    audio = Track(
+        id="trk_a", job_id="job_01JZXR7K3M5Q8N4VWA00000001", kind=TrackKind.AUDIO_TRACK, index=2, source_ref="2"
+    )
     resolved = compute_outputs(job, [_video_track(1), audio], sess, tp)
     assert len(resolved) == 1
     assert resolved[0].track_id == "trk_1"
@@ -104,7 +106,9 @@ def test_compute_outputs_iso_no_transcode_preset() -> None:
         transcode_preset_id=None,
         output_path_template="{title} ({year})/{title} ({year}).{ext}",
     )
-    track = Track(id="trk_iso", job_id="job_x", kind=TrackKind.VIDEO_TITLE, index=1, source_ref="full")
+    track = Track(
+        id="trk_iso", job_id="job_01JZXR7K3M5Q8N4VWA00000001", kind=TrackKind.VIDEO_TITLE, index=1, source_ref="full"
+    )
     # ISO ext is fixed by media_type, not by a transcode preset — but our context
     # populates `ext` from transcode_preset.container. So an ISO session with no
     # preset *will* fail on `{ext}` at apply time. The seeder template uses a
@@ -131,7 +135,7 @@ def test_compute_outputs_archive_multiple_tracks() -> None:
 
 def test_compute_outputs_tv_with_metadata_season_disc() -> None:
     job = Job(
-        id="job_tv",
+        id="job_01JZXR7K3M5Q8N4VWA0000000E",
         drive_id="drv_x",
         disc_type=DiscType.DVD,
         title="Battlestar Galactica",
@@ -152,7 +156,7 @@ def test_compute_outputs_tv_with_metadata_season_disc() -> None:
     tp.name = "Plex TV 1080p H.265"
     track = Track(
         id="trk_1",
-        job_id="job_tv",
+        job_id="job_01JZXR7K3M5Q8N4VWA0000000E",
         kind=TrackKind.VIDEO_TITLE,
         index=1,
         source_ref="1",

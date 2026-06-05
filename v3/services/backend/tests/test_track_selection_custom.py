@@ -40,42 +40,42 @@ def _custom_preset(filters: dict) -> RipPreset:
 def test_custom_min_duration_filters_short_tracks() -> None:
     scan = _scan(30, 120, 3600)
     preset = _custom_preset({"min_duration_seconds": 100})
-    result = select_tracks("job_x", scan, preset)
+    result = select_tracks("job_01JZXR7K3M5Q8N4VWA00000001", scan, preset)
     assert sorted(t.index for t in result) == [2, 3]
 
 
 def test_custom_max_duration_filters_long_tracks() -> None:
     scan = _scan(30, 120, 3600)
     preset = _custom_preset({"max_duration_seconds": 200})
-    result = select_tracks("job_x", scan, preset)
+    result = select_tracks("job_01JZXR7K3M5Q8N4VWA00000001", scan, preset)
     assert sorted(t.index for t in result) == [1, 2]
 
 
 def test_custom_indices_allowlist() -> None:
     scan = _scan(60, 60, 60, 60)
     preset = _custom_preset({"title_indices": [1, 3]})
-    result = select_tracks("job_x", scan, preset)
+    result = select_tracks("job_01JZXR7K3M5Q8N4VWA00000001", scan, preset)
     assert sorted(t.index for t in result) == [1, 3]
 
 
 def test_custom_indices_blocklist() -> None:
     scan = _scan(60, 60, 60, 60)
     preset = _custom_preset({"title_indices_exclude": [2, 4]})
-    result = select_tracks("job_x", scan, preset)
+    result = select_tracks("job_01JZXR7K3M5Q8N4VWA00000001", scan, preset)
     assert sorted(t.index for t in result) == [1, 3]
 
 
 def test_custom_combinations_anded() -> None:
     scan = _scan(30, 120, 3600, 7200)
     preset = _custom_preset({"title_indices": [2, 3, 4], "max_duration_seconds": 4000})
-    result = select_tracks("job_x", scan, preset)
+    result = select_tracks("job_01JZXR7K3M5Q8N4VWA00000001", scan, preset)
     assert sorted(t.index for t in result) == [2, 3]
 
 
 def test_custom_with_no_matches_returns_empty_list() -> None:
     scan = _scan(60)
     preset = _custom_preset({"min_duration_seconds": 1000})
-    assert select_tracks("job_x", scan, preset) == []
+    assert select_tracks("job_01JZXR7K3M5Q8N4VWA00000001", scan, preset) == []
 
 
 def test_custom_without_filters_raises() -> None:
@@ -89,7 +89,7 @@ def test_custom_without_filters_raises() -> None:
         track_filters_json=None,
     )
     with pytest.raises(TrackSelectionError):
-        select_tracks("job_x", _scan(60), preset)
+        select_tracks("job_01JZXR7K3M5Q8N4VWA00000001", _scan(60), preset)
 
 
 def test_audio_custom_filters_apply_to_cd_scan() -> None:
@@ -99,6 +99,6 @@ def test_audio_custom_filters_apply_to_cd_scan() -> None:
     )
     preset = _custom_preset({"title_indices": [3, 5, 7]})
     preset.media_type = MediaType.MUSIC
-    result = select_tracks("job_x", scan, preset)
+    result = select_tracks("job_01JZXR7K3M5Q8N4VWA00000001", scan, preset)
     assert sorted(t.index for t in result) == [3, 5, 7]
     assert all(t.kind == TrackKind.AUDIO_TRACK for t in result)

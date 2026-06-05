@@ -41,7 +41,7 @@ def test_split_origins_parses_csv() -> None:
 
 def _job(title: str | None, year: int | None) -> Job:
     return Job(
-        id="job_x",
+        id="job_01JZXR7K3M5Q8N4VWA00000001",
         drive_id="drv_x",
         disc_type=DiscType.DVD,
         title=title,
@@ -53,7 +53,9 @@ def _job(title: str | None, year: int | None) -> Job:
 
 
 def _event(**payload: object) -> Event:
-    return Event(id="evt_1", event_type="rip.completed", job_id="job_x", payload_json=dict(payload))
+    return Event(
+        id="evt_1", event_type="rip.completed", job_id="job_01JZXR7K3M5Q8N4VWA00000001", payload_json=dict(payload)
+    )
 
 
 def test_disc_label_title_without_year() -> None:
@@ -65,8 +67,8 @@ def test_disc_label_title_with_year() -> None:
 
 
 def test_disc_label_job_id_fallback() -> None:
-    ev = Event(id="e", event_type="x", job_id="job_42", payload_json={})
-    assert _disc_label(ev, None) == "job=job_42"
+    ev = Event(id="e", event_type="x", job_id="job_01JZXR7K3M5Q8N4VWA0000000C", payload_json={})
+    assert _disc_label(ev, None) == "job=job_01JZXR7K3M5Q8N4VWA0000000C"
 
 
 def test_disc_label_unknown() -> None:
@@ -106,7 +108,10 @@ def test_split_known_no_scope() -> None:
 
 
 def test_split_scoped() -> None:
-    assert _split("ripper.progress.job_1") == ("ripper.progress", "job_1")
+    assert _split("ripper.progress.job_01JZXR7K3M5Q8N4VWA0000000D") == (
+        "ripper.progress",
+        "job_01JZXR7K3M5Q8N4VWA0000000D",
+    )
 
 
 # --- WSHub -------------------------------------------------------------------
@@ -151,4 +156,4 @@ def _preset() -> RipPreset:
 def test_select_tracks_unsupported_disc_type_raises() -> None:
     scan = ScanResult(disc_type=DiscType.UNKNOWN, titles=[])
     with pytest.raises(TrackSelectionError, match="cannot select tracks for disc_type"):
-        select_tracks("job_x", scan, _preset())
+        select_tracks("job_01JZXR7K3M5Q8N4VWA00000001", scan, _preset())

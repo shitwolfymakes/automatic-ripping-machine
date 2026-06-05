@@ -57,7 +57,7 @@ def _seed(db: FakeSession, *, job_status: JobStatus = JobStatus.RIPPING) -> None
     ]
     db.rows["jobs"] = [
         Job(
-            id="job_x",
+            id="job_01JZXR7K3M5Q8N4VWA00000001",
             drive_id="drv_x",
             disc_type=DiscType.DVD,
             title="Iron Man",
@@ -70,7 +70,7 @@ def _seed(db: FakeSession, *, job_status: JobStatus = JobStatus.RIPPING) -> None
     db.rows["tracks"] = [
         Track(
             id="trk_1",
-            job_id="job_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             kind=TrackKind.VIDEO_TITLE,
             index=1,
             source_ref="1",
@@ -108,10 +108,10 @@ def test_resume_happy_path_resets_and_emits() -> None:
     hub = _CapturingHub()
     app = _make_app(db, hub=hub)
     with TestClient(app) as client:
-        r = client.post("/api/ripper/jobs/job_x/resume", headers=_service_headers())
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resume", headers=_service_headers())
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["job_id"] == "job_x"
+    assert body["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001"
     assert len(body["tracks"]) == 1
     assert body["tracks"][0]["status"] == "queued"
     assert body["tracks"][0]["attempts"] == 2  # 1 → 2
@@ -119,7 +119,7 @@ def test_resume_happy_path_resets_and_emits() -> None:
     assert job.resumed_from_crash is True
     resumed = [e for e in hub.events if e["event_type"] == "rip.resumed"]
     assert len(resumed) == 1
-    assert resumed[0]["payload"]["job_id"] == "job_x"
+    assert resumed[0]["payload"]["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001"
     assert resumed[0]["payload"]["resumed_from_crash"] is True
 
 
@@ -129,7 +129,7 @@ def test_resume_idempotent_does_not_inflate_attempts() -> None:
     # First resume.
     app = _make_app(db, hub=_CapturingHub())
     with TestClient(app) as client:
-        first = client.post("/api/ripper/jobs/job_x/resume", headers=_service_headers())
+        first = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resume", headers=_service_headers())
     assert first.status_code == 200
     track_after_first = db.rows["tracks"][0]
     assert track_after_first.attempts == 2
@@ -137,7 +137,7 @@ def test_resume_idempotent_does_not_inflate_attempts() -> None:
     # Second resume — track is now QUEUED already, attempts must not increment.
     app2 = _make_app(db, hub=_CapturingHub())
     with TestClient(app2) as client:
-        second = client.post("/api/ripper/jobs/job_x/resume", headers=_service_headers())
+        second = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resume", headers=_service_headers())
     assert second.status_code == 200
     assert db.rows["tracks"][0].attempts == 2
 
@@ -147,7 +147,7 @@ def test_resume_on_non_ripping_job_returns_409() -> None:
     _seed(db, job_status=JobStatus.RIPPED)
     app = _make_app(db, hub=_CapturingHub())
     with TestClient(app) as client:
-        r = client.post("/api/ripper/jobs/job_x/resume", headers=_service_headers())
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resume", headers=_service_headers())
     assert r.status_code == 409
 
 
@@ -156,7 +156,7 @@ def test_resume_unknown_job_returns_404() -> None:
     _seed(db)
     app = _make_app(db, hub=_CapturingHub())
     with TestClient(app) as client:
-        r = client.post("/api/ripper/jobs/job_missing/resume", headers=_service_headers())
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA0000000M/resume", headers=_service_headers())
     assert r.status_code == 404
 
 
@@ -165,7 +165,7 @@ def test_resume_unauthenticated_returns_401() -> None:
     _seed(db)
     app = _make_app(db, hub=_CapturingHub())
     with TestClient(app) as client:
-        r = client.post("/api/ripper/jobs/job_x/resume")
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resume")
     assert r.status_code == 401
 
 
@@ -175,7 +175,7 @@ def test_resume_wrong_hostname_returns_403() -> None:
     app = _make_app(db, hub=_CapturingHub())
     with TestClient(app) as client:
         r = client.post(
-            "/api/ripper/jobs/job_x/resume",
+            "/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resume",
             headers={"Authorization": "Bearer tok-service", "X-ARM-Hostname": "wrong-host"},
         )
     assert r.status_code == 403
@@ -195,7 +195,7 @@ def test_in_flight_returns_ripping_job() -> None:
         )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["id"] == "job_x"
+    assert body["id"] == "job_01JZXR7K3M5Q8N4VWA00000001"
     assert body["status"] == "ripping"
 
 

@@ -88,19 +88,19 @@ def _make_track(track_id: str, *, job_id: str, index: int, status: TrackStatus) 
 def test_ripping_job_with_in_progress_track_returns_summary(signing_key: bytes) -> None:
     db = FakeSession()
     _seed_admin(db)
-    db.rows["jobs"] = [_make_job("job_a", status=JobStatus.RIPPING)]
+    db.rows["jobs"] = [_make_job("job_01JZXR7K3M5Q8N4VWA00000002", status=JobStatus.RIPPING)]
     # 8 tracks: 0..1 done, 2 in-progress, 3..7 queued. Indexes intentionally
     # out of insertion order to prove `_summarize_rip_progress` sorts by
     # `Track.index` before computing the ordinal.
     db.rows["tracks"] = [
-        _make_track("trk_3", job_id="job_a", index=3, status=TrackStatus.QUEUED),
-        _make_track("trk_2", job_id="job_a", index=2, status=TrackStatus.IN_PROGRESS),
-        _make_track("trk_0", job_id="job_a", index=0, status=TrackStatus.DONE),
-        _make_track("trk_1", job_id="job_a", index=1, status=TrackStatus.DONE),
-        _make_track("trk_4", job_id="job_a", index=4, status=TrackStatus.QUEUED),
-        _make_track("trk_5", job_id="job_a", index=5, status=TrackStatus.QUEUED),
-        _make_track("trk_6", job_id="job_a", index=6, status=TrackStatus.QUEUED),
-        _make_track("trk_7", job_id="job_a", index=7, status=TrackStatus.QUEUED),
+        _make_track("trk_3", job_id="job_01JZXR7K3M5Q8N4VWA00000002", index=3, status=TrackStatus.QUEUED),
+        _make_track("trk_2", job_id="job_01JZXR7K3M5Q8N4VWA00000002", index=2, status=TrackStatus.IN_PROGRESS),
+        _make_track("trk_0", job_id="job_01JZXR7K3M5Q8N4VWA00000002", index=0, status=TrackStatus.DONE),
+        _make_track("trk_1", job_id="job_01JZXR7K3M5Q8N4VWA00000002", index=1, status=TrackStatus.DONE),
+        _make_track("trk_4", job_id="job_01JZXR7K3M5Q8N4VWA00000002", index=4, status=TrackStatus.QUEUED),
+        _make_track("trk_5", job_id="job_01JZXR7K3M5Q8N4VWA00000002", index=5, status=TrackStatus.QUEUED),
+        _make_track("trk_6", job_id="job_01JZXR7K3M5Q8N4VWA00000002", index=6, status=TrackStatus.QUEUED),
+        _make_track("trk_7", job_id="job_01JZXR7K3M5Q8N4VWA00000002", index=7, status=TrackStatus.QUEUED),
     ]
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
@@ -122,11 +122,11 @@ def test_ripping_job_with_in_progress_track_returns_summary(signing_key: bytes) 
 def test_ripping_job_without_in_progress_track_returns_null_current(signing_key: bytes) -> None:
     db = FakeSession()
     _seed_admin(db)
-    db.rows["jobs"] = [_make_job("job_a", status=JobStatus.RIPPING)]
+    db.rows["jobs"] = [_make_job("job_01JZXR7K3M5Q8N4VWA00000002", status=JobStatus.RIPPING)]
     db.rows["tracks"] = [
-        _make_track("trk_0", job_id="job_a", index=0, status=TrackStatus.QUEUED),
-        _make_track("trk_1", job_id="job_a", index=1, status=TrackStatus.QUEUED),
-        _make_track("trk_2", job_id="job_a", index=2, status=TrackStatus.QUEUED),
+        _make_track("trk_0", job_id="job_01JZXR7K3M5Q8N4VWA00000002", index=0, status=TrackStatus.QUEUED),
+        _make_track("trk_1", job_id="job_01JZXR7K3M5Q8N4VWA00000002", index=1, status=TrackStatus.QUEUED),
+        _make_track("trk_2", job_id="job_01JZXR7K3M5Q8N4VWA00000002", index=2, status=TrackStatus.QUEUED),
     ]
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
@@ -145,12 +145,12 @@ def test_ripping_job_without_in_progress_track_returns_null_current(signing_key:
 def test_ripping_job_counts_failed_tracks(signing_key: bytes) -> None:
     db = FakeSession()
     _seed_admin(db)
-    db.rows["jobs"] = [_make_job("job_a", status=JobStatus.RIPPING)]
+    db.rows["jobs"] = [_make_job("job_01JZXR7K3M5Q8N4VWA00000002", status=JobStatus.RIPPING)]
     db.rows["tracks"] = [
-        _make_track("trk_0", job_id="job_a", index=0, status=TrackStatus.DONE),
-        _make_track("trk_1", job_id="job_a", index=1, status=TrackStatus.FAILED),
-        _make_track("trk_2", job_id="job_a", index=2, status=TrackStatus.IN_PROGRESS),
-        _make_track("trk_3", job_id="job_a", index=3, status=TrackStatus.QUEUED),
+        _make_track("trk_0", job_id="job_01JZXR7K3M5Q8N4VWA00000002", index=0, status=TrackStatus.DONE),
+        _make_track("trk_1", job_id="job_01JZXR7K3M5Q8N4VWA00000002", index=1, status=TrackStatus.FAILED),
+        _make_track("trk_2", job_id="job_01JZXR7K3M5Q8N4VWA00000002", index=2, status=TrackStatus.IN_PROGRESS),
+        _make_track("trk_3", job_id="job_01JZXR7K3M5Q8N4VWA00000002", index=3, status=TrackStatus.QUEUED),
     ]
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
@@ -177,11 +177,11 @@ def test_ripping_job_counts_failed_tracks(signing_key: bytes) -> None:
 def test_non_ripping_jobs_return_null_rip_progress(signing_key: bytes, status: JobStatus) -> None:
     db = FakeSession()
     _seed_admin(db)
-    db.rows["jobs"] = [_make_job("job_a", status=status)]
+    db.rows["jobs"] = [_make_job("job_01JZXR7K3M5Q8N4VWA00000002", status=status)]
     # Even with tracks, non-ripping jobs should not get a summary —
     # the field is dashboard-only.
     db.rows["tracks"] = [
-        _make_track("trk_0", job_id="job_a", index=0, status=TrackStatus.DONE),
+        _make_track("trk_0", job_id="job_01JZXR7K3M5Q8N4VWA00000002", index=0, status=TrackStatus.DONE),
     ]
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
@@ -193,7 +193,7 @@ def test_non_ripping_jobs_return_null_rip_progress(signing_key: bytes, status: J
 def test_ripping_job_with_no_tracks_returns_zeroed_summary(signing_key: bytes) -> None:
     db = FakeSession()
     _seed_admin(db)
-    db.rows["jobs"] = [_make_job("job_a", status=JobStatus.RIPPING)]
+    db.rows["jobs"] = [_make_job("job_01JZXR7K3M5Q8N4VWA00000002", status=JobStatus.RIPPING)]
     db.rows["tracks"] = []
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
@@ -213,14 +213,14 @@ def test_mixed_jobs_only_ripping_get_summary(signing_key: bytes) -> None:
     db = FakeSession()
     _seed_admin(db)
     db.rows["jobs"] = [
-        _make_job("job_ripping", status=JobStatus.RIPPING, drive_id="drv_1"),
-        _make_job("job_done", status=JobStatus.RIPPED, drive_id="drv_2"),
+        _make_job("job_01JZXR7K3M5Q8N4VWA0000000A", status=JobStatus.RIPPING, drive_id="drv_1"),
+        _make_job("job_01JZXR7K3M5Q8N4VWA00000007", status=JobStatus.RIPPED, drive_id="drv_2"),
     ]
     db.rows["tracks"] = [
-        _make_track("trk_a0", job_id="job_ripping", index=0, status=TrackStatus.IN_PROGRESS),
-        _make_track("trk_a1", job_id="job_ripping", index=1, status=TrackStatus.QUEUED),
+        _make_track("trk_a0", job_id="job_01JZXR7K3M5Q8N4VWA0000000A", index=0, status=TrackStatus.IN_PROGRESS),
+        _make_track("trk_a1", job_id="job_01JZXR7K3M5Q8N4VWA0000000A", index=1, status=TrackStatus.QUEUED),
         # Tracks for the terminal job — must not bleed into its summary.
-        _make_track("trk_b0", job_id="job_done", index=0, status=TrackStatus.DONE),
+        _make_track("trk_b0", job_id="job_01JZXR7K3M5Q8N4VWA00000007", index=0, status=TrackStatus.DONE),
     ]
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
@@ -228,6 +228,6 @@ def test_mixed_jobs_only_ripping_get_summary(signing_key: bytes) -> None:
     assert r.status_code == 200
     body = r.json()
     by_id = {j["id"]: j for j in body}
-    assert by_id["job_ripping"]["rip_progress"]["current_track_index"] == 1
-    assert by_id["job_ripping"]["rip_progress"]["tracks_total"] == 2
-    assert by_id["job_done"]["rip_progress"] is None
+    assert by_id["job_01JZXR7K3M5Q8N4VWA0000000A"]["rip_progress"]["current_track_index"] == 1
+    assert by_id["job_01JZXR7K3M5Q8N4VWA0000000A"]["rip_progress"]["tracks_total"] == 2
+    assert by_id["job_01JZXR7K3M5Q8N4VWA00000007"]["rip_progress"] is None

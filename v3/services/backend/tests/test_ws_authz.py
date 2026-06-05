@@ -61,11 +61,18 @@ def _extract_id(sql: str) -> str | None:
 def session() -> Any:
     drive_a = Drive(id="drv_A", hostname="arm-ripper-A", device_path="/dev/sr0", status=DriveStatus.ONLINE)
     drive_b = Drive(id="drv_B", hostname="arm-ripper-B", device_path="/dev/sr1", status=DriveStatus.ONLINE)
-    job_a = Job(id="job_A", drive_id="drv_A", disc_type=DiscType.DVD, status=JobStatus.RIPPING)
-    job_b = Job(id="job_B", drive_id="drv_B", disc_type=DiscType.DVD, status=JobStatus.RIPPING)
+    job_01JZXR7K3M5Q8N4VWA00000002 = Job(
+        id="job_01JZXR7K3M5Q8N4VWA00000005", drive_id="drv_A", disc_type=DiscType.DVD, status=JobStatus.RIPPING
+    )
+    job_01JZXR7K3M5Q8N4VWA00000003 = Job(
+        id="job_01JZXR7K3M5Q8N4VWA00000006", drive_id="drv_B", disc_type=DiscType.DVD, status=JobStatus.RIPPING
+    )
     return _FakeSession(
         drives={"drv_A": drive_a, "drv_B": drive_b},
-        jobs={"job_A": job_a, "job_B": job_b},
+        jobs={
+            "job_01JZXR7K3M5Q8N4VWA00000005": job_01JZXR7K3M5Q8N4VWA00000002,
+            "job_01JZXR7K3M5Q8N4VWA00000006": job_01JZXR7K3M5Q8N4VWA00000003,
+        },
     )
 
 
@@ -82,7 +89,7 @@ async def test_ripper_cannot_subscribe_other_drives_command_topic(session: Any) 
 async def test_ripper_cannot_subscribe_ui_topics(session: Any) -> None:
     p = ServicePrincipal(kind="ripper", hostname="arm-ripper-A")
     assert await can_subscribe(p, "ripper.events", session) is False
-    assert await can_subscribe(p, "ripper.progress.job_A", session) is False
+    assert await can_subscribe(p, "ripper.progress.job_01JZXR7K3M5Q8N4VWA00000005", session) is False
     assert await can_subscribe(p, "system.events", session) is False
 
 
@@ -94,10 +101,10 @@ async def test_ripper_cannot_subscribe_to_unknown_drive(session: Any) -> None:
 async def test_ui_can_subscribe_to_ui_topics(session: Any) -> None:
     ui = UIPrincipal(user_id="u_1", username="admin")
     assert await can_subscribe(ui, "ripper.events", session) is True
-    assert await can_subscribe(ui, "ripper.progress.job_A", session) is True
+    assert await can_subscribe(ui, "ripper.progress.job_01JZXR7K3M5Q8N4VWA00000005", session) is True
     assert await can_subscribe(ui, "transcode.events", session) is True
     assert await can_subscribe(ui, "system.events", session) is True
-    assert await can_subscribe(ui, "logs.job_A", session) is True
+    assert await can_subscribe(ui, "logs.job_01JZXR7K3M5Q8N4VWA00000005", session) is True
 
 
 async def test_ui_cannot_subscribe_to_command_topics(session: Any) -> None:
@@ -108,12 +115,12 @@ async def test_ui_cannot_subscribe_to_command_topics(session: Any) -> None:
 
 async def test_ripper_can_publish_progress_for_own_job(session: Any) -> None:
     p = ServicePrincipal(kind="ripper", hostname="arm-ripper-A")
-    assert await can_publish(p, "ripper.progress.job_A", session) is True
+    assert await can_publish(p, "ripper.progress.job_01JZXR7K3M5Q8N4VWA00000005", session) is True
 
 
 async def test_ripper_cannot_publish_progress_for_other_drives_job(session: Any) -> None:
     p = ServicePrincipal(kind="ripper", hostname="arm-ripper-A")
-    assert await can_publish(p, "ripper.progress.job_B", session) is False
+    assert await can_publish(p, "ripper.progress.job_01JZXR7K3M5Q8N4VWA00000006", session) is False
 
 
 async def test_ripper_cannot_publish_to_ripper_events(session: Any) -> None:
@@ -124,5 +131,5 @@ async def test_ripper_cannot_publish_to_ripper_events(session: Any) -> None:
 
 async def test_ui_cannot_publish_anywhere(session: Any) -> None:
     ui = UIPrincipal(user_id="u_1", username="admin")
-    assert await can_publish(ui, "ripper.progress.job_A", session) is False
+    assert await can_publish(ui, "ripper.progress.job_01JZXR7K3M5Q8N4VWA00000005", session) is False
     assert await can_publish(ui, "ripper.events", session) is False

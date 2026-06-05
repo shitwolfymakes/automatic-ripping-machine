@@ -17,7 +17,7 @@ def _app(status: SessionApplicationStatus = SessionApplicationStatus.RUNNING) ->
     return SessionApplication(
         id="sap_x",
         session_id="ses_x",
-        job_id="job_x",
+        job_id="job_01JZXR7K3M5Q8N4VWA00000001",
         status=status,
         overwrite=False,
     )

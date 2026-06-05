@@ -164,7 +164,7 @@ def test_delete_terminal_emits_with_job_id(signing_key: bytes) -> None:
         SessionApplication(
             id="sap_1",
             session_id="ses_1",
-            job_id="job_42",
+            job_id="job_01JZXR7K3M5Q8N4VWA0000000C",
             status=SessionApplicationStatus.QUEUED,
         )
     ]
@@ -175,7 +175,7 @@ def test_delete_terminal_emits_with_job_id(signing_key: bytes) -> None:
     evt = hub.events[0]
     assert evt["event_type"] == "task.deleted"
     assert evt["payload"] == {"task_id": "txt_done", "session_application_id": "sap_1"}
-    assert evt["job_id"] == "job_42"
+    assert evt["job_id"] == "job_01JZXR7K3M5Q8N4VWA0000000C"
     assert evt["track_id"] == "trk_9"
 
 

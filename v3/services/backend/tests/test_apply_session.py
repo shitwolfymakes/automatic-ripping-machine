@@ -53,7 +53,7 @@ def _seed(db: FakeSession, *, job_status: JobStatus = JobStatus.RIPPED) -> None:
     db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
     db.rows["jobs"] = [
         Job(
-            id="job_x",
+            id="job_01JZXR7K3M5Q8N4VWA00000001",
             drive_id="drv_x",
             disc_type=DiscType.DVD,
             title="Iron Man",
@@ -98,7 +98,7 @@ def _seed(db: FakeSession, *, job_status: JobStatus = JobStatus.RIPPED) -> None:
     db.rows["tracks"] = [
         Track(
             id="trk_1",
-            job_id="job_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             kind=TrackKind.VIDEO_TITLE,
             index=1,
             source_ref="1",
@@ -165,7 +165,7 @@ def test_apply_happy_path_creates_application_and_tasks(signing_key: bytes, tmp_
     app, token = _make_app(signing_key, db, tmp_path)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/transcode",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
             json={"session_id": "ses_x"},
             headers=_auth(token),
         )
@@ -193,7 +193,7 @@ def test_manual_reapply_with_existing_done_returns_collisions_for_overwrite_prom
         SessionApplication(
             id="sap_existing",
             session_id="ses_x",
-            job_id="job_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             status=SessionApplicationStatus.DONE,
             overwrite=False,
         )
@@ -212,7 +212,7 @@ def test_manual_reapply_with_existing_done_returns_collisions_for_overwrite_prom
     app, token = _make_app(signing_key, db, tmp_path)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/transcode",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
             json={"session_id": "ses_x"},
             headers=_auth(token),
         )
@@ -234,7 +234,7 @@ def test_manual_reapply_with_overwrite_evicts_done_tasks_and_creates_new(signing
         SessionApplication(
             id="sap_existing",
             session_id="ses_x",
-            job_id="job_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             status=SessionApplicationStatus.DONE,
             overwrite=False,
         )
@@ -253,7 +253,7 @@ def test_manual_reapply_with_overwrite_evicts_done_tasks_and_creates_new(signing
     app, token = _make_app(signing_key, db, tmp_path)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/transcode",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
             json={"session_id": "ses_x", "overwrite": True},
             headers=_auth(token),
         )
@@ -292,7 +292,7 @@ def test_manual_reapply_overwrite_refused_when_in_progress(signing_key: bytes, t
     app, token = _make_app(signing_key, db, tmp_path)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/transcode",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
             json={"session_id": "ses_x", "overwrite": True},
             headers=_auth(token),
         )
@@ -315,7 +315,7 @@ def test_apply_collision_409_lists_paths(signing_key: bytes, tmp_path: Path) -> 
     app, token = _make_app(signing_key, db, tmp_path)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/transcode",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
             json={"session_id": "ses_x"},
             headers=_auth(token),
         )
@@ -341,7 +341,7 @@ def test_apply_overwrite_true_clears_collision(signing_key: bytes, tmp_path: Pat
     app, token = _make_app(signing_key, db, tmp_path)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/transcode",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
             json={"session_id": "ses_x", "overwrite": True},
             headers=_auth(token),
         )
@@ -358,7 +358,7 @@ def test_apply_filesystem_collision_detected(signing_key: bytes, tmp_path: Path)
     app, token = _make_app(signing_key, db, tmp_path)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/transcode",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
             json={"session_id": "ses_x"},
             headers=_auth(token),
         )
@@ -381,7 +381,7 @@ def test_apply_duplicate_in_request_collision_for_multi_track_no_track_token(
     db.rows["tracks"].append(
         Track(
             id="trk_2",
-            job_id="job_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             kind=TrackKind.VIDEO_TITLE,
             index=2,
             source_ref="2",
@@ -392,7 +392,7 @@ def test_apply_duplicate_in_request_collision_for_multi_track_no_track_token(
     app, token = _make_app(signing_key, db, tmp_path)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/transcode",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
             json={"session_id": "ses_x"},
             headers=_auth(token),
         )
@@ -411,7 +411,7 @@ def test_apply_to_unidentified_job_creates_waiting_identify(signing_key: bytes, 
     app, token = _make_app(signing_key, db, tmp_path)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/transcode",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
             json={"session_id": "ses_x"},
             headers=_auth(token),
         )
@@ -427,7 +427,7 @@ def test_apply_rejects_job_in_bad_status(signing_key: bytes, tmp_path: Path) -> 
     app, token = _make_app(signing_key, db, tmp_path)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/transcode",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
             json={"session_id": "ses_x"},
             headers=_auth(token),
         )
@@ -440,7 +440,7 @@ def test_apply_unknown_session_400(signing_key: bytes, tmp_path: Path) -> None:
     app, token = _make_app(signing_key, db, tmp_path)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/transcode",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
             json={"session_id": "ses_does_not_exist"},
             headers=_auth(token),
         )
@@ -454,7 +454,7 @@ def test_apply_integrity_race_returns_409(signing_key: bytes, tmp_path: Path) ->
     app, token = _make_app(signing_key, db, tmp_path)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/transcode",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
             json={"session_id": "ses_x"},
             headers=_auth(token),
         )
@@ -469,7 +469,7 @@ def test_apply_emits_session_queued_with_manual_source(signing_key: bytes, tmp_p
     app, token = _make_app(signing_key, db, tmp_path, hub=hub)
     with TestClient(app) as client:
         r = client.post(
-            "/api/jobs/job_x/transcode",
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
             json={"session_id": "ses_x"},
             headers=_auth(token),
         )
@@ -478,5 +478,5 @@ def test_apply_emits_session_queued_with_manual_source(signing_key: bytes, tmp_p
     assert len(queued) == 1
     payload = queued[0]["payload"]
     assert payload["source"] == "manual"
-    assert payload["job_id"] == "job_x"
+    assert payload["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001"
     assert payload["task_count"] == 1

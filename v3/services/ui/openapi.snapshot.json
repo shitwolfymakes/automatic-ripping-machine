@@ -990,6 +990,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
             }
           },
@@ -1047,7 +1048,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]+$",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
             }
           },
@@ -1108,6 +1109,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
             }
           },
@@ -1177,6 +1179,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
             }
           },
@@ -1312,6 +1315,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
             }
           },
@@ -1380,6 +1384,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
             }
           },
@@ -3254,7 +3259,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]+$",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
             }
           },
@@ -3312,7 +3317,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]+$",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
             }
           },

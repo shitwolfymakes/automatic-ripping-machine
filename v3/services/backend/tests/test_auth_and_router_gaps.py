@@ -125,7 +125,7 @@ def test_require_jwt_unknown_user_401() -> None:
 # --- auth.py: drive-owner verification ---------------------------------------
 
 
-def _job(job_id: str = "job_x", drive_id: str = "drv_x") -> Job:
+def _job(job_id: str = "job_01JZXR7K3M5Q8N4VWA00000001", drive_id: str = "drv_x") -> Job:
     return Job(
         id=job_id,
         drive_id=drive_id,
@@ -144,7 +144,7 @@ def test_drive_owner_missing_hostname_header_401() -> None:
     db.rows["drives"] = [Drive(id="drv_x", hostname="h", device_path="/dev/sr0", status=DriveStatus.ONLINE)]
     app = _app(db, ripper_router)
     with TestClient(app) as client:
-        r = client.post("/api/ripper/jobs/job_x/rip-start", headers=_SVC)  # no X-ARM-Hostname
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_SVC)  # no X-ARM-Hostname
     assert r.status_code == 401
     assert "missing X-ARM-Hostname" in r.json()["detail"]
 
@@ -156,7 +156,7 @@ def test_drive_owner_unknown_drive_404() -> None:
     app = _app(db, ripper_router)
     with TestClient(app) as client:
         r = client.post(
-            "/api/ripper/jobs/job_x/rip-start",
+            "/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start",
             headers={**_SVC, "X-ARM-Hostname": "h"},
         )
     assert r.status_code == 404
@@ -170,7 +170,7 @@ def test_drive_owner_hostname_mismatch_403() -> None:
     app = _app(db, ripper_router)
     with TestClient(app) as client:
         r = client.post(
-            "/api/ripper/jobs/job_x/rip-start",
+            "/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start",
             headers={**_SVC, "X-ARM-Hostname": "intruder-host"},
         )
     assert r.status_code == 403

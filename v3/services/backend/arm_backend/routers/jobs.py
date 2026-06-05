@@ -2,10 +2,9 @@ import logging
 import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Annotated, Iterable
+from typing import Iterable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi import Path as PathParam
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -19,6 +18,7 @@ from arm_backend.auto_session import (
 from arm_backend.config import settings
 from arm_backend.db import get_session
 from arm_backend.path_template import TemplateValidationError
+from arm_backend.routers._params import JobIdParam
 from arm_backend.routers.logs import per_job_log_path
 from arm_backend.ws import WSHub
 from arm_common import (
@@ -51,7 +51,7 @@ from arm_common.schemas import (
     TrackView,
     TranscodeTaskView,
 )
-from arm_common.ulid import ID_COMPONENT_PATTERN, is_safe_id_component
+from arm_common.ulid import is_valid_id
 
 logger = logging.getLogger("arm_backend.routers.jobs")
 
@@ -154,7 +154,7 @@ async def list_jobs(
 
 @router.get("/{job_id}", response_model=JobDetailView)
 async def get_job_detail(
-    job_id: str,
+    job_id: JobIdParam,
     _: User = Depends(require_jwt),
     session: AsyncSession = Depends(get_session),
 ) -> JobDetailView:
@@ -194,7 +194,7 @@ _NON_TERMINAL_STATUSES: frozenset[JobStatus] = frozenset(
 
 @router.post("/{job_id}/abandon", response_model=JobView)
 async def abandon_job(
-    job_id: str,
+    job_id: JobIdParam,
     req: AbandonJobRequest | None = None,
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
@@ -325,9 +325,9 @@ def _delete_job_files(
     expected. Returns counters for the operator log.
     """
     # `job_id` is interpolated into a path under `raw_root`; reject anything
-    # that isn't a single safe component so a crafted id can't rmtree outside
-    # the raw tree. Routes pin the param too — this is defence-in-depth.
-    if not is_safe_id_component(job_id):
+    # that isn't the expected `job_<ULID>` shape so a crafted id can't rmtree
+    # outside the raw tree. Routes pin the param too — this is defence-in-depth.
+    if not is_valid_id("job", job_id):
         raise ValueError(f"invalid job_id: {job_id!r}")
     raw_dir = raw_root / job_id
     raw_removed = 0
@@ -376,7 +376,7 @@ def _delete_per_job_log(job_id: str) -> None:
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_job(
-    job_id: Annotated[str, PathParam(pattern=ID_COMPONENT_PATTERN)],
+    job_id: JobIdParam,
     delete_raw: bool = Query(default=False),
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
@@ -544,7 +544,7 @@ async def manual_trigger(
 
 @router.patch("/{job_id}", response_model=JobView)
 async def update_job(
-    job_id: str,
+    job_id: JobIdParam,
     req: JobUpdateRequest,
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
@@ -583,7 +583,7 @@ _RESOLVABLE_STATUSES: frozenset[JobStatus] = _RESOLVABLE_STATUSES_PROMOTE | _RES
 
 @router.post("/{job_id}/resolve", response_model=ResolveResponse)
 async def resolve(
-    job_id: str,
+    job_id: JobIdParam,
     req: ResolveRequest,
     _: User = Depends(require_jwt),
     session: AsyncSession = Depends(get_session),
@@ -668,7 +668,7 @@ async def resolve(
 
 @router.post("/{job_id}/transcode", response_model=ApplySessionResponse)
 async def apply_session(
-    job_id: str,
+    job_id: JobIdParam,
     req: ApplySessionRequest,
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),

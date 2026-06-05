@@ -41,7 +41,7 @@ _SERVICE_AUTH = {"Authorization": "Bearer tok-service", "X-ARM-Hostname": _HOSTN
 def _seed_running_task_with_claimed_gpu(db: FakeSession) -> None:
     db.rows["jobs"] = [
         Job(
-            id="job_x",
+            id="job_01JZXR7K3M5Q8N4VWA00000001",
             drive_id="drv_x",
             disc_type=DiscType.DVD,
             title="X",
@@ -54,7 +54,7 @@ def _seed_running_task_with_claimed_gpu(db: FakeSession) -> None:
         SessionApplication(
             id="sap_x",
             session_id="ses_x",
-            job_id="job_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             status=SessionApplicationStatus.RUNNING,
             overwrite=False,
         )

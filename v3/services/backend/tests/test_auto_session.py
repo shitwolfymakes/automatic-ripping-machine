@@ -71,7 +71,7 @@ class CapturingHub:
 
 def _seed(db: FakeSession, *, job_status: JobStatus = JobStatus.RIPPED) -> Job:
     job = Job(
-        id="job_x",
+        id="job_01JZXR7K3M5Q8N4VWA00000001",
         drive_id="drv_x",
         disc_type=DiscType.DVD,
         title="Iron Man",
@@ -116,7 +116,7 @@ def _seed(db: FakeSession, *, job_status: JobStatus = JobStatus.RIPPED) -> Job:
     db.rows["tracks"] = [
         Track(
             id="trk_1",
-            job_id="job_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             kind=TrackKind.VIDEO_TITLE,
             index=1,
             source_ref="1",
@@ -162,7 +162,7 @@ async def test_manual_source_emits_session_queued(tmp_path: Path) -> None:
     assert evt["topic"] == "session.events"
     assert evt["event_type"] == "session.queued"
     assert evt["payload"]["source"] == "manual"
-    assert evt["payload"]["job_id"] == "job_x"
+    assert evt["payload"]["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001"
     assert evt["payload"]["task_count"] == 1
 
 
@@ -196,7 +196,7 @@ async def test_idempotent_reapply_does_not_re_emit(tmp_path: Path) -> None:
         SessionApplication(
             id="sap_existing",
             session_id="ses_x",
-            job_id="job_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             status=SessionApplicationStatus.QUEUED,
             overwrite=False,
         )

@@ -22,7 +22,7 @@ from arm_common import (  # noqa: E402
 from tests._fakes import FakeSession  # noqa: E402
 
 
-def _make_job(*, job_id: str = "job_x", status: JobStatus = JobStatus.RIPPING) -> Job:
+def _make_job(*, job_id: str = "job_01JZXR7K3M5Q8N4VWA00000001", status: JobStatus = JobStatus.RIPPING) -> Job:
     return Job(
         id=job_id,
         drive_id="drv_x",
@@ -102,7 +102,7 @@ async def test_reset_handles_done_and_failed_tracks() -> None:
 @pytest.mark.asyncio
 async def test_sweep_no_ripping_jobs_returns_zero() -> None:
     db = FakeSession()
-    db.rows["jobs"] = [_make_job(job_id="job_done", status=JobStatus.RIPPED)]
+    db.rows["jobs"] = [_make_job(job_id="job_01JZXR7K3M5Q8N4VWA00000007", status=JobStatus.RIPPED)]
     db.rows["tracks"] = []
 
     swept = await _sweep(db)  # type: ignore[arg-type]
@@ -114,14 +114,14 @@ async def test_sweep_no_ripping_jobs_returns_zero() -> None:
 @pytest.mark.asyncio
 async def test_sweep_resets_only_ripping_jobs() -> None:
     db = FakeSession()
-    ripping_a = _make_job(job_id="job_a", status=JobStatus.RIPPING)
-    ripping_b = _make_job(job_id="job_b", status=JobStatus.RIPPING)
-    ripped = _make_job(job_id="job_c", status=JobStatus.RIPPED)
+    ripping_a = _make_job(job_id="job_01JZXR7K3M5Q8N4VWA00000002", status=JobStatus.RIPPING)
+    ripping_b = _make_job(job_id="job_01JZXR7K3M5Q8N4VWA00000003", status=JobStatus.RIPPING)
+    ripped = _make_job(job_id="job_01JZXR7K3M5Q8N4VWA00000004", status=JobStatus.RIPPED)
     db.rows["jobs"] = [ripping_a, ripping_b, ripped]
     db.rows["tracks"] = [
-        _make_track(track_id="trk_a", job_id="job_a", status=TrackStatus.IN_PROGRESS),
-        _make_track(track_id="trk_b", job_id="job_b", status=TrackStatus.IN_PROGRESS),
-        _make_track(track_id="trk_c", job_id="job_c", status=TrackStatus.DONE, attempts=1),
+        _make_track(track_id="trk_a", job_id="job_01JZXR7K3M5Q8N4VWA00000002", status=TrackStatus.IN_PROGRESS),
+        _make_track(track_id="trk_b", job_id="job_01JZXR7K3M5Q8N4VWA00000003", status=TrackStatus.IN_PROGRESS),
+        _make_track(track_id="trk_c", job_id="job_01JZXR7K3M5Q8N4VWA00000004", status=TrackStatus.DONE, attempts=1),
     ]
 
     swept = await _sweep(db)  # type: ignore[arg-type]

@@ -93,7 +93,7 @@ def _seed_config(
 def _seed_job(db: FakeSession) -> None:
     db.rows.setdefault("jobs", []).append(
         Job(
-            id="job_x",
+            id="job_01JZXR7K3M5Q8N4VWA00000001",
             drive_id="drv_x",
             disc_type=DiscType.DVD,
             title="Iron Man",
@@ -109,7 +109,7 @@ def _make_event(
     *,
     event_id: str = "evt_1",
     event_type: str = "rip.completed",
-    job_id: str | None = "job_x",
+    job_id: str | None = "job_01JZXR7K3M5Q8N4VWA00000001",
     payload: dict[str, Any] | None = None,
     notified_at: datetime | None = None,
     emitted_at: datetime | None = None,

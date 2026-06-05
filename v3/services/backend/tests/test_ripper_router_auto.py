@@ -70,7 +70,7 @@ def _seed(
     auto_transcode_on_idle: bool = True,
 ) -> Job:
     job = Job(
-        id="job_x",
+        id="job_01JZXR7K3M5Q8N4VWA00000001",
         drive_id="drv_x",
         disc_type=DiscType.DVD,
         title="Iron Man",
@@ -133,7 +133,7 @@ def _seed(
     db.rows["tracks"] = [
         Track(
             id="trk_1",
-            job_id="job_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             kind=TrackKind.VIDEO_TITLE,
             index=1,
             source_ref="1",
@@ -164,7 +164,7 @@ async def test_ripped_with_default_and_auto_creates_application(tmp_path: Path) 
     apps = [r for r in db.added if isinstance(r, SessionApplication)]
     assert len(apps) == 1
     assert apps[0].session_id == "ses_x"
-    assert apps[0].job_id == "job_x"
+    assert apps[0].job_id == "job_01JZXR7K3M5Q8N4VWA00000001"
     assert any(e["event_type"] == "session.queued" for e in hub.events)
     assert hub.events[0]["payload"]["source"] == "auto"
 

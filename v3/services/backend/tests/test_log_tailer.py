@@ -74,7 +74,7 @@ def _append(path: Path, record: dict[str, Any]) -> None:
 
 def _record(
     *,
-    job_id: str | None = "job_x",
+    job_id: str | None = "job_01JZXR7K3M5Q8N4VWA00000001",
     track_id: str | None = None,
     msg: str = "ok",
     service: str = "arm-backend",
@@ -96,7 +96,7 @@ def _record(
 async def test_emits_when_job_has_subscriber(tmp_path: Path) -> None:
     log_path = tmp_path / "arm-backend.log"
     log_path.touch()
-    hub = _FakeHub(subscriptions={"logs.job_x": 1})
+    hub = _FakeHub(subscriptions={"logs.job_01JZXR7K3M5Q8N4VWA00000001": 1})
     tailer = LogTailer(hub, log_dir=str(tmp_path))  # type: ignore[arg-type]
 
     await tailer.tick()  # discover + seek-to-end
@@ -105,10 +105,10 @@ async def test_emits_when_job_has_subscriber(tmp_path: Path) -> None:
 
     assert len(hub.emits) == 1
     emit = hub.emits[0]
-    assert emit.topic == "logs.job_x"
+    assert emit.topic == "logs.job_01JZXR7K3M5Q8N4VWA00000001"
     assert emit.event_type == "log.line"
     assert emit.persist is False
-    assert emit.job_id == "job_x"
+    assert emit.job_id == "job_01JZXR7K3M5Q8N4VWA00000001"
     assert emit.payload["msg"] == "ok"
 
 
@@ -116,7 +116,7 @@ async def test_emits_when_job_has_subscriber(tmp_path: Path) -> None:
 async def test_skips_record_with_null_job_id(tmp_path: Path) -> None:
     log_path = tmp_path / "arm-backend.log"
     log_path.touch()
-    hub = _FakeHub(subscriptions={"logs.job_x": 1})
+    hub = _FakeHub(subscriptions={"logs.job_01JZXR7K3M5Q8N4VWA00000001": 1})
     tailer = LogTailer(hub, log_dir=str(tmp_path))  # type: ignore[arg-type]
 
     await tailer.tick()
@@ -144,7 +144,7 @@ async def test_skips_when_no_subscribers(tmp_path: Path) -> None:
 async def test_bad_json_is_silently_skipped(tmp_path: Path) -> None:
     log_path = tmp_path / "arm-backend.log"
     log_path.touch()
-    hub = _FakeHub(subscriptions={"logs.job_x": 1})
+    hub = _FakeHub(subscriptions={"logs.job_01JZXR7K3M5Q8N4VWA00000001": 1})
     tailer = LogTailer(hub, log_dir=str(tmp_path))  # type: ignore[arg-type]
 
     await tailer.tick()
@@ -155,7 +155,7 @@ async def test_bad_json_is_silently_skipped(tmp_path: Path) -> None:
 
     # The bad line is dropped; the good line is emitted.
     assert len(hub.emits) == 1
-    assert hub.emits[0].topic == "logs.job_x"
+    assert hub.emits[0].topic == "logs.job_01JZXR7K3M5Q8N4VWA00000001"
 
 
 @pytest.mark.asyncio
@@ -163,7 +163,7 @@ async def test_loop_guard_skips_hub_self_logs(tmp_path: Path) -> None:
     """Records emitted from `arm_backend.ws.hub.*` must not feed back into the tailer."""
     log_path = tmp_path / "arm-backend.log"
     log_path.touch()
-    hub = _FakeHub(subscriptions={"logs.job_x": 1})
+    hub = _FakeHub(subscriptions={"logs.job_01JZXR7K3M5Q8N4VWA00000001": 1})
     tailer = LogTailer(hub, log_dir=str(tmp_path))  # type: ignore[arg-type]
 
     await tailer.tick()
@@ -184,7 +184,7 @@ async def test_rotation_via_inode_change(tmp_path: Path) -> None:
     """
     log_path = tmp_path / "arm-backend.log"
     log_path.touch()
-    hub = _FakeHub(subscriptions={"logs.job_x": 1})
+    hub = _FakeHub(subscriptions={"logs.job_01JZXR7K3M5Q8N4VWA00000001": 1})
     tailer = LogTailer(hub, log_dir=str(tmp_path))  # type: ignore[arg-type]
 
     await tailer.tick()  # open + seek-to-end on empty file
@@ -211,7 +211,7 @@ async def test_new_file_picked_up_on_subsequent_tick(tmp_path: Path) -> None:
     """A transcode container that starts mid-run creates a new log file
     (`arm-transcode-<task>.log`); the tailer's scandir picks it up.
     """
-    hub = _FakeHub(subscriptions={"logs.job_x": 1})
+    hub = _FakeHub(subscriptions={"logs.job_01JZXR7K3M5Q8N4VWA00000001": 1})
     tailer = LogTailer(hub, log_dir=str(tmp_path))  # type: ignore[arg-type]
 
     await tailer.tick()  # discovers nothing
@@ -236,7 +236,7 @@ async def test_per_job_log_appended_for_lines_with_job_id(tmp_path: Path) -> Non
     stream endpoints and is removed on job-delete."""
     log_path = tmp_path / "arm-backend.log"
     log_path.touch()
-    hub = _FakeHub(subscriptions={"logs.job_x": 1})
+    hub = _FakeHub(subscriptions={"logs.job_01JZXR7K3M5Q8N4VWA00000001": 1})
     tailer = LogTailer(hub, log_dir=str(tmp_path))  # type: ignore[arg-type]
 
     await tailer.tick()
@@ -244,7 +244,7 @@ async def test_per_job_log_appended_for_lines_with_job_id(tmp_path: Path) -> Non
     _append(log_path, _record(msg="line two"))
     await tailer.tick()
 
-    per_job = tmp_path / "jobs" / "job_x.log"
+    per_job = tmp_path / "jobs" / "job_01JZXR7K3M5Q8N4VWA00000001.log"
     assert per_job.is_file()
     lines = [json.loads(line) for line in per_job.read_text().splitlines()]
     assert [line["msg"] for line in lines] == ["line one", "line two"]
@@ -266,7 +266,7 @@ async def test_per_job_log_aggregates_multiple_services(tmp_path: Path) -> None:
     _append(ripper_log, _record(service="arm-ripper-sr0", msg="ripper line"))
     await tailer.tick()
 
-    per_job = tmp_path / "jobs" / "job_x.log"
+    per_job = tmp_path / "jobs" / "job_01JZXR7K3M5Q8N4VWA00000001.log"
     services = {json.loads(line)["service"] for line in per_job.read_text().splitlines()}
     assert services == {"arm-backend", "arm-ripper-sr0"}
 
@@ -297,7 +297,7 @@ async def test_per_job_log_records_hub_self_lines(tmp_path: Path) -> None:
     failure is genuinely useful diagnostic content."""
     log_path = tmp_path / "arm-backend.log"
     log_path.touch()
-    hub = _FakeHub(subscriptions={"logs.job_x": 1})
+    hub = _FakeHub(subscriptions={"logs.job_01JZXR7K3M5Q8N4VWA00000001": 1})
     tailer = LogTailer(hub, log_dir=str(tmp_path))  # type: ignore[arg-type]
 
     await tailer.tick()
@@ -307,6 +307,6 @@ async def test_per_job_log_records_hub_self_lines(tmp_path: Path) -> None:
     # Loop guard kept this off the WS.
     assert hub.emits == []
     # But it's in the per-job file.
-    per_job = tmp_path / "jobs" / "job_x.log"
+    per_job = tmp_path / "jobs" / "job_01JZXR7K3M5Q8N4VWA00000001.log"
     assert per_job.is_file()
     assert "hub self log" in per_job.read_text()

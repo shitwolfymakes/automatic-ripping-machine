@@ -45,8 +45,8 @@ async def test_subscribe_then_emit_fans_out() -> None:
     await hub.emit(
         topic="ripper.events",
         event_type="rip.started",
-        payload={"job_id": "job_x"},
-        job_id="job_x",
+        payload={"job_id": "job_01JZXR7K3M5Q8N4VWA00000001"},
+        job_id="job_01JZXR7K3M5Q8N4VWA00000001",
         session=sess,  # type: ignore[arg-type]
     )
 
@@ -73,11 +73,11 @@ async def test_emit_no_subscribers_is_noop() -> None:
 async def test_progress_topic_is_not_persisted() -> None:
     hub = WSHub()
     ws = _FakeWS()
-    await hub.subscribe(ws, "ripper.progress.job_x")  # type: ignore[arg-type]
+    await hub.subscribe(ws, "ripper.progress.job_01JZXR7K3M5Q8N4VWA00000001")  # type: ignore[arg-type]
     sess = _FakeSession()
 
     await hub.emit(
-        topic="ripper.progress.job_x",
+        topic="ripper.progress.job_01JZXR7K3M5Q8N4VWA00000001",
         event_type="ripper.progress",
         payload={"track_id": "trk_1", "progress_pct": 12.3},
         persist=False,
@@ -91,11 +91,11 @@ async def test_progress_topic_is_not_persisted() -> None:
 async def test_progress_throttle_collapses_bursts() -> None:
     hub = WSHub()
     ws = _FakeWS()
-    await hub.subscribe(ws, "ripper.progress.job_x")  # type: ignore[arg-type]
+    await hub.subscribe(ws, "ripper.progress.job_01JZXR7K3M5Q8N4VWA00000001")  # type: ignore[arg-type]
 
     for pct in range(10):
         await hub.emit(
-            topic="ripper.progress.job_x",
+            topic="ripper.progress.job_01JZXR7K3M5Q8N4VWA00000001",
             event_type="ripper.progress",
             payload={"track_id": "trk_1", "progress_pct": pct},
             persist=False,
@@ -110,10 +110,10 @@ async def test_progress_throttle_collapses_bursts() -> None:
 async def test_progress_throttle_admits_after_window() -> None:
     hub = WSHub()
     ws = _FakeWS()
-    await hub.subscribe(ws, "ripper.progress.job_x")  # type: ignore[arg-type]
+    await hub.subscribe(ws, "ripper.progress.job_01JZXR7K3M5Q8N4VWA00000001")  # type: ignore[arg-type]
 
     await hub.emit(
-        topic="ripper.progress.job_x",
+        topic="ripper.progress.job_01JZXR7K3M5Q8N4VWA00000001",
         event_type="ripper.progress",
         payload={"track_id": "trk_1", "progress_pct": 0.0},
         persist=False,
@@ -121,7 +121,7 @@ async def test_progress_throttle_admits_after_window() -> None:
     )
     await asyncio.sleep(PROGRESS_THROTTLE_SECONDS + 0.05)
     await hub.emit(
-        topic="ripper.progress.job_x",
+        topic="ripper.progress.job_01JZXR7K3M5Q8N4VWA00000001",
         event_type="ripper.progress",
         payload={"track_id": "trk_1", "progress_pct": 50.0},
         persist=False,
@@ -133,17 +133,17 @@ async def test_progress_throttle_admits_after_window() -> None:
 async def test_progress_throttle_is_per_track() -> None:
     hub = WSHub()
     ws = _FakeWS()
-    await hub.subscribe(ws, "ripper.progress.job_x")  # type: ignore[arg-type]
+    await hub.subscribe(ws, "ripper.progress.job_01JZXR7K3M5Q8N4VWA00000001")  # type: ignore[arg-type]
 
     await hub.emit(
-        topic="ripper.progress.job_x",
+        topic="ripper.progress.job_01JZXR7K3M5Q8N4VWA00000001",
         event_type="ripper.progress",
         payload={"track_id": "trk_1"},
         persist=False,
         track_id="trk_1",
     )
     await hub.emit(
-        topic="ripper.progress.job_x",
+        topic="ripper.progress.job_01JZXR7K3M5Q8N4VWA00000001",
         event_type="ripper.progress",
         payload={"track_id": "trk_2"},
         persist=False,

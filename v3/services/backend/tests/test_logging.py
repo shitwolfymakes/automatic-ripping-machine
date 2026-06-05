@@ -74,14 +74,14 @@ def test_with_log_context_populates_then_restores(tmp_path: Path) -> None:
     logger = logging.getLogger("arm_common.tests.ctx")
 
     logger.info("outside")
-    with with_log_context(job_id="job_x"):
+    with with_log_context(job_id="job_01JZXR7K3M5Q8N4VWA00000001"):
         logger.info("inside")
     logger.info("after")
 
     rows = _read_log_file(tmp_path, "test-svc")
     msgs = {row["msg"]: row for row in rows}
     assert msgs["outside"]["job_id"] is None
-    assert msgs["inside"]["job_id"] == "job_x"
+    assert msgs["inside"]["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001"
     assert msgs["after"]["job_id"] is None
 
 

@@ -42,7 +42,7 @@ from tests._fakes import FakeSession  # noqa: E402
 
 def _job(meta: dict | None = None) -> Job:
     return Job(
-        id="job_x",
+        id="job_01JZXR7K3M5Q8N4VWA00000001",
         drive_id="drv_x",
         disc_type=DiscType.CD,
         title="Greatest Hits",
@@ -54,7 +54,9 @@ def _job(meta: dict | None = None) -> Job:
 
 
 def _track(kind: TrackKind = TrackKind.AUDIO_TRACK, index: int = 1) -> Track:
-    return Track(id=f"trk_{index}", job_id="job_x", kind=kind, index=index, source_ref=str(index))
+    return Track(
+        id=f"trk_{index}", job_id="job_01JZXR7K3M5Q8N4VWA00000001", kind=kind, index=index, source_ref=str(index)
+    )
 
 
 def _session(template: str = "{track_title}.{ext}", mt: MediaType = MediaType.MUSIC) -> Session:

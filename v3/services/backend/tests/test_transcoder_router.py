@@ -50,7 +50,7 @@ _SERVICE_AUTH = {"Authorization": "Bearer tok-service", "X-ARM-Hostname": _HOSTN
 def _seed(db: FakeSession, *, task_status: TranscodeTaskStatus = TranscodeTaskStatus.QUEUED) -> None:
     db.rows["jobs"] = [
         Job(
-            id="job_x",
+            id="job_01JZXR7K3M5Q8N4VWA00000001",
             drive_id="drv_x",
             disc_type=DiscType.DVD,
             title="Iron Man",
@@ -96,13 +96,13 @@ def _seed(db: FakeSession, *, task_status: TranscodeTaskStatus = TranscodeTaskSt
     db.rows["tracks"] = [
         Track(
             id="trk_1",
-            job_id="job_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             kind=TrackKind.VIDEO_TITLE,
             index=1,
             source_ref="1",
             expected_duration_seconds=8000,
             status=TrackStatus.DONE,
-            output_path="/raw/job_x/title_t01.mkv",
+            output_path="/raw/job_01JZXR7K3M5Q8N4VWA00000001/title_t01.mkv",
             attempts=0,
         )
     ]
@@ -110,7 +110,7 @@ def _seed(db: FakeSession, *, task_status: TranscodeTaskStatus = TranscodeTaskSt
         SessionApplication(
             id="sap_x",
             session_id="ses_x",
-            job_id="job_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             status=SessionApplicationStatus.QUEUED,
             overwrite=False,
         )
@@ -159,7 +159,7 @@ def test_register_returns_bundle() -> None:
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["task"]["id"] == "txt_1"
-    assert body["raw_input_path"] == "/raw/job_x/title_t01.mkv"
+    assert body["raw_input_path"] == "/raw/job_01JZXR7K3M5Q8N4VWA00000001/title_t01.mkv"
     assert body["transcode_preset"]["preset_ref"] == "H.265 MKV 1080p30"
     assert body["session"]["id"] == "ses_x"
 

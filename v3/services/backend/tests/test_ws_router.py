@@ -110,7 +110,7 @@ def _ripper_drive(drive_id: str = "drv_x", hostname: str = "ripper-host") -> Dri
     return Drive(id=drive_id, hostname=hostname, device_path="/dev/sr0", status=DriveStatus.ONLINE)
 
 
-def _job(job_id: str = "job_x", drive_id: str = "drv_x") -> Job:
+def _job(job_id: str = "job_01JZXR7K3M5Q8N4VWA00000001", drive_id: str = "drv_x") -> Job:
     return Job(
         id=job_id,
         drive_id=drive_id,
@@ -219,10 +219,22 @@ def test_ripper_subscribe_publish_loop(monkeypatch: pytest.MonkeyPatch) -> None:
 
             # publish allowed → progress topic (fire-and-forget, not persisted)
             ws.send_json(
-                {"op": "publish", "topic": "ripper.progress.job_x", "event_type": "rip.progress", "payload": {"pct": 5}}
+                {
+                    "op": "publish",
+                    "topic": "ripper.progress.job_01JZXR7K3M5Q8N4VWA00000001",
+                    "event_type": "rip.progress",
+                    "payload": {"pct": 5},
+                }
             )
             # publish forbidden topic
-            ws.send_json({"op": "publish", "topic": "ripper.progress.job_other", "event_type": "x", "payload": {}})
+            ws.send_json(
+                {
+                    "op": "publish",
+                    "topic": "ripper.progress.job_01JZXR7K3M5Q8N4VWA0000000J",
+                    "event_type": "x",
+                    "payload": {},
+                }
+            )
             err = ws.receive_json()
             assert err["code"] == ws_router.CLOSE_FORBIDDEN
 
@@ -234,10 +246,10 @@ def test_ripper_subscribe_publish_loop(monkeypatch: pytest.MonkeyPatch) -> None:
             ws.send_json({"op": "nope"})
             assert ws.receive_json()["code"] == ws_router.CLOSE_BAD_MESSAGE
 
-    emitted = [e for e in hub.emitted if e["topic"] == "ripper.progress.job_x"]
+    emitted = [e for e in hub.emitted if e["topic"] == "ripper.progress.job_01JZXR7K3M5Q8N4VWA00000001"]
     assert len(emitted) == 1
     assert emitted[0]["persist"] is False
-    assert emitted[0]["job_id"] == "job_x"
+    assert emitted[0]["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001"
     assert emitted[0]["has_session"] is False
     assert hub.disconnected == 1
 

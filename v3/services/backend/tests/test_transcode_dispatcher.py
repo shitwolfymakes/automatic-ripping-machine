@@ -72,7 +72,7 @@ def _app_with_one_task(status: TranscodeTaskStatus, **task_kwargs: Any) -> FakeS
         SessionApplication(
             id="sap_x",
             session_id="ses_x",
-            job_id="job_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             status=SessionApplicationStatus.QUEUED,
             overwrite=False,
         )
@@ -123,7 +123,7 @@ async def test_spawn_caps_at_max_parallel() -> None:
         SessionApplication(
             id="sap_x",
             session_id="ses_x",
-            job_id="job_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             status=SessionApplicationStatus.RUNNING,
             overwrite=False,
         )
@@ -182,7 +182,11 @@ async def test_spawn_continues_after_one_failure() -> None:
     db = FakeSession()
     db.rows["session_applications"] = [
         SessionApplication(
-            id="sap_x", session_id="ses_x", job_id="job_x", status=SessionApplicationStatus.QUEUED, overwrite=False
+            id="sap_x",
+            session_id="ses_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
+            status=SessionApplicationStatus.QUEUED,
+            overwrite=False,
         )
     ]
     now = datetime.now(UTC)

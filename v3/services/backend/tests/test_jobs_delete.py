@@ -92,11 +92,11 @@ def _seed_admin(db: FakeSession) -> None:
 def test_delete_terminal_job_no_raw(signing_key: bytes) -> None:
     db = FakeSession()
     _seed_admin(db)
-    db.rows["jobs"] = [_make_job("job_a", status=JobStatus.RIPPED)]
+    db.rows["jobs"] = [_make_job("job_01JZXR7K3M5Q8N4VWA00000002", status=JobStatus.RIPPED)]
     hub = _CapturingHub()
     app, token = _make_app(signing_key, db, hub)
     with TestClient(app) as client:
-        r = client.delete("/api/jobs/job_a", headers=_auth(token))
+        r = client.delete("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000002", headers=_auth(token))
     assert r.status_code == 204
     assert db.rows["jobs"] == []
     # No WS emit unless delete_raw=true.
@@ -114,8 +114,8 @@ def test_delete_with_delete_raw_runs_filesystem_cleanup(
     media_root = tmp_path / "media"
     raw_root.mkdir()
     media_root.mkdir()
-    (raw_root / "job_a").mkdir()
-    (raw_root / "job_a" / "title00.mkv").write_bytes(b"x")
+    (raw_root / "job_01JZXR7K3M5Q8N4VWA00000002").mkdir()
+    (raw_root / "job_01JZXR7K3M5Q8N4VWA00000002" / "title00.mkv").write_bytes(b"x")
     title_dir = media_root / "X (2000)"
     title_dir.mkdir()
     output_file = title_dir / "X (2000) - Track 01 - plex-1080p.mkv"
@@ -131,14 +131,14 @@ def test_delete_with_delete_raw_runs_filesystem_cleanup(
 
     db = FakeSession()
     _seed_admin(db)
-    db.rows["jobs"] = [_make_job("job_a", status=JobStatus.RIPPED, drive_id="drv_42")]
+    db.rows["jobs"] = [_make_job("job_01JZXR7K3M5Q8N4VWA00000002", status=JobStatus.RIPPED, drive_id="drv_42")]
     hub = _CapturingHub()
     app, token = _make_app(signing_key, db, hub)
     with TestClient(app) as client:
-        r = client.delete("/api/jobs/job_a?delete_raw=true", headers=_auth(token))
+        r = client.delete("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000002?delete_raw=true", headers=_auth(token))
     assert r.status_code == 204
     assert db.rows["jobs"] == []
-    assert not (raw_root / "job_a").exists()
+    assert not (raw_root / "job_01JZXR7K3M5Q8N4VWA00000002").exists()
     assert not output_file.exists()
     # Title dir is the only output's parent and is now empty — should be pruned.
     assert not title_dir.exists()
@@ -158,11 +158,11 @@ def test_delete_with_delete_raw_runs_filesystem_cleanup(
 def test_delete_non_terminal_returns_409(signing_key: bytes, status: JobStatus) -> None:
     db = FakeSession()
     _seed_admin(db)
-    db.rows["jobs"] = [_make_job("job_a", status=status)]
+    db.rows["jobs"] = [_make_job("job_01JZXR7K3M5Q8N4VWA00000002", status=status)]
     hub = _CapturingHub()
     app, token = _make_app(signing_key, db, hub)
     with TestClient(app) as client:
-        r = client.delete("/api/jobs/job_a?delete_raw=true", headers=_auth(token))
+        r = client.delete("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000002?delete_raw=true", headers=_auth(token))
     assert r.status_code == 409
     # Row preserved; WS not fired.
     assert len(db.rows["jobs"]) == 1
@@ -176,7 +176,7 @@ def test_delete_unknown_job_returns_404(signing_key: bytes) -> None:
     hub = _CapturingHub()
     app, token = _make_app(signing_key, db, hub)
     with TestClient(app) as client:
-        r = client.delete("/api/jobs/job_missing", headers=_auth(token))
+        r = client.delete("/api/jobs/job_01JZXR7K3M5Q8N4VWA0000000M", headers=_auth(token))
     assert r.status_code == 404
 
 
@@ -184,12 +184,12 @@ def test_bulk_delete_partitions_terminal_and_non_terminal(signing_key: bytes) ->
     db = FakeSession()
     _seed_admin(db)
     db.rows["jobs"] = [
-        _make_job("job_done", status=JobStatus.RIPPED),
-        _make_job("job_partial", status=JobStatus.RIPPED_PARTIAL),
-        _make_job("job_failed", status=JobStatus.FAILED),
-        _make_job("job_abandoned", status=JobStatus.ABANDONED),
-        _make_job("job_running", status=JobStatus.RIPPING),
-        _make_job("job_pending_id", status=JobStatus.AWAITING_USER_ID),
+        _make_job("job_01JZXR7K3M5Q8N4VWA00000007", status=JobStatus.RIPPED),
+        _make_job("job_01JZXR7K3M5Q8N4VWA0000000F", status=JobStatus.RIPPED_PARTIAL),
+        _make_job("job_01JZXR7K3M5Q8N4VWA0000000G", status=JobStatus.FAILED),
+        _make_job("job_01JZXR7K3M5Q8N4VWA0000000H", status=JobStatus.ABANDONED),
+        _make_job("job_01JZXR7K3M5Q8N4VWA00000009", status=JobStatus.RIPPING),
+        _make_job("job_01JZXR7K3M5Q8N4VWA0000000K", status=JobStatus.AWAITING_USER_ID),
     ]
     hub = _CapturingHub()
     app, token = _make_app(signing_key, db, hub)
@@ -197,11 +197,20 @@ def test_bulk_delete_partitions_terminal_and_non_terminal(signing_key: bytes) ->
         r = client.delete("/api/jobs", headers=_auth(token))
     assert r.status_code == 200
     body = r.json()
-    assert sorted(body["deleted_ids"]) == ["job_abandoned", "job_done", "job_failed", "job_partial"]
-    assert sorted(body["skipped_non_terminal"]) == ["job_pending_id", "job_running"]
+    assert sorted(body["deleted_ids"]) == sorted(
+        [
+            "job_01JZXR7K3M5Q8N4VWA0000000H",
+            "job_01JZXR7K3M5Q8N4VWA00000007",
+            "job_01JZXR7K3M5Q8N4VWA0000000G",
+            "job_01JZXR7K3M5Q8N4VWA0000000F",
+        ]
+    )
+    assert sorted(body["skipped_non_terminal"]) == sorted(
+        ["job_01JZXR7K3M5Q8N4VWA0000000K", "job_01JZXR7K3M5Q8N4VWA00000009"]
+    )
     # Survivors are the non-terminal ones.
     surviving_ids = sorted(j.id for j in db.rows["jobs"])
-    assert surviving_ids == ["job_pending_id", "job_running"]
+    assert surviving_ids == sorted(["job_01JZXR7K3M5Q8N4VWA0000000K", "job_01JZXR7K3M5Q8N4VWA00000009"])
     # No WS unless delete_raw=true.
     assert hub.events == []
 
@@ -215,7 +224,7 @@ def test_bulk_delete_with_raw_cleans_each_terminal_job(
     media_root = tmp_path / "media"
     raw_root.mkdir()
     media_root.mkdir()
-    for jid in ("job_a", "job_b", "job_active"):
+    for jid in ("job_01JZXR7K3M5Q8N4VWA00000002", "job_01JZXR7K3M5Q8N4VWA00000003", "job_01JZXR7K3M5Q8N4VWA00000008"):
         (raw_root / jid).mkdir()
         (raw_root / jid / "title00.mkv").write_bytes(b"x")
 
@@ -230,9 +239,9 @@ def test_bulk_delete_with_raw_cleans_each_terminal_job(
     db = FakeSession()
     _seed_admin(db)
     db.rows["jobs"] = [
-        _make_job("job_a", status=JobStatus.RIPPED, drive_id="drv_1"),
-        _make_job("job_b", status=JobStatus.FAILED, drive_id="drv_2"),
-        _make_job("job_active", status=JobStatus.RIPPING, drive_id="drv_3"),
+        _make_job("job_01JZXR7K3M5Q8N4VWA00000002", status=JobStatus.RIPPED, drive_id="drv_1"),
+        _make_job("job_01JZXR7K3M5Q8N4VWA00000003", status=JobStatus.FAILED, drive_id="drv_2"),
+        _make_job("job_01JZXR7K3M5Q8N4VWA00000008", status=JobStatus.RIPPING, drive_id="drv_3"),
     ]
     hub = _CapturingHub()
     app, token = _make_app(signing_key, db, hub)
@@ -240,12 +249,12 @@ def test_bulk_delete_with_raw_cleans_each_terminal_job(
         r = client.delete("/api/jobs?delete_raw=true", headers=_auth(token))
     assert r.status_code == 200
     body = r.json()
-    assert sorted(body["deleted_ids"]) == ["job_a", "job_b"]
-    assert body["skipped_non_terminal"] == ["job_active"]
+    assert sorted(body["deleted_ids"]) == ["job_01JZXR7K3M5Q8N4VWA00000002", "job_01JZXR7K3M5Q8N4VWA00000003"]
+    assert body["skipped_non_terminal"] == ["job_01JZXR7K3M5Q8N4VWA00000008"]
     # Terminal jobs' raw dirs are gone; in-flight job's raw dir is untouched.
-    assert not (raw_root / "job_a").exists()
-    assert not (raw_root / "job_b").exists()
-    assert (raw_root / "job_active").exists()
+    assert not (raw_root / "job_01JZXR7K3M5Q8N4VWA00000002").exists()
+    assert not (raw_root / "job_01JZXR7K3M5Q8N4VWA00000003").exists()
+    assert (raw_root / "job_01JZXR7K3M5Q8N4VWA00000008").exists()
     assert hub.events == []
 
 
@@ -268,16 +277,16 @@ def test_delete_removes_per_job_log(tmp_path: Any, signing_key: bytes, monkeypat
     monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
     jobs_dir = tmp_path / "jobs"
     jobs_dir.mkdir()
-    log_file = jobs_dir / "job_a.log"
+    log_file = jobs_dir / "job_01JZXR7K3M5Q8N4VWA00000002.log"
     log_file.write_text('{"msg": "rip start"}\n{"msg": "rip done"}\n')
 
     db = FakeSession()
     _seed_admin(db)
-    db.rows["jobs"] = [_make_job("job_a", status=JobStatus.RIPPED)]
+    db.rows["jobs"] = [_make_job("job_01JZXR7K3M5Q8N4VWA00000002", status=JobStatus.RIPPED)]
     hub = _CapturingHub()
     app, token = _make_app(signing_key, db, hub)
     with TestClient(app) as client:
-        r = client.delete("/api/jobs/job_a", headers=_auth(token))
+        r = client.delete("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000002", headers=_auth(token))
     assert r.status_code == 204
     assert not log_file.exists()
 
@@ -288,14 +297,14 @@ def test_delete_succeeds_when_per_job_log_missing(
     """Older jobs that ran before the per-job append landed have no log
     file. Delete must still succeed — no error, no 500."""
     monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
-    # Note: no /jobs/job_a.log exists.
+    # Note: no /jobs/job_01JZXR7K3M5Q8N4VWA00000002.log exists.
     db = FakeSession()
     _seed_admin(db)
-    db.rows["jobs"] = [_make_job("job_a", status=JobStatus.RIPPED)]
+    db.rows["jobs"] = [_make_job("job_01JZXR7K3M5Q8N4VWA00000002", status=JobStatus.RIPPED)]
     hub = _CapturingHub()
     app, token = _make_app(signing_key, db, hub)
     with TestClient(app) as client:
-        r = client.delete("/api/jobs/job_a", headers=_auth(token))
+        r = client.delete("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000002", headers=_auth(token))
     assert r.status_code == 204
 
 
@@ -305,26 +314,26 @@ def test_bulk_delete_removes_per_job_logs(tmp_path: Any, signing_key: bytes, mon
     monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
     jobs_dir = tmp_path / "jobs"
     jobs_dir.mkdir()
-    (jobs_dir / "job_a.log").write_text("{}\n")
-    (jobs_dir / "job_b.log").write_text("{}\n")
-    (jobs_dir / "job_active.log").write_text("{}\n")
+    (jobs_dir / "job_01JZXR7K3M5Q8N4VWA00000002.log").write_text("{}\n")
+    (jobs_dir / "job_01JZXR7K3M5Q8N4VWA00000003.log").write_text("{}\n")
+    (jobs_dir / "job_01JZXR7K3M5Q8N4VWA00000008.log").write_text("{}\n")
 
     db = FakeSession()
     _seed_admin(db)
     db.rows["jobs"] = [
-        _make_job("job_a", status=JobStatus.RIPPED, drive_id="drv_1"),
-        _make_job("job_b", status=JobStatus.FAILED, drive_id="drv_2"),
-        _make_job("job_active", status=JobStatus.RIPPING, drive_id="drv_3"),
+        _make_job("job_01JZXR7K3M5Q8N4VWA00000002", status=JobStatus.RIPPED, drive_id="drv_1"),
+        _make_job("job_01JZXR7K3M5Q8N4VWA00000003", status=JobStatus.FAILED, drive_id="drv_2"),
+        _make_job("job_01JZXR7K3M5Q8N4VWA00000008", status=JobStatus.RIPPING, drive_id="drv_3"),
     ]
     hub = _CapturingHub()
     app, token = _make_app(signing_key, db, hub)
     with TestClient(app) as client:
         r = client.delete("/api/jobs", headers=_auth(token))
     assert r.status_code == 200
-    assert not (jobs_dir / "job_a.log").exists()
-    assert not (jobs_dir / "job_b.log").exists()
+    assert not (jobs_dir / "job_01JZXR7K3M5Q8N4VWA00000002.log").exists()
+    assert not (jobs_dir / "job_01JZXR7K3M5Q8N4VWA00000003.log").exists()
     # The non-terminal job's log is preserved (job wasn't deleted).
-    assert (jobs_dir / "job_active.log").exists()
+    assert (jobs_dir / "job_01JZXR7K3M5Q8N4VWA00000008.log").exists()
 
 
 # ---- _delete_job_files helper ---------------------------------------------
@@ -334,13 +343,15 @@ def test_delete_job_files_rmtrees_raw_dir(tmp_path: Path) -> None:
     raw_root = tmp_path / "raw"
     media_root = tmp_path / "media"
     media_root.mkdir()
-    (raw_root / "job_a").mkdir(parents=True)
-    (raw_root / "job_a" / "title00.mkv").write_bytes(b"x")
-    (raw_root / "job_a" / "manifest.json").write_text("{}")
+    (raw_root / "job_01JZXR7K3M5Q8N4VWA00000002").mkdir(parents=True)
+    (raw_root / "job_01JZXR7K3M5Q8N4VWA00000002" / "title00.mkv").write_bytes(b"x")
+    (raw_root / "job_01JZXR7K3M5Q8N4VWA00000002" / "manifest.json").write_text("{}")
 
-    counters = jobs_router._delete_job_files("job_a", [], raw_root=raw_root, media_root=media_root)
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [], raw_root=raw_root, media_root=media_root
+    )
     assert counters == {"raw_dir_removed": 1, "media_files_removed": 0, "media_dirs_pruned": 0}
-    assert not (raw_root / "job_a").exists()
+    assert not (raw_root / "job_01JZXR7K3M5Q8N4VWA00000002").exists()
 
 
 def test_delete_job_files_unlinks_media_files_individually(tmp_path: Path) -> None:
@@ -357,7 +368,9 @@ def test_delete_job_files_unlinks_media_files_individually(tmp_path: Path) -> No
     job_a_file.write_bytes(b"a")
     sibling_file.write_bytes(b"b")
 
-    counters = jobs_router._delete_job_files("job_a", [job_a_file], raw_root=raw_root, media_root=media_root)
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [job_a_file], raw_root=raw_root, media_root=media_root
+    )
     assert counters["media_files_removed"] == 1
     assert not job_a_file.exists()
     # Sibling re-rip's output is preserved; title dir is non-empty so survives prune.
@@ -377,7 +390,9 @@ def test_delete_job_files_prunes_empty_title_dir(tmp_path: Path) -> None:
     only_file = title_dir / "Sintel (2010) - Track 01 - plex-1080p.mkv"
     only_file.write_bytes(b"a")
 
-    counters = jobs_router._delete_job_files("job_a", [only_file], raw_root=raw_root, media_root=media_root)
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [only_file], raw_root=raw_root, media_root=media_root
+    )
     assert counters["media_dirs_pruned"] >= 1
     assert not title_dir.exists()
     # The media root itself is intact.
@@ -395,7 +410,9 @@ def test_delete_job_files_prunes_nested_dirs(tmp_path: Path) -> None:
     ep = season_dir / "S01E01.mkv"
     ep.write_bytes(b"a")
 
-    counters = jobs_router._delete_job_files("job_a", [ep], raw_root=raw_root, media_root=media_root)
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [ep], raw_root=raw_root, media_root=media_root
+    )
     assert counters["media_dirs_pruned"] == 2
     assert not season_dir.exists()
     assert not (media_root / "ShowName").exists()
@@ -410,7 +427,7 @@ def test_delete_job_files_is_idempotent_over_missing_files(tmp_path: Path) -> No
     media_root.mkdir()
 
     counters = jobs_router._delete_job_files(
-        "job_never_was",
+        "job_01JZXR7K3M5Q8N4VWA0000000N",
         [media_root / "Ghost (1990)" / "Ghost (1990) - Track 01.mkv"],
         raw_root=raw_root,
         media_root=media_root,

@@ -101,7 +101,7 @@ async def test_resolve_preset_none_paths() -> None:
         SessionApplication(
             id="sap_missing",
             session_id="ses_x",
-            job_id="job_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             status=SessionApplicationStatus.QUEUED,
             overwrite=False,
         )
@@ -225,7 +225,7 @@ async def test_spawn_pending_cpu_path_no_gpu() -> None:
         SessionApplication(
             id="sap_x",
             session_id="ses_x",
-            job_id="job_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             status=SessionApplicationStatus.RUNNING,
             overwrite=False,
         )
