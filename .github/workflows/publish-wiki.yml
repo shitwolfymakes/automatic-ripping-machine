@@ -8,6 +8,7 @@ on:
   pull_request_review:
     types: [submitted]
   gollum:
+  workflow_dispatch:
 
 env:
   GIT_AUTHOR_NAME: Actionbot
