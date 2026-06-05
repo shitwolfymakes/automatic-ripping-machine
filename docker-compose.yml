@@ -132,7 +132,7 @@ services:
     depends_on:
       - arm-backend
     ports:
-      - "8081:443"
+      - "8080:443"
     volumes:
       - ./certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
       - ./certs/arm-ui.crt:/etc/ssl/arm/tls.crt:ro
