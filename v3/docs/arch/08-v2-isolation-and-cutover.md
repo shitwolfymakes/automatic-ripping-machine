@@ -13,16 +13,16 @@ This document codifies that rule and describes how the final cutover happens.
 Every file and directory that exists at the repo root **today** — before v3 development begins — stays byte-identical during v3 development. That includes:
 
 - `arm/` — the v2 Python package.
-- `Dockerfile`, `Dockerfile-UI`, `Dockerfile-Ripper` — v2 images.
-- `docker-compose.yml` at the repo root — v2 compose.
+- `Dockerfile` — v2 single-container image.
 - `devtools/` — v2 dev tooling.
 - `setup/`, `scripts/` — v2 bootstrap and runit scripts.
-- `test_ui/`, `test_ripper/`, `test_fixtures/` (if present) — v2 tests.
-- `arm-dependencies/`, `arm_wiki/` — v2 submodules.
-- `setup.cfg`, `requirements_*.txt`, `CHANGELOG.md`, `README.md`, `VERSION`, `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md` — all root-level files.
-- `docs/` — the existing docs tree at root (not including our new `v3/docs/arch/`).
-- `.github/` workflow files — v2 CI.
-- `.gitignore`, `.flake8`, any linter config.
+- `test/` — v2 ripper unit tests (`test/unittest/test_ripper_*`).
+- `arm-dependencies/` — v2 dependency-image submodule (the only entry in `.gitmodules`).
+- `arm_wiki/` — wiki content (tracked files at root, not a submodule).
+- `setup.cfg`, `requirements.txt`, `CHANGELOG.md`, `README.md`, `VERSION`, `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md` — all root-level files.
+- `docs/` — the existing v2 docs tree at root (PSDs, `README-OMDBAPI.md`, `README-TMDBAPI.txt`).
+- `.github/workflows/` — v2 CI (`main.yml`, `publish-image.yml`, `publish-wiki.yml`, `shellcheck.yml`, `stale.yml`, `test-pr-image-build.yml`, `version_bump.yml`, `greetings.yml`).
+- `.gitignore`, `.pylintrc`, `.codeclimate.yml`, `.codecov.yml`, `.dockerignore`, `favicon.ico` — root-level configs and assets.
 
 If any of these needs to change for v3, the change happens in the cutover PR, not earlier.
 
@@ -123,53 +123,80 @@ Exactly one PR modifies v2 files. Its contents:
 
 ### 1. Move v3 contents to root
 
-```
+The v3 subtree currently tracks: `services/`, `packages/`, `docs/` (`arch/ contributors/ ops/ plans/`), `devtools/`, `docker-compose.yml`, `docker-compose.gpu.yml`, `.dockerignore`, `.env.example`, `install.sh`, `pyproject.toml`, `uv.lock`, `.pre-commit-config.yaml`, `README.md`. There is **no** `v3/.gitignore` and **no** `v3/test_fixtures` today — v3 relies on the root `.gitignore`, so there is nothing to merge for those.
+
+```bash
 git mv v3/services services
 git mv v3/packages packages
-git mv v3/test_fixtures test_fixtures    # if not already at root
-git mv v3/docs/arch docs/arch            # or keep under docs/arch/ if already there
-git mv v3/devtools devtools_v3           # rename to avoid clash until step 2
-git mv v3/docker-compose.yml docker-compose.v3.yml  # temp
-git mv v3/.gitignore .gitignore.v3       # temp
-git mv v3/.env.example .env.example.v3   # temp
+git mv v3/install.sh install.sh
+git mv v3/pyproject.toml pyproject.toml
+git mv v3/uv.lock uv.lock
+git mv v3/.pre-commit-config.yaml .pre-commit-config.yaml
+git mv v3/docker-compose.gpu.yml docker-compose.gpu.yml
+git mv v3/docs/arch docs/arch             # add v3 docs alongside the kept v2 docs/ (PSDs, API-key guides)
+git mv v3/docs/contributors docs/contributors
+git mv v3/docs/ops docs/ops
+git mv v3/docs/plans docs/plans
+git mv v3/devtools devtools_v3            # rename to avoid clash until step 2
+git mv v3/docker-compose.yml docker-compose.v3.yml  # temp — replaces (absent) root compose in step 3
+git mv v3/.dockerignore .dockerignore.v3  # temp — replaces v2 .dockerignore in step 3
+git mv v3/.env.example .env.example.v3    # temp
+git mv v3/README.md README.v3.md          # temp — replaces v2 README in step 4
 ```
 
 ### 2. Retire v2
 
-```
+```bash
 git rm -r arm/
-git rm Dockerfile Dockerfile-UI Dockerfile-Ripper
-git rm docker-compose.yml
+git rm Dockerfile
 git rm -r devtools/
 git rm -r setup/ scripts/
-git rm -r test_ui/ test_ripper/
-git rm requirements_ui.txt requirements_ripper.txt setup.cfg
-git rm temp_*.sh
-git rm sqlite_mcp_server.db
-git submodule deinit arm-dependencies && git rm arm-dependencies
-# keep: LICENSE, CODE_OF_CONDUCT.md, SECURITY.md, CONTRIBUTING.md (rewrite), arm_wiki/ submodule
+git rm -r test/
+git rm requirements.txt setup.cfg
+git rm .pylintrc .codeclimate.yml .codecov.yml .dockerignore favicon.ico
+git submodule deinit arm-dependencies && git rm arm-dependencies   # the only entry in .gitmodules
+# keep: LICENSE, CODE_OF_CONDUCT.md, SECURITY.md, CONTRIBUTING.md (rewrite), VERSION (bump),
+#       docs/ (PSDs + OMDB/TMDB API-key guides — still used by v3; step 1 adds v3 docs alongside),
+#       arm_wiki/ (tracked files), .github/ISSUE_TEMPLATE/, .github/dependabot.yml, .github/pull_request_template.md
 ```
+
+There is **no** root `docker-compose.yml`, no `Dockerfile-UI`/`Dockerfile-Ripper`, no split `requirements_*.txt`, no `temp_*.sh`, and no `sqlite_mcp_server.db` to delete — those existed when this plan was first drafted but have since been removed or consolidated. The current v2 surface is the list above.
 
 ### 3. Finalize the v3 files at root
 
-```
+```bash
 git mv devtools_v3 devtools
 git mv docker-compose.v3.yml docker-compose.yml
-# merge .gitignore.v3 → .gitignore (concatenate, dedupe)
-# merge .env.example.v3 → .env.example
+git mv .dockerignore.v3 .dockerignore
+git mv .env.example.v3 .env.example
+# v3 docs were already merged into the kept root docs/ in step 1 — nothing to do here
+# root .gitignore already covers v3 artifacts (no separate v3/.gitignore exists), so nothing to merge
 ```
 
 ### 4. Rewrite user-facing docs
 
-- `README.md` — replace v2 content with v3 content (links to `docs/arch/`).
+- `README.md` — `git mv README.v3.md README.md` to drop the v3 README staged in step 1 over the v2 one (it links to `docs/arch/`).
 - `CHANGELOG.md` — add a `v3.0.0` entry describing the rebuild.
 - `CONTRIBUTING.md` — replace v2 workflow instructions with v3 (pytest per service, arm_common schema discipline, etc.).
-- `VERSION` — `3.0.0`.
+- `VERSION` — `2.23.2` → `3.0.0`.
 
 ### 5. Retire v2 CI workflows
 
-- `git rm .github/workflows/<v2-workflows>.yml`.
-- Rename `.github/workflows/v3-*.yml` → `.github/workflows/*.yml` (drop the prefix now that they are the only workflows).
+```bash
+git rm .github/workflows/main.yml \
+       .github/workflows/publish-image.yml \
+       .github/workflows/publish-wiki.yml \
+       .github/workflows/shellcheck.yml \
+       .github/workflows/stale.yml \
+       .github/workflows/test-pr-image-build.yml \
+       .github/workflows/version_bump.yml \
+       .github/workflows/greetings.yml
+git mv .github/workflows/v3-ci.yml .github/workflows/ci.yml
+git mv .github/workflows/v3-release.yml .github/workflows/release.yml
+git mv .github/workflows/v3-weekly-rebuild.yml .github/workflows/weekly-rebuild.yml
+```
+
+Drop the `v3-` prefix now that these are the only workflows. Re-evaluate `publish-wiki.yml` / `greetings.yml` / `stale.yml` before deleting if v3 still wants those repo-automation behaviors — they are not v2-specific, just currently v2-era.
 
 ### 6. Update ports
 
