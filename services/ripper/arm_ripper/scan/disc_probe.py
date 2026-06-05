@@ -1,149 +1,73 @@
-"""Mount-based disc probe: classifies the disc by filesystem layout and,
-for DVDs, computes the pydvdid CRC64 fingerprint in the same mount cycle.
+"""Disc probe: computes the pydvdid CRC64 fingerprint straight off the device.
 
-The directory layout is the authoritative signal:
-  - `BDMV/index.bdmv`    → Blu-ray
-  - `VIDEO_TS/VIDEO_TS.IFO` → DVD-Video
+The CRC64 is read via PyCdlib (pydvdid) and needs only read access to the
+disc — no mount, no CAP_SYS_ADMIN. A DVD's CRC64 feeds the 1337server lookup
+that runs before OMDb/TMDB. pydvdid returns None for anything without a
+/VIDEO_TS tree, so it's a cheap no-op on Blu-ray / CD, and it reads ISO
+sources (ARM_MANUAL_TRIGGER_ISO) directly with no loop-mount.
 
-This replaces the duration/size heuristic that used to live in `makemkv.py`,
-which misclassified DVD-9s with long main features as Blu-rays (a DVD title
-can easily exceed the 4.7GB single-layer threshold).
-
-Mount/umount needs CAP_SYS_ADMIN — added to the ripper container in
-docker-compose.yml. Mount is ro, lives only for the duration of the probe,
-and is cleaned up on every exit path.
+Disc-type classification is handled upstream by MakeMKV's CINFO:1 (see
+makemkv.scan_disc), so the probe no longer mounts the disc — which is why the
+ripper service needs neither CAP_SYS_ADMIN nor an AppArmor exception.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import shutil
-import tempfile
-from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from pathlib import Path
-from typing import AsyncIterator
-
-from arm_common import DiscType
-from arm_ripper.source import is_iso_source
 
 logger = logging.getLogger("arm_ripper.scan.disc_probe")
-
-_MOUNT_TIMEOUT_SECONDS = 30.0
 
 
 @dataclass(frozen=True)
 class DiscProbe:
-    disc_type: DiscType | None
     crc64: str | None
 
 
 async def probe_disc(device_path: str) -> DiscProbe:
-    """Mount `device_path` ro and inspect the filesystem layout.
+    """Compute the disc's pydvdid CRC64, read off the device via PyCdlib.
 
-    Returns DiscProbe(disc_type=DVD|BLURAY|None, crc64=...) — `disc_type`
-    is None when the mount fails or neither layout marker is present;
-    callers can fall back to a duration-based heuristic.
+    Needs only read access to the disc — no mount, no CAP_SYS_ADMIN — so a
+    DVD always gets its 1337server fingerprint, even on discs the kernel
+    won't mount (region locks, UDF quirks) and even after the ripper service
+    drops root. pydvdid returns None for anything without a /VIDEO_TS tree
+    (Blu-ray / CD), so this is a cheap no-op there.
 
-    Never raises — every failure path is logged and degrades to None
-    fields so the scan flow can continue without a fingerprint.
+    Never raises — failures are logged and degrade to crc64=None.
     """
-    async with _temp_mount(device_path) as mount_dir:
-        if mount_dir is None:
-            return DiscProbe(disc_type=None, crc64=None)
-
-        disc_type = _classify_from_layout(mount_dir)
-        crc64 = None
-        if disc_type == DiscType.DVD:
-            crc64 = await asyncio.to_thread(_compute_crc, mount_dir)
-            if crc64:
-                logger.info("dvd crc64 device=%s value=%s", device_path, crc64)
-        return DiscProbe(disc_type=disc_type, crc64=crc64)
+    crc64 = await asyncio.to_thread(_compute_crc, device_path)
+    if crc64:
+        logger.info("dvd crc64 device=%s value=%s", device_path, crc64)
+    return DiscProbe(crc64=crc64)
 
 
-def _classify_from_layout(mount_dir: Path) -> DiscType | None:
-    """Inspect the mounted root for the canonical disc-format markers.
+def _compute_crc(device_path: str) -> str | None:
+    """Compute the pydvdid CRC64 disc fingerprint from the disc's ISO 9660
+    metadata, read straight off the device via PyCdlib.
 
-    BDMV/index.bdmv is the BD-Video index file; VIDEO_TS/VIDEO_TS.IFO is the
-    DVD-Video master IFO. Both are required for playback so they're a
-    reliable signal that's far better than guessing from title sizes.
+    We read the device, not a mounted VIDEO_TS folder, on purpose. pydvdid
+    hashes each VIDEO_TS file's creation time, size, and name; a mounted or
+    extracted folder can carry rewritten timestamps, and the pydvdid_m fork
+    refuses folder input unless a y/N prompt is answered interactively (it
+    raises EOFError here, and `allow_folder_id=True` makes its __init__ return
+    early without a checksum). Reading the device's ISO 9660 directory records
+    yields the canonical, 1337server-compatible value — the same one upstream
+    ARM v2 produced via `pydvdid.compute(mountpoint)`.
+
+    Note: the dependency is the `pydvdid-m` fork, which exposes a `DvdId`
+    class — there is no top-level `compute()` like the original `pydvdid`.
     """
-    if (mount_dir / "BDMV" / "index.bdmv").is_file():
-        return DiscType.BLURAY
-    if (mount_dir / "VIDEO_TS" / "VIDEO_TS.IFO").is_file():
-        return DiscType.DVD
-    # Some authoring tools lower-case BDMV; cheap second look.
-    if (mount_dir / "bdmv" / "index.bdmv").is_file():
-        return DiscType.BLURAY
-    if (mount_dir / "video_ts" / "VIDEO_TS.IFO").is_file():
-        return DiscType.DVD
-    return None
-
-
-def _compute_crc(mount_dir: Path) -> str | None:
     try:
-        # pydvdid_m has no type stubs / py.typed marker — that's fine,
-        # we use it through a single str() call.
-        import pydvdid_m  # type: ignore[import-untyped]
+        # pydvdid_m ships no type stubs / py.typed marker — fine, we touch it
+        # through one str() call.
+        from pydvdid_m import DvdId  # type: ignore[import-untyped]
     except ImportError as e:
         logger.info("pydvdid_m not available, skipping crc64: %s", e)
         return None
-    compute = getattr(pydvdid_m, "compute", None)
-    if compute is None:
-        return None
     try:
-        crc = compute(str(mount_dir))
-    except Exception as e:  # noqa: BLE001 — pydvdid raises a few flavors
-        logger.info("pydvdid compute failed mount=%s: %s", mount_dir, e)
+        crc = DvdId(device_path).checksum
+    except Exception as e:  # noqa: BLE001 — pydvdid / pycdlib raise a few flavors
+        logger.info("pydvdid compute failed device=%s: %s", device_path, e)
         return None
     return str(crc) if crc is not None else None
-
-
-@asynccontextmanager
-async def _temp_mount(device_path: str) -> AsyncIterator[Path | None]:
-    """Mount `device_path` read-only on a tmpdir; yield the path or None
-    on failure. Always umount + cleanup the tmpdir on exit.
-    """
-    mount_dir = Path(tempfile.mkdtemp(prefix="arm-disc-probe-"))
-    mounted = False
-    try:
-        # ISO sources need `-o loop` so the kernel allocates a loopback
-        # device for the file. Works inside the ripper container only when
-        # the run has access to /dev/loop-control (typically --privileged
-        # for one-off ARM_MANUAL_TRIGGER_ISO smokes; CAP_SYS_ADMIN alone
-        # is not enough). Block devices keep the original ro-only mount.
-        mount_opts = "ro,loop" if is_iso_source(device_path) else "ro"
-        rc, stderr = await _run("mount", "-o", mount_opts, device_path, str(mount_dir))
-        if rc != 0:
-            logger.info("mount %s failed (rc=%s): %s", device_path, rc, stderr)
-            yield None
-            return
-        mounted = True
-        yield mount_dir
-    finally:
-        if mounted:
-            # Best-effort umount; ignore failures (e.g. EBUSY from a stray
-            # fd — the next mount will retry on a fresh tmpdir anyway).
-            await _run("umount", str(mount_dir), log_failure=False)
-        shutil.rmtree(mount_dir, ignore_errors=True)
-
-
-async def _run(*argv: str, log_failure: bool = True) -> tuple[int | None, str]:
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *argv,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-    except (FileNotFoundError, OSError) as e:
-        if log_failure:
-            logger.info("%s errored: %s", argv[0], e)
-        return None, str(e)
-    try:
-        _, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=_MOUNT_TIMEOUT_SECONDS)
-    except asyncio.TimeoutError:
-        proc.kill()
-        await proc.wait()
-        return None, "timeout"
-    return proc.returncode, stderr_b.decode(errors="replace").strip()

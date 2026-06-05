@@ -5,7 +5,6 @@ Covers the five code paths the iso-source helper flips:
   - source.is_iso_source / source.makemkv_source_url helpers
   - scan_disc: makemkvcon info source URL becomes `iso:<file>`
   - rip_disc: makemkvcon mkv source URL becomes `iso:<file>`
-  - _temp_mount: mount options gain `,loop` for ISO sources
   - _eject_with_retry: skipped for ISO sources
   - heartbeat_loop: probe_drive_media is bypassed for ISO sources
 """
@@ -153,11 +152,11 @@ async def test_scan_disc_uses_iso_source_url_for_iso_path(monkeypatch, tmp_path:
     # Empty stdout → parse_makemkvcon_info returns empty titles. probe_disc
     # is best-effort and never raises. We only care about the cmd shape.
     calls = _capture_subprocess(monkeypatch, scan_makemkv, returncode=0, stdout=b"")
-    # Skip the real probe_disc — it would try to mount.
+    # Skip the real probe_disc — it would read the disc device.
     monkeypatch.setattr(
         scan_makemkv,
         "probe_disc",
-        AsyncMock(return_value=disc_probe.DiscProbe(disc_type=None, crc64=None)),
+        AsyncMock(return_value=disc_probe.DiscProbe(crc64=None)),
     )
 
     await scan_makemkv.scan_disc(str(iso))
@@ -175,7 +174,7 @@ async def test_scan_disc_keeps_dev_source_url_for_block_device(monkeypatch) -> N
     monkeypatch.setattr(
         scan_makemkv,
         "probe_disc",
-        AsyncMock(return_value=disc_probe.DiscProbe(disc_type=None, crc64=None)),
+        AsyncMock(return_value=disc_probe.DiscProbe(crc64=None)),
     )
 
     await scan_makemkv.scan_disc("/dev/sr0")
@@ -235,53 +234,6 @@ async def test_rip_disc_keeps_dev_source_url_for_block_device(monkeypatch, tmp_p
     argv = calls[0]
     assert "dev:/dev/sr0" in argv
     assert not any(str(a).startswith("iso:") for a in argv), argv
-
-
-# --- _temp_mount loop option -----------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_temp_mount_uses_loop_option_for_iso(monkeypatch, tmp_path: Path) -> None:
-    iso = tmp_path / "sintel.iso"
-    iso.write_bytes(b"")
-    captured: list[tuple[str, ...]] = []
-
-    async def fake_run(*argv: str, log_failure: bool = True) -> tuple[int | None, str]:
-        captured.append(argv)
-        # mount succeeds; umount is recorded but irrelevant
-        return 0, ""
-
-    monkeypatch.setattr(disc_probe, "_run", fake_run)
-
-    async with disc_probe._temp_mount(str(iso)) as mount_dir:
-        assert mount_dir is not None
-
-    assert captured, "_run was never called"
-    mount_argv = captured[0]
-    assert mount_argv[0] == "mount"
-    assert "-o" in mount_argv
-    opts_idx = mount_argv.index("-o") + 1
-    assert mount_argv[opts_idx] == "ro,loop"
-    assert str(iso) in mount_argv
-
-
-@pytest.mark.asyncio
-async def test_temp_mount_keeps_ro_only_for_block_device(monkeypatch) -> None:
-    captured: list[tuple[str, ...]] = []
-
-    async def fake_run(*argv: str, log_failure: bool = True) -> tuple[int | None, str]:
-        captured.append(argv)
-        return 0, ""
-
-    monkeypatch.setattr(disc_probe, "_run", fake_run)
-
-    async with disc_probe._temp_mount("/dev/sr0") as mount_dir:
-        assert mount_dir is not None
-
-    mount_argv = captured[0]
-    opts_idx = mount_argv.index("-o") + 1
-    assert mount_argv[opts_idx] == "ro"
-    assert "/dev/sr0" in mount_argv
 
 
 # --- eject skip ------------------------------------------------------------

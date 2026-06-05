@@ -464,9 +464,9 @@ class JobController:
         container or the ripper's own scan-poster path mounted the
         device internally.
         """
-        # ISO sources have no tray to eject. The kernel auto-releases the
-        # loopback once probe_disc / makemkvcon close the file; the umount
-        # already happened inside _temp_mount's finally-block.
+        # ISO sources have no tray to eject. probe_disc reads the file
+        # directly via PyCdlib and makemkvcon opens it read-only; nothing
+        # mounts it, so there's nothing to umount or eject.
         if is_iso_source(device_path):
             logger.info("eject skipped: source is ISO file %s", device_path)
             return
