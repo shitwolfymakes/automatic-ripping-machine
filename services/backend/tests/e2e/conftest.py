@@ -169,7 +169,17 @@ def app_client(_sqlite_url: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 
     try:
         with TestClient(main_mod.app) as client:
-            yield client
+            try:
+                yield client
+            finally:
+                # Dispose the async engine on the TestClient's *own* event loop
+                # while it's still alive (`client.portal` runs the app lifespan
+                # loop that opened these aiosqlite connections). Otherwise the
+                # pooled connections' background worker threads outlive the loop
+                # and raise "Event loop is closed" at GC, which pytest surfaces
+                # as a PytestUnhandledThreadExceptionWarning attributed — by
+                # timing, misleadingly — to whatever test is running then.
+                client.portal.call(test_engine.dispose)  # type: ignore[attr-defined,union-attr]
     finally:
         main_mod.app.dependency_overrides.clear()
         _restore_column_types(saved_types)
