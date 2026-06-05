@@ -1,0 +1,716 @@
+"""End-to-end exercise of `rip_disc` against a faked makemkvcon.
+
+The fake replaces `asyncio.create_subprocess_exec` with a stub process
+whose stdout streams a canned robot-mode trace; `rip_disc` walks the
+trace, fires the lifecycle hooks, and walks the (faked) output dir to
+attribute per-title outcomes. Confirms:
+
+  - PRGT "Saving title #N" transitions current_title and emits
+    on_title_start once per title.
+  - PRGV ramps fire on_title_progress against the right title.
+  - MSG:5003 captures per-title failure reason; the matching file is
+    absent from the output dir, so the title comes back FAILED with
+    that reason rather than "produced no .mkv".
+  - Successful titles produce title_tNN.mkv, get sha256+size
+    populated, and come back ok=True.
+  - Tracks not announced in the stream but present on disk are still
+    attributed (PRGT-miss safety net).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+import arm_ripper.rip.makemkv_rip as makemkv_rip
+from arm_ripper.rip.makemkv_rip import rip_disc
+
+
+class _FakeStream:
+    """Async-readable stream emitting canned lines."""
+
+    def __init__(self, lines: list[bytes]) -> None:
+        self._lines = list(lines)
+
+    async def readline(self) -> bytes:
+        if not self._lines:
+            return b""
+        return self._lines.pop(0)
+
+    async def read(self) -> bytes:
+        return b""
+
+
+class _FakeProc:
+    def __init__(self, stdout_lines: list[bytes], returncode: int = 0) -> None:
+        self.stdout = _FakeStream(stdout_lines)
+        self.stderr = _FakeStream([])
+        self.returncode: int | None = None
+        self._final_returncode = returncode
+
+    async def wait(self) -> int:
+        # Yield control so the streamer task gets to drain stdout
+        # before this resolves; mirrors real subprocess timing.
+        await asyncio.sleep(0)
+        self.returncode = self._final_returncode
+        return self.returncode
+
+    def kill(self) -> None:
+        self.returncode = -9
+
+
+def _stub_subprocess(monkeypatch, lines: list[str], returncode: int = 0) -> _FakeProc:
+    """Replace asyncio.create_subprocess_exec with a factory returning a
+    _FakeProc preloaded with `lines`. Returns the proc so a test can
+    inspect post-rip state if needed."""
+    encoded = [(line + "\n").encode() for line in lines]
+    fake = _FakeProc(encoded, returncode=returncode)
+
+    async def fake_create_subprocess_exec(*_args: Any, **_kwargs: Any) -> _FakeProc:
+        return fake
+
+    monkeypatch.setattr(makemkv_rip.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+    return fake
+
+
+def _write_title_file(output_dir: Path, idx: int, content: bytes = b"x" * 64) -> Path:
+    p = output_dir / f"title_t{idx:02d}.mkv"
+    p.write_bytes(content)
+    return p
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_attributes_files_to_eligible_source_indexes(monkeypatch, tmp_path):
+    """In `mkv all` mode MakeMKV writes `<volume_label>_tNN.mkv` files
+    where NN is the *output position*, not the source title index.
+    rip_disc pairs the output files (sorted by `_tNN`) positionally
+    with the eligible-source-index list the dispatcher provides — so
+    a disc where source titles 0 and 2 are eligible (1 below minlength)
+    sees `_t00.mkv` ↦ source 0, `_t01.mkv` ↦ source 2."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'MSG:1005,0,1,"MakeMKV started","%1 started","..."',
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            "PRGV:5000,5000,10000",
+            'MSG:5036,0,2,"Copy complete. 2 titles saved.","Copy complete. %1 %2","2","titles"',
+        ],
+    )
+    content_main = b"alpha-bytes" * 8
+    content_extra = b"beta-bytes" * 8
+    # MakeMKV uses the disc's volume label as the filename prefix —
+    # the test fixture mimics that to confirm the glob is label-agnostic.
+    (tmp_path / "Movie Title_t00.mkv").write_bytes(content_main)
+    (tmp_path / "Movie Title_t01.mkv").write_bytes(content_extra)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=600,
+        eligible_source_indexes=[0, 2],
+    )
+
+    assert result.overall_error is None
+    assert set(result.titles.keys()) == {0, 2}
+    assert result.titles[0].ok is True
+    assert result.titles[0].size_bytes == len(content_main)
+    assert result.titles[0].sha256 == hashlib.sha256(content_main).hexdigest()
+    assert result.titles[0].output_path == tmp_path / "Movie Title_t00.mkv"
+    # Source title 2 mapped positionally to the second output file.
+    assert result.titles[2].ok is True
+    assert result.titles[2].output_path == tmp_path / "Movie Title_t01.mkv"
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_eligible_without_file_marked_failed(monkeypatch, tmp_path):
+    """If MakeMKV produced fewer files than the eligible list expected
+    (e.g. a title failed mid-rip and got rolled back), the missing
+    eligible source indexes come back FAILED with a clear reason."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            'MSG:5036,0,2,"Copy complete. 1 titles saved.","Copy complete. %1 %2","1","titles"',
+        ],
+    )
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"only one made it")
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[0, 2, 5],
+    )
+
+    assert result.overall_error is None
+    assert result.titles[0].ok is True
+    assert result.titles[2].ok is False
+    assert "no .mkv" in (result.titles[2].error or "")
+    assert result.titles[5].ok is False
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_failed_title_carries_msg5003_reason(monkeypatch, tmp_path):
+    """If MSG:5003 captures a per-title failure reason — rare in `mkv
+    all` mode but possible — the corresponding source index in the
+    result dict carries that reason. The dispatcher surfaces it
+    upstream as the track's `last_error`."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            'MSG:5003,0,2,"Failed to save title 1 to file title_t01.mkv",'
+            '"Failed to save title %1 to file %2","1","title_t01.mkv"',
+        ],
+    )
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"title 0 succeeded")
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=600,
+        eligible_source_indexes=[0],
+    )
+
+    assert result.overall_error is None
+    assert result.titles[0].ok is True
+    # Source title 1 wasn't in the eligible list, so attribution
+    # surfaces it via the MSG:5003 reason captured during the rip.
+    assert result.titles[1].ok is False
+    assert "Failed to save title 1" in (result.titles[1].error or "")
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_overall_failure_surfaces_diagnostics(monkeypatch, tmp_path):
+    """Non-zero exit → overall_error set; per-title state discarded so
+    the dispatcher fails every selected track with the disc-level reason."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'MSG:3032,260,4,"Region setting of drive does not match disc",'
+            '"Region setting of drive does not match disc"',
+            'MSG:1002,32,1,"LIBMKV_TRACE: Exception: Error while reading input",'
+            '"LIBMKV_TRACE: %1","Exception: Error while reading input"',
+        ],
+        returncode=1,
+    )
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=600,
+    )
+
+    assert result.overall_error is not None
+    assert "Region setting" in result.overall_error
+    assert "Error while reading input" in result.overall_error
+    assert result.titles == {}
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_extra_output_files_left_unclaimed(monkeypatch, tmp_path):
+    """If MakeMKV writes more files than the eligible list expected
+    (rare — MakeMKV picked up a title our scan missed), the extras
+    stay on disk for the user but aren't claimed by any source index.
+    The eligible list is the source of truth for attribution."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'MSG:5036,0,2,"Copy complete. 2 titles saved.","Copy complete. %1 %2","2","titles"',
+        ],
+    )
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"first")
+    (tmp_path / "Disc_t01.mkv").write_bytes(b"second")
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[0],  # only one eligible title
+    )
+
+    assert result.overall_error is None
+    assert 0 in result.titles
+    assert result.titles[0].ok is True
+    # The second file isn't claimed because no eligible source index maps to it.
+    assert len(result.titles) == 1
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_falls_back_to_disc_progress_when_no_per_title_prgt(monkeypatch, tmp_path):
+    """`mkv all` emits only the overall "Saving all titles to MKV files"
+    PRGT — no per-title milestones. PRGV lines that arrive while
+    `current_title is None` must drive `on_disc_progress` via the
+    `total/max` channel, not get silently dropped.
+
+    This is the regression that made the dashboard bar stay at 0 % for
+    the entire rip even though the file was being written: the streamer
+    gated `on_title_progress` on `current_title is not None` and had no
+    fallback for the disc-overall case."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            # current/max = 0.10, total/max = 0.05  →  expect disc-level 0.05
+            "PRGV:1000,500,10000",
+            "PRGV:5000,2500,10000",
+            "PRGV:9000,9500,10000",
+        ],
+    )
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
+
+    title_progress: list[tuple[int, float]] = []
+    disc_progress: list[float] = []
+
+    async def on_title_start(_idx: int) -> None:
+        return None
+
+    async def on_title_progress(idx: int, frac: float) -> None:
+        title_progress.append((idx, frac))
+
+    async def on_disc_progress(frac: float) -> None:
+        disc_progress.append(frac)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[0],
+        on_title_start=on_title_start,
+        on_title_progress=on_title_progress,
+        on_disc_progress=on_disc_progress,
+    )
+
+    assert result.overall_error is None
+    # No "Saving title N" PRGT → on_title_progress must never have fired.
+    assert title_progress == []
+    # Disc-level callback got the `total/max` channel (not `current/max`).
+    assert disc_progress == [0.05, 0.25, 0.95]
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_pre_save_phase_prgv_is_silently_dropped(monkeypatch, tmp_path):
+    """Pre-rip PRGV lines (analyse / decrypt / BD+ phases) have a
+    `total/max` channel that climbs to 70-80% within those phases,
+    then resets to 0 when MakeMKV enters the save phase.
+
+    If the streamer fired `on_disc_progress` for those, the rips
+    store would publish a 70-80% bar to the dashboard, then snap to
+    0% when PRGC:5017,0 fires per-title progress — and the ETA
+    baseline (anchored at the first sample) would treat the snap as
+    a sustained negative pctDelta, holding ETA null until per-title
+    progress climbs back past the pre-rip peak (basically forever
+    on a long main feature). Gate fixes the regression: PRGV before
+    PRGT:5024 is silent."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            # Pre-rip phase — analyse total climbs to ~78%, then resets.
+            "PRGV:51819,46899,65536",
+            "PRGV:65536,51200,65536",
+            "PRGV:0,0,65536",
+            # Save phase begins.
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            'PRGC:5017,0,"Saving to MKV file"',
+            "PRGV:5000,1000,10000",  # per-op 0.5, attributed to title
+        ],
+    )
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
+
+    title_progress: list[tuple[int, float]] = []
+    disc_progress: list[float] = []
+
+    async def on_title_start(_idx: int) -> None:
+        return None
+
+    async def on_title_progress(idx: int, frac: float) -> None:
+        title_progress.append((idx, frac))
+
+    async def on_disc_progress(frac: float) -> None:
+        disc_progress.append(frac)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[0],
+        on_title_start=on_title_start,
+        on_title_progress=on_title_progress,
+        on_disc_progress=on_disc_progress,
+    )
+
+    assert result.overall_error is None
+    # Pre-rip PRGV → silent. Per-title PRGV after PRGC:5017,0 fires for source 0.
+    assert title_progress == [(0, 0.5)]
+    # Disc-level fallback never fired — pre-rip gated, save phase had PRGC:5017.
+    assert disc_progress == []
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_per_title_progress_takes_precedence_over_disc(monkeypatch, tmp_path):
+    """When a per-title "Saving title #N" PRGT has identified the
+    in-flight title, PRGV drives `on_title_progress` (per-op channel)
+    and the disc-level callback stays silent — the per-title
+    behaviour established in v2 is preserved unchanged."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'PRGT:5018,0,"Saving title #0 to MKV file"',
+            "PRGV:5000,1000,10000",  # per-op 0.5, disc-overall 0.1
+            "PRGV:10000,5000,10000",  # per-op 1.0, disc-overall 0.5
+        ],
+    )
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
+
+    title_progress: list[tuple[int, float]] = []
+    disc_progress: list[float] = []
+
+    async def on_title_start(_idx: int) -> None:
+        return None
+
+    async def on_title_progress(idx: int, frac: float) -> None:
+        title_progress.append((idx, frac))
+
+    async def on_disc_progress(frac: float) -> None:
+        disc_progress.append(frac)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[0],
+        on_title_start=on_title_start,
+        on_title_progress=on_title_progress,
+        on_disc_progress=on_disc_progress,
+    )
+
+    assert result.overall_error is None
+    assert title_progress == [(0, 0.5), (0, 1.0)]
+    assert disc_progress == []
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_prgc_5017_fires_on_title_start_with_mapped_source_idx(monkeypatch, tmp_path):
+    """PRGC:5017 is the primary per-title milestone in `mkv all` mode
+    (confirmed against MakeMKV 1.18.3). The second field is the 0-based
+    *output position* — it indexes into `eligible_source_indexes` to
+    recover the source title index the dispatcher knows about.
+
+    With a sparse eligible list (e.g. {3, 7} after some sub-minlength
+    titles dropped), PRGC:5017,0 must fire `on_title_start(3)` and
+    PRGC:5017,1 must fire `on_title_start(7)` — and PRGV between
+    them must attribute progress to the right source index."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            'PRGC:5017,0,"Saving to MKV file"',
+            "PRGV:5000,1000,10000",  # per-op 0.5 of title at output pos 0
+            'PRGC:5017,1,"Saving to MKV file"',
+            "PRGV:9000,5000,10000",  # per-op 0.9 of title at output pos 1
+            'MSG:5036,0,2,"Copy complete. 2 titles saved.","Copy complete. %1 %2","2","titles"',
+        ],
+    )
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
+    (tmp_path / "Disc_t01.mkv").write_bytes(b"y" * 64)
+
+    starts: list[int] = []
+    title_progress: list[tuple[int, float]] = []
+    disc_progress: list[float] = []
+
+    async def on_title_start(idx: int) -> None:
+        starts.append(idx)
+
+    async def on_title_progress(idx: int, frac: float) -> None:
+        title_progress.append((idx, frac))
+
+    async def on_disc_progress(frac: float) -> None:
+        disc_progress.append(frac)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[3, 7],
+        on_title_start=on_title_start,
+        on_title_progress=on_title_progress,
+        on_disc_progress=on_disc_progress,
+    )
+
+    assert result.overall_error is None
+    # output positions 0,1 mapped via eligible_source_indexes → 3,7
+    assert starts == [3, 7]
+    # PRGV between PRGC:5017 events attributed to the active source idx
+    assert title_progress == [(3, 0.5), (7, 0.9)]
+    # disc-overall fallback never fires because PRGC:5017 set current_title
+    assert disc_progress == []
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_prgc_5017_out_of_range_position_is_skipped(monkeypatch, tmp_path):
+    """If MakeMKV ever emits a PRGC:5017 with an output position past
+    the eligible list (shouldn't happen, but mismatched scan/rip state
+    could cause it), the streamer logs a warning and skips rather than
+    crashing or attributing progress to a wrong track."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            'PRGC:5017,5,"Saving to MKV file"',  # out of range — only 1 eligible
+            "PRGV:5000,2500,10000",  # has no current_title → falls to disc-level
+            'MSG:5036,0,2,"done","%1 %2","0","titles"',
+        ],
+    )
+
+    starts: list[int] = []
+    disc_progress: list[float] = []
+
+    async def on_title_start(idx: int) -> None:
+        starts.append(idx)
+
+    async def on_disc_progress(frac: float) -> None:
+        disc_progress.append(frac)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[0],
+        on_title_start=on_title_start,
+        on_disc_progress=on_disc_progress,
+    )
+
+    assert result.overall_error is None
+    # No on_title_start fired — out-of-range was skipped.
+    assert starts == []
+    # current_title stayed None → PRGV fell through to disc-level callback.
+    assert disc_progress == [0.25]
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_fires_on_title_done_at_prgc_transitions(monkeypatch, tmp_path):
+    """Mid-rip per-title finalisation. When PRGC:5017,N+1 fires (next
+    title starts), the previous title's file is finalised on disk and
+    the streamer fires `on_title_done(prev_source_idx)` before
+    on_title_start for the new title — so the dispatcher can PATCH
+    track N=DONE before track N+1 goes IN_PROGRESS."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            'PRGC:5017,0,"Saving to MKV file"',
+            "PRGV:10000,3000,10000",  # title 0 nearly done
+            'PRGC:5017,1,"Saving to MKV file"',  # title 0 finalised → on_title_done(eligible[0])
+            "PRGV:10000,7000,10000",  # title 1 nearly done
+            'PRGC:5017,2,"Saving to MKV file"',  # title 1 finalised → on_title_done(eligible[1])
+            'MSG:5036,0,2,"done","%1 %2","2","titles"',
+        ],
+    )
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
+    (tmp_path / "Disc_t01.mkv").write_bytes(b"y" * 64)
+    (tmp_path / "Disc_t02.mkv").write_bytes(b"z" * 64)
+
+    starts: list[int] = []
+    dones: list[int] = []
+
+    async def on_title_start(idx: int) -> None:
+        starts.append(idx)
+
+    async def on_title_done(idx: int) -> None:
+        dones.append(idx)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[3, 7, 9],  # sparse to prove mapping
+        on_title_start=on_title_start,
+        on_title_done=on_title_done,
+    )
+
+    assert result.overall_error is None
+    # All three titles started; all three finalised — first two via
+    # PRGC transition, the last via clean-exit catch-up in rip_disc.
+    assert starts == [3, 7, 9]
+    assert dones == [3, 7, 9]
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_fires_on_title_done_for_last_title_at_clean_exit(monkeypatch, tmp_path):
+    """The last title in the rip never gets a follow-up PRGC:5017,N+1.
+    rip_disc catches it with a final on_title_done sweep after the
+    streamer drains and the process exits 0."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            'PRGC:5017,0,"Saving to MKV file"',
+            "PRGV:10000,10000,10000",
+            'MSG:5036,0,2,"done","%1 %2","1","titles"',
+        ],
+    )
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
+
+    dones: list[int] = []
+
+    async def on_title_done(idx: int) -> None:
+        dones.append(idx)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[5],
+        on_title_done=on_title_done,
+    )
+
+    assert result.overall_error is None
+    assert dones == [5]
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_on_title_done_fires_exactly_once_per_title(monkeypatch, tmp_path):
+    """Defensive guard: PRGC:5017,N can fire repeatedly if MakeMKV
+    re-emits a milestone (e.g. after a stream resync). on_title_done
+    must fire exactly once per title regardless."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            'PRGC:5017,0,"Saving to MKV file"',
+            'PRGC:5017,0,"Saving to MKV file"',  # spurious repeat — must NOT trigger on_title_done(0)
+            'PRGC:5017,1,"Saving to MKV file"',  # transitions off 0 → fires done(eligible[0])
+            'MSG:5036,0,2,"done","%1 %2","2","titles"',
+        ],
+    )
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
+    (tmp_path / "Disc_t01.mkv").write_bytes(b"y" * 64)
+
+    dones: list[int] = []
+
+    async def on_title_done(idx: int) -> None:
+        dones.append(idx)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[0, 1],
+        on_title_done=on_title_done,
+    )
+
+    assert result.overall_error is None
+    # eligible[0]=0 fires once at the 0→1 transition; eligible[1]=1 fires
+    # once at clean-exit. Two dones total, no duplicates.
+    assert dones == [0, 1]
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_on_title_done_skipped_on_overall_failure(monkeypatch, tmp_path):
+    """Non-zero exit aborts the rip; the final-title catch-up sweep is
+    skipped so a half-written file isn't reported as DONE. The
+    dispatcher's disc-error branch handles the FAILED transitions."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            'PRGC:5017,0,"Saving to MKV file"',
+            'MSG:1002,32,1,"LIBMKV_TRACE: Exception","LIBMKV_TRACE: %1","Exception"',
+        ],
+        returncode=1,
+    )
+
+    dones: list[int] = []
+
+    async def on_title_done(idx: int) -> None:
+        dones.append(idx)
+
+    result = await rip_disc(
+        device_path="/dev/sr0",
+        output_dir=tmp_path,
+        minlength_seconds=120,
+        eligible_source_indexes=[0],
+        on_title_done=on_title_done,
+    )
+
+    assert result.overall_error is not None
+    # No on_title_done emissions on disc-level failure — caller marks tracks FAILED.
+    assert dones == []
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_returns_unavailable_when_makemkvcon_missing(monkeypatch, tmp_path):
+    async def fake_create_subprocess_exec(*_args: Any, **_kwargs: Any):
+        raise FileNotFoundError("makemkvcon")
+
+    monkeypatch.setattr(makemkv_rip.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+    result = await rip_disc(device_path="/dev/sr0", output_dir=tmp_path)
+    assert result.overall_error is not None
+    assert "makemkvcon not on PATH" in result.overall_error
+    assert result.titles == {}
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_passes_minlength_to_makemkvcon(monkeypatch, tmp_path):
+    """The CLI flag must be `--minlength=<int>` exactly — MakeMKV is
+    strict about the equals form."""
+    captured: dict[str, Any] = {}
+
+    encoded = [b'MSG:5036,0,2,"done","%1 %2","0","titles"\n']
+    fake = _FakeProc(encoded)
+
+    async def fake_create_subprocess_exec(*args: Any, **_kwargs: Any) -> _FakeProc:
+        captured["argv"] = args
+        return fake
+
+    monkeypatch.setattr(makemkv_rip.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+    await rip_disc(device_path="/dev/sr0", output_dir=tmp_path, minlength_seconds=900)
+
+    assert "--minlength=900" in captured["argv"]
+    assert "all" in captured["argv"]
+    # The output dir is the last positional after `all`.
+    argv = list(captured["argv"])
+    assert argv[argv.index("all") + 1] == str(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_msg_5021_surfaces_distinct_error_and_kills_proc(monkeypatch, tmp_path):
+    """When MakeMKV emits MSG:5021 (binary kill-switch), rip_disc kills
+    the subprocess from inside the streamer and returns a distinct
+    `overall_error` that names the docs entry — so operators don't wait
+    out the 6-hour RIP_TIMEOUT_SECONDS for a known upstream-blocked state.
+    See docs/ops/makemkv.md § Failure modes."""
+    _stub_subprocess(
+        monkeypatch,
+        [
+            'MSG:1005,0,1,"MakeMKV v1.18.3 started","%1 started","..."',
+            'MSG:5021,131332,1,"This application version is too old.","...","..."',
+            # Lines after the kill must not be parsed — the streamer
+            # short-circuits the loop and proc.kill() ends the stream.
+            'PRGT:5024,0,"Saving all titles to MKV files"',
+            "PRGV:5000,5000,10000",
+            'MSG:5036,0,2,"Copy complete. 2 titles saved.","Copy complete.","2","titles"',
+        ],
+        returncode=1,
+    )
+
+    result = await rip_disc(
+        device_path="iso:/fake/big.iso",
+        output_dir=tmp_path,
+        minlength_seconds=600,
+        eligible_source_indexes=[0],
+    )
+
+    assert result.overall_error is not None
+    assert "MSG:5021" in result.overall_error
+    assert "docs/ops/makemkv.md" in result.overall_error
+    assert result.titles == {}
+    # The MSG:5021 line is preserved in the composed-error diagnostics so
+    # operators can see the exact line that fired the guard.
+    assert "131332" in result.overall_error

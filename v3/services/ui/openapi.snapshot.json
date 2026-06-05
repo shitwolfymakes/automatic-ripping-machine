@@ -1,0 +1,6303 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ARM v3 Backend",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login",
+        "operationId": "login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logout",
+        "operationId": "logout_api_auth_logout_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "type": "object",
+                  "title": "Response Logout Api Auth Logout Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Change Password",
+        "operationId": "change_password_api_auth_password_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChangeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Change Password Api Auth Password Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ripper/config": {
+      "get": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Get Ripper Config",
+        "description": "Subset of the global Config the ripper reads on each disc insert to\ndecide whether to fire its scan/identify/rip pipeline. Cheap enough to\npoll per-insert; avoids the WS-event invalidation dance for a single\nboolean.",
+        "operationId": "get_ripper_config_api_ripper_config_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RipperConfigView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ripper/heartbeat": {
+      "post": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Heartbeat",
+        "description": "Each ripper posts here every HEARTBEAT_INTERVAL_SECONDS with the\ncurrent CDROM_DRIVE_STATUS reading. The manual-trigger endpoint\nreads `media_status` + `media_status_at` to refuse clicks made\nagainst an empty / open tray, instead of letting identify land an\nempty scan_result.\n\n`last_seen_at` is bumped on every call so the drive's online state\nis implicitly refreshed too \u2014 no separate liveness ping needed.",
+        "operationId": "heartbeat_api_ripper_heartbeat_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RipperHeartbeatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ripper/register": {
+      "post": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Register",
+        "operationId": "register_api_ripper_register_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Drive"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ripper/identify": {
+      "post": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Identify",
+        "operationId": "identify_api_ripper_identify_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ripper/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Get Job",
+        "operationId": "get_job_api_ripper_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ripper/jobs/{job_id}/rip-start": {
+      "post": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Rip Start",
+        "operationId": "rip_start_api_ripper_jobs__job_id__rip_start_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "x-arm-hostname",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Arm-Hostname"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RipStartResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ripper/jobs/{job_id}/resume": {
+      "post": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Resume",
+        "description": "Phase 9 \u2014 per-job crash-recovery reset for the 'only ripper crashed'\ncase. Idempotent: re-running on an already-reset job is a no-op.\nReturns the same shape as `rip-start` so the ripper's existing flow\ncontinues unchanged.",
+        "operationId": "resume_api_ripper_jobs__job_id__resume_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "x-arm-hostname",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Arm-Hostname"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RipStartResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ripper/drives/{drive_id}/in-flight-job": {
+      "get": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Get In Flight Job",
+        "description": "Phase 9 \u2014 boot-probe lookup. Returns the single RIPPING job assigned\nto this drive, if any. 404 if the drive is unknown or no in-flight job\nexists. Multiple matches (data-model violation) log + return the first.",
+        "operationId": "get_in_flight_job_api_ripper_drives__drive_id__in_flight_job_get",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ripper/tracks/{track_id}": {
+      "patch": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Update Track",
+        "operationId": "update_track_api_ripper_tracks__track_id__patch",
+        "parameters": [
+          {
+            "name": "track_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Track Id"
+            }
+          },
+          {
+            "name": "x-arm-hostname",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Arm-Hostname"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ripper/jobs/{job_id}/rip-complete": {
+      "post": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Rip Complete",
+        "operationId": "rip_complete_api_ripper_jobs__job_id__rip_complete_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "x-arm-hostname",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Arm-Hostname"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobCompleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "List Jobs",
+        "operationId": "list_jobs_api_jobs_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/JobStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "drive_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JobView"
+                  },
+                  "title": "Response List Jobs Api Jobs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Delete All Jobs",
+        "description": "Hard-delete every job in a terminal status. Non-terminal jobs are\nskipped and reported in `skipped_non_terminal` so the caller can\nabandon-then-retry them.\n\n`delete_raw=true` runs the filesystem cleanup (raw rmtree + media file\nunlink + empty-parent prune) for each deleted job. Cleanups are\nindependent \u2014 a failure on one job is logged and the next continues.",
+        "operationId": "delete_all_jobs_api_jobs_delete",
+        "parameters": [
+          {
+            "name": "delete_raw",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Delete Raw"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkDeleteJobsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Get Job Detail",
+        "operationId": "get_job_detail_api_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobDetailView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Delete Job",
+        "description": "Hard-delete a Job. Tracks, fingerprints, session_applications,\ntranscode_tasks, and events cascade via Postgres FK ondelete=CASCADE.\n\nRefuses non-terminal jobs (CREATED / AWAITING_USER_ID / IDENTIFIED /\nRIPPING) \u2014 caller must `POST /abandon` first if they want a job in\nflight gone. This keeps the active-rip cancel logic in one place.\n\n`delete_raw=true` also unlinks every transcode output recorded for the\njob and rmtrees `/raw/{job_id}/`. Backend mounts both bind paths\ndirectly, so the cleanup runs synchronously here \u2014 no WS roundtrip,\nno dependency on the ripper container being up. Per-file unlink for\nmedia (sibling re-rips share the `media/<Title>/` parent dir); empty\nparents are pruned after the unlink phase.",
+        "operationId": "delete_job_api_jobs__job_id__delete",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "delete_raw",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Delete Raw"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Update Job",
+        "description": "Edit user-controlled fields on a Job. Currently `poster_url_manual`\nonly \u2014 title/year are owned by the identify/resolve flow.",
+        "operationId": "update_job_api_jobs__job_id__patch",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/abandon": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Abandon Job",
+        "description": "Move a non-terminal job to `abandoned` and tell the ripper to clean up.\n\nTwo cases the ripper handles via the `job.abandoned` WS command:\n  * AWAITING_USER_ID \u2014 the ripper is parked in `_await_resolution`;\n    the waiter polls, sees the non-IDENTIFIED status, exits cleanly.\n  * RIPPING \u2014 the ripper has an active scan/identify/rip pipeline. The\n    WS handler cancels the asyncio task, which kills the makemkvcon\n    subprocess so file handles release on `/raw/<id>/`.\n\n`delete_raw` is plumbed in the WS payload because only the ripper has\n`/raw` mounted; doing the rmtree here would silently no-op (and used to,\npre-fix). Even when there's no active task, the ripper still runs the\nrmtree against any orphaned partial-rip directory.",
+        "operationId": "abandon_job_api_jobs__job_id__abandon_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AbandonJobRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Req"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/manual": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Manual Trigger",
+        "description": "Kick the ripper to run a job on a drive that already has a disc in\nthe tray. The ripper handles the WS command, scans the disc, and\nthreads `pending_session_id` through identify so the resulting Job's\nmetadata carries it. `rip-complete` then auto-applies that session.",
+        "operationId": "manual_trigger_api_jobs_manual_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualTriggerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManualTriggerResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/resolve": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Resolve",
+        "operationId": "resolve_api_jobs__job_id__resolve_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/transcode": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Apply Session",
+        "operationId": "apply_session_api_jobs__job_id__transcode_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplySessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplySessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drives": {
+      "get": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "List Drives",
+        "operationId": "list_drives_api_drives_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Drive"
+                  },
+                  "title": "Response List Drives Api Drives Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drives/{drive_id}": {
+      "patch": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Update Drive",
+        "operationId": "update_drive_api_drives__drive_id__patch",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriveUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Drive"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "List Sessions",
+        "operationId": "list_sessions_api_sessions_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SessionView"
+                  },
+                  "title": "Response List Sessions Api Sessions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Create Session",
+        "operationId": "create_session_api_sessions_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Get Session By Id",
+        "operationId": "get_session_by_id_api_sessions__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Update Session",
+        "operationId": "update_session_api_sessions__session_id__patch",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Delete Session",
+        "operationId": "delete_session_api_sessions__session_id__delete",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/clone": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Clone Session",
+        "operationId": "clone_session_api_sessions__session_id__clone_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCloneRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/preview": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Preview Template",
+        "operationId": "preview_template_api_sessions_preview_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplatePreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplatePreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rip-presets": {
+      "get": {
+        "tags": [
+          "rip-presets"
+        ],
+        "summary": "List Rip Presets",
+        "operationId": "list_rip_presets_api_rip_presets_get",
+        "parameters": [
+          {
+            "name": "media_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/MediaType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Media Type"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RipPresetView"
+                  },
+                  "title": "Response List Rip Presets Api Rip Presets Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "rip-presets"
+        ],
+        "summary": "Create Rip Preset",
+        "operationId": "create_rip_preset_api_rip_presets_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RipPresetCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RipPresetView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rip-presets/{preset_id}": {
+      "get": {
+        "tags": [
+          "rip-presets"
+        ],
+        "summary": "Get Rip Preset",
+        "operationId": "get_rip_preset_api_rip_presets__preset_id__get",
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preset Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RipPresetView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "rip-presets"
+        ],
+        "summary": "Update Rip Preset",
+        "operationId": "update_rip_preset_api_rip_presets__preset_id__patch",
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preset Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RipPresetUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RipPresetView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "rip-presets"
+        ],
+        "summary": "Delete Rip Preset",
+        "operationId": "delete_rip_preset_api_rip_presets__preset_id__delete",
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preset Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcode-presets": {
+      "get": {
+        "tags": [
+          "transcode-presets"
+        ],
+        "summary": "List Transcode Presets",
+        "operationId": "list_transcode_presets_api_transcode_presets_get",
+        "parameters": [
+          {
+            "name": "media_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/MediaType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Media Type"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TranscodePresetView"
+                  },
+                  "title": "Response List Transcode Presets Api Transcode Presets Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "transcode-presets"
+        ],
+        "summary": "Create Transcode Preset",
+        "operationId": "create_transcode_preset_api_transcode_presets_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranscodePresetCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscodePresetView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcode-presets/{preset_id}": {
+      "get": {
+        "tags": [
+          "transcode-presets"
+        ],
+        "summary": "Get Transcode Preset",
+        "operationId": "get_transcode_preset_api_transcode_presets__preset_id__get",
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preset Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscodePresetView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "transcode-presets"
+        ],
+        "summary": "Update Transcode Preset",
+        "operationId": "update_transcode_preset_api_transcode_presets__preset_id__patch",
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preset Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranscodePresetUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscodePresetView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "transcode-presets"
+        ],
+        "summary": "Delete Transcode Preset",
+        "operationId": "delete_transcode_preset_api_transcode_presets__preset_id__delete",
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preset Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcoder/register": {
+      "post": {
+        "tags": [
+          "transcoder"
+        ],
+        "summary": "Register",
+        "operationId": "register_api_transcoder_register_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterTranscoderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterTranscoderResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcoder/tasks/{task_id}/claim": {
+      "post": {
+        "tags": [
+          "transcoder"
+        ],
+        "summary": "Claim",
+        "operationId": "claim_api_transcoder_tasks__task_id__claim_post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "x-arm-hostname",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Arm-Hostname"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimTaskResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcoder/tasks/{task_id}/heartbeat": {
+      "patch": {
+        "tags": [
+          "transcoder"
+        ],
+        "summary": "Heartbeat",
+        "operationId": "heartbeat_api_transcoder_tasks__task_id__heartbeat_patch",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "x-arm-hostname",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Arm-Hostname"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscodeTaskView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcoder/tasks/{task_id}/complete": {
+      "patch": {
+        "tags": [
+          "transcoder"
+        ],
+        "summary": "Complete",
+        "operationId": "complete_api_transcoder_tasks__task_id__complete_patch",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "x-arm-hostname",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Arm-Hostname"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscodeTaskView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcoder/tasks/{task_id}/fail": {
+      "patch": {
+        "tags": [
+          "transcoder"
+        ],
+        "summary": "Fail",
+        "operationId": "fail_api_transcoder_tasks__task_id__fail_patch",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "x-arm-hostname",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Arm-Hostname"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FailTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscodeTaskView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcodes": {
+      "get": {
+        "tags": [
+          "transcodes"
+        ],
+        "summary": "List Transcodes",
+        "operationId": "list_transcodes_api_transcodes_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TranscodeTaskStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "session_application_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Application Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TranscodeTaskView"
+                  },
+                  "title": "Response List Transcodes Api Transcodes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcodes/{task_id}": {
+      "delete": {
+        "tags": [
+          "transcodes"
+        ],
+        "summary": "Delete Transcode",
+        "operationId": "delete_transcode_api_transcodes__task_id__delete",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/config": {
+      "get": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Get Config",
+        "operationId": "get_config_api_config_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Update Config",
+        "operationId": "update_config_api_config_patch",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/diagnostics": {
+      "get": {
+        "tags": [
+          "diagnostics"
+        ],
+        "summary": "Get Diagnostics",
+        "operationId": "get_diagnostics_api_diagnostics_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosticsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/logs/{job_id}.zip": {
+      "get": {
+        "tags": [
+          "logs"
+        ],
+        "summary": "Download Job Logs Zip",
+        "description": "In-memory zip of every line tagged with `job_id`.\n\nSource preference:\n  1. `/logs/jobs/{job_id}.log` \u2014 the per-job aggregated file written\n     by `LogTailer`. Single zip entry, named `<job_id>.log`.\n  2. Fallback (per-job file absent, e.g. jobs predating the tailer's\n     per-job append): walk `/logs/*.log` and write one entry per\n     service that contributed any matching lines.",
+        "operationId": "download_job_logs_zip_api_logs__job_id__zip_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/logs/{job_id}": {
+      "get": {
+        "tags": [
+          "logs"
+        ],
+        "summary": "Stream Job Logs",
+        "description": "NDJSON stream of every line tagged with `job_id`.\n\nReads `/logs/jobs/{job_id}.log` directly when present; otherwise\nfalls back to scanning `/logs/*.log` (alphabetical order; lines\nwithin a file in append order; no cross-file resort \u2014 the consumer\ncan sort by `ts` if global ordering matters).",
+        "operationId": "stream_job_logs_api_logs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1000,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AbandonJobRequest": {
+        "properties": {
+          "delete_raw": {
+            "type": "boolean",
+            "title": "Delete Raw",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "AbandonJobRequest",
+        "description": "POST /api/jobs/{id}/abandon body. `delete_raw=true` also wipes\n`/raw/{job_id}/` so the drive can be reused without leftover partial\nrips on disk. The DB row stays (status=abandoned) for audit."
+      },
+      "ApplySessionRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "overwrite": {
+            "type": "boolean",
+            "title": "Overwrite",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id"
+        ],
+        "title": "ApplySessionRequest"
+      },
+      "ApplySessionResponse": {
+        "properties": {
+          "session_application": {
+            "$ref": "#/components/schemas/SessionApplicationView"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TranscodeTaskView"
+            },
+            "type": "array",
+            "title": "Tasks"
+          },
+          "collisions": {
+            "items": {
+              "$ref": "#/components/schemas/CollisionInfo"
+            },
+            "type": "array",
+            "title": "Collisions"
+          },
+          "idempotent": {
+            "type": "boolean",
+            "title": "Idempotent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_application",
+          "tasks",
+          "collisions",
+          "idempotent"
+        ],
+        "title": "ApplySessionResponse"
+      },
+      "BulkDeleteJobsResponse": {
+        "properties": {
+          "deleted_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Deleted Ids"
+          },
+          "skipped_non_terminal": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skipped Non Terminal"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deleted_ids",
+          "skipped_non_terminal"
+        ],
+        "title": "BulkDeleteJobsResponse",
+        "description": "DELETE /api/jobs response. `deleted_ids` lists the jobs whose DB\nrows were removed; `skipped_non_terminal` lists job IDs that were\nrefused because they were still in flight (caller should abandon\nthem first if they really want them gone)."
+      },
+      "ClaimTaskResponse": {
+        "properties": {
+          "task": {
+            "$ref": "#/components/schemas/TranscodeTaskView"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task"
+        ],
+        "title": "ClaimTaskResponse"
+      },
+      "CollisionInfo": {
+        "properties": {
+          "output_path": {
+            "type": "string",
+            "title": "Output Path"
+          },
+          "existing_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Existing Task Id"
+          },
+          "on_filesystem": {
+            "type": "boolean",
+            "title": "On Filesystem"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "existing_task",
+              "on_disk",
+              "duplicate_in_request"
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "output_path",
+          "existing_task_id",
+          "on_filesystem",
+          "reason"
+        ],
+        "title": "CollisionInfo"
+      },
+      "CompleteTaskRequest": {
+        "properties": {
+          "output_path": {
+            "type": "string",
+            "title": "Output Path"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          }
+        },
+        "type": "object",
+        "required": [
+          "output_path"
+        ],
+        "title": "CompleteTaskRequest"
+      },
+      "ConfigUpdateRequest": {
+        "properties": {
+          "tmdb_api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tmdb Api Key"
+          },
+          "omdb_api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Omdb Api Key"
+          },
+          "musicbrainz_user_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Musicbrainz User Agent"
+          },
+          "auto_transcode_on_idle": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Transcode On Idle"
+          },
+          "auto_rip_on_insert": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Rip On Insert"
+          },
+          "block_on_miss": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block On Miss"
+          },
+          "default_retention_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RetentionPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notification_apprise_urls": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notification Apprise Urls"
+          },
+          "notifications_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notifications Enabled"
+          }
+        },
+        "type": "object",
+        "title": "ConfigUpdateRequest"
+      },
+      "ConfigView": {
+        "properties": {
+          "tmdb_api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tmdb Api Key"
+          },
+          "omdb_api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Omdb Api Key"
+          },
+          "musicbrainz_user_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Musicbrainz User Agent"
+          },
+          "auto_transcode_on_idle": {
+            "type": "boolean",
+            "title": "Auto Transcode On Idle"
+          },
+          "auto_rip_on_insert": {
+            "type": "boolean",
+            "title": "Auto Rip On Insert"
+          },
+          "block_on_miss": {
+            "type": "boolean",
+            "title": "Block On Miss"
+          },
+          "default_retention_policy": {
+            "$ref": "#/components/schemas/RetentionPolicy"
+          },
+          "notification_apprise_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notification Apprise Urls"
+          },
+          "notifications_enabled": {
+            "type": "boolean",
+            "title": "Notifications Enabled"
+          },
+          "updated_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By User Id"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tmdb_api_key",
+          "omdb_api_key",
+          "musicbrainz_user_agent",
+          "auto_transcode_on_idle",
+          "auto_rip_on_insert",
+          "block_on_miss",
+          "default_retention_policy",
+          "notification_apprise_urls",
+          "notifications_enabled",
+          "updated_by_user_id",
+          "updated_at"
+        ],
+        "title": "ConfigView",
+        "description": "`Config` row projected for the UI. `session_signing_key` is intentionally absent."
+      },
+      "ContainerFormat": {
+        "type": "string",
+        "enum": [
+          "mkv",
+          "mp4",
+          "webm",
+          "flac",
+          "mp3",
+          "ogg",
+          "iso",
+          "none"
+        ],
+        "title": "ContainerFormat"
+      },
+      "DiagnosticsResponse": {
+        "properties": {
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/DiagnosticsServiceView"
+            },
+            "type": "array",
+            "title": "Services"
+          }
+        },
+        "type": "object",
+        "required": [
+          "services"
+        ],
+        "title": "DiagnosticsResponse"
+      },
+      "DiagnosticsServiceView": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "log_level": {
+            "type": "string",
+            "title": "Log Level"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "log_level"
+        ],
+        "title": "DiagnosticsServiceView"
+      },
+      "DiscFingerprintInput": {
+        "properties": {
+          "algo": {
+            "type": "string",
+            "title": "Algo"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "algo",
+          "value"
+        ],
+        "title": "DiscFingerprintInput",
+        "description": "One (algo, value) pair on a scanned disc.\n\nCanonical algo names: `crc64` (pydvdid DVD), `aacs` (Blu-ray AACS\nDisc ID), `musicbrainz` (CD disc id), `matrix256` (ARM-native).\nFree-form to permit new algos without a schema bump."
+      },
+      "DiscFingerprintView": {
+        "properties": {
+          "algo": {
+            "type": "string",
+            "title": "Algo"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "algo",
+          "value"
+        ],
+        "title": "DiscFingerprintView"
+      },
+      "DiscType": {
+        "type": "string",
+        "enum": [
+          "dvd",
+          "bluray",
+          "cd",
+          "data",
+          "unknown"
+        ],
+        "title": "DiscType"
+      },
+      "Drive": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "hostname": {
+            "type": "string",
+            "title": "Hostname"
+          },
+          "device_path": {
+            "type": "string",
+            "title": "Device Path"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DriveStatus"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "media_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveMediaStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "media_status_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Status At"
+          },
+          "rip_params_json": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Rip Params Json"
+          },
+          "default_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Session Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "hostname",
+          "device_path",
+          "status",
+          "last_seen_at",
+          "media_status",
+          "media_status_at",
+          "default_session_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Drive"
+      },
+      "DriveMediaStatus": {
+        "type": "string",
+        "enum": [
+          "loaded",
+          "no_disc",
+          "tray_open",
+          "not_ready",
+          "unavailable",
+          "unknown"
+        ],
+        "title": "DriveMediaStatus",
+        "description": "What the drive thinks is in its tray. Reported by each ripper\non a heartbeat so the backend can fail manual-trigger requests\nfast when the user clicks Start without loading a disc."
+      },
+      "DriveStatus": {
+        "type": "string",
+        "enum": [
+          "online",
+          "offline",
+          "ripping",
+          "error"
+        ],
+        "title": "DriveStatus"
+      },
+      "DriveUpdateRequest": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "default_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Session Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DriveUpdateRequest",
+        "description": "PATCH /api/drives/{id} body. Both fields optional + nullable.\n\n`default_session_id=None` (explicit null) clears the field; omitting it\nleaves it untouched. `extra=\"forbid\"` keeps the API honest \u2014 UI typos\nsurface as 422 instead of being silently dropped."
+      },
+      "FailTaskRequest": {
+        "properties": {
+          "last_error": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Last Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "last_error"
+        ],
+        "title": "FailTaskRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HardwareCaps": {
+        "properties": {
+          "cpu_count": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Cpu Count"
+          },
+          "has_vaapi": {
+            "type": "boolean",
+            "title": "Has Vaapi",
+            "default": false
+          },
+          "has_nvenc": {
+            "type": "boolean",
+            "title": "Has Nvenc",
+            "default": false
+          },
+          "has_qsv": {
+            "type": "boolean",
+            "title": "Has Qsv",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "cpu_count"
+        ],
+        "title": "HardwareCaps",
+        "description": "Self-reported transcoder capabilities. Phase 7 (CPU-only) ignores these;\nPhase 7b consumes them for GPU dispatch + `gpus` row writes."
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "HealthResponse"
+      },
+      "HeartbeatRequest": {
+        "properties": {
+          "progress_pct": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Progress Pct"
+          },
+          "current_pass": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Pass"
+          },
+          "eta_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eta Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "progress_pct"
+        ],
+        "title": "HeartbeatRequest"
+      },
+      "HwPreference": {
+        "type": "string",
+        "enum": [
+          "cpu_only",
+          "any"
+        ],
+        "title": "HwPreference"
+      },
+      "IdentificationMode": {
+        "type": "string",
+        "enum": [
+          "required",
+          "skip",
+          "deferred_placeholder"
+        ],
+        "title": "IdentificationMode"
+      },
+      "IdentifyRequest": {
+        "properties": {
+          "drive_id": {
+            "type": "string",
+            "title": "Drive Id"
+          },
+          "scan_result": {
+            "$ref": "#/components/schemas/ScanResult"
+          },
+          "pending_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Session Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drive_id",
+          "scan_result"
+        ],
+        "title": "IdentifyRequest"
+      },
+      "Job": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "drive_id": {
+            "type": "string",
+            "title": "Drive Id"
+          },
+          "disc_type": {
+            "$ref": "#/components/schemas/DiscType"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "poster_url_manual": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url Manual"
+          },
+          "metadata_json": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata Json"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "resumed_from_crash": {
+            "type": "boolean",
+            "title": "Resumed From Crash"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "ripped_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ripped At"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drive_id",
+          "disc_type",
+          "year",
+          "poster_url",
+          "poster_url_manual",
+          "status",
+          "resumed_from_crash",
+          "started_at",
+          "ripped_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Job"
+      },
+      "JobCompleteRequest": {
+        "properties": {},
+        "type": "object",
+        "title": "JobCompleteRequest",
+        "description": "POST /api/ripper/jobs/{job_id}/rip-complete body.\n\nEmpty for now; backend computes the final job status from the track\noutcomes. Reserved for future flags (e.g. user-initiated abort)."
+      },
+      "JobDetailView": {
+        "properties": {
+          "job": {
+            "$ref": "#/components/schemas/JobView"
+          },
+          "tracks": {
+            "items": {
+              "$ref": "#/components/schemas/TrackView"
+            },
+            "type": "array",
+            "title": "Tracks"
+          },
+          "fingerprints": {
+            "items": {
+              "$ref": "#/components/schemas/DiscFingerprintView"
+            },
+            "type": "array",
+            "title": "Fingerprints"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job",
+          "tracks"
+        ],
+        "title": "JobDetailView"
+      },
+      "JobStatus": {
+        "type": "string",
+        "enum": [
+          "created",
+          "awaiting_user_id",
+          "identified",
+          "ripping",
+          "ripped",
+          "ripped_partial",
+          "ripped_awaiting_identify",
+          "abandoned",
+          "failed"
+        ],
+        "title": "JobStatus"
+      },
+      "JobUpdateRequest": {
+        "properties": {
+          "poster_url_manual": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url Manual"
+          }
+        },
+        "type": "object",
+        "title": "JobUpdateRequest",
+        "description": "PATCH /api/jobs/{id} body. Currently only the manual poster override\nis editable \u2014 title/year live behind the identify/resolve flow."
+      },
+      "JobView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "drive_id": {
+            "type": "string",
+            "title": "Drive Id"
+          },
+          "disc_type": {
+            "$ref": "#/components/schemas/DiscType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "poster_url_manual": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url Manual"
+          },
+          "metadata_json": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata Json"
+          },
+          "resumed_from_crash": {
+            "type": "boolean",
+            "title": "Resumed From Crash"
+          },
+          "rip_progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RipProgressSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "drive_id",
+          "disc_type",
+          "status",
+          "title",
+          "year",
+          "metadata_json",
+          "resumed_from_crash"
+        ],
+        "title": "JobView"
+      },
+      "LoginRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginRequest"
+      },
+      "LoginResponse": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "password_must_change": {
+            "type": "boolean",
+            "title": "Password Must Change"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "expires_at",
+          "password_must_change"
+        ],
+        "title": "LoginResponse"
+      },
+      "ManualTriggerRequest": {
+        "properties": {
+          "drive_id": {
+            "type": "string",
+            "title": "Drive Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drive_id"
+        ],
+        "title": "ManualTriggerRequest",
+        "description": "POST /api/jobs/manual \u2014 kick off a rip on a drive that already has a\ndisc in the tray. The ripper picks it up via WS command and runs the\nnormal scan\u2192identify\u2192rip flow; the optional `session_id` is stamped on\nthe resulting Job's metadata so `rip-complete` auto-applies it."
+      },
+      "ManualTriggerResponse": {
+        "properties": {
+          "drive_id": {
+            "type": "string",
+            "title": "Drive Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drive_id",
+          "session_id"
+        ],
+        "title": "ManualTriggerResponse"
+      },
+      "MediaType": {
+        "type": "string",
+        "enum": [
+          "movie",
+          "tv",
+          "music",
+          "data",
+          "iso"
+        ],
+        "title": "MediaType"
+      },
+      "OutputMode": {
+        "type": "string",
+        "enum": [
+          "tracks",
+          "iso",
+          "data_copy"
+        ],
+        "title": "OutputMode"
+      },
+      "PasswordChangeRequest": {
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "title": "Current Password"
+          },
+          "new_password": {
+            "type": "string",
+            "minLength": 8,
+            "title": "New Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "title": "PasswordChangeRequest"
+      },
+      "RegisterRequest": {
+        "properties": {
+          "hostname": {
+            "type": "string",
+            "title": "Hostname"
+          },
+          "device_path": {
+            "type": "string",
+            "title": "Device Path"
+          },
+          "ripper_version": {
+            "type": "string",
+            "title": "Ripper Version"
+          },
+          "hw_caps": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Hw Caps"
+          }
+        },
+        "type": "object",
+        "required": [
+          "hostname",
+          "device_path",
+          "ripper_version"
+        ],
+        "title": "RegisterRequest"
+      },
+      "RegisterTranscoderRequest": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "hostname": {
+            "type": "string",
+            "title": "Hostname"
+          },
+          "hw_caps": {
+            "$ref": "#/components/schemas/HardwareCaps"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "hostname",
+          "hw_caps"
+        ],
+        "title": "RegisterTranscoderRequest"
+      },
+      "RegisterTranscoderResponse": {
+        "properties": {
+          "task": {
+            "$ref": "#/components/schemas/TranscodeTaskView"
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionView"
+          },
+          "transcode_preset": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscodePresetView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_track": {
+            "$ref": "#/components/schemas/TrackView"
+          },
+          "raw_input_path": {
+            "type": "string",
+            "title": "Raw Input Path"
+          },
+          "media_root": {
+            "type": "string",
+            "title": "Media Root"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task",
+          "session",
+          "transcode_preset",
+          "source_track",
+          "raw_input_path",
+          "media_root"
+        ],
+        "title": "RegisterTranscoderResponse",
+        "description": "Bootstrap bundle the transcoder needs before it can claim + run.\n\n`raw_input_path` is the absolute path the transcoder should read from\n(`/raw/<job>/title_tNN.mkv` for video, `/raw/<job>/track_NN.wav` for\naudio, `/raw/<job>/dump.iso` for data). `media_root` plus the task's\n`output_path` is where the final file lands."
+      },
+      "ResolveFanOutOutcomeView": {
+        "properties": {
+          "session_application_id": {
+            "type": "string",
+            "title": "Session Application Id"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionApplicationStatus"
+          },
+          "task_count": {
+            "type": "integer",
+            "title": "Task Count"
+          },
+          "skipped_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "collisions",
+                  "template",
+                  "session_missing"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skipped Reason"
+          },
+          "error_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_application_id",
+          "session_id",
+          "status",
+          "task_count"
+        ],
+        "title": "ResolveFanOutOutcomeView",
+        "description": "One waiting_identify application's post-resolve outcome.\n\n`status='queued'` + `skipped_reason=None` \u2192 the application was\npromoted and `task_count` newly-created transcode tasks are queued.\nAnything else \u2192 the application stays parked in `waiting_identify`\nand `error_detail` carries the reason for the UI to surface."
+      },
+      "ResolveRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "ResolveRequest"
+      },
+      "ResolveResponse": {
+        "properties": {
+          "job": {
+            "$ref": "#/components/schemas/JobView"
+          },
+          "fan_out": {
+            "items": {
+              "$ref": "#/components/schemas/ResolveFanOutOutcomeView"
+            },
+            "type": "array",
+            "title": "Fan Out"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job",
+          "fan_out"
+        ],
+        "title": "ResolveResponse",
+        "description": "POST /api/jobs/{id}/resolve response. The job always reflects the\njust-applied identity (status flipped to `identified`); `fan_out` lists\nthe per-application outcomes from the parked-applications promotion\npass \u2014 empty when no session was applied to the job before resolve."
+      },
+      "RetentionPolicy": {
+        "type": "string",
+        "enum": [
+          "keep_forever",
+          "prune_after_session",
+          "custom"
+        ],
+        "title": "RetentionPolicy"
+      },
+      "RipPresetCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "track_selection": {
+            "$ref": "#/components/schemas/TrackSelection"
+          },
+          "identification_mode": {
+            "$ref": "#/components/schemas/IdentificationMode"
+          },
+          "output_mode": {
+            "$ref": "#/components/schemas/OutputMode"
+          },
+          "track_filters_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Filters Json"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "media_type",
+          "track_selection",
+          "identification_mode",
+          "output_mode"
+        ],
+        "title": "RipPresetCreateRequest"
+      },
+      "RipPresetUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "track_selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrackSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identification_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdentificationMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "output_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OutputMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "track_filters_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Filters Json"
+          }
+        },
+        "type": "object",
+        "title": "RipPresetUpdateRequest"
+      },
+      "RipPresetView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "is_builtin": {
+            "type": "boolean",
+            "title": "Is Builtin"
+          },
+          "track_selection": {
+            "$ref": "#/components/schemas/TrackSelection"
+          },
+          "identification_mode": {
+            "$ref": "#/components/schemas/IdentificationMode"
+          },
+          "output_mode": {
+            "$ref": "#/components/schemas/OutputMode"
+          },
+          "track_filters_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Filters Json"
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "media_type",
+          "is_builtin",
+          "track_selection",
+          "identification_mode",
+          "output_mode",
+          "track_filters_json",
+          "created_by_user_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RipPresetView"
+      },
+      "RipProgressSummary": {
+        "properties": {
+          "tracks_total": {
+            "type": "integer",
+            "title": "Tracks Total"
+          },
+          "tracks_done": {
+            "type": "integer",
+            "title": "Tracks Done"
+          },
+          "tracks_failed": {
+            "type": "integer",
+            "title": "Tracks Failed"
+          },
+          "current_track_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Track Id"
+          },
+          "current_track_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Track Index"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tracks_total",
+          "tracks_done",
+          "tracks_failed",
+          "current_track_id",
+          "current_track_index"
+        ],
+        "title": "RipProgressSummary",
+        "description": "Per-job rip-phase summary surfaced on `JobView` so the dashboard can\nrender `Track 3 / 8` without an N+1 fetch against `/api/jobs/{id}`.\n\nPopulated only for jobs in `JobStatus.RIPPING`. `current_track_index`\nis the 1-based ordinal among `tracks` sorted by `Track.index` of the\nrow currently in `IN_PROGRESS` (None if the rip is between tracks\nor just got going). Live progress percent for that track flows on\nthe `ripper.progress.{job_id}` WS topic \u2014 not stored here."
+      },
+      "RipStartResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "rip_preset_id": {
+            "type": "string",
+            "title": "Rip Preset Id"
+          },
+          "tracks": {
+            "items": {
+              "$ref": "#/components/schemas/TrackView"
+            },
+            "type": "array",
+            "title": "Tracks"
+          },
+          "min_length_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Length Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "rip_preset_id",
+          "tracks"
+        ],
+        "title": "RipStartResponse"
+      },
+      "RipperConfigView": {
+        "properties": {
+          "auto_rip_on_insert": {
+            "type": "boolean",
+            "title": "Auto Rip On Insert"
+          }
+        },
+        "type": "object",
+        "required": [
+          "auto_rip_on_insert"
+        ],
+        "title": "RipperConfigView",
+        "description": "Subset of `Config` the ripper reads to gate its automatic behaviour.\n\nPolled on disc-insert before the pipeline kicks off; small enough to\nkeep cheap. Does not include any UI-only fields."
+      },
+      "RipperHeartbeatRequest": {
+        "properties": {
+          "drive_id": {
+            "type": "string",
+            "title": "Drive Id"
+          },
+          "media_status": {
+            "$ref": "#/components/schemas/DriveMediaStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drive_id",
+          "media_status"
+        ],
+        "title": "RipperHeartbeatRequest",
+        "description": "POST /api/ripper/heartbeat body. Each ripper sends one of these\nevery HEARTBEAT_INTERVAL_SECONDS so the backend can refuse manual-\ntrigger requests against drives whose tray is open / empty without\nwaiting for a doomed identify.\n\nNamed distinctly from the transcoder HeartbeatRequest because the\ntwo services post completely different payloads to different paths."
+      },
+      "ScanResult": {
+        "properties": {
+          "disc_type": {
+            "$ref": "#/components/schemas/DiscType"
+          },
+          "volume_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Label"
+          },
+          "titles": {
+            "items": {
+              "$ref": "#/components/schemas/ScanTitle"
+            },
+            "type": "array",
+            "title": "Titles"
+          },
+          "musicbrainz_disc_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Musicbrainz Disc Id"
+          },
+          "fingerprints": {
+            "items": {
+              "$ref": "#/components/schemas/DiscFingerprintInput"
+            },
+            "type": "array",
+            "title": "Fingerprints"
+          },
+          "raw": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Raw"
+          }
+        },
+        "type": "object",
+        "required": [
+          "disc_type"
+        ],
+        "title": "ScanResult"
+      },
+      "ScanTitle": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "title": "Duration Seconds"
+          },
+          "chapter_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Count"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "source_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "duration_seconds"
+        ],
+        "title": "ScanTitle"
+      },
+      "SessionApplicationStatus": {
+        "type": "string",
+        "enum": [
+          "waiting_identify",
+          "queued",
+          "running",
+          "done",
+          "done_partial",
+          "failed",
+          "cancelled"
+        ],
+        "title": "SessionApplicationStatus"
+      },
+      "SessionApplicationView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionApplicationStatus"
+          },
+          "overrides_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrides Json"
+          },
+          "overwrite": {
+            "type": "boolean",
+            "title": "Overwrite"
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "session_id",
+          "job_id",
+          "status",
+          "overrides_json",
+          "overwrite",
+          "created_by_user_id",
+          "created_at",
+          "completed_at"
+        ],
+        "title": "SessionApplicationView"
+      },
+      "SessionCloneRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "SessionCloneRequest"
+      },
+      "SessionCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "rip_preset_id": {
+            "type": "string",
+            "title": "Rip Preset Id"
+          },
+          "transcode_preset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcode Preset Id"
+          },
+          "output_path_template": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Output Path Template"
+          },
+          "overrides_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrides Json"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "media_type",
+          "rip_preset_id",
+          "output_path_template"
+        ],
+        "title": "SessionCreateRequest"
+      },
+      "SessionUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "rip_preset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rip Preset Id"
+          },
+          "transcode_preset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcode Preset Id"
+          },
+          "output_path_template": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Path Template"
+          },
+          "overrides_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrides Json"
+          }
+        },
+        "type": "object",
+        "title": "SessionUpdateRequest"
+      },
+      "SessionView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "is_builtin": {
+            "type": "boolean",
+            "title": "Is Builtin"
+          },
+          "rip_preset_id": {
+            "type": "string",
+            "title": "Rip Preset Id"
+          },
+          "transcode_preset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcode Preset Id"
+          },
+          "output_path_template": {
+            "type": "string",
+            "title": "Output Path Template"
+          },
+          "overrides_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrides Json"
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "media_type",
+          "is_builtin",
+          "rip_preset_id",
+          "transcode_preset_id",
+          "output_path_template",
+          "overrides_json",
+          "created_by_user_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SessionView"
+      },
+      "TemplatePreviewRequest": {
+        "properties": {
+          "template": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Template"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "has_transcode_preset": {
+            "type": "boolean",
+            "title": "Has Transcode Preset",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "template",
+          "media_type"
+        ],
+        "title": "TemplatePreviewRequest"
+      },
+      "TemplatePreviewResponse": {
+        "properties": {
+          "expansion": {
+            "type": "string",
+            "title": "Expansion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expansion"
+        ],
+        "title": "TemplatePreviewResponse"
+      },
+      "TrackKind": {
+        "type": "string",
+        "enum": [
+          "video_title",
+          "audio_track",
+          "data_dump"
+        ],
+        "title": "TrackKind"
+      },
+      "TrackSelection": {
+        "type": "string",
+        "enum": [
+          "main_feature",
+          "all_tracks",
+          "archive",
+          "custom"
+        ],
+        "title": "TrackSelection"
+      },
+      "TrackStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "in_progress",
+          "done",
+          "failed"
+        ],
+        "title": "TrackStatus"
+      },
+      "TrackUpdateRequest": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/TrackStatus"
+          },
+          "output_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Path"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "TrackUpdateRequest",
+        "description": "PATCH /api/ripper/tracks/{track_id} body.\n\nOnly fields that are non-None are written. Backend validates the\nstate-machine transition implied by `status`."
+      },
+      "TrackView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TrackKind"
+          },
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "source_ref": {
+            "type": "string",
+            "title": "Source Ref"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TrackStatus"
+          },
+          "output_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Path"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "expected_size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Size Bytes"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "expected_duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Duration Seconds"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "job_id",
+          "kind",
+          "index",
+          "source_ref",
+          "status",
+          "output_path",
+          "size_bytes",
+          "duration_seconds",
+          "attempts",
+          "last_error"
+        ],
+        "title": "TrackView"
+      },
+      "TranscodePresetCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "tool": {
+            "$ref": "#/components/schemas/TranscodeTool"
+          },
+          "preset_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset Ref"
+          },
+          "preset_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset Json"
+          },
+          "container": {
+            "$ref": "#/components/schemas/ContainerFormat"
+          },
+          "codec": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoCodec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hw_preference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HwPreference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "extra_args": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Args"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "media_type",
+          "tool",
+          "container"
+        ],
+        "title": "TranscodePresetCreateRequest"
+      },
+      "TranscodePresetUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscodeTool"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preset_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset Ref"
+          },
+          "preset_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset Json"
+          },
+          "container": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContainerFormat"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "codec": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoCodec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hw_preference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HwPreference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "extra_args": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Args"
+          }
+        },
+        "type": "object",
+        "title": "TranscodePresetUpdateRequest"
+      },
+      "TranscodePresetView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "is_builtin": {
+            "type": "boolean",
+            "title": "Is Builtin"
+          },
+          "tool": {
+            "$ref": "#/components/schemas/TranscodeTool"
+          },
+          "preset_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset Ref"
+          },
+          "preset_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset Json"
+          },
+          "container": {
+            "$ref": "#/components/schemas/ContainerFormat"
+          },
+          "codec": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoCodec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hw_preference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HwPreference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "extra_args": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Args"
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "media_type",
+          "is_builtin",
+          "tool",
+          "preset_ref",
+          "preset_json",
+          "container",
+          "codec",
+          "hw_preference",
+          "extra_args",
+          "created_by_user_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TranscodePresetView"
+      },
+      "TranscodeTaskStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "in_progress",
+          "done",
+          "failed"
+        ],
+        "title": "TranscodeTaskStatus"
+      },
+      "TranscodeTaskView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "session_application_id": {
+            "type": "string",
+            "title": "Session Application Id"
+          },
+          "source_track_id": {
+            "type": "string",
+            "title": "Source Track Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TranscodeTaskStatus"
+          },
+          "output_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Path"
+          },
+          "progress_pct": {
+            "type": "integer",
+            "title": "Progress Pct"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "claimed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed By"
+          },
+          "claim_heartbeat_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Heartbeat At"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "session_application_id",
+          "source_track_id",
+          "status",
+          "output_path",
+          "progress_pct",
+          "attempts",
+          "claimed_by",
+          "claim_heartbeat_at",
+          "last_error",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TranscodeTaskView"
+      },
+      "TranscodeTool": {
+        "type": "string",
+        "enum": [
+          "handbrake",
+          "abcde",
+          "none"
+        ],
+        "title": "TranscodeTool"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VideoCodec": {
+        "type": "string",
+        "enum": [
+          "h264",
+          "h265",
+          "av1"
+        ],
+        "title": "VideoCodec"
+      }
+    }
+  }
+}

@@ -1,0 +1,147 @@
+from enum import StrEnum
+
+
+class DiscType(StrEnum):
+    DVD = "dvd"
+    BLURAY = "bluray"
+    CD = "cd"
+    DATA = "data"
+    UNKNOWN = "unknown"
+
+
+class DriveStatus(StrEnum):
+    ONLINE = "online"
+    OFFLINE = "offline"
+    RIPPING = "ripping"
+    ERROR = "error"
+
+
+class DriveMediaStatus(StrEnum):
+    """What the drive thinks is in its tray. Reported by each ripper
+    on a heartbeat so the backend can fail manual-trigger requests
+    fast when the user clicks Start without loading a disc."""
+
+    LOADED = "loaded"  # CDS_DISC_OK
+    NO_DISC = "no_disc"  # CDS_NO_DISC
+    TRAY_OPEN = "tray_open"  # CDS_TRAY_OPEN
+    NOT_READY = "not_ready"  # CDS_DRIVE_NOT_READY (medium spinning up)
+    UNAVAILABLE = "unavailable"  # open() failed — kernel ENODEV / device file gone
+    UNKNOWN = "unknown"  # CDS_NO_INFO, or ioctl unsupported on a probed device
+
+
+class JobStatus(StrEnum):
+    CREATED = "created"
+    AWAITING_USER_ID = "awaiting_user_id"
+    IDENTIFIED = "identified"
+    RIPPING = "ripping"
+    RIPPED = "ripped"
+    RIPPED_PARTIAL = "ripped_partial"
+    # Set by the (future) deferred-placeholder rip path when a disc rips
+    # successfully but identification never landed. Resolvable via the
+    # /resolve endpoint just like AWAITING_USER_ID. Inert today — no code
+    # path sets this yet.
+    RIPPED_AWAITING_IDENTIFY = "ripped_awaiting_identify"
+    ABANDONED = "abandoned"
+    FAILED = "failed"
+
+
+class TrackStatus(StrEnum):
+    QUEUED = "queued"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+    FAILED = "failed"
+
+
+class TrackKind(StrEnum):
+    VIDEO_TITLE = "video_title"
+    AUDIO_TRACK = "audio_track"
+    DATA_DUMP = "data_dump"
+
+
+class MediaType(StrEnum):
+    MOVIE = "movie"
+    TV = "tv"
+    MUSIC = "music"
+    DATA = "data"
+    ISO = "iso"
+
+
+class TrackSelection(StrEnum):
+    MAIN_FEATURE = "main_feature"
+    ALL_TRACKS = "all_tracks"
+    ARCHIVE = "archive"
+    CUSTOM = "custom"
+
+
+class IdentificationMode(StrEnum):
+    REQUIRED = "required"
+    SKIP = "skip"
+    DEFERRED_PLACEHOLDER = "deferred_placeholder"
+
+
+class OutputMode(StrEnum):
+    TRACKS = "tracks"
+    ISO = "iso"
+    DATA_COPY = "data_copy"
+
+
+class TranscodeTool(StrEnum):
+    HANDBRAKE = "handbrake"
+    ABCDE = "abcde"
+    NONE = "none"
+
+
+class ContainerFormat(StrEnum):
+    MKV = "mkv"
+    MP4 = "mp4"
+    WEBM = "webm"
+    FLAC = "flac"
+    MP3 = "mp3"
+    OGG = "ogg"
+    ISO = "iso"
+    NONE = "none"
+
+
+class HwPreference(StrEnum):
+    CPU_ONLY = "cpu_only"
+    ANY = "any"
+
+
+class RetentionPolicy(StrEnum):
+    KEEP_FOREVER = "keep_forever"
+    PRUNE_AFTER_SESSION = "prune_after_session"
+    CUSTOM = "custom"
+
+
+class SessionApplicationStatus(StrEnum):
+    WAITING_IDENTIFY = "waiting_identify"
+    QUEUED = "queued"
+    RUNNING = "running"
+    DONE = "done"
+    DONE_PARTIAL = "done_partial"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class TranscodeTaskStatus(StrEnum):
+    QUEUED = "queued"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+    FAILED = "failed"
+
+
+class GpuVendor(StrEnum):
+    VAAPI = "vaapi"
+    NVENC = "nvenc"
+    QSV = "qsv"
+
+
+class GpuStatus(StrEnum):
+    AVAILABLE = "available"
+    BUSY = "busy"
+
+
+class VideoCodec(StrEnum):
+    H264 = "h264"
+    H265 = "h265"
+    AV1 = "av1"

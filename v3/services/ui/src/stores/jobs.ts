@@ -1,0 +1,80 @@
+import { defineStore } from 'pinia'
+import { api } from '../api/client'
+import type {
+  AbandonJobRequest,
+  BulkDeleteJobsResponse,
+  JobUpdateRequest,
+  JobView,
+  ManualTriggerRequest,
+  ManualTriggerResponse,
+  ResolveJobRequest,
+  ResolveResponse,
+} from '../api/types'
+
+const POLL_INTERVAL_MS = Number(import.meta.env.VITE_JOBS_POLL_MS ?? 5000)
+
+interface JobsState {
+  jobs: JobView[]
+  loading: boolean
+  error: string | null
+  _timer: number | null
+}
+
+export const useJobsStore = defineStore('jobs', {
+  state: (): JobsState => ({
+    jobs: [],
+    loading: false,
+    error: null,
+    _timer: null,
+  }),
+  actions: {
+    async fetchJobs(): Promise<void> {
+      this.loading = true
+      try {
+        this.jobs = await api.get<JobView[]>('/api/jobs')
+        this.error = null
+      } catch (e) {
+        this.error = e instanceof Error ? e.message : String(e)
+      } finally {
+        this.loading = false
+      }
+    },
+    startPolling(): void {
+      if (this._timer !== null) return
+      void this.fetchJobs()
+      this._timer = window.setInterval(() => {
+        void this.fetchJobs()
+      }, POLL_INTERVAL_MS)
+    },
+    stopPolling(): void {
+      if (this._timer !== null) {
+        window.clearInterval(this._timer)
+        this._timer = null
+      }
+    },
+    async triggerManual(req: ManualTriggerRequest): Promise<ManualTriggerResponse> {
+      return await api.post<ManualTriggerResponse>('/api/jobs/manual', req)
+    },
+    async abandon(jobId: string, req: AbandonJobRequest = {}): Promise<JobView> {
+      return await api.post<JobView>(`/api/jobs/${jobId}/abandon`, req)
+    },
+    async update(jobId: string, req: JobUpdateRequest): Promise<JobView> {
+      return await api.patch<JobView>(`/api/jobs/${jobId}`, req)
+    },
+    async resolve(jobId: string, req: ResolveJobRequest): Promise<ResolveResponse> {
+      return await api.post<ResolveResponse>(`/api/jobs/${jobId}/resolve`, req)
+    },
+    async deleteJob(jobId: string, opts: { deleteRaw?: boolean } = {}): Promise<void> {
+      const qs = opts.deleteRaw ? '?delete_raw=true' : ''
+      await api.del(`/api/jobs/${jobId}${qs}`)
+      this.jobs = this.jobs.filter((j) => j.id !== jobId)
+    },
+    async deleteAll(opts: { deleteRaw?: boolean } = {}): Promise<BulkDeleteJobsResponse> {
+      const qs = opts.deleteRaw ? '?delete_raw=true' : ''
+      const result = await api.delJson<BulkDeleteJobsResponse>(`/api/jobs${qs}`)
+      const deleted = new Set(result.deleted_ids)
+      this.jobs = this.jobs.filter((j) => !deleted.has(j.id))
+      return result
+    },
+  },
+})
