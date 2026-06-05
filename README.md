@@ -1,50 +1,86 @@
-# Automatic Ripping Machine (ARM) v3
+# Automatic Ripping Machine (ARM)
+[![CI](https://github.com/automatic-ripping-machine/automatic-ripping-machine/actions/workflows/main.yml/badge.svg)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/actions/workflows/main.yml) [![Publish Docker Image](https://github.com/automatic-ripping-machine/automatic-ripping-machine/actions/workflows/publish-image.yml/badge.svg)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/actions/workflows/publish-image.yml)
+[![Docker](https://img.shields.io/docker/pulls/automaticrippingmachine/automatic-ripping-machine.svg)](https://hub.docker.com/r/automaticrippingmachine/automatic-ripping-machine)
 
-A greenfield rebuild: FastAPI Backend, Vue UI, Postgres, one ripper per optical
-drive, and an ephemeral transcoder. The architecture lives in
-[docs/arch/](docs/arch/). ARM v2 is frozen and preserved at the `v2-final` git
-tag — it shares nothing with this tree at the code level.
+[![GitHub forks](https://img.shields.io/github/forks/automatic-ripping-machine/automatic-ripping-machine)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/network)
+[![GitHub stars](https://img.shields.io/github/stars/automatic-ripping-machine/automatic-ripping-machine)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/stargazers)
+[![GitHub issues](https://img.shields.io/github/issues/automatic-ripping-machine/automatic-ripping-machine)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/issues)
+[![GitHub pull requests](https://img.shields.io/github/issues-pr/automatic-ripping-machine/automatic-ripping-machine)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/pulls)
+[![GitHub contributors](https://img.shields.io/github/contributors/automatic-ripping-machine/automatic-ripping-machine)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/graphs/contributors)
+[![GitHub last commit](https://img.shields.io/github/last-commit/automatic-ripping-machine/automatic-ripping-machine?)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/commits/main)
 
-## Install (one-liner)
+[![GitHub license](https://img.shields.io/github/license/automatic-ripping-machine/automatic-ripping-machine)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/LICENSE)
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/install.sh | bash
-```
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/automatic-ripping-machine/automatic-ripping-machine?label=Latest%20Stable%20Version)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/releases)
+[![GitHub release Date](https://img.shields.io/github/release-date/automatic-ripping-machine/automatic-ripping-machine?label=Latest%20Stable%20Released)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/releases)
+![Python Versions](https://img.shields.io/badge/Python_Versions-3.9_|_3.10_|_3.11_|_3.12-blue?logo=python)
 
-For users who want a TTY before the script runs: `bash -c "$(curl -fsSL .../install.sh)"`. Override the prefix with `--prefix /srv/arm`; auto-start with `--start`; rotate the CA with `--rotate-ca`. See `bash install.sh --help` for everything.
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white) ![Vue.js](https://img.shields.io/badge/Vue.js-4FC08D?logo=vuedotjs&logoColor=white) ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white) ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-D71F00?logo=sqlalchemy&logoColor=white) ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white) ![Nginx](https://img.shields.io/badge/Nginx-009639?logo=nginx&logoColor=white)
 
-The installer drops everything under `~/arm/` (or `--prefix`):
 
-- `certs/` — internal CA + per-service leaf certs (EC P-384, 10y).
-- `.env` — bootstrap secrets, generated random on first run.
-- `docker-compose.yml` — one ripper service per detected drive (with the right `/dev/sg<M>` SCSI-generic pairing). Image-based; pulls `docker.io/automaticrippingmachine/arm-<svc>:v3.x.y`.
-- `docker-compose.gpu.yml` — overlay for VAAPI/QSV/NVENC hosts.
-- `raw/`, `media/`, `logs/` — bind-mounted into the stack.
 
-After install: `cd ~/arm && docker compose up -d`. First-boot credentials are `admin` / `admin` (printed in `docker exec armv3-backend cat /logs/first-boot.log` on every boot until you change it). Open `https://localhost:8081`; you'll be forced to set a real password on first login. See [docs/arch/06-deployment.md § Install](docs/arch/06-deployment.md#install) for the full UX.
+[![Wiki](https://img.shields.io/badge/Wiki-Get%20Help-brightgreen)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki)
+[![Discord](https://img.shields.io/discord/576479573886107699)](https://discord.gg/FUSrn8jUcR)
 
-> ⚠️ If the published registry images don't yet cover your platform or tag, build locally (see "Local development" below) and tag the result so the installer's compose finds it.
 
-## Local development
 
-For contributors editing ARM. From the repo root:
+## Overview
 
-```bash
-bash devtools/setup-dev.sh        # uv sync, certs, .env
-docker compose up -d --build      # build + start
-```
+Insert an optical disc (Blu-ray, DVD, CD) and checks to see if it's audio, video (Movie or TV), or data, then rips it.
 
-`setup-dev.sh` delegates cert generation to `install.sh --certs-only`; the dev compose at [docker-compose.yml](docker-compose.yml) keeps its `build:` blocks (vs. the installer's `image:` references) so you iterate against your own working tree. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor workflow (trunk-based branching, tests, lint, the OpenAPI contract).
+See: https://b3n.org/automatic-ripping-machine
 
-## What's in this tree
 
-- `packages/arm_common/` — shared Pydantic schemas, enums, ULID helper, structured-logging helpers
-- `services/backend/` — FastAPI app + Alembic migrations + WS hub + dispatchers (transcode, notification, log-tail)
-- `services/ripper/` — drive poller + Backend client + makemkv/HandBrake/abcde drivers
-- `services/transcode/` — ephemeral per-task transcoder spawned by the Backend
-- `services/ui/` — Vue 3 SPA served by nginx
-- `services/_common/docker-entrypoint.sh` — shared CA-merge + PUID drop + tini exec
-- `install.sh` — end-user installer (image-based, generates `~/arm/`)
-- `devtools/` — contributor tooling (`setup-dev.sh` bootstrap, `iso-smoke.sh`, `crash-drill.sh`, `regen-openapi-snapshot.sh`)
+## Features
 
-See [docs/arch/README.md](docs/arch/README.md) for the architecture overview and [docs/plans/MASTER_IMPLEMENTATION_PLAN.md](docs/plans/MASTER_IMPLEMENTATION_PLAN.md) for the per-phase rollout.
+- Detects insertion of disc using udev
+- Determines disc type...
+  - If video (Blu-ray or DVD)
+    - Retrieve title from disc or [OMDb API](http://www.omdbapi.com/) to name the folder "Movie Title (Year)" so that Plex or Emby can pick it up
+    - Determine if video is Movie or TV using [OMDb API](http://www.omdbapi.com/)
+    - Rip using MakeMKV or HandBrake (can rip all features or main feature)
+    - Eject disc and queue up Handbrake transcoding when done
+    - Transcoding jobs are asynchronously batched from ripping
+    - Send notifications via IFTTT, Pushbullet, Slack, Discord, and many more!
+  - If audio (CD) - rip using abcde (get disc-data and album art from [musicbrainz](https://musicbrainz.org/))
+  - If data (Blu-ray, DVD, DVD-Audio or CD) - make an ISO backup
+- Headless, designed to be run from a server
+- Can rip from multiple-optical drives in parallel
+- Python Flask UI to interact with ripping jobs, view logs, update jobs, etc
+
+
+
+## Usage
+
+- Insert disc
+- Wait for disc to eject
+- Repeat
+
+
+## Requirements
+
+- A system capable of running Docker containers
+- One or more optical drives to rip Blu-rays, DVDs, and CDs
+- Lots of drive space (I suggest using a NAS) to store your movies
+
+
+## Install
+
+[For normal installation please see the wiki](https://github.com/shitwolfymakes/automatic-ripping-machine/wiki/Getting-Started).
+
+[For docker installation please see here](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/docker).
+
+[For WSL Integration please see here]()
+
+## Troubleshooting
+ [Please see the wiki for troubleshooting](https://github.com/shitwolfymakes/automatic-ripping-machine/wiki/Troubleshooting).
+
+## Contributing
+
+Pull requests are welcome.  Please see the [Contributing Guide](https://github.com/shitwolfymakes/automatic-ripping-machine/wiki/Contribute)
+
+If you set ARM up in a different environment (hardware/OS/virtual/etc.), please consider [submitting a howto to the wiki](https://github.com/shitwolfymakes/automatic-ripping-machine/wiki).
+
+## License
+
+[MIT License](LICENSE)
