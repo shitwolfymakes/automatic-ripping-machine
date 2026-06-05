@@ -24,7 +24,7 @@ back-ported to older tags.
 | Older stable `v3.*` tags                      | :x:                |
 | Pre-release tags (`-RC` / `-alpha` / `-beta`) | :x:                |
 | `:latest` (tracks `main` HEAD)                | :x:                |
-| v2.x (frozen at `v2-final`)                   | :x:                |
+| v2.x (frozen, pre-cutover history)            | :x:                |
 
 If you hit a security issue, pin to and upgrade to the **newest stable `v3.*`
 tag** — that's where the fix will land.

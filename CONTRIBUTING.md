@@ -5,8 +5,8 @@ Thank you for contributing to the Automatic Ripping Machine.
 This is **ARM v3** — a greenfield rebuild (FastAPI backend, Vue UI, Postgres, a
 ripper-per-drive and an ephemeral transcoder). The architecture is documented
 under [docs/arch/](docs/arch/); start at [docs/arch/README.md](docs/arch/README.md).
-ARM v2 is frozen and preserved forever at the `v2-final` tag — no new work
-targets it.
+ARM v2 is frozen — no new work targets it. Its code remains in the
+repository's pre-cutover git history.
 
 ## Reporting issues, bugs, and feature requests
 
@@ -40,7 +40,7 @@ always-releasable.
   a fix while `main` has moved ahead, cut a short-lived `release/3.0.x` branch from
   that tag, land the fix, tag it, and delete the branch. Don't maintain a permanent
   release line.
-- **v2 is closed.** It lives at the `v2-final` tag; nothing new branches off it.
+- **v2 is closed.** It lives in the pre-cutover git history; nothing new branches off it.
 
 ## Pull requests
 

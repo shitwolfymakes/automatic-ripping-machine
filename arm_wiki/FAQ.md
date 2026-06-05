@@ -3,7 +3,7 @@
 ## Is there a native (non-Docker) install?
 
 No. ARM v3 runs only as a Docker Compose stack. The legacy `apt`/native install
-belonged to v2, which is frozen at the `v2-final` tag. See
+belonged to v2, which is frozen and no longer developed. See
 [Getting Started](Getting-Started).
 
 ## Can I upgrade my ARM v2 install to v3?

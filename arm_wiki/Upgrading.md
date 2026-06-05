@@ -6,7 +6,7 @@ forward automatically.
 
 > Coming from **ARM v2**? There is no in-place upgrade path. v3 shares no code,
 > no database, and no config format with v2. Treat it as a fresh install
-> ([Getting Started](Getting-Started)); v2 stays frozen at the `v2-final` tag and
+> ([Getting Started](Getting-Started)); v2 stays frozen and
 > the two stacks can even run side by side (their containers and volumes are
 > namespaced `armv3-*` vs `arm-*`).
 

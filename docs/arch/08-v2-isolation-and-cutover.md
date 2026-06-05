@@ -202,22 +202,18 @@ Drop the `v3-` prefix now that these are the only workflows. Re-evaluate `publis
 
 - The UI stays on host `8081` (mapped to container `443`/TLS). `8081` is the canonical port the installer generates and that existing installs already use; v2's `8080` is **not** reclaimed. (The earlier plan to move back to `8080` was dropped — the installed, TLS-secured deployment is the source of truth, and it has always run on `8081`.)
 
-### 7. Tag v2
+### 7. v2 preservation — no tag
 
-Before merging the cutover PR, tag the current `main` so v2 is reachable forever:
+No git tag is created to preserve v2. It stays reachable two ways that don't depend on a tag:
 
-```bash
-git tag -a v2-final main -m "Final v2 release before v3 replaces main"
-git push origin v2-final
-```
-
-Users who want to stay on v2 pin their image to this tag. No existing v2 install is disrupted by the cutover because the cutover ships new image tags under `v3.x`.
+- **Git history.** The cutover PR removes v2 from `main` in a normal merge, so every pre-cutover commit — with the full v2 tree — remains in `main`'s history. `git checkout <pre-cutover-sha>` (or browsing history on GitHub) recovers it.
+- **Published images.** Existing v2 Docker image tags are untouched; the cutover only ships new `v3.x` tags. A user who wants to stay on v2 keeps running their existing v2 image — no install is disrupted.
 
 ## What the cutover is NOT
 
 - It is not a data migration. v2 users pick v3 by opting into a new database and re-ripping if they want (or keep running v2 off the pinned tag).
 - It is not a branch rename. `main` stays `main`; its content just pivots from v2 to v3.
-- It is not a soft migration. v2 is removed from `main` in one PR. The `v2-final` tag is the preservation mechanism.
+- It is not a soft migration. v2 is removed from `main` in one PR. The pre-cutover git history (plus the existing published v2 images) is the preservation mechanism — no git tag is created.
 
 ## Readiness criteria for cutover
 
@@ -227,7 +223,7 @@ We run the cutover PR only after v3 meets all of these:
 - A fresh-host install of v3 (via the install-script one-liner — see [06-deployment.md § Install](06-deployment.md#install)) lands at the login screen, accepts a disc, and produces a transcoded file using the Big Buck Bunny ISO fixture.
 - Crash-recovery exercise passes: five queued rips + simulated power cut mid-batch resumes cleanly without manual intervention.
 - At least one real Blu-ray, DVD, and audio CD rip have completed end-to-end on a contributor's machine.
-- `.github/workflows/v3-*.yml` CI passes on every targeted platform in the supported matrix.
+- `ci.yml` CI is green on `main`, and the full stack runs end-to-end on the **single supported target** — any Linux host running Docker Engine ≥ 24 + Compose v2. (Unraid/Synology/other NAS appliances are out of scope for v3.0 as of 2026-06-05; see [06-deployment.md § Supported targets](06-deployment.md#supported-targets).) Container deployment is distro-agnostic, so a green CI build plus end-to-end validation on the reference distro covers the matrix.
 - Maintainers have agreed that v3 is ready to replace v2.
 
 Until all of those are true, `main` continues to ship v2 and v3 continues to develop on `v3/main` — exactly as the isolation rule requires.

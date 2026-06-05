@@ -8,7 +8,7 @@ Automatic Ripping Machine **v3** — a greenfield rebuild that now occupies the
 whole repository. It is a multi-service system (FastAPI Backend, Vue UI, a
 ripper per optical drive, and an ephemeral transcoder) on Postgres, and it
 shares nothing with the legacy v2 codebase at the code level. ARM v2 is frozen
-and preserved at the `v2-final` git tag; it is not in this tree.
+and not in this tree; its code remains in the repository's pre-cutover git history.
 
 Start with the architecture docs:
 

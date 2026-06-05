@@ -8,7 +8,7 @@ Start there, and read the architecture docs at
 to understand the v3 service topology before making changes.
 
 > This is **ARM v3** — a FastAPI backend, a Vue UI, Postgres, a ripper per drive,
-> and an ephemeral transcoder. It shares no code with v2 (frozen at `v2-final`).
+> and an ephemeral transcoder. It shares no code with v2 (frozen, no longer developed).
 > If you're patching Flask/`arm.yaml`/the v2 monolith, you're in the wrong tree.
 
 ## Project layout

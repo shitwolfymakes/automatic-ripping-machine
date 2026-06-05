@@ -2,7 +2,7 @@
 
 This directory captures the v3 architecture for the Automatic Ripping Machine as of 2026-04-18. v3 is a **ground-up rebuild** — no part of the v2 architecture is carried forward unconditionally.
 
-**Repo layout.** ARM v3 occupies the repository root: `services/` (one directory per container image), `packages/arm_common/` (shared schemas + models), `devtools/`, `docs/`, and the root `docker-compose.yml`. v3 was developed in isolation under a `v3/` subtree and promoted to the root at cutover; that one-time process — and how v2 was retired to the `v2-final` tag — is recorded in [08-v2-isolation-and-cutover.md](08-v2-isolation-and-cutover.md).
+**Repo layout.** ARM v3 occupies the repository root: `services/` (one directory per container image), `packages/arm_common/` (shared schemas + models), `devtools/`, `docs/`, and the root `docker-compose.yml`. v3 was developed in isolation under a `v3/` subtree and promoted to the root at cutover; that one-time process — and how v2 was retired from `main` — is recorded in [08-v2-isolation-and-cutover.md](08-v2-isolation-and-cutover.md).
 
 ## Quick summary
 

@@ -3,7 +3,7 @@
 This page takes you from a bare Linux host to your first finished rip. ARM v3
 runs **only** as a Docker Compose stack — there is no native install. If you are
 looking for `apt install` instructions or an `arm.yaml`, you are thinking of ARM
-v2, which is frozen at the `v2-final` tag.
+v2, which is frozen and no longer developed.
 
 ## Contents
 

@@ -11,9 +11,9 @@ transcoder spawned per job. There are **no native (non-Docker) installs** in v3
 and **no `arm.yaml`** — you install with a one-line script and configure from
 the UI.
 
-> ARM v2 is frozen and preserved forever at the **`v2-final`** git tag. If you
-> are running a native/`apt` install or editing `arm.yaml`, you are on v2 — its
-> documentation lives in that tag's history, not here.
+> ARM v2 is frozen and no longer developed. If you are running a native/`apt`
+> install or editing `arm.yaml`, you are on v2 — its documentation lives in the
+> pre-cutover git history, not here.
 
 ## New here? Start with [Getting Started](Getting-Started)
 

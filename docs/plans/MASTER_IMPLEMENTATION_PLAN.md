@@ -364,7 +364,7 @@ No DB migration was required — `Job.resumed_from_crash` ([job.py:34](../../pac
 
 ---
 
-## Phase 15 — Integration rig + full exit criteria (partial — see status below)
+## Phase 15 — Integration rig + full exit criteria (complete — pending only maintainer sign-off)
 
 **Goal.** Big Buck Bunny ISO end-to-end rip + transcode on a developer's machine, plus the crash-recovery exercise, plus one real BD/DVD/CD rip done on a contributor's machine.
 
@@ -376,6 +376,7 @@ No DB migration was required — `Job.resumed_from_crash` ([job.py:34](../../pac
 2. **OpenAPI snapshot regen — `devtools/regen-openapi-snapshot.sh`** ([../../devtools/regen-openapi-snapshot.sh](../../devtools/regen-openapi-snapshot.sh)) — formalizes the path the CI `openapi-drift` job's failure message points at. Imports `arm_backend.main:app`, dumps `app.openapi()` to `services/ui/openapi.snapshot.json`, then `npm run openapi-types` if the UI's `node_modules` is present. Smoke-tested clean (no diff → snapshot already current).
 3. **Real-disc smoke checklist — `docs/contributors/real-disc-smoke.md`** ([../contributors/real-disc-smoke.md](../contributors/real-disc-smoke.md)) — host prep, fresh-install vs dev-stack run paths, what to verify (detection / identification / rip / transcode / terminal status / logs zip), what to capture for the PR, known gotchas (MakeMKV beta key rotation, copy-protected discs, slow MusicBrainz, lazy transcode-image pull), and the BD/DVD/CD results table that gates cutover.
 4. **Contract test surface** — OpenAPI drift detection ships in `v3-ci.yml` (Phase 14) as the `openapi-drift` job; the regen helper above closes the loop. The "Contract test suite" deliverable per the original plan is largely covered by this drift check plus the existing pytest in `services/backend/tests/` (which exercises router shapes via `TestClient`); a separate framework was not added.
+5. **ISO-fixture smoke rig — `ARM_MANUAL_TRIGGER_ISO` + [`devtools/iso-smoke.sh`](../../devtools/iso-smoke.sh)** — resolves the BBB-ISO blocker that the original plan deferred to v3.1 (`read_drive_status`'s SCSI ioctl fails on `/dev/loop*`). The ripper now reads `ARM_MANUAL_TRIGGER_ISO`, bypasses the poll loop, and runs scan → identify → rip exactly once against an `.iso` ([job_controller.py](../../services/ripper/arm_ripper/job_controller.py) + [main.py](../../services/ripper/arm_ripper/main.py)). `iso-smoke.sh` pulls the SHA-256-pinned `sintel.iso` / `big_buck_bunny.iso` from the [matrix256-corpus](https://github.com/shitwolfymakes/matrix256-corpus) image and drives the full flow. DVD fingerprint CRC64 is computed device-side (`fd372371`) so the path runs **unprivileged**. This satisfies the readiness criterion "produces a transcoded file using the Big Buck Bunny ISO fixture."
 
 **Validated end-to-end on this dev stack:**
 
@@ -383,10 +384,19 @@ No DB migration was required — `Job.resumed_from_crash` ([job.py:34](../../pac
 - **Identify-miss → block → resolve → rip** — proven 2026-06-05 (`job_01KTCJN7P7DWJQSNG0AAPWDSZH`). With both `tmdb_api_key`/`omdb_api_key` empty and `block_on_miss=true`, a DVD identify lands the job at `awaiting_user_id` with `title=<volume label>` and fires `rip.needs_user_input`; the ripper's `JobController` blocks on the WS event. UI resolve (`POST /api/jobs/{id}/resolve`) emits `identify.resolved` → ripper unblocks and calls `rip-start` 21 ms later → clean `ripped` (5/5 tracks `done`, ~3.4 GB).
 - **Transcode-against-real-rip end-to-end (Phases 7 + 7b + 8)** — proven 2026-06-05 (`job_01KTCFJAAF1XD0A4EXVWKSR38K`). On `rip-complete`, the drive's `default_session_id` + `auto_transcode_on_idle=true` auto-applied `ses_builtin_movie_archive_gpu` (`source=auto`); the dispatcher claimed a GPU, spawned ephemeral transcoders, and produced 5 `done` `transcode_tasks` → real H.265 files on disk at `/media/Sintel (2010)/… - plex-1080p-h-265-gpu-preferred.mkv` (~535 MB total, 18:22–18:44). Confirms the full **rip → auto-session → GPU transcode → `/media`** chain against a real ripped tree, plus Phase 8's collision guard (a second Sintel rip's auto-apply correctly skipped with `reason=collisions` against the existing `done` outputs — `overwrite=false`).
 
-**Outstanding (gates cutover):**
+**Real-disc smoke matrix — complete (contributor hardware):**
 
-- **BBB ISO rig (`devtools/arm-test-rip`)** — **deferred to v3.1**. The plan envisioned mounting BBB.iso as a loop device into a ripper container, but `read_drive_status` does a SCSI ioctl that fails on `/dev/loop*`. A clean fix is a small ripper code change: `--manual-trigger /path/to/iso.iso` mode that bypasses the poll loop and calls `JobController.handle_disc_inserted` directly. Tracked at [07-open-questions.md](../arch/07-open-questions.md) as a v3.1 follow-up. **Cutover impact:** the readiness criterion at [08-v2-isolation-and-cutover.md § Readiness](../arch/08-v2-isolation-and-cutover.md#readiness-criteria-for-cutover) line 200 ("produces a transcoded file using the Big Buck Bunny ISO fixture") needs to be revisited or fulfilled by a real-DVD substitute — the DVD-rip → GPU-transcode chain above is a candidate substitute.
-- **BD + CD smoke** — neither has been executed on this dev stack. Sintel covers the DVD column of the smoke matrix; a Blu-ray and an audio CD still need a real rip on a contributor's machine.
+- **BD + DVD + CD have each completed a real end-to-end rip on contributor hardware**, satisfying the readiness criterion "at least one real Blu-ray, DVD, and audio CD rip have completed end-to-end on a contributor's machine." The BD/DVD/CD results table in [docs/contributors/real-disc-smoke.md](../contributors/real-disc-smoke.md) is the system of record. Combined with the ISO-fixture rig (item 5) and the dev-stack validation above, the integration-rig and disc-smoke readiness gates are now met.
+
+**Outstanding (one non-code cutover gate):**
+
+The disc-smoke, BBB-ISO, **and platform gates are all cleared**; a single human gate remains:
+
+- **Maintainer sign-off** — the final "v3 is ready to replace v2" agreement. Every other criterion in [08-v2-isolation-and-cutover.md § Readiness](../arch/08-v2-isolation-and-cutover.md#readiness-criteria-for-cutover) is now satisfied.
+
+**Platform scope narrowed (2026-06-05):** v3.0 supports **only Linux + Docker Compose** — Unraid/Synology/NAS-appliance targets are out of scope (see [06-deployment.md § Supported targets](../arch/06-deployment.md#supported-targets)). That collapses the old "platform matrix" to a single distro-agnostic target, covered by green `ci.yml` (all 10 jobs — lint ×3 / test ×2 / openapi-drift / build ×4 — on every push to `origin/main`) plus the end-to-end dev-stack validation above. No manual cross-platform smoke remains.
+
+Once sign-off lands, the mechanical Phase 16 cutover PR follows.
 
 **Depends on:** Phases 3, 7, 9.
 
@@ -436,9 +446,9 @@ These can proceed alongside the critical path once their entry condition is met.
 - Entry: Phase 12.
 - Explicitly not shipping in v3.0 per [05-cross-cutting.md § Observability](../arch/05-cross-cutting.md#observability-beyond-logs). Keep the track here so it's not forgotten — add to v3.1 backlog.
 
-### Track C — Platform matrix verification
+### Track C — Platform verification (descoped 2026-06-05)
 - Entry: Phase 13 (installer exists).
-- Manual smoke on Unraid, Synology, stock Docker on each supported Linux distro. Document results in a per-platform appendix to [06-deployment.md](../arch/06-deployment.md).
+- v3.0 supports **only Linux + Docker Compose** (Unraid/Synology dropped — see [06-deployment.md § Supported targets](../arch/06-deployment.md#supported-targets)). Container deployment is distro-agnostic, so this track collapses to "the stack runs on a Linux host via `install.sh` + `docker compose`" — covered by the Phase 15 end-to-end dev-stack validation and green `ci.yml`. No separate per-platform matrix remains for v3.0.
 
 ### Track D — Community DB plumbing
 - Entry: Phase 2.

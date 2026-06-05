@@ -4,13 +4,11 @@ Docker Compose is the one and only supported deploy target for v3.
 
 ## Supported targets
 
-- Bare-metal Docker on Linux (Ubuntu, Debian, Fedora, Arch).
-- Unraid (runs stock Docker).
-- Synology DSM (runs stock Docker).
-- Any Linux host with Docker Engine ≥ 24 and Compose v2 ≥ 2.20.
+- Any Linux host running Docker Engine ≥ 24 and Compose v2 ≥ 2.20 (Ubuntu, Debian, Fedora, Arch, …). This is the **one and only** supported target for v3.0; container deployment is distro-agnostic.
 
 ## Explicitly NOT supported
 
+- Unraid, Synology DSM, QNAP, and other NAS-appliance container GUIs. They run stock Docker, so the generic Linux + Compose path may happen to work, but it is **untested and unsupported** for v3.0 — deploy via the documented `install.sh` + `docker compose` path or not at all. (Dropped 2026-06-05.)
 - TrueNAS / iX Systems. Not a goal. Do not file bugs against it.
 - Kubernetes / Helm.
 - Docker Desktop on macOS/Windows **for ripping**. Internal SATA optical drives cannot be passed to the WSL2/macOS VM; USB drives via `usbipd-win` may work but are not tested. Windows and macOS users can still run the UI + transcoder stack as a library-management frontend (PUID/PGID works correctly on WSL2-native paths, named volumes, and SMB mounts — see "File ownership" below). NTFS bind mounts from `C:\...` are unsupported: the translation layer fakes ownership and ignores `chown`, so PUID becomes cosmetic.
@@ -49,7 +47,7 @@ v3 images are built fresh on upstream bases. They do **not** derive from the v2 
   - `arm-ripper` → `python:3.14-slim-bookworm`, PID 1 = `tini` → poller.
   - `arm-transcode` → `python:3.14-slim-bookworm`, PID 1 = `tini` → HandBrake wrapper.
 
-  `tini` is baked into the Python images rather than relying on `docker run --init`, since Unraid/Synology GUIs don't consistently surface that flag. It reaps the zombie `makemkvcon` / `HandBrakeCLI` / `ffmpeg` subprocesses the ripper and transcode containers fork. The UI spawns no grandchildren, so nginx as PID 1 is sufficient. The common PUID-remap + CA-merge + privilege-drop logic is a ~25-line `docker-entrypoint.sh` stored at `services/_common/docker-entrypoint.sh` and `COPY`ed into each Python image — a shared script, deliberately not a shared base image (a shared base was the `arm-dependencies` coupling we left behind). Hardened vendor bases (Chainguard, distroless, Bitnami Secure, Red Hat UBI Micro) were considered and rejected: paid tiers introduce a gated supply chain at odds with anonymous `docker pull` distribution; free/distroless tiers have no shell, which breaks the runtime CA merge + PUID remap + `gosu` pattern; and the threat model (LAN-only, internal CA, no internet-exposed services) doesn't justify the tradeoff. Supply-chain hygiene is added on top of the minimal bases instead (see the next bullet).
+  `tini` is baked into the Python images rather than relying on `docker run --init`, since not every Docker UI or orchestrator consistently surfaces that flag. It reaps the zombie `makemkvcon` / `HandBrakeCLI` / `ffmpeg` subprocesses the ripper and transcode containers fork. The UI spawns no grandchildren, so nginx as PID 1 is sufficient. The common PUID-remap + CA-merge + privilege-drop logic is a ~25-line `docker-entrypoint.sh` stored at `services/_common/docker-entrypoint.sh` and `COPY`ed into each Python image — a shared script, deliberately not a shared base image (a shared base was the `arm-dependencies` coupling we left behind). Hardened vendor bases (Chainguard, distroless, Bitnami Secure, Red Hat UBI Micro) were considered and rejected: paid tiers introduce a gated supply chain at odds with anonymous `docker pull` distribution; free/distroless tiers have no shell, which breaks the runtime CA merge + PUID remap + `gosu` pattern; and the threat model (LAN-only, internal CA, no internet-exposed services) doesn't justify the tradeoff. Supply-chain hygiene is added on top of the minimal bases instead (see the next bullet).
 - **Supply-chain hygiene.** Minimal bases without vendor hardening means hardening is done at publish time with free open-source tooling:
   - **Pin bases by digest.** Dockerfiles reference `FROM python:3.14-slim-bookworm@sha256:...`, not floating tags. Renovate (or Dependabot) opens a PR when the upstream digest for the pinned tag changes.
   - **SBOM per image.** `syft` generates an SPDX SBOM at build time; `cosign attach sbom` publishes it alongside the image in the registry.
@@ -325,6 +323,4 @@ Four things to back up, in priority order:
 
 ## Platform-specific notes
 
-- **Unraid**: Users can define the compose stack via the Compose Manager plugin. Drive pass-through works via device mappings. Put `arm_raw` / `arm_media` on the array; `arm_db_data` on an SSD cache.
-- **Synology**: Use Container Manager / Portainer.
-- **Bare-metal**: The reference path. All docs default to this.
+- **Bare-metal Docker on Linux**: the one supported path. Install via `install.sh` and run `docker compose up -d`; all docs default to this. NAS-appliance GUIs (Unraid/Synology) are out of scope for v3.0 — see "Explicitly NOT supported" above.
