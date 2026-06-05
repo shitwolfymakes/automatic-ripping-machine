@@ -35,8 +35,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-V3_DIR="$(cd -- "${SCRIPT_DIR}/.." &>/dev/null && pwd)"
-COMPOSE=( docker compose -f "${V3_DIR}/docker-compose.yml" )
+ROOT_DIR="$(cd -- "${SCRIPT_DIR}/.." &>/dev/null && pwd)"
+COMPOSE=( docker compose -f "${ROOT_DIR}/docker-compose.yml" )
 
 CACHE_DIR="${ISO_CACHE_DIR:-${HOME}/arm-corpus}"
 
@@ -255,7 +255,7 @@ require_stack_up() {
     for ctr in armv3-backend armv3-db; do
         if ! docker ps --format '{{.Names}}' | grep -qx "${ctr}"; then
             err "${ctr} is not running"
-            err "bring the stack up first: cd ${V3_DIR} && docker compose up -d arm-db arm-backend arm-ui"
+            err "bring the stack up first: cd ${ROOT_DIR} && docker compose up -d arm-db arm-backend arm-ui"
             exit 1
         fi
     done
@@ -265,10 +265,10 @@ require_stack_up() {
 require_ripper_image() {
     if (( FORCE_REBUILD == 1 )); then
         log "rebuilding ${RIPPER_IMAGE} (--rebuild)"
-        ( cd "${V3_DIR}" && "${COMPOSE[@]}" build "${RIPPER_SERVICE}" )
+        ( cd "${ROOT_DIR}" && "${COMPOSE[@]}" build "${RIPPER_SERVICE}" )
     elif ! docker image inspect "${RIPPER_IMAGE}" >/dev/null 2>&1; then
         log "building ${RIPPER_IMAGE}"
-        ( cd "${V3_DIR}" && "${COMPOSE[@]}" build "${RIPPER_SERVICE}" )
+        ( cd "${ROOT_DIR}" && "${COMPOSE[@]}" build "${RIPPER_SERVICE}" )
     fi
     ok "ripper image present: ${RIPPER_IMAGE}"
 }
@@ -276,7 +276,7 @@ require_ripper_image() {
 stop_live_ripper() {
     if docker ps --format '{{.Names}}' | grep -qx "armv3-ripper-sr0"; then
         log "stopping the live arm-ripper-sr0 (conflicts with the ISO-mode ripper on the same drive_id)"
-        ( cd "${V3_DIR}" && "${COMPOSE[@]}" stop "${RIPPER_SERVICE}" >/dev/null )
+        ( cd "${ROOT_DIR}" && "${COMPOSE[@]}" stop "${RIPPER_SERVICE}" >/dev/null )
         ok "armv3-ripper-sr0 stopped"
     fi
     # Clean up a prior ISO-mode container if one is still running.
@@ -294,7 +294,7 @@ run_iso_ripper() {
     # The compose .env holds ARM_SERVICE_TOKEN; the backend container
     # expects the same value.
     # shellcheck disable=SC1091
-    . "${V3_DIR}/.env"
+    . "${ROOT_DIR}/.env"
 
     log "launching one-shot ripper: ${RIPPER_CTR}"
     docker run --rm -d \
@@ -310,11 +310,11 @@ run_iso_ripper() {
         -e MAKEMKV_KEY="${key}" \
         -e PUID="${PUID:-1000}" -e PGID="${PGID:-1000}" -e CDROM_GID="${CDROM_GID:-24}" \
         -v "${CACHE_DIR}:/corpus:ro" \
-        -v "${V3_DIR}/raw:/raw" \
-        -v "${V3_DIR}/logs:/logs" \
-        -v "${V3_DIR}/certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro" \
-        -v "${V3_DIR}/certs/arm-ripper-sr0.crt:/etc/ssl/arm/tls.crt:ro" \
-        -v "${V3_DIR}/certs/arm-ripper-sr0.key:/etc/ssl/arm/tls.key:ro" \
+        -v "${ROOT_DIR}/raw:/raw" \
+        -v "${ROOT_DIR}/logs:/logs" \
+        -v "${ROOT_DIR}/certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro" \
+        -v "${ROOT_DIR}/certs/arm-ripper-sr0.crt:/etc/ssl/arm/tls.crt:ro" \
+        -v "${ROOT_DIR}/certs/arm-ripper-sr0.key:/etc/ssl/arm/tls.key:ro" \
         "${RIPPER_IMAGE}" >/dev/null
     ok "${RIPPER_CTR} up"
 }
@@ -519,10 +519,10 @@ cleanup_stack() {
     # The ISO ripper was already stopped at rip-complete (kill_iso_ripper);
     # cleanup just restores the live drive service.
     log "restarting ${RIPPER_SERVICE}"
-    if ! ( cd "${V3_DIR}" && "${COMPOSE[@]}" up -d "${RIPPER_SERVICE}" >/dev/null 2>&1 ); then
+    if ! ( cd "${ROOT_DIR}" && "${COMPOSE[@]}" up -d "${RIPPER_SERVICE}" >/dev/null 2>&1 ); then
         warn "${RIPPER_SERVICE} did not come up cleanly; check /dev/sr0 is present on the host"
         warn "  bring it back manually once the drive is attached:"
-        warn "    cd ${V3_DIR} && docker compose up -d ${RIPPER_SERVICE}"
+        warn "    cd ${ROOT_DIR} && docker compose up -d ${RIPPER_SERVICE}"
         return
     fi
     ok "${RIPPER_SERVICE} back up"
@@ -534,7 +534,7 @@ final_summary() {
     local job_id="$1"
     local rip_secs="$2"
     local transcode_secs="${3:-}"
-    local raw_dir="${V3_DIR}/raw/${job_id}"
+    local raw_dir="${ROOT_DIR}/raw/${job_id}"
     local raw_total
     raw_total=$(du -cb "${raw_dir}"/*.mkv 2>/dev/null | tail -1 | awk '{print $1}' || echo 0)
     echo
@@ -547,7 +547,7 @@ final_summary() {
         # know the exact title path without an API roundtrip, so just
         # report the most-recently-modified GPU-preferred batch.
         local media_dir
-        media_dir=$(find "${V3_DIR}/media" -name '*-gpu-preferred.mkv' -newer "${raw_dir}" \
+        media_dir=$(find "${ROOT_DIR}/media" -name '*-gpu-preferred.mkv' -newer "${raw_dir}" \
             -printf '%h\n' 2>/dev/null | sort -u | head -1)
         if [[ -n "${media_dir}" ]]; then
             local media_total media_count
@@ -594,11 +594,11 @@ if (( DO_TRANSCODE == 0 )); then
     echo
     if (( KILL_RIPPER == 1 )); then
         echo "    cleanup when done (ISO ripper already stopped):"
-        echo "      cd ${V3_DIR} && docker compose up -d ${RIPPER_SERVICE}"
+        echo "      cd ${ROOT_DIR} && docker compose up -d ${RIPPER_SERVICE}"
     else
         echo "    cleanup when done:"
         echo "      docker stop ${RIPPER_CTR}"
-        echo "      cd ${V3_DIR} && docker compose up -d ${RIPPER_SERVICE}"
+        echo "      cd ${ROOT_DIR} && docker compose up -d ${RIPPER_SERVICE}"
     fi
     exit 0
 fi

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# One-shot dev-environment setup for the v3 walking skeleton.
+# One-shot dev-environment setup for the walking skeleton.
 # Idempotent — rerunning skips work already done and leaves existing .env alone.
 #
-# Usage:  bash v3/devtools/setup-dev.sh
+# Usage:  bash devtools/setup-dev.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-V3_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 require() {
     local bin="$1"
@@ -27,21 +27,21 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 
 echo "==> syncing host venv via uv"
-( cd "${V3_DIR}" && uv sync )
+( cd "${ROOT_DIR}" && uv sync )
 
-if [[ -f "${V3_DIR}/certs/arm-ca.crt" ]]; then
-    echo "==> certs already present in v3/certs/ — skipping bootstrap"
+if [[ -f "${ROOT_DIR}/certs/arm-ca.crt" ]]; then
+    echo "==> certs already present in certs/ — skipping bootstrap"
 else
     echo "==> generating internal CA + leaves via install.sh --certs-only"
-    bash "${V3_DIR}/install.sh" \
-        --prefix "${V3_DIR}" \
+    bash "${ROOT_DIR}/install.sh" \
+        --prefix "${ROOT_DIR}" \
         --certs-only \
         --no-env \
         --no-compose \
         --no-udev
 fi
 
-ENV_FILE="${V3_DIR}/.env"
+ENV_FILE="${ROOT_DIR}/.env"
 if [[ -f "${ENV_FILE}" ]]; then
     echo "==> ${ENV_FILE} exists — leaving untouched"
 else
@@ -59,7 +59,7 @@ else
         -e "s|^PUID=.*|PUID=${puid}|" \
         -e "s|^PGID=.*|PGID=${pgid}|" \
         -e "s|^CDROM_GID=.*|CDROM_GID=${cdrom_gid}|" \
-        "${V3_DIR}/.env.example" > "${ENV_FILE}"
+        "${ROOT_DIR}/.env.example" > "${ENV_FILE}"
     chmod 600 "${ENV_FILE}"
 fi
 
@@ -67,7 +67,7 @@ fi
 # wants to drive. Without this, post-rip `eject` from the ripper
 # container fails with EBUSY because the host mount holds /dev/srN.
 # Per-drive scope by ID_PATH so we don't disturb other optical drives
-# on the host. See v3/docs/arch/06-deployment.md.
+# on the host. See docs/arch/06-deployment.md.
 UDEV_RULE_PATH="/etc/udev/rules.d/99-arm-no-automount.rules"
 build_udev_rule_content() {
     local drives=()
@@ -94,10 +94,10 @@ build_udev_rule_content() {
     fi
 
     cat <<HEADER
-# Managed by v3/devtools/setup-dev.sh — do not edit by hand.
+# Managed by devtools/setup-dev.sh — do not edit by hand.
 # Disables host auto-mount for ARM-managed optical drives so the ripper
 # container can eject after a rip. See:
-#   v3/docs/arch/06-deployment.md#host-side-auto-mount-must-be-disabled
+#   docs/arch/06-deployment.md#host-side-auto-mount-must-be-disabled
 HEADER
     printf '%s\n' "${rule_lines[@]}"
 }
@@ -131,7 +131,7 @@ ensure_udev_rule
 cat <<EOF
 
 done — next:
-  docker compose -f ${V3_DIR}/docker-compose.yml up -d --build
+  docker compose -f ${ROOT_DIR}/docker-compose.yml up -d --build
 
-IDE: point your interpreter at ${V3_DIR}/.venv/bin/python
+IDE: point your interpreter at ${ROOT_DIR}/.venv/bin/python
 EOF

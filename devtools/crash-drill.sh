@@ -8,7 +8,7 @@
 #   - track.attempts incremented
 #   - job.resumed_from_crash flipped to true
 #
-# Runs against the dev compose at v3/docker-compose.yml. The DB and
+# Runs against the dev compose at docker-compose.yml. The DB and
 # backend container names (armv3-db, armv3-backend) are taken from
 # `name: armv3` in the compose file.
 #
@@ -17,8 +17,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-V3_DIR="$(cd -- "${SCRIPT_DIR}/.." &>/dev/null && pwd)"
-COMPOSE=( docker compose -f "${V3_DIR}/docker-compose.yml" )
+ROOT_DIR="$(cd -- "${SCRIPT_DIR}/.." &>/dev/null && pwd)"
+COMPOSE=( docker compose -f "${ROOT_DIR}/docker-compose.yml" )
 DB_CTR="armv3-db"
 BACKEND_CTR="armv3-backend"
 DRILL_PREFIX="DRILL-$(date -u +%s)-"
@@ -57,7 +57,7 @@ trap cleanup EXIT
 log "checking dev stack is up"
 if ! docker inspect -f '{{.State.Running}}' "${BACKEND_CTR}" 2>/dev/null | grep -q true; then
     err "${BACKEND_CTR} is not running. Bring up the dev stack first:"
-    err "    cd v3 && docker compose up -d"
+    err "    cd ${ROOT_DIR} && docker compose up -d"
     exit 1
 fi
 if ! docker inspect -f '{{.State.Running}}' "${DB_CTR}" 2>/dev/null | grep -q true; then
