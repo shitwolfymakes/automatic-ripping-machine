@@ -7,3 +7,4 @@
 - [Backend coverage push](project_backend_coverage_push.md) — 70%→94% status; which modules still have gaps and the pattern to finish them; no CI gate yet.
 - [Ripper disc-insert detection](project_ripper_insert_detection.md) — poll loop (no udev) + drive quirk (TRAY_OPEN ~2s flash, settles NOT_READY→DISC_OK) and the InsertDetector fix.
 - [ISO-source ripping = ephemeral spawned workers](project_iso_source_ripping.md) — rip-from-.iso is designed as transcode-style ephemeral containers spawned per ISO, NOT a long-running service; owner directive; future UI-upload front door; design at v3/docs/arch/10-iso-source-ripping.md.
+- [Pin GitHub Actions to commit SHAs](feedback_pin_actions_to_sha.md) — every `uses:` must be a 40-char SHA + `# vX.Y.Z`, never a tag/branch; dependabot keeps them bumped.
