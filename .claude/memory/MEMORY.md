@@ -6,3 +6,4 @@
 - [Backend test harness](project_backend_test_harness.md) — two tiers (fast fake-session router tests vs real-DB e2e under tests/e2e/); env/argon2/metadata gotchas; pre-existing test_dispatcher.py whole-suite collision.
 - [Backend coverage push](project_backend_coverage_push.md) — 70%→94% status; which modules still have gaps and the pattern to finish them; no CI gate yet.
 - [Ripper disc-insert detection](project_ripper_insert_detection.md) — poll loop (no udev) + drive quirk (TRAY_OPEN ~2s flash, settles NOT_READY→DISC_OK) and the InsertDetector fix.
+- [ISO-source ripping = ephemeral spawned workers](project_iso_source_ripping.md) — rip-from-.iso is designed as transcode-style ephemeral containers spawned per ISO, NOT a long-running service; owner directive; future UI-upload front door; design at v3/docs/arch/10-iso-source-ripping.md.
