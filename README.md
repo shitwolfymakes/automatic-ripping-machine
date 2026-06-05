@@ -21,7 +21,7 @@ The installer drops everything under `~/arm/` (or `--prefix`):
 - `docker-compose.gpu.yml` — overlay for VAAPI/QSV/NVENC hosts.
 - `raw/`, `media/`, `logs/` — bind-mounted into the stack.
 
-After install: `cd ~/arm && docker compose up -d`. First-boot credentials are `admin` / `admin` (printed in `docker exec armv3-backend cat /logs/first-boot.log` on every boot until you change it). Open `https://localhost:8080`; you'll be forced to set a real password on first login. See [docs/arch/06-deployment.md § Install](docs/arch/06-deployment.md#install) for the full UX.
+After install: `cd ~/arm && docker compose up -d`. First-boot credentials are `admin` / `admin` (printed in `docker exec armv3-backend cat /logs/first-boot.log` on every boot until you change it). Open `https://localhost:8081`; you'll be forced to set a real password on first login. See [docs/arch/06-deployment.md § Install](docs/arch/06-deployment.md#install) for the full UX.
 
 > ⚠️ If the published registry images don't yet cover your platform or tag, build locally (see "Local development" below) and tag the result so the installer's compose finds it.
 

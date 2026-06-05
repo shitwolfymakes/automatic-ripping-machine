@@ -58,7 +58,7 @@ Run from the repo root.
 
 ```bash
 bash devtools/setup-dev.sh     # uv sync, certs, .env (idempotent)
-docker compose up -d           # bring up the stack; UI at https://localhost:8080
+docker compose up -d           # bring up the stack; UI at https://localhost:8081
 ```
 
 ### Tests

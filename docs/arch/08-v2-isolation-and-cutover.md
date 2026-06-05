@@ -198,9 +198,9 @@ git mv .github/workflows/v3-weekly-rebuild.yml .github/workflows/weekly-rebuild.
 
 Drop the `v3-` prefix now that these are the only workflows. Re-evaluate `publish-wiki.yml` / `greetings.yml` / `stale.yml` before deleting if v3 still wants those repo-automation behaviors — they are not v2-specific, just currently v2-era.
 
-### 6. Update ports
+### 6. Ports — no change
 
-- v3 UI moves from host `8081` back to `8080` in the new root `docker-compose.yml`.
+- The UI stays on host `8081` (mapped to container `443`/TLS). `8081` is the canonical port the installer generates and that existing installs already use; v2's `8080` is **not** reclaimed. (The earlier plan to move back to `8080` was dropped — the installed, TLS-secured deployment is the source of truth, and it has always run on `8081`.)
 
 ### 7. Tag v2
 

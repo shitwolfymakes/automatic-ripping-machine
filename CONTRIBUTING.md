@@ -66,7 +66,7 @@ bash devtools/setup-dev.sh     # one-shot, idempotent dev-env setup
 docker compose up -d           # bring up the stack
 ```
 
-The UI is served at <http://localhost:8080>.
+The UI is served at <https://localhost:8081>.
 
 ## Tests
 
