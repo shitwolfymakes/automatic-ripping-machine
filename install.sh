@@ -335,7 +335,7 @@ ARM_IMAGE_TAG=${ARM_IMAGE_TAG_DEFAULT}
 OMDB_API_KEY=
 
 # WebSocket Origin allowlist. Add every URL the UI is reachable at.
-ARM_ALLOWED_ORIGINS=https://localhost:8081
+ARM_ALLOWED_ORIGINS=https://localhost:8080
 
 # Phase 7: transcode dispatcher.
 MAX_PARALLEL_TRANSCODES=1
@@ -510,7 +510,7 @@ services:
     restart: unless-stopped
     depends_on: [arm-backend]
     ports:
-      - "8081:443"
+      - "8080:443"
     volumes:
       - ./certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
       - ./certs/arm-ui.crt:/etc/ssl/arm/tls.crt:ro
@@ -643,7 +643,7 @@ Next:
 First-boot admin credentials (you'll be forced to change the password):
   docker exec armv3-backend cat /logs/first-boot.log
 
-Then open: https://localhost:8081
+Then open: https://localhost:8080
   (Import $PREFIX/certs/arm-ca.crt into your browser/OS trust store
    to silence the cert warning across every device on the LAN.)
 

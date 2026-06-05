@@ -80,7 +80,7 @@ RIPPER_SERVICE="arm-ripper-sr0"
 COMPOSE_NETWORK="armv3_default"
 MAKEMKV_FORUM_URL="https://forum.makemkv.com/forum/viewtopic.php?f=5&t=1053"
 
-API_BASE="${ARM_API_BASE:-https://localhost:8081}"
+API_BASE="${ARM_API_BASE:-https://localhost:8080}"
 DEFAULT_SESSION_ID="ses_builtin_movie_plex_1080p_gpu"
 SESSION_ID="${DEFAULT_SESSION_ID}"
 DO_TRANSCODE=1
@@ -129,7 +129,7 @@ Environment variables:
                       (default: admin). Used non-interactively when set.
   ARM_ADMIN_PASSWORD  Admin password. If unset, the script prompts
                       interactively at JWT-acquire time.
-  ARM_API_BASE        Backend / UI base URL (default: https://localhost:8081).
+  ARM_API_BASE        Backend / UI base URL (default: https://localhost:8080).
 EOF
 }
 

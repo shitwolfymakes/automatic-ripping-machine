@@ -119,7 +119,7 @@ services:
     restart: unless-stopped
     depends_on: [arm-backend]
     ports:
-      - "8081:443"   # v3 on 8081 (TLS); v2 stays on 8080 during co-existence
+      - "8080:443"   # UI over TLS
     volumes:
       - ./certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
       - ./certs/arm-ui.crt:/etc/ssl/arm/tls.crt:ro
@@ -291,12 +291,10 @@ curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic
 **First-boot sequence** (after `docker compose up -d`):
 
 1. Backend starts, waits for Postgres, runs `alembic upgrade head`, seeds the `admin` user with a random password written to `/logs/first-boot.log` and printed to stdout.
-2. User navigates to `https://host:8081`, accepts the internal-CA cert warning on first visit (or imports `~/arm/certs/arm-ca.crt` into the OS/browser trust store once to clear it for every device on the LAN — see [05-cross-cutting.md § Transport (TLS)](05-cross-cutting.md#transport-tls)), logs in as `admin` with the printed password, is forced to change it.
+2. User navigates to `https://host:8080`, accepts the internal-CA cert warning on first visit (or imports `~/arm/certs/arm-ca.crt` into the OS/browser trust store once to clear it for every device on the LAN — see [05-cross-cutting.md § Transport (TLS)](05-cross-cutting.md#transport-tls)), logs in as `admin` with the printed password, is forced to change it.
 3. User enters third-party API keys in the UI → stored in `config`.
 4. Rippers register themselves with Backend, appear in UI.
 5. User inserts a disc; flow proceeds as documented in [02-job-lifecycle.md](02-job-lifecycle.md).
-
-Post-cutover (when v2 is retired), the port moves back to 8080. Until then, 8081 avoids the v2 UI collision.
 
 ## Update / upgrade
 

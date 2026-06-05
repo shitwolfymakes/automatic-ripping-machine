@@ -4,55 +4,48 @@ Things that touch every service: configuration, authentication, secrets, logging
 
 ## Repo layout
 
-v3 is a **monorepo with a shared Python package**, physically isolated under a single top-level `v3/` directory so that **no existing v2 file is touched during development**. See [08-v2-isolation-and-cutover.md](08-v2-isolation-and-cutover.md) for the full isolation strategy and cutover plan.
+ARM v3 is a **monorepo with a shared Python package** at the repository root. (During development it lived in isolation under a top-level `v3/` subtree so that no v2 file was touched; it was promoted to the root at cutover. See [08-v2-isolation-and-cutover.md](08-v2-isolation-and-cutover.md) for that history.)
 
 ```
 repo-root/
 │
-├── arm/ Dockerfile* docker-compose.yml        ← all v2 files untouched
-├── devtools/ setup/ scripts/ test_ui/ …       ← all v2 files untouched
-│
-└── v3/                                        ← every v3 artifact lives here
-    ├── packages/
-    │   └── arm_common/              # shared Python package
-    │       ├── arm_common/
-    │       │   ├── schemas/         # Pydantic models (requests, responses, events)
-    │       │   ├── models/          # SQLAlchemy ORM (Backend uses; others may import types only)
-    │       │   ├── enums.py
-    │       │   ├── ulid.py
-    │       │   └── client/          # generated OpenAPI client for ripper/transcoder
-    │       └── pyproject.toml
-    ├── services/
-    │   ├── backend/                 # FastAPI app
-    │   │   ├── arm_backend/
-    │   │   ├── migrations/          # Alembic
-    │   │   ├── Dockerfile
-    │   │   └── pyproject.toml
-    │   ├── ripper/                  # Python ripper
-    │   │   ├── arm_ripper/
-    │   │   ├── Dockerfile
-    │   │   └── pyproject.toml
-    │   ├── transcode/               # Python HandBrake wrapper
-    │   │   ├── arm_transcode/
-    │   │   ├── Dockerfile
-    │   │   └── pyproject.toml
-    │   └── ui/                      # Vue 3 + Vite
-    │       ├── src/
-    │       ├── package.json
-    │       └── Dockerfile
-    ├── test_fixtures/
-    │   └── big_buck_bunny.iso       # (or a reference to where it lives — see testing below)
-    ├── docs/
-    │   └── arch/                    # this directory
-    ├── devtools/                    # v3-only tooling; root devtools/ stays on v2
-    ├── docker-compose.yml           # v3 stack; root compose stays on v2
-    ├── .env.example
-    └── pyproject.toml               # workspace root (uv or hatch)
+├── packages/
+│   └── arm_common/              # shared Python package
+│       ├── arm_common/
+│       │   ├── schemas/         # Pydantic models (requests, responses, events)
+│       │   ├── models/          # SQLAlchemy ORM (Backend uses; others may import types only)
+│       │   ├── enums.py
+│       │   ├── ulid.py
+│       │   └── client/          # generated OpenAPI client for ripper/transcoder
+│       └── pyproject.toml
+├── services/
+│   ├── backend/                 # FastAPI app
+│   │   ├── arm_backend/
+│   │   ├── migrations/          # Alembic
+│   │   ├── Dockerfile
+│   │   └── pyproject.toml
+│   ├── ripper/                  # Python ripper
+│   │   ├── arm_ripper/
+│   │   ├── Dockerfile
+│   │   └── pyproject.toml
+│   ├── transcode/               # Python HandBrake wrapper
+│   │   ├── arm_transcode/
+│   │   ├── Dockerfile
+│   │   └── pyproject.toml
+│   └── ui/                      # Vue 3 + Vite
+│       ├── src/
+│       ├── package.json
+│       └── Dockerfile
+├── docs/
+│   └── arch/                    # this directory
+├── devtools/                    # contributor tooling
+├── docker-compose.yml           # the ARM stack
+├── .env.example
+└── pyproject.toml               # workspace root (uv)
 ```
 
-Key properties:
+Key property:
 - A single PR can change a Pydantic schema in `arm_common` and its producers + consumers in `services/*`. Protocol changes are always atomic.
-- No v3 PR ever modifies a v2 file. v3 merges are strictly additive to the repo tree; v2 keeps building and running the entire time.
 
 ## Configuration strategy
 
@@ -134,7 +127,7 @@ These rules close the "compromised ripper acts as a different ripper" gap down t
 
 The Docker bridge network is technically not reachable from outside the host, but "not reachable today" isn't the same as "not reachable." A misconfigured port publish, a compromised sibling container, or a future docker-network gotcha is enough to turn an intra-compose plaintext hop into a JWT-sniffing or service-token-sniffing opportunity. TLS-everywhere removes the class of problem instead of depending on operator discipline.
 
-**Deployment scope: LAN-only, never internet-exposed.** ARM v3 is designed to be reached from a browser on the same LAN (or through a VPN into that LAN). It is not intended to be exposed to the public internet, ever — the threat model and the single-admin / homelab auth surface assume a trusted network boundary. Users who want remote access should run WireGuard or Tailscale back to their home network rather than port-forwarding `8081`. This framing has a direct consequence for certs: Let's Encrypt's HTTP-01 challenge requires a publicly-reachable HTTP server, which we explicitly do not have; even DNS-01 requires a real owned domain just to cert a LAN service, which is ceremony without payoff. The internal CA below is the expected path for every hop, including browser ↔ UI.
+**Deployment scope: LAN-only, never internet-exposed.** ARM v3 is designed to be reached from a browser on the same LAN (or through a VPN into that LAN). It is not intended to be exposed to the public internet, ever — the threat model and the single-admin / homelab auth surface assume a trusted network boundary. Users who want remote access should run WireGuard or Tailscale back to their home network rather than port-forwarding `8080`. This framing has a direct consequence for certs: Let's Encrypt's HTTP-01 challenge requires a publicly-reachable HTTP server, which we explicitly do not have; even DNS-01 requires a real owned domain just to cert a LAN service, which is ceremony without payoff. The internal CA below is the expected path for every hop, including browser ↔ UI.
 
 ### Cert layout
 
@@ -252,28 +245,28 @@ The explicit structure of the typed event log (`events` table) is the closest th
 
 ## Code quality
 
-A single pre-commit stack, configured at the workspace root, gates every Python file in `v3/`. All three packages (`arm_common`, `arm_backend`, `arm_ripper`) are held to the same bar.
+A single pre-commit stack, configured at the workspace root, gates every Python file in the repo. All four packages (`arm_common`, `arm_backend`, `arm_ripper`, `arm_transcode`) are held to the same bar.
 
 | Tool | Role | Config |
 |---|---|---|
-| **ruff** (`format` + `check --fix`) | Formatter + linter. One Rust-backed binary covering what black, isort, flake8, bugbear, and pyupgrade did separately. | `[tool.ruff]` in [v3/pyproject.toml](../../pyproject.toml) |
-| **mypy** | Strict type checker. Runs via `uv run` so it resolves against the real synced workspace graph, not a pinned subset maintained per-hook. | `[tool.mypy]` in [v3/pyproject.toml](../../pyproject.toml) |
-| **pre-commit** | Orchestrates the above. Hooks are scoped to `^v3/` so v2 files are never rewritten. | [v3/.pre-commit-config.yaml](../../.pre-commit-config.yaml) |
+| **ruff** (`format` + `check --fix`) | Formatter + linter. One Rust-backed binary covering what black, isort, flake8, bugbear, and pyupgrade did separately. | `[tool.ruff]` in [pyproject.toml](../../pyproject.toml) |
+| **mypy** | Strict type checker. Runs via `uv run` so it resolves against the real synced workspace graph, not a pinned subset maintained per-hook. | `[tool.mypy]` in [pyproject.toml](../../pyproject.toml) |
+| **pre-commit** | Orchestrates the above. Hooks run against the whole repository. | [.pre-commit-config.yaml](../../.pre-commit-config.yaml) |
 
 The ruff + uv pairing is deliberate: both ship from Astral and wire together cleanly, and the full sweep finishes well under a second on a warm cache. Black + isort + flake8 would reproduce the same rules across four tools and four configs for no gain.
 
 **What strict mypy buys us.** Untyped returns, untyped calls, untyped defs, and unreachable code all fail. Every workspace package ships a `py.typed` marker so cross-package imports are trusted as typed rather than silently collapsed to `Any`.
 
-**Install and run (from `v3/`):**
+**Install and run (from the repo root):**
 
 ```bash
-uv sync --group dev                                                 # sync tools into v3/.venv
-uv run pre-commit install --config .pre-commit-config.yaml          # wire up the git hook
-uv run pre-commit run --config .pre-commit-config.yaml --all-files  # run over everything
-uv run pre-commit autoupdate --config .pre-commit-config.yaml       # bump hook pins
+uv sync                                  # sync tools into .venv
+uv run pre-commit install                # wire up the git hook
+uv run pre-commit run --all-files        # run over everything
+uv run pre-commit autoupdate             # bump hook pins
 ```
 
-Pre-commit changes `cwd` to the git root before executing hooks, which is why the `--config` paths in the hook file (`v3/pyproject.toml`, `-p arm_common -p arm_backend -p arm_ripper`) are all phrased repo-root-relative — they resolve correctly no matter which directory invokes pre-commit.
+Pre-commit changes `cwd` to the git root before executing hooks, which is why the mypy hook's `--config-file=pyproject.toml` and `-p arm_common -p arm_backend -p arm_ripper -p arm_transcode` package list are phrased repo-root-relative — they resolve correctly no matter which directory invokes pre-commit.
 
 **No docstring-body reformatter.** The historical tool for this (`docformatter`) is effectively unmaintained and its transitive dep doesn't build on Python 3.14. Ruff covers docstring quote style and whitespace; docstring content is a review concern.
 

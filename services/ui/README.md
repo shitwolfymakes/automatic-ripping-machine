@@ -38,7 +38,7 @@ For the simpler path, build the container:
 ```sh
 cd v3
 docker compose up -d arm-backend arm-ui
-# https://localhost:8081/
+# https://localhost:8080/
 ```
 
 ## OpenAPI snapshot

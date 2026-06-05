@@ -45,7 +45,7 @@ bash install.sh --prefix "$TEST" --start
 # file (in case the terminal scrollback is lost):
 docker exec armv3-backend cat /logs/first-boot.log
 
-# Visit https://localhost:8081, log in, change the password.
+# Visit https://localhost:8080, log in, change the password.
 ```
 
 ## Run the test (dev stack path)
@@ -66,7 +66,6 @@ orchestrates the full flow against the
 Sintel ISO:
 
 ```bash
-cd v3
 docker compose up -d arm-db arm-backend arm-ui       # if not already up
 ./devtools/iso-smoke.sh
 ```
