@@ -21,6 +21,10 @@ COPY services/ui/nginx.conf /etc/nginx/conf.d/default.conf
 COPY services/ui/docker-entrypoint.sh /docker-entrypoint-arm.sh
 RUN chmod +x /docker-entrypoint-arm.sh
 
+# Ship the project license in the image (placed late — it rarely changes, so
+# it never busts the cache of the build/asset layers above).
+COPY LICENSE /LICENSE
+
 EXPOSE 443
 
 ENTRYPOINT ["/docker-entrypoint-arm.sh"]

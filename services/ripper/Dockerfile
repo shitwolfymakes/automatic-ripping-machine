@@ -119,6 +119,10 @@ RUN uv sync --frozen --package arm_ripper --no-dev
 COPY services/_common/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
+# Ship the project license in the image (placed late — it rarely changes, so
+# it never busts the cache of the uv-sync layer above).
+COPY LICENSE /LICENSE
+
 ENV PATH="/opt/venv/bin:${PATH}" \
     PYTHONPATH="/app/services/ripper"
 

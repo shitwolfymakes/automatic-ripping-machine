@@ -64,6 +64,13 @@ install.sh
 docker-compose*.yml
 .pre-commit-config.yaml
 .editorconfig
+# Claude Code memory + settings and the GitHub wiki mirror — pure repo
+# metadata, tracked in git but never copied into any image.
+.claude/
+arm_wiki/
+# Repo-root favicon is decoration; the UI image ships its own assets and
+# no build COPYs this.
+favicon.ico
 
 # ---- Test suites -----------------------------------------------------
 # Runtime images don't run tests. Vite's build only pulls files reachable
@@ -76,6 +83,11 @@ docker-compose*.yml
 **/README.md
 **/CHANGELOG.md
 **/CONTRIBUTING.md
+**/CODE_OF_CONDUCT.md
+**/SECURITY.md
+**/CLAUDE.md
+# LICENSE is intentionally NOT ignored — it stays in the context so a
+# `COPY LICENSE` can bundle it into each image.
 
 # ---- IDE / editor / OS noise -----------------------------------------
 .vscode/
