@@ -20,12 +20,15 @@
 #      and ISO-mode ripper conflict on the same drive_id registration).
 #   4. One-shot `docker run --privileged` of the ripper image with
 #      ARM_MANUAL_TRIGGER_ISO and the ISO bind-mounted at /corpus.
-#      Logs are tailed until `rip-complete`.
+#      Logs are tailed until `rip-complete`. The ISO ripper idles
+#      forever by design, so once rip-complete lands its work is done
+#      and the container is stopped right away (transcoding is the
+#      backend's job, not the ripper's). `--no-cleanup` keeps it up.
 #   5. Admin JWT acquired (env vars or interactive prompt) and the
 #      GPU-preferred Plex H.265 session applied to the job. Transcode
 #      tasks are polled until all are done|failed.
-#   6. Cleanup: stop the ISO-mode ripper, restart the live
-#      arm-ripper-sr0 service. Opt out with `--no-cleanup`.
+#   6. Cleanup: restart the live arm-ripper-sr0 service. Opt out with
+#      `--no-cleanup`.
 #
 # Idempotent. Safe to re-run.
 
@@ -82,6 +85,7 @@ DEFAULT_SESSION_ID="ses_builtin_movie_plex_1080p_gpu"
 SESSION_ID="${DEFAULT_SESSION_ID}"
 DO_TRANSCODE=1
 DO_CLEANUP=1
+KILL_RIPPER=1
 FORCE_REBUILD=0
 
 log() { printf '\033[1;36m→\033[0m %s\n' "$*"; }
@@ -90,7 +94,7 @@ warn() { printf '\033[1;33m!\033[0m %s\n' "$*" >&2; }
 err() { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; }
 
 show_help() {
-    sed -n '2,30p' "$0" | sed 's/^# \?//'
+    sed -n '2,33p' "$0" | sed 's/^# \?//'
     cat <<'EOF'
 
 Usage: iso-smoke.sh [options]
@@ -102,13 +106,15 @@ Options:
                       at docs/arch/08-v2-isolation-and-cutover.md
                       § Readiness line 200.
   --no-transcode      Stop after rip-complete; skip the transcode
-                      chain and the cleanup step.
+                      chain and the live-ripper restart. The ISO
+                      ripper is still torn down at rip-complete
+                      (pass --no-cleanup to keep it idling).
   --session=<id>      Override the default transcode session
                       (default: ses_builtin_movie_plex_1080p_gpu —
                       NVENC-preferred Plex H.265 1080p).
-  --no-cleanup        After the transcode, leave the ISO ripper idling
-                      and the live arm-ripper-sr0 stopped for manual
-                      inspection.
+  --no-cleanup        Leave the ISO ripper idling (skip the rip-complete
+                      teardown) and the live arm-ripper-sr0 stopped for
+                      manual inspection.
   --rebuild           Force a fresh `docker compose build` of the ripper
                       image before launching. Use after editing
                       services/ripper/ — otherwise the in-flight image
@@ -131,7 +137,7 @@ for arg in "$@"; do
     case "$arg" in
         --help|-h) show_help; exit 0 ;;
         --no-transcode) DO_TRANSCODE=0; DO_CLEANUP=0 ;;
-        --no-cleanup) DO_CLEANUP=0 ;;
+        --no-cleanup) DO_CLEANUP=0; KILL_RIPPER=0 ;;
         --rebuild) FORCE_REBUILD=1 ;;
         --session=*) SESSION_ID="${arg#--session=}" ;;
         --iso=*) ISO_CHOICE="${arg#--iso=}" ;;
@@ -347,6 +353,20 @@ watch_until_rip_complete() {
     printf '%s\n' "${job_id}"
 }
 
+# ---- Teardown -----------------------------------------------------------
+
+# The ISO-mode ripper idles forever after rip-complete (the rip process
+# doesn't self-exit). Its useful work ends at rip-complete — transcoding
+# is the backend/transcoder's job, not the ripper's — so stop it as soon
+# as the rip lands instead of letting it idle through the transcode wait
+# (or, under --no-transcode, indefinitely; that idle ripper is what gets
+# left running for hours). Launched with `--rm`, so stopping removes it.
+kill_iso_ripper() {
+    log "stopping ${RIPPER_CTR} (rip done — ripper has no further work)"
+    docker stop "${RIPPER_CTR}" >/dev/null 2>&1 || true
+    ok "${RIPPER_CTR} stopped"
+}
+
 # ---- Auth ---------------------------------------------------------------
 
 acquire_jwt() {
@@ -496,8 +516,8 @@ PYEOF
 # ---- Cleanup ------------------------------------------------------------
 
 cleanup_stack() {
-    log "stopping ${RIPPER_CTR}"
-    docker stop "${RIPPER_CTR}" >/dev/null 2>&1 || true
+    # The ISO ripper was already stopped at rip-complete (kill_iso_ripper);
+    # cleanup just restores the live drive service.
     log "restarting ${RIPPER_SERVICE}"
     if ! ( cd "${V3_DIR}" && "${COMPOSE[@]}" up -d "${RIPPER_SERVICE}" >/dev/null 2>&1 ); then
         warn "${RIPPER_SERVICE} did not come up cleanly; check /dev/sr0 is present on the host"
@@ -554,6 +574,12 @@ job_id=$(watch_until_rip_complete)
 rip_end=$(date +%s)
 rip_secs=$(( rip_end - rip_start ))
 
+# Ripper's job ends at rip-complete; don't let it idle through the
+# transcode wait (or forever under --no-transcode). --no-cleanup opts out.
+if (( KILL_RIPPER == 1 )); then
+    kill_iso_ripper
+fi
+
 if (( DO_TRANSCODE == 0 )); then
     final_summary "${job_id}" "${rip_secs}"
     echo
@@ -566,9 +592,14 @@ if (( DO_TRANSCODE == 0 )); then
     echo "        -H \"Authorization: Bearer \$JWT\" -H 'Content-Type: application/json' \\"
     echo "        -d '{\"session_id\":\"${SESSION_ID}\",\"overwrite\":false}'"
     echo
-    echo "    cleanup when done:"
-    echo "      docker stop ${RIPPER_CTR}"
-    echo "      cd ${V3_DIR} && docker compose up -d ${RIPPER_SERVICE}"
+    if (( KILL_RIPPER == 1 )); then
+        echo "    cleanup when done (ISO ripper already stopped):"
+        echo "      cd ${V3_DIR} && docker compose up -d ${RIPPER_SERVICE}"
+    else
+        echo "    cleanup when done:"
+        echo "      docker stop ${RIPPER_CTR}"
+        echo "      cd ${V3_DIR} && docker compose up -d ${RIPPER_SERVICE}"
+    fi
     exit 0
 fi
 
