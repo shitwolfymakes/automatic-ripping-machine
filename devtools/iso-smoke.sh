@@ -18,8 +18,10 @@
 #      load, so an explicit key keeps the smoke deterministic.
 #   3. The live `arm-ripper-sr0` service is stopped (poll-loop ripper
 #      and ISO-mode ripper conflict on the same drive_id registration).
-#   4. One-shot `docker run --privileged` of the ripper image with
-#      ARM_MANUAL_TRIGGER_ISO and the ISO bind-mounted at /corpus.
+#   4. One-shot `docker run` of the ripper image (unprivileged, matching
+#      the compose service) with ARM_MANUAL_TRIGGER_ISO and the ISO
+#      bind-mounted at /corpus. MakeMKV and the pydvdid CRC64 both read the
+#      ISO file directly — no loop-mount, so no --privileged.
 #      Logs are tailed until `rip-complete`. The ISO ripper idles
 #      forever by design, so once rip-complete lands its work is done
 #      and the container is stopped right away (transcoding is the
@@ -301,7 +303,6 @@ run_iso_ripper() {
         --name "${RIPPER_CTR}" \
         --network "${COMPOSE_NETWORK}" \
         --hostname "arm-ripper-iso" \
-        --privileged \
         -e ARM_DRIVE_DEV=/dev/sr0 \
         -e ARM_BACKEND_URL=https://arm-backend:8443 \
         -e ARM_SERVICE_TOKEN="${ARM_SERVICE_TOKEN}" \

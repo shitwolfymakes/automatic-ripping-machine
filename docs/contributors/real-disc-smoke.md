@@ -86,8 +86,8 @@ The script:
   that the ripper does on boot has the same failure mode.
 - Stops the live `arm-ripper-sr0` (the ISO-mode ripper registers as the
   same `drive_id`, so the two would conflict) and launches a one-shot
-  `docker run --privileged` of the ripper image with the ISO bind-mounted
-  at `/corpus`.
+  `docker run` of the ripper image (unprivileged, matching the compose
+  service) with the ISO bind-mounted at `/corpus`.
 - Tails the container logs until the `rip-complete` milestone fires,
   then prints the `job_id` along with the `curl` to apply a GPU-preferred
   Plex transcode session and the cleanup commands.
@@ -100,12 +100,13 @@ smoke.
 
 **Gotchas** (already in the matrix's ISO-row notes):
 
-- `mount -o ro,loop /corpus/sintel.iso ...` returns `EPERM` inside the
-  container even with `--privileged`. The CRC64 fingerprint silently
-  falls through; MakeMKV's `CINFO:1` from the `iso:` source URL is
-  authoritative for `disc_type`, so identify still proceeds via OMDB.
-  Loop-mount path needs follow-up work if you rely on the 1337server
-  community DB lookup.
+- ~~`mount -o ro,loop /corpus/sintel.iso ...` returns `EPERM` inside the
+  container even with `--privileged`, so the CRC64 fingerprint silently
+  falls through.~~ **Resolved (commit `fd372371`):** the CRC64 is now read
+  straight off the device/ISO via `pydvdid_m.DvdId` (PyCdlib) — no
+  loop-mount, no privilege — so the `disc_fingerprints` row and the
+  1337server `lookup_by_crc64` fast path now work in the ISO smoke too.
+  MakeMKV's `CINFO:1` remains authoritative for `disc_type`.
 - The 11.5 GB matrix256-corpus image overflowed `/var/lib/docker` on the
   dev box; the archive.org fallback exists for hosts with the same
   constraint. The fallback is byte-equivalent (corpus.lock pins the same
