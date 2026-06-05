@@ -1,60 +1,43 @@
-# Automatic Ripping Machine (ARM) - Development Tools
+# devtools
 
-## Overview
+Scripts that support local development of the ARM stack. Not shipped to end users.
 
-Development tools to help automate testing and fault-finding when making changes the ARM main code.
-Aim of this code is to be independent of the main ARM Repo, such that no libraries are pulled into support the test code. With the intent that it is possible to run the ARM Devtools as a standalone python script. This is to avoid introducing errors into the main code from the test tool.
-Currently, a work in progress.
+## setup-dev.sh
 
-## Features
+One-shot dev-environment bootstrap. Run once after cloning:
 
-- Manage branch changes and the ARMUI
-- Docker
-    - Rebuild the docker image with updated ARM code
-- Database management
-    - Remove the database file, test running of ARM on a new system
-- Quality Checks (runs Flake8 against all arm code)
-- PR Checks
-    - Run actions prior to commiting a PR
-- Notification check, generate notifications to the UI
-
-
-## Usage
+```bash
+bash devtools/setup-dev.sh
 ```
-$ ./armdevtools.py -h
-usage: armdevtools.py [-h] [-b B] [-dr DR] [-db_rem] [-qa] [-pr] [-n] [-v]
 
-Automatic Ripping Machine Development Tool Scripts. Note: scripts assume running on a bare
-metal server when running, unless running the specific docker rebuild scripts.
+What it does (idempotent — safe to re-run):
 
-options:
-  -h, --help  show this help message and exit
-  -b B        Name of the branch to move to, example -b bugfix_removecode
-  -dr DR      Docker rebuild post ARM code update. Requires docker run script path to run.
-  -db_rem     Database tool - remove current arm.db file
-  -qa         QA Checks - run Flake8 against ARM
-  -pr         Actions to run prior to committing a PR against ARM on github
-  -n          Notification tool - show a test notification
-  -v          ARM Dev Tools Version
-``````
+1. Checks that `uv`, `docker`, `docker compose`, and `openssl` are available.
+2. Runs `uv sync` to create `.venv/` with all workspace members.
+3. Calls `bash install.sh --certs-only --no-env --no-compose --no-udev` if `certs/arm-ca.crt` isn't already present.
+4. Creates `.env` from `.env.example` if missing, filling in a random `POSTGRES_PASSWORD` and `ARM_SERVICE_TOKEN`, and detecting `PUID`/`PGID`/`CDROM_GID` from the host. An existing `.env` is left untouched.
+5. On a Linux host with optical drives, writes a per-drive host udev rule (`/etc/udev/rules.d/99-arm-no-automount.rules`, via `sudo`) so the desktop's `udisks2`/`gvfs` doesn't grab the disc and block the ripper's post-rip `eject`. Skipped if `udevadm` isn't on PATH or no drive is present. See [../docs/arch/06-deployment.md § Host-side auto-mount](../docs/arch/06-deployment.md#host-side-auto-mount-must-be-disabled).
 
-## Requirements
+After it finishes: `docker compose up -d --build`.
 
-No unique requirements for devtools
+Cert generation is delegated to [install.sh](../install.sh) — the end-user installer is the single source of truth for the CA + leaves under `certs/`. See [../docs/arch/05-cross-cutting.md § Transport (TLS)](../docs/arch/05-cross-cutting.md#transport-tls) for the full cert design.
 
-## Install
+## iso-smoke.sh
 
-No install required, once ARM installed
+Fixture-driven Phase 15 smoke — runs the ripper end-to-end against the matrix256-corpus Sintel ISO instead of a physical disc.
 
-## Troubleshooting
- Please see the [wiki](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/).
+```bash
+bash devtools/iso-smoke.sh
+```
 
-## Contributing
+Prereqs: dev stack up (`docker compose up -d arm-db arm-backend arm-ui`). The script stops the live `arm-ripper-sr0` for the duration of the run (it would conflict on the same `drive_id`) and prints the bring-it-back command when it's done.
 
-Pull requests are welcome.  Please see the [Contributing Guide](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Contributing-Guide)
+Defaults to caching the ISO under `~/arm-corpus/` (override with `ISO_CACHE_DIR`). MakeMKV key resolution: `MAKEMKV_KEY` env first (any value MakeMKV accepts — purchased perma-key or a beta you grabbed manually), then a single forum-scrape attempt. See [../docs/contributors/real-disc-smoke.md § Run the test (ISO fixture)](../docs/contributors/real-disc-smoke.md#run-the-test-iso-fixture--no-physical-disc-needed) for the full runbook and known gotchas.
 
-If you set ARM up in a different environment (hardware/OS/virtual/etc.), please consider submitting a howto to the [wiki](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki).
+## crash-drill.sh
 
-## License
+Phase 9 + 15 backend crash-recovery drill. Injects a synthetic in-flight job into the DB, force-kills the backend, brings it back, and asserts the lifespan-startup sweep recovered the job. Destructive — confirms before touching anything; `--yes` skips the prompt.
 
-[MIT License](../LICENSE)
+## regen-openapi-snapshot.sh
+
+Regenerates `services/ui/openapi.snapshot.json` from the live FastAPI app. The CI `openapi-drift` job points at this script in its failure message.

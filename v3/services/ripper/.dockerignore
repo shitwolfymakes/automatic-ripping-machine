@@ -1,2 +1,0 @@
-# Not read by Docker — build context is v3/, so v3/.dockerignore governs.
-# Kept as a forward-compat marker if this service is ever split into its own context.

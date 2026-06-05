@@ -1,36 +1,49 @@
-# Contributing to the Automatic Ripping Machine (ARM) Wiki
+# Contributing to the Wiki
 
-Thank you for considering contributing to the Automatic Ripping Machine (ARM) Wiki! Your contributions help make ARM more accessible and user-friendly for everyone. Below are the steps you need to follow to make changes to the wiki:
+The wiki you're reading is generated from Markdown files in the **`arm_wiki/`**
+folder of the main repository, so wiki edits go through the same fork → branch →
+PR flow as code. (Don't edit pages directly in the GitHub wiki UI — those edits
+live in a separate wiki repo and get overwritten.)
 
-## Getting Started
+## Make a change
 
-1. **Fork the Repository**: First, fork the main ARM repository to your GitHub account. This creates a copy of the repository under your account, allowing you to make changes without affecting the original repository.
+1. **Fork** the
+   [repository](https://github.com/automatic-ripping-machine/automatic-ripping-machine)
+   and **clone** your fork:
 
-2. **Clone the Forked Repository**: Clone the forked repository to your local machine using the following command:
    ```bash
-   git clone https://github.com/your-username/arm.git
+   git clone https://github.com/<your-username>/automatic-ripping-machine.git
+   cd automatic-ripping-machine
    ```
 
-3. **Modify Wiki Files**: Navigate to the arm_wiki folder within your cloned repository. Here, you'll find the Markdown files corresponding to the wiki pages. Make the necessary modifications or create new Markdown files to add content to the wiki.
+2. **Branch** from `main` (trunk-based — don't commit to `main` directly):
 
-4. **Commit Your Changes**: Once you've made the desired changes to the wiki files, commit them to your forked repository. Use meaningful commit messages to describe your changes clearly.
+   ```bash
+   git switch -c wiki/fix-getting-started
+   ```
 
-5. **Push Changes to Your Fork**: Push the committed changes to your forked repository on GitHub using the following command:
+3. **Edit the Markdown** under `arm_wiki/`. Each `.md` file is one wiki page; the
+   filename (with spaces as hyphens) is its URL slug. If you add or remove a
+   page, update **`arm_wiki/_Sidebar.md`** so the navigation stays in sync.
 
-    ```bash
-    git push origin main
-    ```
+4. **Commit and push** to your fork:
 
-## Creating a Pull Request (PR)
+   ```bash
+   git commit -am "docs(wiki): clarify GPU overlay setup"
+   git push -u origin wiki/fix-getting-started
+   ```
 
-1. **Navigate to GitHub**: Visit the GitHub page of your forked repository in your web browser.
+5. **Open a pull request** against `main`. A maintainer reviews it, and once
+   merged the published wiki updates automatically.
 
-2. **Create a Pull Request**: Click on the "New Pull Request" button. GitHub will compare the changes between your fork and the main ARM repository. Ensure that the base repository is set to the main ARM repository.
+## Style notes
 
-3. **Review Your Changes**: Review the changes you've made in the pull request. Provide a clear description of the changes and any relevant context.
+- Keep it **v3-accurate.** v3 is Docker-only with a one-line installer and UI
+  config — no native installs, no `arm.yaml`. If you find a page still describing
+  v2, fix or flag it.
+- **Link between pages** with the page slug, e.g. `[Configuration](Configuring-ARM)`;
+  link into the repo with full GitHub URLs.
+- Prefer concise, task-focused prose. Match the tone of the existing pages.
 
-4. **Submit the Pull Request**: Once you're satisfied with the changes, submit the pull request. Your changes will be reviewed by the maintainers of the ARM project.
-
-5. **Review and Approval**: The maintainers will review your pull request and provide feedback or request further modifications if necessary. Once approved, your changes will be merged into the main ARM repository, and the wiki will be updated for all users to see.
-
-Thank you for your contribution to the ARM project! If you have any questions or need assistance, feel free to reach out to the project maintainers.
+If you're also touching code, fold the wiki update into the same PR — see
+[Contributing](Contribute).

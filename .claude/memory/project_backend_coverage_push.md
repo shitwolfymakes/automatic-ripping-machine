@@ -6,7 +6,7 @@ metadata:
 ---
 
 Effort (2026-05-16, branch `wolfy/v3-improvments`) to drive
-`v3/services/backend` to full coverage. **Done.** See
+`services/backend` to full coverage. **Done.** See
 [[project_backend_test_harness]] for the two test tiers.
 
 **Result: 70% → 99%** (branch coverage); **100% of statements** (2833/2833),
@@ -29,7 +29,7 @@ enum raises, the dead docker-py ImportError fallback, two dispatcher race
 guards. Coverage config also excludes Protocol/overload `...` stubs.
 
 CI **measures** coverage (`coverage run -m pytest` + `coverage report`,
-config in `v3/pyproject.toml [tool.coverage]`, branch=true) but does
+config in `pyproject.toml [tool.coverage]`, branch=true) but does
 **not gate** — the user explicitly chose "measure but don't fail yet". A
 `fail_under` ratchet (≈97–98, below the achieved 99 to allow noise) is
 ready to add when they want the regression floor; it was deliberately

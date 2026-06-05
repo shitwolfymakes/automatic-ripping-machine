@@ -6,7 +6,7 @@ metadata:
 ---
 
 The v3 ripper has **no udev**; insertion is detected by `poll_loop` in
-`v3/services/ripper/arm_ripper/main.py`, which reads `CDROM_DRIVE_STATUS`
+`services/ripper/arm_ripper/main.py`, which reads `CDROM_DRIVE_STATUS`
 (ioctl) every `POLL_INTERVAL_SECONDS` (default 2s) and calls
 `JobController.handle_disc_inserted`, which queries the backend live
 (`GET /api/ripper/config`, no caching) for `auto_rip_on_insert`.
