@@ -17,9 +17,35 @@ require() {
     fi
 }
 
+# Load nvm if the user manages Node that way. nvm only wires `node`/`npm` onto
+# PATH in interactive shells, so a non-interactive `bash devtools/setup-dev.sh`
+# wouldn't see them; sourcing nvm.sh here fixes that and pins the version to
+# services/ui/.nvmrc so the host toolchain matches the container build.
+load_nvm() {
+    local nvm_sh="${NVM_DIR:-${HOME}/.nvm}/nvm.sh"
+    [[ -s "${nvm_sh}" ]] || return 0   # no nvm install — fall through to PATH + require
+    echo "==> nvm detected — loading Node from services/ui/.nvmrc"
+    local want
+    want="$(cat "${ROOT_DIR}/services/ui/.nvmrc" 2>/dev/null || true)"
+    # nvm.sh isn't written for `set -eu`; relax around the load + select, then restore.
+    set +eu
+    # shellcheck disable=SC1090
+    . "${nvm_sh}"
+    if [[ -n "${want}" ]]; then
+        nvm install "${want}" && nvm use "${want}"
+    fi
+    set -eu
+}
+
 require uv      "install: curl -LsSf https://astral.sh/uv/install.sh | sh"
 require docker  "install: https://docs.docker.com/engine/install/"
 require openssl "openssl should be present on any linux system"
+
+# nvm users: pull Node onto PATH (and pin it to .nvmrc) before the checks below.
+load_nvm
+
+require node    "install Node 22 (matches services/ui/.nvmrc / Dockerfile): https://nodejs.org/ — or 'nvm install' if you use nvm"
+require npm     "npm ships with Node — reinstall Node, or run 'nvm use', if it's missing"
 
 if ! docker compose version >/dev/null 2>&1; then
     echo "ERROR: 'docker compose' (v2 plugin) not available" >&2
@@ -28,6 +54,19 @@ fi
 
 echo "==> syncing host venv via uv"
 ( cd "${ROOT_DIR}" && uv sync )
+
+# UI deps from the committed lockfile (same as services/ui/Dockerfile, which
+# builds on node:22). npm ci wipes node_modules and reinstalls exactly what
+# package-lock.json pins, so guard it: npm writes node_modules/.package-lock.json
+# on install, and a `git pull` that updates the lockfile makes it newer again.
+UI_DIR="${ROOT_DIR}/services/ui"
+if [[ -d "${UI_DIR}/node_modules" \
+      && "${UI_DIR}/node_modules/.package-lock.json" -nt "${UI_DIR}/package-lock.json" ]]; then
+    echo "==> UI deps already current — skipping npm ci"
+else
+    echo "==> installing UI deps via npm ci"
+    ( cd "${UI_DIR}" && npm ci --no-audit --no-fund )
+fi
 
 if [[ -f "${ROOT_DIR}/certs/arm-ca.crt" ]]; then
     echo "==> certs already present in certs/ — skipping bootstrap"

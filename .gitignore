@@ -187,6 +187,10 @@ removed/*
 
 arm.yaml
 
+# Node / npm — UI deps installed by devtools/setup-dev.sh (npm ci) and rebuilt
+# inside the UI Docker image; never commit them.
+node_modules/
+
 # Local Docker bind-mount runtime state (repo root, per the dev install prefix)
 /db/
 /raw/
