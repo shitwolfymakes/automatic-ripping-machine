@@ -1047,6 +1047,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
               "title": "Job Id"
             }
           },
@@ -3253,6 +3254,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
               "title": "Job Id"
             }
           },
@@ -3310,6 +3312,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
               "title": "Job Id"
             }
           },

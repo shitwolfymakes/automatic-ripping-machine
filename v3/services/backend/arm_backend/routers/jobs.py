@@ -2,9 +2,10 @@ import logging
 import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Annotated, Iterable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import Path as PathParam
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -50,6 +51,7 @@ from arm_common.schemas import (
     TrackView,
     TranscodeTaskView,
 )
+from arm_common.ulid import ID_COMPONENT_PATTERN, is_safe_id_component
 
 logger = logging.getLogger("arm_backend.routers.jobs")
 
@@ -322,6 +324,11 @@ def _delete_job_files(
     Idempotent: missing raw dir, missing files, and missing parents are all
     expected. Returns counters for the operator log.
     """
+    # `job_id` is interpolated into a path under `raw_root`; reject anything
+    # that isn't a single safe component so a crafted id can't rmtree outside
+    # the raw tree. Routes pin the param too — this is defence-in-depth.
+    if not is_safe_id_component(job_id):
+        raise ValueError(f"invalid job_id: {job_id!r}")
     raw_dir = raw_root / job_id
     raw_removed = 0
     if raw_dir.exists():
@@ -369,7 +376,7 @@ def _delete_per_job_log(job_id: str) -> None:
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_job(
-    job_id: str,
+    job_id: Annotated[str, PathParam(pattern=ID_COMPONENT_PATTERN)],
     delete_raw: bool = Query(default=False),
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),

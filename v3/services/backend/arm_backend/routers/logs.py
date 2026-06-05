@@ -27,12 +27,20 @@ import json
 import zipfile
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response
+from fastapi import Path as PathParam
 from fastapi.responses import StreamingResponse
 
 from arm_backend.auth import require_jwt
 from arm_common import User
+from arm_common.ulid import ID_COMPONENT_PATTERN, is_safe_id_component
+
+# Reusable validated path param: rejects any id that isn't a single safe path
+# component (no `/`, `.`, NUL …) with a clean 422 before it reaches the
+# filesystem. `per_job_log_path` re-checks as defence-in-depth.
+JobIdParam = Annotated[str, PathParam(pattern=ID_COMPONENT_PATTERN)]
 
 # Resolved at import time so tests can monkeypatch this module attribute.
 # `per_job_log_path` reads `LOG_DIR` at call time so a `monkeypatch.setattr`
@@ -41,7 +49,15 @@ LOG_DIR = Path("/logs")
 
 
 def per_job_log_path(job_id: str) -> Path:
-    """The aggregated-log file written by `LogTailer` for `job_id`."""
+    """The aggregated-log file written by `LogTailer` for `job_id`.
+
+    `job_id` originates from a URL path param and is concatenated into a
+    filesystem path, so it is validated as a single safe path component
+    first — an unchecked `../…` would traverse out of `/logs`. Routes also
+    pin the param with `pattern=`, making this a defence-in-depth guard.
+    """
+    if not is_safe_id_component(job_id):
+        raise ValueError(f"invalid job_id: {job_id!r}")
     return LOG_DIR / "jobs" / f"{job_id}.log"
 
 
@@ -64,7 +80,7 @@ router = APIRouter(prefix="/api/logs", tags=["logs"])
 # in it and the zip route would be unreachable.
 @router.get("/{job_id}.zip")
 async def download_job_logs_zip(
-    job_id: str,
+    job_id: JobIdParam,
     _: User = Depends(require_jwt),
 ) -> Response:
     """In-memory zip of every line tagged with `job_id`.
@@ -103,7 +119,7 @@ async def download_job_logs_zip(
 
 @router.get("/{job_id}")
 async def stream_job_logs(
-    job_id: str,
+    job_id: JobIdParam,
     limit: int = PER_FILE_DEFAULT,
     _: User = Depends(require_jwt),
 ) -> StreamingResponse:
