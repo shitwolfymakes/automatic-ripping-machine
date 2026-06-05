@@ -21,7 +21,13 @@ logger = logging.getLogger("arm_ripper.makemkv_key")
 # Installed by the ripper Dockerfile (services/ripper/install/update_key.sh
 # → here). The same script the shared entrypoint runs at boot.
 UPDATE_KEY_SCRIPT = "/usr/local/bin/update_key.sh"
-REFRESH_TIMEOUT_SECONDS = 30.0
+# Bounds the forum key-scrape in update_key.sh (curl has no --max-time of its
+# own). The MakeMKV forum thread we scrape can respond slowly — latencies past
+# 50s have been observed — and a refresh that times out leaves makemkvcon with
+# no current beta key, which it reports as MSG:5021 and the scan then
+# misclassifies the disc as `data`. 120s gives enough headroom that a
+# slow-but-alive forum still yields a key before the scan runs.
+REFRESH_TIMEOUT_SECONDS = 120.0
 
 
 async def refresh_makemkv_key(script_path: str = UPDATE_KEY_SCRIPT) -> None:
