@@ -1,167 +1,212 @@
+# Getting Started
+
+This page takes you from a bare Linux host to your first finished rip. ARM v3
+runs **only** as a Docker Compose stack — there is no native install. If you are
+looking for `apt install` instructions or an `arm.yaml`, you are thinking of ARM
+v2, which is frozen at the `v2-final` tag.
+
 ## Contents
-1. [Hardware Requirements](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Getting-Started#Hardware-Requirements)
-2. [Installation](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Getting-Started#Installation)
-3. [Docker Setup](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Getting-Started#Docker-Setup)
-4. [Virtual Machine Setup](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Getting-Started#Virtual-Machine-Setup)
-5. [ARM Configuration](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Getting-Started#ARM-Configuration)
-6. [Additional Hardware Setup](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Getting-Started#Additional-Hardware-Setup)
 
-## Hardware Requirements
+1. [Hardware](#hardware)
+2. [Prerequisites](#prerequisites)
+3. [Install](#install)
+4. [What the installer creates](#what-the-installer-creates)
+5. [Start the stack](#start-the-stack)
+6. [First login](#first-login)
+7. [Trust the certificate (optional but recommended)](#trust-the-certificate)
+8. [Your first rip](#your-first-rip)
+9. [Next steps](#next-steps)
 
-Operation of ARM does not require much in the way of system requirements, although it goes with out saying that a faster processor and more memory will rip media much faster. System storage is an important requirement to pay attention to, otherwise jobs will fail whilst processing if storage reaches 100%.
-- Host OS:
-   - Debian 10 (buster) ***ongoing support dropped end of 2022***
-   - Open Media Vault (5.x) ***ongoing support dropped end of 2022***
-   - Ubuntu Server 18.04 - Needs Multiverse and Universe repositories ***ongoing support dropped end of 2022***
-   - Ubuntu 20.04 - Needs Multiverse and Universe repositories
-   - **Might work with other Linux distros but this isn't tested
-- Hardware:
-   - The below are the minimum requirements to support handbrake transcoding of video files, one of the most intensive part of ARM - [Handbrake requirements](https://handbrake.fr/docs/en/latest/technical/system-requirements.html).
-   - Processor:
-      - AMD Ryzen, Threadripper, or Epyc
-      - Intel Core (6th generation and newer) i3, i5, i7, i9, or equivalent Xeon
-   - Free memory:
-      - Depends on settings used but as a general guide:
-      - 1 GB for transcoding standard definition video (480p/576p)
-      - 2 to 8 GB for transcoding high definition video (720p/1080p)
-      - 6 to 16 GB or more for transcoding ultra high definition video (2160p 4K)
-   - One or more optical drives to rip Blu-Rays, DVDs, and CDs
-   (Optional)
-   - a (GPU)[#Additional-Hardware-Setup]
-- Storage:
-   - ARM Docker container 2-4 GB
-   - Audio CD: <1GB per CD ripped
-   - ARM transcode and completed folders: 10 GB or more recommended for processing and storing your new videos
-   - Blurays: requires a minimum of 10-20 GB free space to complete a rip
-- Some free time to set everything up
+## Hardware
 
+ARM is happy on modest hardware, but transcoding video is the heavy part. Use
+HandBrake's [system requirements](https://handbrake.fr/docs/en/latest/technical/system-requirements.html)
+as the baseline.
 
-## Installation
+- **CPU:** anything reasonably modern. A 6th-gen-or-newer Intel Core / Xeon, or
+  an AMD Ryzen/Threadripper/Epyc, transcodes comfortably. A GPU is optional and
+  only speeds up transcoding — see [Hardware Transcoding](Hardware-Transcoding).
+- **Memory:** roughly 1 GB for SD, 2–8 GB for HD (720p/1080p), and 6–16 GB+ for
+  4K transcodes, on top of what the rest of the stack uses.
+- **Optical drive(s):** one or more, each exposed to the host as `/dev/sr*`. ARM
+  runs one ripper container per drive, in parallel.
+- **Storage:** ripping is disk-hungry. Budget ~10–20 GB free per in-flight
+  Blu-ray for the intermediate `raw` files, plus space for the finished `media`
+  library. Audio CDs are well under 1 GB each.
 
-ARM can be installed in multiple ways:
-- Docker install on a bare metal server/PC
-- Docker install in a VM, on a bare metal server/PC
-- On a bare metal server/PC ***Note not prefered option***
+> ⚠️ **Windows / macOS:** Docker Desktop cannot pass an internal SATA optical
+> drive into its Linux VM, so you **cannot rip** from Windows or macOS. You can
+> still run the UI + transcoder as a library frontend over an SMB/WSL2 path. See
+> [Known Issues](Status-Known-Issues).
 
-### Docker Setup
+## Prerequisites
 
-ARM has a prebuilt docker image ready to go with minimal steps required to start, this is the best option for new users of ARM as it requires less setup and configuration - [prebuilt image](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/docker).
+The host must have, and the installer checks for:
 
-The alternative is to build the docker image from the ARM dockerfile on your system and
-       - [Build from Dockerfile](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Building-ARM-docker-image-from-source)
+| Tool | Minimum | Notes |
+|---|---|---|
+| Docker Engine | **24** | <https://docs.docker.com/engine/install/> |
+| `docker compose` | **v2 plugin** | Ships with current Docker; `docker compose version` must work. |
+| `openssl` | 1.1.1 | Present on any modern Linux. Used to generate the internal CA. |
+| `bash` | 4 | The installer uses bash-4 features. |
 
-### Virtual Machine Setup
+Your user must be able to reach the Docker daemon — either a member of the
+`docker` group or able to `sudo`:
 
-Prior to installing ARM within a virtual machine, the VM needs any hardware passed through from the host to the VM such that drive can then be passed through to docker. With multiple layers of obstraction, there is potential to not configure drives correctly which has been known to cause issues with ARM functionality and throw strange errors. Setting up the Host machine will prevent these issues from surfacing. Thanks to [stevenewbs](https://github.com/stevenewbs/blog/blob/master/libvirtd%20qemu%20Blu%20Ray%20passthrough.md) for the setup information.
-
-#### Apparmor
-
-If setup Apparmor may block access to your disk drive so you need to whitelist it.
-
-1. Check if Apparmour is blocking access:
-
-```dmesg | grep /dev/sg0``` OR ```dmesg | grep /dev/sr0```
-
-Check for "DENIED" entries for /dev/s{r,g}0
-
-2. Add lines to /etc/apparmor.d/libvirt/TEMPLATE.qemu to allow access to qemu:
-
-```
-    profile LIBVIRT_TEMPLATE flags=(attach_disconnected) {
-      #include <abstractions/libvirt-qemu>
-      /dev/sg* rwk,
-      /dev/sr* rwk,
-    }
+```bash
+sudo usermod -aG docker "$USER" && newgrp docker
 ```
 
-3. Add the /dev... from above to /etc/apparmor.d/usr.lib.libvirt.virt-aa-helper under the # for hostdev section:
+You do **not** need to be in the host's optical group; the ripper container is
+granted access to the drive via `group_add` automatically.
 
-```
-    ...
-    # for hostdev
-    /dev/sr* rwk,
-    /dev/sg* rwk,
-    ...
-```
+## Install
 
-4. Reload apparmor:
+One command bootstraps everything:
 
-```sudo systemctl restart apparmor```
-
-#### Libvirt / qemu config
-
-1. If it does not already exist, create the VM.
-
-2. List SCSI devices to get the ID of any CD, DVD or Bluray drives. These will be identified as an sr[0-9] drive, shown below as sr0 and sr1.
-
-```
-$ lsscsi
-[0:0:0:0]    disk    ATA      WDC WDS120G2G0A- 0000  /dev/sda
-[1:0:0:0]    cd/dvd  HL-DT-ST BDDVDRW CH12LS28 1.00  /dev/sr0
-[2:0:0:0]    disk    ATA      KINGSTON SHFS37A BBF2  /dev/sdb
-[3:0:0:0]    cd/dvd  PLDS     DVD+-RW DH-16ABS PD11  /dev/sr1
+```bash
+curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/install.sh | bash
 ```
 
-3. On the host, edit the VM's config.
+Prefer to read the script first, or want a TTY for the prompts? Use either of:
 
-```$ sudo virsh edit <VM NAME>```
+```bash
+# Download, read, run
+curl -fsSLo install.sh https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/install.sh
+less install.sh && bash install.sh
 
-4. Add a section for a SCSI controller and a new hostdev device. These need to be within the <devices> tags - the file will re-generate with your changes afterwards anyway.
-
-- The below may exist already. If not, add it.
-
-```
-  <controller type='scsi' index='0' model='virtio-scsi'>
-     <address type='pci' domain='0x0000' bus='0x00' slot='0x0c' function='0x0'/>
-  </controller>
+# Or run with a real TTY attached
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/install.sh)"
 ```
 
-- Following the above, add a new <hostdev> section for each drive. The adapter name needs to reflect the drive ID as provided from lssci.
-sr0 will be scsi_host1
-sr1 will be scsi_host3
-- Each hostdev entry must have a unique ID otherwise the VM won't load. In the below example sr1 is assigned unit ID of '1'.
+Useful flags (`install.sh --help` lists them all):
 
-```
-  <hostdev mode='subsystem' type='scsi' managed='no'>
-    <source>
-      <adapter name='scsi_host1'/>
-      <address bus='0' target='0' unit='0'/>
-    </source>
-    <readonly/>
-    <address type='drive' controller='0' bus='0' target='0' unit='0'/>
-  </hostdev>
-  <hostdev mode='subsystem' type='scsi' managed='no'>
-    <source>
-      <adapter name='scsi_host3'/>
-      <address bus='0' target='0' unit='0'/>
-    </source>
-    <readonly/>
-    <address type='drive' controller='0' bus='0' target='0' unit='1'/>
-  </hostdev>
-```
+| Flag | Effect |
+|---|---|
+| `--prefix <path>` | Install somewhere other than `~/arm` (e.g. `/srv/arm`, `/mnt/tank/arm`). |
+| `--start` | Run `docker compose up -d` at the end instead of just printing the command. |
+| `--rotate-ca` | Regenerate the internal CA **and every leaf cert** (you'll need to re-trust it on every device — only for suspected key compromise). |
 
-- Save and exit the editor.
+The installer is **idempotent** — rerun it any time you attach a new drive or
+upgrade across a major version. It preserves your `.env` secrets and your CA,
+and only *adds* service blocks for newly-detected drives.
 
-5. Boot the VM. Once loaded confirm with lssci that the drives have passed correctly.
+## What the installer creates
 
-```
-lsscsi
-[0:0:0:0]    cd/dvd  HL-DT-ST BDDVDRW CH12LS28 1.00  /dev/sr0
-[0:0:0:1]    cd/dvd  PLDS     DVD+-RW DH-16ABS PD11  /dev/sr1
+Everything lands under the prefix (`~/arm` by default). You never clone the repo
+and nothing compiles on the host — the stack is entirely image-based.
+
+```text
+~/arm/
+├── .env                     # generated secrets + tunables (mode 0600)
+├── docker-compose.yml       # generated; one arm-ripper-srN block per drive
+├── docker-compose.gpu.yml   # GPU transcoding overlay (opt-in)
+├── certs/                   # internal CA + per-service TLS leaf certs
+├── db/                      # Postgres data
+├── raw/                     # intermediate rip output
+├── media/                   # finished, Plex/Jellyfin-friendly library
+└── logs/                    # per-service JSONL logs
 ```
 
-## ARM Configuration
+In order, the installer:
 
-Once setup, ARM operates will operate with no changes to the default configuration. However, to get the most of ARM review the configuration files and modify to suit the media being ripped. See ARM [Configuration](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Configuring-ARM) for more information.
+1. **Checks prerequisites** (above) and fails fast with a clear message.
+2. **Generates an internal CA** (`certs/arm-ca.{key,crt}`, EC P-384, 10-year).
+   The CA key stays on the host and is never mounted into a container.
+3. **Detects optical drives** by scanning `/dev/sr*`, pairing each with its
+   SCSI-generic node (`/dev/sg*` — MakeMKV needs both), and issues a TLS leaf
+   cert per drive plus leaves for the backend, UI, and database.
+4. **Seeds `.env`** with a random `POSTGRES_PASSWORD` and `ARM_SERVICE_TOKEN`,
+   your `PUID`/`PGID` (`id -u`/`id -g`), and the host's optical group GID
+   (`CDROM_GID`). Third-party API keys are left blank — you set those in the UI.
+5. **Generates `docker-compose.yml`** with one `arm-ripper-srN` service per
+   detected drive. With no drives detected the stack still installs (UI +
+   backend + transcoder); only the ripper services are omitted.
+6. **On a desktop host, disables auto-mount** for the ARM drive(s) only, by
+   writing a scoped udev rule (`/etc/udev/rules.d/99-arm-no-automount.rules`).
+   This is required so the ripper can eject after a rip — see
+   [Troubleshooting § Disc won't eject](Troubleshooting#disc-wont-eject-after-a-rip).
 
+## Start the stack
 
-## Additional Hardware Setup
+```bash
+cd ~/arm
+docker compose pull      # fetch the published images
+docker compose up -d
+```
 
-Ripping media with additional hardware configuration allows for faster transcoding and depending on the host system, should improve ripping times.
-Supported Hardware Acceleration:
-- Optional extras. None of these are required for ARM to run.
-  - For [Intel QuickSync Video support](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/intel-qsv) you need 6th Gen CPU (Skylake) or newer with QuickSync feature set
-  - For [AMD VCE support](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/amd-vce) you need RX400, 500, Vega/II, Navi series GPU or better
-  - For [NVIDIA NVENC support](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/nvidia) you need GeForce GTX Pascal (1050+) and RTX Turing (1650+, 2060+) series GPU or better
+Check that everything is healthy:
 
-**A small warning, using Intel QuickSync/AMD VCE/NVIDIA NVENC will decrease video quality, but it increases the speed of encoding significantly!**
+```bash
+docker compose ps
+docker compose logs -f arm-backend
+```
+
+> **Alpha note:** during early v3 development the published registry images may
+> not yet exist for every tag, and `docker compose pull` can 404. To run today,
+> build the images locally from a checkout — see
+> [Local development in the README](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/README.md#local-development).
+
+## First login
+
+On first boot the backend waits for Postgres, runs its database migrations, and
+seeds an `admin` account with a **default password of `admin`**:
+
+```text
+username: admin
+password: admin
+```
+
+These are also written to `logs/first-boot.log`:
+
+```bash
+docker exec armv3-backend cat /logs/first-boot.log
+```
+
+Open **`https://localhost:8081`** (or `https://<host-ip>:8081` from another
+device), log in as `admin` / `admin`, and you'll be **forced to set a new
+password immediately** — the rest of the API stays locked (HTTP 403) until you
+do.
+
+## Trust the certificate
+
+The stack serves HTTPS using its own internal CA, so the first visit shows a
+browser certificate warning. You can click through it, but to silence it for
+good — on every device on your LAN — import the CA once:
+
+- The CA file is `~/arm/certs/arm-ca.crt`.
+- Import it into your browser or OS trust store as a trusted **root**
+  certificate authority.
+
+This is a one-time action per device. The per-service leaf certs are
+regenerated whenever you rerun the installer, but they're all signed by this CA,
+so trusting the CA is enough — you never re-import after a leaf changes.
+
+## Your first rip
+
+1. **Configure metadata lookups (recommended).** In the UI, open **Settings**
+   and add a [TMDb](https://www.themoviedb.org/settings/api) and/or
+   [OMDb](https://www.omdbapi.com/apikey.aspx) API key so ARM can name your
+   discs. ARM also tries the community CRC64 database first (no key needed), and
+   audio CDs use MusicBrainz (no key needed). See [Configuration](Configuring-ARM).
+2. **Insert a disc.** The ripper polls the drive every couple of seconds — no
+   udev events needed — and a new job appears on the dashboard within a few
+   seconds of the drive spinning up.
+3. **Watch it work.** ARM identifies the disc, rips it with MakeMKV (video) or
+   abcde (audio CD), and streams live progress to the browser. Video then
+   transcodes with HandBrake into `~/arm/media/`.
+4. **Eject.** ARM ejects automatically when the rip finishes.
+
+If the disc isn't identified and you've set `block_on_miss` (the default), ARM
+pauses and asks you to confirm or search for the title before ripping. You can
+also start a rip by hand from **Jobs → Manual** when a disc is already in the
+tray.
+
+## Next steps
+
+- **[Configuration](Configuring-ARM)** — every `.env` tunable and UI setting.
+- **[Web UI](Web-UI)** — what each page does.
+- **[Hardware Transcoding](Hardware-Transcoding)** — turn on GPU transcoding.
+- **[MakeMKV](MakeMKV)** — supply a permanent key instead of the rotating beta.
+- **[Troubleshooting](Troubleshooting)** — when a disc isn't detected, won't
+  eject, or files land with the wrong owner.

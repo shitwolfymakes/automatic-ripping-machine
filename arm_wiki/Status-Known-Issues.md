@@ -1,26 +1,53 @@
 # Known Issues
 
-The folllowing is a list of known issues that can cause issues during use of ARM, with potential work arounds.
+Current limitations of ARM v3, with workarounds where they exist. For
+in-the-weeds debugging see [Troubleshooting](Troubleshooting); for what's planned
+see the [Roadmap](Status-Roadmap).
 
-## Ripping
+## v3 is in alpha
 
-* **Issue:** If the host running the container mid-job, any data that wasn't at rest is lost. Additionally, the job logic will be lest in a broken state and must be deleted.
-**Solution:** abandon the old job and start a new rip.
+v3 is under active development. Expect rough edges, breaking changes between
+versions, and incomplete docs.
 
-* **Issue:** Movies with a `/` in the name can break the rip.
-**Solution:** none at present
+- **Published images may not exist for every tag yet.** `docker compose pull`
+  can return 404 during the alpha. Build the images locally from a checkout —
+  see
+  [Local development in the README](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/README.md#local-development).
 
-* **Issue:** SQLite has a read / write limit, depending on ARM use the database can enter a state where ripping fails due to an inability to read or write data to the database. 
-**Solution:** planned for resolution in 3.x [Development Path](Status-Roadmap)
+## Platform limitations
 
-* **Issue:** Ubuntu kernel 5.15.134 is known to break ARM per #1353
-**Solution:** Upgrade host Ubuntu system to a later kernel
+- **Windows / macOS can't rip.** Docker Desktop can't pass an internal SATA
+  optical drive into its Linux VM. You can run the UI + transcoder as a
+  library-management frontend (over a WSL2-native path, a named volume, or an SMB
+  mount — **not** an NTFS `C:\...` bind mount, where file ownership is faked),
+  but ripping requires a Linux host.
+- **TrueNAS, Kubernetes/Helm, and Podman are not supported.** TrueNAS in
+  particular is explicitly out of scope — please don't file bugs against it.
+  Unraid and Synology run stock Docker and work.
 
-```bash
-Mar 25 16:55:30 ripperbox kernel: UDF-fs: error (device sr5): udf_fiiter_advance_blk: extent after position 2016 not allocated in directory (ino 269)
-Mar 25 16:55:30 ripperbox kernel: UDF-fs: error (device sr5): udf_verify_fi: directory (ino 269) has entry where CRC length (36) does not match entry length (240)
-```
+## Operational gotchas
 
-## User Iterface
+- **Desktop hosts need auto-mount disabled to eject.** On a host with a GNOME/
+  KDE/XFCE session, `udisks2`/`gvfs` grabs the disc and the ripper can't eject
+  after a rip. The installer writes a scoped udev rule to fix this; if you
+  installed manually or eject still fails, see
+  [Troubleshooting § Disc won't eject](Troubleshooting#disc-wont-eject-after-a-rip).
+- **No database schema rollback.** Alembic `downgrade` across versions isn't
+  supported — back up Postgres before upgrading if you want a safety net. See
+  [Upgrading](Upgrading).
+- **MakeMKV beta binary expiry.** MakeMKV beta binaries self-expire (~60 days),
+  which blocks Blu-ray/UHD reads (DVDs are unaffected) until upstream ships a new
+  beta and the ripper image is rebuilt. No registration key overrides this. See
+  [MakeMKV](MakeMKV).
 
-* Running in dark mode can cause some of the text and boxes to not display correctly
+## Not built yet
+
+- **Ripping from an `.iso` file** (vs a physical disc) is designed but not
+  implemented as a user-facing feature. ARM can produce an `.iso` *from* a disc
+  today. See [Roadmap](Status-Roadmap).
+
+---
+
+Found something not listed here? Search the
+[issue tracker](https://github.com/automatic-ripping-machine/automatic-ripping-machine/issues)
+and open a new issue if it's not already tracked.

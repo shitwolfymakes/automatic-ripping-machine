@@ -1,53 +1,67 @@
-## Overview
+# Automatic Ripping Machine (ARM) v3
 
-Insert an optical disc (Blu-ray, DVD, CD) and checks to see if it's audio, video (Movie or TV), or data, then rips it.
+Insert a Blu-ray, DVD, or CD and ARM identifies it, rips it, and (for video)
+transcodes it into a Plex/Jellyfin-friendly library — headless, driven from a
+web UI, one job per optical drive in parallel.
 
-See: https://b3n.org/automatic-ripping-machine for a more detailed breakdown of how the project started.
+This is the wiki for **ARM v3**, a greenfield rebuild. It shares nothing with
+the legacy v2 codebase: v3 is a multi-service Docker stack — a FastAPI backend,
+a Vue UI, Postgres, one ripper container per optical drive, and an ephemeral
+transcoder spawned per job. There are **no native (non-Docker) installs** in v3
+and **no `arm.yaml`** — you install with a one-line script and configure from
+the UI.
 
+> ARM v2 is frozen and preserved forever at the **`v2-final`** git tag. If you
+> are running a native/`apt` install or editing `arm.yaml`, you are on v2 — its
+> documentation lives in that tag's history, not here.
 
-## Supported Operating Systems
+## New here? Start with [Getting Started](Getting-Started)
 
-ARM is available as both a [Docker image](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/docker) as well as in a natively installed version. 
+The short version:
 
-### Docker image
+```bash
+curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/install.sh | bash
+cd ~/arm && docker compose up -d
+```
 
-Due to the nature of Docker, the container can be run on any platform that supports a Docker installation. Please refer to the [Docker documentation](https://docs.docker.com/engine/install/) for further information. The current main development effort is also going into the Docker container, for minimal issues in deployment and setup use the provided Docker image.
+Then open **`https://localhost:8081`** and log in as `admin` / `admin` (you'll
+be forced to set a real password immediately). The full walkthrough — prereqs,
+what the installer generates, trusting the TLS certificate, and your first rip —
+is in [Getting Started](Getting-Started).
 
-### Native installation
+## Requirements at a glance
 
-This is a small project with few maintainers. As such we do not have the time to support a large number of distributions, and systems are chosen for support by most common use. We officially support the following operating systems:
-| Operating System | Versions     |
-|------------------|--------------|
-| Ubuntu Desktop   | 20.04 |
+- A Linux host with **Docker Engine ≥ 24** and the **`docker compose` v2** plugin.
+- One or more optical drives passed through to the host (`/dev/sr*`).
+- Enough CPU/RAM for HandBrake transcoding, and disk for `raw` + `media`.
+  See [Getting Started § Hardware](Getting-Started#hardware).
 
-> [!WARNING]
-> Please keep in mind that the regular support of Ubuntu 20.04 is end-of-life in April 2025. Due to this we ***highly*** recommend running a Docker container instead and a native installation is discouraged.
-> Ubuntu 24.02 has had initial testing.
+Windows and macOS can run the UI + transcoder as a library frontend, but
+**cannot rip** — internal optical drives don't pass into the Docker VM. See
+[Status & Known Issues](Status-Known-Issues).
 
-Please note that if you open an issue to ask for help, if the OS you are using is not on this list you will be asked to reimage and try again or your issue will be closed.
+## What v3 does
 
-If you use an unsupported operating system and can't or don't want to reimage, that's okay! Please try our Docker image instead.
+- Detects disc insertion by polling the drive (no host udev rules required).
+- Identifies video discs against the ARM community DB (CRC64), then TMDb and
+  OMDb; identifies audio CDs via MusicBrainz.
+- Rips video with **MakeMKV** and audio CDs with **abcde**.
+- Transcodes video with **HandBrake**, optionally on an Intel/AMD/NVIDIA GPU.
+- Streams live job progress to the browser over WebSockets.
+- Notifies you on completion/failure through **Apprise** (Discord, Slack,
+  Telegram, Gotify, and many more).
 
+## Wiki map
 
-## Get Started
-[Getting Started](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Getting-Started) on your journey with ARM
+- **[Getting Started](Getting-Started)** — install and run your first rip.
+- **[Configuration](Configuring-ARM)** — the `.env` file and the UI Settings page.
+- **[Web UI](Web-UI)** — a tour of the dashboard, jobs, drives, sessions, and presets.
+- **[MakeMKV](MakeMKV)** — registration key handling and the beta-key rotation.
+- **[Hardware Transcoding](Hardware-Transcoding)** — enabling Intel QSV / AMD VAAPI / NVIDIA NVENC.
+- **[Upgrading](Upgrading)** and **[Uninstall](Uninstall)**.
+- **[Troubleshooting](Troubleshooting)** · **[FAQ](FAQ)** · **[Known Issues](Status-Known-Issues)**.
+- **[Roadmap](Status-Roadmap)** · **[Contributing](Contribute)** · **[Contributing to the Wiki](Contribute-Wiki)**.
 
-## Current Features
-
-- Detects insertion of disc using udev
-- Determines disc type...
-  - If video (Blu-ray or DVD)
-    - Retrieve title from disc or OMdb API to name the folder "movie title (year)" so that Plex or Emby can pick it up
-    - Determine if video is Movie or TV using OMDb API
-    - Rip using MakeMKV or HandBrake (can rip all features or main feature)
-    - Eject disc and queue up Handbrake transcoding when done
-    - Transcoding jobs are asynchronously batched from ripping
-    - Send notifications on updates via IFTTT, Pushbullet, Pushover, Discord, Slack, Telegram and many more!
-  - If audio (CD) - rip using abcde  (get discdata and album art from musicbrainz)
-  - If data (Blu-Ray, DVD, or CD) - make an ISO backup
-- Headless, designed to be run from a server
-- Ripping from multiple-optical drives in parallel
-- HTML UI to interact with ripping jobs, view logs, etc
-- Intel QuickSync support
-- NVIDIA NVENC support
-- AMD VCE support
+For the architecture and design rationale behind v3, read the in-repo docs
+starting at
+[`docs/arch/README.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/arch/README.md).

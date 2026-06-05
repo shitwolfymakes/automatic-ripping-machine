@@ -1,107 +1,81 @@
-# Frequently asked questions
+# FAQ
 
-## My arm wont start when i insert a disc ?
+## Is there a native (non-Docker) install?
 
-When a disc is inserted, udev rules should launch a script (scripts/arm_wrapper.sh) that will launch A.R.M.  Here are some basic troubleshooting steps:
-- Look for empty.log.  
-  - Everytime you eject the cdrom, an entry should be entered in empty.log like:
-  ```
-  [2018-08-05 11:39:45] INFO A.R.M: main.<module> Drive appears to be empty or is not ready.  Exiting A.R.M.
-  ```
-  - Empty.log should be in your logs directory as defined in your arm.yaml file.  If there is no empty.log file, or entries are not being entered when you eject the cdrom drive, then udev is not launching A.R.M correctly.  Check the instructions and make sure the symlink to 51-automedia.rules is set up right.  I've you've changed the link or the file contents you need to reload your udev rules with:
-  ```
-  sudo udevadm control --reload-rules 
-  ```
-- Make sure the user arm has write permission to the location you have set in your arm.yaml
-    You can test these permissions by inserting a disc and running (remember to replace sr0 with the name of your own device)
-	
-    `sudo -u arm /usr/bin/python3 /opt/arm/arm/ripper/main.py -d sr0`
+No. ARM v3 runs only as a Docker Compose stack. The legacy `apt`/native install
+belonged to v2, which is frozen at the `v2-final` tag. See
+[Getting Started](Getting-Started).
 
-- Check that  the arm_wrapper.sh is executable
-  try running `tail -f /var/log/syslog` before you insert a disc, then watch for
+## Can I upgrade my ARM v2 install to v3?
 
-  `sr0: Process '/opt/arm/scripts/arm_wrapper.sh sr0' failed with exit code 1`
+There's no in-place migration — v3 shares no code, database, or config with v2.
+Install v3 fresh; it can run side by side with v2 (containers/volumes are
+namespaced `armv3-*` vs `arm-*`). See [Upgrading](Upgrading).
 
-  If you see this in your logs it can mean arm_wrapper.sh isn't executable, you can fix this by running
-   
-  `sudo chmod +x /opt/arm/scripts/arm_wrapper.sh`
+## Do I need API keys?
 
-- Lastly is to check the output of `tail -f /var/log/syslog`
-  A.R.M may be starting, erroring out and then sending an email before it exits. Check the arm user email for any status messages. You can use the command line 'mail' command to read these. Its rudimentary but it will give any error messages stopping A.R.M from running.
+No, but they help. ARM tries the community CRC64 database first (no key), then
+TMDb and OMDb (keys improve naming hit rates a lot), and MusicBrainz for audio
+CDs (no key). Add TMDb/OMDb keys on the Settings page — see
+[Configuration](Configuring-ARM#metadata--identification).
 
-## Is there a way to disable HandBrake encoding, I just want to rip the whole feature leaving it a .mkv file.
+## Can I rip on Windows or macOS?
 
-You can either edit the arm.yaml manually with: `sudo nano /opt/arm/arm.yaml` or you can use the A.R.M settings page to update
+You can run the UI + transcoder as a library frontend, but you **cannot rip** —
+Docker Desktop can't pass an internal optical drive into its Linux VM. Ripping
+needs a Linux host. See [Known Issues](Status-Known-Issues).
 
-`SKIP_TRANSCODE: false`
+## How do I rip without HandBrake transcoding?
 
-Change false to true
+Apply a rip-only session/preset (e.g. the ISO-dump or a passthrough rip preset)
+instead of a transcoding session, or leave **Auto-transcode on idle** off and
+don't queue a transcode. The raw MakeMKV output lands in
+`~/arm/raw/<job-id>/`. See [Web UI § Sessions and presets](Web-UI#sessions-and-presets).
 
-`Save the changes to arm.yaml (Ctr + S  then Ctr + x) or pressing submit on the A.R.M settings page
+## Where do my files end up?
 
-## A.R.M won't eject the DVD until it finishes transcoding
+- **`~/arm/raw/<job-id>/`** — the intermediate MakeMKV/abcde output.
+- **`~/arm/media/`** — the finished, Plex/Jellyfin-friendly library after
+  transcoding.
 
-To enable stacking of DVD's there are a couple of settings that must be changed
- - `RIPMETHOD: "mkv"` and `MAINFEATURE: false`
- - Rip method being set to mkv tells arm to use MakeMKV to pull the contents to disk(the raw folder), by default arm will try to transcode straight from the disc
- - Main feature being turned off tells arm that it wants everthing from the disc and not just the main feature.
+## My disc didn't get identified — what now?
 
-The reason these aren't enabled by default is that Rip method being set to mkv can cause issues with blurays
+By default (**Block on identification miss** = on) ARM pauses and asks you to
+confirm or search for the title before ripping; resolve it from the job in the
+UI. Turn the setting off to rip immediately and sort identity out later. See
+[Configuration](Configuring-ARM#rip--transcode-behaviour).
 
-## I can't get Intel QuickSync to work
+## How do I get notified when a rip finishes?
 
-- To check if **Intel QuickSync** is enabled and is set up correctly you can run
-   ```
-    HandBrakeCLI --help | grep -A12 "Select video encoder"
-   ```
-  You should see some entries with
-  ```
-  qsv_265
-  qsv_264
-  ```
- If none of these are showing, you need to install Intel Media SDK [MediaSDK](https://github.com/Intel-Media-SDK/MediaSDK) and its requirements & install the correct driver for your graphics. **You also may need to recompile HandBrake from source depending on your distro**
+Enable notifications on the Settings page and add one or more Apprise URLs
+(Discord, Slack, Telegram, Gotify, e-mail, …). ARM notifies on rip and session
+completion/failure. See [Configuration § Notifications](Configuring-ARM#notifications).
 
-- If they are showing are you using the correct profile ? For QSV there are 2 built in profiles you can use 
+## Do I have to pay for MakeMKV?
 
-  - `H.265 QSV 2160p 4K`
-  - `H.265 QSV 1080p`
+Not while it's in beta — ARM uses the free monthly beta key automatically. You
+can supply a purchased permanent key via `MAKEMKV_KEY` to skip the monthly
+rotation. DVDs don't need a key at all; Blu-ray/UHD do. See [MakeMKV](MakeMKV).
 
-- You can use HandBrakeCLI -z to show all the profiles available
+## How do I turn on GPU transcoding?
 
-## I cant get AMD VCE to work
+Enable the GPU overlay (and, on NVIDIA, install the Container Toolkit). See
+[Hardware Transcoding](Hardware-Transcoding).
 
-- To check if **AMD VCE** is enabled and is set up correctly you can run
-   ```
-    HandBrakeCLI --help | grep -A12 "Select video encoder"
-   ```
-  You should see some entries with
-  ```
-  vce_h264
-  vce_h265
-  ```
- If none of these are showing, you need to install the amdgpu-pro drivers & amf-amdgpu-pro package. You will also need to install the Vulkan SDK. 
+## Can I rip from an `.iso` file instead of a disc?
 
-- If they are showing are you using the correct profile ? For VCE there is only 1 built in profiles you can use 
-  - `H.264 VCE 1080p`
+Not yet as a user feature — that's designed but not built. ARM *can* produce an
+`.iso` **from** a physical disc (the ISO-dump preset). See
+[Roadmap](Status-Roadmap).
 
-- Make sure you only install drivers for your own graphics card. Installing incorrect drivers can cause issues with AMD VCE (personally mesa-vulkan-drivers caused a headache, your own may vary)
+## How do I read the logs?
 
-- Did you compile HandBrakeCLI from source ? Currently, VCE in not enabled by default by any distro. To enable VCE you **MUST** Compile HandBrake from source with the `--enable-vce` flag set. You can see an example of the code [HERE](https://github.com/1337-server/automatic-ripping-machine/blob/v2.2_dev_ubuntu/scripts/installers/ubuntu-quicksync.sh)
+`docker compose logs <service>` from `~/arm`, or browse `~/arm/logs/`. Set
+`ARM_LOG_LEVEL=debug` in `.env` first for detail. More in
+[Troubleshooting](Troubleshooting).
 
+## How do I back up my install?
 
-## I cant get NVIDIA NVENC to work
- - I have no idea, and I can't test.
- - Consider installing the latest driver from Nvidia and checking for certain your
- - Have you checked our Nvidia notes [here](nvidia)
-
-## Other problems
-- Check A.R.M log files 
-  - The default location is /home/arm/logs/ (unless this is changed in your arm.yaml file) and is named after the dvd. These are very verbose.  You can filter them a little by piping the log through grep.  Something like 
-  ```
-  cat <logname> | grep ARM:
-  ```  
-    This will filter out the MakeMKV and HandBrake entries and only output the A.R.M log entries.
-  - You can change the verbosity in the arm.yaml file.  DEBUG will give you more information about what A.R.M is trying to do.  Note: please run a rip in DEBUG mode if you want to post to an issue for assistance.  
-  - Ideally, if you are going to post a log for help, please delete the log file, and re-run the disc in DEBUG mode.  This ensures we get the most information possible and don't have to parse the file for multiple rips.
-
-If you need any help feel free to open an issue.  Please see the above note about posting a log.
+In priority order: `certs/arm-ca.key` (unique, unrecoverable), a Postgres dump
+(`docker exec armv3-db pg_dump -U arm arm`), `.env`, and your `media/` library.
+See [Uninstall](Uninstall) and [Upgrading](Upgrading).
