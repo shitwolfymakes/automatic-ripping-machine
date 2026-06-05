@@ -32,6 +32,12 @@ class ArmServerClient:
         self._http = http
 
     async def lookup_by_crc64(self, crc64: str) -> MetadataResult:
+        # 1337server is keyed on the plain 16-hex CRC64 (`format(crc, "016x")`,
+        # the form ARM v2's original `pydvdid` produced). pydvdid-m stringifies
+        # as "<high8>|<low8>"; the ripper already strips the pipe at the source
+        # (disc_probe), but normalise here too so a stray separator from any
+        # caller can't silently miss every disc on format alone.
+        crc64 = crc64.replace("|", "")
         try:
             r = await self._http.get(
                 _BASE_URL,

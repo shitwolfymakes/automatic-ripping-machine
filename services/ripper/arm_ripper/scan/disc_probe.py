@@ -70,4 +70,11 @@ def _compute_crc(device_path: str) -> str | None:
     except Exception as e:  # noqa: BLE001 — pydvdid / pycdlib raise a few flavors
         logger.info("pydvdid compute failed device=%s: %s", device_path, e)
         return None
-    return str(crc) if crc is not None else None
+    if crc is None:
+        return None
+    # pydvdid-m's CRC64.__str__ formats as "<high8>|<low8>" (e.g.
+    # "79df7b12|8b27d001"), but 1337server is keyed on ARM v2's original-pydvdid
+    # form `format(crc, "016x")` — the identical bytes with no separator. Strip
+    # the pipe so the stored fingerprint and the lookup both match the DB; a
+    # piped value misses every disc on format alone.
+    return str(crc).replace("|", "")

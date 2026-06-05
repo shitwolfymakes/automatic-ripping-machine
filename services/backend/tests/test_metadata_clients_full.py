@@ -333,3 +333,16 @@ async def test_arm_server_hit_unparseable_year(http_client) -> None:  # type: ig
     )
     result = await ArmServerClient(http_client).lookup_by_crc64("c1")
     assert result.year is None
+
+
+@respx.mock
+async def test_arm_server_strips_pipe_from_crc64(http_client) -> None:  # type: ignore[no-untyped-def]
+    # pydvdid-m stringifies the CRC64 as "<high8>|<low8>"; 1337server is keyed
+    # on the plain 16-hex form, so the pipe must be stripped before the query.
+    route = respx.get(_ARM).mock(
+        return_value=httpx.Response(200, json={"success": True, "results": {"0": {"title": "Sintel", "year": 2010}}})
+    )
+    await ArmServerClient(http_client).lookup_by_crc64("79df7b12|8b27d001")
+    sent = str(route.calls.last.request.url)
+    assert "crc64=79df7b128b27d001" in sent
+    assert "%7C" not in sent and "|" not in sent
