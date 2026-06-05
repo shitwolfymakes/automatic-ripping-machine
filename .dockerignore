@@ -1,4 +1,4 @@
-# Docker build-context excludes for v3/.
+# Docker build-context excludes for the repo root.
 #
 # Every v3 service builds with `context: .` and `dockerfile: services/<svc>/Dockerfile`
 # (see docker-compose.yml), so this is the single .dockerignore that governs all four

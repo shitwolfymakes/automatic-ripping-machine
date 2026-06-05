@@ -11,7 +11,7 @@ that closes Phase 15.
 - Linux host with Docker ≥ 24, an optical drive, and the disc you're
   testing in the drive.
 - Either a fresh `~/arm/` install (preferred — exercises the installer
-  too) or a working v3 dev stack at `v3/`.
+  too) or a working dev stack at the repo root.
 
 ## One-time host prep
 
@@ -39,7 +39,7 @@ in-progress real install.
 ```bash
 TEST=/tmp/arm-smoke
 rm -rf "$TEST"
-bash v3/install.sh --prefix "$TEST" --start
+bash install.sh --prefix "$TEST" --start
 
 # Wait for backend healthy. First boot logs the admin password to a
 # file (in case the terminal scrollback is lost):
@@ -51,7 +51,6 @@ docker exec armv3-backend cat /logs/first-boot.log
 ## Run the test (dev stack path)
 
 ```bash
-cd v3
 docker compose up -d
 docker compose logs -f arm-ripper-sr0 &        # watch ripper events
 ```
@@ -61,7 +60,7 @@ docker compose logs -f arm-ripper-sr0 &        # watch ripper events
 For hosts without a Blu-ray/DVD drive, or for fixture-driven CI-adjacent
 runs, the ripper accepts an `ARM_MANUAL_TRIGGER_ISO` env var that bypasses
 the poll loop and runs scan → identify → rip exactly once against an
-`.iso` file. [v3/devtools/iso-smoke.sh](../../devtools/iso-smoke.sh)
+`.iso` file. [devtools/iso-smoke.sh](../../devtools/iso-smoke.sh)
 orchestrates the full flow against the
 [matrix256-corpus](https://github.com/shitwolfymakes/matrix256-corpus)
 Sintel ISO:

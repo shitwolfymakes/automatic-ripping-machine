@@ -51,7 +51,7 @@ services:
       ARM_TRANSCODE_IMAGE: ${ARM_TRANSCODE_IMAGE:-arm-transcode:dev}
       # Default to the same host paths the bind mounts below resolve to —
       # `${PWD}` is the directory `docker compose` was invoked from, which
-      # for this project's docs is always `v3/`. Override in `.env` only if
+      # for this project is always the repo root. Override in `.env` only if
       # you've moved the data out of the repo tree.
       ARM_HOST_RAW_PATH: ${ARM_HOST_RAW_PATH:-${PWD}/raw}
       ARM_HOST_MEDIA_PATH: ${ARM_HOST_MEDIA_PATH:-${PWD}/media}

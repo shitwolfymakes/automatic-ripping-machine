@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     # Optional .env override for the OMDB key. When set, takes precedence over
     # config.omdb_api_key on every identify call — useful in dev where the
-    # secret lives in v3/.env and the Config row stays empty.
+    # secret lives in .env and the Config row stays empty.
     OMDB_API_KEY: str | None = None
 
     # Comma-separated list of `Origin` header values the WS endpoint accepts

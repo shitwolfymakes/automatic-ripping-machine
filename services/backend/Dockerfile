@@ -42,7 +42,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
-# Copy workspace root + packages + the backend service (context = v3/).
+# Copy workspace root + packages + the backend service (context = repo root).
 # Source must land before `uv sync` because hatchling validates each workspace
 # package's force-include (e.g. arm_backend/py.typed) at install time.
 COPY pyproject.toml /app/pyproject.toml

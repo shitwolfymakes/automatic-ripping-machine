@@ -6,7 +6,7 @@ The ripper container builds MakeMKV from the upstream signed source tarballs in 
 
 `update_key.sh` runs once before every rip (see [When the beta key rotates](#when-the-beta-key-rotates) below) and picks one of two paths each time:
 
-1. **Operator-supplied key** — set `MAKEMKV_KEY=T-…` in the ripper service environment (typically `v3/.env`). Any value MakeMKV accepts: a purchased perma-key, a monthly beta you grabbed yourself, whatever — the script writes it into `~/.MakeMKV/settings.conf`, idempotently.
+1. **Operator-supplied key** — set `MAKEMKV_KEY=T-…` in the ripper service environment (typically `.env`). Any value MakeMKV accepts: a purchased perma-key, a monthly beta you grabbed yourself, whatever — the script writes it into `~/.MakeMKV/settings.conf`, idempotently.
 2. **Scraped monthly beta key** — leave `MAKEMKV_KEY` unset. The script scrapes the current month's beta from the public MakeMKV forum thread (`https://forum.makemkv.com/forum/viewtopic.php?f=5&t=1053`) and writes that. This is the same approach v2 has shipped for years; no MakeMKV terms are violated as long as the beta key is openly published there. The scrape is brittle (the forum sits behind Cloudflare and rate-limits / 525s under load); operators hitting that should switch to path 1.
 
 The key path is `/home/arm/.MakeMKV/settings.conf` inside the container. The Dockerfile pre-creates the directory and chowns it to UID 1000; the shared entrypoint chowns again on `PUID` changes.

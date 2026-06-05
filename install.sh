@@ -8,11 +8,11 @@
 # for ARM-managed drives.
 #
 # Usage:
-#   curl -fsSL .../v3/install.sh | bash
-#   bash v3/install.sh                       # local checkout, default prefix
-#   bash v3/install.sh --prefix /srv/arm     # custom prefix
-#   bash v3/install.sh --start               # also `docker compose up -d`
-#   bash v3/install.sh --rotate-ca           # regen CA + every leaf
+#   curl -fsSL .../install.sh | bash
+#   bash install.sh                       # local checkout, default prefix
+#   bash install.sh --prefix /srv/arm     # custom prefix
+#   bash install.sh --start               # also `docker compose up -d`
+#   bash install.sh --rotate-ca           # regen CA + every leaf
 #
 # Advanced (used by setup-dev.sh and unattended installs):
 #   --certs-only        Only run cert generation; skip env/compose/udev.
@@ -20,7 +20,7 @@
 #   --no-compose        Skip docker-compose.yml generation.
 #   --no-udev           Skip host udev rule.
 #
-# See v3/docs/arch/06-deployment.md for the full design.
+# See docs/arch/06-deployment.md for the full design.
 
 set -euo pipefail
 
@@ -582,10 +582,10 @@ build_udev_rule_content() {
     [[ ${#rule_lines[@]} -eq 0 ]] && return 1
 
     cat <<HEADER
-# Managed by v3/install.sh — do not edit by hand.
+# Managed by install.sh — do not edit by hand.
 # Disables host auto-mount for ARM-managed optical drives so the ripper
 # container can eject after a rip. See:
-#   v3/docs/arch/06-deployment.md#host-side-auto-mount-must-be-disabled
+#   docs/arch/06-deployment.md#host-side-auto-mount-must-be-disabled
 HEADER
     printf '%s\n' "${rule_lines[@]}"
 }
@@ -653,7 +653,7 @@ toolkit — see .env for the install commands).
 
 Heads-up: $ARM_IMAGE_TAG_DEFAULT is a pre-release tag. Until Phase 14 (CI
 + image release) lands, 'docker compose pull' may 404. To run today, build
-images locally from a v3/ checkout and tag them — see v3/README.md.
+images locally from a local checkout and tag them — see README.md.
 
 EOF
 }

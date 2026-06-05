@@ -13,7 +13,7 @@ favour of this document once the Backend tiers diverged from it.
 ## Principles
 
 1. **Tests run with one command, zero infrastructure.** `uv run pytest`
-   from `v3/` — no Docker, no Postgres, no drives, no network. A
+   from the repo root — no Docker, no Postgres, no drives, no network. A
    contributor clones, syncs, and runs the suite in seconds. CI does
    exactly the same thing. The moment the suite needs a sidecar to pass,
    it stops being run.
@@ -96,7 +96,7 @@ than by taxing the whole suite.
 ## Coverage policy
 
 - **100% statements on the Backend; branch coverage measured.** Config in
-  `v3/pyproject.toml [tool.coverage]`, `branch = true`.
+  `pyproject.toml [tool.coverage]`, `branch = true`.
 - **CI measures, it does not gate.** `coverage run -m pytest` +
   `coverage report` run in the `test-python` job. There is no `fail_under`
   — a deliberate choice (a regression *ratchet* below the achieved level
@@ -197,4 +197,4 @@ These cost real debugging time; they are load-bearing, not trivia.
 See also: [05-cross-cutting.md](05-cross-cutting.md) (the other cross-
 cutting concerns; testing was consolidated out of it into this document),
 [08-v2-isolation-and-cutover.md](08-v2-isolation-and-cutover.md) (why v3
-tests live entirely under `v3/`).
+tests were kept under `v3/` during development).

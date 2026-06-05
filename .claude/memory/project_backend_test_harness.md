@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-The v3 backend has **two** test tiers under `v3/services/backend/tests/`:
+The v3 backend has **two** test tiers under `services/backend/tests/`:
 
 1. **Fake-session per-router tests** (`test_*_router.py`, ~0.3s each): build a
    one-router `FastAPI()`, override `get_session` with `tests._fakes.FakeSession`
@@ -19,7 +19,7 @@ The v3 backend has **two** test tiers under `v3/services/backend/tests/`:
 
 Goal: drive backend coverage toward 100%. Coverage is measured in CI
 (`coverage run -m pytest` + `coverage report`) but **not gated** yet — no
-`fail_under` in `v3/pyproject.toml` `[tool.coverage]`; ratchet it up later.
+`fail_under` in `pyproject.toml` `[tool.coverage]`; ratchet it up later.
 
 **Non-obvious gotchas (cost real debugging time):**
 

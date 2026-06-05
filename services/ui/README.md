@@ -26,7 +26,7 @@ src/
 ## Local development
 
 ```sh
-cd v3/services/ui
+cd services/ui
 npm install
 npm run dev
 # Vite serves http://localhost:5173 and proxies /api + /ws to https://localhost:8443
@@ -84,7 +84,7 @@ npm run format:check   # report Prettier diffs without writing
 ```
 
 Pre-commit runs both on staged UI files (see [.pre-commit-config.yaml](../../.pre-commit-config.yaml)).
-First-time setup needs `npm install --prefix v3/services/ui` so the hook
+First-time setup needs `npm install --prefix services/ui` so the hook
 can find the binaries.
 
 ## Browser cert warning

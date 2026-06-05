@@ -205,7 +205,7 @@ async def _rip_optical(
         We attribute disc-level progress to the first eligible track —
         the WS payload requires a track_id, but the UI's rips store
         keys live progress by `job_id` and only ever displays a single
-        bar per disc (see [v3/services/ui/src/components/JobCard.vue]),
+        bar per disc (see [services/ui/src/components/JobCard.vue]),
         so the choice of track_id is purely a wire-format detail. The
         bar fills smoothly 0→100 % across the whole rip via the PRGV
         `total/max` channel. Per-title attribution still happens

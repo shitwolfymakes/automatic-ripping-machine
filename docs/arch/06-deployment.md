@@ -49,14 +49,14 @@ v3 images are built fresh on upstream bases. They do **not** derive from the v2 
   - `arm-ripper` → `python:3.14-slim-bookworm`, PID 1 = `tini` → poller.
   - `arm-transcode` → `python:3.14-slim-bookworm`, PID 1 = `tini` → HandBrake wrapper.
 
-  `tini` is baked into the Python images rather than relying on `docker run --init`, since Unraid/Synology GUIs don't consistently surface that flag. It reaps the zombie `makemkvcon` / `HandBrakeCLI` / `ffmpeg` subprocesses the ripper and transcode containers fork. The UI spawns no grandchildren, so nginx as PID 1 is sufficient. The common PUID-remap + CA-merge + privilege-drop logic is a ~25-line `docker-entrypoint.sh` stored at `v3/services/_common/docker-entrypoint.sh` and `COPY`ed into each Python image — a shared script, deliberately not a shared base image (a shared base was the `arm-dependencies` coupling we left behind). Hardened vendor bases (Chainguard, distroless, Bitnami Secure, Red Hat UBI Micro) were considered and rejected: paid tiers introduce a gated supply chain at odds with anonymous `docker pull` distribution; free/distroless tiers have no shell, which breaks the runtime CA merge + PUID remap + `gosu` pattern; and the threat model (LAN-only, internal CA, no internet-exposed services) doesn't justify the tradeoff. Supply-chain hygiene is added on top of the minimal bases instead (see the next bullet).
+  `tini` is baked into the Python images rather than relying on `docker run --init`, since Unraid/Synology GUIs don't consistently surface that flag. It reaps the zombie `makemkvcon` / `HandBrakeCLI` / `ffmpeg` subprocesses the ripper and transcode containers fork. The UI spawns no grandchildren, so nginx as PID 1 is sufficient. The common PUID-remap + CA-merge + privilege-drop logic is a ~25-line `docker-entrypoint.sh` stored at `services/_common/docker-entrypoint.sh` and `COPY`ed into each Python image — a shared script, deliberately not a shared base image (a shared base was the `arm-dependencies` coupling we left behind). Hardened vendor bases (Chainguard, distroless, Bitnami Secure, Red Hat UBI Micro) were considered and rejected: paid tiers introduce a gated supply chain at odds with anonymous `docker pull` distribution; free/distroless tiers have no shell, which breaks the runtime CA merge + PUID remap + `gosu` pattern; and the threat model (LAN-only, internal CA, no internet-exposed services) doesn't justify the tradeoff. Supply-chain hygiene is added on top of the minimal bases instead (see the next bullet).
 - **Supply-chain hygiene.** Minimal bases without vendor hardening means hardening is done at publish time with free open-source tooling:
   - **Pin bases by digest.** Dockerfiles reference `FROM python:3.14-slim-bookworm@sha256:...`, not floating tags. Renovate (or Dependabot) opens a PR when the upstream digest for the pinned tag changes.
   - **SBOM per image.** `syft` generates an SPDX SBOM at build time; `cosign attach sbom` publishes it alongside the image in the registry.
   - **Cosign-signed images.** Every published image is signed via Sigstore's keyless flow (OIDC from the GitHub Actions runner → short-lived Fulcio cert → Rekor transparency log). Users can verify with `cosign verify docker.io/automaticrippingmachine/arm-<service>:v3.x.y --certificate-identity=... --certificate-oidc-issuer=https://token.actions.githubusercontent.com`. No long-lived signing keys to manage.
   - **Weekly base rebuild.** A scheduled CI job rebuilds each image weekly on its current tag so Debian's security updates land without waiting for the next ARM release.
-- **Each service has its own Dockerfile under `v3/services/<service>/Dockerfile`.** Shared Python code (schemas, clients) lives in `v3/packages/arm_common/` and is installed into each image by the build, not mounted at runtime — there is no v2-style `PYTHONPATH=/opt/arm` shim.
-- **Nothing compiles on the host.** The installer (see [§ Install](#install)) only pulls pinned images from `docker.io/automaticrippingmachine/`. Contributors building locally use `docker compose -f v3/docker-compose.yml build`; end users never do.
+- **Each service has its own Dockerfile under `services/<service>/Dockerfile`.** Shared Python code (schemas, clients) lives in `packages/arm_common/` and is installed into each image by the build, not mounted at runtime — there is no v2-style `PYTHONPATH=/opt/arm` shim.
+- **Nothing compiles on the host.** The installer (see [§ Install](#install)) only pulls pinned images from `docker.io/automaticrippingmachine/`. Contributors building locally use `docker compose -f docker-compose.yml build`; end users never do.
 
 ## Compose topology
 
@@ -171,7 +171,7 @@ The pairing isn't lexicographic — `sr0` does **not** automatically pair with `
 ls /sys/class/block/sr0/device/scsi_generic/   # → e.g. "sg5"
 ```
 
-Phase 13's installer auto-detects this per drive and emits the right `devices:` entries. Until then, the dev compose file at [v3/docker-compose.yml](../../docker-compose.yml) hardcodes the pairing for one host — change it (or add more entries for multi-drive setups) before bringing the stack up on a different machine.
+Phase 13's installer auto-detects this per drive and emits the right `devices:` entries. Until then, the dev compose file at [docker-compose.yml](../../docker-compose.yml) hardcodes the pairing for one host — change it (or add more entries for multi-drive setups) before bringing the stack up on a different machine.
 
 ### Host-side auto-mount must be disabled
 
@@ -263,7 +263,7 @@ No `privileged: true` anywhere. If a ripper ever needs it for a weird host, we d
 A single command bootstraps the whole stack:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/v3/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/install.sh | bash
 ```
 
 (Or `bash -c "$(curl -fsSL ...)"` for users who want a TTY; `install.sh --prefix /srv/arm` to override the default path.)
