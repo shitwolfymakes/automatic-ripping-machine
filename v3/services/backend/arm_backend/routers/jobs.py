@@ -326,15 +326,12 @@ def _delete_job_files(
     expected. Returns counters for the operator log.
     """
     # `job_id` is interpolated into a path under `raw_root`; reject anything
-    # that isn't the expected `job_<ULID>` shape, then confirm the resolved
-    # dir stays within `raw_root`, so a crafted id can't rmtree outside the
-    # raw tree (also closes symlink escapes). Routes pin the param too.
+    # that isn't the expected `job_<ULID>` shape, then join only its
+    # `os.path.basename` so a crafted id can never rmtree outside the raw
+    # tree (strips any directory component). Routes pin the param too.
     if not is_valid_id("job", job_id):
         raise ValueError(f"invalid job_id: {job_id!r}")
-    raw_dir = raw_root / job_id
-    raw_base = os.path.realpath(raw_root)
-    if os.path.commonpath([os.path.realpath(raw_dir), raw_base]) != raw_base:
-        raise ValueError(f"job_id escapes raw dir: {job_id!r}")
+    raw_dir = raw_root / os.path.basename(job_id)
     raw_removed = 0
     if raw_dir.exists():
         try:

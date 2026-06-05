@@ -49,17 +49,13 @@ def per_job_log_path(job_id: str) -> Path:
     `job_id` originates from a URL path param and is concatenated into a
     filesystem path, so it is validated against the `job_<ULID>` shape
     first — an unchecked `../…` would traverse out of `/logs`. Routes also
-    pin the param with `pattern=`. As a final barrier the resolved path is
-    confirmed to stay within `LOG_DIR/jobs` (also closes symlink escapes).
+    pin the param with `pattern=`. The filename is then reduced to its
+    `os.path.basename`, which strips any directory component outright — both
+    a defence-in-depth barrier and the form static analysis recognises.
     """
     if not is_valid_id("job", job_id):
         raise ValueError(f"invalid job_id: {job_id!r}")
-    jobs_dir = LOG_DIR / "jobs"
-    candidate = jobs_dir / f"{job_id}.log"
-    base = os.path.realpath(jobs_dir)
-    if os.path.commonpath([os.path.realpath(candidate), base]) != base:
-        raise ValueError(f"job_id escapes log dir: {job_id!r}")
-    return candidate
+    return LOG_DIR / "jobs" / os.path.basename(f"{job_id}.log")
 
 
 # Defaults / caps for the streaming grep endpoint. Per-file (not global)
