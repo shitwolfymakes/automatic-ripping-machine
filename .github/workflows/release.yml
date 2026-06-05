@@ -3,7 +3,9 @@
 # Trigger: pushing a tag matching `v3.*` (e.g. v3.0.0, v3.0.0-RC1).
 # Per-service images publish to:
 #   docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-<service>:<tag>
-#   docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-<service>:latest  (only on stable tags)
+#
+# `:latest` is NOT set here — it tracks `main` HEAD and is owned by
+# publish-main.yml. A release is identified solely by its semver tag.
 #
 # Each image is:
 #   1. Built from services/<service>/Dockerfile (context = repo root).
@@ -74,13 +76,12 @@ jobs:
 
       - name: Compute image tags
         id: meta
-        # `latest` tag only for stable releases (no pre-release suffix).
+        # Only the semver tag itself — `:latest` is owned by publish-main.yml.
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}
           tags: |
             type=ref,event=tag
-            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
 
       - name: Build & push
         id: build

@@ -1,80 +1,43 @@
-# Weekly rebuild — repush the latest stable release against fresh
-# base layers so users pinned to the supported stable tag get CVE-patched
-# bits without us hand-cutting a new release every time Debian/Python ships
-# a security update. (The newest stable `v3.*` tag is the SECURITY.md support
-# target; `:latest` tracks main HEAD and is refreshed nightly by
-# publish-main.yml, so it is intentionally NOT touched here.)
+# Publish main — rolling `:latest` from the trunk.
 #
-# Trigger: weekly cron (Sundays 03:17 UTC — off-peak, off-hour to dodge
-# Docker Hub rate-limit windows). Also `workflow_dispatch` for manual rerun.
+# Mirrors the v2 cadence: every push to `main` republishes `:latest`, and a
+# nightly cron rebuilds it from fresh base layers (CVE-patched bits without
+# hand-cutting a release). Per-service images publish to:
+#   docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-<service>:latest
+#   docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-<service>:main-<sha>
 #
-# Strategy:
-#   1. Find the most recent stable `v3.*` tag (excludes pre-releases like -alpha-1).
-#   2. Check that tag out.
-#   3. Rebuild every service Dockerfile from scratch (no Docker layer cache —
-#      that's the whole point: pull fresh base + apt indices).
-#   4. Push to the SAME tag only.
-#   5. Re-sign + re-attest SBOM. Sigstore accepts multiple sigs per image.
+# `:latest` therefore tracks `main` HEAD — bleeding edge, NOT a support target
+# (see SECURITY.md: only the newest stable `v3.*` tag is supported). Tagged
+# releases are published separately by release.yml under their semver tag, and
+# weekly-rebuild.yml keeps the newest stable tag CVE-fresh.
 #
-# If no stable v3.* tag exists yet, the workflow no-ops cleanly.
-name: Weekly rebuild
+# Each image is built, pushed by digest, cosign keyless-signed, and SBOM-
+# attested — same supply-chain treatment as release.yml.
+name: Publish main
 
 on:
+  push:
+    branches: [main]
+  # Nightly rebuild from fresh base layers (03:41 UTC — off-peak, offset from
+  # weekly-rebuild's 03:17 so they don't collide on Sundays).
   schedule:
-    - cron: '17 3 * * 0'
+    - cron: '41 3 * * *'
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Override: rebuild this exact tag instead of latest stable'
-        required: false
-        default: ''
 
 permissions:
   contents: read
-  id-token: write
-  packages: write
+  id-token: write     # required for cosign keyless signing (OIDC)
+  packages: write     # in case GHCR is added later; harmless on Docker Hub
 
 concurrency:
-  group: ${{ github.workflow }}
-  cancel-in-progress: false
+  # Newer trunk pushes supersede in-flight ones — `:latest` should reflect the
+  # freshest commit. Scheduled and push runs share refs/heads/main here.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  resolve-tag:
-    name: resolve target tag
-    runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.find.outputs.tag }}
-      skip: ${{ steps.find.outputs.skip }}
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-      - name: Resolve target tag
-        id: find
-        env:
-          OVERRIDE: ${{ inputs.tag }}
-        run: |
-          if [[ -n "$OVERRIDE" ]]; then
-            tag="$OVERRIDE"
-          else
-            # Newest stable v3 tag (no pre-release suffix).
-            tag="$(git tag --list 'v3.*' --sort=-v:refname | grep -v -- '-' | head -n1 || true)"
-          fi
-          if [[ -z "$tag" ]]; then
-            echo "::warning::No stable v3.* tag found — nothing to rebuild."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "tag=" >> "$GITHUB_OUTPUT"
-          else
-            echo "Resolved target tag: $tag"
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          fi
-
-  rebuild:
-    name: rebuild (${{ matrix.service }})
-    needs: resolve-tag
-    if: needs.resolve-tag.outputs.skip != 'true'
+  publish:
+    name: publish (${{ matrix.service }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -82,8 +45,6 @@ jobs:
         service: [backend, ripper, transcode, ui]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: ${{ needs.resolve-tag.outputs.tag }}
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
@@ -113,28 +74,32 @@ jobs:
         with:
           images: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}
           tags: |
-            type=raw,value=${{ needs.resolve-tag.outputs.tag }}
+            type=raw,value=latest
+            type=sha,prefix=main-,format=short
 
-      # Crucially: NO cache-from. Weekly rebuild's whole job is to ignore
-      # the cache and pull fresh base layers + apt indices.
-      - name: Build & push (no cache)
+      # Nightly cron rebuilds without cache to pull fresh base + apt indices;
+      # ordinary trunk pushes reuse the gha cache for speed.
+      - name: Build & push
         id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: services/${{ matrix.service }}/Dockerfile
           push: true
-          no-cache: true
+          no-cache: ${{ github.event_name == 'schedule' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           provenance: true
-          sbom: false
+          sbom: false                          # generated separately via syft below
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
       - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
         with:
           cosign-release: 'v2.4.1'
 
       - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        id: sbom
         with:
           image: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}@${{ steps.build.outputs.digest }}
           format: spdx-json
