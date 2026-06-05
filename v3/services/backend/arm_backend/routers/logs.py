@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import zipfile
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -48,11 +49,17 @@ def per_job_log_path(job_id: str) -> Path:
     `job_id` originates from a URL path param and is concatenated into a
     filesystem path, so it is validated against the `job_<ULID>` shape
     first — an unchecked `../…` would traverse out of `/logs`. Routes also
-    pin the param with `pattern=`, making this a defence-in-depth guard.
+    pin the param with `pattern=`. As a final barrier the resolved path is
+    confirmed to stay within `LOG_DIR/jobs` (also closes symlink escapes).
     """
     if not is_valid_id("job", job_id):
         raise ValueError(f"invalid job_id: {job_id!r}")
-    return LOG_DIR / "jobs" / f"{job_id}.log"
+    jobs_dir = LOG_DIR / "jobs"
+    candidate = jobs_dir / f"{job_id}.log"
+    base = os.path.realpath(jobs_dir)
+    if os.path.commonpath([os.path.realpath(candidate), base]) != base:
+        raise ValueError(f"job_id escapes log dir: {job_id!r}")
+    return candidate
 
 
 # Defaults / caps for the streaming grep endpoint. Per-file (not global)
