@@ -40,6 +40,7 @@ load_nvm() {
 require uv      "install: curl -LsSf https://astral.sh/uv/install.sh | sh"
 require docker  "install: https://docs.docker.com/engine/install/"
 require openssl "openssl should be present on any linux system"
+require lsscsi  "drive enumeration needs lsscsi: 'apt-get install lsscsi' (Debian/Ubuntu), 'dnf install lsscsi' (Fedora), 'pacman -S lsscsi' (Arch)"
 
 # nvm users: pull Node onto PATH (and pin it to .nvmrc) before the checks below.
 load_nvm
@@ -79,6 +80,169 @@ else
         --no-compose \
         --no-udev
 fi
+
+# docker-compose.yml is generated per host (gitignored, like .env): bootstrap it
+# from the committed docker-compose.yml.example template, then splice one
+# arm-ripper-srN service per optical drive into its GENERATED region (between the
+# `>>>/<<< arm-ripper services` sentinels). Static services (db/backend/ui/
+# transcode) live in the template above the sentinels; only the ripper blocks
+# below them are machine-written.
+#
+# `lsscsi -g` is the reliable source for the /dev/srN ↔ /dev/sgM pairing:
+# MakeMKV enumerates drives via SCSI-generic ioctls, and that node is NOT
+# lexicographically tied to the block device (sr0 may pair with sg2, sr1 with
+# sg6) — so we read the pairing straight out of lsscsi's last two columns.
+COMPOSE_FILE_PATH="${ROOT_DIR}/docker-compose.yml"
+COMPOSE_TEMPLATE_PATH="${ROOT_DIR}/docker-compose.yml.example"
+RIPPER_BEGIN_MARK="# >>> arm-ripper services"
+
+DRIVES_SR=()   # bare drive numbers, e.g. (0 1)
+DRIVES_SG=()   # matching sg node names, index-aligned, e.g. (sg2 sg6)
+
+detect_optical_drives() {
+    DRIVES_SR=()
+    DRIVES_SG=()
+    local line srdev sgdev
+    while IFS= read -r line; do
+        [[ -z "${line}" ]] && continue
+        srdev="${line%% *}"   # /dev/srN
+        sgdev="${line##* }"   # /dev/sgM
+        DRIVES_SR+=("${srdev#/dev/sr}")
+        DRIVES_SG+=("${sgdev#/dev/}")
+    done < <(
+        lsscsi -g 2>/dev/null | awk '
+            $2 == "cd/dvd" {
+                blk = ""; gen = ""
+                for (i = 1; i <= NF; i++) {
+                    if ($i ~ /^\/dev\/sr[0-9]+$/)      blk = $i
+                    else if ($i ~ /^\/dev\/sg[0-9]+$/) gen = $i
+                }
+                if (blk != "" && gen != "") print blk, gen
+            }' | sort -V || true
+    )
+}
+
+emit_ripper_block() {
+    local n="$1" sg="$2"
+    cat <<EOF
+
+  arm-ripper-sr${n}:
+    build:
+      context: .
+      dockerfile: services/ripper/Dockerfile
+    container_name: armv3-ripper-sr${n}
+    hostname: arm-ripper-sr${n}
+    restart: unless-stopped
+    depends_on:
+      - arm-backend
+    devices:
+      - "/dev/sr${n}:/dev/sr${n}"
+      # MakeMKV reads the disc via SCSI-generic ioctls, not the block device.
+      # /dev/${sg} is the sg node paired with /dev/sr${n} by \`lsscsi -g\` (NOT
+      # lexicographically). Re-run devtools/setup-dev.sh if the pairing moves.
+      - "/dev/${sg}:/dev/${sg}"
+    # Unprivileged: MakeMKV (SCSI generic) + the pydvdid CRC64 off the block
+    # device (PyCdlib) both need only \`cdrom\` group membership. No mount, so
+    # no CAP_SYS_ADMIN and no AppArmor exception.
+    group_add:
+      - "\${CDROM_GID:-44}"
+    environment:
+      ARM_DRIVE_DEV: /dev/sr${n}
+      ARM_BACKEND_URL: https://arm-backend:8443
+      ARM_SERVICE_TOKEN: \${ARM_SERVICE_TOKEN}
+      ARM_LOG_LEVEL: \${ARM_LOG_LEVEL:-info}
+      PUID: \${PUID:-1000}
+      PGID: \${PGID:-1000}
+      CDROM_GID: \${CDROM_GID:-44}
+    volumes:
+      - ./raw:/raw
+      - ./logs:/logs
+      - ./certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
+      - ./certs/arm-ripper-sr${n}.crt:/etc/ssl/arm/tls.crt:ro
+      - ./certs/arm-ripper-sr${n}.key:/etc/ssl/arm/tls.key:ro
+EOF
+}
+
+# A drive attached after the initial cert bootstrap (when the certs/ dir
+# already existed, so the block above was skipped) won't have a leaf cert.
+# install.sh --certs-only regenerates every leaf, including the new drive.
+ensure_ripper_certs() {
+    local i n missing=0
+    for i in "${!DRIVES_SR[@]}"; do
+        n="${DRIVES_SR[$i]}"
+        if [[ ! -f "${ROOT_DIR}/certs/arm-ripper-sr${n}.crt" \
+           || ! -f "${ROOT_DIR}/certs/arm-ripper-sr${n}.key" ]]; then
+            missing=1
+        fi
+    done
+    if [[ ${missing} -eq 1 ]]; then
+        echo "==> a detected drive is missing its leaf cert — regenerating via install.sh --certs-only"
+        bash "${ROOT_DIR}/install.sh" \
+            --prefix "${ROOT_DIR}" --certs-only --no-env --no-compose --no-udev
+    fi
+}
+
+generate_ripper_services() {
+    # Bootstrap the gitignored dev compose from the committed template the first
+    # time (same copy-if-missing semantics as .env from .env.example). Existing
+    # files are left alone so local tweaks survive; delete docker-compose.yml and
+    # re-run to refresh the static services from the template.
+    if [[ ! -f "${COMPOSE_FILE_PATH}" ]]; then
+        if [[ ! -f "${COMPOSE_TEMPLATE_PATH}" ]]; then
+            echo "ERROR: ${COMPOSE_TEMPLATE_PATH} missing; cannot create docker-compose.yml." >&2
+            exit 1
+        fi
+        echo "==> creating docker-compose.yml from docker-compose.yml.example"
+        cp "${COMPOSE_TEMPLATE_PATH}" "${COMPOSE_FILE_PATH}"
+    fi
+
+    if ! grep -qF "${RIPPER_BEGIN_MARK}" "${COMPOSE_FILE_PATH}"; then
+        echo "ERROR: ${COMPOSE_FILE_PATH} lacks the '${RIPPER_BEGIN_MARK}' sentinel; cannot splice rippers." >&2
+        exit 1
+    fi
+
+    detect_optical_drives
+
+    local blocks_file
+    blocks_file="$(mktemp)"
+    {
+        echo "  # Re-run \`bash devtools/setup-dev.sh\` after attaching or removing a drive —"
+        echo "  # this region is regenerated from \`lsscsi -g\`, so don't hand-edit it."
+    } >> "${blocks_file}"
+
+    if [[ ${#DRIVES_SR[@]} -eq 0 ]]; then
+        echo "==> no optical drives found via lsscsi — ripper region left empty"
+        echo "  # (no optical drives detected on this host)" >> "${blocks_file}"
+    else
+        ensure_ripper_certs
+        local i summary=""
+        for i in "${!DRIVES_SR[@]}"; do
+            summary+="sr${DRIVES_SR[$i]}↔${DRIVES_SG[$i]} "
+            emit_ripper_block "${DRIVES_SR[$i]}" "${DRIVES_SG[$i]}" >> "${blocks_file}"
+        done
+        echo "==> detected ${#DRIVES_SR[@]} optical drive(s): ${summary}"
+    fi
+
+    local tmp
+    tmp="$(mktemp)"
+    awk -v blockfile="${blocks_file}" '
+        index($0, "# >>> arm-ripper services") {
+            print
+            while ((getline line < blockfile) > 0) print line
+            close(blockfile)
+            skip = 1
+            next
+        }
+        index($0, "# <<< arm-ripper services") { skip = 0; print; next }
+        skip { next }
+        { print }
+    ' "${COMPOSE_FILE_PATH}" > "${tmp}"
+    mv "${tmp}" "${COMPOSE_FILE_PATH}"
+    rm -f "${blocks_file}"
+    echo "==> wrote ${#DRIVES_SR[@]} ripper service(s) into ${COMPOSE_FILE_PATH}"
+}
+
+generate_ripper_services
 
 ENV_FILE="${ROOT_DIR}/.env"
 if [[ -f "${ENV_FILE}" ]]; then

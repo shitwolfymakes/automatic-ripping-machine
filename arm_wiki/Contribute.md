@@ -33,8 +33,10 @@ bash devtools/setup-dev.sh        # uv sync, generate certs, seed .env (idempote
 docker compose up -d --build      # build images from your working tree and start
 ```
 
-The dev `docker-compose.yml` keeps `build:` blocks (vs the installer's
-`image:` references) so you iterate against your own code. The UI comes up at
+The dev compose that `devtools/setup-dev.sh` generates from
+`docker-compose.yml.example` (into a gitignored `docker-compose.yml`, one
+`arm-ripper-srN` per drive) keeps `build:` blocks (vs the installer's `image:`
+references) so you iterate against your own code. The UI comes up at
 <https://localhost:8081>.
 
 ## Development model: trunk-based

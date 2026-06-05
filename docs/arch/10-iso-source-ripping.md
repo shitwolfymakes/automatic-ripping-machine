@@ -178,7 +178,7 @@ Recommend **(A)** now, revisit **(B)** if ephemeral drive rows become noise.
 - **Cancel**: force-stop the labeled container, mirroring transcode cancel.
 
 The Docker socket is **already** mounted into the backend for transcode spawns
-([docker-compose.yml:68-70](../../docker-compose.yml#L68-L70)) — no new privilege
+([docker-compose.yml.example:68-70](../../docker-compose.yml.example#L68-L70)) — no new privilege
 is taken on; the root-equivalent risk is already accepted in
 [06-deployment.md](06-deployment.md).
 

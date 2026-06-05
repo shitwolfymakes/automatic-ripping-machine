@@ -12,11 +12,12 @@ bash devtools/setup-dev.sh
 
 What it does (idempotent — safe to re-run):
 
-1. Checks that `uv`, `docker`, `docker compose`, and `openssl` are available.
+1. Checks that `uv`, `docker`, `docker compose`, `openssl`, and `lsscsi` are available (`lsscsi` is used to enumerate optical drives — `apt-get install lsscsi` / `dnf install lsscsi` / `pacman -S lsscsi`).
 2. Runs `uv sync` to create `.venv/` with all workspace members.
 3. Calls `bash install.sh --certs-only --no-env --no-compose --no-udev` if `certs/arm-ca.crt` isn't already present.
 4. Creates `.env` from `.env.example` if missing, filling in a random `POSTGRES_PASSWORD` and `ARM_SERVICE_TOKEN`, and detecting `PUID`/`PGID`/`CDROM_GID` from the host. An existing `.env` is left untouched.
-5. On a Linux host with optical drives, writes a per-drive host udev rule (`/etc/udev/rules.d/99-arm-no-automount.rules`, via `sudo`) so the desktop's `udisks2`/`gvfs` doesn't grab the disc and block the ripper's post-rip `eject`. Skipped if `udevadm` isn't on PATH or no drive is present. See [../docs/arch/06-deployment.md § Host-side auto-mount](../docs/arch/06-deployment.md#host-side-auto-mount-must-be-disabled).
+5. Creates `docker-compose.yml` from the committed `docker-compose.yml.example` template if it doesn't exist yet — the generated file is **gitignored**, same split as `.env` / `.env.example`, so you never have to discard host-specific changes. Then writes one `arm-ripper-srN` service per optical drive into its generated region (between the `>>>/<<< arm-ripper services` sentinels), pairing each `/dev/srN` with its matching `/dev/sgM` node via `lsscsi -g`. A drive attached after the initial cert bootstrap gets its leaf cert regenerated automatically. The ripper region is rewritten on every run (a no-op when your drives are unchanged); re-run after attaching/removing a drive. To pull static-service updates from the template, delete `docker-compose.yml` and re-run.
+6. On a Linux host with optical drives, writes a per-drive host udev rule (`/etc/udev/rules.d/99-arm-no-automount.rules`, via `sudo`) so the desktop's `udisks2`/`gvfs` doesn't grab the disc and block the ripper's post-rip `eject`. Skipped if `udevadm` isn't on PATH or no drive is present. See [../docs/arch/06-deployment.md § Host-side auto-mount](../docs/arch/06-deployment.md#host-side-auto-mount-must-be-disabled).
 
 After it finishes: `docker compose up -d --build`.
 

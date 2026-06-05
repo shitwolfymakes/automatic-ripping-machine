@@ -169,7 +169,7 @@ The pairing isn't lexicographic — `sr0` does **not** automatically pair with `
 ls /sys/class/block/sr0/device/scsi_generic/   # → e.g. "sg5"
 ```
 
-Phase 13's installer auto-detects this per drive and emits the right `devices:` entries. Until then, the dev compose file at [docker-compose.yml](../../docker-compose.yml) hardcodes the pairing for one host — change it (or add more entries for multi-drive setups) before bringing the stack up on a different machine.
+The installer ([install.sh](../../install.sh)) auto-detects this per drive and emits the right `devices:` entries. For contributors running from a checkout, [devtools/setup-dev.sh](../../devtools/setup-dev.sh) does the same: it copies the committed [docker-compose.yml.example](../../docker-compose.yml.example) template to a gitignored `docker-compose.yml` (same split as `.env` / `.env.example`) and splices the ripper services into its generated region (between the `>>>/<<< arm-ripper services` sentinels), using `lsscsi -g` to read the `/dev/srN ↔ /dev/sgM` pairing — one `arm-ripper-srN` service per drive. The region is regenerated on every run (idempotent — a no-op when your drives are unchanged); re-run `setup-dev.sh` after attaching or removing a drive rather than hand-editing the pairing.
 
 ### Host-side auto-mount must be disabled
 
