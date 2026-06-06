@@ -37,6 +37,36 @@ load_nvm() {
     set -eu
 }
 
+# Phase 7b: enumerate GPUs host-side so the GPU-free backend can fill the `gpus`
+# table from ARM_GPUS instead of probing hardware. Prints a compact JSON array
+# (empty `[]` if none). Mirrors services/backend/arm_backend/gpu_probe.py and the
+# detect_gpus in install.sh.
+detect_gpus() {
+    local entries=() node vendor_file vid vendor idx
+    if [[ -d /dev/dri ]]; then
+        for node in /dev/dri/renderD*; do
+            [[ -e "${node}" ]] || continue
+            vendor_file="/sys/class/drm/$(basename "${node}")/device/vendor"
+            [[ -r "${vendor_file}" ]] || continue
+            vid="$(tr -d '[:space:]' < "${vendor_file}" | tr '[:upper:]' '[:lower:]')"
+            case "${vid}" in
+                0x8086) vendor=qsv ;;
+                0x1002) vendor=vaapi ;;
+                *)      continue ;;
+            esac
+            entries+=("{\"vendor\":\"${vendor}\",\"device_path\":\"${node}\",\"encoder_kinds\":[\"h264\",\"h265\"]}")
+        done
+    fi
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        while IFS= read -r idx; do
+            [[ -n "${idx}" ]] || continue
+            entries+=("{\"vendor\":\"nvenc\",\"device_path\":\"nvidia://${idx}\",\"encoder_kinds\":[\"h264\",\"h265\"]}")
+        done < <(nvidia-smi -L 2>/dev/null | sed -nE 's/^GPU ([0-9]+):.*/\1/p')
+    fi
+    local IFS=,
+    printf '[%s]' "${entries[*]:-}"
+}
+
 require uv      "install: curl -LsSf https://astral.sh/uv/install.sh | sh"
 require docker  "install: https://docs.docker.com/engine/install/"
 require openssl "openssl should be present on any linux system"
@@ -246,7 +276,7 @@ generate_ripper_services
 
 ENV_FILE="${ROOT_DIR}/.env"
 if [[ -f "${ENV_FILE}" ]]; then
-    echo "==> ${ENV_FILE} exists — leaving untouched"
+    echo "==> ${ENV_FILE} exists — preserving secrets, refreshing ARM_GPUS"
 else
     echo "==> creating .env from .env.example with generated secrets"
     pg_pass="$(openssl rand -hex 24)"
@@ -264,6 +294,26 @@ else
         -e "s|^CDROM_GID=.*|CDROM_GID=${cdrom_gid}|" \
         "${ROOT_DIR}/.env.example" > "${ENV_FILE}"
     chmod 600 "${ENV_FILE}"
+fi
+
+# Refresh ARM_GPUS from host detection in both cases (it's derived, not a secret).
+ARM_GPUS_VALUE="$(detect_gpus)"
+if grep -q '^ARM_GPUS=' "${ENV_FILE}"; then
+    sed -i "s|^ARM_GPUS=.*|ARM_GPUS=${ARM_GPUS_VALUE}|" "${ENV_FILE}"
+else
+    printf 'ARM_GPUS=%s\n' "${ARM_GPUS_VALUE}" >> "${ENV_FILE}"
+fi
+echo "==> detected GPU(s) for ARM_GPUS: ${ARM_GPUS_VALUE}"
+
+# Build the fat HW transcode image if it isn't present. The dispatcher spawns it
+# ephemerally per task; it lives behind the `build-transcode` profile so a plain
+# `docker compose up` never starts it. Without this build the dispatcher tries to
+# pull `arm-transcode:dev` and every transcode fails on a fresh dev box.
+if docker image inspect arm-transcode:dev >/dev/null 2>&1; then
+    echo "==> arm-transcode:dev present — skipping transcode image build"
+else
+    echo "==> building arm-transcode:dev (one-time; fat multi-vendor HW image)"
+    ( cd "${ROOT_DIR}" && docker compose --profile build-transcode build arm-transcode-builder )
 fi
 
 # Prevent the host's udisks2/gvfs from auto-mounting optical drives ARM

@@ -58,6 +58,10 @@ services:
       ARM_HOST_LOGS_PATH: ${ARM_HOST_LOGS_PATH:-${PWD}/logs}
       ARM_HOST_CERTS_PATH: ${ARM_HOST_CERTS_PATH:-${PWD}/certs}
       ARM_DOCKER_NETWORK: ${ARM_DOCKER_NETWORK:-armv3_default}
+      # Phase 7b — GPUs detected host-side by setup-dev.sh into ARM_GPUS. The
+      # GPU-free backend reads this to fill the gpus table; the dispatcher
+      # injects device access into each ephemeral transcoder. [] => CPU-only.
+      ARM_GPUS: ${ARM_GPUS:-[]}
     volumes:
       - ./logs:/logs
       - ./media:/media

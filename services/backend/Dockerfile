@@ -8,34 +8,17 @@ ENV DEBIAN_FRONTEND=noninteractive \
     UV_COMPILE_BYTECODE=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv
 
-# Phase 7b: install `nvidia-smi` so the GPU probe can enumerate NVENC
-# devices without depending on the NVIDIA Container Toolkit's auto-mount
-# path. The Debian package was historically `nvidia-utils-535` from
-# bookworm-backports; the current packaging carries the binary directly
-# in the `nvidia-smi` package (versioned to whichever NVIDIA driver
-# branch is in backports at the time of build). `nvidia-smi` will refuse
-# to talk to a driver whose major version doesn't match — the probe
-# handles that gracefully (non-zero exit → empty NVENC list → CPU
-# fallback).
-#
-# `python:3.14-slim-bookworm` ships its base sources in deb822 format
-# with an explicit `Signed-By:` directive. Adding plain legacy lines
-# without one triggers `E: Conflicting values set for option Signed-By`
-# because apt sees the same suite referenced twice with mismatched
-# signing config. Carry the `[signed-by=…]` option through on the
-# legacy lines we write here.
-RUN echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware' \
-        > /etc/apt/sources.list.d/non-free.list \
-    && echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://deb.debian.org/debian bookworm-backports main contrib non-free non-free-firmware' \
-        > /etc/apt/sources.list.d/backports.list \
-    && apt-get update \
+# The backend no longer touches GPUs: GPU detection happens host-side at
+# install time and arrives via the `ARM_GPUS` env (see arm_backend/gpu_probe.py),
+# so no `nvidia-smi` / NVIDIA userspace is baked in here. The only container that
+# needs GPU access is the ephemeral transcoder, which the dispatcher grants
+# per-task.
+RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         tini \
         gosu \
         curl \
         ca-certificates \
-    && apt-get install -y --no-install-recommends -t bookworm-backports \
-        nvidia-smi \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/

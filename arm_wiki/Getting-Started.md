@@ -100,7 +100,6 @@ and nothing compiles on the host — the stack is entirely image-based.
 ~/arm/
 ├── .env                     # generated secrets + tunables (mode 0600)
 ├── docker-compose.yml       # generated; one arm-ripper-srN block per drive
-├── docker-compose.gpu.yml   # GPU transcoding overlay (opt-in)
 ├── certs/                   # internal CA + per-service TLS leaf certs
 ├── db/                      # Postgres data
 ├── raw/                     # intermediate rip output

@@ -286,6 +286,37 @@ detect_drives() {
 
 # ----------------------------------------------------------------- env seed
 
+# Phase 7b: enumerate GPUs host-side so the GPU-free backend can fill the `gpus`
+# table from ARM_GPUS instead of probing hardware. Prints a compact JSON array on
+# stdout (empty `[]` if none). Mirrors services/backend/arm_backend/gpu_probe.py.
+detect_gpus() {
+    local entries=() node vendor_file vid vendor idx
+    # Intel (QSV, 0x8086) / AMD (VAAPI, 0x1002) via DRM render nodes.
+    if [[ -d /dev/dri ]]; then
+        for node in /dev/dri/renderD*; do
+            [[ -e "$node" ]] || continue
+            vendor_file="/sys/class/drm/$(basename "$node")/device/vendor"
+            [[ -r "$vendor_file" ]] || continue
+            vid="$(tr -d '[:space:]' < "$vendor_file" | tr '[:upper:]' '[:lower:]')"
+            case "$vid" in
+                0x8086) vendor=qsv ;;
+                0x1002) vendor=vaapi ;;
+                *)      continue ;;
+            esac
+            entries+=("{\"vendor\":\"${vendor}\",\"device_path\":\"${node}\",\"encoder_kinds\":[\"h264\",\"h265\"]}")
+        done
+    fi
+    # NVIDIA (NVENC) via nvidia-smi — one entry per listed GPU index.
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        while IFS= read -r idx; do
+            [[ -n "$idx" ]] || continue
+            entries+=("{\"vendor\":\"nvenc\",\"device_path\":\"nvidia://${idx}\",\"encoder_kinds\":[\"h264\",\"h265\"]}")
+        done < <(nvidia-smi -L 2>/dev/null | sed -nE 's/^GPU ([0-9]+):.*/\1/p')
+    fi
+    local IFS=,
+    printf '[%s]' "${entries[*]:-}"
+}
+
 seed_env() {
     local env_file="$PREFIX/.env"
 
@@ -294,13 +325,22 @@ seed_env() {
     pgid="$(id -g)"
     cdrom_gid="$(stat -c '%g' /dev/sr0 2>/dev/null || echo 44)"
 
+    local arm_gpus
+    arm_gpus="$(detect_gpus)"
+
     if [[ -f "$env_file" ]]; then
-        log ".env exists; preserving secrets, re-deriving PUID/PGID/CDROM_GID"
+        log ".env exists; preserving secrets, re-deriving PUID/PGID/CDROM_GID/ARM_GPUS"
         sed -i \
             -e "s|^PUID=.*|PUID=${puid}|" \
             -e "s|^PGID=.*|PGID=${pgid}|" \
             -e "s|^CDROM_GID=.*|CDROM_GID=${cdrom_gid}|" \
             "$env_file"
+        if grep -q '^ARM_GPUS=' "$env_file"; then
+            sed -i "s|^ARM_GPUS=.*|ARM_GPUS=${arm_gpus}|" "$env_file"
+        else
+            printf 'ARM_GPUS=%s\n' "$arm_gpus" >> "$env_file"
+        fi
+        log "detected GPU(s): ${arm_gpus}"
         return 0
     fi
 
@@ -352,52 +392,62 @@ ARM_HOST_CERTS_PATH=\${PWD}/certs
 # Docker network the spawned transcoder joins so it can reach the backend.
 ARM_DOCKER_NETWORK=armv3_default
 
-# Phase 7b: GPU transcoding (optional).
-# Uncomment to load docker-compose.gpu.yml as an overlay automatically; the
-# base compose stays CPU-only otherwise. NVIDIA hosts also need
-# nvidia-container-toolkit installed (see .env.example for the apt commands).
-# COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
+# Phase 7b: GPUs detected host-side at install time (see detect_gpus in
+# install.sh). The GPU-free backend reads this to fill the gpus table; the
+# dispatcher injects the matching device access into each ephemeral transcoder.
+# Empty [] => CPU-only transcoding. Re-run install.sh after a GPU/driver change.
+# NVIDIA hosts also need nvidia-container-toolkit (install.sh offers to set it up).
+ARM_GPUS=${arm_gpus}
 EOF
     chmod 600 "$env_file"
 }
 
-# ---------------------------------------------------- CTK detection (advisory)
+# ---------------------------------------------- NVIDIA Container Toolkit setup
 
-check_nvidia_container_toolkit() {
-    # Warn (don't fail) when the host has an NVIDIA GPU but the
-    # nvidia-container-toolkit isn't registered with docker. Without the
-    # toolkit, `docker compose -f docker-compose.gpu.yml up` fails with
-    # "could not select device driver \"nvidia\"" — installable, but most
-    # users won't connect that error to "you need an extra package."
+ensure_nvidia_container_toolkit() {
+    # NVENC needs the host's nvidia-container-toolkit so the docker daemon can
+    # pass GPU device files into the ephemeral transcoder. On apt hosts we offer
+    # to install + register it; elsewhere we print the steps. CPU/VAAPI/QSV need
+    # nothing here. Idempotent — skips when already wired up.
 
     # Cheap host detection: lspci has been on every Linux desktop since the 90s.
     if ! command -v lspci >/dev/null 2>&1; then
         return 0
     fi
     if ! lspci 2>/dev/null | grep -qi 'nvidia'; then
-        return 0  # No NVIDIA hardware → CTK irrelevant.
+        return 0  # No NVIDIA hardware → toolkit irrelevant.
+    fi
+    if command -v nvidia-ctk >/dev/null 2>&1 && docker info 2>/dev/null | grep -q 'nvidia'; then
+        return 0  # Already installed and registered with docker.
     fi
 
-    if docker info 2>/dev/null | grep -q 'nvidia'; then
-        return 0  # `Runtimes:` line lists `nvidia` → CTK already wired up.
-    fi
-
-    warn "NVIDIA GPU detected but the docker 'nvidia' runtime isn't registered."
-    cat >&2 <<'CTK'
-    For NVENC transcoding you'll want nvidia-container-toolkit. Install:
-
-      curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
-          | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-      curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
-          | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
-          | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-      sudo apt update && sudo apt install -y nvidia-container-toolkit
-      sudo nvidia-ctk runtime configure --runtime=docker
-      sudo systemctl restart docker
-
-    Then uncomment COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml in
-    your .env. Skipping for now — CPU transcoding still works.
+    if ! command -v apt-get >/dev/null 2>&1; then
+        warn "NVIDIA GPU detected but nvidia-container-toolkit isn't set up (non-apt host)."
+        cat >&2 <<'CTK'
+    Install it for your distro, then re-run install.sh:
+      https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+    After install: sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker
+    Skipping for now — CPU transcoding still works.
 CTK
+        return 0
+    fi
+
+    log "NVIDIA GPU detected; nvidia-container-toolkit enables NVENC transcoding."
+    if ! confirm "Install nvidia-container-toolkit now (needs sudo)?"; then
+        warn "skipping nvidia-container-toolkit — NVENC stays off until it's installed. CPU transcoding still works."
+        return 0
+    fi
+
+    log "installing nvidia-container-toolkit (sudo)"
+    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+        | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+    curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+        | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+        | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list >/dev/null
+    sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+    sudo nvidia-ctk runtime configure --runtime=docker
+    sudo systemctl restart docker
+    log "nvidia-container-toolkit installed; docker 'nvidia' runtime registered"
 }
 
 # ---------------------------------------------------- compose generation
@@ -495,6 +545,7 @@ services:
       ARM_HOST_LOGS_PATH: \${ARM_HOST_LOGS_PATH}
       ARM_HOST_CERTS_PATH: \${ARM_HOST_CERTS_PATH}
       ARM_DOCKER_NETWORK: \${ARM_DOCKER_NETWORK:-armv3_default}
+      ARM_GPUS: \${ARM_GPUS:-[]}
     volumes:
       - ./raw:/raw
       - ./media:/media
@@ -522,38 +573,6 @@ EOF
     for i in "${!DRIVES_SR[@]}"; do
         emit_ripper_block "${DRIVES_SR[$i]}" "${DRIVES_SG[$i]}" >> "$out"
     done
-}
-
-generate_compose_gpu() {
-    local out="$PREFIX/docker-compose.gpu.yml"
-    log "generating $out (overlay; load with -f docker-compose.yml -f docker-compose.gpu.yml)"
-    cat > "$out" <<'EOF'
-# Generated by install.sh — GPU transcoding overlay.
-#
-# Run with:
-#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
-#
-# CPU-only host? Don't use this overlay. The base compose runs on CPU.
-#
-# Trim for your hardware:
-# - VAAPI/QSV-only host (no NVIDIA): strip `runtime: nvidia` and the entire
-#   `deploy:` block.
-# - NVIDIA-only host: strip the `devices:` line.
-# - Mixed host: leave everything; the probe handles each path independently.
-
-services:
-  arm-backend:
-    devices:
-      - /dev/dri:/dev/dri:ro
-    runtime: nvidia
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu, video]
-EOF
 }
 
 # ----------------------------------------------------------- host udev rule
@@ -647,9 +666,10 @@ Then open: https://localhost:8081
   (Import $PREFIX/certs/arm-ca.crt into your browser/OS trust store
    to silence the cert warning across every device on the LAN.)
 
-GPU host? Uncomment the COMPOSE_FILE line in $PREFIX/.env so the GPU
-overlay loads automatically (NVIDIA hosts also need nvidia-container-
-toolkit — see .env for the install commands).
+GPU host? GPUs are auto-detected into ARM_GPUS in $PREFIX/.env and the
+backend wires them to the transcoder automatically. Re-run install.sh after
+adding/removing a GPU or updating drivers. (NVIDIA hosts: install.sh offered
+to set up nvidia-container-toolkit above.)
 
 Heads-up: $ARM_IMAGE_TAG_DEFAULT is a pre-release tag. Until Phase 14 (CI
 + image release) lands, 'docker compose pull' may 404. To run today, build
@@ -662,7 +682,6 @@ EOF
 
 main() {
     check_prereqs
-    check_nvidia_container_toolkit
     ensure_prefix
 
     if [[ $ROTATE_CA -eq 1 ]]; then
@@ -690,8 +709,9 @@ main() {
         return 0
     fi
 
+    ensure_nvidia_container_toolkit
     [[ $NO_ENV -eq 0 ]]     && seed_env
-    [[ $NO_COMPOSE -eq 0 ]] && { generate_compose; generate_compose_gpu; }
+    [[ $NO_COMPOSE -eq 0 ]] && generate_compose
     [[ $NO_UDEV -eq 0 ]]    && ensure_udev_rule
 
     print_next_steps

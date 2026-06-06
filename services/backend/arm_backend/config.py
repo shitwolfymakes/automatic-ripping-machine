@@ -85,5 +85,13 @@ class Settings(BaseSettings):
     # `<project>_default`.
     ARM_DOCKER_NETWORK: str = "armv3_default"
 
+    # --- Phase 7b: GPU inventory --------------------------------------------
+    # JSON array of GPUs detected host-side at install time (install.sh /
+    # setup-dev.sh enumerate /dev/dri + nvidia-smi and write this). The backend
+    # parses it at lifespan startup to fill the `gpus` table — it does NOT probe
+    # hardware itself. Empty/absent => CPU-only transcoding. See gpu_probe.py
+    # for the schema. Re-run the installer after a GPU/driver change.
+    ARM_GPUS: str = ""
+
 
 settings = Settings()  # type: ignore[call-arg]  # fields loaded from env by pydantic-settings
