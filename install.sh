@@ -34,8 +34,18 @@ NO_ENV=0
 NO_COMPOSE=0
 NO_UDEV=0
 
-ARM_IMAGE_TAG_DEFAULT="v3.0.0-alpha-1"
 ARM_IMAGE_PREFIX_DEFAULT="docker.io/automaticrippingmachine"
+# GitHub repo whose latest *stable* (non-prerelease) release pins the image
+# versions. Override for a fork via --release-repo or ARM_RELEASE_REPO.
+ARM_RELEASE_REPO="${ARM_RELEASE_REPO:-automatic-ripping-machine/automatic-ripping-machine}"
+# This installer targets ARM v3. The resolved release tag must be on this major
+# line — guards against pinning the repo's latest *v2* stable (e.g. 2.x), whose
+# images don't exist under the v3 arm-<svc> names. Bump when v4 lands.
+ARM_EXPECTED_MAJOR="3"
+# Resolved at install time from GitHub (resolve_image_tag) on a fresh install,
+# or reused from an existing .env. No hardcoded fallback — a real install always
+# pins a real published tag (we hard-fail rather than ship a stale default).
+ARM_IMAGE_TAG_DEFAULT=""
 
 usage() {
     cat <<EOF
@@ -47,6 +57,10 @@ Options:
   --prefix <path>     Install prefix (default: ~/arm)
   --rotate-ca         Regenerate the internal CA + all leaves (with confirm).
   --start             Run 'docker compose up -d' after install.
+  --release-repo <owner/repo>
+                      GitHub repo to resolve the latest stable image tag from
+                      (default: automatic-ripping-machine/automatic-ripping-machine;
+                      also settable via ARM_RELEASE_REPO).
 
 Advanced (used by setup-dev.sh and unattended installs):
   --certs-only        Only run cert generation; skip env/compose/udev.
@@ -63,6 +77,8 @@ while [[ $# -gt 0 ]]; do
         --prefix=*)    PREFIX="${1#*=}"; shift ;;
         --rotate-ca)   ROTATE_CA=1; shift ;;
         --start)       START=1; shift ;;
+        --release-repo)   ARM_RELEASE_REPO="$2"; shift 2 ;;
+        --release-repo=*) ARM_RELEASE_REPO="${1#*=}"; shift ;;
         --certs-only)  CERTS_ONLY=1; shift ;;
         --no-env)      NO_ENV=1; shift ;;
         --no-compose)  NO_COMPOSE=1; shift ;;
@@ -100,6 +116,42 @@ confirm() {
         read -rp "$prompt [y/N] " reply
     fi
     [[ "$reply" =~ ^[yY]([eE][sS])?$ ]]
+}
+
+# Resolve the image tag that pins ALL service images (backend/ripper/ui +
+# the transcode image the dispatcher spawns). Reuse an existing pin from the
+# prefix's .env so re-runs don't silently upgrade and work offline; otherwise
+# fetch the latest *stable* (non-prerelease) release of ARM_RELEASE_REPO from
+# GitHub. Hard-fail if it can't be resolved — we never ship a stale default.
+resolve_image_tag() {
+    local existing
+    if [[ -f "$PREFIX/.env" ]]; then
+        existing="$(sed -nE 's/^ARM_IMAGE_TAG=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+        if [[ -n "$existing" ]]; then
+            log "reusing pinned image tag ${existing} from existing .env" >&2
+            printf '%s' "$existing"
+            return 0
+        fi
+    fi
+
+    require curl "install curl, or pre-set ARM_IMAGE_TAG in $PREFIX/.env"
+    local url="https://api.github.com/repos/${ARM_RELEASE_REPO}/releases/latest"
+    local body tag
+    # `releases/latest` returns the newest non-prerelease, non-draft release;
+    # 404 when the repo has none. `-f` makes curl fail (non-zero) on any non-2xx.
+    if ! body="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$url" 2>/dev/null)"; then
+        err "could not resolve a stable release tag from '${ARM_RELEASE_REPO}' (GitHub unreachable, rate-limited, or no stable release yet). Use --release-repo to point at the right repo, or pre-set ARM_IMAGE_TAG in $PREFIX/.env."
+    fi
+    tag="$(printf '%s' "$body" | grep -m1 '"tag_name"' | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
+    [[ -n "$tag" ]] || err "could not parse a tag_name from '${ARM_RELEASE_REPO}' latest release."
+    # Reject a tag off the expected major (e.g. the repo's latest v2 stable):
+    # its v3 arm-<svc> images don't exist, so pulling would 404. Tags look like
+    # `v3.0.0` or `3.0.0`; match the leading (optional-v) major.
+    if [[ ! "$tag" =~ ^v?${ARM_EXPECTED_MAJOR}\. ]]; then
+        err "latest stable release of '${ARM_RELEASE_REPO}' is ${tag}, not a v${ARM_EXPECTED_MAJOR} release. No v${ARM_EXPECTED_MAJOR} stable exists there yet — use --release-repo to point at a repo that has one, or pre-set ARM_IMAGE_TAG in $PREFIX/.env."
+    fi
+    log "pinned images to ${ARM_RELEASE_REPO}@${tag} (latest stable)" >&2
+    printf '%s' "$tag"
 }
 
 # -------------------------------------------------------------- prereq check
@@ -367,7 +419,9 @@ CDROM_GID=${cdrom_gid}
 
 ARM_LOG_LEVEL=info
 
-# Image registry + tag. Bump ARM_IMAGE_TAG to upgrade.
+# Image registry + tag. Pins EVERY service image, including the transcode
+# image the backend spawns (see ARM_TRANSCODE_IMAGE in docker-compose.yml,
+# which is derived from these). Bump ARM_IMAGE_TAG to upgrade the whole stack.
 ARM_IMAGE_PREFIX=${ARM_IMAGE_PREFIX_DEFAULT}
 ARM_IMAGE_TAG=${ARM_IMAGE_TAG_DEFAULT}
 
@@ -378,8 +432,10 @@ OMDB_API_KEY=
 ARM_ALLOWED_ORIGINS=https://localhost:8081
 
 # Phase 7: transcode dispatcher.
+# ARM_TRANSCODE_IMAGE is not set here on purpose — docker-compose.yml derives it
+# from ARM_IMAGE_PREFIX/ARM_IMAGE_TAG so it tracks the same version as the rest.
+# Set it explicitly only to override the transcode image independently.
 MAX_PARALLEL_TRANSCODES=1
-ARM_TRANSCODE_IMAGE=${ARM_IMAGE_PREFIX_DEFAULT}/arm-transcode:${ARM_IMAGE_TAG_DEFAULT}
 
 # Backend's host-side mount paths. The dispatcher passes these to the docker
 # daemon when spawning transcoder containers; \${PWD} resolves to the
@@ -539,7 +595,10 @@ services:
       PGID: \${PGID:-1000}
       MEDIA_ROOT: /media
       MAX_PARALLEL_TRANSCODES: \${MAX_PARALLEL_TRANSCODES:-1}
-      ARM_TRANSCODE_IMAGE: \${ARM_TRANSCODE_IMAGE:-${ARM_IMAGE_PREFIX_DEFAULT}/arm-transcode:${ARM_IMAGE_TAG_DEFAULT}}
+      # Derived from ARM_IMAGE_PREFIX/ARM_IMAGE_TAG exactly like the image: refs
+      # above, so it tracks the same version. ARM_TRANSCODE_IMAGE in .env (if set)
+      # still wins, for independent overrides.
+      ARM_TRANSCODE_IMAGE: \${ARM_TRANSCODE_IMAGE:-\${ARM_IMAGE_PREFIX:-${ARM_IMAGE_PREFIX_DEFAULT}}/arm-transcode:\${ARM_IMAGE_TAG:-${ARM_IMAGE_TAG_DEFAULT}}}
       ARM_HOST_RAW_PATH: \${ARM_HOST_RAW_PATH}
       ARM_HOST_MEDIA_PATH: \${ARM_HOST_MEDIA_PATH}
       ARM_HOST_LOGS_PATH: \${ARM_HOST_LOGS_PATH}
@@ -653,10 +712,11 @@ print_next_steps() {
 Prefix:   $PREFIX
 Drives:   ${#DRIVES_SR[@]} ripper service(s) configured
 Image:    $ARM_IMAGE_PREFIX_DEFAULT/arm-<svc>:$ARM_IMAGE_TAG_DEFAULT
+          (latest stable from $ARM_RELEASE_REPO; bump ARM_IMAGE_TAG in .env to change)
 
 Next:
   cd $PREFIX
-  docker compose pull         # NB: alpha/beta tags may not yet be published
+  docker compose pull
   docker compose up -d
 
 First-boot admin credentials (you'll be forced to change the password):
@@ -670,10 +730,6 @@ GPU host? GPUs are auto-detected into ARM_GPUS in $PREFIX/.env and the
 backend wires them to the transcoder automatically. Re-run install.sh after
 adding/removing a GPU or updating drivers. (NVIDIA hosts: install.sh offered
 to set up nvidia-container-toolkit above.)
-
-Heads-up: $ARM_IMAGE_TAG_DEFAULT is a pre-release tag. Until Phase 14 (CI
-+ image release) lands, 'docker compose pull' may 404. To run today, build
-images locally from a local checkout and tag them — see README.md.
 
 EOF
 }
@@ -707,6 +763,12 @@ main() {
     if [[ $CERTS_ONLY -eq 1 ]]; then
         log "certs-only mode; skipping env/compose/udev"
         return 0
+    fi
+
+    # Pin image versions before seeding env / generating compose (both bake the
+    # tag). Resolved from GitHub on a fresh install; reused from .env otherwise.
+    if [[ $NO_ENV -eq 0 || $NO_COMPOSE -eq 0 ]]; then
+        ARM_IMAGE_TAG_DEFAULT="$(resolve_image_tag)"
     fi
 
     ensure_nvidia_container_toolkit
