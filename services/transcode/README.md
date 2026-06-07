@@ -58,8 +58,9 @@ spawns it on demand. To build it locally:
 docker compose --profile build-transcode build arm-transcode-builder
 ```
 
-The dispatcher picks the image up by name (`arm-transcode:dev` by
-default, override via `ARM_TRANSCODE_IMAGE` in `.env`).
+The dispatcher picks the image up by name. In dev it's built locally and
+tagged `arm-transcode:latest` (never pulled); production overrides
+`ARM_TRANSCODE_IMAGE` with the versioned image pulled from the registry.
 
 ## Lifecycle (single task per container)
 

@@ -48,7 +48,7 @@ services:
       # interprets these, NOT the Backend container's filesystem).
       MEDIA_ROOT: /media
       MAX_PARALLEL_TRANSCODES: ${MAX_PARALLEL_TRANSCODES:-1}
-      ARM_TRANSCODE_IMAGE: ${ARM_TRANSCODE_IMAGE:-arm-transcode:dev}
+      ARM_TRANSCODE_IMAGE: ${ARM_TRANSCODE_IMAGE:-arm-transcode:latest}
       # Default to the same host paths the bind mounts below resolve to —
       # `${PWD}` is the directory `docker compose` was invoked from, which
       # for this project is always the repo root. Override in `.env` only if
@@ -82,7 +82,7 @@ services:
   #   docker compose --profile build-transcode build arm-transcode-builder
   arm-transcode-builder:
     profiles: ["build-transcode"]
-    image: ${ARM_TRANSCODE_IMAGE:-arm-transcode:dev}
+    image: ${ARM_TRANSCODE_IMAGE:-arm-transcode:latest}
     build:
       context: .
       dockerfile: services/transcode/Dockerfile

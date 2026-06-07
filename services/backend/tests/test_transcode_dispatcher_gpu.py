@@ -51,7 +51,7 @@ def _settings(**overrides: Any) -> Settings:
         "MAX_PARALLEL_TRANSCODES": 2,
         "ARM_TRANSCODE_STALE_THRESHOLD_SECONDS": 90,
         "ARM_TRANSCODE_MAX_ATTEMPTS": 3,
-        "ARM_TRANSCODE_IMAGE": "arm-transcode:dev",
+        "ARM_TRANSCODE_IMAGE": "arm-transcode:latest",
         "ARM_HOST_RAW_PATH": "/host/raw",
         "ARM_HOST_MEDIA_PATH": "/host/media",
         "ARM_HOST_LOGS_PATH": "/host/logs",

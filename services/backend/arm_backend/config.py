@@ -52,10 +52,11 @@ class Settings(BaseSettings):
     # = 'in_progress'` so the value survives Backend restarts.
     MAX_PARALLEL_TRANSCODES: int = 1
 
-    # The image name the dispatcher passes to docker. The dev compose file
-    # builds it via `docker compose build arm-transcode-builder`; production
-    # installs pull a tagged image.
-    ARM_TRANSCODE_IMAGE: str = "arm-transcode:dev"
+    # The image name the dispatcher passes to docker. Dev builds it locally and
+    # tags it `arm-transcode:latest` (docker compose build arm-transcode-builder);
+    # production overrides this with the versioned, pulled image. Compose always
+    # sets it, so this default only applies in tests.
+    ARM_TRANSCODE_IMAGE: str = "arm-transcode:latest"
 
     # Stale-claim sweep tunables. 90 s = 3× heartbeat interval (the
     # transcoder POSTs heartbeat every 30 s). After MAX_ATTEMPTS stale resets

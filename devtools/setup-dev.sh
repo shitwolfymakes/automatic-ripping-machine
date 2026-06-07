@@ -305,16 +305,13 @@ else
 fi
 echo "==> detected GPU(s) for ARM_GPUS: ${ARM_GPUS_VALUE}"
 
-# Build the fat HW transcode image if it isn't present. The dispatcher spawns it
-# ephemerally per task; it lives behind the `build-transcode` profile so a plain
-# `docker compose up` never starts it. Without this build the dispatcher tries to
-# pull `arm-transcode:dev` and every transcode fails on a fresh dev box.
-if docker image inspect arm-transcode:dev >/dev/null 2>&1; then
-    echo "==> arm-transcode:dev present — skipping transcode image build"
-else
-    echo "==> building arm-transcode:dev (one-time; fat multi-vendor HW image)"
-    ( cd "${ROOT_DIR}" && docker compose --profile build-transcode build arm-transcode-builder )
-fi
+# Build the fat HW transcode image locally (dev never pulls it). The dispatcher
+# spawns it ephemerally per task; it lives behind the `build-transcode` profile
+# so a plain `docker compose up` never starts it. Without this build the
+# dispatcher would try to pull `arm-transcode:latest` and every transcode fails
+# on a fresh dev box. Always rebuild so it tracks local source changes.
+echo "==> building arm-transcode:latest locally (fat multi-vendor HW image)"
+( cd "${ROOT_DIR}" && docker compose --profile build-transcode build arm-transcode-builder )
 
 # Prevent the host's udisks2/gvfs from auto-mounting optical drives ARM
 # wants to drive. Without this, post-rip `eject` from the ripper
