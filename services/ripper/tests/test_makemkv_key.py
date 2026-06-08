@@ -50,3 +50,32 @@ async def test_nonzero_exit_is_non_fatal(tmp_path, caplog):
     await refresh_makemkv_key(script)
 
     assert any("makemkv key refresh exited 3" in r.message for r in caplog.records)
+
+
+async def test_configured_key_injected_as_env(tmp_path):
+    """A configured key is exported to the script as MAKEMKV_KEY so its
+    env-var branch picks it up ahead of any host-set value."""
+    out = tmp_path / "seen_key"
+    script = _write_script(
+        tmp_path / "update_key.sh",
+        f'#!/usr/bin/env bash\necho "key=${{MAKEMKV_KEY:-unset}}" > {out}\n',
+    )
+
+    await refresh_makemkv_key(script, key="T-fromconfig")
+
+    assert out.read_text().strip() == "key=T-fromconfig"
+
+
+async def test_blank_key_does_not_shadow_env(tmp_path, monkeypatch):
+    """A blank/whitespace key is treated as unset so it doesn't override the
+    inherited env-var / scrape fallback."""
+    monkeypatch.delenv("MAKEMKV_KEY", raising=False)
+    out = tmp_path / "seen_key"
+    script = _write_script(
+        tmp_path / "update_key.sh",
+        f'#!/usr/bin/env bash\necho "key=${{MAKEMKV_KEY:-unset}}" > {out}\n',
+    )
+
+    await refresh_makemkv_key(script, key="   ")
+
+    assert out.read_text().strip() == "key=unset"

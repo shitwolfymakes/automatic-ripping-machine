@@ -16,6 +16,7 @@ async function reload() {
   form.value = {
     tmdb_api_key: cfg.value.tmdb_api_key,
     omdb_api_key: cfg.value.omdb_api_key,
+    makemkv_key: cfg.value.makemkv_key,
     musicbrainz_user_agent: cfg.value.musicbrainz_user_agent,
     auto_transcode_on_idle: cfg.value.auto_transcode_on_idle,
     auto_rip_on_insert: cfg.value.auto_rip_on_insert,
@@ -65,6 +66,18 @@ async function save() {
     <div class="field">
       <label>OMDB API key</label>
       <input v-model="form.omdb_api_key" />
+    </div>
+    <div class="field">
+      <label>MakeMKV key</label>
+      <input
+        v-model="form.makemkv_key"
+        data-testid="makemkv-key"
+        placeholder="T-… (perma-key or beta key)"
+      />
+      <p class="muted">
+        Leave blank to use the monthly free beta key (scraped automatically) or a
+        <code>MAKEMKV_KEY</code> env var. A key set here takes precedence.
+      </p>
     </div>
     <div class="field">
       <label>MusicBrainz user agent</label>

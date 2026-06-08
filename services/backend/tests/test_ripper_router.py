@@ -181,7 +181,18 @@ def test_get_config_returns_flag() -> None:
     with TestClient(_make_app(db)) as client:
         r = client.get("/api/ripper/config", headers=_SERVICE_AUTH)
     assert r.status_code == 200
-    assert r.json() == {"auto_rip_on_insert": True}
+    assert r.json() == {"auto_rip_on_insert": True, "makemkv_key": None}
+
+
+def test_get_config_includes_makemkv_key() -> None:
+    db = FakeSession()
+    cfg = _config()
+    cfg.makemkv_key = "T-abc123"
+    db.rows["config"] = [cfg]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/config", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["makemkv_key"] == "T-abc123"
 
 
 def test_get_config_missing_singleton_500() -> None:

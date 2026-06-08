@@ -9,13 +9,17 @@ directly.)
 ## How the key works
 
 Before each disc, the ripper runs a small script that ensures a key is in place,
-choosing one of two paths:
+choosing one of three paths, in precedence order:
 
-1. **You supply a key.** Set `MAKEMKV_KEY=T-…` in `~/arm/.env` (a purchased
-   permanent key, or a beta key you grabbed yourself). The script writes it into
-   the container's `~/.MakeMKV/settings.conf`. No forum traffic, no surprises —
-   **this is the recommended setup for anything beyond casual use.**
-2. **You leave it unset.** The script scrapes the *current month's free beta
+1. **You set it in the UI** *(recommended).* Open **Config → MakeMKV key** and
+   paste your key (a purchased permanent key, or a beta you grabbed yourself).
+   The ripper fetches it from the backend before each rip — no file editing, and
+   it survives a `docker compose down`/recreate. A key set here **overrides** the
+   `MAKEMKV_KEY` env var below, and you can change it without restarting anything.
+2. **You supply a key via env.** Set `MAKEMKV_KEY=T-…` in `~/arm/.env`. Used when
+   the UI key is blank. The script writes it into the container's
+   `~/.MakeMKV/settings.conf`.
+3. **You leave both unset.** The script scrapes the *current month's free beta
    key* from MakeMKV's public forum thread and uses that. This is the same
    approach ARM has shipped for years and is fine for DVDs, but the forum sits
    behind Cloudflare and rate-limits, so the scrape is brittle under load.
@@ -24,18 +28,19 @@ The free beta key rotates roughly monthly. Because the refresh runs per disc, a
 container left running across a rotation **self-heals on the next disc** — no
 restart needed.
 
-After setting a key, apply it and verify:
+After setting a key (whichever path), verify it landed:
 
 ```bash
-cd ~/arm && docker compose up -d
-docker compose exec arm-ripper-sr0 grep app_Key /home/arm/.MakeMKV/settings.conf
+cd ~/arm && docker compose exec arm-ripper-sr0 grep app_Key /home/arm/.MakeMKV/settings.conf
 ```
+
+(The UI path takes effect on the next rip; the env path needs `docker compose up -d`.)
 
 ## Buying a key
 
 While MakeMKV is in beta the free key works, but you can buy a permanent key to
 avoid the monthly rotation and the forum scrape: <https://www.makemkv.com/buy/>.
-Set it as `MAKEMKV_KEY` per path 1 above.
+Paste it into **Config → MakeMKV key** (path 1 above), or set it as `MAKEMKV_KEY`.
 
 ## DVD vs Blu-ray — where the key actually matters
 

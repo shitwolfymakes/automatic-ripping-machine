@@ -36,7 +36,7 @@ never touch; the ones you might are flagged **editable** below.
 | `ARM_HOST_*_PATH` | Host paths (`raw`/`media`/`logs`/`certs`) the backend hands to the Docker daemon when spawning transcoders. Default to `${PWD}/...`; only change if you move data out of the prefix. |
 | `ARM_DOCKER_NETWORK` | The compose network a spawned transcoder joins to reach the backend (`armv3_default`). |
 | `COMPOSE_FILE` | **Editable, commented out by default.** Uncomment to auto-load the GPU overlay — see [Hardware Transcoding](Hardware-Transcoding). |
-| `MAKEMKV_KEY` | **Editable (add it yourself).** A permanent/operator MakeMKV key. When unset, the ripper scrapes the monthly free beta. See [MakeMKV](MakeMKV). |
+| `MAKEMKV_KEY` | **Editable (add it yourself), fallback only.** A permanent/operator MakeMKV key. Prefer setting this in the UI (**Config → MakeMKV key**), which overrides this var and survives a recreate; this env var is used only when the UI key is blank. When both are unset, the ripper scrapes the monthly free beta. See [MakeMKV](MakeMKV). |
 
 After editing `.env`, apply it with:
 

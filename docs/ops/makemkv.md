@@ -4,10 +4,11 @@ The ripper container builds MakeMKV from the upstream signed source tarballs in 
 
 ## Setting the key
 
-`update_key.sh` runs once before every rip (see [When the beta key rotates](#when-the-beta-key-rotates) below) and picks one of two paths each time:
+`update_key.sh` runs once before every rip (see [When the beta key rotates](#when-the-beta-key-rotates) below) and picks one of three paths each time, in precedence order:
 
-1. **Operator-supplied key** — set `MAKEMKV_KEY=T-…` in the ripper service environment (typically `.env`). Any value MakeMKV accepts: a purchased perma-key, a monthly beta you grabbed yourself, whatever — the script writes it into `~/.MakeMKV/settings.conf`, idempotently.
-2. **Scraped monthly beta key** — leave `MAKEMKV_KEY` unset. The script scrapes the current month's beta from the public MakeMKV forum thread (`https://forum.makemkv.com/forum/viewtopic.php?f=5&t=1053`) and writes that. This is the same approach v2 has shipped for years; no MakeMKV terms are violated as long as the beta key is openly published there. The scrape is brittle (the forum sits behind Cloudflare and rate-limits / 525s under load); operators hitting that should switch to path 1.
+1. **Key configured in the UI** *(recommended)* — set the MakeMKV key in **Config → MakeMKV key** (`Config.makemkv_key`). The ripper fetches it from the backend at the top of each rip and injects it into `update_key.sh` as `MAKEMKV_KEY`, so a UI-set key wins over a host-set env var. This is the only path that survives a `docker compose down`/recreate without re-editing files, and it can be changed without a restart. Any value MakeMKV accepts: a purchased perma-key or a beta you grabbed yourself.
+2. **Operator-supplied env key** — set `MAKEMKV_KEY=T-…` in the ripper service environment (typically `.env`). Used when no key is configured in the UI. The script writes it into `~/.MakeMKV/settings.conf`, idempotently.
+3. **Scraped monthly beta key** — leave both the UI key and `MAKEMKV_KEY` unset. The script scrapes the current month's beta from the public MakeMKV forum thread (`https://forum.makemkv.com/forum/viewtopic.php?f=5&t=1053`) and writes that. This is the same approach v2 has shipped for years; no MakeMKV terms are violated as long as the beta key is openly published there. The scrape is brittle (the forum sits behind Cloudflare and rate-limits / 525s under load); operators hitting that should switch to path 1 or 2.
 
 The key path is `/home/arm/.MakeMKV/settings.conf` inside the container. The Dockerfile pre-creates the directory and chowns it to UID 1000; the shared entrypoint chowns again on `PUID` changes.
 
@@ -23,7 +24,7 @@ If the file is missing or has no `app_Key` line, check the ripper logs for `upda
 
 The free beta key rotates roughly monthly. The ripper's `JobController` runs `update_key.sh` at the top of each disc's pipeline — before the makemkvcon scan probe, and again before a crash-resumed rip (which skips the scan). This is the v3 port of v2's `prep_mkv`; see [`makemkv_key.py`](../../services/ripper/arm_ripper/makemkv_key.py). A container left up across a key rotation therefore self-heals on the next disc — no restart needed. (Earlier v3 builds scraped only at container boot; that boot-time hook was dropped once the per-rip refresh covered every run.)
 
-The per-rip refresh is non-fatal: a transient forum-scrape failure leaves the existing key in place and lets makemkvcon proceed (it surfaces a genuinely dead key downstream as `App key incorrect` or, for binary expiry, `MSG:5021`). When `MAKEMKV_KEY` is set, the script writes that operator key instead of scraping, so there is no forum traffic per rip.
+The per-rip refresh is non-fatal: a transient forum-scrape failure leaves the existing key in place and lets makemkvcon proceed (it surfaces a genuinely dead key downstream as `App key incorrect` or, for binary expiry, `MSG:5021`). When a key is configured (UI or `MAKEMKV_KEY`), the script writes that operator key instead of scraping, so there is no forum traffic per rip. A backend lookup error while fetching the UI key is also non-fatal — the ripper falls back to the env var / scrape rather than blocking the rip.
 
 ## Failure modes
 

@@ -6,6 +6,7 @@ import Config from '../views/Config.vue'
 const baseConfig = {
   tmdb_api_key: null,
   omdb_api_key: null,
+  makemkv_key: null,
   musicbrainz_user_agent: null,
   auto_transcode_on_idle: false,
   block_on_miss: true,
@@ -62,6 +63,28 @@ describe('Config.vue notifications', () => {
     expect(patchCall).toBeDefined()
     const body = JSON.parse(patchCall![1].body as string)
     expect(body.notifications_enabled).toBe(true)
+  })
+
+  it('sends makemkv_key in the PATCH body when set', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(baseConfig))
+      .mockResolvedValueOnce(jsonResponse({ ...baseConfig, makemkv_key: 'T-abc123' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mount(Config)
+    await flushPromises()
+
+    const field = wrapper.find('[data-testid="makemkv-key"]')
+    expect(field.exists()).toBe(true)
+    await field.setValue('T-abc123')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    const patchCall = fetchMock.mock.calls.find((c) => c[1]?.method === 'PATCH')
+    expect(patchCall).toBeDefined()
+    const body = JSON.parse(patchCall![1].body as string)
+    expect(body.makemkv_key).toBe('T-abc123')
   })
 
   it('renders backend 400 detail when invalid apprise URL is rejected', async () => {
