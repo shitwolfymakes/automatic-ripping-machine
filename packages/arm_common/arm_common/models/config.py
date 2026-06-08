@@ -14,6 +14,13 @@ class Config(SQLModel, table=True):
     id: int = Field(sa_column=Column(Integer, primary_key=True, autoincrement=False))
     tmdb_api_key: str | None = Field(default=None)
     omdb_api_key: str | None = Field(default=None)
+    # Operator's MakeMKV registration key (a purchased perma-key or a beta key
+    # pasted in by hand). When set it is the authoritative source the ripper
+    # writes into ~/.MakeMKV/settings.conf before each rip, overriding the
+    # legacy MAKEMKV_KEY env var; when empty the ripper falls back to that env
+    # var and then to the monthly forum beta-key scrape. See
+    # services/ripper/arm_ripper/makemkv_key.py.
+    makemkv_key: str | None = Field(default=None)
     # MusicBrainz requires a non-empty User-Agent (they 403 blank UAs); `armv3`
     # is a reasonable shared default that won't blow up the first audio-CD rip
     # on a fresh install. Operators are still encouraged to override with an

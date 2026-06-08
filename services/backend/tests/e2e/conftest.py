@@ -140,10 +140,10 @@ def app_client(_sqlite_url: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     # happens to have, making main.py coverage environment-dependent.
     monkeypatch.setattr(main_mod, "_build_docker_client", lambda: None)
 
-    # Deterministic GPU inventory: a test host may or may not have a render
-    # node, which would flip the `transcode.hw_unavailable` emit branch.
-    # CI has no GPU, so model that.
-    monkeypatch.setattr(main_mod, "probe_gpus", lambda: [])
+    # Deterministic GPU inventory: ARM_GPUS is unset under test, so the loader
+    # would return [] anyway, but pin it so the `transcode.hw_unavailable` emit
+    # branch is stable regardless of any stray env. CI has no GPU, so model that.
+    monkeypatch.setattr(main_mod, "load_configured_gpus", lambda _raw: [])
 
     # Postgres Alembic revisions can't run on SQLite — create the schema from
     # model metadata instead. Same effect for the API surface under test. A

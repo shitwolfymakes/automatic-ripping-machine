@@ -352,6 +352,7 @@ export interface TemplatePreviewResponse {
 export interface ConfigView {
   tmdb_api_key: string | null
   omdb_api_key: string | null
+  makemkv_key: string | null
   musicbrainz_user_agent: string | null
   auto_transcode_on_idle: boolean
   auto_rip_on_insert: boolean
@@ -366,6 +367,7 @@ export interface ConfigView {
 export interface ConfigUpdateRequest {
   tmdb_api_key?: string | null
   omdb_api_key?: string | null
+  makemkv_key?: string | null
   musicbrainz_user_agent?: string | null
   auto_transcode_on_idle?: boolean
   auto_rip_on_insert?: boolean

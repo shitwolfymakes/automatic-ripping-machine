@@ -98,3 +98,9 @@ class RipperConfigView(BaseModel):
     """
 
     auto_rip_on_insert: bool
+    # Operator's MakeMKV key, when configured in the UI. The ripper writes it
+    # into ~/.MakeMKV/settings.conf before each rip (overriding the legacy
+    # MAKEMKV_KEY env var). `None` => fall back to that env var, then the
+    # monthly forum beta-key scrape. Defaulted so older backends omitting it
+    # still validate.
+    makemkv_key: str | None = None

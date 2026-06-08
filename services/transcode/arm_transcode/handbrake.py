@@ -47,13 +47,15 @@ _PROGRESS_LINE_RE = re.compile(
 )
 
 
-# Vendor + codec → HandBrake `--encoder` ID. The names match HandBrakeCLI's
-# canonical encoder list (`HandBrakeCLI --help | grep encoder`) on
-# Debian Bookworm builds. AV1 is intentionally absent — Phase 7b's encoder
-# matrix is h264 + h265 only; AV1 lands in a follow-up.
+# Vendor + codec → HandBrake `--encoder` ID. These match the HW encoder IDs in
+# our source-built HandBrakeCLI (services/transcode/Dockerfile, built with
+# --enable-qsv/nvenc/vce). NOTE: HandBrake has no generic "vaapi" encoder — AMD
+# is exposed as `vce_*`. The GPU probe tags AMD render nodes with the `vaapi`
+# vendor (GpuVendor.VAAPI), so we bridge that vendor token to HandBrake's `vce_*`
+# IDs here. AV1 is intentionally absent — Phase 7b's matrix is h264 + h265 only.
 _HW_ENCODER_TABLE: dict[tuple[str, str], str] = {
-    ("vaapi", "h264"): "vaapi_h264",
-    ("vaapi", "h265"): "vaapi_h265",
+    ("vaapi", "h264"): "vce_h264",
+    ("vaapi", "h265"): "vce_h265",
     ("qsv", "h264"): "qsv_h264",
     ("qsv", "h265"): "qsv_h265",
     ("nvenc", "h264"): "nvenc_h264",

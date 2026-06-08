@@ -5,12 +5,12 @@ your host has an Intel iGPU (Quick Sync), an AMD GPU (VAAPI), or an NVIDIA GPU
 (NVENC), you can offload it to the GPU — much faster, at a modest quality cost
 versus a slow CPU encode.
 
-> **You do not build HandBrake or install codecs by hand in v3.** The transcode
-> image already ships HandBrake + ffmpeg with the QSV/VAAPI/NVENC encoders. All
-> you do is (1) expose the GPU to the stack via the **GPU overlay**, and on
-> NVIDIA (2) install the NVIDIA Container Toolkit on the host. The backend then
-> probes for GPUs at startup and the dispatcher hands each transcode job a free
-> one.
+> **You do not build HandBrake, install codecs, or edit compose files by hand in
+> v3.** The transcode image already ships HandBrake + ffmpeg with the
+> QSV/VAAPI/NVENC encoders. The installer **detects your GPUs automatically** and
+> wires them up; on NVIDIA it also offers to install the NVIDIA Container Toolkit.
+> The dispatcher then hands each transcode job a free GPU. CPU-only hosts need
+> nothing at all.
 
 ## Is my GPU supported?
 
@@ -23,43 +23,39 @@ versus a slow CPU encode.
 CPU-only hosts need none of this — the base stack transcodes on CPU with zero
 configuration.
 
-## Enabling the GPU overlay
+## Enabling GPU transcoding
 
-GPU support lives in a separate compose file, `docker-compose.gpu.yml`, kept out
-of the base compose so CPU-only hosts get clean startup. (Putting
-`runtime: nvidia` in the base file would make `docker compose up` fail outright
-on any host without the NVIDIA toolkit.) You opt in two ways:
+There's nothing to enable by hand — **the installer detects your GPUs and wires
+them up.** When you run `install.sh` (or `devtools/setup-dev.sh` for a dev
+checkout) it enumerates your hardware:
 
-**Recommended — set it once in `.env`.** Uncomment this line in `~/arm/.env`:
+- **Intel QSV / AMD VAAPI** — lists `/dev/dri/renderD*` and reads each card's
+  vendor ID (`0x8086` Intel, `0x1002` AMD).
+- **NVIDIA NVENC** — runs `nvidia-smi -L`, one entry per GPU.
 
-```bash
-COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
-```
-
-Now a plain `docker compose up -d` loads both files automatically — no `-f`
-flags to remember.
-
-**Or per command:**
+The result is written to the `ARM_GPUS` line in `~/arm/.env` as a JSON array, for
+example:
 
 ```bash
-cd ~/arm
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+ARM_GPUS=[{"vendor":"qsv","device_path":"/dev/dri/renderD128","encoder_kinds":["h264","h265"]}]
 ```
 
-What the overlay does:
+The backend reads `ARM_GPUS` at startup to populate its GPU table, and the
+dispatcher passes the right device into each short-lived transcoder container it
+spawns. No overlay file, no `COMPOSE_FILE` juggling, no GPU access on the backend
+itself.
 
-- Mounts `/dev/dri` into the backend so it can detect **Intel QSV** and **AMD
-  VAAPI** (it lists `/dev/dri/renderD*` and reads each card's vendor ID —
-  `0x8086` Intel, `0x1002` AMD).
-- Enables the **NVIDIA runtime** and reserves the GPU devices so the backend can
-  detect **NVENC** via `nvidia-smi`.
+> **Re-run the installer after any GPU or driver change** (new card, driver
+> upgrade) so `ARM_GPUS` is refreshed — detection happens at install time, not on
+> every boot.
 
-## NVIDIA: install the Container Toolkit first
+## NVIDIA: the Container Toolkit
 
-`runtime: nvidia` only works if the host has the **NVIDIA Container Toolkit**,
-which injects the driver libraries into containers. Without it, `docker compose
-up` fails with *"could not select device driver nvidia"*. The installer warns
-you when it detects an NVIDIA GPU without the toolkit registered. Install it:
+NVENC needs the **NVIDIA Container Toolkit** on the host so the docker daemon can
+pass GPU devices into the transcoder. When `install.sh` detects an NVIDIA GPU
+without the toolkit registered, **it offers to install and configure it for you**
+on Debian/Ubuntu hosts (with a confirmation prompt). On other distros it prints
+the steps. To do it manually:
 
 ```bash
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
@@ -74,30 +70,18 @@ sudo systemctl restart docker
 
 You also need a working NVIDIA driver on the host (download from
 <https://www.nvidia.com/en-us/drivers/>). Intel and AMD need no extra host
-packages — the `/dev/dri` mount is enough.
-
-## Trimming the overlay for your hardware
-
-The generated `docker-compose.gpu.yml` assumes a mixed host. If you only have
-one vendor, trim it:
-
-- **Intel/AMD only (no NVIDIA):** delete the `runtime: nvidia` line and the
-  whole `deploy:` block. Keep the `/dev/dri` device mount.
-- **NVIDIA only (no Intel/AMD):** delete the `devices: [/dev/dri:...]` line.
-- **Mixed:** leave everything; the probe handles each path independently.
-
-To pin a specific GPU instead of exposing all of them, replace `count: all`
-with `device_ids: ["0"]` under the NVIDIA reservation.
+packages — the render-node device is enough.
 
 ## Verifying it worked
 
-After bringing the stack up with the overlay, the backend probes for GPUs at
-startup. Confirm detection in the UI's **Diagnostics** page, or check the
-backend log:
+Confirm detection in the UI's **Diagnostics** page, or check the backend log:
 
 ```bash
 docker compose logs arm-backend | grep -i gpu
 ```
+
+You can also inspect `ARM_GPUS` in `~/arm/.env` directly — if it's `[]`, the
+installer found no GPUs (re-run it after fixing drivers/toolkit).
 
 Transcode presets default to *prefer GPU, queue if all GPUs are busy, fall back
 to CPU only if no GPU advertises that codec* — so once a GPU is detected, eligible
@@ -105,4 +89,4 @@ jobs use it automatically. If nothing is detected, ARM transcodes on CPU and
 everything still works.
 
 See [Troubleshooting § GPU isn't detected](Troubleshooting#gpu-isnt-detected) if
-the probe comes up empty.
+detection comes up empty.

@@ -25,8 +25,8 @@ def test_no_env_returns_empty(clean_env: None) -> None:
 @pytest.mark.parametrize(
     "vendor,codec,expected",
     [
-        ("vaapi", "h264", "vaapi_h264"),
-        ("vaapi", "h265", "vaapi_h265"),
+        ("vaapi", "h264", "vce_h264"),  # AMD render node → HandBrake's `vce_*`
+        ("vaapi", "h265", "vce_h265"),
         ("qsv", "h264", "qsv_h264"),
         ("qsv", "h265", "qsv_h265"),
         ("nvenc", "h264", "nvenc_h264"),

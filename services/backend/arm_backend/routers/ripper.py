@@ -105,7 +105,7 @@ async def get_ripper_config(session: AsyncSession = Depends(get_session)) -> Rip
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     if cfg is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="config singleton missing")
-    return RipperConfigView(auto_rip_on_insert=cfg.auto_rip_on_insert)
+    return RipperConfigView(auto_rip_on_insert=cfg.auto_rip_on_insert, makemkv_key=cfg.makemkv_key)
 
 
 @router.post("/heartbeat", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_service_token)])

@@ -38,7 +38,7 @@ def _settings(**overrides: Any) -> Settings:
         "MAX_PARALLEL_TRANSCODES": 2,
         "ARM_TRANSCODE_STALE_THRESHOLD_SECONDS": 90,
         "ARM_TRANSCODE_MAX_ATTEMPTS": 3,
-        "ARM_TRANSCODE_IMAGE": "arm-transcode:dev",
+        "ARM_TRANSCODE_IMAGE": "arm-transcode:latest",
         "ARM_HOST_RAW_PATH": "/host/raw",
         "ARM_HOST_MEDIA_PATH": "/host/media",
         "ARM_HOST_LOGS_PATH": "/host/logs",
@@ -106,7 +106,7 @@ async def test_spawn_pending_calls_docker_run_with_correct_volumes_and_env() -> 
 
     docker.containers.run.assert_called_once()
     kwargs = docker.containers.run.call_args.kwargs
-    assert kwargs["image"] == "arm-transcode:dev"
+    assert kwargs["image"] == "arm-transcode:latest"
     assert kwargs["labels"] == {"arm.task_id": "txt_1"}
     assert "/host/raw" in kwargs["volumes"]
     assert kwargs["volumes"]["/host/raw"] == {"bind": "/raw", "mode": "ro"}

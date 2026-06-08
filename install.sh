@@ -34,8 +34,18 @@ NO_ENV=0
 NO_COMPOSE=0
 NO_UDEV=0
 
-ARM_IMAGE_TAG_DEFAULT="v3.0.0-alpha-1"
 ARM_IMAGE_PREFIX_DEFAULT="docker.io/automaticrippingmachine"
+# GitHub repo whose latest *stable* (non-prerelease) release pins the image
+# versions. Override for a fork via --release-repo or ARM_RELEASE_REPO.
+ARM_RELEASE_REPO="${ARM_RELEASE_REPO:-automatic-ripping-machine/automatic-ripping-machine}"
+# This installer targets ARM v3. The resolved release tag must be on this major
+# line — guards against pinning the repo's latest *v2* stable (e.g. 2.x), whose
+# images don't exist under the v3 arm-<svc> names. Bump when v4 lands.
+ARM_EXPECTED_MAJOR="3"
+# Resolved at install time from GitHub (resolve_image_tag) on a fresh install,
+# or reused from an existing .env. No hardcoded fallback — a real install always
+# pins a real published tag (we hard-fail rather than ship a stale default).
+ARM_IMAGE_TAG_DEFAULT=""
 
 usage() {
     cat <<EOF
@@ -47,6 +57,10 @@ Options:
   --prefix <path>     Install prefix (default: ~/arm)
   --rotate-ca         Regenerate the internal CA + all leaves (with confirm).
   --start             Run 'docker compose up -d' after install.
+  --release-repo <owner/repo>
+                      GitHub repo to resolve the latest stable image tag from
+                      (default: automatic-ripping-machine/automatic-ripping-machine;
+                      also settable via ARM_RELEASE_REPO).
 
 Advanced (used by setup-dev.sh and unattended installs):
   --certs-only        Only run cert generation; skip env/compose/udev.
@@ -63,6 +77,8 @@ while [[ $# -gt 0 ]]; do
         --prefix=*)    PREFIX="${1#*=}"; shift ;;
         --rotate-ca)   ROTATE_CA=1; shift ;;
         --start)       START=1; shift ;;
+        --release-repo)   ARM_RELEASE_REPO="$2"; shift 2 ;;
+        --release-repo=*) ARM_RELEASE_REPO="${1#*=}"; shift ;;
         --certs-only)  CERTS_ONLY=1; shift ;;
         --no-env)      NO_ENV=1; shift ;;
         --no-compose)  NO_COMPOSE=1; shift ;;
@@ -100,6 +116,42 @@ confirm() {
         read -rp "$prompt [y/N] " reply
     fi
     [[ "$reply" =~ ^[yY]([eE][sS])?$ ]]
+}
+
+# Resolve the image tag that pins ALL service images (backend/ripper/ui +
+# the transcode image the dispatcher spawns). Reuse an existing pin from the
+# prefix's .env so re-runs don't silently upgrade and work offline; otherwise
+# fetch the latest *stable* (non-prerelease) release of ARM_RELEASE_REPO from
+# GitHub. Hard-fail if it can't be resolved — we never ship a stale default.
+resolve_image_tag() {
+    local existing
+    if [[ -f "$PREFIX/.env" ]]; then
+        existing="$(sed -nE 's/^ARM_IMAGE_TAG=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+        if [[ -n "$existing" ]]; then
+            log "reusing pinned image tag ${existing} from existing .env" >&2
+            printf '%s' "$existing"
+            return 0
+        fi
+    fi
+
+    require curl "install curl, or pre-set ARM_IMAGE_TAG in $PREFIX/.env"
+    local url="https://api.github.com/repos/${ARM_RELEASE_REPO}/releases/latest"
+    local body tag
+    # `releases/latest` returns the newest non-prerelease, non-draft release;
+    # 404 when the repo has none. `-f` makes curl fail (non-zero) on any non-2xx.
+    if ! body="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$url" 2>/dev/null)"; then
+        err "could not resolve a stable release tag from '${ARM_RELEASE_REPO}' (GitHub unreachable, rate-limited, or no stable release yet). Use --release-repo to point at the right repo, or pre-set ARM_IMAGE_TAG in $PREFIX/.env."
+    fi
+    tag="$(printf '%s' "$body" | grep -m1 '"tag_name"' | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
+    [[ -n "$tag" ]] || err "could not parse a tag_name from '${ARM_RELEASE_REPO}' latest release."
+    # Reject a tag off the expected major (e.g. the repo's latest v2 stable):
+    # its v3 arm-<svc> images don't exist, so pulling would 404. Tags look like
+    # `v3.0.0` or `3.0.0`; match the leading (optional-v) major.
+    if [[ ! "$tag" =~ ^v?${ARM_EXPECTED_MAJOR}\. ]]; then
+        err "latest stable release of '${ARM_RELEASE_REPO}' is ${tag}, not a v${ARM_EXPECTED_MAJOR} release. No v${ARM_EXPECTED_MAJOR} stable exists there yet — use --release-repo to point at a repo that has one, or pre-set ARM_IMAGE_TAG in $PREFIX/.env."
+    fi
+    log "pinned images to ${ARM_RELEASE_REPO}@${tag} (latest stable)" >&2
+    printf '%s' "$tag"
 }
 
 # -------------------------------------------------------------- prereq check
@@ -286,6 +338,49 @@ detect_drives() {
 
 # ----------------------------------------------------------------- env seed
 
+# Phase 7b: enumerate GPUs host-side so the GPU-free backend can fill the `gpus`
+# table from ARM_GPUS instead of probing hardware. Prints a compact JSON array on
+# stdout (empty `[]` if none). Mirrors services/backend/arm_backend/gpu_probe.py.
+detect_gpus() {
+    local entries=() node vendor_file vid vendor idx
+    # Intel (QSV, 0x8086) / AMD (VAAPI, 0x1002) via DRM render nodes.
+    if [[ -d /dev/dri ]]; then
+        for node in /dev/dri/renderD*; do
+            [[ -e "$node" ]] || continue
+            vendor_file="/sys/class/drm/$(basename "$node")/device/vendor"
+            [[ -r "$vendor_file" ]] || continue
+            vid="$(tr -d '[:space:]' < "$vendor_file" | tr '[:upper:]' '[:lower:]')"
+            case "$vid" in
+                0x8086) vendor=qsv ;;
+                0x1002) vendor=vaapi ;;
+                *)      continue ;;
+            esac
+            entries+=("{\"vendor\":\"${vendor}\",\"device_path\":\"${node}\",\"encoder_kinds\":[\"h264\",\"h265\"]}")
+        done
+    fi
+    # NVIDIA (NVENC) via nvidia-smi — one entry per listed GPU index.
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        while IFS= read -r idx; do
+            [[ -n "$idx" ]] || continue
+            entries+=("{\"vendor\":\"nvenc\",\"device_path\":\"nvidia://${idx}\",\"encoder_kinds\":[\"h264\",\"h265\"]}")
+        done < <(nvidia-smi -L 2>/dev/null | sed -nE 's/^GPU ([0-9]+):.*/\1/p')
+    fi
+    local IFS=,
+    printf '[%s]' "${entries[*]:-}"
+}
+
+# GID of the /dev/dri render-node group. The dispatcher adds it to VAAPI/QSV
+# transcoders so the PUID-dropped process can open the node (root:render 0660).
+# Empty if there's no render node (CPU / NVENC-only host).
+detect_render_gid() {
+    local node
+    for node in /dev/dri/renderD*; do
+        [[ -e "$node" ]] || continue
+        stat -c '%g' "$node"
+        return 0
+    done
+}
+
 seed_env() {
     local env_file="$PREFIX/.env"
 
@@ -294,13 +389,28 @@ seed_env() {
     pgid="$(id -g)"
     cdrom_gid="$(stat -c '%g' /dev/sr0 2>/dev/null || echo 44)"
 
+    local arm_gpus render_gid
+    arm_gpus="$(detect_gpus)"
+    render_gid="$(detect_render_gid || true)"
+
     if [[ -f "$env_file" ]]; then
-        log ".env exists; preserving secrets, re-deriving PUID/PGID/CDROM_GID"
+        log ".env exists; preserving secrets, re-deriving PUID/PGID/CDROM_GID/ARM_GPUS/ARM_RENDER_GID"
         sed -i \
             -e "s|^PUID=.*|PUID=${puid}|" \
             -e "s|^PGID=.*|PGID=${pgid}|" \
             -e "s|^CDROM_GID=.*|CDROM_GID=${cdrom_gid}|" \
             "$env_file"
+        if grep -q '^ARM_GPUS=' "$env_file"; then
+            sed -i "s|^ARM_GPUS=.*|ARM_GPUS=${arm_gpus}|" "$env_file"
+        else
+            printf 'ARM_GPUS=%s\n' "$arm_gpus" >> "$env_file"
+        fi
+        if grep -q '^ARM_RENDER_GID=' "$env_file"; then
+            sed -i "s|^ARM_RENDER_GID=.*|ARM_RENDER_GID=${render_gid}|" "$env_file"
+        else
+            printf 'ARM_RENDER_GID=%s\n' "$render_gid" >> "$env_file"
+        fi
+        log "detected GPU(s): ${arm_gpus}  render_gid=${render_gid:-(none)}"
         return 0
     fi
 
@@ -327,7 +437,9 @@ CDROM_GID=${cdrom_gid}
 
 ARM_LOG_LEVEL=info
 
-# Image registry + tag. Bump ARM_IMAGE_TAG to upgrade.
+# Image registry + tag. Pins EVERY service image, including the transcode
+# image the backend spawns (see ARM_TRANSCODE_IMAGE in docker-compose.yml,
+# which is derived from these). Bump ARM_IMAGE_TAG to upgrade the whole stack.
 ARM_IMAGE_PREFIX=${ARM_IMAGE_PREFIX_DEFAULT}
 ARM_IMAGE_TAG=${ARM_IMAGE_TAG_DEFAULT}
 
@@ -338,8 +450,10 @@ OMDB_API_KEY=
 ARM_ALLOWED_ORIGINS=https://localhost:8081
 
 # Phase 7: transcode dispatcher.
+# ARM_TRANSCODE_IMAGE is not set here on purpose — docker-compose.yml derives it
+# from ARM_IMAGE_PREFIX/ARM_IMAGE_TAG so it tracks the same version as the rest.
+# Set it explicitly only to override the transcode image independently.
 MAX_PARALLEL_TRANSCODES=1
-ARM_TRANSCODE_IMAGE=${ARM_IMAGE_PREFIX_DEFAULT}/arm-transcode:${ARM_IMAGE_TAG_DEFAULT}
 
 # Backend's host-side mount paths. The dispatcher passes these to the docker
 # daemon when spawning transcoder containers; \${PWD} resolves to the
@@ -352,52 +466,67 @@ ARM_HOST_CERTS_PATH=\${PWD}/certs
 # Docker network the spawned transcoder joins so it can reach the backend.
 ARM_DOCKER_NETWORK=armv3_default
 
-# Phase 7b: GPU transcoding (optional).
-# Uncomment to load docker-compose.gpu.yml as an overlay automatically; the
-# base compose stays CPU-only otherwise. NVIDIA hosts also need
-# nvidia-container-toolkit installed (see .env.example for the apt commands).
-# COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
+# Phase 7b: GPUs detected host-side at install time (see detect_gpus in
+# install.sh). The GPU-free backend reads this to fill the gpus table; the
+# dispatcher injects the matching device access into each ephemeral transcoder.
+# Empty [] => CPU-only transcoding. Re-run install.sh after a GPU/driver change.
+# NVIDIA hosts also need nvidia-container-toolkit (install.sh offers to set it up).
+ARM_GPUS=${arm_gpus}
+
+# GID of the /dev/dri render-node group. The dispatcher adds it to VAAPI/QSV
+# transcoders so the PUID-dropped process can open the node (root:render 0660).
+# Empty => not added (CPU / NVENC-only host).
+ARM_RENDER_GID=${render_gid}
 EOF
     chmod 600 "$env_file"
 }
 
-# ---------------------------------------------------- CTK detection (advisory)
+# ---------------------------------------------- NVIDIA Container Toolkit setup
 
-check_nvidia_container_toolkit() {
-    # Warn (don't fail) when the host has an NVIDIA GPU but the
-    # nvidia-container-toolkit isn't registered with docker. Without the
-    # toolkit, `docker compose -f docker-compose.gpu.yml up` fails with
-    # "could not select device driver \"nvidia\"" — installable, but most
-    # users won't connect that error to "you need an extra package."
+ensure_nvidia_container_toolkit() {
+    # NVENC needs the host's nvidia-container-toolkit so the docker daemon can
+    # pass GPU device files into the ephemeral transcoder. On apt hosts we offer
+    # to install + register it; elsewhere we print the steps. CPU/VAAPI/QSV need
+    # nothing here. Idempotent — skips when already wired up.
 
     # Cheap host detection: lspci has been on every Linux desktop since the 90s.
     if ! command -v lspci >/dev/null 2>&1; then
         return 0
     fi
     if ! lspci 2>/dev/null | grep -qi 'nvidia'; then
-        return 0  # No NVIDIA hardware → CTK irrelevant.
+        return 0  # No NVIDIA hardware → toolkit irrelevant.
+    fi
+    if command -v nvidia-ctk >/dev/null 2>&1 && docker info 2>/dev/null | grep -q 'nvidia'; then
+        return 0  # Already installed and registered with docker.
     fi
 
-    if docker info 2>/dev/null | grep -q 'nvidia'; then
-        return 0  # `Runtimes:` line lists `nvidia` → CTK already wired up.
-    fi
-
-    warn "NVIDIA GPU detected but the docker 'nvidia' runtime isn't registered."
-    cat >&2 <<'CTK'
-    For NVENC transcoding you'll want nvidia-container-toolkit. Install:
-
-      curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
-          | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-      curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
-          | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
-          | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-      sudo apt update && sudo apt install -y nvidia-container-toolkit
-      sudo nvidia-ctk runtime configure --runtime=docker
-      sudo systemctl restart docker
-
-    Then uncomment COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml in
-    your .env. Skipping for now — CPU transcoding still works.
+    if ! command -v apt-get >/dev/null 2>&1; then
+        warn "NVIDIA GPU detected but nvidia-container-toolkit isn't set up (non-apt host)."
+        cat >&2 <<'CTK'
+    Install it for your distro, then re-run install.sh:
+      https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+    After install: sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker
+    Skipping for now — CPU transcoding still works.
 CTK
+        return 0
+    fi
+
+    log "NVIDIA GPU detected; nvidia-container-toolkit enables NVENC transcoding."
+    if ! confirm "Install nvidia-container-toolkit now (needs sudo)?"; then
+        warn "skipping nvidia-container-toolkit — NVENC stays off until it's installed. CPU transcoding still works."
+        return 0
+    fi
+
+    log "installing nvidia-container-toolkit (sudo)"
+    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+        | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+    curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+        | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+        | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list >/dev/null
+    sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+    sudo nvidia-ctk runtime configure --runtime=docker
+    sudo systemctl restart docker
+    log "nvidia-container-toolkit installed; docker 'nvidia' runtime registered"
 }
 
 # ---------------------------------------------------- compose generation
@@ -489,12 +618,17 @@ services:
       PGID: \${PGID:-1000}
       MEDIA_ROOT: /media
       MAX_PARALLEL_TRANSCODES: \${MAX_PARALLEL_TRANSCODES:-1}
-      ARM_TRANSCODE_IMAGE: \${ARM_TRANSCODE_IMAGE:-${ARM_IMAGE_PREFIX_DEFAULT}/arm-transcode:${ARM_IMAGE_TAG_DEFAULT}}
+      # Derived from ARM_IMAGE_PREFIX/ARM_IMAGE_TAG exactly like the image: refs
+      # above, so it tracks the same version. ARM_TRANSCODE_IMAGE in .env (if set)
+      # still wins, for independent overrides.
+      ARM_TRANSCODE_IMAGE: \${ARM_TRANSCODE_IMAGE:-\${ARM_IMAGE_PREFIX:-${ARM_IMAGE_PREFIX_DEFAULT}}/arm-transcode:\${ARM_IMAGE_TAG:-${ARM_IMAGE_TAG_DEFAULT}}}
       ARM_HOST_RAW_PATH: \${ARM_HOST_RAW_PATH}
       ARM_HOST_MEDIA_PATH: \${ARM_HOST_MEDIA_PATH}
       ARM_HOST_LOGS_PATH: \${ARM_HOST_LOGS_PATH}
       ARM_HOST_CERTS_PATH: \${ARM_HOST_CERTS_PATH}
       ARM_DOCKER_NETWORK: \${ARM_DOCKER_NETWORK:-armv3_default}
+      ARM_GPUS: \${ARM_GPUS:-[]}
+      ARM_RENDER_GID: \${ARM_RENDER_GID:-}
     volumes:
       - ./raw:/raw
       - ./media:/media
@@ -522,38 +656,6 @@ EOF
     for i in "${!DRIVES_SR[@]}"; do
         emit_ripper_block "${DRIVES_SR[$i]}" "${DRIVES_SG[$i]}" >> "$out"
     done
-}
-
-generate_compose_gpu() {
-    local out="$PREFIX/docker-compose.gpu.yml"
-    log "generating $out (overlay; load with -f docker-compose.yml -f docker-compose.gpu.yml)"
-    cat > "$out" <<'EOF'
-# Generated by install.sh — GPU transcoding overlay.
-#
-# Run with:
-#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
-#
-# CPU-only host? Don't use this overlay. The base compose runs on CPU.
-#
-# Trim for your hardware:
-# - VAAPI/QSV-only host (no NVIDIA): strip `runtime: nvidia` and the entire
-#   `deploy:` block.
-# - NVIDIA-only host: strip the `devices:` line.
-# - Mixed host: leave everything; the probe handles each path independently.
-
-services:
-  arm-backend:
-    devices:
-      - /dev/dri:/dev/dri:ro
-    runtime: nvidia
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu, video]
-EOF
 }
 
 # ----------------------------------------------------------- host udev rule
@@ -634,10 +736,11 @@ print_next_steps() {
 Prefix:   $PREFIX
 Drives:   ${#DRIVES_SR[@]} ripper service(s) configured
 Image:    $ARM_IMAGE_PREFIX_DEFAULT/arm-<svc>:$ARM_IMAGE_TAG_DEFAULT
+          (latest stable from $ARM_RELEASE_REPO; bump ARM_IMAGE_TAG in .env to change)
 
 Next:
   cd $PREFIX
-  docker compose pull         # NB: alpha/beta tags may not yet be published
+  docker compose pull
   docker compose up -d
 
 First-boot admin credentials (you'll be forced to change the password):
@@ -647,13 +750,10 @@ Then open: https://localhost:8081
   (Import $PREFIX/certs/arm-ca.crt into your browser/OS trust store
    to silence the cert warning across every device on the LAN.)
 
-GPU host? Uncomment the COMPOSE_FILE line in $PREFIX/.env so the GPU
-overlay loads automatically (NVIDIA hosts also need nvidia-container-
-toolkit — see .env for the install commands).
-
-Heads-up: $ARM_IMAGE_TAG_DEFAULT is a pre-release tag. Until Phase 14 (CI
-+ image release) lands, 'docker compose pull' may 404. To run today, build
-images locally from a local checkout and tag them — see README.md.
+GPU host? GPUs are auto-detected into ARM_GPUS in $PREFIX/.env and the
+backend wires them to the transcoder automatically. Re-run install.sh after
+adding/removing a GPU or updating drivers. (NVIDIA hosts: install.sh offered
+to set up nvidia-container-toolkit above.)
 
 EOF
 }
@@ -662,7 +762,6 @@ EOF
 
 main() {
     check_prereqs
-    check_nvidia_container_toolkit
     ensure_prefix
 
     if [[ $ROTATE_CA -eq 1 ]]; then
@@ -690,8 +789,15 @@ main() {
         return 0
     fi
 
+    # Pin image versions before seeding env / generating compose (both bake the
+    # tag). Resolved from GitHub on a fresh install; reused from .env otherwise.
+    if [[ $NO_ENV -eq 0 || $NO_COMPOSE -eq 0 ]]; then
+        ARM_IMAGE_TAG_DEFAULT="$(resolve_image_tag)"
+    fi
+
+    ensure_nvidia_container_toolkit
     [[ $NO_ENV -eq 0 ]]     && seed_env
-    [[ $NO_COMPOSE -eq 0 ]] && { generate_compose; generate_compose_gpu; }
+    [[ $NO_COMPOSE -eq 0 ]] && generate_compose
     [[ $NO_UDEV -eq 0 ]]    && ensure_udev_rule
 
     print_next_steps

@@ -52,10 +52,12 @@ class Settings(BaseSettings):
     # = 'in_progress'` so the value survives Backend restarts.
     MAX_PARALLEL_TRANSCODES: int = 1
 
-    # The image name the dispatcher passes to docker. The dev compose file
-    # builds it via `docker compose build arm-transcode-builder`; production
-    # installs pull a tagged image.
-    ARM_TRANSCODE_IMAGE: str = "arm-transcode:dev"
+    # The image name the dispatcher passes to docker. Dev builds it locally as
+    # arm-transcode:latest (the arm-transcode compose service, deploy.replicas:0,
+    # built by `docker compose up --build` but never run); production overrides
+    # this with the versioned, pulled image. Compose always sets it, so this
+    # default only applies in tests.
+    ARM_TRANSCODE_IMAGE: str = "arm-transcode:latest"
 
     # Stale-claim sweep tunables. 90 s = 3× heartbeat interval (the
     # transcoder POSTs heartbeat every 30 s). After MAX_ATTEMPTS stale resets
@@ -84,6 +86,21 @@ class Settings(BaseSettings):
     # `https://arm-backend:8443`. Compose default project network is
     # `<project>_default`.
     ARM_DOCKER_NETWORK: str = "armv3_default"
+
+    # --- Phase 7b: GPU inventory --------------------------------------------
+    # JSON array of GPUs detected host-side at install time (install.sh /
+    # setup-dev.sh enumerate /dev/dri + nvidia-smi and write this). The backend
+    # parses it at lifespan startup to fill the `gpus` table — it does NOT probe
+    # hardware itself. Empty/absent => CPU-only transcoding. See gpu_probe.py
+    # for the schema. Re-run the installer after a GPU/driver change.
+    ARM_GPUS: str = ""
+
+    # GID of the host's /dev/dri render node group (detected host-side, like
+    # CDROM_GID for the ripper). The dispatcher adds it via `group_add` to each
+    # VAAPI/QSV transcoder so the PUID-dropped process can open the render node
+    # (root:render 0660) — without it HandBrake's QSV/VAAPI init fails with
+    # "failed to create hwdevice". Empty => no group added (CPU / NVENC-only).
+    ARM_RENDER_GID: str = ""
 
 
 settings = Settings()  # type: ignore[call-arg]  # fields loaded from env by pydantic-settings

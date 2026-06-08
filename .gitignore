@@ -191,7 +191,10 @@ arm.yaml
 # inside the UI Docker image; never commit them.
 node_modules/
 
-# Local Docker bind-mount runtime state (repo root, per the dev install prefix)
+# Local Docker bind-mount runtime state. Dev nests these under ./arm/ (the dev
+# mirror of production's ~/arm prefix); the bare entries cover pre-migration
+# layouts that wrote straight into the repo root.
+/arm/
 /db/
 /raw/
 /media/
@@ -208,3 +211,4 @@ node_modules/
 # `git filter-branch` before force-push.
 /certs/
 .claude/scheduled_tasks.lock
+services/ui/src/api/generated.ts

@@ -29,9 +29,3 @@ First-class "rip from an `.iso` as a source" — distinct from the existing
   transcode-dispatcher model), **not** a long-running service.
 - Eventual front door is UI file upload.
 - Six open decisions in the doc to settle before implementation.
-
-## MakeMKV permanent key in Config (from PR #2)
-
-Persist the MakeMKV registration key as a Config setting, settable from the UI,
-so rippers don't depend on the `MAKEMKV_KEY` env var or the monthly beta-key
-forum scrape.
