@@ -319,29 +319,6 @@ else
 fi
 echo "==> detected GPU(s) for ARM_GPUS: ${ARM_GPUS_VALUE}"
 
-# Migrate away the old hardcoded transcode-image override. Dev now lets compose
-# default ARM_TRANSCODE_IMAGE to arm-transcode:latest (built locally); a stale
-# `ARM_TRANSCODE_IMAGE=arm-transcode:dev` line from an earlier setup would
-# override that and point the dispatcher at a never-built tag.
-if grep -q '^ARM_TRANSCODE_IMAGE=arm-transcode:dev$' "${ENV_FILE}"; then
-    sed -i '/^ARM_TRANSCODE_IMAGE=arm-transcode:dev$/d' "${ENV_FILE}"
-    echo "==> removed stale ARM_TRANSCODE_IMAGE=arm-transcode:dev from .env (compose now defaults to arm-transcode:latest)"
-fi
-
-# Migrate host data paths into ./arm/ (older .env files point at the repo root).
-# Idempotent: rewrites each line to the arm/ path regardless of prior value.
-# `${PWD}` is written literally into .env on purpose (compose expands it, not us).
-# shellcheck disable=SC2016
-if grep -q '^ARM_HOST_RAW_PATH=\${PWD}/raw$' "${ENV_FILE}"; then
-    sed -i \
-        -e 's|^ARM_HOST_RAW_PATH=.*|ARM_HOST_RAW_PATH=${PWD}/arm/raw|' \
-        -e 's|^ARM_HOST_MEDIA_PATH=.*|ARM_HOST_MEDIA_PATH=${PWD}/arm/media|' \
-        -e 's|^ARM_HOST_LOGS_PATH=.*|ARM_HOST_LOGS_PATH=${PWD}/arm/logs|' \
-        -e 's|^ARM_HOST_CERTS_PATH=.*|ARM_HOST_CERTS_PATH=${PWD}/arm/certs|' \
-        "${ENV_FILE}"
-    echo "==> migrated ARM_HOST_*_PATH in .env to ./arm/ (was repo root)"
-fi
-
 # The transcode image is built by `docker compose up -d --build` like every other
 # service (the arm-transcode service has deploy.replicas:0 — built, never run), so
 # there's no separate build step here.
