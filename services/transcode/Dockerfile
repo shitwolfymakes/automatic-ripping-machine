@@ -9,6 +9,20 @@
 # Pinned to a release tag; bump HANDBRAKE_VERSION to upgrade.
 FROM debian:bookworm AS handbrake-builder
 ARG HANDBRAKE_VERSION=1.11.1
+# nv-codec-headers pin. HandBrake 1.11.x defaults to 13.0.19.0, whose NVENC API
+# (13.0) demands NVIDIA driver >= 570. Stable distros lag: Debian 13 (trixie)
+# ships driver 550 from `nvidia-driver` and going off-package isn't advisable, so
+# the 13.0 default makes every GPU encode die `rc=3` at `avcodec_open`
+# ("Driver does not support the required nvenc API version"). We override the
+# pin to 12.1.14.0, which (a) FFmpeg 8.0.1 — what HandBrake 1.11.1 bundles —
+# accepts (its floor is `ffnvcodec >= 12.1.14.0`) and (b) requires only driver
+# >= 530.41.03. NVENC is backward-compatible, so the binary still runs on 570+
+# hosts; we just forgo 13.0-only features ARM doesn't use (h264/h265 only).
+# Keep ARM_NVENC_MIN_DRIVER (install.sh / devtools/setup-dev.sh) in sync with the
+# driver floor of whatever version is pinned here. Re-verify both the FFmpeg floor
+# and the driver requirement when bumping HANDBRAKE_VERSION.
+ARG NVCODEC_VERSION=12.1.14.0
+ARG NVCODEC_SHA256=62b30ab37e4e9be0d0c5b37b8fee4b094e38e570984d56e1135a6b6c2c164c9f
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -23,6 +37,20 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 RUN git clone --branch "${HANDBRAKE_VERSION}" --depth 1 https://github.com/HandBrake/HandBrake.git /HandBrake
 WORKDIR /HandBrake
+# Re-pin the contrib nv-codec-headers (see ARG comment above for the why). The
+# version string appears in both the basename and the FFmpeg release path, so a
+# global swap rewrites every URL; the HandBrake-contribs mirror won't host the
+# older tarball, but HandBrake's fetcher falls through to the FFmpeg upstream URL
+# on 404. The grep asserts the patch landed so a future HANDBRAKE_VERSION bump
+# that changes module.defs fails the build loudly instead of silently shipping
+# the 570-only default.
+RUN set -eux; \
+    sed -i \
+      -e "s|13\.0\.19\.0|${NVCODEC_VERSION}|g" \
+      -e "s|13da39edb3a40ed9713ae390ca89faa2f1202c9dda869ef306a8d4383e242bee|${NVCODEC_SHA256}|" \
+      contrib/nvenc/module.defs; \
+    grep -q "n${NVCODEC_VERSION}/nv-codec-headers-${NVCODEC_VERSION}.tar.gz" contrib/nvenc/module.defs; \
+    grep -q "${NVCODEC_SHA256}" contrib/nvenc/module.defs
 # `--launch` runs the build immediately; contrib libs (incl. nv-codec-headers
 # and oneVPL) are fetched + built by HandBrake's own contrib system.
 RUN ./configure --launch-jobs="$(nproc)" --launch --disable-gtk \

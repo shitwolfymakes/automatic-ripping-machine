@@ -338,6 +338,33 @@ detect_drives() {
 
 # ----------------------------------------------------------------- env seed
 
+# Minimum NVIDIA driver major version whose NVENC API satisfies the HandBrake
+# build in services/transcode/Dockerfile. That Dockerfile pins nv-codec-headers
+# to NVCODEC_VERSION 12.1.14.0, whose floor is driver 530.41.03. A host below
+# this advertises NVENC via nvidia-smi but every GPU encode dies `rc=3` at
+# `avcodec_open` ("Driver does not support the required nvenc API version"), so
+# we gate it here and let such a host fall back to CPU. Keep in lockstep with the
+# Dockerfile's NVCODEC_VERSION driver floor. Mirror any change in devtools/setup-dev.sh.
+ARM_NVENC_MIN_DRIVER=530
+
+# Echo `0` (advertise NVENC) or `1` (skip it) for the host's nvidia-smi driver.
+# Warns via warn() (stderr) so it never pollutes detect_gpus' JSON on stdout.
+nvenc_driver_ok() {
+    local drv major
+    drv="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1)"
+    major="${drv%%.*}"
+    if [[ -z "$major" || ! "$major" =~ ^[0-9]+$ ]]; then
+        warn "could not read NVIDIA driver version; advertising NVENC anyway"
+        echo 0; return
+    fi
+    if (( major < ARM_NVENC_MIN_DRIVER )); then
+        warn "NVIDIA driver ${drv} is too old for this build's NVENC (needs >= ${ARM_NVENC_MIN_DRIVER}.x); skipping NVENC so transcodes fall back to CPU. Upgrade the driver to enable HW encode."
+        echo 1; return
+    fi
+    log "NVIDIA driver ${drv} detected (>= ${ARM_NVENC_MIN_DRIVER}.x); advertising NVENC" >&2
+    echo 0
+}
+
 # Phase 7b: enumerate GPUs host-side so the GPU-free backend can fill the `gpus`
 # table from ARM_GPUS instead of probing hardware. Prints a compact JSON array on
 # stdout (empty `[]` if none). Mirrors services/backend/arm_backend/gpu_probe.py.
@@ -358,8 +385,9 @@ detect_gpus() {
             entries+=("{\"vendor\":\"${vendor}\",\"device_path\":\"${node}\",\"encoder_kinds\":[\"h264\",\"h265\"]}")
         done
     fi
-    # NVIDIA (NVENC) via nvidia-smi — one entry per listed GPU index.
-    if command -v nvidia-smi >/dev/null 2>&1; then
+    # NVIDIA (NVENC) via nvidia-smi — one entry per listed GPU index. Gated on a
+    # driver new enough for the shipped HandBrake NVENC build (see above).
+    if command -v nvidia-smi >/dev/null 2>&1 && [[ "$(nvenc_driver_ok)" == 0 ]]; then
         while IFS= read -r idx; do
             [[ -n "$idx" ]] || continue
             entries+=("{\"vendor\":\"nvenc\",\"device_path\":\"nvidia://${idx}\",\"encoder_kinds\":[\"h264\",\"h265\"]}")

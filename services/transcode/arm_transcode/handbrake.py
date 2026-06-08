@@ -34,6 +34,14 @@ logger = logging.getLogger("arm_transcode.handbrake")
 
 ProgressCallback = Callable[[int, int | None, str | None], Awaitable[None]]
 
+# How many trailing stderr lines to attach to the rc!=0 error. HandBrake prints
+# the verbose title/audio dump *before* the decisive failure line (e.g. the
+# NVENC `Driver does not support the required nvenc API version` message), so a
+# short tail silently drops the one line that explains the failure. The full
+# stderr is always tee'd to the per-job log at DEBUG; this is just the inline
+# excerpt carried in the exception → `transcode_tasks.last_error`.
+_STDERR_TAIL_LINES = 1000
+
 
 # `Encoding: task 2 of 3, 47.30 % (45.67 fps, avg 23.45 fps, ETA 00h12m34s)`
 # `Encoding: task 1 of 1, 0.00 %`           ← no ETA yet (HandBrake hasn't
@@ -129,7 +137,7 @@ async def transcode_handbrake(
             await stderr_task
 
     if rc != 0:
-        tail = "\n".join(stderr_buf[-30:])
+        tail = "\n".join(stderr_buf[-_STDERR_TAIL_LINES:])
         raise RuntimeError(f"HandBrakeCLI exited rc={rc}\nstderr tail:\n{tail}")
 
     return output_path.stat().st_size

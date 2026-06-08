@@ -45,6 +45,24 @@ from arm_transcode.ws_client import WSClient
 
 logger = logging.getLogger("arm_transcode.main")
 
+# Upper bound on the error string we PATCH to `transcode_tasks.last_error`.
+# `last_error` is an unbounded TEXT column, but a pathological multi-MB stderr
+# shouldn't bloat the row / WS frame. Generous enough to hold handbrake.py's
+# 1000-line stderr tail (~80 KB) intact; see `_clip_error`.
+_MAX_ERROR_CHARS = 100_000
+
+
+def _clip_error(msg: str) -> str:
+    """Bound an error string for `last_error`, keeping the *tail*.
+
+    Encoder failures (HandBrake/ffmpeg) print the decisive line last, so we
+    truncate from the front, not the back — the historical `str(exc)[:500]`
+    kept the front and dropped exactly the line that explained the failure.
+    """
+    if len(msg) <= _MAX_ERROR_CHARS:
+        return msg
+    return "…(truncated)…\n" + msg[-_MAX_ERROR_CHARS:]
+
 
 class CancelRequested(Exception):
     pass
@@ -196,7 +214,7 @@ async def run() -> int:
                     rc = 0
                 except Exception as exc:
                     logger.exception("encoder failed: %s", exc)
-                    await api.fail(cfg.task_id, last_error=str(exc)[:500])
+                    await api.fail(cfg.task_id, last_error=_clip_error(str(exc)))
                     rc = 1
                 else:
                     relative = final_output.relative_to(registered.media_root).as_posix()
