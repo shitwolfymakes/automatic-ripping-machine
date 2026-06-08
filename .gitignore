@@ -211,3 +211,4 @@ node_modules/
 # `git filter-branch` before force-push.
 /certs/
 .claude/scheduled_tasks.lock
+services/ui/src/api/generated.ts
