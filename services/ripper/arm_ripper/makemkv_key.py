@@ -10,16 +10,6 @@ The heavy lifting lives in `update_key.sh`: it reads `MAKEMKV_KEY` from
 the environment and, when set, writes that operator key into
 `~/.MakeMKV/settings.conf`; otherwise it scrapes the current month's free
 beta key from the MakeMKV forum.
-
-Key precedence (highest first):
-
-1. The operator key configured in the UI (`Config.makemkv_key`). The
-   JobController fetches it and passes it as ``key`` here; we inject it as
-   ``MAKEMKV_KEY`` in the script's environment so the configured value wins
-   over any host-set env var.
-2. The legacy ``MAKEMKV_KEY`` env var on the ripper container (inherited by
-   the subprocess when ``key`` is ``None``).
-3. The monthly free beta key scraped from the MakeMKV forum.
 """
 
 import asyncio
@@ -40,14 +30,8 @@ UPDATE_KEY_SCRIPT = "/usr/local/bin/update_key.sh"
 REFRESH_TIMEOUT_SECONDS = 120.0
 
 
-async def refresh_makemkv_key(script_path: str = UPDATE_KEY_SCRIPT, key: str | None = None) -> None:
+async def refresh_makemkv_key(script_path: str = UPDATE_KEY_SCRIPT) -> None:
     """Refresh `~/.MakeMKV/settings.conf` before makemkvcon runs.
-
-    When ``key`` is supplied (the operator key from `Config.makemkv_key`),
-    it is injected as ``MAKEMKV_KEY`` in the script's environment so it
-    overrides any host-set env var. When ``None``, the subprocess inherits
-    the parent environment unchanged, preserving the legacy env-var path and
-    the forum-scrape fallback.
 
     Non-fatal by design. Two reasons it's safe to swallow errors:
 
@@ -67,19 +51,11 @@ async def refresh_makemkv_key(script_path: str = UPDATE_KEY_SCRIPT, key: str | N
         logger.debug("makemkv key refresh skipped: %s not executable", script_path)
         return
 
-    # Inject the configured key (if any) so update_key.sh's MAKEMKV_KEY branch
-    # picks it up ahead of any host-set value. A blank/whitespace key is
-    # treated as unset so it doesn't shadow the env/scrape fallbacks.
-    env = None
-    if key and key.strip():
-        env = {**os.environ, "MAKEMKV_KEY": key}
-
     try:
         proc = await asyncio.create_subprocess_exec(
             script_path,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
-            env=env,
         )
     except OSError as exc:
         logger.warning("makemkv key refresh could not start (%s): %s", script_path, exc)

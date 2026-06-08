@@ -30,7 +30,6 @@ def _to_view(cfg: Config) -> ConfigView:
     return ConfigView(
         tmdb_api_key=cfg.tmdb_api_key,
         omdb_api_key=cfg.omdb_api_key,
-        makemkv_key=cfg.makemkv_key,
         musicbrainz_user_agent=cfg.musicbrainz_user_agent,
         auto_transcode_on_idle=cfg.auto_transcode_on_idle,
         auto_rip_on_insert=cfg.auto_rip_on_insert,

@@ -51,18 +51,15 @@ re-encodes those WAVs to FLAC/MP3 via ffmpeg.
 
 ## Dev rebuild
 
-In dev, the `arm-transcode` compose service carries `deploy.replicas: 0`: a
-normal `docker compose up -d --build` (or `docker compose build`) **builds** the
-image as `arm-transcode:latest` but **never starts** a container — the dispatcher
-spawns short-lived containers from it on demand. To (re)build just this image:
+The image is not declared as a runtime compose service — the dispatcher
+spawns it on demand. To build it locally:
 
 ```sh
-docker compose build arm-transcode
+docker compose --profile build-transcode build arm-transcode-builder
 ```
 
-The dispatcher picks the image up by name. In dev it's built locally and tagged
-`arm-transcode:latest` (never pulled); production overrides `ARM_TRANSCODE_IMAGE`
-with the versioned image pulled from the registry.
+The dispatcher picks the image up by name (`arm-transcode:dev` by
+default, override via `ARM_TRANSCODE_IMAGE` in `.env`).
 
 ## Lifecycle (single task per container)
 
@@ -93,28 +90,34 @@ catches it via the WS subscription and SIGTERMs the encoder. After a
 
 ## GPU transcoding (Phase 7b)
 
-There is **no GPU overlay** and the Backend is **GPU-free** — it ships no
-`nvidia-smi` and gets no GPU device access. GPUs are detected **host-side at
-install time** (`devtools/setup-dev.sh` / `install.sh`) and handed to the
-Backend as the `ARM_GPUS` JSON env var; the Backend just parses it at lifespan
-startup to fill the `gpus` table (`arm_backend/gpu_probe.py:load_configured_gpus`).
+Run with the GPU overlay loaded:
 
-The only container that touches a GPU is the **ephemeral transcoder**. This
-image is the fat, multi-vendor HW image: the VAAPI/QSV userspace (`libva`,
-`mesa-va-drivers`, `intel-media-va-driver-non-free`, `i965-va-driver`, oneVPL)
-is baked in; NVENC's `libnvidia-encode` is injected at runtime by the host's
-nvidia-container-toolkit. The dispatcher passes the matching device into each
-spawned container — `devices=/dev/dri/renderD*` for VAAPI/QSV, `runtime: nvidia`
-+ `device_requests` for NVENC (`transcode_dispatcher.py:_inject_gpu_run_kwargs`).
+```sh
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+```
 
-NVIDIA hosts need nvidia-container-toolkit installed + registered with docker
-(`nvidia-ctk runtime configure`); `install.sh` offers to set this up on apt
-hosts. Re-run the installer after a GPU/driver change to refresh `ARM_GPUS`.
+The overlay adds `/dev/dri:/dev/dri:ro` (so Backend can list Intel/AMD
+render nodes) and `runtime: nvidia` + `device_requests` (so the NVIDIA
+driver libraries are accessible from within the Backend container).
 
-`ARM_GPUS` is a JSON array; each entry mirrors a `gpus` row:
+`nvidia-smi` itself ships **inside the Backend image** via apt
+(`nvidia-utils-535` from Debian `non-free` / `bookworm-backports`). The
+default branch is 535; override at build time if your host driver is on
+a different major version:
 
-| vendor | detected host-side from | encoders advertised |
-|--------|-------------------------|---------------------|
+```sh
+docker compose build --build-arg NVIDIA_UTILS_VERSION=525 arm-backend
+```
+
+If the in-image `nvidia-smi` major version doesn't match the host
+driver, NVIDIA refuses the call and the probe records nothing for
+NVENC — the host falls through to CPU.
+
+Backend probes the host once at lifespan startup and populates the
+`gpus` table:
+
+| vendor | how detected | encoders advertised |
+|--------|--------------|---------------------|
 | QSV    | `/dev/dri/renderD*` + `/sys vendor=0x8086` | h264, h265 |
 | VAAPI  | `/dev/dri/renderD*` + `/sys vendor=0x1002` | h264, h265 |
 | NVENC  | `nvidia-smi -L` (per GPU) | h264, h265 |
@@ -133,19 +136,15 @@ AV1 preset as CPU-only for Phase 7b.
 | `NULL` (default) | GPU             | queue → GPU when free | CPU                |
 
 The dispatcher injects `ARM_GPU_VENDOR`, `ARM_GPU_DEVICE`, and
-`ARM_GPU_CODEC` env vars; `arm_transcode/handbrake.py` maps them to
-HandBrake's HW encoder ID and appends `--encoder <id>`. The IDs are
-`qsv_h264`/`qsv_h265` (Intel), `nvenc_h264`/`nvenc_h265` (NVIDIA), and
-`vce_h264`/`vce_h265` (AMD — HandBrake has no generic "vaapi" encoder, so the
-`vaapi` vendor token from the probe bridges to `vce_*`). Verify with the
-spawned container's logs:
+`ARM_GPU_CODEC` env vars; `arm_transcode/handbrake.py` appends
+`--encoder <vendor>_<codec>` (e.g. `vaapi_h265`, `nvenc_h264`) to the
+HandBrake invocation. Verify with the spawned container's logs:
 
 ```sh
 docker compose logs arm-transcode-<id> | grep "HandBrakeCLI launching"
 ```
 
-These encoders are built into the image (see `services/transcode/Dockerfile`,
-HandBrakeCLI compiled with `--enable-qsv/nvenc/vce`). HandBrake only *lists* an
-encoder when it can initialize the device, so `HandBrakeCLI --help` shows the HW
-IDs only with the GPU passed in. There's no silent CPU fallback at the encoder
-layer — GPU is only chosen when Backend successfully claimed a `gpus` row.
+If your host's HandBrake build doesn't include the requested encoder
+(`HandBrakeCLI --help | grep encoder` to check), the task fails with a
+clear `last_error`. There's no silent CPU fallback at the encoder layer
+— GPU is only chosen when Backend successfully claimed a `gpus` row.

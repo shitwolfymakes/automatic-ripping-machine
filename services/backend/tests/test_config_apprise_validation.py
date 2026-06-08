@@ -155,20 +155,3 @@ def test_default_view_has_notifications_disabled(signing_key: bytes) -> None:
         r = client.get("/api/config", headers=_auth(token))
     assert r.status_code == 200, r.text
     assert r.json()["notifications_enabled"] is False
-
-
-def test_makemkv_key_round_trips(signing_key: bytes) -> None:
-    db = FakeSession()
-    _seed(db)
-    app, token = _make_app(signing_key, db)
-    with TestClient(app) as client:
-        # Unset by default.
-        r = client.get("/api/config", headers=_auth(token))
-        assert r.status_code == 200, r.text
-        assert r.json()["makemkv_key"] is None
-
-        # PATCH persists it and the view echoes it back.
-        r = client.patch("/api/config", json={"makemkv_key": "T-abc123"}, headers=_auth(token))
-        assert r.status_code == 200, r.text
-        assert r.json()["makemkv_key"] == "T-abc123"
-        assert db.rows["config"][0].makemkv_key == "T-abc123"

@@ -180,7 +180,7 @@ class JobController:
                 # the disc (the scan probe runs it for every disc), so a
                 # container up across a beta-key rotation doesn't scan/rip
                 # protected discs with a stale key.
-                await refresh_makemkv_key(key=await self._configured_makemkv_key())
+                await refresh_makemkv_key()
                 try:
                     scan_result = await scan_disc(device_path)
                 except ScanError as e:
@@ -335,21 +335,6 @@ class JobController:
             logger.warning("get_job %s failed (%s); will retry on next signal", job_id, e)
             return None
 
-    async def _configured_makemkv_key(self) -> str | None:
-        """The operator's UI-set MakeMKV key, or None to fall back to the
-        MAKEMKV_KEY env var / forum scrape.
-
-        Fail-open: a flapping backend must not block ripping. On any lookup
-        error we return None, which leaves the legacy env/scrape behaviour
-        intact rather than wiping a key the operator already configured.
-        """
-        try:
-            cfg = await self._client.get_ripper_config()
-        except httpx.HTTPError as e:
-            logger.warning("makemkv key lookup failed (%s); using env/scrape fallback", e)
-            return None
-        return cfg.makemkv_key
-
     async def _run_rip(self, job: Job, device_path: str) -> None:
         rip_start = await self._rip_start_with_retry(job.id)
         logger.info(
@@ -375,7 +360,7 @@ class JobController:
         with with_log_context(job_id=job.id):
             # Crash-resume skips the scan path, so refresh the key here too —
             # a rip resumed days after a crash must not run on a stale key.
-            await refresh_makemkv_key(key=await self._configured_makemkv_key())
+            await refresh_makemkv_key()
             rip_start = await self._client.resume(job.id)
             logger.info("rip-resume job_id=%s tracks=%d", job.id, len(rip_start.tracks))
             await self._execute_rip(

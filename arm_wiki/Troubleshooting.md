@@ -116,18 +116,17 @@ Then `docker compose up -d`.
 
 ## GPU isn't detected
 
-1. Check `ARM_GPUS` in `~/arm/.env`. The installer writes it from host-side
-   detection; if it's `[]`, nothing was found. Re-run `install.sh` (or
-   `devtools/setup-dev.sh`) after fixing drivers/toolkit — detection only happens
-   at install time.
+1. Did you load the overlay? Either `COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml`
+   in `.env`, or `-f docker-compose.yml -f docker-compose.gpu.yml` on the
+   command line.
 2. **NVIDIA:** install the NVIDIA Container Toolkit on the host (the installer
-   offers to do this on apt hosts) — see
-   [Hardware Transcoding § NVIDIA](Hardware-Transcoding#nvidia-the-container-toolkit).
-   Without it the transcoder can't get the GPU and the job falls back to CPU.
-   Confirm the runtime is registered: `docker info | grep -i nvidia`.
-3. **Intel/AMD:** `/dev/dri/renderD*` must exist on the host. If it's missing,
-   the kernel driver for your GPU isn't loaded.
-4. Check what the backend loaded: `docker compose logs arm-backend | grep -i gpu`.
+   warns when it's missing) — see
+   [Hardware Transcoding § NVIDIA](Hardware-Transcoding#nvidia-install-the-container-toolkit-first).
+   Without it, `docker compose up` fails with *"could not select device driver
+   nvidia"*.
+3. **Intel/AMD:** the overlay must mount `/dev/dri`, which has to exist on the
+   host.
+4. Check what the backend probe saw: `docker compose logs arm-backend | grep -i gpu`.
 
 A host with no detectable GPU still transcodes on CPU — this is a speed issue,
 not a broken stack.

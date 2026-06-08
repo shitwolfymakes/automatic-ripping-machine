@@ -3585,17 +3585,6 @@
             ],
             "title": "Omdb Api Key"
           },
-          "makemkv_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Makemkv Key"
-          },
           "musicbrainz_user_agent": {
             "anyOf": [
               {
@@ -3703,17 +3692,6 @@
             ],
             "title": "Omdb Api Key"
           },
-          "makemkv_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Makemkv Key"
-          },
           "musicbrainz_user_agent": {
             "anyOf": [
               {
@@ -3779,7 +3757,6 @@
         "required": [
           "tmdb_api_key",
           "omdb_api_key",
-          "makemkv_key",
           "musicbrainz_user_agent",
           "auto_transcode_on_idle",
           "auto_rip_on_insert",
@@ -5136,17 +5113,6 @@
           "auto_rip_on_insert": {
             "type": "boolean",
             "title": "Auto Rip On Insert"
-          },
-          "makemkv_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Makemkv Key"
           }
         },
         "type": "object",
