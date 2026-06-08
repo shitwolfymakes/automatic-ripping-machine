@@ -8,6 +8,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# Runtime/data dirs (db, raw, media, logs, certs) live under ./arm/ to keep the
+# repo root tidy — the dev mirror of production's ~/arm prefix. The compose file
+# and .env still live in the repo root (dev builds from `context: .`).
+ARM_DIR="${ROOT_DIR}/arm"
+
 require() {
     local bin="$1"
     local hint="$2"
@@ -99,12 +104,21 @@ else
     ( cd "${UI_DIR}" && npm ci --no-audit --no-fund )
 fi
 
-if [[ -f "${ROOT_DIR}/certs/arm-ca.crt" ]]; then
-    echo "==> certs already present in certs/ — skipping bootstrap"
+# Create the data-dir tree under ./arm/ (mirrors install.sh's ensure_prefix:
+# setgid + group-writable on the ARM-written dirs so spawned containers inherit
+# the group). Idempotent; pre-creating avoids docker bind-mounting root-owned
+# source dirs into the PUID-dropped containers.
+echo "==> ensuring data dirs under ${ARM_DIR}"
+mkdir -p "${ARM_DIR}"/{certs,raw,media,logs,db}
+chmod 700 "${ARM_DIR}/certs"
+chmod 2775 "${ARM_DIR}/raw" "${ARM_DIR}/media" "${ARM_DIR}/logs"
+
+if [[ -f "${ARM_DIR}/certs/arm-ca.crt" ]]; then
+    echo "==> certs already present in arm/certs/ — skipping bootstrap"
 else
     echo "==> generating internal CA + leaves via install.sh --certs-only"
     bash "${ROOT_DIR}/install.sh" \
-        --prefix "${ROOT_DIR}" \
+        --prefix "${ARM_DIR}" \
         --certs-only \
         --no-env \
         --no-compose \
@@ -185,11 +199,11 @@ emit_ripper_block() {
       PGID: \${PGID:-1000}
       CDROM_GID: \${CDROM_GID:-44}
     volumes:
-      - ./raw:/raw
-      - ./logs:/logs
-      - ./certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
-      - ./certs/arm-ripper-sr${n}.crt:/etc/ssl/arm/tls.crt:ro
-      - ./certs/arm-ripper-sr${n}.key:/etc/ssl/arm/tls.key:ro
+      - ./arm/raw:/raw
+      - ./arm/logs:/logs
+      - ./arm/certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
+      - ./arm/certs/arm-ripper-sr${n}.crt:/etc/ssl/arm/tls.crt:ro
+      - ./arm/certs/arm-ripper-sr${n}.key:/etc/ssl/arm/tls.key:ro
 EOF
 }
 
@@ -200,31 +214,31 @@ ensure_ripper_certs() {
     local i n missing=0
     for i in "${!DRIVES_SR[@]}"; do
         n="${DRIVES_SR[$i]}"
-        if [[ ! -f "${ROOT_DIR}/certs/arm-ripper-sr${n}.crt" \
-           || ! -f "${ROOT_DIR}/certs/arm-ripper-sr${n}.key" ]]; then
+        if [[ ! -f "${ARM_DIR}/certs/arm-ripper-sr${n}.crt" \
+           || ! -f "${ARM_DIR}/certs/arm-ripper-sr${n}.key" ]]; then
             missing=1
         fi
     done
     if [[ ${missing} -eq 1 ]]; then
         echo "==> a detected drive is missing its leaf cert — regenerating via install.sh --certs-only"
         bash "${ROOT_DIR}/install.sh" \
-            --prefix "${ROOT_DIR}" --certs-only --no-env --no-compose --no-udev
+            --prefix "${ARM_DIR}" --certs-only --no-env --no-compose --no-udev
     fi
 }
 
 generate_ripper_services() {
-    # Bootstrap the gitignored dev compose from the committed template the first
-    # time (same copy-if-missing semantics as .env from .env.example). Existing
-    # files are left alone so local tweaks survive; delete docker-compose.yml and
-    # re-run to refresh the static services from the template.
-    if [[ ! -f "${COMPOSE_FILE_PATH}" ]]; then
-        if [[ ! -f "${COMPOSE_TEMPLATE_PATH}" ]]; then
-            echo "ERROR: ${COMPOSE_TEMPLATE_PATH} missing; cannot create docker-compose.yml." >&2
-            exit 1
-        fi
-        echo "==> creating docker-compose.yml from docker-compose.yml.example"
-        cp "${COMPOSE_TEMPLATE_PATH}" "${COMPOSE_FILE_PATH}"
+    # The dev compose is a generated artifact (gitignored, like .env): always
+    # regenerate it from the committed template, then re-splice the per-drive
+    # ripper services. Regenerating every run keeps the static services
+    # (db/backend/ui/transcode) in sync with the template — knobs live in .env,
+    # so there are no hand-edits to preserve here. (A previous copy-if-absent
+    # left stale static services behind after template changes.)
+    if [[ ! -f "${COMPOSE_TEMPLATE_PATH}" ]]; then
+        echo "ERROR: ${COMPOSE_TEMPLATE_PATH} missing; cannot create docker-compose.yml." >&2
+        exit 1
     fi
+    echo "==> generating docker-compose.yml from docker-compose.yml.example"
+    cp "${COMPOSE_TEMPLATE_PATH}" "${COMPOSE_FILE_PATH}"
 
     if ! grep -qF "${RIPPER_BEGIN_MARK}" "${COMPOSE_FILE_PATH}"; then
         echo "ERROR: ${COMPOSE_FILE_PATH} lacks the '${RIPPER_BEGIN_MARK}' sentinel; cannot splice rippers." >&2
@@ -305,13 +319,32 @@ else
 fi
 echo "==> detected GPU(s) for ARM_GPUS: ${ARM_GPUS_VALUE}"
 
-# Build the fat HW transcode image locally (dev never pulls it). The dispatcher
-# spawns it ephemerally per task; it lives behind the `build-transcode` profile
-# so a plain `docker compose up` never starts it. Without this build the
-# dispatcher would try to pull `arm-transcode:latest` and every transcode fails
-# on a fresh dev box. Always rebuild so it tracks local source changes.
-echo "==> building arm-transcode:latest locally (fat multi-vendor HW image)"
-( cd "${ROOT_DIR}" && docker compose --profile build-transcode build arm-transcode-builder )
+# Migrate away the old hardcoded transcode-image override. Dev now lets compose
+# default ARM_TRANSCODE_IMAGE to arm-transcode:latest (built locally); a stale
+# `ARM_TRANSCODE_IMAGE=arm-transcode:dev` line from an earlier setup would
+# override that and point the dispatcher at a never-built tag.
+if grep -q '^ARM_TRANSCODE_IMAGE=arm-transcode:dev$' "${ENV_FILE}"; then
+    sed -i '/^ARM_TRANSCODE_IMAGE=arm-transcode:dev$/d' "${ENV_FILE}"
+    echo "==> removed stale ARM_TRANSCODE_IMAGE=arm-transcode:dev from .env (compose now defaults to arm-transcode:latest)"
+fi
+
+# Migrate host data paths into ./arm/ (older .env files point at the repo root).
+# Idempotent: rewrites each line to the arm/ path regardless of prior value.
+# `${PWD}` is written literally into .env on purpose (compose expands it, not us).
+# shellcheck disable=SC2016
+if grep -q '^ARM_HOST_RAW_PATH=\${PWD}/raw$' "${ENV_FILE}"; then
+    sed -i \
+        -e 's|^ARM_HOST_RAW_PATH=.*|ARM_HOST_RAW_PATH=${PWD}/arm/raw|' \
+        -e 's|^ARM_HOST_MEDIA_PATH=.*|ARM_HOST_MEDIA_PATH=${PWD}/arm/media|' \
+        -e 's|^ARM_HOST_LOGS_PATH=.*|ARM_HOST_LOGS_PATH=${PWD}/arm/logs|' \
+        -e 's|^ARM_HOST_CERTS_PATH=.*|ARM_HOST_CERTS_PATH=${PWD}/arm/certs|' \
+        "${ENV_FILE}"
+    echo "==> migrated ARM_HOST_*_PATH in .env to ./arm/ (was repo root)"
+fi
+
+# The transcode image is built by `docker compose up -d --build` like every other
+# service (the arm-transcode service has deploy.replicas:0 — built, never run), so
+# there's no separate build step here.
 
 # Prevent the host's udisks2/gvfs from auto-mounting optical drives ARM
 # wants to drive. Without this, post-rip `eject` from the ripper

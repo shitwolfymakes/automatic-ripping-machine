@@ -51,16 +51,18 @@ re-encodes those WAVs to FLAC/MP3 via ffmpeg.
 
 ## Dev rebuild
 
-The image is not declared as a runtime compose service — the dispatcher
-spawns it on demand. To build it locally:
+In dev, the `arm-transcode` compose service carries `deploy.replicas: 0`: a
+normal `docker compose up -d --build` (or `docker compose build`) **builds** the
+image as `arm-transcode:latest` but **never starts** a container — the dispatcher
+spawns short-lived containers from it on demand. To (re)build just this image:
 
 ```sh
-docker compose --profile build-transcode build arm-transcode-builder
+docker compose build arm-transcode
 ```
 
-The dispatcher picks the image up by name. In dev it's built locally and
-tagged `arm-transcode:latest` (never pulled); production overrides
-`ARM_TRANSCODE_IMAGE` with the versioned image pulled from the registry.
+The dispatcher picks the image up by name. In dev it's built locally and tagged
+`arm-transcode:latest` (never pulled); production overrides `ARM_TRANSCODE_IMAGE`
+with the versioned image pulled from the registry.
 
 ## Lifecycle (single task per container)
 
