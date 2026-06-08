@@ -384,6 +384,12 @@ class TranscodeDispatcher:
             env["ARM_GPU_DEVICE"] = assignment.gpu.device_path
             if assignment.codec is not None:
                 env["ARM_GPU_CODEC"] = assignment.codec
+            # VAAPI/QSV need the render-node group inside the container; the
+            # entrypoint adds `arm` to RENDER_GID before gosu (a docker
+            # --group-add wouldn't survive the gosu group reset). NVENC's device
+            # access comes via the nvidia runtime, so it doesn't need this.
+            if assignment.gpu.vendor in (GpuVendor.VAAPI, GpuVendor.QSV) and self._settings.ARM_RENDER_GID:
+                env["RENDER_GID"] = self._settings.ARM_RENDER_GID
             self._inject_gpu_run_kwargs(extra_run_kwargs, assignment.gpu)
         # Container hostname is the last 12 chars of the ULID — short enough
         # for `docker ps` and unique enough that two simultaneous transcoders
@@ -417,6 +423,10 @@ class TranscodeDispatcher:
         NVENC: ask for the NVIDIA runtime + a single GPU via `device_requests`.
         """
         if gpu.vendor in (GpuVendor.VAAPI, GpuVendor.QSV):
+            # Grant cgroup access to the render node. File-level access (the node
+            # is root:render 0660) is handled by the container entrypoint adding
+            # `arm` to RENDER_GID — see _spawn_container; a docker group_add here
+            # wouldn't survive the entrypoint's gosu group reset.
             kwargs["devices"] = [f"{gpu.device_path}:{gpu.device_path}:rwm"]
             return
         if gpu.vendor == GpuVendor.NVENC:

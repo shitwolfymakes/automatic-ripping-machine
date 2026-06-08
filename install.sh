@@ -369,6 +369,18 @@ detect_gpus() {
     printf '[%s]' "${entries[*]:-}"
 }
 
+# GID of the /dev/dri render-node group. The dispatcher adds it to VAAPI/QSV
+# transcoders so the PUID-dropped process can open the node (root:render 0660).
+# Empty if there's no render node (CPU / NVENC-only host).
+detect_render_gid() {
+    local node
+    for node in /dev/dri/renderD*; do
+        [[ -e "$node" ]] || continue
+        stat -c '%g' "$node"
+        return 0
+    done
+}
+
 seed_env() {
     local env_file="$PREFIX/.env"
 
@@ -377,11 +389,12 @@ seed_env() {
     pgid="$(id -g)"
     cdrom_gid="$(stat -c '%g' /dev/sr0 2>/dev/null || echo 44)"
 
-    local arm_gpus
+    local arm_gpus render_gid
     arm_gpus="$(detect_gpus)"
+    render_gid="$(detect_render_gid || true)"
 
     if [[ -f "$env_file" ]]; then
-        log ".env exists; preserving secrets, re-deriving PUID/PGID/CDROM_GID/ARM_GPUS"
+        log ".env exists; preserving secrets, re-deriving PUID/PGID/CDROM_GID/ARM_GPUS/ARM_RENDER_GID"
         sed -i \
             -e "s|^PUID=.*|PUID=${puid}|" \
             -e "s|^PGID=.*|PGID=${pgid}|" \
@@ -392,7 +405,12 @@ seed_env() {
         else
             printf 'ARM_GPUS=%s\n' "$arm_gpus" >> "$env_file"
         fi
-        log "detected GPU(s): ${arm_gpus}"
+        if grep -q '^ARM_RENDER_GID=' "$env_file"; then
+            sed -i "s|^ARM_RENDER_GID=.*|ARM_RENDER_GID=${render_gid}|" "$env_file"
+        else
+            printf 'ARM_RENDER_GID=%s\n' "$render_gid" >> "$env_file"
+        fi
+        log "detected GPU(s): ${arm_gpus}  render_gid=${render_gid:-(none)}"
         return 0
     fi
 
@@ -454,6 +472,11 @@ ARM_DOCKER_NETWORK=armv3_default
 # Empty [] => CPU-only transcoding. Re-run install.sh after a GPU/driver change.
 # NVIDIA hosts also need nvidia-container-toolkit (install.sh offers to set it up).
 ARM_GPUS=${arm_gpus}
+
+# GID of the /dev/dri render-node group. The dispatcher adds it to VAAPI/QSV
+# transcoders so the PUID-dropped process can open the node (root:render 0660).
+# Empty => not added (CPU / NVENC-only host).
+ARM_RENDER_GID=${render_gid}
 EOF
     chmod 600 "$env_file"
 }
@@ -605,6 +628,7 @@ services:
       ARM_HOST_CERTS_PATH: \${ARM_HOST_CERTS_PATH}
       ARM_DOCKER_NETWORK: \${ARM_DOCKER_NETWORK:-armv3_default}
       ARM_GPUS: \${ARM_GPUS:-[]}
+      ARM_RENDER_GID: \${ARM_RENDER_GID:-}
     volumes:
       - ./raw:/raw
       - ./media:/media

@@ -95,5 +95,12 @@ class Settings(BaseSettings):
     # for the schema. Re-run the installer after a GPU/driver change.
     ARM_GPUS: str = ""
 
+    # GID of the host's /dev/dri render node group (detected host-side, like
+    # CDROM_GID for the ripper). The dispatcher adds it via `group_add` to each
+    # VAAPI/QSV transcoder so the PUID-dropped process can open the render node
+    # (root:render 0660) — without it HandBrake's QSV/VAAPI init fails with
+    # "failed to create hwdevice". Empty => no group added (CPU / NVENC-only).
+    ARM_RENDER_GID: str = ""
+
 
 settings = Settings()  # type: ignore[call-arg]  # fields loaded from env by pydantic-settings
