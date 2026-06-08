@@ -98,8 +98,8 @@ async def test_refresh_gpu_inventory_populates(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(main_mod, "SessionLocal", lambda: _SessionCtx(db))
     monkeypatch.setattr(
         main_mod,
-        "load_configured_gpus",
-        lambda _raw: [ProbedGpu(vendor=GpuVendor.QSV, device_path="/dev/dri/renderD128", encoder_kinds=["h264"])],
+        "probe_gpus",
+        lambda: [ProbedGpu(vendor=GpuVendor.QSV, device_path="/dev/dri/renderD128", encoder_kinds=["h264"])],
     )
     hub = _Hub()
     await main_mod._refresh_gpu_inventory(hub)
@@ -113,7 +113,7 @@ async def test_refresh_gpu_inventory_empty_emits_unavailable(monkeypatch: pytest
 
     db = FakeSession()
     monkeypatch.setattr(main_mod, "SessionLocal", lambda: _SessionCtx(db))
-    monkeypatch.setattr(main_mod, "load_configured_gpus", lambda _raw: [])
+    monkeypatch.setattr(main_mod, "probe_gpus", lambda: [])
     hub = _Hub()
     await main_mod._refresh_gpu_inventory(hub)
     assert hub.events == ["transcode.hw_unavailable"]

@@ -8,11 +8,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Runtime/data dirs (db, raw, media, logs, certs) live under ./arm/ to keep the
-# repo root tidy — the dev mirror of production's ~/arm prefix. The compose file
-# and .env still live in the repo root (dev builds from `context: .`).
-ARM_DIR="${ROOT_DIR}/arm"
-
 require() {
     local bin="$1"
     local hint="$2"
@@ -143,21 +138,12 @@ else
     ( cd "${UI_DIR}" && npm ci --no-audit --no-fund )
 fi
 
-# Create the data-dir tree under ./arm/ (mirrors install.sh's ensure_prefix:
-# setgid + group-writable on the ARM-written dirs so spawned containers inherit
-# the group). Idempotent; pre-creating avoids docker bind-mounting root-owned
-# source dirs into the PUID-dropped containers.
-echo "==> ensuring data dirs under ${ARM_DIR}"
-mkdir -p "${ARM_DIR}"/{certs,raw,media,logs,db}
-chmod 700 "${ARM_DIR}/certs"
-chmod 2775 "${ARM_DIR}/raw" "${ARM_DIR}/media" "${ARM_DIR}/logs"
-
-if [[ -f "${ARM_DIR}/certs/arm-ca.crt" ]]; then
-    echo "==> certs already present in arm/certs/ — skipping bootstrap"
+if [[ -f "${ROOT_DIR}/certs/arm-ca.crt" ]]; then
+    echo "==> certs already present in certs/ — skipping bootstrap"
 else
     echo "==> generating internal CA + leaves via install.sh --certs-only"
     bash "${ROOT_DIR}/install.sh" \
-        --prefix "${ARM_DIR}" \
+        --prefix "${ROOT_DIR}" \
         --certs-only \
         --no-env \
         --no-compose \
@@ -238,11 +224,11 @@ emit_ripper_block() {
       PGID: \${PGID:-1000}
       CDROM_GID: \${CDROM_GID:-44}
     volumes:
-      - ./arm/raw:/raw
-      - ./arm/logs:/logs
-      - ./arm/certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
-      - ./arm/certs/arm-ripper-sr${n}.crt:/etc/ssl/arm/tls.crt:ro
-      - ./arm/certs/arm-ripper-sr${n}.key:/etc/ssl/arm/tls.key:ro
+      - ./raw:/raw
+      - ./logs:/logs
+      - ./certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
+      - ./certs/arm-ripper-sr${n}.crt:/etc/ssl/arm/tls.crt:ro
+      - ./certs/arm-ripper-sr${n}.key:/etc/ssl/arm/tls.key:ro
 EOF
 }
 
@@ -253,31 +239,31 @@ ensure_ripper_certs() {
     local i n missing=0
     for i in "${!DRIVES_SR[@]}"; do
         n="${DRIVES_SR[$i]}"
-        if [[ ! -f "${ARM_DIR}/certs/arm-ripper-sr${n}.crt" \
-           || ! -f "${ARM_DIR}/certs/arm-ripper-sr${n}.key" ]]; then
+        if [[ ! -f "${ROOT_DIR}/certs/arm-ripper-sr${n}.crt" \
+           || ! -f "${ROOT_DIR}/certs/arm-ripper-sr${n}.key" ]]; then
             missing=1
         fi
     done
     if [[ ${missing} -eq 1 ]]; then
         echo "==> a detected drive is missing its leaf cert — regenerating via install.sh --certs-only"
         bash "${ROOT_DIR}/install.sh" \
-            --prefix "${ARM_DIR}" --certs-only --no-env --no-compose --no-udev
+            --prefix "${ROOT_DIR}" --certs-only --no-env --no-compose --no-udev
     fi
 }
 
 generate_ripper_services() {
-    # The dev compose is a generated artifact (gitignored, like .env): always
-    # regenerate it from the committed template, then re-splice the per-drive
-    # ripper services. Regenerating every run keeps the static services
-    # (db/backend/ui/transcode) in sync with the template — knobs live in .env,
-    # so there are no hand-edits to preserve here. (A previous copy-if-absent
-    # left stale static services behind after template changes.)
-    if [[ ! -f "${COMPOSE_TEMPLATE_PATH}" ]]; then
-        echo "ERROR: ${COMPOSE_TEMPLATE_PATH} missing; cannot create docker-compose.yml." >&2
-        exit 1
+    # Bootstrap the gitignored dev compose from the committed template the first
+    # time (same copy-if-missing semantics as .env from .env.example). Existing
+    # files are left alone so local tweaks survive; delete docker-compose.yml and
+    # re-run to refresh the static services from the template.
+    if [[ ! -f "${COMPOSE_FILE_PATH}" ]]; then
+        if [[ ! -f "${COMPOSE_TEMPLATE_PATH}" ]]; then
+            echo "ERROR: ${COMPOSE_TEMPLATE_PATH} missing; cannot create docker-compose.yml." >&2
+            exit 1
+        fi
+        echo "==> creating docker-compose.yml from docker-compose.yml.example"
+        cp "${COMPOSE_TEMPLATE_PATH}" "${COMPOSE_FILE_PATH}"
     fi
-    echo "==> generating docker-compose.yml from docker-compose.yml.example"
-    cp "${COMPOSE_TEMPLATE_PATH}" "${COMPOSE_FILE_PATH}"
 
     if ! grep -qF "${RIPPER_BEGIN_MARK}" "${COMPOSE_FILE_PATH}"; then
         echo "ERROR: ${COMPOSE_FILE_PATH} lacks the '${RIPPER_BEGIN_MARK}' sentinel; cannot splice rippers." >&2
@@ -329,7 +315,7 @@ generate_ripper_services
 
 ENV_FILE="${ROOT_DIR}/.env"
 if [[ -f "${ENV_FILE}" ]]; then
-    echo "==> ${ENV_FILE} exists — preserving secrets, refreshing ARM_GPUS"
+    echo "==> ${ENV_FILE} exists — leaving untouched"
 else
     echo "==> creating .env from .env.example with generated secrets"
     pg_pass="$(openssl rand -hex 24)"
@@ -348,28 +334,6 @@ else
         "${ROOT_DIR}/.env.example" > "${ENV_FILE}"
     chmod 600 "${ENV_FILE}"
 fi
-
-# Refresh ARM_GPUS from host detection in both cases (it's derived, not a secret).
-ARM_GPUS_VALUE="$(detect_gpus)"
-if grep -q '^ARM_GPUS=' "${ENV_FILE}"; then
-    sed -i "s|^ARM_GPUS=.*|ARM_GPUS=${ARM_GPUS_VALUE}|" "${ENV_FILE}"
-else
-    printf 'ARM_GPUS=%s\n' "${ARM_GPUS_VALUE}" >> "${ENV_FILE}"
-fi
-echo "==> detected GPU(s) for ARM_GPUS: ${ARM_GPUS_VALUE}"
-
-# Render-node group for VAAPI/QSV device access (set-or-append, like ARM_GPUS).
-RENDER_GID_VALUE="$(detect_render_gid || true)"
-if grep -q '^ARM_RENDER_GID=' "${ENV_FILE}"; then
-    sed -i "s|^ARM_RENDER_GID=.*|ARM_RENDER_GID=${RENDER_GID_VALUE}|" "${ENV_FILE}"
-else
-    printf 'ARM_RENDER_GID=%s\n' "${RENDER_GID_VALUE}" >> "${ENV_FILE}"
-fi
-echo "==> detected render group GID for ARM_RENDER_GID: ${RENDER_GID_VALUE:-(none)}"
-
-# The transcode image is built by `docker compose up -d --build` like every other
-# service (the arm-transcode service has deploy.replicas:0 — built, never run), so
-# there's no separate build step here.
 
 # Prevent the host's udisks2/gvfs from auto-mounting optical drives ARM
 # wants to drive. Without this, post-rip `eject` from the ripper

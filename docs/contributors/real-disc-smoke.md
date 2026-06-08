@@ -173,10 +173,10 @@ Attach to the PR comment / issue:
   `~/arm/.env` (`MAKEMKV_KEY=…`).
 - **Audio CD identification can take 30–60s** — MusicBrainz lookups
   with rate-limiting are slow; don't assume the job is stuck.
-- **The transcode image is multi-GB.** In dev it's built locally up front
-  by `devtools/setup-dev.sh` (tagged `arm-transcode:latest`, never pulled);
-  production pulls the versioned image on first dispatch and the Backend logs
-  `pulling arm-transcode:…` while the transcode task sits at `queued`.
+- **First HandBrake transcode pulls a multi-GB image lazily** —
+  `arm-transcode:dev` (or `:v3.x`) is built/pulled on first dispatch.
+  The Backend logs `pulling arm-transcode:…` while the user-visible
+  transcode task sits at `queued`.
 - **Copy-protected discs.** Some commercial Blu-rays use AACS keys not
   in libaacs's defaults. MakeMKV handles most; some require an updated
   `KEYDB.cfg`. If a rip fails decryption, document it and move to the

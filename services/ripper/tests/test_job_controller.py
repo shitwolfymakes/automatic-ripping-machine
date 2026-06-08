@@ -60,8 +60,6 @@ class FakeClient:
         self.rip_start_calls: list[str] = []
         self.rip_complete_calls: list[str] = []
         self.auto_rip_on_insert: bool = True
-        self.makemkv_key: str | None = None
-        self.get_ripper_config_error: Exception | None = None
         self.get_ripper_config_calls: int = 0
 
     async def identify(
@@ -96,9 +94,7 @@ class FakeClient:
 
     async def get_ripper_config(self) -> RipperConfigView:
         self.get_ripper_config_calls += 1
-        if self.get_ripper_config_error is not None:
-            raise self.get_ripper_config_error
-        return RipperConfigView(auto_rip_on_insert=self.auto_rip_on_insert, makemkv_key=self.makemkv_key)
+        return RipperConfigView(auto_rip_on_insert=self.auto_rip_on_insert)
 
 
 @pytest.fixture(autouse=True)
@@ -236,53 +232,29 @@ async def test_manual_trigger_runs_even_when_auto_rip_disabled(stub_scan, stub_e
 
     await asyncio.wait_for(controller.handle_manual_trigger("sess_test"), timeout=2.0)
 
-    # The manual path bypasses the auto_rip gate (user already opted in) but
-    # still does one config lookup inside the pipeline to fetch the MakeMKV key.
-    assert client.get_ripper_config_calls == 1
+    # No config lookup on the manual path — user already opted in.
+    assert client.get_ripper_config_calls == 0
     assert client.identify_pending_session_ids == ["sess_test"]
     assert client.rip_start_calls == ["job_test"]
     assert client.rip_complete_calls == ["job_test"]
 
 
 async def test_pipeline_refreshes_makemkv_key_before_scan(monkeypatch, stub_scan, stub_eject):
-    """The key is refreshed once, before the scan probe, with the configured key."""
-    keys: list[str | None] = []
+    """The key is refreshed once, before the scan probe."""
+    calls: list[int] = []
 
-    async def _record(key: str | None = None) -> None:
-        keys.append(key)
+    async def _record() -> None:
+        calls.append(1)
 
     monkeypatch.setattr(jc_module, "refresh_makemkv_key", _record)
 
     client = FakeClient()
-    client.makemkv_key = "T-configured"
     client.identify_responses.append(_job(JobStatus.IDENTIFIED, title="Test Movie"))
     controller = JobController(client, "drv_test")
 
     await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
 
-    # Refreshed once, and the operator key from Config was threaded through.
-    assert keys == ["T-configured"]
-    assert client.rip_start_calls == ["job_test"]
-
-
-async def test_makemkv_key_lookup_failure_falls_back_to_none(monkeypatch, stub_scan, stub_eject):
-    """A backend error fetching the key is non-fatal: refresh runs with key=None
-    (env/scrape fallback) and the rip proceeds."""
-    keys: list[str | None] = []
-
-    async def _record(key: str | None = None) -> None:
-        keys.append(key)
-
-    monkeypatch.setattr(jc_module, "refresh_makemkv_key", _record)
-
-    client = FakeClient()
-    client.get_ripper_config_error = httpx.ConnectError("backend down")
-    client.identify_responses.append(_job(JobStatus.IDENTIFIED, title="Test Movie"))
-    controller = JobController(client, "drv_test", device_path="/dev/sr0")
-
-    await asyncio.wait_for(controller.handle_manual_trigger(None), timeout=2.0)
-
-    assert keys == [None]
+    assert calls == [1]
     assert client.rip_start_calls == ["job_test"]
 
 

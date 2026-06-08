@@ -68,29 +68,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     UV_PROJECT_ENVIRONMENT=/opt/venv
 
 # tini reaps HandBrake / ffmpeg subprocesses; gosu drops privileges to PUID;
-# handbrake-cli + ffmpeg + flac are the encoder toolchain. util-linux pulls in
-# `flock` for the atomic-rename safety net.
-#
-# Phase 7b — this is the fat, multi-vendor HW-transcode image (published to
-# Docker Hub; the dispatcher spawns it ephemerally per task and injects the
-# right device access). It bakes in the VAAPI/QSV *userspace*:
-#   - libva2 / libva-drm2 / vainfo — the VAAPI loader + a probe tool.
-#   - mesa-va-drivers           — AMD (VAAPI/VCN).
-#   - intel-media-va-driver-non-free + i965-va-driver — Intel QSV (modern +
-#     legacy iGPUs). The newer driver lives in Debian `non-free`.
-#   - libvpl2                   — oneVPL runtime for Intel QSV.
-# We apt-install `handbrake-cli` for its full runtime dependency closure, then
-# (further down) overwrite the binary with our HW-enabled build from the builder
-# stage. NVENC needs nothing baked here: `libnvidia-encode` is injected at
-# runtime by the host's NVIDIA Container Toolkit. The kernel device nodes
-# (/dev/dri/*, /dev/nvidia*) are passed in per-container by the dispatcher.
-#
-# `python:3.14-slim-bookworm` ships its base sources in deb822 format with an
-# explicit `Signed-By:` directive; legacy lines we add must carry the matching
-# `[signed-by=…]` option or apt errors with "Conflicting values ... Signed-By".
-RUN echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware' \
-        > /etc/apt/sources.list.d/non-free.list \
-    && apt-get update \
+# handbrake-cli + ffmpeg + flac are the encoder toolchain (CPU-only Phase 7;
+# GPU passthrough lands in Phase 7b). util-linux pulls in `flock` for the
+# atomic-rename safety net.
+RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         tini \
         gosu \
@@ -100,17 +81,7 @@ RUN echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://
         ffmpeg \
         flac \
         util-linux \
-        libva2 \
-        libva-drm2 \
-        vainfo \
-        mesa-va-drivers \
-        intel-media-va-driver-non-free \
-        i965-va-driver \
-        libvpl2 \
     && rm -rf /var/lib/apt/lists/*
-
-# Replace Debian's HW-less HandBrakeCLI with the HW-enabled build (NVENC/QSV/VCE).
-COPY --from=handbrake-builder /HandBrake/build/HandBrakeCLI /usr/bin/HandBrakeCLI
 
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/
 

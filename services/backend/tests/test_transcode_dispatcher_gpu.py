@@ -51,7 +51,7 @@ def _settings(**overrides: Any) -> Settings:
         "MAX_PARALLEL_TRANSCODES": 2,
         "ARM_TRANSCODE_STALE_THRESHOLD_SECONDS": 90,
         "ARM_TRANSCODE_MAX_ATTEMPTS": 3,
-        "ARM_TRANSCODE_IMAGE": "arm-transcode:latest",
+        "ARM_TRANSCODE_IMAGE": "arm-transcode:dev",
         "ARM_HOST_RAW_PATH": "/host/raw",
         "ARM_HOST_MEDIA_PATH": "/host/media",
         "ARM_HOST_LOGS_PATH": "/host/logs",
@@ -199,8 +199,6 @@ async def test_vaapi_available_claims_gpu_and_injects_devices() -> None:
     assert kwargs["environment"]["ARM_GPU_CODEC"] == "h265"
     assert kwargs["environment"]["ARM_GPU_DEVICE"] == "/dev/dri/renderD128"
     assert kwargs["devices"] == ["/dev/dri/renderD128:/dev/dri/renderD128:rwm"]
-    # No render GID configured → no RENDER_GID handed to the container entrypoint.
-    assert "RENDER_GID" not in kwargs["environment"]
     # GPU is claimed.
     assert db.rows["gpus"][0].status == GpuStatus.BUSY
     assert db.rows["gpus"][0].claimed_by_task_id == "txt_1"
@@ -217,22 +215,6 @@ async def test_qsv_available_uses_devices_injection() -> None:
     kwargs = docker.containers.run.call_args.kwargs
     assert kwargs["environment"]["ARM_GPU_VENDOR"] == "qsv"
     assert "devices" in kwargs
-
-
-async def test_render_gid_passed_as_env_for_qsv() -> None:
-    """With ARM_RENDER_GID set, VAAPI/QSV spawns get RENDER_GID in the env so the
-    entrypoint adds `arm` to the render group (gosu would drop a docker
-    --group-add), letting the PUID transcoder open the /dev/dri node."""
-    db = _build_db(
-        hw_preference=HwPreference.ANY,
-        gpus=[(GpuVendor.QSV, GpuStatus.AVAILABLE, ["h264", "h265"], None)],
-    )
-    docker = MagicMock()
-    disp = TranscodeDispatcher(_settings(ARM_RENDER_GID="110"), _db_factory(db), docker, WSHub())
-    await disp.spawn_pending(db)
-    kwargs = docker.containers.run.call_args.kwargs
-    assert kwargs["environment"]["RENDER_GID"] == "110"
-    assert kwargs["devices"] == ["/dev/dri/renderD128:/dev/dri/renderD128:rwm"]
 
 
 # --- NVENC: runtime + device_requests injection ------------------------------

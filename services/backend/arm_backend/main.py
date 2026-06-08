@@ -15,7 +15,7 @@ from sqlmodel import col, select
 from arm_backend.config import settings
 from arm_backend.crash_recovery import sweep_in_flight_jobs
 from arm_backend.db import SessionLocal
-from arm_backend.gpu_probe import load_configured_gpus
+from arm_backend.gpu_probe import probe_gpus
 from arm_backend.log_tailer import LogTailer
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.notification_dispatcher import (
@@ -66,13 +66,12 @@ async def _run_seeders() -> None:
 
 
 async def _refresh_gpu_inventory(hub: WSHub) -> None:
-    """Load the install-time GPU inventory, truncate `gpus`, repopulate.
-
-    Emit `transcode.hw_unavailable` on empty. The descriptor comes from the
-    `ARM_GPUS` env (host-side detection at install time); the backend does not
-    probe hardware. `load_configured_gpus` degrades to `[]` on malformed input.
-    """
-    probed = load_configured_gpus(settings.ARM_GPUS)
+    """Probe the host, truncate `gpus`, repopulate. Emit `transcode.hw_unavailable` on empty."""
+    try:
+        probed = probe_gpus()
+    except Exception as exc:  # noqa: BLE001  # pragma: no cover — probe_gpus degrades internally; this is the last-resort guard
+        logger.exception("gpu probe failed: %s", exc)
+        probed = []
     now = datetime.now(UTC)
     async with SessionLocal() as session:
         await session.execute(delete(Gpu))
