@@ -39,6 +39,9 @@ The dev compose that `devtools/setup-dev.sh` generates from
 references) so you iterate against your own code. The UI comes up at
 <https://localhost:8081>.
 
+The `.env` file contains the switch for the log level, so you'll want to run
+`docker compose up -d --build --force-recreate` after changing values there.
+
 ## Development model: trunk-based
 
 `main` is the trunk and is always releasable. **There is no long-lived `dev`
