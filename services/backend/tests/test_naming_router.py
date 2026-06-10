@@ -148,6 +148,15 @@ def test_job_naming_preview_unknown_job_404(signing_key: bytes) -> None:
     assert r.status_code == 404
 
 
+def test_job_naming_preview_unauthenticated_401(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, _ = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{_JOB_ID_1}/naming-preview")
+    assert r.status_code == 401
+
+
 def test_job_naming_preview_no_session_409(signing_key: bytes) -> None:
     db = FakeSession()
     _seed(db)
@@ -173,7 +182,6 @@ def test_job_naming_preview_with_transcode_preset(signing_key: bytes) -> None:
     """When the session references a transcode preset, the preset is resolved and
     {transcode_slug}/{ext} tokens are available in the template."""
     from arm_common import ContainerFormat, HwPreference, TranscodePreset, TranscodeTool
-    from arm_common.enums import IdentificationMode, OutputMode, TrackSelection
 
     db = FakeSession()
     _seed(db)
