@@ -765,3 +765,82 @@ async def test_tmdb_search_movie_candidates_with_year(http_client):
     results = await client.search_movie_candidates("dune", year=2021)
     assert results[0].title == "Dune"
     assert "year=2021" in str(respx.calls.last.request.url)
+
+
+# ---------------------------------------------------------------------------
+# MusicBrainz release search
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_musicbrainz_search_releases(http_client):
+    respx.get("https://musicbrainz.org/ws/2/release").mock(
+        return_value=httpx.Response(200, json={"releases": [
+            {"title": "The Dark Side of the Moon", "date": "1973-03-01", "id": "mb-1",
+             "artist-credit": [{"name": "Pink Floyd"}]},
+        ]})
+    )
+    client = MusicBrainzClient("arm/test", http_client)
+    results = await client.search_releases("dark side of the moon")
+    assert results[0].title == "The Dark Side of the Moon"
+    assert results[0].year == 1973
+    assert results[0].kind == "music"
+    assert results[0].payload["artist"] == "Pink Floyd"
+
+
+@respx.mock
+async def test_musicbrainz_search_empty(http_client):
+    respx.get("https://musicbrainz.org/ws/2/release").mock(
+        return_value=httpx.Response(200, json={"releases": []})
+    )
+    client = MusicBrainzClient("arm/test", http_client)
+    assert await client.search_releases("zzz") == []
+
+
+@respx.mock
+async def test_musicbrainz_search_5xx_raises(http_client):
+    respx.get("https://musicbrainz.org/ws/2/release").mock(return_value=httpx.Response(503))
+    client = MusicBrainzClient("arm/test", http_client)
+    with pytest.raises(LookupError):
+        await client.search_releases("x")
+
+
+@respx.mock
+async def test_musicbrainz_search_skips_releases_without_title(http_client):
+    """Releases missing the title key are silently skipped."""
+    respx.get("https://musicbrainz.org/ws/2/release").mock(
+        return_value=httpx.Response(200, json={"releases": [
+            {"date": "2000-01-01", "id": "mb-no-title"},  # no title key
+            {"title": "", "date": "2001-01-01", "id": "mb-empty-title"},  # empty title
+            {"title": "Real Album", "date": "2002-06-15", "id": "mb-real"},
+        ]})
+    )
+    client = MusicBrainzClient("arm/test", http_client)
+    results = await client.search_releases("real")
+    assert len(results) == 1
+    assert results[0].title == "Real Album"
+
+
+@respx.mock
+async def test_musicbrainz_search_timeout_raises(http_client):
+    from arm_backend.metadata.base import LookupTimeout
+
+    def _raise_timeout(request):
+        raise httpx.TimeoutException("timed out", request=request)
+
+    respx.get("https://musicbrainz.org/ws/2/release").mock(side_effect=_raise_timeout)
+    client = MusicBrainzClient("arm/test", http_client)
+    with pytest.raises(LookupTimeout):
+        await client.search_releases("x")
+
+
+@respx.mock
+async def test_musicbrainz_transport_error_raises(http_client):
+    # Covers the shared _get HTTPError branch (non-timeout transport failure).
+    def _raise_transport(request):
+        raise httpx.ConnectError("conn refused", request=request)
+
+    respx.get("https://musicbrainz.org/ws/2/release").mock(side_effect=_raise_transport)
+    client = MusicBrainzClient("arm/test", http_client)
+    with pytest.raises(LookupError, match="transport error"):
+        await client.search_releases("x")

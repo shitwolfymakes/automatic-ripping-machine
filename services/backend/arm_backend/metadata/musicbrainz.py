@@ -38,13 +38,19 @@ class MusicBrainzClient:
         self._user_agent = user_agent
         self._http = http
 
-    async def lookup_disc_id(self, disc_id: str) -> MetadataResult:
+    async def _get(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
+        """Rate-limit, execute GET, handle transport errors and bad statuses.
+
+        Enforces the 1 req/s rate limit, sets the required User-Agent header,
+        and converts transport failures and non-200 HTTP statuses into the
+        appropriate LookupError / LookupTimeout. Returns the parsed JSON body.
+        """
         await _rate_limit()
 
         try:
             r = await self._http.get(
-                f"{_BASE_URL}/discid/{disc_id}",
-                params={"inc": "artists+recordings", "fmt": "json"},
+                f"{_BASE_URL}{path}",
+                params=params,
                 headers={"User-Agent": self._user_agent, "Accept": "application/json"},
             )
         except httpx.TimeoutException as e:
@@ -52,14 +58,19 @@ class MusicBrainzClient:
         except httpx.HTTPError as e:
             raise LookupError(f"musicbrainz transport error: {e}") from e
 
-        if r.status_code == 404:
-            raise LookupError("musicbrainz disc_id not found")
         if r.status_code >= 500:
             raise LookupError(f"musicbrainz 5xx status={r.status_code}")
         if r.status_code != 200:
             raise LookupError(f"musicbrainz status={r.status_code}")
 
-        body: dict[str, Any] = r.json()
+        return r.json()  # type: ignore[no-any-return]
+
+    async def lookup_disc_id(self, disc_id: str) -> MetadataResult:
+        body = await self._get(
+            f"/discid/{disc_id}",
+            params={"inc": "artists+recordings", "fmt": "json"},
+        )
+
         releases = body.get("releases") or []
         if not releases:
             raise LookupError("musicbrainz disc_id has no releases")
@@ -87,6 +98,26 @@ class MusicBrainzClient:
         }
 
         return MetadataResult(title=title_val, year=year_val, kind="music", payload=payload)
+
+    async def search_releases(self, query: str, limit: int = 10) -> list[MetadataResult]:
+        """Lucene release search for interactive lookup. Returns up to `limit`."""
+        body = await self._get(
+            "/release",
+            params={"query": query, "fmt": "json", "limit": limit},
+        )
+
+        results: list[MetadataResult] = []
+        for rel in (body.get("releases") or [])[:limit]:
+            title = rel.get("title")
+            if not title:
+                continue
+            date = rel.get("date") or ""
+            year: int | None = int(date[:4]) if date[:4].isdigit() else None
+            artist = _join_artist_credit(rel.get("artist-credit") or [])
+            payload: dict[str, Any] = {"artist": artist, "album": title, **rel}
+            results.append(MetadataResult(title=title, year=year, kind="music", payload=payload))
+
+        return results
 
 
 def _join_artist_credit(credit: list[dict[str, Any]]) -> str:
