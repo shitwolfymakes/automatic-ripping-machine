@@ -585,10 +585,15 @@ async def test_omdb_lookup_by_imdb_id_tv_series_kind(http_client):
 @respx.mock
 async def test_tmdb_search_movie_candidates(http_client):
     respx.get("https://api.themoviedb.org/3/search/movie").mock(
-        return_value=httpx.Response(200, json={"results": [
-            {"title": "The Matrix", "release_date": "1999-03-31", "id": 603, "poster_path": "/a.jpg"},
-            {"title": "The Matrix Reloaded", "release_date": "2003-05-15", "id": 604, "poster_path": "/b.jpg"},
-        ]})
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    {"title": "The Matrix", "release_date": "1999-03-31", "id": 603, "poster_path": "/a.jpg"},
+                    {"title": "The Matrix Reloaded", "release_date": "2003-05-15", "id": 604, "poster_path": "/b.jpg"},
+                ]
+            },
+        )
     )
     client = TMDBClient("k", http_client)
     results = await client.search_movie_candidates("matrix")
@@ -600,9 +605,14 @@ async def test_tmdb_search_movie_candidates(http_client):
 @respx.mock
 async def test_tmdb_search_tv_candidates(http_client):
     respx.get("https://api.themoviedb.org/3/search/tv").mock(
-        return_value=httpx.Response(200, json={"results": [
-            {"name": "Battlestar Galactica", "first_air_date": "2004-10-18", "id": 1972},
-        ]})
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    {"name": "Battlestar Galactica", "first_air_date": "2004-10-18", "id": 1972},
+                ]
+            },
+        )
     )
     client = TMDBClient("k", http_client)
     results = await client.search_tv_candidates("galactica")
@@ -613,9 +623,7 @@ async def test_tmdb_search_tv_candidates(http_client):
 
 @respx.mock
 async def test_tmdb_search_empty_results(http_client):
-    respx.get("https://api.themoviedb.org/3/search/movie").mock(
-        return_value=httpx.Response(200, json={"results": []})
-    )
+    respx.get("https://api.themoviedb.org/3/search/movie").mock(return_value=httpx.Response(200, json={"results": []}))
     client = TMDBClient("k", http_client)
     assert await client.search_movie_candidates("zzz") == []
 
@@ -632,14 +640,128 @@ async def test_tmdb_search_auth_failure_raises(http_client):
 async def test_tmdb_search_candidates_skips_items_without_title(http_client):
     """Items with no usable title are silently skipped; tv path + original_name fallback exercised."""
     respx.get("https://api.themoviedb.org/3/search/tv").mock(
-        return_value=httpx.Response(200, json={"results": [
-            {"name": "", "first_air_date": "2000-01-01", "id": 1},          # empty name — skip
-            {"first_air_date": "2001-01-01", "id": 2},                       # missing name key — skip
-            {"original_name": "Fallback Show", "first_air_date": "2002-06-01", "id": 3},  # original_name fallback
-        ]})
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    {"name": "", "first_air_date": "2000-01-01", "id": 1},  # empty name — skip
+                    {"first_air_date": "2001-01-01", "id": 2},  # missing name key — skip
+                    {
+                        "original_name": "Fallback Show",
+                        "first_air_date": "2002-06-01",
+                        "id": 3,
+                    },  # original_name fallback
+                ]
+            },
+        )
     )
     client = TMDBClient("k", http_client)
     results = await client.search_tv_candidates("x")
     assert len(results) == 1
     assert results[0].title == "Fallback Show"
     assert results[0].year == 2002
+
+
+@respx.mock
+async def test_tmdb_get_results_5xx_raises(http_client):
+    # Covers the shared _get_results 5xx branch (used by both search paths).
+    respx.get("https://api.themoviedb.org/3/search/movie").mock(return_value=httpx.Response(503))
+    client = TMDBClient("k", http_client)
+    with pytest.raises(LookupError, match="5xx"):
+        await client.search_movie_candidates("x")
+
+
+@respx.mock
+async def test_tmdb_get_results_timeout_raises(http_client):
+    from arm_backend.metadata.base import LookupTimeout
+
+    def _raise_timeout(request):
+        raise httpx.TimeoutException("timed out", request=request)
+
+    respx.get("https://api.themoviedb.org/3/search/movie").mock(side_effect=_raise_timeout)
+    client = TMDBClient("k", http_client)
+    with pytest.raises(LookupTimeout):
+        await client.search_movie_candidates("x")
+
+
+@respx.mock
+async def test_tmdb_search_movie_top_hit_with_year(http_client):
+    # Covers single-hit search_movie + the year-param branch.
+    respx.get("https://api.themoviedb.org/3/search/movie").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    {"title": "Iron Man", "release_date": "2008-05-02", "id": 1726},
+                ]
+            },
+        )
+    )
+    client = TMDBClient("k", http_client)
+    result = await client.search_movie("iron man", 2008)
+    assert result.title == "Iron Man"
+    assert result.year == 2008
+    assert "year=2008" in str(respx.calls.last.request.url)
+
+
+@respx.mock
+async def test_tmdb_search_tv_top_hit(http_client):
+    # Covers single-hit search_tv path.
+    respx.get("https://api.themoviedb.org/3/search/tv").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    {"name": "The Expanse", "first_air_date": "2015-12-14", "id": 63639},
+                ]
+            },
+        )
+    )
+    client = TMDBClient("k", http_client)
+    result = await client.search_tv("expanse")
+    assert result.title == "The Expanse"
+    assert result.kind == "tv"
+
+
+@respx.mock
+async def test_tmdb_search_top_result_missing_title_raises(http_client):
+    # Covers the _search "top result missing title" branch.
+    respx.get("https://api.themoviedb.org/3/search/movie").mock(
+        return_value=httpx.Response(200, json={"results": [{"release_date": "1999-01-01", "id": 1}]})
+    )
+    client = TMDBClient("k", http_client)
+    with pytest.raises(LookupError, match="missing title"):
+        await client.search_movie("x")
+
+
+@respx.mock
+async def test_tmdb_get_results_transport_error_raises(http_client):
+    # Covers the shared _get_results HTTPError (non-timeout transport) branch.
+    def _raise_transport(request):
+        raise httpx.ConnectError("conn refused", request=request)
+
+    respx.get("https://api.themoviedb.org/3/search/movie").mock(side_effect=_raise_transport)
+    client = TMDBClient("k", http_client)
+    with pytest.raises(LookupError, match="transport error"):
+        await client.search_movie_candidates("x")
+
+
+@respx.mock
+async def test_tmdb_get_results_non200_raises(http_client):
+    # Covers the shared _get_results non-200 (non-401, non-5xx) branch.
+    respx.get("https://api.themoviedb.org/3/search/movie").mock(return_value=httpx.Response(404))
+    client = TMDBClient("k", http_client)
+    with pytest.raises(LookupError, match="status=404"):
+        await client.search_movie_candidates("x")
+
+
+@respx.mock
+async def test_tmdb_search_movie_candidates_with_year(http_client):
+    # Covers the year-param branch in search_movie_candidates.
+    respx.get("https://api.themoviedb.org/3/search/movie").mock(
+        return_value=httpx.Response(200, json={"results": [{"title": "Dune", "release_date": "2021-09-15", "id": 1}]})
+    )
+    client = TMDBClient("k", http_client)
+    results = await client.search_movie_candidates("dune", year=2021)
+    assert results[0].title == "Dune"
+    assert "year=2021" in str(respx.calls.last.request.url)
