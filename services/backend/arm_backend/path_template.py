@@ -111,3 +111,28 @@ def validate_template_or_http(template: str, media_type: MediaType, has_transcod
         return validate_template(template, media_type, has_transcode_preset)
     except TemplateValidationError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+
+
+# Human-readable description per token, surfaced by GET /api/naming/variables.
+_TOKEN_DESCRIPTIONS: dict[str, str] = {
+    "title": "Movie/feature title",
+    "show": "TV show name",
+    "year": "Release year",
+    "season": "Season number, zero-padded",
+    "disc": "Disc number within the set",
+    "track": "Track number, zero-padded",
+    "track_title": "Per-track title (music)",
+    "artist": "Album artist (music)",
+    "album": "Album name (music)",
+    "duration_human": "Human-readable runtime, e.g. 02h05m",
+    "transcode_slug": "Slug of the applied transcode preset",
+    "ext": "Output file extension",
+}
+
+
+def tokens_for_media(media_type: MediaType) -> list[dict[str, str]]:
+    """Return the allowed tokens for a media type with descriptions, sorted."""
+    return [
+        {"token": tok, "description": _TOKEN_DESCRIPTIONS.get(tok, "")}
+        for tok in sorted(_ALLOWED_TOKENS_BY_MEDIA[media_type])
+    ]

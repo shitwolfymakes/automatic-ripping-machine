@@ -31,6 +31,7 @@ from arm_backend.routers import (
     jobs,
     logs as logs_router,
     metadata as metadata_router,
+    naming as naming_router,
     rip_presets,
     ripper,
     sessions,
@@ -210,6 +211,7 @@ app.include_router(transcodes.router)
 app.include_router(config_router.router)
 app.include_router(diagnostics.router)
 app.include_router(metadata_router.router)
+app.include_router(naming_router.router)
 app.include_router(logs_router.router)
 app.include_router(ws_router)
 

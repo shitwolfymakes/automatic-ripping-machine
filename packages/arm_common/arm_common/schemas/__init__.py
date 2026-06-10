@@ -26,6 +26,12 @@ from arm_common.schemas.jobs import (
     TrackView,
 )
 from arm_common.schemas.metadata import MetadataKeyTestResponse, MetadataProvider
+from arm_common.schemas.naming import (
+    JobNamingPreviewResponse,
+    NamingPreviewItem,
+    NamingVariable,
+    NamingVariablesResponse,
+)
 from arm_common.schemas.ripper import (
     DiscFingerprintInput,
     IdentifyRequest,
@@ -106,8 +112,12 @@ __all__ = [
     "JobView",
     "LoginRequest",
     "LoginResponse",
+    "JobNamingPreviewResponse",
     "ManualTriggerRequest",
     "ManualTriggerResponse",
+    "NamingPreviewItem",
+    "NamingVariable",
+    "NamingVariablesResponse",
     "PasswordChangeRequest",
     "RegisterRequest",
     "RegisterTranscoderRequest",
