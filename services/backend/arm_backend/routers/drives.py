@@ -14,8 +14,10 @@ from arm_common.schemas import DriveDiagnosticItem, DriveDiagnosticResponse, Dri
 router = APIRouter(prefix="/api/drives", tags=["drives"])
 
 # A drive whose last media-status update is older than this is considered
-# stale (its ripper likely stopped heart-beating). Mirrors the freshness
-# window the manual-trigger pre-check uses.
+# stale (its ripper likely stopped heart-beating). Deliberately looser than the
+# 90s manual-trigger pre-check window (jobs.py `_MEDIA_STATUS_FRESHNESS`): that
+# gate fast-fails a rip on a momentarily-quiet drive, whereas this is an
+# operator-facing health view that shouldn't flap on a single missed heartbeat.
 _STALE_AFTER = timedelta(minutes=5)
 
 
@@ -67,7 +69,11 @@ async def rescan_drives(
 ) -> DriveRescanResponse:
     """Reconcile drive freshness from heartbeats. Backend-side only: the
     ripper owns hardware re-enumeration; this surfaces which registered drives
-    are live vs stale based on their last media-status update."""
+    are live vs stale based on their last media-status update.
+
+    Kept as POST (not GET) even though it currently only reads: a real rescan
+    triggers ripper-side hardware re-enumeration (a non-idempotent side effect),
+    which the follow-up will add behind this same verb. See followups-for-wolfy."""
     drives = list((await db.execute(select(Drive))).scalars().all())
     now = datetime.now(timezone.utc)
     online = 0

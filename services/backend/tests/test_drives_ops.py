@@ -76,8 +76,9 @@ def test_rescan_counts_online_and_stale(signing_key: bytes) -> None:
     with TestClient(app) as client:
         r = client.post("/api/drives/rescan", headers=_auth(token))
     assert r.status_code == 200, r.text
-    assert r.json()["online"] >= 1
-    assert r.json()["stale"] >= 1
+    # Seed has exactly one fresh+ONLINE drive and one stale drive.
+    assert r.json()["online"] == 1
+    assert r.json()["stale"] == 1
 
 
 def test_diagnostic_unauthenticated_401(signing_key: bytes) -> None:
