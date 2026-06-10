@@ -76,7 +76,11 @@ class OMDBClient:
         kind: Literal["movie", "tv"] = "movie",
         limit: int = 10,
     ) -> list[MetadataResult]:
-        """Return up to `limit` candidates for an interactive search (OMDB `s=`)."""
+        """Return up to `limit` candidates for an interactive search (OMDB `s=`).
+
+        OMDB's `s=` returns at most 10 results per page; `limit` is applied
+        client-side on top of that, so the effective cap is min(limit, 10).
+        """
         body = await self._get_json({"s": title, "type": kind})
         if body.get("Response") != "True":
             return []  # "Movie not found!" etc. — a real empty result, not an error
