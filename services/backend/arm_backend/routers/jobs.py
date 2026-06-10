@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt
-from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_backend.auto_session import (
     SessionNotFoundError,
     apply_session_internal,
@@ -22,6 +21,7 @@ from arm_backend.db import get_session
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.routers._params import JobIdParam
 from arm_backend.routers.logs import per_job_log_path
+from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
