@@ -868,6 +868,16 @@ async def test_musicbrainz_get_non200_raises(http_client):
 
 
 @respx.mock
+async def test_musicbrainz_disc_id_404_not_found(http_client):
+    # A 404 on a disc lookup is an expected miss, with a disc-specific message
+    # (not the generic "status=404" that search would give).
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(404))
+    client = MusicBrainzClient("arm/test", http_client)
+    with pytest.raises(LookupError, match="disc_id not found"):
+        await client.lookup_disc_id("abc")
+
+
+@respx.mock
 async def test_musicbrainz_disc_id_no_releases_raises(http_client):
     # Covers lookup_disc_id's "no releases" branch.
     respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(200, json={"releases": []}))
