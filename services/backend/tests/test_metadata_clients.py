@@ -775,10 +775,19 @@ async def test_tmdb_search_movie_candidates_with_year(http_client):
 @respx.mock
 async def test_musicbrainz_search_releases(http_client):
     respx.get("https://musicbrainz.org/ws/2/release").mock(
-        return_value=httpx.Response(200, json={"releases": [
-            {"title": "The Dark Side of the Moon", "date": "1973-03-01", "id": "mb-1",
-             "artist-credit": [{"name": "Pink Floyd"}]},
-        ]})
+        return_value=httpx.Response(
+            200,
+            json={
+                "releases": [
+                    {
+                        "title": "The Dark Side of the Moon",
+                        "date": "1973-03-01",
+                        "id": "mb-1",
+                        "artist-credit": [{"name": "Pink Floyd"}],
+                    },
+                ]
+            },
+        )
     )
     client = MusicBrainzClient("arm/test", http_client)
     results = await client.search_releases("dark side of the moon")
@@ -790,9 +799,7 @@ async def test_musicbrainz_search_releases(http_client):
 
 @respx.mock
 async def test_musicbrainz_search_empty(http_client):
-    respx.get("https://musicbrainz.org/ws/2/release").mock(
-        return_value=httpx.Response(200, json={"releases": []})
-    )
+    respx.get("https://musicbrainz.org/ws/2/release").mock(return_value=httpx.Response(200, json={"releases": []}))
     client = MusicBrainzClient("arm/test", http_client)
     assert await client.search_releases("zzz") == []
 
@@ -809,11 +816,16 @@ async def test_musicbrainz_search_5xx_raises(http_client):
 async def test_musicbrainz_search_skips_releases_without_title(http_client):
     """Releases missing the title key are silently skipped."""
     respx.get("https://musicbrainz.org/ws/2/release").mock(
-        return_value=httpx.Response(200, json={"releases": [
-            {"date": "2000-01-01", "id": "mb-no-title"},  # no title key
-            {"title": "", "date": "2001-01-01", "id": "mb-empty-title"},  # empty title
-            {"title": "Real Album", "date": "2002-06-15", "id": "mb-real"},
-        ]})
+        return_value=httpx.Response(
+            200,
+            json={
+                "releases": [
+                    {"date": "2000-01-01", "id": "mb-no-title"},  # no title key
+                    {"title": "", "date": "2001-01-01", "id": "mb-empty-title"},  # empty title
+                    {"title": "Real Album", "date": "2002-06-15", "id": "mb-real"},
+                ]
+            },
+        )
     )
     client = MusicBrainzClient("arm/test", http_client)
     results = await client.search_releases("real")
@@ -844,3 +856,32 @@ async def test_musicbrainz_transport_error_raises(http_client):
     client = MusicBrainzClient("arm/test", http_client)
     with pytest.raises(LookupError, match="transport error"):
         await client.search_releases("x")
+
+
+@respx.mock
+async def test_musicbrainz_get_non200_raises(http_client):
+    # Covers the shared _get non-200 (non-5xx) branch.
+    respx.get("https://musicbrainz.org/ws/2/release").mock(return_value=httpx.Response(404))
+    client = MusicBrainzClient("arm/test", http_client)
+    with pytest.raises(LookupError, match="status=404"):
+        await client.search_releases("x")
+
+
+@respx.mock
+async def test_musicbrainz_disc_id_no_releases_raises(http_client):
+    # Covers lookup_disc_id's "no releases" branch.
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(200, json={"releases": []}))
+    client = MusicBrainzClient("arm/test", http_client)
+    with pytest.raises(LookupError, match="no releases"):
+        await client.lookup_disc_id("abc")
+
+
+@respx.mock
+async def test_musicbrainz_disc_id_top_release_missing_title_raises(http_client):
+    # Covers lookup_disc_id's "top release missing title" branch.
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(
+        return_value=httpx.Response(200, json={"releases": [{"date": "1999"}]})
+    )
+    client = MusicBrainzClient("arm/test", http_client)
+    with pytest.raises(LookupError, match="missing title"):
+        await client.lookup_disc_id("abc")
