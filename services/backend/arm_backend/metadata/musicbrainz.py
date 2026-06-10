@@ -38,12 +38,15 @@ class MusicBrainzClient:
         self._user_agent = user_agent
         self._http = http
 
-    async def _get(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def _get(self, path: str, params: dict[str, Any], *, not_found_detail: str | None = None) -> dict[str, Any]:
         """Rate-limit, execute GET, handle transport errors and bad statuses.
 
         Enforces the 1 req/s rate limit, sets the required User-Agent header,
         and converts transport failures and non-200 HTTP statuses into the
         appropriate LookupError / LookupTimeout. Returns the parsed JSON body.
+
+        `not_found_detail`, when set, gives a 404 a caller-specific message
+        (e.g. "disc_id not found" — an expected miss, not a generic HTTP error).
         """
         await _rate_limit()
 
@@ -58,6 +61,8 @@ class MusicBrainzClient:
         except httpx.HTTPError as e:
             raise LookupError(f"musicbrainz transport error: {e}") from e
 
+        if not_found_detail is not None and r.status_code == 404:
+            raise LookupError(not_found_detail)
         if r.status_code >= 500:
             raise LookupError(f"musicbrainz 5xx status={r.status_code}")
         if r.status_code != 200:
@@ -69,6 +74,7 @@ class MusicBrainzClient:
         body = await self._get(
             f"/discid/{disc_id}",
             params={"inc": "artists+recordings", "fmt": "json"},
+            not_found_detail="musicbrainz disc_id not found",
         )
 
         releases = body.get("releases") or []
