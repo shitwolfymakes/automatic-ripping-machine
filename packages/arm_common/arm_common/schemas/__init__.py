@@ -1,4 +1,3 @@
-from arm_common.schemas.metadata import MetadataKeyTestResponse, MetadataProvider
 from arm_common.schemas.auth import (
     ConfigUpdateRequest,
     ConfigView,
@@ -26,6 +25,7 @@ from arm_common.schemas.jobs import (
     RipStartResponse,
     TrackView,
 )
+from arm_common.schemas.metadata import MetadataKeyTestResponse, MetadataProvider
 from arm_common.schemas.ripper import (
     DiscFingerprintInput,
     IdentifyRequest,

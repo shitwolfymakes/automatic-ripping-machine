@@ -74,11 +74,14 @@ async def test_key(
                 raise MetaLookupError(f"tmdb status={r.status_code}")
         else:  # omdb
             r = await http.get(_OMDB_URL, params={"apikey": key, "t": "the matrix"}, timeout=_TIMEOUT_SECONDS)
+            if r.status_code != 200:
+                raise MetaLookupError(f"omdb status={r.status_code}")
             body = r.json()
             # OMDB returns 200 + {"Response":"False","Error":"Invalid API key!"} on a bad key.
             if body.get("Response") != "True" and "API key" in (body.get("Error") or ""):
                 raise MetaLookupError(body.get("Error", "omdb auth failed"))
     except MetaLookupError as exc:
+        logger.warning("test-key invalid provider=%s", provider)
         return MetadataKeyTestResponse(provider=provider, valid=False, detail=str(exc))
     except httpx.TimeoutException:
         return MetadataKeyTestResponse(provider=provider, valid=False, detail="request timed out")

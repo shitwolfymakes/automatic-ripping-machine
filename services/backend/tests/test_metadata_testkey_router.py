@@ -229,3 +229,32 @@ def test_tmdb_transport_error_returns_200_invalid(signing_key: bytes) -> None:
     assert r.status_code == 200, r.text
     assert r.json()["valid"] is False
     assert "transport error" in r.json()["detail"]
+
+
+@respx.mock
+def test_tvdb_timeout_returns_200_invalid(signing_key: bytes) -> None:
+    """TVDB timeout → TVDBClient wraps into LookupTimeout (MetaLookupError) → valid=False."""
+    respx.post("https://api4.thetvdb.com/v4/login").mock(side_effect=httpx.TimeoutException("slow"))
+    db = FakeSession()
+    _seed(db, tvdb_api_key="k")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get("/api/metadata/test-key", params={"provider": "tvdb"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["valid"] is False
+
+
+@respx.mock
+def test_omdb_5xx_returns_200_invalid(signing_key: bytes) -> None:
+    """OMDB 5xx with HTML body → status guard raises MetaLookupError → valid=False."""
+    respx.get("https://www.omdbapi.com/").mock(
+        return_value=httpx.Response(503, text="<html>Service Unavailable</html>")
+    )
+    db = FakeSession()
+    _seed(db, omdb_api_key="some-omdb-key")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get("/api/metadata/test-key", params={"provider": "omdb"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["valid"] is False
+    assert "503" in r.json()["detail"]
