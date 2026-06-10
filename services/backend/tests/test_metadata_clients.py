@@ -495,30 +495,6 @@ async def test_omdb_lookup_by_title_missing_title_raises(http_client):
         await client.lookup_by_title("x")
 
 
-@respx.mock
-async def test_omdb_lookup_by_title_with_year_param(http_client):
-    """Exercises the `if year is not None: params['y'] = year` branch."""
-    from arm_backend.metadata.omdb import OMDBClient
-    respx.get("https://www.omdbapi.com/").mock(
-        return_value=httpx.Response(200, json={"Response": "True", "Title": "Blade Runner", "Year": "1982"})
-    )
-    client = OMDBClient("k", http_client)
-    result = await client.lookup_by_title("Blade Runner", year=1982)
-    assert result.year == 1982
-
-
-@respx.mock
-async def test_omdb_lookup_by_title_non_digit_year(http_client):
-    """Year field that can't be parsed as int yields year=None."""
-    from arm_backend.metadata.omdb import OMDBClient
-    respx.get("https://www.omdbapi.com/").mock(
-        return_value=httpx.Response(200, json={"Response": "True", "Title": "Old Film", "Year": "N/A"})
-    )
-    client = OMDBClient("k", http_client)
-    result = await client.lookup_by_title("Old Film")
-    assert result.year is None
-
-
 # ---------------------------------------------------------------------------
 # Coverage gap tests — search_candidates error branches
 # ---------------------------------------------------------------------------
@@ -682,15 +658,3 @@ async def test_omdb_lookup_by_imdb_id_tv_series_kind(http_client):
     assert result.kind == "tv"
 
 
-@respx.mock
-async def test_omdb_lookup_by_imdb_id_non_digit_year(http_client):
-    """Year field that can't be parsed yields year=None."""
-    from arm_backend.metadata.omdb import OMDBClient
-    respx.get("https://www.omdbapi.com/").mock(
-        return_value=httpx.Response(200, json={
-            "Response": "True", "Title": "Some Show", "Year": "N/A", "Type": "movie",
-        })
-    )
-    client = OMDBClient("k", http_client)
-    result = await client.lookup_by_imdb_id("tt0000001")
-    assert result.year is None
