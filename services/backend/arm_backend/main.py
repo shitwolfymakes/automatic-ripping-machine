@@ -36,6 +36,7 @@ from arm_backend.routers import (
     rip_presets,
     ripper,
     sessions,
+    system as system_router,
     transcode_presets,
     transcoder,
     transcodes,
@@ -123,6 +124,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.signing_key = cfg.session_signing_key
     http = httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=10.0))
     app.state.http = http
+    app.state.started_at = datetime.now(UTC)
     app.state.dispatcher = MetadataDispatcher(http, omdb_api_key_override=settings.OMDB_API_KEY)
     app.state.ws_hub = WSHub()
 
@@ -215,6 +217,7 @@ app.include_router(metadata_router.router)
 app.include_router(naming_router.router)
 app.include_router(iso_router.router)
 app.include_router(logs_router.router)
+app.include_router(system_router.router)
 app.include_router(ws_router)
 
 
