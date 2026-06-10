@@ -47,6 +47,7 @@ class ConfigView(BaseModel):
     auto_transcode_on_idle: bool
     auto_rip_on_insert: bool
     block_on_miss: bool
+    ripping_paused: bool
     default_retention_policy: RetentionPolicy
     notification_apprise_urls: list[str]
     notifications_enabled: bool
@@ -63,6 +64,7 @@ class ConfigUpdateRequest(BaseModel):
     auto_transcode_on_idle: bool | None = None
     auto_rip_on_insert: bool | None = None
     block_on_miss: bool | None = None
+    ripping_paused: bool | None = None
     default_retention_policy: RetentionPolicy | None = None
     notification_apprise_urls: list[str] | None = None
     notifications_enabled: bool | None = None
