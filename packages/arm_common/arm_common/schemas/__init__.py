@@ -9,7 +9,12 @@ from arm_common.schemas.auth import (
     PasswordChangeRequest,
 )
 from arm_common.schemas.common import ErrorResponse, HealthResponse
-from arm_common.schemas.drives import DriveUpdateRequest
+from arm_common.schemas.drives import (
+    DriveDiagnosticItem,
+    DriveDiagnosticResponse,
+    DriveRescanResponse,
+    DriveUpdateRequest,
+)
 from arm_common.schemas.iso import IsoScanRequest, IsoScanResponse
 from arm_common.schemas.jobs import (
     AbandonJobRequest,
@@ -100,6 +105,9 @@ __all__ = [
     "ConfigView",
     "DiagnosticsResponse",
     "DiagnosticsServiceView",
+    "DriveDiagnosticItem",
+    "DriveDiagnosticResponse",
+    "DriveRescanResponse",
     "DriveUpdateRequest",
     "ErrorResponse",
     "FailTaskRequest",

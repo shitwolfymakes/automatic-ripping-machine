@@ -1,15 +1,22 @@
 """Drive listing + PATCH for `default_session_id` / `display_name` (Phase 8)."""
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
-from arm_common import Drive, Session, User
-from arm_common.schemas import DriveUpdateRequest
+from arm_common import Drive, DriveStatus, Session, User
+from arm_common.schemas import DriveDiagnosticItem, DriveDiagnosticResponse, DriveRescanResponse, DriveUpdateRequest
 
 router = APIRouter(prefix="/api/drives", tags=["drives"])
+
+# A drive whose last media-status update is older than this is considered
+# stale (its ripper likely stopped heart-beating). Mirrors the freshness
+# window the manual-trigger pre-check uses.
+_STALE_AFTER = timedelta(minutes=5)
 
 
 @router.get("", response_model=list[Drive])
@@ -19,6 +26,59 @@ async def list_drives(
 ) -> list[Drive]:
     result = await session.execute(select(Drive).order_by(col(Drive.created_at).asc()))
     return list(result.scalars().all())
+
+
+@router.get("/diagnostic", response_model=DriveDiagnosticResponse)
+async def drive_diagnostic(
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> DriveDiagnosticResponse:
+    drives = list((await db.execute(select(Drive).order_by(col(Drive.created_at).asc()))).scalars().all())
+    now = datetime.now(timezone.utc)
+    items: list[DriveDiagnosticItem] = []
+    for d in drives:
+        notes: list[str] = []
+        healthy = True
+        if d.media_status_at is None:
+            healthy = False
+            notes.append("no media-status heartbeat recorded")
+        elif now - d.media_status_at > _STALE_AFTER:
+            healthy = False
+            notes.append("media-status heartbeat is stale")
+        if d.status != DriveStatus.ONLINE:
+            healthy = False
+            notes.append(f"drive status is {d.status.value}")
+        items.append(
+            DriveDiagnosticItem(
+                id=d.id,
+                media_status=d.media_status,
+                media_status_at=d.media_status_at,
+                healthy=healthy,
+                notes=notes,
+            )
+        )
+    return DriveDiagnosticResponse(drives=items)
+
+
+@router.post("/rescan", response_model=DriveRescanResponse)
+async def rescan_drives(
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> DriveRescanResponse:
+    """Reconcile drive freshness from heartbeats. Backend-side only: the
+    ripper owns hardware re-enumeration; this surfaces which registered drives
+    are live vs stale based on their last media-status update."""
+    drives = list((await db.execute(select(Drive))).scalars().all())
+    now = datetime.now(timezone.utc)
+    online = 0
+    stale = 0
+    for d in drives:
+        fresh = d.media_status_at is not None and (now - d.media_status_at) <= _STALE_AFTER
+        if fresh and d.status == DriveStatus.ONLINE:
+            online += 1
+        else:
+            stale += 1
+    return DriveRescanResponse(online=online, stale=stale)
 
 
 @router.patch("/{drive_id}", response_model=Drive)
