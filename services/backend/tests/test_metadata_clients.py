@@ -375,20 +375,24 @@ async def test_musicbrainz_tracks_drop_entries_without_title(http_client):
 @respx.mock
 async def test_omdb_search_candidates(http_client):
     respx.get("https://www.omdbapi.com/").mock(
-        return_value=httpx.Response(200, json={
-            "Response": "True",
-            "Search": [
-                {"Title": "The Matrix", "Year": "1999", "imdbID": "tt0133093", "Poster": "http://x/p.jpg"},
-                {"Title": "The Matrix Reloaded", "Year": "2003", "imdbID": "tt0234215", "Poster": "N/A"},
-            ],
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "Response": "True",
+                "Search": [
+                    {"Title": "The Matrix", "Year": "1999", "imdbID": "tt0133093", "Poster": "http://x/p.jpg"},
+                    {"Title": "The Matrix Reloaded", "Year": "2003", "imdbID": "tt0234215", "Poster": "N/A"},
+                ],
+            },
+        )
     )
-    from arm_backend.metadata.omdb import OMDBClient
     client = OMDBClient("k", http_client)
     results = await client.search_candidates("matrix", kind="movie")
     assert [r.title for r in results] == ["The Matrix", "The Matrix Reloaded"]
     assert results[0].year == 1999
     assert results[0].payload["imdbID"] == "tt0133093"
+    # search uses the OMDB `s=` param (not `t=`); guard against a future typo.
+    assert "s=matrix" in str(respx.calls.last.request.url)
 
 
 @respx.mock
@@ -396,7 +400,6 @@ async def test_omdb_search_no_results_returns_empty(http_client):
     respx.get("https://www.omdbapi.com/").mock(
         return_value=httpx.Response(200, json={"Response": "False", "Error": "Movie not found!"})
     )
-    from arm_backend.metadata.omdb import OMDBClient
     client = OMDBClient("k", http_client)
     results = await client.search_candidates("zzzznope", kind="movie")
     assert results == []
@@ -405,8 +408,6 @@ async def test_omdb_search_no_results_returns_empty(http_client):
 @respx.mock
 async def test_omdb_search_auth_failure_raises(http_client):
     respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(401))
-    from arm_backend.metadata.omdb import OMDBClient
-    from arm_backend.metadata.base import LookupError
     client = OMDBClient("bad", http_client)
     with pytest.raises(LookupError):
         await client.search_candidates("matrix", kind="movie")
@@ -415,24 +416,31 @@ async def test_omdb_search_auth_failure_raises(http_client):
 @respx.mock
 async def test_omdb_lookup_by_imdb_id(http_client):
     respx.get("https://www.omdbapi.com/").mock(
-        return_value=httpx.Response(200, json={
-            "Response": "True", "Title": "The Matrix", "Year": "1999", "imdbID": "tt0133093",
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "Response": "True",
+                "Title": "The Matrix",
+                "Year": "1999",
+                "imdbID": "tt0133093",
+            },
+        )
     )
-    from arm_backend.metadata.omdb import OMDBClient
     client = OMDBClient("k", http_client)
     result = await client.lookup_by_imdb_id("tt0133093")
     assert result.title == "The Matrix"
     assert result.year == 1999
+    # lookup uses the OMDB `i=` param; guard against a future typo.
+    assert "i=tt0133093" in str(respx.calls.last.request.url)
 
 
 # ---------------------------------------------------------------------------
 # Coverage gap tests — lookup_by_title error branches
 # ---------------------------------------------------------------------------
 
+
 @respx.mock
 async def test_omdb_lookup_by_title_timeout_raises(http_client):
-    from arm_backend.metadata.omdb import OMDBClient
     from arm_backend.metadata.base import LookupTimeout
 
     def _raise_timeout(request):
@@ -446,7 +454,6 @@ async def test_omdb_lookup_by_title_timeout_raises(http_client):
 
 @respx.mock
 async def test_omdb_lookup_by_title_transport_error_raises(http_client):
-    from arm_backend.metadata.omdb import OMDBClient
 
     def _raise_transport(request):
         raise httpx.ConnectError("conn refused", request=request)
@@ -459,7 +466,7 @@ async def test_omdb_lookup_by_title_transport_error_raises(http_client):
 
 @respx.mock
 async def test_omdb_lookup_by_title_401_raises(http_client):
-    from arm_backend.metadata.omdb import OMDBClient
+
     respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(401))
     client = OMDBClient("k", http_client)
     with pytest.raises(LookupError, match="omdb auth failed"):
@@ -468,7 +475,7 @@ async def test_omdb_lookup_by_title_401_raises(http_client):
 
 @respx.mock
 async def test_omdb_lookup_by_title_5xx_raises(http_client):
-    from arm_backend.metadata.omdb import OMDBClient
+
     respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(503))
     client = OMDBClient("k", http_client)
     with pytest.raises(LookupError, match="5xx"):
@@ -477,7 +484,7 @@ async def test_omdb_lookup_by_title_5xx_raises(http_client):
 
 @respx.mock
 async def test_omdb_lookup_by_title_non200_raises(http_client):
-    from arm_backend.metadata.omdb import OMDBClient
+
     respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(404))
     client = OMDBClient("k", http_client)
     with pytest.raises(LookupError, match="omdb status=404"):
@@ -486,7 +493,7 @@ async def test_omdb_lookup_by_title_non200_raises(http_client):
 
 @respx.mock
 async def test_omdb_lookup_by_title_missing_title_raises(http_client):
-    from arm_backend.metadata.omdb import OMDBClient
+
     respx.get("https://www.omdbapi.com/").mock(
         return_value=httpx.Response(200, json={"Response": "True", "Title": "", "Year": "2000"})
     )
@@ -504,19 +511,23 @@ async def test_omdb_lookup_by_title_missing_title_raises(http_client):
 # lookup_by_title_*_raises tests above. search_candidates / lookup_by_imdb_id
 # only need their own BEHAVIOR tests (empty-vs-raise, skip, kind inference).
 
+
 @respx.mock
 async def test_omdb_search_candidates_skips_items_without_title(http_client):
     """Items in Search[] that have no Title are silently skipped."""
-    from arm_backend.metadata.omdb import OMDBClient
+
     respx.get("https://www.omdbapi.com/").mock(
-        return_value=httpx.Response(200, json={
-            "Response": "True",
-            "Search": [
-                {"Title": "", "Year": "2000", "imdbID": "tt0000001"},
-                {"Year": "2001", "imdbID": "tt0000002"},  # missing Title key
-                {"Title": "Real Movie", "Year": "2002", "imdbID": "tt0000003"},
-            ],
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "Response": "True",
+                "Search": [
+                    {"Title": "", "Year": "2000", "imdbID": "tt0000001"},
+                    {"Year": "2001", "imdbID": "tt0000002"},  # missing Title key
+                    {"Title": "Real Movie", "Year": "2002", "imdbID": "tt0000003"},
+                ],
+            },
+        )
     )
     client = OMDBClient("k", http_client)
     results = await client.search_candidates("real", kind="movie")
@@ -526,7 +537,7 @@ async def test_omdb_search_candidates_skips_items_without_title(http_client):
 
 @respx.mock
 async def test_omdb_lookup_by_imdb_id_miss_raises(http_client):
-    from arm_backend.metadata.omdb import OMDBClient
+
     respx.get("https://www.omdbapi.com/").mock(
         return_value=httpx.Response(200, json={"Response": "False", "Error": "Incorrect IMDb ID."})
     )
@@ -537,7 +548,7 @@ async def test_omdb_lookup_by_imdb_id_miss_raises(http_client):
 
 @respx.mock
 async def test_omdb_lookup_by_imdb_id_missing_title_raises(http_client):
-    from arm_backend.metadata.omdb import OMDBClient
+
     respx.get("https://www.omdbapi.com/").mock(
         return_value=httpx.Response(200, json={"Response": "True", "Title": "", "Year": "2000"})
     )
@@ -549,14 +560,18 @@ async def test_omdb_lookup_by_imdb_id_missing_title_raises(http_client):
 @respx.mock
 async def test_omdb_lookup_by_imdb_id_tv_series_kind(http_client):
     """When OMDB returns Type=series, kind is set to 'tv'."""
-    from arm_backend.metadata.omdb import OMDBClient
+
     respx.get("https://www.omdbapi.com/").mock(
-        return_value=httpx.Response(200, json={
-            "Response": "True", "Title": "Breaking Bad", "Year": "2008", "Type": "series",
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "Response": "True",
+                "Title": "Breaking Bad",
+                "Year": "2008",
+                "Type": "series",
+            },
+        )
     )
     client = OMDBClient("k", http_client)
     result = await client.lookup_by_imdb_id("tt0903747")
     assert result.kind == "tv"
-
-
