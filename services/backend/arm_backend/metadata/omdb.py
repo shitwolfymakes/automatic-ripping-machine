@@ -22,18 +22,16 @@ class OMDBClient:
         self._api_key = api_key
         self._http = http
 
-    async def lookup_by_title(
-        self,
-        title: str,
-        year: int | None = None,
-        kind: Literal["movie", "tv"] = "movie",
-    ) -> MetadataResult:
-        params: dict[str, Any] = {"apikey": self._api_key, "t": title, "type": kind}
-        if year is not None:
-            params["y"] = year
+    async def _get_json(self, params: dict[str, Any]) -> dict[str, Any]:
+        """GET the OMDB endpoint and return the parsed JSON body.
 
+        Centralizes the transport + HTTP-status handling shared by every OMDB
+        call: TimeoutException -> LookupTimeout, other transport errors and
+        401/5xx/non-200 -> LookupError. `apikey` is injected here so callers
+        only pass the query-specific params.
+        """
         try:
-            r = await self._http.get(_BASE_URL, params=params)
+            r = await self._http.get(_BASE_URL, params={"apikey": self._api_key, **params})
         except httpx.TimeoutException as e:
             raise LookupTimeout("omdb timeout") from e
         except httpx.HTTPError as e:
@@ -47,7 +45,20 @@ class OMDBClient:
         if r.status_code != 200:
             raise LookupError(f"omdb status={r.status_code}")
 
-        body = r.json()
+        body: dict[str, Any] = r.json()
+        return body
+
+    async def lookup_by_title(
+        self,
+        title: str,
+        year: int | None = None,
+        kind: Literal["movie", "tv"] = "movie",
+    ) -> MetadataResult:
+        params: dict[str, Any] = {"t": title, "type": kind}
+        if year is not None:
+            params["y"] = year
+
+        body = await self._get_json(params)
         if body.get("Response") != "True":
             raise LookupError(f"omdb miss: {body.get('Error', 'unknown')}")
 
@@ -66,23 +77,7 @@ class OMDBClient:
         limit: int = 10,
     ) -> list[MetadataResult]:
         """Return up to `limit` candidates for an interactive search (OMDB `s=`)."""
-        params: dict[str, Any] = {"apikey": self._api_key, "s": title, "type": kind}
-        try:
-            r = await self._http.get(_BASE_URL, params=params)
-        except httpx.TimeoutException as e:
-            raise LookupTimeout("omdb timeout") from e
-        except httpx.HTTPError as e:
-            raise LookupError(f"omdb transport error: {e}") from e
-
-        if r.status_code == 401:
-            logger.warning("omdb auth_failed status=401")
-            raise LookupError("omdb auth failed")
-        if r.status_code >= 500:
-            raise LookupError(f"omdb 5xx status={r.status_code}")
-        if r.status_code != 200:
-            raise LookupError(f"omdb status={r.status_code}")
-
-        body = r.json()
+        body = await self._get_json({"s": title, "type": kind})
         if body.get("Response") != "True":
             return []  # "Movie not found!" etc. — a real empty result, not an error
         out: list[MetadataResult] = []
@@ -97,23 +92,7 @@ class OMDBClient:
 
     async def lookup_by_imdb_id(self, imdb_id: str) -> MetadataResult:
         """Full details for a known IMDb id (OMDB `i=`)."""
-        params: dict[str, Any] = {"apikey": self._api_key, "i": imdb_id}
-        try:
-            r = await self._http.get(_BASE_URL, params=params)
-        except httpx.TimeoutException as e:
-            raise LookupTimeout("omdb timeout") from e
-        except httpx.HTTPError as e:
-            raise LookupError(f"omdb transport error: {e}") from e
-
-        if r.status_code == 401:
-            logger.warning("omdb auth_failed status=401")
-            raise LookupError("omdb auth failed")
-        if r.status_code >= 500:
-            raise LookupError(f"omdb 5xx status={r.status_code}")
-        if r.status_code != 200:
-            raise LookupError(f"omdb status={r.status_code}")
-
-        body = r.json()
+        body = await self._get_json({"i": imdb_id})
         if body.get("Response") != "True":
             raise LookupError(f"omdb miss: {body.get('Error', 'unknown')}")
         title_val = body.get("Title")

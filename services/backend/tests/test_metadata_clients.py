@@ -499,50 +499,10 @@ async def test_omdb_lookup_by_title_missing_title_raises(http_client):
 # Coverage gap tests — search_candidates error branches
 # ---------------------------------------------------------------------------
 
-@respx.mock
-async def test_omdb_search_candidates_timeout_raises(http_client):
-    from arm_backend.metadata.omdb import OMDBClient
-    from arm_backend.metadata.base import LookupTimeout
-
-    def _raise_timeout(request):
-        raise httpx.TimeoutException("timed out", request=request)
-
-    respx.get("https://www.omdbapi.com/").mock(side_effect=_raise_timeout)
-    client = OMDBClient("k", http_client)
-    with pytest.raises(LookupTimeout):
-        await client.search_candidates("x")
-
-
-@respx.mock
-async def test_omdb_search_candidates_transport_error_raises(http_client):
-    from arm_backend.metadata.omdb import OMDBClient
-
-    def _raise_transport(request):
-        raise httpx.ConnectError("conn refused", request=request)
-
-    respx.get("https://www.omdbapi.com/").mock(side_effect=_raise_transport)
-    client = OMDBClient("k", http_client)
-    with pytest.raises(LookupError):
-        await client.search_candidates("x")
-
-
-@respx.mock
-async def test_omdb_search_candidates_5xx_raises(http_client):
-    from arm_backend.metadata.omdb import OMDBClient
-    respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(500))
-    client = OMDBClient("k", http_client)
-    with pytest.raises(LookupError, match="5xx"):
-        await client.search_candidates("x")
-
-
-@respx.mock
-async def test_omdb_search_candidates_non200_raises(http_client):
-    from arm_backend.metadata.omdb import OMDBClient
-    respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(404))
-    client = OMDBClient("k", http_client)
-    with pytest.raises(LookupError, match="omdb status=404"):
-        await client.search_candidates("x")
-
+# Note: the shared transport/status branches (timeout, transport error, 401,
+# 5xx, non-200) live in OMDBClient._get_json and are covered once by the
+# lookup_by_title_*_raises tests above. search_candidates / lookup_by_imdb_id
+# only need their own BEHAVIOR tests (empty-vs-raise, skip, kind inference).
 
 @respx.mock
 async def test_omdb_search_candidates_skips_items_without_title(http_client):
@@ -562,64 +522,6 @@ async def test_omdb_search_candidates_skips_items_without_title(http_client):
     results = await client.search_candidates("real", kind="movie")
     assert len(results) == 1
     assert results[0].title == "Real Movie"
-
-
-# ---------------------------------------------------------------------------
-# Coverage gap tests — lookup_by_imdb_id error branches
-# ---------------------------------------------------------------------------
-
-@respx.mock
-async def test_omdb_lookup_by_imdb_id_timeout_raises(http_client):
-    from arm_backend.metadata.omdb import OMDBClient
-    from arm_backend.metadata.base import LookupTimeout
-
-    def _raise_timeout(request):
-        raise httpx.TimeoutException("timed out", request=request)
-
-    respx.get("https://www.omdbapi.com/").mock(side_effect=_raise_timeout)
-    client = OMDBClient("k", http_client)
-    with pytest.raises(LookupTimeout):
-        await client.lookup_by_imdb_id("tt0133093")
-
-
-@respx.mock
-async def test_omdb_lookup_by_imdb_id_transport_error_raises(http_client):
-    from arm_backend.metadata.omdb import OMDBClient
-
-    def _raise_transport(request):
-        raise httpx.ConnectError("conn refused", request=request)
-
-    respx.get("https://www.omdbapi.com/").mock(side_effect=_raise_transport)
-    client = OMDBClient("k", http_client)
-    with pytest.raises(LookupError):
-        await client.lookup_by_imdb_id("tt0133093")
-
-
-@respx.mock
-async def test_omdb_lookup_by_imdb_id_401_raises(http_client):
-    from arm_backend.metadata.omdb import OMDBClient
-    respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(401))
-    client = OMDBClient("k", http_client)
-    with pytest.raises(LookupError, match="omdb auth failed"):
-        await client.lookup_by_imdb_id("tt0133093")
-
-
-@respx.mock
-async def test_omdb_lookup_by_imdb_id_5xx_raises(http_client):
-    from arm_backend.metadata.omdb import OMDBClient
-    respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(503))
-    client = OMDBClient("k", http_client)
-    with pytest.raises(LookupError, match="5xx"):
-        await client.lookup_by_imdb_id("tt0133093")
-
-
-@respx.mock
-async def test_omdb_lookup_by_imdb_id_non200_raises(http_client):
-    from arm_backend.metadata.omdb import OMDBClient
-    respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(404))
-    client = OMDBClient("k", http_client)
-    with pytest.raises(LookupError, match="omdb status=404"):
-        await client.lookup_by_imdb_id("tt0133093")
 
 
 @respx.mock
