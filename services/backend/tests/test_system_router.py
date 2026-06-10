@@ -34,15 +34,22 @@ def _seed(db: FakeSession) -> None:
         Drive(id="drv_off000000000000000000002", hostname="h2", device_path="/dev/sr1", status=DriveStatus.OFFLINE),
     ]
     db.rows["jobs"] = [
-        Job(id="job_0000000000000000000000001", drive_id="drv_on0000000000000000000001",
-            disc_type=DiscType.DVD, status=JobStatus.RIPPING),
-        Job(id="job_0000000000000000000000002", drive_id="drv_on0000000000000000000001",
-            disc_type=DiscType.DVD, status=JobStatus.RIPPED),
+        Job(
+            id="job_0000000000000000000000001",
+            drive_id="drv_on0000000000000000000001",
+            disc_type=DiscType.DVD,
+            status=JobStatus.RIPPING,
+        ),
+        Job(
+            id="job_0000000000000000000000002",
+            drive_id="drv_on0000000000000000000001",
+            disc_type=DiscType.DVD,
+            status=JobStatus.RIPPED,
+        ),
     ]
     db.rows["events"] = [
         Event(id="evt_0000000000000000000000001", event_type="rip.completed", notified_at=None),
-        Event(id="evt_0000000000000000000000002", event_type="rip.completed",
-              notified_at=datetime.now(timezone.utc)),
+        Event(id="evt_0000000000000000000000002", event_type="rip.completed", notified_at=datetime.now(timezone.utc)),
     ]
 
 
@@ -50,9 +57,12 @@ def _make_app(signing_key: bytes, db: FakeSession, *, ingress_ok: bool, tmp) -> 
     app = FastAPI()
     app.state.signing_key = signing_key
     app.state.started_at = datetime.now(timezone.utc) - timedelta(seconds=42)
-    media = tmp / "media"; media.mkdir()
-    raw = tmp / "raw"; raw.mkdir()
-    logs = tmp / "logs"; logs.mkdir()
+    media = tmp / "media"
+    media.mkdir()
+    raw = tmp / "raw"
+    raw.mkdir()
+    logs = tmp / "logs"
+    logs.mkdir()
     ingress = tmp / "ingress"
     if ingress_ok:
         ingress.mkdir()
