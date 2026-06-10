@@ -57,9 +57,14 @@ def _auth(t: str) -> dict[str, str]:
 @respx.mock
 def test_search_tmdb_returns_candidates(signing_key: bytes) -> None:
     respx.get("https://api.themoviedb.org/3/search/movie").mock(
-        return_value=httpx.Response(200, json={"results": [
-            {"title": "The Matrix", "release_date": "1999-03-31", "id": 603, "poster_path": "/a.jpg"},
-        ]})
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    {"title": "The Matrix", "release_date": "1999-03-31", "id": 603, "poster_path": "/a.jpg"},
+                ]
+            },
+        )
     )
     db = FakeSession()
     _seed(db, tmdb_api_key="k")
@@ -138,9 +143,14 @@ def test_lookup_both_params_returns_422(signing_key: bytes) -> None:
 @respx.mock
 def test_music_search(signing_key: bytes) -> None:
     respx.get("https://musicbrainz.org/ws/2/release").mock(
-        return_value=httpx.Response(200, json={"releases": [
-            {"title": "Wish You Were Here", "date": "1975-09-12", "id": "mb-2"},
-        ]})
+        return_value=httpx.Response(
+            200,
+            json={
+                "releases": [
+                    {"title": "Wish You Were Here", "date": "1975-09-12", "id": "mb-2"},
+                ]
+            },
+        )
     )
     db = FakeSession()
     _seed(db)
@@ -170,10 +180,13 @@ def test_search_unauthenticated_401(signing_key: bytes) -> None:
 def test_lookup_by_crc64(signing_key: bytes) -> None:
     """ArmServerClient.lookup_by_crc64 path."""
     respx.get("https://1337server.pythonanywhere.com/api/v1/").mock(
-        return_value=httpx.Response(200, json={
-            "success": True,
-            "results": {"0": {"title": "Frozen", "year": 2013, "video_type": "movie"}},
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "results": {"0": {"title": "Frozen", "year": 2013, "video_type": "movie"}},
+            },
+        )
     )
     db = FakeSession()
     _seed(db)
@@ -188,10 +201,13 @@ def test_lookup_by_crc64(signing_key: bytes) -> None:
 def test_search_omdb_provider_returns_candidates(signing_key: bytes) -> None:
     """provider=omdb path in search_metadata."""
     respx.get("https://www.omdbapi.com/").mock(
-        return_value=httpx.Response(200, json={
-            "Response": "True",
-            "Search": [{"Title": "Blade Runner", "Year": "1982", "imdbID": "tt0083658", "Type": "movie"}],
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "Response": "True",
+                "Search": [{"Title": "Blade Runner", "Year": "1982", "imdbID": "tt0083658", "Type": "movie"}],
+            },
+        )
     )
     db = FakeSession()
     _seed(db, omdb_api_key="k")
@@ -234,9 +250,14 @@ def test_music_search_provider_error_returns_200_empty(signing_key: bytes) -> No
 def test_search_tmdb_tv_candidates(signing_key: bytes) -> None:
     """type=tv hits search_tv_candidates."""
     respx.get("https://api.themoviedb.org/3/search/tv").mock(
-        return_value=httpx.Response(200, json={"results": [
-            {"name": "Breaking Bad", "first_air_date": "2008-01-20", "id": 1396},
-        ]})
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    {"name": "Breaking Bad", "first_air_date": "2008-01-20", "id": 1396},
+                ]
+            },
+        )
     )
     db = FakeSession()
     _seed(db, tmdb_api_key="k")
