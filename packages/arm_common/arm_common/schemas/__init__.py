@@ -84,6 +84,13 @@ from arm_common.schemas.transcoder import (
     RegisterTranscoderRequest,
     RegisterTranscoderResponse,
 )
+from arm_common.schemas.system import (
+    PathStatus,
+    PathsResponse,
+    PreflightCheck,
+    PreflightResponse,
+    StatsResponse,
+)
 from arm_common.schemas.ws import (
     WSAck,
     WSAuthRequest,
@@ -138,7 +145,12 @@ __all__ = [
     "NamingVariable",
     "NamingVariablesResponse",
     "PasswordChangeRequest",
+    "PathStatus",
+    "PathsResponse",
+    "PreflightCheck",
+    "PreflightResponse",
     "RegisterRequest",
+    "StatsResponse",
     "RegisterTranscoderRequest",
     "RegisterTranscoderResponse",
     "RipperConfigView",
