@@ -90,3 +90,23 @@ def test_validate_music_template() -> None:
         has_transcode_preset=True,
     )
     assert "Pink Floyd" in out and "Speak to Me" in out and out.endswith(".flac")
+
+
+def test_validate_template_or_http_passes_through_expansion() -> None:
+    from arm_backend.path_template import validate_template_or_http
+    from arm_common.enums import MediaType
+
+    out = validate_template_or_http("{title} ({year})/{title}.mkv", MediaType.MOVIE, True)
+    assert "Iron Man" in out
+
+
+def test_validate_template_or_http_raises_http_422_on_bad_token() -> None:
+    import pytest
+    from fastapi import HTTPException
+
+    from arm_backend.path_template import validate_template_or_http
+    from arm_common.enums import MediaType
+
+    with pytest.raises(HTTPException) as exc:
+        validate_template_or_http("{nope}", MediaType.MOVIE, True)
+    assert exc.value.status_code == 422
