@@ -1,7 +1,8 @@
 """ISO-import scan: validate an ISO under the ingress root and suggest
 title/year. Job creation is owned by the ripper register->identify flow (an ISO
-is a Drive whose device_path is the iso path), so full ISO import is a follow-up
-(see followups). Ports neu's POST /jobs/iso/scan, adapted to v3."""
+is a Drive whose device_path is the iso path), so full ISO import — registering
+the ISO as a drive and dispatching a ripper to it — is a separate follow-up.
+This endpoint only validates + suggests metadata. Ports neu's POST /jobs/iso/scan."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 

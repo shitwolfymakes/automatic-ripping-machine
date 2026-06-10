@@ -1,6 +1,7 @@
 """Metadata API-key tester. Validates omdb/tmdb/tvdb keys against the upstream
-service; makemkv is a structural/presence check (full validity confirmed at
-rip time — see followups). Ports neu's GET /api/v1/metadata/test-key."""
+service; makemkv is a structural/presence check only (the ripper owns the
+update-key script, so true validity is confirmed at rip time). Ports neu's
+GET /api/v1/metadata/test-key."""
 
 import logging
 import re

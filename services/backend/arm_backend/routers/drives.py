@@ -73,7 +73,7 @@ async def rescan_drives(
 
     Kept as POST (not GET) even though it currently only reads: a real rescan
     triggers ripper-side hardware re-enumeration (a non-idempotent side effect),
-    which the follow-up will add behind this same verb. See followups-for-wolfy."""
+    which a follow-up will add behind this same verb."""
     drives = list((await db.execute(select(Drive))).scalars().all())
     now = datetime.now(timezone.utc)
     online = 0
