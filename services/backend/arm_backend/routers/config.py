@@ -36,6 +36,7 @@ def _to_view(cfg: Config) -> ConfigView:
         auto_transcode_on_idle=cfg.auto_transcode_on_idle,
         auto_rip_on_insert=cfg.auto_rip_on_insert,
         block_on_miss=cfg.block_on_miss,
+        ripping_paused=bool(cfg.ripping_paused),
         default_retention_policy=cfg.default_retention_policy,
         notification_apprise_urls=list(cfg.notification_apprise_urls or []),
         notifications_enabled=cfg.notifications_enabled,
