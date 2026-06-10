@@ -2,7 +2,7 @@ import httpx
 import pytest
 import respx
 
-from arm_backend.metadata.base import LookupError
+from arm_backend.metadata.base import LookupError, LookupTimeout
 from arm_backend.metadata.musicbrainz import MusicBrainzClient
 from arm_backend.metadata.omdb import OMDBClient
 from arm_backend.metadata.tmdb import TMDBClient
@@ -441,7 +441,6 @@ async def test_omdb_lookup_by_imdb_id(http_client):
 
 @respx.mock
 async def test_omdb_lookup_by_title_timeout_raises(http_client):
-    from arm_backend.metadata.base import LookupTimeout
 
     def _raise_timeout(request):
         raise httpx.TimeoutException("timed out", request=request)
@@ -673,7 +672,6 @@ async def test_tmdb_get_results_5xx_raises(http_client):
 
 @respx.mock
 async def test_tmdb_get_results_timeout_raises(http_client):
-    from arm_backend.metadata.base import LookupTimeout
 
     def _raise_timeout(request):
         raise httpx.TimeoutException("timed out", request=request)
@@ -808,7 +806,7 @@ async def test_musicbrainz_search_empty(http_client):
 async def test_musicbrainz_search_5xx_raises(http_client):
     respx.get("https://musicbrainz.org/ws/2/release").mock(return_value=httpx.Response(503))
     client = MusicBrainzClient("arm/test", http_client)
-    with pytest.raises(LookupError):
+    with pytest.raises(LookupError, match="5xx"):
         await client.search_releases("x")
 
 
@@ -835,7 +833,6 @@ async def test_musicbrainz_search_skips_releases_without_title(http_client):
 
 @respx.mock
 async def test_musicbrainz_search_timeout_raises(http_client):
-    from arm_backend.metadata.base import LookupTimeout
 
     def _raise_timeout(request):
         raise httpx.TimeoutException("timed out", request=request)
