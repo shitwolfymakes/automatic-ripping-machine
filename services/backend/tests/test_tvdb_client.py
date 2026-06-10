@@ -49,3 +49,19 @@ async def test_validate_key_timeout_raises_lookuptimeout(http_client):
     client = TVDBClient("k", http_client)
     with pytest.raises(LookupTimeout):
         await client.validate_key()
+
+
+@respx.mock
+async def test_validate_key_transport_error_raises_lookuperror(http_client):
+    respx.post(_LOGIN_URL).mock(side_effect=httpx.ConnectError("refused"))
+    client = TVDBClient("k", http_client)
+    with pytest.raises(LookupError):
+        await client.validate_key()
+
+
+@respx.mock
+async def test_validate_key_unexpected_status_raises_lookuperror(http_client):
+    respx.post(_LOGIN_URL).mock(return_value=httpx.Response(403))
+    client = TVDBClient("k", http_client)
+    with pytest.raises(LookupError):
+        await client.validate_key()
