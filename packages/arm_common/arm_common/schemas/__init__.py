@@ -1,3 +1,4 @@
+from arm_common.schemas.metadata import MetadataKeyTestResponse, MetadataProvider
 from arm_common.schemas.auth import (
     ConfigUpdateRequest,
     ConfigView,
@@ -78,6 +79,8 @@ from arm_common.schemas.ws import (
 
 __all__ = [
     "AbandonJobRequest",
+    "MetadataKeyTestResponse",
+    "MetadataProvider",
     "ApplySessionRequest",
     "BulkDeleteJobsResponse",
     "DiscFingerprintInput",
