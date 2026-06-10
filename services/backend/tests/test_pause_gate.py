@@ -5,7 +5,6 @@ normally.
 
 from __future__ import annotations
 
-import asyncio
 import os
 import secrets
 from typing import Any
@@ -23,12 +22,9 @@ from arm_backend.routers import jobs as jobs_router  # noqa: E402
 from arm_backend.routers import ripper as ripper_router  # noqa: E402
 from arm_common import (  # noqa: E402
     Config,
-    DiscType,
     Drive,
     DriveMediaStatus,
     DriveStatus,
-    Job,
-    JobStatus,
     MediaType,
     RetentionPolicy,
     Session,
