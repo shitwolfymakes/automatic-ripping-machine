@@ -28,9 +28,11 @@ _REQUIRED_ROOTS = {"MEDIA_ROOT", "RAW_ROOT", "LOG_DIR"}
 
 
 def _roots(request: Request) -> dict[str, str]:
-    injected = getattr(request.app.state, "system_paths", None)
+    injected: dict[str, str] | None = getattr(request.app.state, "system_paths", None)
     if injected is not None:
         return injected
+    # LOG_DIR is the fixed `/logs` mount throughout v3 (see logs.py /
+    # log_tailer.py) — convention-over-config, not a Settings field.
     return {
         "MEDIA_ROOT": settings.MEDIA_ROOT,
         "RAW_ROOT": settings.RAW_ROOT,
@@ -72,9 +74,7 @@ async def preflight(
                 PreflightCheck(name=name, status=sev, detail=f"{path}: exists={ps.exists} writable={ps.writable}")
             )
 
-    drives = list(
-        (await db.execute(select(Drive).where(col(Drive.status) == DriveStatus.ONLINE))).scalars().all()
-    )
+    drives = list((await db.execute(select(Drive).where(col(Drive.status) == DriveStatus.ONLINE))).scalars().all())
     checks.append(
         PreflightCheck(
             name="drives",
