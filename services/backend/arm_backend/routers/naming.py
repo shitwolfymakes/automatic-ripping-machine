@@ -29,10 +29,7 @@ async def naming_variables(
     _: User = Depends(require_jwt),
 ) -> NamingVariablesResponse:
     types = [media_type] if media_type is not None else list(MediaType)
-    variables = {
-        mt.value: [NamingVariable(**tok) for tok in tokens_for_media(mt)]
-        for mt in types
-    }
+    variables = {mt.value: [NamingVariable(**tok) for tok in tokens_for_media(mt)] for mt in types}
     return NamingVariablesResponse(variables=variables)
 
 

@@ -31,11 +31,22 @@ def _seed(db: FakeSession) -> None:
     now = datetime.now(timezone.utc)
     db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
     db.rows["drives"] = [
-        Drive(id="drv_frsh000000000000000000001", hostname="h1", device_path="/dev/sr0",
-              status=DriveStatus.ONLINE, media_status=DriveMediaStatus.LOADED, media_status_at=now),
-        Drive(id="drv_stal000000000000000000002", hostname="h2", device_path="/dev/sr1",
-              status=DriveStatus.ONLINE, media_status=DriveMediaStatus.NO_DISC,
-              media_status_at=now - timedelta(hours=2)),
+        Drive(
+            id="drv_frsh000000000000000000001",
+            hostname="h1",
+            device_path="/dev/sr0",
+            status=DriveStatus.ONLINE,
+            media_status=DriveMediaStatus.LOADED,
+            media_status_at=now,
+        ),
+        Drive(
+            id="drv_stal000000000000000000002",
+            hostname="h2",
+            device_path="/dev/sr1",
+            status=DriveStatus.ONLINE,
+            media_status=DriveMediaStatus.NO_DISC,
+            media_status_at=now - timedelta(hours=2),
+        ),
     ]
 
 
@@ -95,8 +106,14 @@ def test_diagnostic_drive_no_heartbeat(signing_key: bytes) -> None:
     db = FakeSession()
     db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
     db.rows["drives"] = [
-        Drive(id="drv_nohb000000000000000000003", hostname="h3", device_path="/dev/sr2",
-              status=DriveStatus.ONLINE, media_status=None, media_status_at=None),
+        Drive(
+            id="drv_nohb000000000000000000003",
+            hostname="h3",
+            device_path="/dev/sr2",
+            status=DriveStatus.ONLINE,
+            media_status=None,
+            media_status_at=None,
+        ),
     ]
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
@@ -113,9 +130,14 @@ def test_diagnostic_drive_offline_status(signing_key: bytes) -> None:
     db = FakeSession()
     db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
     db.rows["drives"] = [
-        Drive(id="drv_offl000000000000000000004", hostname="h4", device_path="/dev/sr3",
-              status=DriveStatus.OFFLINE, media_status=DriveMediaStatus.UNAVAILABLE,
-              media_status_at=now),
+        Drive(
+            id="drv_offl000000000000000000004",
+            hostname="h4",
+            device_path="/dev/sr3",
+            status=DriveStatus.OFFLINE,
+            media_status=DriveMediaStatus.UNAVAILABLE,
+            media_status_at=now,
+        ),
     ]
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
