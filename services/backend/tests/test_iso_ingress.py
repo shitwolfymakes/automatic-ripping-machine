@@ -42,6 +42,11 @@ def test_resolve_rejects_escaping_symlink(tmp_path) -> None:
         resolve_iso_path(str(tmp_path), "link.iso")
 
 
+def test_resolve_rejects_nul_byte(tmp_path) -> None:
+    with pytest.raises(IngressError):
+        resolve_iso_path(str(tmp_path), "evil\x00.iso")
+
+
 def test_parse_filename_title_and_year() -> None:
     title, year = parse_iso_filename("Iron Man (2008).iso")
     assert title == "Iron Man"

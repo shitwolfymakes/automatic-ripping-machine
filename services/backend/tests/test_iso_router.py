@@ -88,6 +88,16 @@ def test_scan_missing_file_rejected_400(signing_key: bytes, tmp_path) -> None:
     assert r.status_code == 400
 
 
+def test_scan_non_iso_rejected_400(signing_key: bytes, tmp_path) -> None:
+    (tmp_path / "movie.mkv").write_bytes(b"x")
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, str(tmp_path))
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/iso/scan", json={"path": "movie.mkv"}, headers=_auth(token))
+    assert r.status_code == 400
+
+
 def test_scan_unauthenticated_401(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)

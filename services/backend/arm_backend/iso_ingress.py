@@ -2,8 +2,9 @@
 
 Resolves an operator-supplied relative path under ISO_INGRESS_ROOT and proves
 the real resolved path stays inside the root (defends against `..`, absolute
-paths, and escaping symlinks). Mirrors the containment pattern used by the
-logs/jobs path guards."""
+paths, and escaping symlinks). Unlike the logs/jobs guards — which whitelist a
+ULID via regex then `os.path.basename()` — operator-chosen ISO filenames are
+unstructured, so this uses a resolve-then-contains sandbox instead."""
 
 import re
 from pathlib import Path
@@ -23,7 +24,12 @@ def resolve_iso_path(ingress_root: str, requested: str) -> Path:
     root = Path(ingress_root).resolve()
     if requested.startswith("/") or requested.startswith("\\"):
         raise IngressError("absolute paths are not allowed")
-    candidate = (root / requested).resolve()
+    # `resolve()` raises ValueError on an embedded NUL byte; keep the contract
+    # that every invalid input surfaces as IngressError (a 400), not a 500.
+    try:
+        candidate = (root / requested).resolve()
+    except ValueError as exc:
+        raise IngressError("path contains invalid characters") from exc
     # Containment: the resolved real path must be inside the root.
     if root != candidate and root not in candidate.parents:
         raise IngressError("path escapes the ingress root")
