@@ -58,3 +58,68 @@ class OMDBClient:
             raise LookupError("omdb hit missing title")
 
         return MetadataResult(title=title_val, year=year_val, kind=kind, payload=body)
+
+    async def search_candidates(
+        self,
+        title: str,
+        kind: Literal["movie", "tv"] = "movie",
+        limit: int = 10,
+    ) -> list[MetadataResult]:
+        """Return up to `limit` candidates for an interactive search (OMDB `s=`)."""
+        params: dict[str, Any] = {"apikey": self._api_key, "s": title, "type": kind}
+        try:
+            r = await self._http.get(_BASE_URL, params=params)
+        except httpx.TimeoutException as e:
+            raise LookupTimeout("omdb timeout") from e
+        except httpx.HTTPError as e:
+            raise LookupError(f"omdb transport error: {e}") from e
+
+        if r.status_code == 401:
+            logger.warning("omdb auth_failed status=401")
+            raise LookupError("omdb auth failed")
+        if r.status_code >= 500:
+            raise LookupError(f"omdb 5xx status={r.status_code}")
+        if r.status_code != 200:
+            raise LookupError(f"omdb status={r.status_code}")
+
+        body = r.json()
+        if body.get("Response") != "True":
+            return []  # "Movie not found!" etc. — a real empty result, not an error
+        out: list[MetadataResult] = []
+        for item in (body.get("Search") or [])[:limit]:
+            title_val = item.get("Title")
+            if not title_val:
+                continue
+            year_str = item.get("Year") or ""
+            year_val = int(year_str[:4]) if year_str[:4].isdigit() else None
+            out.append(MetadataResult(title=title_val, year=year_val, kind=kind, payload=item))
+        return out
+
+    async def lookup_by_imdb_id(self, imdb_id: str) -> MetadataResult:
+        """Full details for a known IMDb id (OMDB `i=`)."""
+        params: dict[str, Any] = {"apikey": self._api_key, "i": imdb_id}
+        try:
+            r = await self._http.get(_BASE_URL, params=params)
+        except httpx.TimeoutException as e:
+            raise LookupTimeout("omdb timeout") from e
+        except httpx.HTTPError as e:
+            raise LookupError(f"omdb transport error: {e}") from e
+
+        if r.status_code == 401:
+            logger.warning("omdb auth_failed status=401")
+            raise LookupError("omdb auth failed")
+        if r.status_code >= 500:
+            raise LookupError(f"omdb 5xx status={r.status_code}")
+        if r.status_code != 200:
+            raise LookupError(f"omdb status={r.status_code}")
+
+        body = r.json()
+        if body.get("Response") != "True":
+            raise LookupError(f"omdb miss: {body.get('Error', 'unknown')}")
+        title_val = body.get("Title")
+        if not title_val:
+            raise LookupError("omdb hit missing title")
+        year_str = body.get("Year") or ""
+        year_val = int(year_str[:4]) if year_str[:4].isdigit() else None
+        kind: Literal["movie", "tv"] = "tv" if body.get("Type") == "series" else "movie"
+        return MetadataResult(title=title_val, year=year_val, kind=kind, payload=body)
