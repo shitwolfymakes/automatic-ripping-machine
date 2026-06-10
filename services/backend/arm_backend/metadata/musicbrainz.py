@@ -83,8 +83,7 @@ class MusicBrainzClient:
 
         top = releases[0]
         title_val = top.get("title")
-        date = top.get("date") or ""
-        year_val = int(date[:4]) if date[:4].isdigit() else None
+        year_val = _parse_year(top.get("date") or "")
         if not title_val:
             raise LookupError("musicbrainz top release missing title")
 
@@ -113,17 +112,22 @@ class MusicBrainzClient:
         )
 
         results: list[MetadataResult] = []
+        # MB's `limit` query param is advisory; re-cap client-side as a guard.
         for rel in (body.get("releases") or [])[:limit]:
             title = rel.get("title")
             if not title:
                 continue
-            date = rel.get("date") or ""
-            year: int | None = int(date[:4]) if date[:4].isdigit() else None
+            year = _parse_year(rel.get("date") or "")
             artist = _join_artist_credit(rel.get("artist-credit") or [])
             payload: dict[str, Any] = {"artist": artist, "album": title, **rel}
             results.append(MetadataResult(title=title, year=year, kind="music", payload=payload))
 
         return results
+
+
+def _parse_year(date: str) -> int | None:
+    """Year from a MusicBrainz date string ("1973-03-01" -> 1973), or None."""
+    return int(date[:4]) if date[:4].isdigit() else None
 
 
 def _join_artist_credit(credit: list[dict[str, Any]]) -> str:
