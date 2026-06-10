@@ -51,10 +51,10 @@ class TMDBClient:
         return results
 
     @staticmethod
-    def _parse_one(top: dict[str, Any], endpoint: str, kind: Literal["movie", "tv"]) -> MetadataResult | None:
+    def _parse_one(top: dict[str, Any], kind: Literal["movie", "tv"]) -> MetadataResult | None:
         """Map one TMDB result dict to a MetadataResult, or None if it has no
         usable title. Movie/TV differ only in the title/date field names."""
-        if endpoint == "movie":
+        if kind == "movie":
             release = top.get("release_date") or ""
             title_val = top.get("title") or top.get("original_title") or ""
         else:
@@ -96,7 +96,7 @@ class TMDBClient:
         results = await self._get_results(endpoint, params)
         out: list[MetadataResult] = []
         for top in results[:limit]:
-            parsed = self._parse_one(top, endpoint, kind)
+            parsed = self._parse_one(top, kind)
             if parsed is not None:
                 out.append(parsed)
         return out
@@ -111,7 +111,7 @@ class TMDBClient:
         results = await self._get_results(endpoint, params)
         if not results:
             raise LookupError(f"tmdb {endpoint} no results")
-        parsed = self._parse_one(results[0], endpoint, kind)
+        parsed = self._parse_one(results[0], kind)
         if parsed is None:
             raise LookupError(f"tmdb {endpoint} top result missing title")
         return parsed
