@@ -34,6 +34,52 @@ class TMDBClient:
     async def search_tv(self, title: str) -> MetadataResult:
         return await self._search("tv", {"query": title}, kind="tv")
 
+    async def search_movie_candidates(self, title: str, year: int | None = None, limit: int = 10) -> list[MetadataResult]:
+        params: dict[str, Any] = {"query": title}
+        if year is not None:
+            params["year"] = year
+        return await self._search_candidates("movie", params, kind="movie", limit=limit)
+
+    async def search_tv_candidates(self, title: str, limit: int = 10) -> list[MetadataResult]:
+        return await self._search_candidates("tv", {"query": title}, kind="tv", limit=limit)
+
+    async def _search_candidates(
+        self,
+        endpoint: str,
+        params: dict[str, Any],
+        *,
+        kind: Literal["movie", "tv"],
+        limit: int,
+    ) -> list[MetadataResult]:
+        try:
+            r = await self._http.get(f"{_BASE_URL}/search/{endpoint}", params=params, headers=self._headers)
+        except httpx.TimeoutException as e:
+            raise LookupTimeout(f"tmdb {endpoint} timeout") from e
+        except httpx.HTTPError as e:
+            raise LookupError(f"tmdb {endpoint} transport error: {e}") from e
+
+        if r.status_code == 401:
+            logger.warning("tmdb auth_failed status=401")
+            raise LookupError("tmdb auth failed")
+        if r.status_code >= 500:
+            raise LookupError(f"tmdb {endpoint} 5xx status={r.status_code}")
+        if r.status_code != 200:
+            raise LookupError(f"tmdb {endpoint} status={r.status_code}")
+
+        out: list[MetadataResult] = []
+        for top in (r.json().get("results") or [])[:limit]:
+            if endpoint == "movie":
+                release = top.get("release_date") or ""
+                title_val = top.get("title") or top.get("original_title") or ""
+            else:
+                release = top.get("first_air_date") or ""
+                title_val = top.get("name") or top.get("original_name") or ""
+            if not title_val:
+                continue
+            year_val = int(release[:4]) if release[:4].isdigit() else None
+            out.append(MetadataResult(title=title_val, year=year_val, kind=kind, payload=top))
+        return out
+
     async def _search(
         self,
         endpoint: str,
