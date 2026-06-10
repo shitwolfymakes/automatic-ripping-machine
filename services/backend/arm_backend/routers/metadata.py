@@ -137,7 +137,9 @@ async def search_metadata(
     try:
         if provider == "tmdb":
             client = TMDBClient(key, http)
-            results = await (client.search_movie_candidates(title) if type == "movie" else client.search_tv_candidates(title))
+            results = await (
+                client.search_movie_candidates(title) if type == "movie" else client.search_tv_candidates(title)
+            )
         else:
             results = await OMDBClient(key, http).search_candidates(title, kind=type)
     except (MetaLookupError, LookupTimeout) as exc:
@@ -160,18 +162,19 @@ async def lookup_metadata(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="exactly one of imdb_id or crc64 is required",
         )
-    cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-    if cfg is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="config not initialised")
     http: httpx.AsyncClient = request.app.state.http
-    if imdb_id is not None:
-        key = (cfg.omdb_api_key or "").strip()
-        if not key:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no omdb key configured")
     try:
         if imdb_id is not None:
-            result = await OMDBClient(key, http).lookup_by_imdb_id(imdb_id)  # type: ignore[possibly-undefined]
+            # imdb lookup needs the OMDB key from config; crc64 (community DB)
+            # needs no key or config, so its guard lives in this branch only.
+            cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+            key = (cfg.omdb_api_key or "").strip() if cfg is not None else ""
+            if not key:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no omdb key configured")
+            result = await OMDBClient(key, http).lookup_by_imdb_id(imdb_id)
         else:
+            # The XOR guard above guarantees crc64 is a str in this branch,
+            # but mypy can't narrow it across the if/else.
             result = await ArmServerClient(http).lookup_by_crc64(crc64)  # type: ignore[arg-type]
     except (MetaLookupError, LookupTimeout) as exc:
         return MetadataSearchResponse(candidates=[], detail=str(exc))
