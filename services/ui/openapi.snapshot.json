@@ -1547,7 +1547,7 @@
           "drives"
         ],
         "summary": "Rescan Drives",
-        "description": "Reconcile drive freshness from heartbeats. Backend-side only: the\nripper owns hardware re-enumeration; this surfaces which registered drives\nare live vs stale based on their last media-status update.\n\nKept as POST (not GET) even though it currently only reads: a real rescan\ntriggers ripper-side hardware re-enumeration (a non-idempotent side effect),\nwhich the follow-up will add behind this same verb. See followups-for-wolfy.",
+        "description": "Reconcile drive freshness from heartbeats. Backend-side only: the\nripper owns hardware re-enumeration; this surfaces which registered drives\nare live vs stale based on their last media-status update.\n\nKept as POST (not GET) even though it currently only reads: a real rescan\ntriggers ripper-side hardware re-enumeration (a non-idempotent side effect),\nwhich a follow-up will add behind this same verb.",
         "operationId": "rescan_drives_api_drives_rescan_post",
         "parameters": [
           {
