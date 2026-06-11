@@ -41,8 +41,12 @@ def test_compose_url_from_fields(monkeypatch) -> None:
 
 def test_mask_config_masks_private_apprise_fields(monkeypatch) -> None:
     _patch_catalog(monkeypatch)
-    cfg = {"type": "apprise", "url": "discord://1/2", "service_id": "discord",
-           "fields": {"webhook_id": "1", "webhook_token": "2", "format": "markdown"}}
+    cfg = {
+        "type": "apprise",
+        "url": "discord://1/2",
+        "service_id": "discord",
+        "fields": {"webhook_id": "1", "webhook_token": "2", "format": "markdown"},
+    }
     masked = fm.mask_config(cfg)
     assert masked["fields"]["webhook_id"] == fm._HIDDEN_LITERAL
     assert masked["fields"]["webhook_token"] == fm._HIDDEN_LITERAL
@@ -61,14 +65,21 @@ def test_mask_config_no_fields_passthrough(monkeypatch) -> None:
 
 def test_merge_patch_keeps_hidden_secret(monkeypatch) -> None:
     _patch_catalog(monkeypatch)
-    existing = {"type": "apprise", "service_id": "discord", "url": "discord://1/2",
-                "fields": {"webhook_id": "1", "webhook_token": "2"}}
-    incoming = {"type": "apprise", "service_id": "discord",
-                "fields": {"webhook_id": fm._HIDDEN_LITERAL, "webhook_token": "NEW"}}
+    existing = {
+        "type": "apprise",
+        "service_id": "discord",
+        "url": "discord://1/2",
+        "fields": {"webhook_id": "1", "webhook_token": "2"},
+    }
+    incoming = {
+        "type": "apprise",
+        "service_id": "discord",
+        "fields": {"webhook_id": fm._HIDDEN_LITERAL, "webhook_token": "NEW"},
+    }
     merged = fm.merge_patch_config(existing, incoming)
-    assert merged["fields"]["webhook_id"] == "1"      # kept
+    assert merged["fields"]["webhook_id"] == "1"  # kept
     assert merged["fields"]["webhook_token"] == "NEW"  # overwritten
-    assert merged["url"] == "discord://1/NEW"          # recomposed
+    assert merged["url"] == "discord://1/NEW"  # recomposed
 
 
 def test_merge_patch_incoming_none(monkeypatch) -> None:
@@ -86,24 +97,26 @@ def test_merge_patch_non_apprise_returns_incoming(monkeypatch) -> None:
 
 def test_merge_patch_incoming_missing_service_id_falls_back(monkeypatch) -> None:
     _patch_catalog(monkeypatch)
-    existing = {"type": "apprise", "service_id": "discord", "url": "discord://1/2",
-                "fields": {"webhook_id": "1", "webhook_token": "2"}}
+    existing = {
+        "type": "apprise",
+        "service_id": "discord",
+        "url": "discord://1/2",
+        "fields": {"webhook_id": "1", "webhook_token": "2"},
+    }
     # incoming omits service_id entirely
     incoming = {"type": "apprise", "fields": {"webhook_token": "NEW"}}
     merged = fm.merge_patch_config(existing, incoming)
-    assert merged["service_id"] == "discord"          # fell back to existing
-    assert merged["fields"]["webhook_id"] == "1"      # untouched stored field kept
+    assert merged["service_id"] == "discord"  # fell back to existing
+    assert merged["fields"]["webhook_id"] == "1"  # untouched stored field kept
     assert merged["fields"]["webhook_token"] == "NEW"
-    assert merged["url"] == "discord://1/NEW"          # recomposed via fallback service_id
+    assert merged["url"] == "discord://1/NEW"  # recomposed via fallback service_id
 
 
 def test_merge_patch_unknown_service_keeps_url(monkeypatch) -> None:
     _patch_catalog(monkeypatch)
     # service_id present on both but not in the catalog -> compose returns None
-    existing = {"type": "apprise", "service_id": "ghost", "url": "ghost://old",
-                "fields": {"a": "1"}}
-    incoming = {"type": "apprise", "service_id": "ghost", "url": "ghost://old",
-                "fields": {"a": "2"}}
+    existing = {"type": "apprise", "service_id": "ghost", "url": "ghost://old", "fields": {"a": "1"}}
+    incoming = {"type": "apprise", "service_id": "ghost", "url": "ghost://old", "fields": {"a": "2"}}
     merged = fm.merge_patch_config(existing, incoming)
-    assert merged["fields"]["a"] == "2"     # field still merged
-    assert merged["url"] == "ghost://old"   # url unchanged (compose returned None)
+    assert merged["fields"]["a"] == "2"  # field still merged
+    assert merged["url"] == "ghost://old"  # url unchanged (compose returned None)
