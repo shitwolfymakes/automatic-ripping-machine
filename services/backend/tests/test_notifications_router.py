@@ -391,3 +391,19 @@ def test_test_adhoc_unknown_service_returns_ok_false(signing_key: bytes) -> None
         r = client.post("/api/notifications/test", json=body, headers=_auth(token))
     assert r.status_code == 200
     assert r.json() == {"ok": False, "error": "url is required"}
+
+
+def test_dispatch_log_list_and_filter(signing_key: bytes) -> None:
+    from arm_common import NotificationDispatchLog
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_dispatch_log", []).extend([
+        NotificationDispatchLog(id="ndl_1", channel_id="ncl_1", event_type="rip.completed", title="t", body="b", success=True),
+        NotificationDispatchLog(id="ndl_2", channel_id="ncl_2", event_type="rip.failed", title="t", body="b", success=False),
+    ])
+    with TestClient(app) as client:
+        r = client.get("/api/notifications/dispatch-log", headers=_auth(token))
+        assert r.status_code == 200
+        assert len(r.json()) == 2
+        r2 = client.get("/api/notifications/dispatch-log?channel_id=ncl_1", headers=_auth(token))
+        assert [row["id"] for row in r2.json()] == ["ndl_1"]
