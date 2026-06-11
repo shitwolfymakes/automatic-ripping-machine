@@ -58,6 +58,7 @@ _TITLES: dict[str, str] = {
     "rip.completed": "ARM: rip completed",
     "rip.failed": "ARM: rip failed",
     "rip.partial": "ARM: rip partial",
+    "rip.needs_user_input": "ARM: needs user input",
     "session.completed": "ARM: session completed",
     "session.failed": "ARM: session failed",
     "session.partial": "ARM: session partial",
@@ -95,7 +96,7 @@ def format_event(event: Event, job: Job | None) -> tuple[str, str]:
     """Return (title, body) for an outbound notification.
 
     Raises `KeyError` for unknown event types; the dispatcher only feeds
-    types from `NOTIFIABLE_EVENT_TYPES`, so an unknown type here is a
+    types from `NOTABLE_EVENT_TYPES`, so an unknown type here is a
     code bug, not user input.
     """
     title = _TITLES[event.event_type]
