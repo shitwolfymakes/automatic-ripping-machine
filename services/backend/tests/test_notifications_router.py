@@ -246,3 +246,33 @@ def test_delete_channel_404(signing_key: bytes) -> None:
     with TestClient(app) as client:
         r = client.delete("/api/notifications/channels/ncl_x", headers=_auth(token))
     assert r.status_code == 404
+
+
+def test_get_services(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get("/api/notifications/services", headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()["featured"] == ["discord"]
+    assert r.json()["services"][0]["id"] == "discord"
+
+
+def test_compose_url(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    body = {"required": {"webhook_id": "1", "webhook_token": "2"}, "advanced": {"format": "markdown"}}
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/services/discord/compose-url", json=body, headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()["url"] == "discord://1/2?format=markdown"
+
+
+def test_event_types(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get("/api/notifications/event-types", headers=_auth(token))
+    assert r.status_code == 200
+    assert "rip.completed" in r.json()
+    assert r.json() == sorted(r.json())
