@@ -20,3 +20,19 @@ def test_notification_channel_defaults() -> None:
     assert ch.last_success_at is None
     assert ch.last_error is None
     assert ch.__tablename__ == "notification_channels"
+
+
+def test_notification_dispatch_log_defaults() -> None:
+    from arm_common import NotificationDispatchLog
+
+    row = NotificationDispatchLog(
+        event_type="rip.completed",
+        title="t",
+        body="b",
+        success=True,
+    )
+    assert row.id.startswith("ndl_")
+    assert row.channel_id is None
+    assert row.event_id is None
+    assert row.error is None
+    assert row.__tablename__ == "notification_dispatch_log"
