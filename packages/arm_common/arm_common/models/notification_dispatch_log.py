@@ -25,9 +25,7 @@ class NotificationDispatchLog(SQLModel, table=True):
         )
     )
     # null for test-sends; SET NULL so the log row survives event deletion.
-    event_id: str | None = Field(
-        sa_column=Column(String, ForeignKey("events.id", ondelete="SET NULL"), nullable=True)
-    )
+    event_id: str | None = Field(sa_column=Column(String, ForeignKey("events.id", ondelete="SET NULL"), nullable=True))
     # Denormalized so the log survives event + channel deletion.
     event_type: str = Field(sa_column=Column(String, nullable=False))
     title: str = Field(sa_column=Column(String, nullable=False))

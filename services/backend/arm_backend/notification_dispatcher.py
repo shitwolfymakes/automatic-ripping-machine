@@ -174,11 +174,7 @@ class NotificationDispatcher:
                 logger.info("notification dispatch: %d event(s) skipped (notifications disabled)", len(unsent))
                 return
 
-            channels = (
-                (await db.execute(select(NotificationChannel)))
-                .scalars()
-                .all()
-            )
+            channels = (await db.execute(select(NotificationChannel))).scalars().all()
             enabled_channels = [c for c in channels if c.enabled]
 
             for event in unsent:
@@ -208,7 +204,9 @@ class NotificationDispatcher:
                             err = str(exc)
                             logger.exception(
                                 "notification failed: event_id=%s channel=%s url=%s",
-                                event.id, channel.id, redact_apprise_url(url),
+                                event.id,
+                                channel.id,
+                                redact_apprise_url(url),
                             )
                         channel.last_fired_at = fire_now
                         if ok:
