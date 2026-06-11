@@ -21,7 +21,6 @@ class NotificationDispatchLog(SQLModel, table=True):
             String,
             ForeignKey("notification_channels.id", ondelete="CASCADE"),
             nullable=True,
-            index=True,
         )
     )
     # null for test-sends; SET NULL so the log row survives event deletion.
