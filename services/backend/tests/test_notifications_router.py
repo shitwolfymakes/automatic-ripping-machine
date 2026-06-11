@@ -226,3 +226,23 @@ def test_patch_channel_empty_config_rejected(signing_key: bytes) -> None:
     assert r.status_code == 422, r.text
     # stored config untouched (still the old valid url)
     assert db.rows["notification_channels"][0].config["url"] == "json://old/x"
+
+
+def test_delete_channel(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(id="ncl_1", type="apprise", name="D", config={"type": "apprise", "url": "json://l/x"})
+    )
+    with TestClient(app) as client:
+        r = client.delete("/api/notifications/channels/ncl_1", headers=_auth(token))
+    assert r.status_code == 204
+    assert db.rows["notification_channels"] == []
+
+
+def test_delete_channel_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.delete("/api/notifications/channels/ncl_x", headers=_auth(token))
+    assert r.status_code == 404
