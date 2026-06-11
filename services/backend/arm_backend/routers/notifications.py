@@ -17,7 +17,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -45,6 +45,7 @@ from arm_common.schemas import (
     NotificationChannelTestRequest,
     NotificationChannelUpdateRequest,
     NotificationChannelView,
+    NotificationDispatchLogView,
     NotificationTestRequest,
     NotificationTestResult,
     ServiceCatalog,
@@ -332,3 +333,17 @@ async def test_config(
         return NotificationTestResult(ok=False, error="url is required")
     event_type = req.event_type or "rip.completed"
     return await _send_and_log(db=db, notifier=notifier, url=url, event_type=event_type, channel=None)
+
+
+@router.get("/dispatch-log", response_model=list[NotificationDispatchLogView])
+async def dispatch_log(
+    channel_id: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> list[NotificationDispatchLog]:
+    stmt = select(NotificationDispatchLog).order_by(col(NotificationDispatchLog.created_at).desc())
+    if channel_id is not None:
+        stmt = stmt.where(col(NotificationDispatchLog.channel_id) == channel_id)
+    stmt = stmt.limit(limit)
+    return list((await db.execute(stmt)).scalars().all())
