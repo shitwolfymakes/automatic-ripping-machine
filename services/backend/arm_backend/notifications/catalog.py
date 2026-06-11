@@ -21,8 +21,16 @@ logger = logging.getLogger("arm_backend.notifications.catalog")
 _BLOCKED_ARGS = frozenset({"verify", "rto", "cto", "store", "tz", "overflow", "emojis"})
 
 FEATURED_SERVICES = [
-    "discord", "slack", "tgram", "pbul", "pover",
-    "ntfys", "mailtos", "ifttt", "gotifys", "matrixs",
+    "discord",
+    "slack",
+    "tgram",
+    "pbul",
+    "pover",
+    "ntfys",
+    "mailtos",
+    "ifttt",
+    "gotifys",
+    "matrixs",
 ]
 
 
@@ -71,9 +79,7 @@ def _build_service_entry(plugin_cls: Any) -> dict[str, Any] | None:
     if not service_id:
         return None
     required_fields = [
-        _build_field(key, spec)
-        for key, spec in (plugin_cls.template_tokens or {}).items()
-        if spec.get("required")
+        _build_field(key, spec) for key, spec in (plugin_cls.template_tokens or {}).items() if spec.get("required")
     ]
     advanced_fields = [
         _build_field(key, spec)
