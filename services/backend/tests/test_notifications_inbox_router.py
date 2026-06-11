@@ -47,11 +47,17 @@ def _auth(token: str) -> dict[str, str]:
 
 
 def _seed_rows(db: FakeSession) -> None:
-    db.rows.setdefault("notification_inbox", []).extend([
-        NotificationInbox(id="nin_1", event_type="rip.completed", title="t1", message="m1", seen=False, cleared=False),
-        NotificationInbox(id="nin_2", event_type="rip.failed", title="t2", message="m2", seen=True, cleared=False),
-        NotificationInbox(id="nin_3", event_type="rip.completed", title="t3", message="m3", seen=True, cleared=True),
-    ])
+    db.rows.setdefault("notification_inbox", []).extend(
+        [
+            NotificationInbox(
+                id="nin_1", event_type="rip.completed", title="t1", message="m1", seen=False, cleared=False
+            ),
+            NotificationInbox(id="nin_2", event_type="rip.failed", title="t2", message="m2", seen=True, cleared=False),
+            NotificationInbox(
+                id="nin_3", event_type="rip.completed", title="t3", message="m3", seen=True, cleared=True
+            ),
+        ]
+    )
 
 
 def test_inbox_list_excludes_cleared_by_default(signing_key: bytes) -> None:
@@ -121,6 +127,7 @@ def test_inbox_requires_auth(signing_key: bytes) -> None:
 
 def test_app_registers_inbox_route() -> None:
     from arm_backend.main import app
+
     paths = {r.path for r in app.routes}
     assert "/api/notifications/inbox" in paths
 
