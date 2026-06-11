@@ -5,6 +5,13 @@ output — the validation helper redacts the URL in any 400 response, and
 the handler itself logs nothing about config bodies. Phase 11 added the
 `notifications_enabled` master toggle (default False) so the UI can enable
 or disable outbound Apprise dispatch without dropping the saved URL list.
+
+As of the notification-channels feature, `notification_apprise_urls` is
+DEPRECATED as a delivery source — the dispatcher now reads
+`notification_channels` rows (migration 0015 imported the existing list).
+The field is still accepted/returned here for backward compatibility but
+is no longer used for dispatch; `notifications_enabled` remains the global
+master toggle. New URLs should be added as channels via /api/notifications.
 """
 
 from datetime import datetime, timezone
