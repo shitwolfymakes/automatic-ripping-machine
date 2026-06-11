@@ -38,7 +38,7 @@ from arm_backend.notifications.field_map import (
     merge_patch_config,
 )
 from arm_backend.notifications.url_composer import compose_apprise_url
-from arm_common import NotificationChannel, NotificationDispatchLog, User
+from arm_common import NotificationChannel, NotificationDispatchLog, NotificationInbox, User
 from arm_common.schemas import (
     ComposeUrlRequest,
     ComposeUrlResult,
@@ -47,6 +47,9 @@ from arm_common.schemas import (
     NotificationChannelUpdateRequest,
     NotificationChannelView,
     NotificationDispatchLogView,
+    NotificationInboxCountView,
+    NotificationInboxUpdateRequest,
+    NotificationInboxView,
     NotificationTestRequest,
     NotificationTestResult,
     ServiceCatalog,
@@ -366,3 +369,85 @@ async def dispatch_log(
         stmt = stmt.where(col(NotificationDispatchLog.channel_id) == channel_id)
     stmt = stmt.limit(limit)
     return list((await db.execute(stmt)).scalars().all())
+
+
+@router.get("/inbox", response_model=list[NotificationInboxView])
+async def list_inbox(
+    include_cleared: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=200),
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> list[NotificationInbox]:
+    stmt = select(NotificationInbox).order_by(col(NotificationInbox.created_at).desc())
+    rows = list((await db.execute(stmt)).scalars().all())
+    if not include_cleared:
+        rows = [r for r in rows if not r.cleared]
+    return rows[:limit]
+
+
+@router.get("/inbox/count", response_model=NotificationInboxCountView)
+async def inbox_count(
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> NotificationInboxCountView:
+    rows = list((await db.execute(select(NotificationInbox))).scalars().all())
+    cleared = sum(1 for r in rows if r.cleared)
+    unseen = sum(1 for r in rows if not r.seen and not r.cleared)
+    seen = sum(1 for r in rows if r.seen and not r.cleared)
+    return NotificationInboxCountView(unseen=unseen, seen=seen, cleared=cleared, total=len(rows))
+
+
+@router.post("/inbox/dismiss-all")
+async def inbox_dismiss_all(
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> dict[str, int]:
+    rows = list((await db.execute(select(NotificationInbox))).scalars().all())
+    now = datetime.now(UTC)
+    updated = 0
+    for r in rows:
+        if not r.seen:
+            r.seen = True
+            r.seen_at = now
+            updated += 1
+    await db.commit()
+    return {"updated": updated}
+
+
+@router.post("/inbox/purge")
+async def inbox_purge(
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> dict[str, int]:
+    rows = list((await db.execute(select(NotificationInbox))).scalars().all())
+    deleted = 0
+    for r in rows:
+        if r.cleared:
+            await db.delete(r)
+            deleted += 1
+    await db.commit()
+    return {"deleted": deleted}
+
+
+@router.patch("/inbox/{inbox_id}", response_model=NotificationInboxView)
+async def patch_inbox(
+    inbox_id: str,
+    req: NotificationInboxUpdateRequest,
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> NotificationInbox:
+    row = (
+        await db.execute(select(NotificationInbox).where(col(NotificationInbox.id) == inbox_id))
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown inbox_id: {inbox_id}")
+    now = datetime.now(UTC)
+    if req.seen is not None:
+        row.seen = req.seen
+        row.seen_at = now if req.seen else None
+    if req.cleared is not None:
+        row.cleared = req.cleared
+        row.cleared_at = now if req.cleared else None
+    await db.commit()
+    await db.refresh(row)
+    return row
