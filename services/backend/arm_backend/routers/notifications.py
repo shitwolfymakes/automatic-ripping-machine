@@ -301,6 +301,9 @@ async def test_channel(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown channel_id: {channel_id}")
     config = ch.config or {}
     # If the editor re-entered fields, merge them in to test the new url.
+    # A raw-URL channel (no service_id — e.g. migration-imported) can't
+    # recompose, so merge_patch_config leaves the url unchanged and the
+    # re-entered fields are effectively ignored (the stored url is tested).
     if req.fields:
         merged = merge_patch_config(
             config, {"type": "apprise", "service_id": config.get("service_id"), "fields": req.fields}
