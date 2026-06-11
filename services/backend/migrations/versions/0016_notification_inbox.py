@@ -23,8 +23,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 # Keep in sync with DEFAULT_INBOX_EVENT_TYPES in notification_dispatcher.py.
 _DEFAULT_INBOX_EVENTS = [
-    "rip.completed", "rip.failed", "rip.needs_user_input",
-    "session.completed", "session.failed",
+    "rip.completed",
+    "rip.failed",
+    "rip.needs_user_input",
+    "session.completed",
+    "session.failed",
 ]
 
 
@@ -33,7 +36,9 @@ def upgrade() -> None:
         "notification_inbox",
         sa.Column("id", sa.String(), primary_key=True),
         sa.Column("event_id", sa.String(), sa.ForeignKey("events.id", ondelete="SET NULL"), nullable=True),
-        sa.Column("channel_id", sa.String(), sa.ForeignKey("notification_channels.id", ondelete="CASCADE"), nullable=True),
+        sa.Column(
+            "channel_id", sa.String(), sa.ForeignKey("notification_channels.id", ondelete="CASCADE"), nullable=True
+        ),
         sa.Column("event_type", sa.String(), nullable=False),
         sa.Column("title", sa.String(), nullable=False),
         sa.Column("message", sa.String(), nullable=False),
