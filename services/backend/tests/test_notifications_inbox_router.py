@@ -117,3 +117,9 @@ def test_inbox_requires_auth(signing_key: bytes) -> None:
         assert client.get("/api/notifications/inbox").status_code == 401
         assert client.get("/api/notifications/inbox/count").status_code == 401
         assert client.post("/api/notifications/inbox/dismiss-all").status_code == 401
+
+
+def test_app_registers_inbox_route() -> None:
+    from arm_backend.main import app
+    paths = {r.path for r in app.routes}
+    assert "/api/notifications/inbox" in paths
