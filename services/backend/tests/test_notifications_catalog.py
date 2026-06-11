@@ -80,6 +80,34 @@ def test_catalog_skips_plugin_with_no_scheme(monkeypatch) -> None:
     assert c["services"] == []
 
 
+def test_catalog_unwraps_enum_default_value(monkeypatch) -> None:
+    # a default carrying a ``.value`` (apprise enum-ish) is unwrapped -> line 53
+    class _Enumish:
+        value = "html"
+
+    p = _FakePlugin(
+        scheme="x", name="X",
+        args={"format": {"name": "Format", "type": "string", "default": _Enumish()}},
+    )
+    _patch(monkeypatch, [p])
+    c = cat.build_catalog()
+    assert c["services"][0]["advanced_fields"][0]["default"] == "html"
+
+
+def test_catalog_normalizes_plain_type_and_list_scheme(monkeypatch) -> None:
+    # scheme as a list -> _service_id takes [0]; plain "string" advanced type -> passthrough
+    p = _FakePlugin(
+        scheme=["multi", "multis"],
+        name="Multi",
+        args={"token": {"name": "Token", "type": "string"}},
+    )
+    _patch(monkeypatch, [p])
+    c = cat.build_catalog()
+    svc = c["services"][0]
+    assert svc["id"] == "multi"  # list scheme -> first element
+    assert svc["advanced_fields"][0]["type"] == "string"  # plain type passthrough
+
+
 def test_catalog_skips_plugin_that_raises(monkeypatch) -> None:
     bad = _FakePlugin(scheme="bad", name="Bad")
     # template_tokens that raises on .items()
