@@ -5,18 +5,23 @@ of `TranscodeDispatcher`. Each tick:
 
 1. Selects every `Event` row whose `notified_at IS NULL` and whose
    `event_type` is in `NOTIFIABLE_EVENT_TYPES`.
-2. Loads the `Config` singleton and reads `notifications_enabled` and
-   `notification_apprise_urls`.
-3. If notifications are disabled OR the URL list is empty, marks every
-   selected event with `notified_at = now()` and returns. This is the
-   "off out of the box" exit behaviour — without it, events would pile
-   up indefinitely while disabled and turning notifications on later
-   would dump the entire backlog.
-4. Otherwise, for each event: load the `Job` (if any), format a (title,
-   body) pair, and call the configured `AppriseNotifier`. The notifier
-   exception is caught and logged; `notified_at` is set on the row
-   regardless. Notifications are best-effort — a permanently-broken URL
-   does not pile up retries forever.
+2. Loads the `Config` singleton and reads `notifications_enabled`.
+3. If notifications are disabled, marks every selected event with
+   `notified_at = now()` and returns. This is the "off out of the box"
+   exit behaviour — without it, events would pile up indefinitely while
+   disabled and turning notifications on later would dump the entire
+   backlog.
+4. Otherwise, for each event: load the `Job` (if any) and format the
+   default (title, body); then fan out to every enabled
+   `NotificationChannel` whose `subscribed_events` contains the event
+   type. Each channel applies its per-event template override, fires its
+   own URL, records `last_fired_at`/`last_success_at`/`last_error`, and
+   gets a `NotificationDispatchLog` row. A no-subscriber event is simply
+   marked `notified_at`. The notifier exception is caught and logged per
+   channel; `notified_at` is set on the event once all its channels are
+   attempted. Notifications are best-effort — a permanently-broken
+   channel does not pile up retries forever, and one channel's failure
+   never blocks the others.
 
 URL credentials never appear in log output. `redact_apprise_url(url)`
 returns `"<scheme>://****"` — scheme-only redaction is conservative
@@ -41,9 +46,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
 
 from arm_backend.config import Settings
-from arm_backend.notification_format import format_event
+from arm_backend.notification_format import format_event, resolve_title_body
 from arm_backend.seeders import CONFIG_SINGLETON_ID
-from arm_common import Config, Event, Job, with_log_context
+from arm_common import Config, Event, Job, NotificationChannel, NotificationDispatchLog, with_log_context
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -160,51 +165,67 @@ class NotificationDispatcher:
 
             cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
             enabled = cfg is not None and cfg.notifications_enabled
-            urls = list(cfg.notification_apprise_urls or []) if cfg is not None else []
 
             now = datetime.now(UTC)
             if not enabled:
                 for event in unsent:
                     event.notified_at = now
                 await db.commit()
-                logger.info(
-                    "notification dispatch: %d event(s) skipped (notifications disabled)",
-                    len(unsent),
-                )
-                return
-            if not urls:
-                for event in unsent:
-                    event.notified_at = now
-                await db.commit()
-                logger.info(
-                    "notification dispatch: %d event(s) skipped (no urls configured)",
-                    len(unsent),
-                )
+                logger.info("notification dispatch: %d event(s) skipped (notifications disabled)", len(unsent))
                 return
 
-            redacted = [redact_apprise_url(u) for u in urls]
+            channels = (
+                (await db.execute(select(NotificationChannel)))
+                .scalars()
+                .all()
+            )
+            enabled_channels = [c for c in channels if c.enabled]
+
             for event in unsent:
                 with with_log_context(
                     job_id=event.job_id,
                     session_application_id=event.session_application_id,
                 ):
                     job = await self._load_job(db, event.job_id)
-                    title, body = format_event(event, job)
-                    try:
-                        await self._notifier.notify(urls, title, body)
-                        logger.info(
-                            "notification sent: event_id=%s type=%s urls=%s",
-                            event.id,
-                            event.event_type,
-                            redacted,
+                    default_title, default_body = format_event(event, job)
+                    targets = [c for c in enabled_channels if event.event_type in (c.subscribed_events or [])]
+                    for channel in targets:
+                        url = (channel.config or {}).get("url", "")
+                        template = (channel.templates or {}).get(event.event_type)
+                        title, body = resolve_title_body(
+                            event_type=event.event_type,
+                            default_title=default_title,
+                            default_body=default_body,
+                            template=template,
                         )
-                    except Exception as exc:
-                        logger.exception(
-                            "notification failed: event_id=%s type=%s urls=%s err=%s",
-                            event.id,
-                            event.event_type,
-                            redacted,
-                            exc,
+                        fire_now = datetime.now(UTC)
+                        ok = True
+                        err: str | None = None
+                        try:
+                            await self._notifier.notify([url], title, body)
+                        except Exception as exc:
+                            ok = False
+                            err = str(exc)
+                            logger.exception(
+                                "notification failed: event_id=%s channel=%s url=%s",
+                                event.id, channel.id, redact_apprise_url(url),
+                            )
+                        channel.last_fired_at = fire_now
+                        if ok:
+                            channel.last_success_at = fire_now
+                            channel.last_error = None
+                        else:
+                            channel.last_error = err
+                        db.add(
+                            NotificationDispatchLog(
+                                channel_id=channel.id,
+                                event_id=event.id,
+                                event_type=event.event_type,
+                                title=title,
+                                body=body,
+                                success=ok,
+                                error=err,
+                            )
                         )
                     event.notified_at = datetime.now(UTC)
             await db.commit()
