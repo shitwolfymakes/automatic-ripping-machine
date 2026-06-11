@@ -29,16 +29,21 @@ from arm_backend.notification_dispatcher import (
     _first_invalid_apprise_url,
     redact_apprise_url,
 )
+from arm_backend.notifications import catalog as catalog_module
 from arm_backend.notifications.field_map import (
     compose_url_from_fields,
     mask_config,
     merge_patch_config,
 )
+from arm_backend.notifications.url_composer import compose_apprise_url
 from arm_common import NotificationChannel, User
 from arm_common.schemas import (
+    ComposeUrlRequest,
+    ComposeUrlResult,
     NotificationChannelCreateRequest,
     NotificationChannelUpdateRequest,
     NotificationChannelView,
+    ServiceCatalog,
 )
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
@@ -216,3 +221,22 @@ async def delete_channel(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown channel_id: {channel_id}")
     await db.delete(ch)
     await db.commit()
+
+
+@router.get("/services", response_model=ServiceCatalog)
+async def get_services(_: User = Depends(require_jwt)) -> dict[str, Any]:
+    return catalog_module.build_catalog()
+
+
+@router.post("/services/{service_id}/compose-url", response_model=ComposeUrlResult)
+async def compose_url(
+    service_id: str,
+    req: ComposeUrlRequest,
+    _: User = Depends(require_jwt),
+) -> dict[str, str]:
+    return {"url": compose_apprise_url(service_id=service_id, required=req.required, advanced=req.advanced)}
+
+
+@router.get("/event-types", response_model=list[str])
+async def event_types(_: User = Depends(require_jwt)) -> list[str]:
+    return sorted(NOTIFIABLE_EVENT_TYPES)
