@@ -276,3 +276,118 @@ def test_event_types(signing_key: bytes) -> None:
     assert r.status_code == 200
     assert "rip.completed" in r.json()
     assert r.json() == sorted(r.json())
+
+
+def test_test_saved_channel_success(signing_key: bytes) -> None:
+    db = FakeSession()
+    notifier = _FakeNotifier()
+    app, token = _make_app(signing_key, db, notifier)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(id="ncl_1", type="apprise", name="D",
+                            config={"type": "apprise", "url": "json://localhost/x"},
+                            subscribed_events=["rip.completed"])
+    )
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/channels/ncl_1/test", json={}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json() == {"ok": True, "error": None}
+    assert notifier.calls and notifier.calls[0][0] == ["json://localhost/x"]
+    stored = db.rows["notification_channels"][0]
+    assert stored.last_success_at is not None
+    assert stored.last_error is None
+    # a dispatch-log row was written
+    assert any(r.success for r in db.rows.get("notification_dispatch_log", []))
+
+
+def test_test_saved_channel_failure_returns_ok_false(signing_key: bytes) -> None:
+    db = FakeSession()
+    notifier = _FakeNotifier()
+    notifier.raise_on_notify = True
+    app, token = _make_app(signing_key, db, notifier)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(id="ncl_1", type="apprise", name="D",
+                            config={"type": "apprise", "url": "json://localhost/x"})
+    )
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/channels/ncl_1/test", json={}, headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()["ok"] is False
+    stored = db.rows["notification_channels"][0]
+    assert stored.last_error is not None
+
+
+def test_test_saved_channel_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/channels/ncl_x/test", json={}, headers=_auth(token))
+    assert r.status_code == 404
+
+
+def test_test_adhoc_config_success(signing_key: bytes) -> None:
+    db = FakeSession()
+    notifier = _FakeNotifier()
+    app, token = _make_app(signing_key, db, notifier)
+    body = {"config": {"type": "apprise", "service_id": "discord", "fields": {"webhook_id": "1", "webhook_token": "2"}}}
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/test", json=body, headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert notifier.calls[0][0] == ["discord://1/2"]
+    # ad-hoc log row has channel_id None
+    assert any(r.channel_id is None for r in db.rows.get("notification_dispatch_log", []))
+
+
+def test_test_adhoc_no_url_returns_ok_false(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    body = {"config": {"type": "apprise"}}  # no url, no fields
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/test", json=body, headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json() == {"ok": False, "error": "url is required"}
+
+
+def test_test_saved_channel_with_reentered_fields(signing_key: bytes) -> None:
+    db = FakeSession()
+    notifier = _FakeNotifier()
+    app, token = _make_app(signing_key, db, notifier)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(id="ncl_1", type="apprise", name="D",
+                            config={"type": "apprise", "service_id": "discord", "url": "discord://1/2",
+                                    "fields": {"webhook_id": "1", "webhook_token": "2"}},
+                            subscribed_events=["rip.completed"])
+    )
+    # re-enter the token only; webhook_id stays via <hidden>
+    body = {"fields": {"webhook_id": "<hidden>", "webhook_token": "NEW"}}
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/channels/ncl_1/test", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["ok"] is True
+    # the recomposed url (kept secret + new token) is what got sent, NOT the stored url
+    assert notifier.calls[0][0] == ["discord://1/NEW"]
+
+
+def test_test_saved_channel_empty_url_returns_ok_false(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    # channel whose config resolves to no url (no url, no fields)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(id="ncl_1", type="apprise", name="D",
+                            config={"type": "apprise"}, subscribed_events=["rip.completed"])
+    )
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/channels/ncl_1/test", json={}, headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json() == {"ok": False, "error": "could not compose url from fields"}
+
+
+def test_test_adhoc_unknown_service_returns_ok_false(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    # service_id not in the fake catalog -> compose_url_from_fields returns None -> url stays empty
+    body = {"config": {"type": "apprise", "service_id": "ghost", "fields": {"a": "b"}}}
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/test", json=body, headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json() == {"ok": False, "error": "url is required"}
