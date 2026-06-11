@@ -33,6 +33,7 @@ from arm_backend.routers import (
     logs as logs_router,
     metadata as metadata_router,
     naming as naming_router,
+    notifications as notifications_router,
     rip_presets,
     ripper,
     sessions,
@@ -164,10 +165,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Phase 11 — outbound Apprise notifications. Off out of the box; the
     # dispatcher polls but no-ops until the user enables notifications in
     # the UI and saves at least one valid Apprise URL.
+    notifier = _RealAppriseNotifier()
+    app.state.notifier = notifier
     notification_dispatcher = NotificationDispatcher(
         settings=settings,
         db_factory=SessionLocal,
-        notifier=_RealAppriseNotifier(),
+        notifier=notifier,
     )
     notification_task = asyncio.create_task(notification_dispatcher.run())
     app.state.notification_dispatcher = notification_dispatcher
@@ -215,6 +218,7 @@ app.include_router(config_router.router)
 app.include_router(diagnostics.router)
 app.include_router(metadata_router.router)
 app.include_router(naming_router.router)
+app.include_router(notifications_router.router)
 app.include_router(iso_router.router)
 app.include_router(logs_router.router)
 app.include_router(system_router.router)

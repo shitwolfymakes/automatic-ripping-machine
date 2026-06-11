@@ -407,3 +407,9 @@ def test_dispatch_log_list_and_filter(signing_key: bytes) -> None:
         assert len(r.json()) == 2
         r2 = client.get("/api/notifications/dispatch-log?channel_id=ncl_1", headers=_auth(token))
         assert [row["id"] for row in r2.json()] == ["ndl_1"]
+
+
+def test_app_registers_notifications_router() -> None:
+    from arm_backend.main import app
+    paths = {r.path for r in app.routes}
+    assert "/api/notifications/channels" in paths
