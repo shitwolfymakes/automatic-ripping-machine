@@ -23,6 +23,7 @@ from arm_backend.notification_dispatcher import (
     _RealAppriseNotifier,
 )
 from arm_backend.notifications.apprise_listener import AppriseListener
+from arm_backend.notifications.inbox_listener import InboxListener
 from arm_backend.routers import (
     auth,
     config as config_router,
@@ -170,7 +171,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     notification_dispatcher = MessageDispatcher(
         settings=settings,
         db_factory=SessionLocal,
-        listeners=[AppriseListener(notifier)],
+        listeners=[AppriseListener(notifier), InboxListener()],
     )
     notification_task = asyncio.create_task(notification_dispatcher.run())
     app.state.notification_dispatcher = notification_dispatcher
