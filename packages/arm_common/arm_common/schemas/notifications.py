@@ -1,8 +1,10 @@
-"""Wire schemas for notification channels (apprise arm only this batch).
+"""Wire schemas for notification channels + the in-app inbox.
 
-The ``config`` union is apprise-only for now; ``type`` is constrained to
-``"apprise"`` so create/patch reject webhook/bash until those arms ship.
-``last_*`` and ``id`` are server-managed and live only on the View.
+The channel ``config`` is a discriminated union keyed on ``type``:
+``apprise`` (url/fields, server-composed + masked) and ``inapp`` (the UI
+bell — no destination, delivery is an inbox-row write). webhook/bash arms
+remain deferred. ``last_*`` and ``id`` are server-managed and live only on
+the View.
 """
 
 from __future__ import annotations
@@ -21,6 +23,12 @@ class AppriseChannelConfig(BaseModel):
     url: str = ""
     service_id: str | None = None
     fields: dict[str, str] | None = None
+
+
+class InAppChannelConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    type: Literal["inapp"] = "inapp"
+    # No url/fields — delivery is a DB write (inbox row), not a destination.
 
 
 class ChannelTemplate(BaseModel):
@@ -48,10 +56,10 @@ class NotificationChannelView(BaseModel):
 
 
 class NotificationChannelCreateRequest(BaseModel):
-    type: Literal["apprise"] = "apprise"
+    type: Literal["apprise", "inapp"] = "apprise"
     name: str
     enabled: bool = True
-    config: AppriseChannelConfig
+    config: AppriseChannelConfig | InAppChannelConfig = Field(discriminator="type")
     subscribed_events: list[str] = Field(default_factory=list)
     templates: dict[str, ChannelTemplate] = Field(default_factory=dict)
 
@@ -59,7 +67,7 @@ class NotificationChannelCreateRequest(BaseModel):
 class NotificationChannelUpdateRequest(BaseModel):
     name: str | None = None
     enabled: bool | None = None
-    config: AppriseChannelConfig | None = None
+    config: AppriseChannelConfig | InAppChannelConfig | None = Field(default=None, discriminator="type")
     subscribed_events: list[str] | None = None
     templates: dict[str, ChannelTemplate] | None = None
 
@@ -128,3 +136,32 @@ class NotificationDispatchLogView(BaseModel):
     success: bool
     error: str | None
     created_at: datetime | None
+
+
+class NotificationInboxView(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    event_id: str | None
+    channel_id: str | None
+    event_type: str
+    title: str
+    message: str
+    job_id: str | None
+    seen: bool
+    cleared: bool
+    seen_at: datetime | None
+    cleared_at: datetime | None
+    created_at: datetime | None
+
+
+class NotificationInboxUpdateRequest(BaseModel):
+    seen: bool | None = None
+    cleared: bool | None = None
+
+
+class NotificationInboxCountView(BaseModel):
+    unseen: int
+    seen: int
+    cleared: int
+    total: int
