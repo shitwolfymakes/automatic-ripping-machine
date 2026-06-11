@@ -14,6 +14,7 @@ JWT-guarded.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -31,10 +32,12 @@ from arm_backend.notification_dispatcher import (
 from arm_backend.notifications.field_map import (
     compose_url_from_fields,
     mask_config,
+    merge_patch_config,
 )
 from arm_common import NotificationChannel, User
 from arm_common.schemas import (
     NotificationChannelCreateRequest,
+    NotificationChannelUpdateRequest,
     NotificationChannelView,
 )
 
@@ -150,6 +153,51 @@ async def create_channel(
         created_by_user_id=user.id,
     )
     db.add(ch)
+    await db.commit()
+    await db.refresh(ch)
+    return _to_view_dict(ch)
+
+
+@router.patch("/channels/{channel_id}", response_model=NotificationChannelView)
+async def patch_channel(
+    channel_id: str,
+    req: NotificationChannelUpdateRequest,
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    ch = (
+        await db.execute(select(NotificationChannel).where(col(NotificationChannel.id) == channel_id))
+    ).scalar_one_or_none()
+    if ch is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown channel_id: {channel_id}")
+
+    fields = req.model_dump(exclude_unset=True)
+    if "subscribed_events" in fields and fields["subscribed_events"] is not None:
+        _validate_events(fields["subscribed_events"])
+    if "templates" in fields and fields["templates"] is not None:
+        _validate_template_keys(fields["templates"])
+
+    if req.name is not None:
+        ch.name = req.name
+    if req.enabled is not None:
+        ch.enabled = req.enabled
+    if req.subscribed_events is not None:
+        ch.subscribed_events = list(req.subscribed_events)
+    if req.templates is not None:
+        ch.templates = {k: v.model_dump(exclude_none=True) for k, v in req.templates.items()}
+    if req.config is not None:
+        incoming = req.config.model_dump(mode="json")
+        # A raw-url-only PATCH (no fields) stores the url directly; a fields
+        # PATCH merges secrets + recomposes. Either way, validate the final
+        # url so a config that resolves to an empty/invalid url is rejected
+        # (422) rather than silently bricking the channel.
+        if not incoming.get("fields") and incoming.get("url"):
+            new_config = incoming
+        else:
+            new_config = merge_patch_config(ch.config or {}, incoming)
+        _validate_apprise_url(new_config.get("url", ""))
+        ch.config = new_config
+    ch.updated_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(ch)
     return _to_view_dict(ch)

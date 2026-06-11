@@ -16,7 +16,7 @@ from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import notifications as notif_router  # noqa: E402
 from arm_backend.notifications import catalog as cat  # noqa: E402
-from arm_common import User  # noqa: E402
+from arm_common import NotificationChannel, User  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -150,3 +150,79 @@ def test_get_channel_404(signing_key: bytes) -> None:
     with TestClient(app) as client:
         r = client.get("/api/notifications/channels/ncl_missing", headers=_auth(token))
     assert r.status_code == 404
+
+
+def test_patch_channel_name_only(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(id="ncl_1", type="apprise", name="Old",
+                            config={"type": "apprise", "url": "json://localhost/x"},
+                            subscribed_events=["rip.completed"])
+    )
+    with TestClient(app) as client:
+        r = client.patch("/api/notifications/channels/ncl_1", json={"name": "New"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["name"] == "New"
+    assert r.json()["config"]["url"] == "json://localhost/x"  # untouched
+
+
+def test_patch_channel_merges_hidden_secret(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(id="ncl_1", type="apprise", name="D",
+                            config={"type": "apprise", "service_id": "discord", "url": "discord://1/2",
+                                    "fields": {"webhook_id": "1", "webhook_token": "2"}},
+                            subscribed_events=["rip.completed"])
+    )
+    body = {"config": {"type": "apprise", "service_id": "discord",
+                       "fields": {"webhook_id": "<hidden>", "webhook_token": "NEW"}}}
+    with TestClient(app) as client:
+        r = client.patch("/api/notifications/channels/ncl_1", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    # url recomposed with kept secret + new token; output masked
+    # (fetch stored row to assert the real url)
+    stored = db.rows["notification_channels"][0]
+    assert stored.config["url"] == "discord://1/NEW"
+    assert stored.config["fields"]["webhook_id"] == "1"
+
+
+def test_patch_channel_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/notifications/channels/ncl_x", json={"name": "n"}, headers=_auth(token))
+    assert r.status_code == 404
+
+
+def test_patch_channel_config_raw_url(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(id="ncl_1", type="apprise", name="D",
+                            config={"type": "apprise", "url": "json://old/x"},
+                            subscribed_events=["rip.completed"])
+    )
+    body = {"config": {"type": "apprise", "url": "json://new/y"}}
+    with TestClient(app) as client:
+        r = client.patch("/api/notifications/channels/ncl_1", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert db.rows["notification_channels"][0].config["url"] == "json://new/y"
+
+
+def test_patch_channel_empty_config_rejected(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(id="ncl_1", type="apprise", name="D",
+                            config={"type": "apprise", "url": "json://old/x"},
+                            subscribed_events=["rip.completed"])
+    )
+    # config with neither url nor fields -> resolves to empty url -> 422, channel not bricked
+    body = {"config": {"type": "apprise"}}
+    with TestClient(app) as client:
+        r = client.patch("/api/notifications/channels/ncl_1", json=body, headers=_auth(token))
+    assert r.status_code == 422, r.text
+    # stored config untouched (still the old valid url)
+    assert db.rows["notification_channels"][0].config["url"] == "json://old/x"
