@@ -1,9 +1,10 @@
-"""Phase 11 — `NotificationDispatcher._tick` exhaustive cases.
+"""Phase 11 — `MessageDispatcher._tick` exhaustive cases (via AppriseListener).
 
 Mirrors the FakeSession + db_factory shape used by the transcode
 dispatcher tests. The Apprise lib itself is bypassed — tests inject a
 `_FakeNotifier` that records `(urls, title, body)` calls and can be
-configured to raise.
+configured to raise. The end-to-end channel routing / dispatch-log /
+`last_*` behaviour now lives in `AppriseListener`; the dispatcher feeds it.
 """
 
 from __future__ import annotations
@@ -21,9 +22,10 @@ import pytest  # noqa: E402
 
 from arm_backend.config import Settings  # noqa: E402
 from arm_backend.notification_dispatcher import (  # noqa: E402
-    NotificationDispatcher,
+    MessageDispatcher,
     redact_apprise_url,
 )
+from arm_backend.notifications.apprise_listener import AppriseListener  # noqa: E402
 from arm_common import (  # noqa: E402
     Config,
     DiscType,
@@ -156,7 +158,7 @@ async def test_disabled_marks_notified_without_calling() -> None:
     db.rows["events"] = [event]
 
     notifier = _FakeNotifier()
-    dispatcher = NotificationDispatcher(_settings(), _db_factory(db), notifier)
+    dispatcher = MessageDispatcher(_settings(), _db_factory(db), [AppriseListener(notifier)])
     await dispatcher._tick()
 
     assert notifier.calls == []
@@ -174,7 +176,7 @@ async def test_enabled_with_subscribed_channel_dispatches_event() -> None:
     db.rows["events"] = [event]
 
     notifier = _FakeNotifier()
-    dispatcher = NotificationDispatcher(_settings(), _db_factory(db), notifier)
+    dispatcher = MessageDispatcher(_settings(), _db_factory(db), [AppriseListener(notifier)])
     await dispatcher._tick()
 
     assert len(notifier.calls) == 1
@@ -202,7 +204,7 @@ async def test_enabled_but_no_subscribed_channels_marks_without_calling() -> Non
     db.rows["events"] = [event]
 
     notifier = _FakeNotifier()
-    dispatcher = NotificationDispatcher(_settings(), _db_factory(db), notifier)
+    dispatcher = MessageDispatcher(_settings(), _db_factory(db), [AppriseListener(notifier)])
     await dispatcher._tick()
 
     assert notifier.calls == []
@@ -220,7 +222,7 @@ async def test_non_notifiable_event_type_ignored() -> None:
     db.rows["events"] = [skip, progress]
 
     notifier = _FakeNotifier()
-    dispatcher = NotificationDispatcher(_settings(), _db_factory(db), notifier)
+    dispatcher = MessageDispatcher(_settings(), _db_factory(db), [AppriseListener(notifier)])
     await dispatcher._tick()
 
     assert notifier.calls == []
@@ -237,7 +239,7 @@ async def test_already_notified_row_ignored() -> None:
     db.rows["events"] = [already]
 
     notifier = _FakeNotifier()
-    dispatcher = NotificationDispatcher(_settings(), _db_factory(db), notifier)
+    dispatcher = MessageDispatcher(_settings(), _db_factory(db), [AppriseListener(notifier)])
     await dispatcher._tick()
 
     assert notifier.calls == []
@@ -253,7 +255,7 @@ async def test_notifier_raises_still_marks_notified(caplog: pytest.LogCaptureFix
     db.rows["events"] = [event]
 
     notifier = _FakeNotifier(raises=RuntimeError("network down"))
-    dispatcher = NotificationDispatcher(_settings(), _db_factory(db), notifier)
+    dispatcher = MessageDispatcher(_settings(), _db_factory(db), [AppriseListener(notifier)])
     with caplog.at_level(logging.ERROR, logger="arm_backend.notification_dispatcher"):
         await dispatcher._tick()
 
@@ -284,7 +286,7 @@ async def test_multi_event_tick() -> None:
     db.rows["events"] = [older, newer, third]
 
     notifier = _FakeNotifier()
-    dispatcher = NotificationDispatcher(_settings(), _db_factory(db), notifier)
+    dispatcher = MessageDispatcher(_settings(), _db_factory(db), [AppriseListener(notifier)])
     await dispatcher._tick()
 
     assert len(notifier.calls) == 3
@@ -307,8 +309,8 @@ async def test_log_lines_redact_credential_segment(caplog: pytest.LogCaptureFixt
     db.rows["events"] = [event]
 
     notifier = _FakeNotifier(raises=RuntimeError("network down"))
-    dispatcher = NotificationDispatcher(_settings(), _db_factory(db), notifier)
-    with caplog.at_level(logging.INFO, logger="arm_backend.notification_dispatcher"):
+    dispatcher = MessageDispatcher(_settings(), _db_factory(db), [AppriseListener(notifier)])
+    with caplog.at_level(logging.INFO, logger="arm_backend.notifications.apprise_listener"):
         await dispatcher._tick()
 
     rendered = " ".join(rec.getMessage() for rec in caplog.records)
