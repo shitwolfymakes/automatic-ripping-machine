@@ -409,6 +409,92 @@ def test_dispatch_log_list_and_filter(signing_key: bytes) -> None:
         assert [row["id"] for row in r2.json()] == ["ndl_1"]
 
 
+def test_get_channel_returns_existing(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(id="ncl_1", type="apprise", name="D",
+                            config={"type": "apprise", "url": "json://l/x"},
+                            subscribed_events=["rip.completed"])
+    )
+    with TestClient(app) as client:
+        r = client.get("/api/notifications/channels/ncl_1", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["name"] == "D"
+
+
+def test_create_unknown_service_id_yields_empty_url_rejected(signing_key: bytes) -> None:
+    # service_id not in catalog -> compose_url_from_fields returns None ->
+    # url stays empty -> _validate_apprise_url rejects (covers 114->116).
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    body = {
+        "type": "apprise",
+        "name": "Ghost",
+        "config": {"type": "apprise", "service_id": "ghost", "fields": {"a": "b"}},
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/channels", json=body, headers=_auth(token))
+    assert r.status_code == 422, r.text
+
+
+def test_create_rejects_bad_template_key(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    body = {"type": "apprise", "name": "X",
+            "config": {"type": "apprise", "url": "json://localhost/x"},
+            "templates": {"not.an.event": {"title": "hi"}}}
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/channels", json=body, headers=_auth(token))
+    assert r.status_code == 422
+    assert "not.an.event" in r.json()["detail"]
+
+
+def test_list_channels_returns_rows_masked(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_channels", []).extend([
+        NotificationChannel(id="ncl_1", type="apprise", name="A",
+                            config={"type": "apprise", "service_id": "discord", "url": "discord://1/2",
+                                    "fields": {"webhook_id": "1", "webhook_token": "2"}},
+                            subscribed_events=["rip.completed"]),
+        NotificationChannel(id="ncl_2", type="apprise", name="B",
+                            config={"type": "apprise", "url": "json://b/x"}),
+    ])
+    with TestClient(app) as client:
+        r = client.get("/api/notifications/channels", headers=_auth(token))
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 2
+    # the fields-bearing channel has its private fields masked
+    a = next(c for c in rows if c["name"] == "A")
+    assert a["config"]["fields"]["webhook_id"] == "<hidden>"
+
+
+def test_patch_channel_applies_all_fields(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(id="ncl_1", type="apprise", name="Old", enabled=True,
+                            config={"type": "apprise", "url": "json://l/x"},
+                            subscribed_events=["rip.completed"], templates={})
+    )
+    body = {
+        "name": "New",
+        "enabled": False,
+        "subscribed_events": ["rip.failed", "session.completed"],
+        "templates": {"rip.failed": {"title": "Custom", "body": "b"}},
+    }
+    with TestClient(app) as client:
+        r = client.patch("/api/notifications/channels/ncl_1", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    stored = db.rows["notification_channels"][0]
+    assert stored.name == "New"
+    assert stored.enabled is False
+    assert stored.subscribed_events == ["rip.failed", "session.completed"]
+    assert stored.templates == {"rip.failed": {"title": "Custom", "body": "b"}}
+
+
 def test_app_registers_notifications_router() -> None:
     from arm_backend.main import app
     paths = {r.path for r in app.routes}

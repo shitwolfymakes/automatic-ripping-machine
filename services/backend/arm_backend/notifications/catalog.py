@@ -26,7 +26,7 @@ FEATURED_SERVICES = [
 ]
 
 
-def _get_manager() -> NotificationManager:
+def _get_manager() -> NotificationManager:  # pragma: no cover
     """Indirection so tests can patch the manager."""
     mgr = NotificationManager()  # type: ignore[no-untyped-call]
     mgr.load_modules()  # type: ignore[no-untyped-call]
