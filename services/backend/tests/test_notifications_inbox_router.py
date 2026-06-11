@@ -123,3 +123,42 @@ def test_app_registers_inbox_route() -> None:
     from arm_backend.main import app
     paths = {r.path for r in app.routes}
     assert "/api/notifications/inbox" in paths
+
+
+def test_inbox_patch_only_seen(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_rows(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        # nin_1 starts seen=False, cleared=False; set ONLY seen
+        r = client.patch("/api/notifications/inbox/nin_1", json={"seen": True}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["seen"] is True and body["seen_at"] is not None
+    assert body["cleared"] is False and body["cleared_at"] is None  # cleared untouched
+
+
+def test_inbox_patch_only_cleared_then_unset(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_rows(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        # set ONLY cleared=True on nin_1, then unset it (False -> cleared_at None)
+        r1 = client.patch("/api/notifications/inbox/nin_1", json={"cleared": True}, headers=_auth(token))
+        assert r1.status_code == 200, r1.text
+        assert r1.json()["cleared"] is True and r1.json()["cleared_at"] is not None
+        r2 = client.patch("/api/notifications/inbox/nin_1", json={"cleared": False}, headers=_auth(token))
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["cleared"] is False and r2.json()["cleared_at"] is None
+
+
+def test_inbox_patch_empty_body_noop(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_rows(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        # neither seen nor cleared provided -> both branches skipped, 200 no-op
+        r = client.patch("/api/notifications/inbox/nin_1", json={}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    # nin_1 unchanged: still seen=False, cleared=False
+    assert r.json()["seen"] is False and r.json()["cleared"] is False
