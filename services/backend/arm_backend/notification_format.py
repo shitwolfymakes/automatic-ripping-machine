@@ -64,6 +64,33 @@ _TITLES: dict[str, str] = {
 }
 
 
+def resolve_title_body(
+    *,
+    event_type: str,
+    default_title: str,
+    default_body: str,
+    template: dict[str, str | None] | None,
+) -> tuple[str, str]:
+    """Apply a channel's per-event template override onto the defaults.
+
+    A template ``{"title": ..., "body": ...}`` overrides the matching
+    field; a ``None`` (or missing) field falls back to the default.
+    ``event_type`` is accepted for call-site uniformity with the
+    dispatcher loop; it is not used directly here.
+    """
+    if not template:
+        return default_title, default_body
+    title = template.get("title") or default_title
+    body = template.get("body") or default_body
+    return title, body
+
+
+def synthetic_test_message(event_type: str) -> tuple[str, str]:
+    """A placeholder (title, body) for test-sends."""
+    title = _TITLES.get(event_type, "ARM: test notification")
+    return title, f"ARM test notification ({event_type})"
+
+
 def format_event(event: Event, job: Job | None) -> tuple[str, str]:
     """Return (title, body) for an outbound notification.
 
