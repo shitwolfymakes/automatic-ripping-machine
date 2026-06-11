@@ -110,9 +110,7 @@ def test_resolve_title_body_uses_override() -> None:
 def test_resolve_title_body_no_template() -> None:
     from arm_backend.notification_format import resolve_title_body
 
-    title, body = resolve_title_body(
-        event_type="rip.completed", default_title="T", default_body="B", template=None
-    )
+    title, body = resolve_title_body(event_type="rip.completed", default_title="T", default_body="B", template=None)
     assert (title, body) == ("T", "B")
 
 

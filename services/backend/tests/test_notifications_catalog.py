@@ -40,7 +40,11 @@ def test_catalog_builds_required_and_advanced(monkeypatch) -> None:
     assert svc["id"] == "discord"
     assert svc["name"] == "Discord"
     assert svc["required_fields"][0] == {
-        "key": "webhook_id", "label": "Webhook ID", "type": "string", "private": True, "required": True,
+        "key": "webhook_id",
+        "label": "Webhook ID",
+        "type": "string",
+        "private": True,
+        "required": True,
     }
     adv = svc["advanced_fields"][0]
     assert adv["type"] == "choice"
@@ -50,8 +54,13 @@ def test_catalog_builds_required_and_advanced(monkeypatch) -> None:
 
 def test_catalog_blocklist_and_alias_skipped(monkeypatch) -> None:
     p = _FakePlugin(
-        scheme="x", name="X",
-        args={"verify": {"name": "v", "type": "bool"}, "real": {"name": "r", "type": "string"}, "alias": {"alias_of": "real"}},
+        scheme="x",
+        name="X",
+        args={
+            "verify": {"name": "v", "type": "bool"},
+            "real": {"name": "r", "type": "string"},
+            "alias": {"alias_of": "real"},
+        },
     )
     _patch(monkeypatch, [p])
     c = cat.build_catalog()
@@ -86,7 +95,8 @@ def test_catalog_unwraps_enum_default_value(monkeypatch) -> None:
         value = "html"
 
     p = _FakePlugin(
-        scheme="x", name="X",
+        scheme="x",
+        name="X",
         args={"format": {"name": "Format", "type": "string", "default": _Enumish()}},
     )
     _patch(monkeypatch, [p])
@@ -110,10 +120,12 @@ def test_catalog_normalizes_plain_type_and_list_scheme(monkeypatch) -> None:
 
 def test_catalog_skips_plugin_that_raises(monkeypatch) -> None:
     bad = _FakePlugin(scheme="bad", name="Bad")
+
     # template_tokens that raises on .items()
     class _Boom:
         def items(self):
             raise RuntimeError("boom")
+
     bad.template_tokens = _Boom()
     good = _FakePlugin(scheme="good", name="Good")
     _patch(monkeypatch, [bad, good])

@@ -10,14 +10,26 @@ from tests._fakes import FakeSession
 
 
 def _msg(event_type="rip.completed", job_id=None) -> Message:
-    return Message(event_id="evt_1", event_type=event_type, job_id=job_id,
-                   default_title="ARM: rip completed", default_body="Iron Man", job=None)
+    return Message(
+        event_id="evt_1",
+        event_type=event_type,
+        job_id=job_id,
+        default_title="ARM: rip completed",
+        default_body="Iron Man",
+        job=None,
+    )
 
 
 def _inapp(enabled=True, events=("rip.completed",), templates=None) -> NotificationChannel:
-    return NotificationChannel(id=INBOX_CHANNEL_ID, type="inapp", name="bell", enabled=enabled,
-                               config={"type": "inapp"}, subscribed_events=list(events),
-                               templates=templates or {})
+    return NotificationChannel(
+        id=INBOX_CHANNEL_ID,
+        type="inapp",
+        name="bell",
+        enabled=enabled,
+        config={"type": "inapp"},
+        subscribed_events=list(events),
+        templates=templates or {},
+    )
 
 
 @pytest.mark.asyncio
