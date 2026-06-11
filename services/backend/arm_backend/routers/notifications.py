@@ -201,3 +201,18 @@ async def patch_channel(
     await db.commit()
     await db.refresh(ch)
     return _to_view_dict(ch)
+
+
+@router.delete("/channels/{channel_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_channel(
+    channel_id: str,
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> None:
+    ch = (
+        await db.execute(select(NotificationChannel).where(col(NotificationChannel.id) == channel_id))
+    ).scalar_one_or_none()
+    if ch is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown channel_id: {channel_id}")
+    await db.delete(ch)
+    await db.commit()
