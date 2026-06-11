@@ -499,3 +499,44 @@ def test_app_registers_notifications_router() -> None:
     from arm_backend.main import app
     paths = {r.path for r in app.routes}
     assert "/api/notifications/channels" in paths
+
+
+def test_create_inapp_channel_rejected(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    body = {"type": "inapp", "name": "another bell", "config": {"type": "inapp"}}
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/channels", json=body, headers=_auth(token))
+    assert r.status_code == 409
+    assert "inapp" in r.json()["detail"].lower()
+
+
+def test_delete_inapp_channel_rejected(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(id="ncl_inbox", type="inapp", name="bell", enabled=True,
+                            config={"type": "inapp"}, subscribed_events=["rip.completed"])
+    )
+    with TestClient(app) as client:
+        r = client.delete("/api/notifications/channels/ncl_inbox", headers=_auth(token))
+    assert r.status_code == 409
+
+
+def test_patch_inapp_config_rejected_but_events_ok(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(id="ncl_inbox", type="inapp", name="bell", enabled=True,
+                            config={"type": "inapp"}, subscribed_events=["rip.completed"])
+    )
+    with TestClient(app) as client:
+        # config change rejected
+        r1 = client.patch("/api/notifications/channels/ncl_inbox",
+                          json={"config": {"type": "inapp"}}, headers=_auth(token))
+        assert r1.status_code == 422
+        # subscribed_events change allowed
+        r2 = client.patch("/api/notifications/channels/ncl_inbox",
+                          json={"subscribed_events": ["rip.failed"]}, headers=_auth(token))
+        assert r2.status_code == 200, r2.text
+    assert db.rows["notification_channels"][0].subscribed_events == ["rip.failed"]

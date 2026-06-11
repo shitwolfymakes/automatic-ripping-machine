@@ -31,6 +31,7 @@ from arm_backend.notification_dispatcher import (
 )
 from arm_backend.notification_format import synthetic_test_message
 from arm_backend.notifications import catalog as catalog_module
+from arm_backend.notifications.inbox_listener import INBOX_CHANNEL_ID
 from arm_backend.notifications.field_map import (
     compose_url_from_fields,
     mask_config,
@@ -150,6 +151,11 @@ async def create_channel(
     user: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
+    if req.type == "inapp":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="cannot create an inapp channel; the in-app bell (ncl_inbox) is system-managed",
+        )
     _validate_events(req.subscribed_events)
     _validate_template_keys(req.templates)
     config = _apprise_config_to_storage(req.config.model_dump(mode="json"))
@@ -180,6 +186,11 @@ async def patch_channel(
     ).scalar_one_or_none()
     if ch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown channel_id: {channel_id}")
+    if channel_id == INBOX_CHANNEL_ID and req.config is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="the in-app channel config is fixed; edit subscribed_events/enabled/name instead",
+        )
 
     fields = req.model_dump(exclude_unset=True)
     if "subscribed_events" in fields and fields["subscribed_events"] is not None:
@@ -224,6 +235,11 @@ async def delete_channel(
     ).scalar_one_or_none()
     if ch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown channel_id: {channel_id}")
+    if channel_id == INBOX_CHANNEL_ID:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="cannot delete the system in-app notification channel",
+        )
     await db.delete(ch)
     await db.commit()
 
