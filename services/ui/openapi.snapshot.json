@@ -4475,6 +4475,304 @@
         }
       }
     },
+    "/api/notifications/inbox": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "List Inbox",
+        "operationId": "list_inbox_api_notifications_inbox_get",
+        "parameters": [
+          {
+            "name": "include_cleared",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Cleared"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NotificationInboxView"
+                  },
+                  "title": "Response List Inbox Api Notifications Inbox Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/inbox/count": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Inbox Count",
+        "operationId": "inbox_count_api_notifications_inbox_count_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationInboxCountView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/inbox/dismiss-all": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Inbox Dismiss All",
+        "operationId": "inbox_dismiss_all_api_notifications_inbox_dismiss_all_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Inbox Dismiss All Api Notifications Inbox Dismiss All Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/inbox/purge": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Inbox Purge",
+        "operationId": "inbox_purge_api_notifications_inbox_purge_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Inbox Purge Api Notifications Inbox Purge Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/inbox/{inbox_id}": {
+      "patch": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Patch Inbox",
+        "operationId": "patch_inbox_api_notifications_inbox__inbox_id__patch",
+        "parameters": [
+          {
+            "name": "inbox_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Inbox Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationInboxUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationInboxView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/jobs/iso/scan": {
       "post": {
         "tags": [
@@ -5983,6 +6281,18 @@
         ],
         "title": "IdentifyRequest"
       },
+      "InAppChannelConfig": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "inapp",
+            "title": "Type",
+            "default": "inapp"
+          }
+        },
+        "type": "object",
+        "title": "InAppChannelConfig"
+      },
       "IsoScanRequest": {
         "properties": {
           "path": {
@@ -6729,7 +7039,10 @@
         "properties": {
           "type": {
             "type": "string",
-            "const": "apprise",
+            "enum": [
+              "apprise",
+              "inapp"
+            ],
             "title": "Type",
             "default": "apprise"
           },
@@ -6743,7 +7056,22 @@
             "default": true
           },
           "config": {
-            "$ref": "#/components/schemas/AppriseChannelConfig"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AppriseChannelConfig"
+              },
+              {
+                "$ref": "#/components/schemas/InAppChannelConfig"
+              }
+            ],
+            "title": "Config",
+            "discriminator": {
+              "propertyName": "type",
+              "mapping": {
+                "apprise": "#/components/schemas/AppriseChannelConfig",
+                "inapp": "#/components/schemas/InAppChannelConfig"
+              }
+            }
           },
           "subscribed_events": {
             "items": {
@@ -6819,12 +7147,27 @@
           "config": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/AppriseChannelConfig"
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/AppriseChannelConfig"
+                  },
+                  {
+                    "$ref": "#/components/schemas/InAppChannelConfig"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "type",
+                  "mapping": {
+                    "apprise": "#/components/schemas/AppriseChannelConfig",
+                    "inapp": "#/components/schemas/InAppChannelConfig"
+                  }
+                }
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Config"
           },
           "subscribed_events": {
             "anyOf": [
@@ -7065,6 +7408,175 @@
           "created_at"
         ],
         "title": "NotificationDispatchLogView"
+      },
+      "NotificationInboxCountView": {
+        "properties": {
+          "unseen": {
+            "type": "integer",
+            "title": "Unseen"
+          },
+          "seen": {
+            "type": "integer",
+            "title": "Seen"
+          },
+          "cleared": {
+            "type": "integer",
+            "title": "Cleared"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "unseen",
+          "seen",
+          "cleared",
+          "total"
+        ],
+        "title": "NotificationInboxCountView"
+      },
+      "NotificationInboxUpdateRequest": {
+        "properties": {
+          "seen": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seen"
+          },
+          "cleared": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cleared"
+          }
+        },
+        "type": "object",
+        "title": "NotificationInboxUpdateRequest"
+      },
+      "NotificationInboxView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "seen": {
+            "type": "boolean",
+            "title": "Seen"
+          },
+          "cleared": {
+            "type": "boolean",
+            "title": "Cleared"
+          },
+          "seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seen At"
+          },
+          "cleared_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cleared At"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_id",
+          "channel_id",
+          "event_type",
+          "title",
+          "message",
+          "job_id",
+          "seen",
+          "cleared",
+          "seen_at",
+          "cleared_at",
+          "created_at"
+        ],
+        "title": "NotificationInboxView"
       },
       "NotificationTestRequest": {
         "properties": {
