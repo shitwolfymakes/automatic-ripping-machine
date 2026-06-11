@@ -29,6 +29,7 @@ from arm_backend.notification_dispatcher import (
     _first_invalid_apprise_url,
     redact_apprise_url,
 )
+from arm_backend.notification_format import synthetic_test_message
 from arm_backend.notifications import catalog as catalog_module
 from arm_backend.notifications.field_map import (
     compose_url_from_fields,
@@ -36,13 +37,16 @@ from arm_backend.notifications.field_map import (
     merge_patch_config,
 )
 from arm_backend.notifications.url_composer import compose_apprise_url
-from arm_common import NotificationChannel, User
+from arm_common import NotificationChannel, NotificationDispatchLog, User
 from arm_common.schemas import (
     ComposeUrlRequest,
     ComposeUrlResult,
     NotificationChannelCreateRequest,
+    NotificationChannelTestRequest,
     NotificationChannelUpdateRequest,
     NotificationChannelView,
+    NotificationTestRequest,
+    NotificationTestResult,
     ServiceCatalog,
 )
 
@@ -240,3 +244,91 @@ async def compose_url(
 @router.get("/event-types", response_model=list[str])
 async def event_types(_: User = Depends(require_jwt)) -> list[str]:
     return sorted(NOTIFIABLE_EVENT_TYPES)
+
+
+async def _send_and_log(
+    *,
+    db: AsyncSession,
+    notifier: AppriseNotifier,
+    url: str,
+    event_type: str,
+    channel: NotificationChannel | None,
+) -> NotificationTestResult:
+    title, body = synthetic_test_message(event_type)
+    now = datetime.now(UTC)
+    ok = True
+    err: str | None = None
+    try:
+        await notifier.notify([url], title, body)
+    except Exception as exc:  # never 500 on a bad destination
+        ok = False
+        err = str(exc)
+    if channel is not None:
+        channel.last_fired_at = now
+        if ok:
+            channel.last_success_at = now
+            channel.last_error = None
+        else:
+            channel.last_error = err
+    db.add(
+        NotificationDispatchLog(
+            channel_id=channel.id if channel is not None else None,
+            event_id=None,
+            event_type=event_type,
+            title=title,
+            body=body,
+            success=ok,
+            error=err,
+        )
+    )
+    await db.commit()
+    return NotificationTestResult(ok=ok, error=None if ok else "test send failed")
+
+
+@router.post("/channels/{channel_id}/test", response_model=NotificationTestResult)
+async def test_channel(
+    channel_id: str,
+    req: NotificationChannelTestRequest,
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+    notifier: AppriseNotifier = Depends(get_notifier),
+) -> NotificationTestResult:
+    ch = (
+        await db.execute(select(NotificationChannel).where(col(NotificationChannel.id) == channel_id))
+    ).scalar_one_or_none()
+    if ch is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown channel_id: {channel_id}")
+    config = ch.config or {}
+    # If the editor re-entered fields, merge them in to test the new url.
+    if req.fields:
+        merged = merge_patch_config(
+            config, {"type": "apprise", "service_id": config.get("service_id"), "fields": req.fields}
+        )
+        url = merged.get("url", "")
+    else:
+        url = config.get("url", "")
+    event_type = req.event_type or (ch.subscribed_events or ["rip.completed"])[0]
+    if not url:
+        return NotificationTestResult(ok=False, error="could not compose url from fields")
+    return await _send_and_log(db=db, notifier=notifier, url=url, event_type=event_type, channel=ch)
+
+
+@router.post("/test", response_model=NotificationTestResult)
+async def test_config(
+    req: NotificationTestRequest,
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+    notifier: AppriseNotifier = Depends(get_notifier),
+) -> NotificationTestResult:
+    config = req.config.model_dump(mode="json")
+    fields = config.get("fields") or {}
+    service_id = config.get("service_id")
+    url = config.get("url") or ""
+    if not url and fields and service_id:
+        composed = compose_url_from_fields(service_id, fields)
+        if composed:
+            url = composed
+    if not url:
+        return NotificationTestResult(ok=False, error="url is required")
+    event_type = req.event_type or "rip.completed"
+    return await _send_and_log(db=db, notifier=notifier, url=url, event_type=event_type, channel=None)
