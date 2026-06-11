@@ -24,7 +24,7 @@ from sqlmodel import col, select
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
 from arm_backend.notification_dispatcher import (
-    NOTIFIABLE_EVENT_TYPES,
+    NOTABLE_EVENT_TYPES,
     AppriseNotifier,
     _first_invalid_apprise_url,
     redact_apprise_url,
@@ -91,7 +91,7 @@ def _validate_apprise_url(url: str) -> None:
 
 
 def _validate_events(events: list[str]) -> None:
-    bad = [e for e in events if e not in NOTIFIABLE_EVENT_TYPES]
+    bad = [e for e in events if e not in NOTABLE_EVENT_TYPES]
     if bad:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -100,7 +100,7 @@ def _validate_events(events: list[str]) -> None:
 
 
 def _validate_template_keys(templates: dict[str, Any]) -> None:
-    bad = [k for k in templates if k not in NOTIFIABLE_EVENT_TYPES]
+    bad = [k for k in templates if k not in NOTABLE_EVENT_TYPES]
     if bad:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -263,7 +263,7 @@ async def compose_url(
 
 @router.get("/event-types", response_model=list[str])
 async def event_types(_: User = Depends(require_jwt)) -> list[str]:
-    return sorted(NOTIFIABLE_EVENT_TYPES)
+    return sorted(NOTABLE_EVENT_TYPES)
 
 
 async def _send_and_log(

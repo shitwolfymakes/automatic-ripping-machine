@@ -156,9 +156,13 @@ def test_patch_channel_name_only(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows.setdefault("notification_channels", []).append(
-        NotificationChannel(id="ncl_1", type="apprise", name="Old",
-                            config={"type": "apprise", "url": "json://localhost/x"},
-                            subscribed_events=["rip.completed"])
+        NotificationChannel(
+            id="ncl_1",
+            type="apprise",
+            name="Old",
+            config={"type": "apprise", "url": "json://localhost/x"},
+            subscribed_events=["rip.completed"],
+        )
     )
     with TestClient(app) as client:
         r = client.patch("/api/notifications/channels/ncl_1", json={"name": "New"}, headers=_auth(token))
@@ -171,13 +175,26 @@ def test_patch_channel_merges_hidden_secret(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows.setdefault("notification_channels", []).append(
-        NotificationChannel(id="ncl_1", type="apprise", name="D",
-                            config={"type": "apprise", "service_id": "discord", "url": "discord://1/2",
-                                    "fields": {"webhook_id": "1", "webhook_token": "2"}},
-                            subscribed_events=["rip.completed"])
+        NotificationChannel(
+            id="ncl_1",
+            type="apprise",
+            name="D",
+            config={
+                "type": "apprise",
+                "service_id": "discord",
+                "url": "discord://1/2",
+                "fields": {"webhook_id": "1", "webhook_token": "2"},
+            },
+            subscribed_events=["rip.completed"],
+        )
     )
-    body = {"config": {"type": "apprise", "service_id": "discord",
-                       "fields": {"webhook_id": "<hidden>", "webhook_token": "NEW"}}}
+    body = {
+        "config": {
+            "type": "apprise",
+            "service_id": "discord",
+            "fields": {"webhook_id": "<hidden>", "webhook_token": "NEW"},
+        }
+    }
     with TestClient(app) as client:
         r = client.patch("/api/notifications/channels/ncl_1", json=body, headers=_auth(token))
     assert r.status_code == 200, r.text
@@ -200,9 +217,13 @@ def test_patch_channel_config_raw_url(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows.setdefault("notification_channels", []).append(
-        NotificationChannel(id="ncl_1", type="apprise", name="D",
-                            config={"type": "apprise", "url": "json://old/x"},
-                            subscribed_events=["rip.completed"])
+        NotificationChannel(
+            id="ncl_1",
+            type="apprise",
+            name="D",
+            config={"type": "apprise", "url": "json://old/x"},
+            subscribed_events=["rip.completed"],
+        )
     )
     body = {"config": {"type": "apprise", "url": "json://new/y"}}
     with TestClient(app) as client:
@@ -215,9 +236,13 @@ def test_patch_channel_empty_config_rejected(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows.setdefault("notification_channels", []).append(
-        NotificationChannel(id="ncl_1", type="apprise", name="D",
-                            config={"type": "apprise", "url": "json://old/x"},
-                            subscribed_events=["rip.completed"])
+        NotificationChannel(
+            id="ncl_1",
+            type="apprise",
+            name="D",
+            config={"type": "apprise", "url": "json://old/x"},
+            subscribed_events=["rip.completed"],
+        )
     )
     # config with neither url nor fields -> resolves to empty url -> 422, channel not bricked
     body = {"config": {"type": "apprise"}}
@@ -283,9 +308,13 @@ def test_test_saved_channel_success(signing_key: bytes) -> None:
     notifier = _FakeNotifier()
     app, token = _make_app(signing_key, db, notifier)
     db.rows.setdefault("notification_channels", []).append(
-        NotificationChannel(id="ncl_1", type="apprise", name="D",
-                            config={"type": "apprise", "url": "json://localhost/x"},
-                            subscribed_events=["rip.completed"])
+        NotificationChannel(
+            id="ncl_1",
+            type="apprise",
+            name="D",
+            config={"type": "apprise", "url": "json://localhost/x"},
+            subscribed_events=["rip.completed"],
+        )
     )
     with TestClient(app) as client:
         r = client.post("/api/notifications/channels/ncl_1/test", json={}, headers=_auth(token))
@@ -305,8 +334,9 @@ def test_test_saved_channel_failure_returns_ok_false(signing_key: bytes) -> None
     notifier.raise_on_notify = True
     app, token = _make_app(signing_key, db, notifier)
     db.rows.setdefault("notification_channels", []).append(
-        NotificationChannel(id="ncl_1", type="apprise", name="D",
-                            config={"type": "apprise", "url": "json://localhost/x"})
+        NotificationChannel(
+            id="ncl_1", type="apprise", name="D", config={"type": "apprise", "url": "json://localhost/x"}
+        )
     )
     with TestClient(app) as client:
         r = client.post("/api/notifications/channels/ncl_1/test", json={}, headers=_auth(token))
@@ -353,10 +383,18 @@ def test_test_saved_channel_with_reentered_fields(signing_key: bytes) -> None:
     notifier = _FakeNotifier()
     app, token = _make_app(signing_key, db, notifier)
     db.rows.setdefault("notification_channels", []).append(
-        NotificationChannel(id="ncl_1", type="apprise", name="D",
-                            config={"type": "apprise", "service_id": "discord", "url": "discord://1/2",
-                                    "fields": {"webhook_id": "1", "webhook_token": "2"}},
-                            subscribed_events=["rip.completed"])
+        NotificationChannel(
+            id="ncl_1",
+            type="apprise",
+            name="D",
+            config={
+                "type": "apprise",
+                "service_id": "discord",
+                "url": "discord://1/2",
+                "fields": {"webhook_id": "1", "webhook_token": "2"},
+            },
+            subscribed_events=["rip.completed"],
+        )
     )
     # re-enter the token only; webhook_id stays via <hidden>
     body = {"fields": {"webhook_id": "<hidden>", "webhook_token": "NEW"}}
@@ -373,8 +411,9 @@ def test_test_saved_channel_empty_url_returns_ok_false(signing_key: bytes) -> No
     app, token = _make_app(signing_key, db)
     # channel whose config resolves to no url (no url, no fields)
     db.rows.setdefault("notification_channels", []).append(
-        NotificationChannel(id="ncl_1", type="apprise", name="D",
-                            config={"type": "apprise"}, subscribed_events=["rip.completed"])
+        NotificationChannel(
+            id="ncl_1", type="apprise", name="D", config={"type": "apprise"}, subscribed_events=["rip.completed"]
+        )
     )
     with TestClient(app) as client:
         r = client.post("/api/notifications/channels/ncl_1/test", json={}, headers=_auth(token))
@@ -395,12 +434,19 @@ def test_test_adhoc_unknown_service_returns_ok_false(signing_key: bytes) -> None
 
 def test_dispatch_log_list_and_filter(signing_key: bytes) -> None:
     from arm_common import NotificationDispatchLog
+
     db = FakeSession()
     app, token = _make_app(signing_key, db)
-    db.rows.setdefault("notification_dispatch_log", []).extend([
-        NotificationDispatchLog(id="ndl_1", channel_id="ncl_1", event_type="rip.completed", title="t", body="b", success=True),
-        NotificationDispatchLog(id="ndl_2", channel_id="ncl_2", event_type="rip.failed", title="t", body="b", success=False),
-    ])
+    db.rows.setdefault("notification_dispatch_log", []).extend(
+        [
+            NotificationDispatchLog(
+                id="ndl_1", channel_id="ncl_1", event_type="rip.completed", title="t", body="b", success=True
+            ),
+            NotificationDispatchLog(
+                id="ndl_2", channel_id="ncl_2", event_type="rip.failed", title="t", body="b", success=False
+            ),
+        ]
+    )
     with TestClient(app) as client:
         r = client.get("/api/notifications/dispatch-log", headers=_auth(token))
         assert r.status_code == 200
@@ -413,9 +459,13 @@ def test_get_channel_returns_existing(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows.setdefault("notification_channels", []).append(
-        NotificationChannel(id="ncl_1", type="apprise", name="D",
-                            config={"type": "apprise", "url": "json://l/x"},
-                            subscribed_events=["rip.completed"])
+        NotificationChannel(
+            id="ncl_1",
+            type="apprise",
+            name="D",
+            config={"type": "apprise", "url": "json://l/x"},
+            subscribed_events=["rip.completed"],
+        )
     )
     with TestClient(app) as client:
         r = client.get("/api/notifications/channels/ncl_1", headers=_auth(token))
@@ -441,9 +491,12 @@ def test_create_unknown_service_id_yields_empty_url_rejected(signing_key: bytes)
 def test_create_rejects_bad_template_key(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
-    body = {"type": "apprise", "name": "X",
-            "config": {"type": "apprise", "url": "json://localhost/x"},
-            "templates": {"not.an.event": {"title": "hi"}}}
+    body = {
+        "type": "apprise",
+        "name": "X",
+        "config": {"type": "apprise", "url": "json://localhost/x"},
+        "templates": {"not.an.event": {"title": "hi"}},
+    }
     with TestClient(app) as client:
         r = client.post("/api/notifications/channels", json=body, headers=_auth(token))
     assert r.status_code == 422
@@ -453,14 +506,23 @@ def test_create_rejects_bad_template_key(signing_key: bytes) -> None:
 def test_list_channels_returns_rows_masked(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
-    db.rows.setdefault("notification_channels", []).extend([
-        NotificationChannel(id="ncl_1", type="apprise", name="A",
-                            config={"type": "apprise", "service_id": "discord", "url": "discord://1/2",
-                                    "fields": {"webhook_id": "1", "webhook_token": "2"}},
-                            subscribed_events=["rip.completed"]),
-        NotificationChannel(id="ncl_2", type="apprise", name="B",
-                            config={"type": "apprise", "url": "json://b/x"}),
-    ])
+    db.rows.setdefault("notification_channels", []).extend(
+        [
+            NotificationChannel(
+                id="ncl_1",
+                type="apprise",
+                name="A",
+                config={
+                    "type": "apprise",
+                    "service_id": "discord",
+                    "url": "discord://1/2",
+                    "fields": {"webhook_id": "1", "webhook_token": "2"},
+                },
+                subscribed_events=["rip.completed"],
+            ),
+            NotificationChannel(id="ncl_2", type="apprise", name="B", config={"type": "apprise", "url": "json://b/x"}),
+        ]
+    )
     with TestClient(app) as client:
         r = client.get("/api/notifications/channels", headers=_auth(token))
     assert r.status_code == 200
@@ -475,9 +537,15 @@ def test_patch_channel_applies_all_fields(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows.setdefault("notification_channels", []).append(
-        NotificationChannel(id="ncl_1", type="apprise", name="Old", enabled=True,
-                            config={"type": "apprise", "url": "json://l/x"},
-                            subscribed_events=["rip.completed"], templates={})
+        NotificationChannel(
+            id="ncl_1",
+            type="apprise",
+            name="Old",
+            enabled=True,
+            config={"type": "apprise", "url": "json://l/x"},
+            subscribed_events=["rip.completed"],
+            templates={},
+        )
     )
     body = {
         "name": "New",
@@ -497,6 +565,7 @@ def test_patch_channel_applies_all_fields(signing_key: bytes) -> None:
 
 def test_app_registers_notifications_router() -> None:
     from arm_backend.main import app
+
     paths = {r.path for r in app.routes}
     assert "/api/notifications/channels" in paths
 
@@ -515,8 +584,14 @@ def test_delete_inapp_channel_rejected(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows.setdefault("notification_channels", []).append(
-        NotificationChannel(id="ncl_inbox", type="inapp", name="bell", enabled=True,
-                            config={"type": "inapp"}, subscribed_events=["rip.completed"])
+        NotificationChannel(
+            id="ncl_inbox",
+            type="inapp",
+            name="bell",
+            enabled=True,
+            config={"type": "inapp"},
+            subscribed_events=["rip.completed"],
+        )
     )
     with TestClient(app) as client:
         r = client.delete("/api/notifications/channels/ncl_inbox", headers=_auth(token))
@@ -527,16 +602,64 @@ def test_patch_inapp_config_rejected_but_events_ok(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows.setdefault("notification_channels", []).append(
-        NotificationChannel(id="ncl_inbox", type="inapp", name="bell", enabled=True,
-                            config={"type": "inapp"}, subscribed_events=["rip.completed"])
+        NotificationChannel(
+            id="ncl_inbox",
+            type="inapp",
+            name="bell",
+            enabled=True,
+            config={"type": "inapp"},
+            subscribed_events=["rip.completed"],
+        )
     )
     with TestClient(app) as client:
         # config change rejected
-        r1 = client.patch("/api/notifications/channels/ncl_inbox",
-                          json={"config": {"type": "inapp"}}, headers=_auth(token))
+        r1 = client.patch(
+            "/api/notifications/channels/ncl_inbox", json={"config": {"type": "inapp"}}, headers=_auth(token)
+        )
         assert r1.status_code == 422
         # subscribed_events change allowed
-        r2 = client.patch("/api/notifications/channels/ncl_inbox",
-                          json={"subscribed_events": ["rip.failed"]}, headers=_auth(token))
+        r2 = client.patch(
+            "/api/notifications/channels/ncl_inbox", json={"subscribed_events": ["rip.failed"]}, headers=_auth(token)
+        )
         assert r2.status_code == 200, r2.text
     assert db.rows["notification_channels"][0].subscribed_events == ["rip.failed"]
+
+
+def test_patch_inapp_channel_roundtrips_default_events(signing_key: bytes) -> None:
+    # Regression: the bell subscribes to DEFAULT_INBOX_EVENT_TYPES (incl.
+    # rip.needs_user_input), which is NOTABLE but not NOTIFIABLE. PATCHing the
+    # bell with its own event set must NOT 422.
+    from arm_backend.notification_dispatcher import DEFAULT_INBOX_EVENT_TYPES
+
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(
+            id="ncl_inbox",
+            type="inapp",
+            name="bell",
+            enabled=True,
+            config={"type": "inapp"},
+            subscribed_events=sorted(DEFAULT_INBOX_EVENT_TYPES),
+        )
+    )
+    body = {"enabled": False, "subscribed_events": sorted(DEFAULT_INBOX_EVENT_TYPES)}
+    with TestClient(app) as client:
+        r = client.patch("/api/notifications/channels/ncl_inbox", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert db.rows["notification_channels"][0].enabled is False
+
+
+def test_create_channel_accepts_needs_user_input_event(signing_key: bytes) -> None:
+    # An apprise channel can also subscribe to a NOTABLE (inbox-default) event.
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    body = {
+        "type": "apprise",
+        "name": "X",
+        "config": {"type": "apprise", "url": "json://localhost/x"},
+        "subscribed_events": ["rip.needs_user_input"],
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/channels", json=body, headers=_auth(token))
+    assert r.status_code == 201, r.text
