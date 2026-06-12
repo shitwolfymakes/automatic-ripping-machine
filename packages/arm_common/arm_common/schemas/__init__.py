@@ -34,6 +34,8 @@ from arm_common.schemas.metadata import (
     MetadataCandidate,
     MetadataKeyTestResponse,
     MetadataProvider,
+    MetadataReleaseDetail,
+    MetadataReleaseTrack,
     MetadataSearchResponse,
 )
 from arm_common.schemas.naming import (
@@ -98,6 +100,8 @@ __all__ = [
     "MetadataCandidate",
     "MetadataKeyTestResponse",
     "MetadataProvider",
+    "MetadataReleaseDetail",
+    "MetadataReleaseTrack",
     "MetadataSearchResponse",
     "ApplySessionRequest",
     "BulkDeleteJobsResponse",
