@@ -51,6 +51,7 @@ class ConfigView(BaseModel):
     default_retention_policy: RetentionPolicy
     notification_apprise_urls: list[str]
     notifications_enabled: bool
+    metadata_provider: str
     updated_by_user_id: str | None
     updated_at: datetime | None
 
@@ -68,6 +69,7 @@ class ConfigUpdateRequest(BaseModel):
     default_retention_policy: RetentionPolicy | None = None
     notification_apprise_urls: list[str] | None = None
     notifications_enabled: bool | None = None
+    metadata_provider: str | None = None
 
 
 class DiagnosticsServiceView(BaseModel):
