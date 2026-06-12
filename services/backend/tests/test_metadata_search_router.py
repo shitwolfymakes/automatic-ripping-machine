@@ -389,10 +389,14 @@ def test_music_release_detail_ok(signing_key: bytes) -> None:
         r = c.get("/api/metadata/music/mbid-1", headers=_auth(token))
     assert r.status_code == 200, r.text
     body = r.json()
+    assert body["release_id"] == "mbid-1"
     assert body["title"] == "The Dark Side of the Moon"
     assert body["year"] == 1973
-    assert body["kind"] == "music"
-    assert body["provider_id"] == "mbid-1"
+    assert body["artist"] == "Pink Floyd"
+    # M5 fix: the detail view must carry the track listing get_release fetched.
+    assert len(body["tracks"]) > 0
+    assert body["tracks"][0]["title"] == "Speak to Me"
+    assert body["tracks"][0]["position"] == 1
 
 
 @respx.mock

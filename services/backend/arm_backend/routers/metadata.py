@@ -23,7 +23,14 @@ from arm_backend.metadata.tmdb import TMDBClient
 from arm_backend.metadata.tvdb import TVDBClient
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_common import Config, User
-from arm_common.schemas import MetadataCandidate, MetadataKeyTestResponse, MetadataProvider, MetadataSearchResponse
+from arm_common.schemas import (
+    MetadataCandidate,
+    MetadataKeyTestResponse,
+    MetadataProvider,
+    MetadataReleaseDetail,
+    MetadataReleaseTrack,
+    MetadataSearchResponse,
+)
 
 logger = logging.getLogger("arm_backend.routers.metadata")
 
@@ -202,13 +209,13 @@ async def search_music(
     return MetadataSearchResponse(candidates=[_to_candidate(r) for r in results])
 
 
-@router.get("/music/{release_id}", response_model=MetadataCandidate)
+@router.get("/music/{release_id}", response_model=MetadataReleaseDetail)
 async def music_release_detail(
     release_id: str,
     request: Request,
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
-) -> MetadataCandidate:
+) -> MetadataReleaseDetail:
     cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     ua = (cfg.musicbrainz_user_agent if cfg else None) or "armv3"
     http: httpx.AsyncClient = request.app.state.http
@@ -225,4 +232,14 @@ async def music_release_detail(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"musicbrainz unavailable: {exc}") from exc
     except (LookupTimeout, httpx.HTTPError) as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"musicbrainz unavailable: {exc}") from exc
-    return _to_candidate(result)
+    payload = result.payload or {}
+    raw_tracks = payload.get("tracks") or []
+    tracks = [MetadataReleaseTrack(position=t.get("position"), title=t.get("title") or "") for t in raw_tracks]
+    return MetadataReleaseDetail(
+        release_id=release_id,
+        title=result.title,
+        artist=payload.get("artist"),
+        year=result.year,
+        poster_url=extract_poster_url(result),
+        tracks=tracks,
+    )
