@@ -222,15 +222,14 @@ async def music_release_detail(
     try:
         result = await MusicBrainzClient(ua, http).get_release(release_id)
     except MetaLookupError as exc:
-        # _get collapses both a real 404 (unknown MBID) and transport failures
-        # into LookupError, so we discriminate on the message: the not-found
-        # path carries the `not_found_detail` string ("...release not found")
-        # → 404; anything else (transport / 5xx / bad status) is an upstream
-        # outage → 502.
+        # _get collapses every failure mode into a MetaLookupError subclass:
+        # a real 404 (unknown MBID), transport failures (wrapped LookupError),
+        # and timeouts (LookupTimeout, a LookupError subclass). We discriminate
+        # on the message: the not-found path carries the `not_found_detail`
+        # string ("...release not found") → 404; anything else (transport /
+        # timeout / 5xx / bad status) is an upstream outage → 502.
         if "not found" in str(exc):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"musicbrainz unavailable: {exc}") from exc
-    except (LookupTimeout, httpx.HTTPError) as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"musicbrainz unavailable: {exc}") from exc
     payload = result.payload or {}
     raw_tracks = payload.get("tracks") or []

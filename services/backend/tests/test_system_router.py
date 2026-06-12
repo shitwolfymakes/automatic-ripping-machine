@@ -225,6 +225,18 @@ def test_system_version_requires_auth(signing_key: bytes, tmp_path) -> None:
         assert client.get("/api/system/version").status_code == 401
 
 
+def test_app_version_real_fallback(monkeypatch) -> None:
+    import importlib.metadata
+
+    from arm_backend.routers.system import _app_version
+
+    def _raise(_name: str) -> str:
+        raise importlib.metadata.PackageNotFoundError("arm_backend")
+
+    monkeypatch.setattr(importlib.metadata, "version", _raise)
+    assert _app_version() == "0.0.0+unknown"
+
+
 def test_paths_uses_settings_fallback(signing_key: bytes) -> None:
     """When system_paths is absent from app.state, _roots falls back to settings."""
     db = FakeSession()
