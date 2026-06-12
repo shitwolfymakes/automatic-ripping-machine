@@ -21,7 +21,7 @@ class TemplateValidationError(ValueError):
 _ALLOWED_TOKENS_BY_MEDIA: dict[MediaType, set[str]] = {
     MediaType.MOVIE: {"title", "year", "track", "duration_human", "transcode_slug", "ext"},
     MediaType.TV: {"show", "year", "season", "disc", "track", "duration_human", "transcode_slug", "ext"},
-    MediaType.MUSIC: {"artist", "album", "track", "track_title", "transcode_slug", "ext"},
+    MediaType.MUSIC: {"artist", "album", "disc", "track", "track_title", "transcode_slug", "ext"},
     MediaType.DATA: {"title"},
     MediaType.ISO: {"title", "year", "ext"},
 }
@@ -50,6 +50,7 @@ _SYNTHETIC_CONTEXTS: dict[MediaType, dict[str, str]] = {
     MediaType.MUSIC: {
         "artist": "Pink Floyd",
         "album": "The Dark Side of the Moon",
+        "disc": "01",
         "track": "01",
         "track_title": "Speak to Me",
         "transcode_slug": "flac",
