@@ -223,9 +223,12 @@ def test_search_omdb_provider_returns_candidates(signing_key: bytes) -> None:
 
 
 def test_lookup_imdb_no_omdb_key_returns_400(signing_key: bytes) -> None:
-    """imdb_id path with no omdb key → 400."""
+    """imdb_id path with provider=omdb and no omdb key → 400. Must seed
+    metadata_provider="omdb" so this exercises the OMDb branch's missing-key
+    guard; without it the default ("tmdb") would route to the tmdb branch and
+    400 there, leaving the omdb guard untested."""
     db = FakeSession()
-    _seed(db, omdb_api_key=None)
+    _seed(db, metadata_provider="omdb", omdb_api_key=None)
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/lookup", params={"imdb_id": "tt0133093"}, headers=_auth(token))
