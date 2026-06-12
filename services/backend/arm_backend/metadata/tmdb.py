@@ -48,7 +48,14 @@ class TMDBClient:
         if r.status_code != 200:
             raise LookupError(f"tmdb {endpoint} status={r.status_code}")
 
-        results: list[dict[str, Any]] = r.json().get("results") or []
+        # A 200 with a non-JSON body must surface as the module LookupError (which
+        # the search router catches → degraded-200), not an uncaught ValueError → 500.
+        # Mirrors the json-guard in find_by_imdb_id / get_external_ids.
+        try:
+            body = r.json()
+        except ValueError as e:
+            raise LookupError(f"tmdb {endpoint} returned non-JSON response") from e
+        results: list[dict[str, Any]] = (body.get("results") if isinstance(body, dict) else None) or []
         return results
 
     @staticmethod
@@ -100,13 +107,22 @@ class TMDBClient:
             parsed = self._parse_one(top, kind)
             if parsed is not None:
                 out.append(parsed)
-        if out:
+        # Enrich each candidate with its imdb_id concurrently. Use .get("id") (not
+        # an index): a result without an id can't be enriched, so it skips the call
+        # and degrades to imdb_id=None rather than raising KeyError synchronously —
+        # which would escape the gather guard below. gather(return_exceptions=True)
+        # ensures one external_ids failure can't fail the batch.
+        enrichable = [r for r in out if r.payload.get("id") is not None]
+        if enrichable:
             ids = await asyncio.gather(
-                *(self.get_external_ids(r.payload["id"], kind) for r in out),
+                *(self.get_external_ids(r.payload["id"], kind) for r in enrichable),
                 return_exceptions=True,
             )
-            for r, imdb in zip(out, ids):
-                r.payload["imdb_id"] = imdb if isinstance(imdb, str) else None
+            resolved = {id(r): (imdb if isinstance(imdb, str) else None) for r, imdb in zip(enrichable, ids)}
+        else:
+            resolved = {}
+        for r in out:
+            r.payload["imdb_id"] = resolved.get(id(r))
         return out
 
     async def get_external_ids(self, tmdb_id: int | str, kind: Literal["movie", "tv"]) -> str | None:
@@ -121,9 +137,14 @@ class TMDBClient:
         if r.status_code != 200:
             return None
         try:
-            imdb = r.json().get("imdb_id")
+            body = r.json()
         except ValueError:
             return None
+        # A 200 whose body is JSON but not an object (e.g. a bare array) would make
+        # .get() raise AttributeError, breaking the never-raises contract — guard it.
+        if not isinstance(body, dict):
+            return None
+        imdb = body.get("imdb_id")
         return imdb if isinstance(imdb, str) and imdb else None
 
     async def find_by_imdb_id(self, imdb_id: str) -> MetadataResult:

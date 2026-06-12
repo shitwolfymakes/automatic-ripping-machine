@@ -662,6 +662,45 @@ async def test_tmdb_search_candidates_skips_items_without_title(http_client):
 
 
 @respx.mock
+async def test_tmdb_search_non_json_body_raises(http_client):
+    # A 200 with a non-JSON body on the search path must raise the module
+    # LookupError (caught by the /search router → degraded-200), not an uncaught
+    # ValueError → 500. Mirrors the json-guard in find_by_imdb_id.
+    respx.get("https://api.themoviedb.org/3/search/movie").mock(
+        return_value=httpx.Response(200, text="<html>not json</html>")
+    )
+    client = TMDBClient("k", http_client)
+    with pytest.raises(LookupError, match="non-JSON"):
+        await client.search_movie_candidates("x")
+
+
+@respx.mock
+async def test_tmdb_search_candidate_without_id_skips_enrichment(http_client):
+    """A search result lacking an `id` can't be enriched; it must still be
+    returned (with imdb_id=None), not raise KeyError past the gather guard.
+    The candidate that HAS an id is enriched normally."""
+    respx.get("https://api.themoviedb.org/3/search/movie").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    {"title": "No Id Movie", "release_date": "1999-01-01"},  # no id — skip enrichment
+                    {"title": "Has Id Movie", "release_date": "2000-01-01", "id": 42},
+                ]
+            },
+        )
+    )
+    respx.get("https://api.themoviedb.org/3/movie/42/external_ids").mock(
+        return_value=httpx.Response(200, json={"imdb_id": "tt0000042"})
+    )
+    client = TMDBClient("k", http_client)
+    results = await client.search_movie_candidates("x")
+    assert [r.title for r in results] == ["No Id Movie", "Has Id Movie"]
+    assert results[0].payload["imdb_id"] is None  # skipped, degraded to None
+    assert results[1].payload["imdb_id"] == "tt0000042"  # enriched
+
+
+@respx.mock
 async def test_tmdb_get_results_5xx_raises(http_client):
     # Covers the shared _get_results 5xx branch (used by both search paths).
     respx.get("https://api.themoviedb.org/3/search/movie").mock(return_value=httpx.Response(503))
@@ -999,6 +1038,16 @@ async def test_tmdb_get_external_ids_missing_key_returns_none(http_client) -> No
         return_value=httpx.Response(200, json={"facebook_id": "x"})
     )
     assert await TMDBClient("k", http_client).get_external_ids(503, "movie") is None
+
+
+@respx.mock
+async def test_tmdb_get_external_ids_non_dict_body_returns_none(http_client) -> None:
+    # 200 whose body is valid JSON but not an object (a bare array) must NOT raise
+    # AttributeError — the never-raises contract covers malformed-but-JSON bodies too.
+    respx.get("https://api.themoviedb.org/3/movie/504/external_ids").mock(
+        return_value=httpx.Response(200, json=["unexpected"])
+    )
+    assert await TMDBClient("k", http_client).get_external_ids(504, "movie") is None
 
 
 # ---------------------------------------------------------------------------
