@@ -8,7 +8,7 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
-from arm_common import Drive, DriveStatus, Session, User
+from arm_common import Drive, DriveStatus, Job, JobStatus, Session, User
 from arm_common.schemas import DriveDiagnosticItem, DriveDiagnosticResponse, DriveRescanResponse, DriveUpdateRequest
 
 router = APIRouter(prefix="/api/drives", tags=["drives"])
@@ -116,3 +116,29 @@ async def update_drive(
     await db.commit()
     await db.refresh(drive)
     return drive
+
+
+@router.delete("/{drive_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_drive(
+    drive_id: str,
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> None:
+    drive = (await db.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
+    if drive is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {drive_id}")
+    # Refuse to delete a drive with an in-flight (RIPPING) job — same predicate
+    # the ripper boot-probe uses. A live ripper re-registers the row on its next
+    # startup (hostname upsert), so this only guards the active-rip case.
+    active = (
+        (await db.execute(select(Job).where(col(Job.drive_id) == drive_id).where(col(Job.status) == JobStatus.RIPPING)))
+        .scalars()
+        .all()
+    )
+    if active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="cannot delete a drive with an in-flight job",
+        )
+    await db.delete(drive)
+    await db.commit()

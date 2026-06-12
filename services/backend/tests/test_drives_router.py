@@ -17,10 +17,13 @@ from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import drives as drives_router  # noqa: E402
 from arm_common import (  # noqa: E402
     ContainerFormat,
+    DiscType,
     Drive,
     DriveStatus,
     HwPreference,
     IdentificationMode,
+    Job,
+    JobStatus,
     MediaType,
     OutputMode,
     RipPreset,
@@ -180,3 +183,54 @@ def test_patch_unauthenticated_returns_401(signing_key: bytes) -> None:
     with TestClient(app) as client:
         r = client.patch("/api/drives/drv_x", json={"display_name": "x"})
     assert r.status_code == 401
+
+
+def test_delete_drive_ok(signing_key: bytes) -> None:
+    db = FakeSession()
+    db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
+    db.rows.setdefault("drives", []).append(Drive(id="drv_1", device_path="/dev/sr0", hostname="h1"))
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.delete("/api/drives/drv_1", headers=_auth(token))
+    assert r.status_code == 204
+    assert db.rows["drives"] == []
+
+
+def test_delete_drive_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.delete("/api/drives/drv_x", headers=_auth(token))
+    assert r.status_code == 404
+
+
+def test_delete_drive_with_active_job_409(signing_key: bytes) -> None:
+    db = FakeSession()
+    db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
+    db.rows.setdefault("drives", []).append(Drive(id="drv_1", device_path="/dev/sr0", hostname="h1"))
+    db.rows.setdefault("jobs", []).append(
+        Job(id="job_1", drive_id="drv_1", status=JobStatus.RIPPING, disc_type=DiscType.DVD)
+    )
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.delete("/api/drives/drv_1", headers=_auth(token))
+    assert r.status_code == 409
+    assert db.rows["drives"]  # not deleted
+
+
+def test_delete_drive_with_non_ripping_job_succeeds(signing_key: bytes) -> None:
+    db = FakeSession()
+    db.rows.setdefault("users", []).append(
+        User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)
+    )
+    db.rows.setdefault("drives", []).append(Drive(id="drv_1", device_path="/dev/sr0", hostname="h1"))
+    # a RIPPED (terminal) job on the drive must NOT block deletion — only RIPPING does
+    db.rows.setdefault("jobs", []).append(
+        Job(id="job_1", drive_id="drv_1", status=JobStatus.RIPPED, disc_type=DiscType.DVD)
+    )
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.delete("/api/drives/drv_1", headers=_auth(token))
+    assert r.status_code == 204, r.text
+    assert db.rows["drives"] == []
