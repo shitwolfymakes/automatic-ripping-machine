@@ -104,6 +104,33 @@ class MusicBrainzClient:
 
         return MetadataResult(title=title_val, year=year_val, kind="music", payload=payload)
 
+    async def get_release(self, release_id: str) -> MetadataResult:
+        """Fetch a single MusicBrainz release by MBID for interactive detail.
+
+        Mirrors lookup_disc_id's projection (artist/album/tracks spread over the
+        raw release dict) but keyed on a known release MBID instead of a disc-id
+        lookup. A 404 (unknown MBID) surfaces as the not-found LookupError.
+        """
+        body = await self._get(
+            f"/release/{release_id}",
+            params={"inc": "artists+recordings+labels", "fmt": "json"},
+            not_found_detail="musicbrainz release not found",
+        )
+        title_val = body.get("title")
+        if not title_val:
+            raise LookupError("musicbrainz release missing title")
+        year_val = _parse_year(body.get("date") or "")
+        artist = _join_artist_credit(body.get("artist-credit") or [])
+        media = body.get("media") or []
+        tracks = _extract_tracks(media[0] if media else None)
+        payload: dict[str, Any] = {
+            "artist": artist,
+            "album": title_val,
+            "tracks": tracks,
+            **body,
+        }
+        return MetadataResult(title=title_val, year=year_val, kind="music", payload=payload)
+
     async def search_releases(self, query: str, limit: int = 10) -> list[MetadataResult]:
         """Lucene release search for interactive lookup. Returns up to `limit`."""
         body = await self._get(

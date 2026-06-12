@@ -361,3 +361,59 @@ def test_music_search_httpx_error_returns_200_empty(signing_key: bytes) -> None:
     assert r.status_code == 200, r.text
     assert r.json()["candidates"] == []
     assert r.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# GET /api/metadata/music/{release_id} — release detail by MBID
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+def test_music_release_detail_ok(signing_key: bytes) -> None:
+    respx.get("https://musicbrainz.org/ws/2/release/mbid-1").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "mbid-1",
+                "title": "The Dark Side of the Moon",
+                "date": "1973-03-01",
+                "artist-credit": [{"name": "Pink Floyd"}],
+                "media": [{"tracks": [{"position": "1", "title": "Speak to Me"}]}],
+            },
+        )
+    )
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/music/mbid-1", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["title"] == "The Dark Side of the Moon"
+    assert body["year"] == 1973
+    assert body["kind"] == "music"
+    assert body["provider_id"] == "mbid-1"
+
+
+@respx.mock
+def test_music_release_detail_404(signing_key: bytes) -> None:
+    """Unknown MBID → upstream 404 → 404."""
+    respx.get("https://musicbrainz.org/ws/2/release/missing").mock(return_value=httpx.Response(404))
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/music/missing", headers=_auth(token))
+    assert r.status_code == 404, r.text
+
+
+@respx.mock
+def test_music_release_detail_unavailable_502(signing_key: bytes) -> None:
+    """Transport failure (collapsed into LookupError by _get) → 502, not 404."""
+    respx.get("https://musicbrainz.org/ws/2/release/mbid-1").mock(side_effect=httpx.ConnectError("boom"))
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/music/mbid-1", headers=_auth(token))
+    assert r.status_code == 502, r.text
