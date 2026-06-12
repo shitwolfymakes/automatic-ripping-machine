@@ -53,7 +53,8 @@ def _fake_catalog(monkeypatch):
                     {"key": "webhook_token", "label": "Token", "type": "string", "private": True, "required": True},
                 ],
                 "advanced_fields": [
-                    {"key": "format", "label": "Format", "type": "choice", "private": False, "required": False}
+                    {"key": "format", "label": "Format", "type": "choice", "private": False, "required": False},
+                    {"key": "tts", "label": "TTS", "type": "bool", "private": False, "required": False},
                 ],
             }
         ],
@@ -127,6 +128,29 @@ def test_create_channel_composes_from_fields(signing_key: bytes) -> None:
     assert cfg["url"] == "discord://1/2"
     # private fields masked on the way out
     assert cfg["fields"]["webhook_id"] == "<hidden>"
+
+
+def test_create_apprise_channel_with_typed_fields(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    body = {
+        "type": "apprise",
+        "name": "Discord",
+        "config": {
+            "type": "apprise",
+            "service_id": "discord",
+            "fields": {"webhook_id": "1", "webhook_token": "2", "tts": True},
+        },
+        "subscribed_events": ["rip.completed"],
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/channels", json=body, headers=_auth(token))
+    assert r.status_code == 201, r.text
+    cfg = r.json()["config"]
+    # bool field composed into the apprise url (tts=yes), proving non-str values round-trip
+    assert "tts=yes" in cfg["url"]
+    # non-private bool field passes through the masked view unchanged
+    assert cfg["fields"]["tts"] is True
 
 
 def test_create_rejects_bad_event(signing_key: bytes) -> None:

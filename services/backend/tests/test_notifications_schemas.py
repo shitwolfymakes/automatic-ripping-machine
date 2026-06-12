@@ -31,3 +31,8 @@ def test_create_request_rejects_non_apprise_type() -> None:
 def test_test_request_shape() -> None:
     r = NotificationTestRequest(config=AppriseChannelConfig(service_id="discord", fields={"webhook_id": "1"}))
     assert r.event_type is None
+
+
+def test_apprise_config_accepts_typed_field_values() -> None:
+    c = AppriseChannelConfig(service_id="discord", fields={"webhook_id": "1", "tts": True, "flags": 4, "ratio": 0.5})
+    assert c.fields == {"webhook_id": "1", "tts": True, "flags": 4, "ratio": 0.5}
