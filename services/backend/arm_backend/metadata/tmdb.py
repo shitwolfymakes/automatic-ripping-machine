@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Any, Literal
 
@@ -99,6 +100,13 @@ class TMDBClient:
             parsed = self._parse_one(top, kind)
             if parsed is not None:
                 out.append(parsed)
+        if out:
+            ids = await asyncio.gather(
+                *(self.get_external_ids(r.payload["id"], kind) for r in out),
+                return_exceptions=True,
+            )
+            for r, imdb in zip(out, ids):
+                r.payload["imdb_id"] = imdb if isinstance(imdb, str) else None
         return out
 
     async def get_external_ids(self, tmdb_id: int | str, kind: Literal["movie", "tv"]) -> str | None:

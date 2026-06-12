@@ -3492,12 +3492,18 @@
             "in": "query",
             "required": false,
             "schema": {
-              "enum": [
-                "tmdb",
-                "omdb"
+              "anyOf": [
+                {
+                  "enum": [
+                    "tmdb",
+                    "omdb"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
               ],
-              "type": "string",
-              "default": "tmdb",
               "title": "Provider"
             }
           },
@@ -5800,6 +5806,17 @@
               }
             ],
             "title": "Notifications Enabled"
+          },
+          "metadata_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Provider"
           }
         },
         "type": "object",
@@ -5892,6 +5909,10 @@
             "type": "boolean",
             "title": "Notifications Enabled"
           },
+          "metadata_provider": {
+            "type": "string",
+            "title": "Metadata Provider"
+          },
           "updated_by_user_id": {
             "anyOf": [
               {
@@ -5930,6 +5951,7 @@
           "default_retention_policy",
           "notification_apprise_urls",
           "notifications_enabled",
+          "metadata_provider",
           "updated_by_user_id",
           "updated_at"
         ],

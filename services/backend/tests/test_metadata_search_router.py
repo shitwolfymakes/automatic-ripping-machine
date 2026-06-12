@@ -114,7 +114,7 @@ def test_lookup_by_imdb_id(signing_key: bytes) -> None:
         return_value=httpx.Response(200, json={"Response": "True", "Title": "The Matrix", "Year": "1999"})
     )
     db = FakeSession()
-    _seed(db, omdb_api_key="k")
+    _seed(db, metadata_provider="omdb", omdb_api_key="k")
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/lookup", params={"imdb_id": "tt0133093"}, headers=_auth(token))
@@ -314,7 +314,7 @@ def test_search_httpx_error_returns_200_empty(signing_key: bytes) -> None:
 def test_lookup_httpx_error_returns_200_empty(signing_key: bytes) -> None:
     """httpx.HTTPError in lookup_metadata safety net."""
     db = FakeSession()
-    _seed(db, omdb_api_key="k")
+    _seed(db, metadata_provider="omdb", omdb_api_key="k")
     app, token = _make_app(signing_key, db)
     with mock.patch.object(omdb_mod.OMDBClient, "lookup_by_imdb_id", side_effect=httpx.RemoteProtocolError("bad")):
         with TestClient(app) as c:
@@ -340,7 +340,7 @@ def test_music_search_lookup_error_returns_200_empty(signing_key: bytes) -> None
 def test_lookup_lookup_error_returns_200_empty(signing_key: bytes) -> None:
     """MetaLookupError in lookup_metadata → 200 + empty + detail."""
     db = FakeSession()
-    _seed(db, omdb_api_key="k")
+    _seed(db, metadata_provider="omdb", omdb_api_key="k")
     app, token = _make_app(signing_key, db)
     with mock.patch.object(omdb_mod.OMDBClient, "lookup_by_imdb_id", side_effect=MetaLookupError("omdb miss")):
         with TestClient(app) as c:
@@ -397,6 +397,111 @@ def test_music_release_detail_ok(signing_key: bytes) -> None:
     assert len(body["tracks"]) > 0
     assert body["tracks"][0]["title"] == "Speak to Me"
     assert body["tracks"][0]["position"] == 1
+
+
+# ---------------------------------------------------------------------------
+# imdb-id round-trip: TMDb search enrichment + provider-driven lookup
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+def test_search_tmdb_candidates_carry_imdb_id(signing_key: bytes) -> None:
+    """TMDb search candidates are enriched with their imdb_id (via external_ids),
+    and _to_candidate prefers it: provider_id is the imdb id, not the tmdb id."""
+    respx.get("https://api.themoviedb.org/3/search/movie").mock(
+        return_value=httpx.Response(
+            200,
+            json={"results": [{"id": 1726, "title": "Iron Man", "release_date": "2008-04-30"}]},
+        )
+    )
+    respx.get("https://api.themoviedb.org/3/movie/1726/external_ids").mock(
+        return_value=httpx.Response(200, json={"imdb_id": "tt0371746"})
+    )
+    db = FakeSession()
+    _seed(db, metadata_provider="tmdb", tmdb_api_key="k")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/search", params={"title": "iron man", "type": "movie"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    cands = r.json()["candidates"]
+    assert cands[0]["title"] == "Iron Man"
+    assert cands[0]["provider_id"] == "tt0371746"
+
+
+@respx.mock
+def test_search_tmdb_enrichment_failure_is_tolerated(signing_key: bytes) -> None:
+    """One candidate's external_ids fetch failing (500) must not fail the whole
+    search (200). The failed candidate is NOT enriched with an imdb id — its
+    imdb_id stays None, so _to_candidate falls back to the bare tmdb id; the
+    other candidate keeps its enriched imdb id."""
+    respx.get("https://api.themoviedb.org/3/search/movie").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    {"id": 1726, "title": "Iron Man", "release_date": "2008-04-30"},
+                    {"id": 1727, "title": "Iron Man 2", "release_date": "2010-04-28"},
+                ]
+            },
+        )
+    )
+    respx.get("https://api.themoviedb.org/3/movie/1726/external_ids").mock(
+        return_value=httpx.Response(200, json={"imdb_id": "tt0371746"})
+    )
+    respx.get("https://api.themoviedb.org/3/movie/1727/external_ids").mock(return_value=httpx.Response(500))
+    db = FakeSession()
+    _seed(db, metadata_provider="tmdb", tmdb_api_key="k")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/search", params={"title": "iron man", "type": "movie"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    cands = r.json()["candidates"]
+    assert cands[0]["provider_id"] == "tt0371746"
+    # Enrichment failed for 1727 → no imdb id; _to_candidate falls back to the
+    # tmdb id, and critically it is NOT the failed-but-tolerated imdb value.
+    assert cands[1]["provider_id"] == "1727"
+
+
+@respx.mock
+def test_lookup_uses_tmdb_find_when_provider_tmdb(signing_key: bytes) -> None:
+    """metadata_provider=tmdb → /lookup?imdb_id resolves via TMDb /find."""
+    respx.get("https://api.themoviedb.org/3/find/tt0371746").mock(
+        return_value=httpx.Response(
+            200,
+            json={"movie_results": [{"id": 1726, "title": "Iron Man", "release_date": "2008-04-30"}]},
+        )
+    )
+    db = FakeSession()
+    _seed(db, metadata_provider="tmdb", tmdb_api_key="k")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/lookup", params={"imdb_id": "tt0371746"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["candidates"][0]["title"] == "Iron Man"
+
+
+@respx.mock
+def test_lookup_uses_omdb_when_provider_omdb(signing_key: bytes) -> None:
+    """metadata_provider=omdb → /lookup?imdb_id resolves via OMDb i=."""
+    respx.get("https://www.omdbapi.com/").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "Response": "True",
+                "Title": "Iron Man",
+                "Year": "2008",
+                "Type": "movie",
+                "imdbID": "tt0371746",
+            },
+        )
+    )
+    db = FakeSession()
+    _seed(db, metadata_provider="omdb", omdb_api_key="k")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/lookup", params={"imdb_id": "tt0371746"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["candidates"][0]["title"] == "Iron Man"
 
 
 @respx.mock
