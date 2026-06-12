@@ -22,7 +22,7 @@ class AppriseChannelConfig(BaseModel):
     # be a raw pasted apprise URL.
     url: str = ""
     service_id: str | None = None
-    fields: dict[str, str] | None = None
+    fields: dict[str, str | int | float | bool] | None = None
 
 
 class InAppChannelConfig(BaseModel):
@@ -82,7 +82,7 @@ class NotificationTestRequest(BaseModel):
 class NotificationChannelTestRequest(BaseModel):
     """Test a saved channel, optionally with re-entered field values."""
 
-    fields: dict[str, str] = Field(default_factory=dict)
+    fields: dict[str, str | int | float | bool] = Field(default_factory=dict)
     event_type: str | None = None
 
 
