@@ -12,13 +12,15 @@ from arm_backend.routers._params import JobIdParam
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
 from arm_backend.path_sanitize import sanitize_path_component
-from arm_backend.path_template import TemplateValidationError, tokens_for_media
+from arm_backend.path_template import TemplateValidationError, tokens_for_media, validate_template_or_http
 from arm_backend.transcode_apply import compute_outputs
 from arm_common import Job, Session, Track, TranscodePreset, User
 from arm_common.enums import MediaType
 from arm_common.schemas import (
     JobNamingPreviewResponse,
     NamingPreviewItem,
+    NamingValidateRequest,
+    NamingValidateResponse,
     NamingVariable,
     NamingVariablesResponse,
 )
@@ -92,3 +94,14 @@ async def job_naming_preview(
         job_output_name=job_output_name,
         items=items,
     )
+
+
+@router.post("/api/naming/validate", response_model=NamingValidateResponse)
+async def naming_validate(
+    req: NamingValidateRequest,
+    _: User = Depends(require_jwt),
+) -> NamingValidateResponse:
+    # validate_template_or_http raises HTTPException(422, detail=<message>) on
+    # an invalid template; returns the synthetic expansion on success.
+    validate_template_or_http(req.template, req.media_type, req.has_transcode_preset)
+    return NamingValidateResponse(valid=True)

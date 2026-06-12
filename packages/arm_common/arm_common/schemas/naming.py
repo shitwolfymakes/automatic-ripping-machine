@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 
+from arm_common.enums import MediaType
+
 
 class NamingVariable(BaseModel):
     token: str
@@ -23,3 +25,13 @@ class JobNamingPreviewResponse(BaseModel):
     job_output_dir: str
     job_output_name: str
     items: list[NamingPreviewItem]
+
+
+class NamingValidateRequest(BaseModel):
+    template: str
+    media_type: MediaType
+    has_transcode_preset: bool = False
+
+
+class NamingValidateResponse(BaseModel):
+    valid: bool

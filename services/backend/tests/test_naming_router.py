@@ -424,3 +424,34 @@ def test_naming_preview_flat_template(signing_key: bytes) -> None:
     assert body["job_output_dir"] == ""
     assert body["items"][0]["output_dir"] == ""
     assert body["items"][0]["output_name"] == body["items"][0]["output_path"]
+
+
+def test_naming_validate_ok(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {"template": "{title} ({year}).{ext}", "media_type": "movie", "has_transcode_preset": True}
+    with TestClient(app) as client:
+        r = client.post("/api/naming/validate", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json() == {"valid": True}
+
+
+def test_naming_validate_rejects_unknown_token(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {"template": "{nope}.{ext}", "media_type": "movie", "has_transcode_preset": True}
+    with TestClient(app) as client:
+        r = client.post("/api/naming/validate", json=body, headers=_auth(token))
+    assert r.status_code == 422
+    assert "nope" in r.json()["detail"]
+
+
+def test_naming_validate_requires_auth() -> None:
+    import secrets as _secrets
+
+    app, _ = _make_app(_secrets.token_bytes(32), FakeSession())
+    with TestClient(app) as client:
+        r = client.post("/api/naming/validate", json={"template": "x", "media_type": "movie"})
+    assert r.status_code == 401

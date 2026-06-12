@@ -42,6 +42,8 @@ from arm_common.schemas.metadata import (
 from arm_common.schemas.naming import (
     JobNamingPreviewResponse,
     NamingPreviewItem,
+    NamingValidateRequest,
+    NamingValidateResponse,
     NamingVariable,
     NamingVariablesResponse,
 )
@@ -172,6 +174,8 @@ __all__ = [
     "ManualTriggerRequest",
     "ManualTriggerResponse",
     "NamingPreviewItem",
+    "NamingValidateRequest",
+    "NamingValidateResponse",
     "NamingVariable",
     "NotificationChannelCreateRequest",
     "NotificationChannelTestRequest",
