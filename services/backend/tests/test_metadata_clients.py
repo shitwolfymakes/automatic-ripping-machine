@@ -999,3 +999,70 @@ async def test_tmdb_get_external_ids_missing_key_returns_none(http_client) -> No
         return_value=httpx.Response(200, json={"facebook_id": "x"})
     )
     assert await TMDBClient("k", http_client).get_external_ids(503, "movie") is None
+
+
+# ---------------------------------------------------------------------------
+# TMDBClient.find_by_imdb_id — imdb -> TMDb detail via /find
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_movie(http_client) -> None:
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    respx.get("https://api.themoviedb.org/3/find/tt0371746").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "movie_results": [{"id": 1726, "title": "Iron Man", "release_date": "2008-04-30"}],
+                "tv_results": [],
+            },
+        )
+    )
+    r = await TMDBClient("k", http_client).find_by_imdb_id("tt0371746")
+    assert r.title == "Iron Man" and r.year == 2008 and r.kind == "movie"
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_tv(http_client) -> None:
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    respx.get("https://api.themoviedb.org/3/find/tt0944947").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "movie_results": [],
+                "tv_results": [{"id": 1399, "name": "Game of Thrones", "first_air_date": "2011-04-17"}],
+            },
+        )
+    )
+    r = await TMDBClient("k", http_client).find_by_imdb_id("tt0944947")
+    assert r.title == "Game of Thrones" and r.year == 2011 and r.kind == "tv"
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_no_match_raises(http_client) -> None:
+    import pytest as _pytest
+    from arm_backend.metadata.base import LookupError as MetaLookupError
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    respx.get("https://api.themoviedb.org/3/find/tt0000000").mock(
+        return_value=httpx.Response(200, json={"movie_results": [], "tv_results": []})
+    )
+    with _pytest.raises(MetaLookupError):
+        await TMDBClient("k", http_client).find_by_imdb_id("tt0000000")
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_non_json_raises(http_client) -> None:
+    import pytest as _pytest
+    from arm_backend.metadata.base import LookupError as MetaLookupError
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    # a 200 with a non-JSON body must raise the module LookupError (which the
+    # lookup router catches), NOT an uncaught ValueError (-> 500)
+    respx.get("https://api.themoviedb.org/3/find/tt0000001").mock(
+        return_value=httpx.Response(200, text="<html>not json</html>")
+    )
+    with _pytest.raises(MetaLookupError):
+        await TMDBClient("k", http_client).find_by_imdb_id("tt0000001")

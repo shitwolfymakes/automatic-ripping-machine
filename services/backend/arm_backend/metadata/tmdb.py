@@ -118,6 +118,39 @@ class TMDBClient:
             return None
         return imdb if isinstance(imdb, str) and imdb else None
 
+    async def find_by_imdb_id(self, imdb_id: str) -> MetadataResult:
+        """Resolve an imdb_id to a TMDB record via /find. Used by the
+        provider-driven detail lookup when metadata_provider == 'tmdb'."""
+        try:
+            r = await self._http.get(
+                f"{_BASE_URL}/find/{imdb_id}",
+                params={"external_source": "imdb_id"},
+                headers=self._headers,
+            )
+        except httpx.TimeoutException as e:
+            raise LookupTimeout("tmdb find timeout") from e
+        except httpx.HTTPError as e:
+            raise LookupError(f"tmdb find transport error: {e}") from e
+        if r.status_code == 401:
+            raise LookupError("tmdb auth failed")
+        if r.status_code != 200:
+            raise LookupError(f"tmdb find status={r.status_code}")
+        try:
+            data = r.json()
+        except ValueError as e:
+            raise LookupError("tmdb find returned non-JSON response") from e
+        if data.get("movie_results"):
+            parsed = self._parse_one(data["movie_results"][0], "movie")
+            if parsed is None:
+                raise LookupError("tmdb find result missing title")
+            return parsed
+        if data.get("tv_results"):
+            parsed = self._parse_one(data["tv_results"][0], "tv")
+            if parsed is None:
+                raise LookupError("tmdb find result missing title")
+            return parsed
+        raise LookupError(f"tmdb find no results for {imdb_id}")
+
     async def _search(
         self,
         endpoint: str,
