@@ -892,3 +892,37 @@ async def test_musicbrainz_disc_id_top_release_missing_title_raises(http_client)
     client = MusicBrainzClient("arm/test", http_client)
     with pytest.raises(LookupError, match="missing title"):
         await client.lookup_disc_id("abc")
+
+
+# ---------------------------------------------------------------------------
+# MusicBrainz release detail (by MBID)
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_get_release_success(http_client):
+    respx.get("https://musicbrainz.org/ws/2/release/mbid-1").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "mbid-1",
+                "title": "The Dark Side of the Moon",
+                "date": "1973-03-01",
+                "artist-credit": [{"name": "Pink Floyd"}],
+                "media": [{"tracks": [{"position": "1", "title": "Speak to Me"}]}],
+            },
+        )
+    )
+    result = await MusicBrainzClient("armv3", http_client).get_release("mbid-1")
+    assert result.title == "The Dark Side of the Moon"
+    assert result.year == 1973
+    assert result.kind == "music"
+    assert result.payload["artist"] == "Pink Floyd"
+    assert result.payload["tracks"] == [{"title": "Speak to Me", "position": 1}]
+
+
+@respx.mock
+async def test_get_release_not_found(http_client):
+    respx.get("https://musicbrainz.org/ws/2/release/missing").mock(return_value=httpx.Response(404))
+    with pytest.raises(LookupError, match="release not found"):
+        await MusicBrainzClient("armv3", http_client).get_release("missing")

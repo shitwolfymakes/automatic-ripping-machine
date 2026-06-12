@@ -200,3 +200,29 @@ async def search_music(
     except httpx.HTTPError as exc:
         return MetadataSearchResponse(candidates=[], detail=f"musicbrainz unavailable: {exc}")
     return MetadataSearchResponse(candidates=[_to_candidate(r) for r in results])
+
+
+@router.get("/music/{release_id}", response_model=MetadataCandidate)
+async def music_release_detail(
+    release_id: str,
+    request: Request,
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> MetadataCandidate:
+    cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    ua = (cfg.musicbrainz_user_agent if cfg else None) or "armv3"
+    http: httpx.AsyncClient = request.app.state.http
+    try:
+        result = await MusicBrainzClient(ua, http).get_release(release_id)
+    except MetaLookupError as exc:
+        # _get collapses both a real 404 (unknown MBID) and transport failures
+        # into LookupError, so we discriminate on the message: the not-found
+        # path carries the `not_found_detail` string ("...release not found")
+        # → 404; anything else (transport / 5xx / bad status) is an upstream
+        # outage → 502.
+        if "not found" in str(exc):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"musicbrainz unavailable: {exc}") from exc
+    except (LookupTimeout, httpx.HTTPError) as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"musicbrainz unavailable: {exc}") from exc
+    return _to_candidate(result)
