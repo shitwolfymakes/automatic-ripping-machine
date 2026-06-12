@@ -937,3 +937,65 @@ async def test_get_release_missing_title_raises(http_client):
     )
     with pytest.raises(LookupError, match="missing title"):
         await MusicBrainzClient("armv3", http_client).get_release("no-title")
+
+
+# ---------------------------------------------------------------------------
+# TMDBClient.get_external_ids — per-candidate imdb_id fetch, never raises
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_tmdb_get_external_ids_movie(http_client) -> None:
+    respx.get("https://api.themoviedb.org/3/movie/1726/external_ids").mock(
+        return_value=httpx.Response(200, json={"imdb_id": "tt0371746"})
+    )
+    imdb = await TMDBClient("k", http_client).get_external_ids(1726, "movie")
+    assert imdb == "tt0371746"
+
+
+@respx.mock
+async def test_tmdb_get_external_ids_tv(http_client) -> None:
+    respx.get("https://api.themoviedb.org/3/tv/1399/external_ids").mock(
+        return_value=httpx.Response(200, json={"imdb_id": "tt0944947"})
+    )
+    imdb = await TMDBClient("k", http_client).get_external_ids(1399, "tv")
+    assert imdb == "tt0944947"
+
+
+@respx.mock
+async def test_tmdb_get_external_ids_null_returns_none(http_client) -> None:
+    respx.get("https://api.themoviedb.org/3/movie/999/external_ids").mock(
+        return_value=httpx.Response(200, json={"imdb_id": None})
+    )
+    assert await TMDBClient("k", http_client).get_external_ids(999, "movie") is None
+
+
+@respx.mock
+async def test_tmdb_get_external_ids_error_returns_none(http_client) -> None:
+    respx.get("https://api.themoviedb.org/3/movie/500/external_ids").mock(return_value=httpx.Response(500))
+    # non-200 -> None, NEVER raises (enrichment must not fail the search)
+    assert await TMDBClient("k", http_client).get_external_ids(500, "movie") is None
+
+
+@respx.mock
+async def test_tmdb_get_external_ids_transport_error_returns_none(http_client) -> None:
+    respx.get("https://api.themoviedb.org/3/movie/501/external_ids").mock(side_effect=httpx.ConnectError("boom"))
+    assert await TMDBClient("k", http_client).get_external_ids(501, "movie") is None
+
+
+@respx.mock
+async def test_tmdb_get_external_ids_non_json_returns_none(http_client) -> None:
+    # a 200 with a non-JSON body (e.g. a proxy HTML error page) must NOT raise
+    respx.get("https://api.themoviedb.org/3/movie/502/external_ids").mock(
+        return_value=httpx.Response(200, text="<html>not json</html>")
+    )
+    assert await TMDBClient("k", http_client).get_external_ids(502, "movie") is None
+
+
+@respx.mock
+async def test_tmdb_get_external_ids_missing_key_returns_none(http_client) -> None:
+    # 200 JSON with no imdb_id key -> None
+    respx.get("https://api.themoviedb.org/3/movie/503/external_ids").mock(
+        return_value=httpx.Response(200, json={"facebook_id": "x"})
+    )
+    assert await TMDBClient("k", http_client).get_external_ids(503, "movie") is None

@@ -101,6 +101,23 @@ class TMDBClient:
                 out.append(parsed)
         return out
 
+    async def get_external_ids(self, tmdb_id: int | str, kind: Literal["movie", "tv"]) -> str | None:
+        """Fetch a result's imdb_id via TMDB external_ids. Returns None on any
+        failure (null imdb, non-200, transport error) — NEVER raises, since this
+        runs per-candidate in the search enrichment fan-out and one failure must
+        not fail the whole search."""
+        try:
+            r = await self._http.get(f"{_BASE_URL}/{kind}/{tmdb_id}/external_ids", headers=self._headers)
+        except httpx.HTTPError:
+            return None
+        if r.status_code != 200:
+            return None
+        try:
+            imdb = r.json().get("imdb_id")
+        except ValueError:
+            return None
+        return imdb if isinstance(imdb, str) and imdb else None
+
     async def _search(
         self,
         endpoint: str,
