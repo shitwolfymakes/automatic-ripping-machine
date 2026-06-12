@@ -59,7 +59,7 @@ def test_tmdb_valid_key(signing_key: bytes) -> None:
     with TestClient(app) as client:
         r = client.get("/api/metadata/test-key", params={"provider": "tmdb"}, headers=_auth(token))
     assert r.status_code == 200, r.text
-    assert r.json() == {"provider": "tmdb", "valid": True, "detail": None}
+    assert r.json() == {"provider": "tmdb", "valid": True, "detail": None, "checked_at": None}
 
 
 @respx.mock
