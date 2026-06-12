@@ -7,11 +7,13 @@ import httpx
 
 from arm_common import DriveMediaStatus, configure_service_logging
 from arm_ripper.backend_client import BackendClient
-from arm_ripper.config import settings
+from arm_ripper.config import MAKEMKV_KEYCHECK_INTERVAL_SECONDS, settings
 from arm_ripper.drive_poll import DriveState, InsertDetector, read_drive_status
 from arm_ripper.drive_status import probe_drive_media
 from arm_ripper.job_controller import JobController
+from arm_ripper.makemkv_key import refresh_makemkv_key
 from arm_ripper.recovery import boot_probe
+from arm_ripper.scan.makemkv import probe_makemkv_key
 from arm_ripper.source import is_iso_source
 from arm_ripper.ws_client import WSClient
 
@@ -71,6 +73,38 @@ async def heartbeat_loop(client: BackendClient, drive_id: str, device_path: str)
         except (httpx.HTTPError, OSError) as exc:
             logger.warning("heartbeat failed: %s", exc)
         await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
+
+
+def makemkv_key_changed(*, prev: str | None, current: str | None) -> bool:
+    """True when the effective makemkv key changed (treats blank as None)."""
+
+    def _norm(v: str | None) -> str | None:
+        return (v or "").strip() or None
+
+    return _norm(prev) != _norm(current)
+
+
+async def makemkv_keycheck_loop(client: BackendClient) -> None:
+    """Probe makemkv key-validity on key-change + daily, report to the backend.
+    Best-effort: errors are logged + swallowed (mirrors heartbeat_loop)."""
+    last_key: str | None = None
+    first = True
+    while True:
+        try:
+            cfg = await client.get_ripper_config()
+            key = cfg.makemkv_key
+            if first or makemkv_key_changed(prev=last_key, current=key):
+                # Write settings.conf with the current key BEFORE probing, so the
+                # probe checks the key actually on disk. (Single call — do not
+                # double-invoke refresh_makemkv_key.)
+                await refresh_makemkv_key(key=key)
+            state, detail = await probe_makemkv_key(key)
+            await client.report_makemkv_key_status(state=state, detail=detail)
+            last_key = key
+            first = False
+        except (httpx.HTTPError, OSError) as exc:
+            logger.warning("makemkv keycheck failed: %s", exc)
+        await asyncio.sleep(MAKEMKV_KEYCHECK_INTERVAL_SECONDS)
 
 
 async def poll_loop(controller: JobController) -> None:
@@ -145,6 +179,7 @@ async def amain() -> None:
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("boot probe failed: %s", exc)
             heartbeat_task = asyncio.create_task(heartbeat_loop(client, drive_id, device_path))
+            keycheck_task = asyncio.create_task(makemkv_keycheck_loop(client))
             try:
                 if iso_mode:
                     logger.info("ARM_MANUAL_TRIGGER_ISO=%s; running one-shot pipeline", device_path)
@@ -163,6 +198,7 @@ async def amain() -> None:
                     await poll_loop(controller)
             finally:
                 heartbeat_task.cancel()
+                keycheck_task.cancel()
     finally:
         await client.close()
 

@@ -32,3 +32,5 @@ class Settings(BaseSettings):
 
 
 settings = Settings()  # type: ignore[call-arg]  # fields loaded from env by pydantic-settings
+
+MAKEMKV_KEYCHECK_INTERVAL_SECONDS = 86400
