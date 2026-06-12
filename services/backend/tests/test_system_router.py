@@ -195,6 +195,36 @@ def test_stats_no_started_at(signing_key: bytes, tmp_path) -> None:
     assert r.json()["uptime_seconds"] == 0
 
 
+def test_system_version(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    with TestClient(app) as client:
+        r = client.get("/api/system/version", headers=_auth(token))
+    assert r.status_code == 200
+    assert isinstance(r.json()["version"], str) and r.json()["version"]
+
+
+def test_system_version_fallback_when_package_missing(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    from arm_backend.routers import system as system_router_mod
+
+    monkeypatch.setattr(system_router_mod, "_app_version", lambda: "0.0.0+unknown")
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    with TestClient(app) as client:
+        r = client.get("/api/system/version", headers=_auth(token))
+    assert r.json()["version"] == "0.0.0+unknown"
+
+
+def test_system_version_requires_auth(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, _ = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    with TestClient(app) as client:
+        assert client.get("/api/system/version").status_code == 401
+
+
 def test_paths_uses_settings_fallback(signing_key: bytes) -> None:
     """When system_paths is absent from app.state, _roots falls back to settings."""
     db = FakeSession()

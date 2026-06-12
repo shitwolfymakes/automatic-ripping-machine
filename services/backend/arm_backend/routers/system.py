@@ -1,6 +1,7 @@
 """System preflight / paths / stats. Read-only operator diagnostics.
 Ports neu's system/preflight + system/paths + system/stats, adapted to v3."""
 
+import importlib.metadata
 import os
 from datetime import datetime, timezone
 
@@ -19,6 +20,7 @@ from arm_common.schemas import (
     PreflightCheck,
     PreflightResponse,
     StatsResponse,
+    SystemVersionResponse,
 )
 
 router = APIRouter(prefix="/api/system", tags=["system"])
@@ -126,3 +128,15 @@ async def stats(
         drives_online=drives_online,
         events_unsent=events_unsent,
     )
+
+
+def _app_version() -> str:
+    try:
+        return importlib.metadata.version("arm_backend")
+    except importlib.metadata.PackageNotFoundError:
+        return "0.0.0+unknown"
+
+
+@router.get("/version", response_model=SystemVersionResponse)
+async def system_version(_: User = Depends(require_jwt)) -> SystemVersionResponse:
+    return SystemVersionResponse(version=_app_version())

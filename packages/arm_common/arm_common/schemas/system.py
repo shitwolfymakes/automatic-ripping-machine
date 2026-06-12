@@ -28,3 +28,7 @@ class StatsResponse(BaseModel):
     jobs_by_status: dict[str, int]
     drives_online: int
     events_unsent: int
+
+
+class SystemVersionResponse(BaseModel):
+    version: str

@@ -93,6 +93,7 @@ from arm_common.schemas.system import (
     PreflightCheck,
     PreflightResponse,
     StatsResponse,
+    SystemVersionResponse,
 )
 from arm_common.schemas.notifications import (
     AppriseChannelConfig,
@@ -211,6 +212,7 @@ __all__ = [
     "ServiceCatalog",
     "SessionApplicationView",
     "StatsResponse",
+    "SystemVersionResponse",
     "SessionCloneRequest",
     "SessionCreateRequest",
     "SessionUpdateRequest",
