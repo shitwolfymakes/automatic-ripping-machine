@@ -104,6 +104,8 @@ async def makemkv_keycheck_loop(client: BackendClient) -> None:
             first = False
         except (httpx.HTTPError, OSError) as exc:
             logger.warning("makemkv keycheck failed: %s", exc)
+        except Exception:  # noqa: BLE001 — keycheck is best-effort; never let it kill the loop
+            logger.exception("makemkv keycheck: unexpected error")
         await asyncio.sleep(MAKEMKV_KEYCHECK_INTERVAL_SECONDS)
 
 
