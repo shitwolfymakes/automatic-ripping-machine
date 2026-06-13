@@ -5125,6 +5125,109 @@
         }
       }
     },
+    "/api/settings/infra": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Settings Infra",
+        "description": "Read-only values for the infra-tier (deploy-time) settings shown in the\nSystem section. Allowlisted + stringified; never secrets/bootstrap.",
+        "operationId": "settings_infra_api_settings_infra_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Settings Infra Api Settings Infra Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/schema": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Settings Schema",
+        "operationId": "settings_schema_api_settings_schema_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSchemaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/system/preflight": {
       "get": {
         "tags": [
@@ -5723,6 +5826,64 @@
           "url"
         ],
         "title": "ComposeUrlResult"
+      },
+      "ConfigFieldMeta": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "group": {
+            "type": "string",
+            "title": "Group"
+          },
+          "tier": {
+            "type": "string",
+            "title": "Tier"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "help": {
+            "type": "string",
+            "title": "Help"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "editable": {
+            "type": "boolean",
+            "title": "Editable"
+          },
+          "enum_values": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enum Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "group",
+          "tier",
+          "label",
+          "help",
+          "type",
+          "editable"
+        ],
+        "title": "ConfigFieldMeta",
+        "description": "Render + classification metadata for one configuration field. The single\nsource of truth for the settings UI: tier (secret/operator/infra), grouping,\nhelp text, render-type, and editability. Lives in code (not a DB table \u2014 the\nfield set is migration-gated; not a sidecar JSON \u2014 that drifts). The guard\ntest (tests/test_config_metadata.py) keeps it in sync with the schemas."
       },
       "ConfigUpdateRequest": {
         "properties": {
@@ -9109,6 +9270,45 @@
           "updated_at"
         ],
         "title": "SessionView"
+      },
+      "SettingsGroup": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigFieldMeta"
+            },
+            "type": "array",
+            "title": "Fields"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "fields"
+        ],
+        "title": "SettingsGroup",
+        "description": "A named section of the settings page (e.g. Metadata, Ripping, System)."
+      },
+      "SettingsSchemaResponse": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/SettingsGroup"
+            },
+            "type": "array",
+            "title": "Groups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "groups"
+        ],
+        "title": "SettingsSchemaResponse",
+        "description": "Render metadata for the settings page \u2014 grouped field classification.\nStatic (derived from CONFIG_FIELD_META); values come from /api/config and\n/api/settings/infra."
       },
       "StatsResponse": {
         "properties": {

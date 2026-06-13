@@ -81,14 +81,17 @@ async def update_config(
     user: User = Depends(require_jwt),
     session: AsyncSession = Depends(get_session),
 ) -> ConfigView:
+    # FastAPI has already validated the body into `req` (a ConfigUpdateRequest),
+    # so a non-object body is rejected with 422 before we get here — `raw` is
+    # always a dict. We re-read the raw body because `req` silently drops unknown
+    # keys, so model_dump() would never reveal a forbidden (infra/non-editable) key.
     raw = await request.json()
-    if isinstance(raw, dict):
-        forbidden = _NON_EDITABLE_KEYS & set(raw.keys())
-        if forbidden:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"non-editable settings cannot be patched: {sorted(forbidden)}",
-            )
+    forbidden = _NON_EDITABLE_KEYS & set(raw.keys())
+    if forbidden:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"non-editable settings cannot be patched: {sorted(forbidden)}",
+        )
 
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     if cfg is None:
