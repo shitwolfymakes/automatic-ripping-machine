@@ -53,6 +53,15 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         editable=True,
     ),
     ConfigFieldMeta(
+        key="tvdb_api_key",
+        group="Metadata",
+        tier="secret",
+        label="TVDb API key",
+        help="TheTVDB v4 API key (used for episode matching).",
+        type="string",
+        editable=True,
+    ),
+    ConfigFieldMeta(
         key="makemkv_key",
         group="Metadata",
         tier="secret",
