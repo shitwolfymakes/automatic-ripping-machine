@@ -103,3 +103,33 @@ def test_secret_keys_match_registry():
     assert _SECRET_KEYS == expected
     assert {"tmdb_api_key", "omdb_api_key", "makemkv_key"} <= _SECRET_KEYS
     assert "tvdb_api_key" not in _SECRET_KEYS  # not in ConfigView yet (B29)
+
+
+def test_patch_hidden_preserves_stored_secret(signing_key):
+    db = FakeSession()
+    _seed(db, tmdb_api_key="sk-real")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/config", json={"tmdb_api_key": HIDDEN_SECRET}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert db.rows["config"][0].tmdb_api_key == "sk-real"  # preserved, NOT "<hidden>"
+
+
+def test_patch_real_value_updates_secret(signing_key):
+    db = FakeSession()
+    _seed(db, tmdb_api_key="sk-real")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/config", json={"tmdb_api_key": "sk-new"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert db.rows["config"][0].tmdb_api_key == "sk-new"
+
+
+def test_patch_empty_clears_secret(signing_key):
+    db = FakeSession()
+    _seed(db, tmdb_api_key="sk-real")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/config", json={"tmdb_api_key": ""}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert (db.rows["config"][0].tmdb_api_key or "") == ""

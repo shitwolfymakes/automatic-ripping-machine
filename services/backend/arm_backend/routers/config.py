@@ -108,6 +108,12 @@ async def update_config(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="config singleton missing")
 
     fields = req.model_dump(exclude_unset=True)
+    # A secret field whose submitted value is the masked sentinel means "keep the
+    # stored secret" — drop it from the update set so it isn't overwritten with the
+    # literal "<hidden>". Real values update; "" / None clears (normal setattr below).
+    for key in _SECRET_KEYS:
+        if fields.get(key) == HIDDEN_SECRET:
+            del fields[key]
     if fields.get("notification_apprise_urls"):
         bad = _first_invalid_apprise_url(fields["notification_apprise_urls"])
         if bad is not None:
