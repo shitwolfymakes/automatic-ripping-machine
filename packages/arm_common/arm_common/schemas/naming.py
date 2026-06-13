@@ -35,3 +35,14 @@ class NamingValidateRequest(BaseModel):
 
 class NamingValidateResponse(BaseModel):
     valid: bool
+
+
+class NamingPreviewRequest(BaseModel):
+    template: str
+    media_type: MediaType
+    has_transcode_preset: bool = False
+    variables: dict[str, str] = {}
+
+
+class NamingPreviewResponse(BaseModel):
+    rendered: str

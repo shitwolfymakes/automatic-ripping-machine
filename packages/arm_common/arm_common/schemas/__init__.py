@@ -42,6 +42,8 @@ from arm_common.schemas.metadata import (
 from arm_common.schemas.naming import (
     JobNamingPreviewResponse,
     NamingPreviewItem,
+    NamingPreviewRequest,
+    NamingPreviewResponse,
     NamingValidateRequest,
     NamingValidateResponse,
     NamingVariable,
@@ -181,6 +183,8 @@ __all__ = [
     "ManualTriggerRequest",
     "ManualTriggerResponse",
     "NamingPreviewItem",
+    "NamingPreviewRequest",
+    "NamingPreviewResponse",
     "NamingValidateRequest",
     "NamingValidateResponse",
     "NamingVariable",
