@@ -59,9 +59,8 @@ def _normalize_volume_label(label: str) -> tuple[str, int | None]:
 
 
 class MetadataDispatcher:
-    def __init__(self, http: httpx.AsyncClient, *, omdb_api_key_override: str | None = None) -> None:
+    def __init__(self, http: httpx.AsyncClient) -> None:
         self._http = http
-        self._omdb_api_key_override = omdb_api_key_override
 
     async def aclose(self) -> None:
         await self._http.aclose()
@@ -111,7 +110,7 @@ class MetadataDispatcher:
             if hit is not None:
                 return hit
 
-        omdb_key = self._omdb_api_key_override or cfg.omdb_api_key
+        omdb_key = cfg.omdb_api_key
         if omdb_key:
             omdb = OMDBClient(omdb_key, self._http)
             hit = await self._call("omdb_movie", omdb.lookup_by_title(title, year, kind="movie"))

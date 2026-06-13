@@ -471,9 +471,6 @@ ARM_LOG_LEVEL=info
 ARM_IMAGE_PREFIX=${ARM_IMAGE_PREFIX_DEFAULT}
 ARM_IMAGE_TAG=${ARM_IMAGE_TAG_DEFAULT}
 
-# Optional API keys; primarily set via the UI Settings page.
-OMDB_API_KEY=
-
 # WebSocket Origin allowlist. Add every URL the UI is reachable at.
 ARM_ALLOWED_ORIGINS=https://localhost:8081
 
@@ -638,7 +635,6 @@ services:
       DATABASE_URL: postgresql://\${POSTGRES_USER}:\${POSTGRES_PASSWORD}@arm-db:5432/\${POSTGRES_DB}?sslmode=verify-full&sslrootcert=/etc/ssl/arm/arm-ca.crt
       ARM_SERVICE_TOKEN: \${ARM_SERVICE_TOKEN}
       ARM_LOG_LEVEL: \${ARM_LOG_LEVEL:-info}
-      OMDB_API_KEY: \${OMDB_API_KEY:-}
       ARM_ALLOWED_ORIGINS: \${ARM_ALLOWED_ORIGINS:-}
       TLS_CERT_PATH: /etc/ssl/arm/tls.crt
       TLS_KEY_PATH: /etc/ssl/arm/tls.key

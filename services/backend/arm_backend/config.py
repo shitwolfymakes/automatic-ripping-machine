@@ -31,11 +31,6 @@ class Settings(BaseSettings):
     # MEDIA_ROOT/RAW_ROOT; bind-mount a host dir here in compose.
     ISO_INGRESS_ROOT: str = "/ingress"
 
-    # Optional .env override for the OMDB key. When set, takes precedence over
-    # config.omdb_api_key on every identify call — useful in dev where the
-    # secret lives in .env and the Config row stays empty.
-    OMDB_API_KEY: str | None = None
-
     # Comma-separated list of `Origin` header values the WS endpoint accepts
     # from browser clients. Service-token connections (rippers, transcoders)
     # mark themselves with the `arm-service-token` subprotocol and skip this

@@ -28,7 +28,6 @@ never touch; the ones you might are flagged **editable** below.
 | `PUID` / `PGID` | **Editable.** UID/GID that owns everything ARM writes to `raw`/`media`. Match your media server (Plex/Jellyfin) so it can read the files. See [File ownership](#file-ownership). |
 | `CDROM_GID` | The host's optical group GID, detected via `stat -c %g /dev/sr0` (usually `44` on Debian/Ubuntu, `19` on Arch). Lets the ripper read the drive. |
 | `ARM_LOG_LEVEL` | **Editable.** `info` (default) or `debug`. Set `debug` before reproducing a bug. |
-| `OMDB_API_KEY` | **Editable.** Optional. When set, overrides the OMDb key from the UI on every lookup — handy for keeping the secret out of the DB in dev. |
 | `ARM_ALLOWED_ORIGINS` | **Editable.** Comma-separated allowlist of URLs the WebSocket endpoint accepts from browsers. Add every URL you open the UI at — e.g. `https://localhost:8081,https://nas.lan:8081`. |
 | `MAX_PARALLEL_TRANSCODES` | **Editable.** How many transcoder containers may run at once. Default `1` (a 1080p HandBrake job pegs every core). |
 | `ARM_IMAGE_PREFIX` / `ARM_IMAGE_TAG` | Registry path + image tag. **Bump `ARM_IMAGE_TAG` to upgrade** — see [Upgrading](Upgrading). |
@@ -56,7 +55,7 @@ and apply immediately. The full set:
 | Setting | Default | Effect |
 |---|---|---|
 | **TMDb API key** | empty | Enables TMDb movie/TV lookups. Get one free at <https://www.themoviedb.org/settings/api>. |
-| **OMDb API key** | empty | Enables OMDb lookups. Get one at <https://www.omdbapi.com/apikey.aspx>. (The `.env` `OMDB_API_KEY` overrides this when set.) |
+| **OMDb API key** | empty | Enables OMDb lookups. Get one at <https://www.omdbapi.com/apikey.aspx>. |
 | **MusicBrainz user-agent** | `armv3` | The UA string ARM sends to MusicBrainz for audio-CD lookups. No key needed. |
 
 ARM identifies video discs in this order: the **community CRC64 database**

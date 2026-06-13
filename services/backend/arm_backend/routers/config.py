@@ -16,7 +16,7 @@ master toggle. New URLs should be added as channels via /api/notifications.
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -28,9 +28,12 @@ from arm_backend.notification_dispatcher import (
 )
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_common import Config, User
+from arm_common.config_metadata import CONFIG_FIELD_META
 from arm_common.schemas import ConfigUpdateRequest, ConfigView
 
 router = APIRouter(prefix="/api/config", tags=["config"])
+
+_NON_EDITABLE_KEYS = frozenset(m.key for m in CONFIG_FIELD_META if not m.editable)
 
 
 def _to_view(cfg: Config) -> ConfigView:
@@ -74,9 +77,22 @@ async def get_config(
 @router.patch("", response_model=ConfigView)
 async def update_config(
     req: ConfigUpdateRequest,
+    request: Request,
     user: User = Depends(require_jwt),
     session: AsyncSession = Depends(get_session),
 ) -> ConfigView:
+    # FastAPI has already validated the body into `req` (a ConfigUpdateRequest),
+    # so a non-object body is rejected with 422 before we get here — `raw` is
+    # always a dict. We re-read the raw body because `req` silently drops unknown
+    # keys, so model_dump() would never reveal a forbidden (infra/non-editable) key.
+    raw = await request.json()
+    forbidden = _NON_EDITABLE_KEYS & set(raw.keys())
+    if forbidden:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"non-editable settings cannot be patched: {sorted(forbidden)}",
+        )
+
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     if cfg is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="config singleton missing")
