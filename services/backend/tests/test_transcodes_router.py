@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import secrets
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
@@ -334,4 +335,90 @@ def test_retry_requires_jwt(signing_key: bytes) -> None:
     app, _ = _make_app(signing_key, FakeSession())
     with TestClient(app) as c:
         r = c.post("/api/transcodes/txt_x/retry")
+    assert r.status_code == 401
+
+
+def _write_task_log(log_dir: Path, task_id: str, lines: list[str]) -> None:
+    p = log_dir / f"arm-transcode-{task_id[-12:]}.log"
+    p.write_text("".join(line if line.endswith("\n") else line + "\n" for line in lines), encoding="utf-8")
+
+
+def test_log_streams_task_file(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tx_router, "LOG_DIR", tmp_path)
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [_task("txt_log000000001", status=TranscodeTaskStatus.DONE)]
+    _write_task_log(tmp_path, "txt_log000000001", ["line one", "line two"])
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/txt_log000000001/log", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert "line one" in r.text and "line two" in r.text
+
+
+def test_log_unknown_task_404(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tx_router, "LOG_DIR", tmp_path)
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/txt_missing0001/log", headers=_auth(token))
+    assert r.status_code == 404
+
+
+def test_log_task_exists_no_file_404(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tx_router, "LOG_DIR", tmp_path)
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [_task("txt_nofile00001", status=TranscodeTaskStatus.DONE)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/txt_nofile00001/log", headers=_auth(token))
+    assert r.status_code == 404
+    assert "no transcoder log" in r.json()["detail"]
+
+
+def test_log_respects_limit_cap(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tx_router, "LOG_DIR", tmp_path)
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [_task("txt_cap000000001", status=TranscodeTaskStatus.DONE)]
+    _write_task_log(tmp_path, "txt_cap000000001", ["a", "b", "c"])
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/txt_cap000000001/log?limit=2", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    # only the first 2 lines are streamed
+    assert r.text.count("\n") == 2
+
+
+def test_log_zip_returns_zip(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+    import zipfile
+
+    monkeypatch.setattr(tx_router, "LOG_DIR", tmp_path)
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [_task("txt_zip000000001", status=TranscodeTaskStatus.DONE)]
+    _write_task_log(tmp_path, "txt_zip000000001", ["zipline"])
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/txt_zip000000001/log.zip", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"] == "application/zip"
+    zf = zipfile.ZipFile(io.BytesIO(r.content))
+    assert zf.namelist() == ["arm-transcode-zip000000001.log"]
+    assert b"zipline" in zf.read("arm-transcode-zip000000001.log")
+
+
+def test_log_zip_no_file_404(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tx_router, "LOG_DIR", tmp_path)
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [_task("txt_zipno000001", status=TranscodeTaskStatus.DONE)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/txt_zipno000001/log.zip", headers=_auth(token))
+    assert r.status_code == 404
+
+
+def test_log_requires_jwt(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tx_router, "LOG_DIR", tmp_path)
+    app, _ = _make_app(signing_key, FakeSession())
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/txt_x/log")
     assert r.status_code == 401

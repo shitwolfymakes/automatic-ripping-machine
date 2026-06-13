@@ -10,19 +10,40 @@ removes the row immediately.
 """
 
 import asyncio
+import io
+import zipfile
+from collections.abc import Iterator
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt
 from arm_backend.config import settings
 from arm_backend.db import get_session
+from arm_backend.routers.logs import LOG_DIR, PER_FILE_DEFAULT, PER_FILE_HARD_CAP
 from arm_common import Gpu, GpuStatus, SessionApplication, TranscodeTaskStatus, User
 from arm_common.models import TranscodeTask
 from arm_common.schemas import TranscodeStatsView, TranscodeTaskView, TranscodeWorkerView
 
 router = APIRouter(prefix="/api/transcodes", tags=["transcodes"])
+
+
+def _transcode_log_path(task_id: str) -> Path:
+    # The dispatcher names each task's container log by the last 12 chars of the
+    # task id (ARM_SERVICE_NAME = arm-transcode-<id[-12:]>; see
+    # transcode_dispatcher._spawn_container). LOG_DIR is read at call time so
+    # tests can monkeypatch it.
+    return LOG_DIR / f"arm-transcode-{task_id[-12:]}.log"
+
+
+async def _require_task(db: AsyncSession, task_id: str) -> TranscodeTask:
+    row = (await db.execute(select(TranscodeTask).where(col(TranscodeTask.id) == task_id))).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown transcode_task_id: {task_id}")
+    return row
 
 
 @router.get("", response_model=list[TranscodeTaskView])
@@ -112,6 +133,62 @@ async def retry_transcode(
     await db.commit()
     await db.refresh(row)
     return row
+
+
+@router.get("/{task_id}/log.zip")
+async def download_transcode_log_zip(
+    task_id: str,
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> Response:
+    await _require_task(db, task_id)
+    path = _transcode_log_path(task_id)
+    if not path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no transcoder log for task {task_id}")
+    lines: list[str] = []
+    with path.open("r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            lines.append(line)
+            if len(lines) >= PER_FILE_HARD_CAP:
+                break
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(path.name, "".join(lines))
+    body = buf.getvalue()
+    return Response(
+        content=body,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="arm-transcode-{task_id}.zip"',
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get("/{task_id}/log")
+async def stream_transcode_log(
+    task_id: str,
+    limit: int = PER_FILE_DEFAULT,
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> StreamingResponse:
+    await _require_task(db, task_id)
+    path = _transcode_log_path(task_id)
+    if not path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no transcoder log for task {task_id}")
+    cap = max(0, min(limit, PER_FILE_HARD_CAP))
+
+    def gen() -> Iterator[bytes]:
+        yielded = 0
+        with path.open("r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                out = line if line.endswith("\n") else line + "\n"
+                yield out.encode("utf-8")
+                yielded += 1
+                if yielded >= cap:
+                    return
+
+    return StreamingResponse(gen(), media_type="application/x-ndjson")
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
