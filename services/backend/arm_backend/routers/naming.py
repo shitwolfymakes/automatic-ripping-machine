@@ -12,13 +12,21 @@ from arm_backend.routers._params import JobIdParam
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
 from arm_backend.path_sanitize import sanitize_path_component
-from arm_backend.path_template import TemplateValidationError, tokens_for_media, validate_template_or_http
+from arm_backend.path_template import (
+    TemplateValidationError,
+    expand_template,
+    synthetic_context,
+    tokens_for_media,
+    validate_template_or_http,
+)
 from arm_backend.transcode_apply import compute_outputs
 from arm_common import Job, Session, Track, TranscodePreset, User
 from arm_common.enums import MediaType
 from arm_common.schemas import (
     JobNamingPreviewResponse,
     NamingPreviewItem,
+    NamingPreviewRequest,
+    NamingPreviewResponse,
     NamingValidateRequest,
     NamingValidateResponse,
     NamingVariable,
@@ -105,3 +113,19 @@ async def naming_validate(
     # an invalid template; returns the synthetic expansion on success.
     validate_template_or_http(req.template, req.media_type, req.has_transcode_preset)
     return NamingValidateResponse(valid=True)
+
+
+@router.post("/api/naming/preview", response_model=NamingPreviewResponse)
+async def naming_preview(
+    req: NamingPreviewRequest,
+    _: User = Depends(require_jwt),
+) -> NamingPreviewResponse:
+    # Validate exactly like /naming/validate (token allowlist + preset gate) so a
+    # preview can never accept a template that save-time would reject. Raises
+    # HTTPException(422) on an illegal/empty/preset-gated token.
+    validate_template_or_http(req.template, req.media_type, req.has_transcode_preset)
+    # Caller-supplied variables override the synthetic stand-ins; omitted tokens
+    # fall back to the demo values so a zero-variable preview still renders.
+    ctx = {**synthetic_context(req.media_type), **req.variables}
+    rendered = expand_template(req.template, ctx)
+    return NamingPreviewResponse(rendered=rendered)

@@ -455,3 +455,77 @@ def test_naming_validate_requires_auth() -> None:
     with TestClient(app) as client:
         r = client.post("/api/naming/validate", json={"template": "x", "media_type": "movie"})
     assert r.status_code == 401
+
+
+def test_naming_preview_uses_caller_variables(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {
+        "template": "{title} ({year}).{ext}",
+        "media_type": "movie",
+        "has_transcode_preset": True,
+        "variables": {"title": "Blade Runner", "year": "1982", "ext": "mkv"},
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/naming/preview", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json() == {"rendered": "Blade Runner (1982).mkv"}
+
+
+def test_naming_preview_falls_back_to_synthetic(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {"template": "{title} ({year}).{ext}", "media_type": "movie", "has_transcode_preset": True}
+    with TestClient(app) as client:
+        r = client.post("/api/naming/preview", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    # synthetic movie ctx: title="Iron Man", year="2008", ext="mkv"
+    assert r.json() == {"rendered": "Iron Man (2008).mkv"}
+
+
+def test_naming_preview_rejects_unknown_token(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {"template": "{nope}.{ext}", "media_type": "movie", "has_transcode_preset": True}
+    with TestClient(app) as client:
+        r = client.post("/api/naming/preview", json=body, headers=_auth(token))
+    assert r.status_code == 422
+    assert "nope" in r.json()["detail"]
+
+
+def test_naming_preview_preset_gate_blocks_transcode_slug(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {"template": "{title}-{transcode_slug}", "media_type": "movie", "has_transcode_preset": False}
+    with TestClient(app) as client:
+        r = client.post("/api/naming/preview", json=body, headers=_auth(token))
+    assert r.status_code == 422
+    assert "transcode_slug" in r.json()["detail"]
+
+
+def test_naming_preview_ignores_unreferenced_variable(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {
+        "template": "{title}",
+        "media_type": "movie",
+        "variables": {"title": "Dune", "bogus": "ignored"},
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/naming/preview", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json() == {"rendered": "Dune"}
+
+
+def test_naming_preview_requires_auth() -> None:
+    import secrets as _secrets
+
+    app, _ = _make_app(_secrets.token_bytes(32), FakeSession())
+    with TestClient(app) as client:
+        r = client.post("/api/naming/preview", json={"template": "x", "media_type": "movie"})
+    assert r.status_code == 401
