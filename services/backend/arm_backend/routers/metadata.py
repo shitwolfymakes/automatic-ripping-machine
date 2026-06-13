@@ -4,7 +4,6 @@ update-key script, so true validity is confirmed at rip time). Ports neu's
 GET /api/v1/metadata/test-key."""
 
 import logging
-import re
 from typing import Literal
 
 import httpx
@@ -14,6 +13,7 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
+from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.metadata.arm_server import ArmServerClient
 from arm_backend.metadata.base import LookupError as MetaLookupError
 from arm_backend.metadata.base import LookupTimeout, MetadataResult, extract_poster_url
@@ -36,10 +36,6 @@ logger = logging.getLogger("arm_backend.routers.metadata")
 
 router = APIRouter(prefix="/api/metadata", tags=["metadata"])
 
-# MakeMKV registration keys look like `M-xxxx...` (Crockford-ish base32 with
-# dashes). We can only confirm the format offline; true validity is checked by
-# the ripper at scan time. Mirrors neu's INVALID_MAKEMKV_SERIAL case.
-_MAKEMKV_SERIAL_RE = re.compile(r"^M-[0-9A-Za-z-]+$")
 _TMDB_CONFIG_URL = "https://api.themoviedb.org/3/configuration"
 _OMDB_URL = "https://www.omdbapi.com/"
 _TIMEOUT_SECONDS = 8.0
@@ -59,16 +55,19 @@ async def test_key(
     http: httpx.AsyncClient = request.app.state.http
 
     if provider == "makemkv":
-        key = (cfg.makemkv_key or "").strip()
-        if not key:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no makemkv key configured")
-        valid = bool(_MAKEMKV_SERIAL_RE.match(key))
-        detail = (
-            "format/presence only — MakeMKV validity is confirmed at rip time"
-            if valid
-            else "key does not match the MakeMKV serial format (M-...)"
+        if cfg.makemkv_key_checked_at is None and cfg.makemkv_key_state is None:
+            return MetadataKeyTestResponse(
+                provider=provider,
+                valid=None,
+                detail="not yet validated — no ripper has checked this key",
+                checked_at=None,
+            )
+        return MetadataKeyTestResponse(
+            provider=provider,
+            valid=cfg.makemkv_key_valid,
+            detail=makemkv_state_detail(cfg.makemkv_key_state),
+            checked_at=cfg.makemkv_key_checked_at,
         )
-        return MetadataKeyTestResponse(provider=provider, valid=valid, detail=detail)
 
     key_attr = {"omdb": "omdb_api_key", "tmdb": "tmdb_api_key", "tvdb": "tvdb_api_key"}[provider]
     key = (getattr(cfg, key_attr) or "").strip()

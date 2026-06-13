@@ -93,20 +93,25 @@ def test_unknown_provider_returns_422(signing_key: bytes) -> None:
     assert r.status_code == 422
 
 
-def test_makemkv_valid_format(signing_key: bytes) -> None:
+def test_makemkv_stored_valid_returns_true(signing_key: bytes) -> None:
+    """Stored makemkv_key_state='valid' → valid=True with human-readable detail."""
+    from datetime import datetime, timezone
+
     db = FakeSession()
-    _seed(db, makemkv_key="M-abcd1234EFGH")
+    _seed(db, makemkv_key="M-abcd1234EFGH", makemkv_key_valid=True, makemkv_key_state="valid")
+    db.rows["config"][0].makemkv_key_checked_at = datetime.now(timezone.utc)
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.get("/api/metadata/test-key", params={"provider": "makemkv"}, headers=_auth(token))
     assert r.status_code == 200, r.text
     assert r.json()["valid"] is True
-    assert "rip time" in r.json()["detail"]
+    assert r.json()["checked_at"] is not None
 
 
-def test_makemkv_bad_format_invalid(signing_key: bytes) -> None:
+def test_makemkv_stored_format_invalid_returns_false(signing_key: bytes) -> None:
+    """Stored makemkv_key_state='format_invalid' → valid=False (ripper set this)."""
     db = FakeSession()
-    _seed(db, makemkv_key="not-a-serial")
+    _seed(db, makemkv_key="not-a-serial", makemkv_key_valid=False, makemkv_key_state="format_invalid")
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.get("/api/metadata/test-key", params={"provider": "makemkv"}, headers=_auth(token))
@@ -135,14 +140,16 @@ def test_config_not_initialised_returns_400(signing_key: bytes) -> None:
     assert "config" in r.json()["detail"].lower()
 
 
-def test_makemkv_missing_key_returns_400(signing_key: bytes) -> None:
-    """makemkv_key is None → 400 'no makemkv key configured'."""
+def test_makemkv_no_key_no_state_returns_unknown(signing_key: bytes) -> None:
+    """makemkv_key is None and no stored state → valid=None, 'not yet validated'."""
     db = FakeSession()
     _seed(db, makemkv_key=None)
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.get("/api/metadata/test-key", params={"provider": "makemkv"}, headers=_auth(token))
-    assert r.status_code == 400
+    assert r.status_code == 200, r.text
+    assert r.json()["valid"] is None
+    assert "not yet validated" in (r.json()["detail"] or "")
 
 
 @respx.mock
