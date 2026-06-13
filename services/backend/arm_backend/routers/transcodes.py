@@ -88,6 +88,30 @@ async def transcode_workers(
     ]
 
 
+@router.post("/{task_id}/retry", response_model=TranscodeTaskView)
+async def retry_transcode(
+    task_id: str,
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> TranscodeTask:
+    row = (await db.execute(select(TranscodeTask).where(col(TranscodeTask.id) == task_id))).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown transcode_task_id: {task_id}")
+    if row.status != TranscodeTaskStatus.FAILED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"only FAILED tasks can be retried; task is {row.status.value}",
+        )
+    row.status = TranscodeTaskStatus.QUEUED
+    row.progress_pct = 0
+    row.last_error = None
+    row.claimed_by = None
+    # attempts intentionally preserved (audit trail); the dispatcher's QUEUED
+    # spawn loop picks the task up on its next tick — no dispatcher change here.
+    await db.commit()
+    return row
+
+
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_transcode(
     task_id: str,

@@ -286,3 +286,49 @@ def test_workers_requires_jwt(signing_key: bytes) -> None:
     with TestClient(app) as c:
         r = c.get("/api/transcodes/workers")
     assert r.status_code == 401
+
+
+def test_retry_failed_requeues_and_resets(signing_key: bytes) -> None:
+    db = FakeSession()
+    failed = _task("txt_f", status=TranscodeTaskStatus.FAILED)
+    failed.progress_pct = 47
+    failed.last_error = "boom"
+    failed.claimed_by = "transcoder-xyz"
+    failed.attempts = 2
+    db.rows["transcode_tasks"] = [failed]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.post("/api/transcodes/txt_f/retry", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "queued"
+    assert body["progress_pct"] == 0
+    assert body["last_error"] is None
+    assert body["claimed_by"] is None
+    assert body["attempts"] == 2  # preserved for audit
+    assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.QUEUED
+
+
+def test_retry_non_failed_409(signing_key: bytes) -> None:
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [_task("txt_run", status=TranscodeTaskStatus.IN_PROGRESS)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.post("/api/transcodes/txt_run/retry", headers=_auth(token))
+    assert r.status_code == 409, r.text
+    assert "in_progress" in r.json()["detail"]
+
+
+def test_retry_unknown_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.post("/api/transcodes/txt_nope/retry", headers=_auth(token))
+    assert r.status_code == 404
+
+
+def test_retry_requires_jwt(signing_key: bytes) -> None:
+    app, _ = _make_app(signing_key, FakeSession())
+    with TestClient(app) as c:
+        r = c.post("/api/transcodes/txt_x/retry")
+    assert r.status_code == 401
