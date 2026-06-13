@@ -27,7 +27,7 @@ target-version = "py314"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["services/backend/tests", "services/ripper/tests", "services/transcode/tests"]
+testpaths = ["packages/arm_common/tests", "services/backend/tests", "services/ripper/tests", "services/transcode/tests"]
 
 [tool.coverage.run]
 # Backend API is the coverage target being driven to 100%. Add ripper /
