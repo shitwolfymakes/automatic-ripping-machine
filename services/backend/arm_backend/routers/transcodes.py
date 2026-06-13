@@ -159,7 +159,7 @@ async def download_transcode_log_zip(
         content=body,
         media_type="application/zip",
         headers={
-            "Content-Disposition": f'attachment; filename="arm-transcode-{task_id}.zip"',
+            "Content-Disposition": f'attachment; filename="arm-transcode-{task_id[-12:]}.zip"',
             "Content-Length": str(len(body)),
         },
     )
@@ -168,7 +168,7 @@ async def download_transcode_log_zip(
 @router.get("/{task_id}/log")
 async def stream_transcode_log(
     task_id: str,
-    limit: int = PER_FILE_DEFAULT,
+    limit: int = Query(default=PER_FILE_DEFAULT, ge=0),
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
