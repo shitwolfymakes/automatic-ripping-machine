@@ -115,7 +115,7 @@ SearchProvider = Literal["tmdb", "omdb"]
 
 def _to_candidate(r: MetadataResult) -> MetadataCandidate:
     payload = r.payload or {}
-    provider_id = payload.get("id") or payload.get("imdbID")
+    provider_id = payload.get("imdb_id") or payload.get("imdbID") or payload.get("id")
     return MetadataCandidate(
         title=r.title,
         year=r.year,
@@ -130,19 +130,20 @@ async def search_metadata(
     request: Request,
     title: str,
     type: SearchType = "movie",
-    provider: SearchProvider = "tmdb",
+    provider: SearchProvider | None = None,
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
 ) -> MetadataSearchResponse:
     cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     if cfg is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="config not initialised")
+    resolved = provider or (cfg.metadata_provider if cfg.metadata_provider in ("tmdb", "omdb") else None) or "tmdb"
     http: httpx.AsyncClient = request.app.state.http
-    key = (cfg.tmdb_api_key if provider == "tmdb" else cfg.omdb_api_key) or ""
+    key = (cfg.tmdb_api_key if resolved == "tmdb" else cfg.omdb_api_key) or ""
     if not key.strip():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"no {provider} key configured")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"no {resolved} key configured")
     try:
-        if provider == "tmdb":
+        if resolved == "tmdb":
             client = TMDBClient(key, http)
             results = await (
                 client.search_movie_candidates(title) if type == "movie" else client.search_tv_candidates(title)
@@ -152,7 +153,7 @@ async def search_metadata(
     except (MetaLookupError, LookupTimeout) as exc:
         return MetadataSearchResponse(candidates=[], detail=str(exc))
     except httpx.HTTPError as exc:
-        return MetadataSearchResponse(candidates=[], detail=f"{provider} unavailable: {exc}")
+        return MetadataSearchResponse(candidates=[], detail=f"{resolved} unavailable: {exc}")
     return MetadataSearchResponse(candidates=[_to_candidate(r) for r in results])
 
 
@@ -172,13 +173,23 @@ async def lookup_metadata(
     http: httpx.AsyncClient = request.app.state.http
     try:
         if imdb_id is not None:
-            # imdb lookup needs the OMDB key from config; crc64 (community DB)
+            # imdb lookup needs a provider key from config; the provider is chosen
+            # by metadata_provider (TMDb /find vs OMDb i=). crc64 (community DB)
             # needs no key or config, so its guard lives in this branch only.
             cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-            key = (cfg.omdb_api_key or "").strip() if cfg is not None else ""
-            if not key:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no omdb key configured")
-            result = await OMDBClient(key, http).lookup_by_imdb_id(imdb_id)
+            provider = (
+                cfg.metadata_provider if cfg is not None and cfg.metadata_provider in ("tmdb", "omdb") else "tmdb"
+            )
+            if provider == "tmdb":
+                key = (cfg.tmdb_api_key or "").strip() if cfg is not None else ""
+                if not key:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no tmdb key configured")
+                result = await TMDBClient(key, http).find_by_imdb_id(imdb_id)
+            else:
+                key = (cfg.omdb_api_key or "").strip() if cfg is not None else ""
+                if not key:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no omdb key configured")
+                result = await OMDBClient(key, http).lookup_by_imdb_id(imdb_id)
         else:
             # The XOR guard above guarantees crc64 is a str in this branch,
             # but mypy can't narrow it across the if/else.

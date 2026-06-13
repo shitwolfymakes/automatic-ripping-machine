@@ -662,6 +662,45 @@ async def test_tmdb_search_candidates_skips_items_without_title(http_client):
 
 
 @respx.mock
+async def test_tmdb_search_non_json_body_raises(http_client):
+    # A 200 with a non-JSON body on the search path must raise the module
+    # LookupError (caught by the /search router → degraded-200), not an uncaught
+    # ValueError → 500. Mirrors the json-guard in find_by_imdb_id.
+    respx.get("https://api.themoviedb.org/3/search/movie").mock(
+        return_value=httpx.Response(200, text="<html>not json</html>")
+    )
+    client = TMDBClient("k", http_client)
+    with pytest.raises(LookupError, match="non-JSON"):
+        await client.search_movie_candidates("x")
+
+
+@respx.mock
+async def test_tmdb_search_candidate_without_id_skips_enrichment(http_client):
+    """A search result lacking an `id` can't be enriched; it must still be
+    returned (with imdb_id=None), not raise KeyError past the gather guard.
+    The candidate that HAS an id is enriched normally."""
+    respx.get("https://api.themoviedb.org/3/search/movie").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    {"title": "No Id Movie", "release_date": "1999-01-01"},  # no id — skip enrichment
+                    {"title": "Has Id Movie", "release_date": "2000-01-01", "id": 42},
+                ]
+            },
+        )
+    )
+    respx.get("https://api.themoviedb.org/3/movie/42/external_ids").mock(
+        return_value=httpx.Response(200, json={"imdb_id": "tt0000042"})
+    )
+    client = TMDBClient("k", http_client)
+    results = await client.search_movie_candidates("x")
+    assert [r.title for r in results] == ["No Id Movie", "Has Id Movie"]
+    assert results[0].payload["imdb_id"] is None  # skipped, degraded to None
+    assert results[1].payload["imdb_id"] == "tt0000042"  # enriched
+
+
+@respx.mock
 async def test_tmdb_get_results_5xx_raises(http_client):
     # Covers the shared _get_results 5xx branch (used by both search paths).
     respx.get("https://api.themoviedb.org/3/search/movie").mock(return_value=httpx.Response(503))
@@ -937,3 +976,222 @@ async def test_get_release_missing_title_raises(http_client):
     )
     with pytest.raises(LookupError, match="missing title"):
         await MusicBrainzClient("armv3", http_client).get_release("no-title")
+
+
+# ---------------------------------------------------------------------------
+# TMDBClient.get_external_ids — per-candidate imdb_id fetch, never raises
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_tmdb_get_external_ids_movie(http_client) -> None:
+    respx.get("https://api.themoviedb.org/3/movie/1726/external_ids").mock(
+        return_value=httpx.Response(200, json={"imdb_id": "tt0371746"})
+    )
+    imdb = await TMDBClient("k", http_client).get_external_ids(1726, "movie")
+    assert imdb == "tt0371746"
+
+
+@respx.mock
+async def test_tmdb_get_external_ids_tv(http_client) -> None:
+    respx.get("https://api.themoviedb.org/3/tv/1399/external_ids").mock(
+        return_value=httpx.Response(200, json={"imdb_id": "tt0944947"})
+    )
+    imdb = await TMDBClient("k", http_client).get_external_ids(1399, "tv")
+    assert imdb == "tt0944947"
+
+
+@respx.mock
+async def test_tmdb_get_external_ids_null_returns_none(http_client) -> None:
+    respx.get("https://api.themoviedb.org/3/movie/999/external_ids").mock(
+        return_value=httpx.Response(200, json={"imdb_id": None})
+    )
+    assert await TMDBClient("k", http_client).get_external_ids(999, "movie") is None
+
+
+@respx.mock
+async def test_tmdb_get_external_ids_error_returns_none(http_client) -> None:
+    respx.get("https://api.themoviedb.org/3/movie/500/external_ids").mock(return_value=httpx.Response(500))
+    # non-200 -> None, NEVER raises (enrichment must not fail the search)
+    assert await TMDBClient("k", http_client).get_external_ids(500, "movie") is None
+
+
+@respx.mock
+async def test_tmdb_get_external_ids_transport_error_returns_none(http_client) -> None:
+    respx.get("https://api.themoviedb.org/3/movie/501/external_ids").mock(side_effect=httpx.ConnectError("boom"))
+    assert await TMDBClient("k", http_client).get_external_ids(501, "movie") is None
+
+
+@respx.mock
+async def test_tmdb_get_external_ids_non_json_returns_none(http_client) -> None:
+    # a 200 with a non-JSON body (e.g. a proxy HTML error page) must NOT raise
+    respx.get("https://api.themoviedb.org/3/movie/502/external_ids").mock(
+        return_value=httpx.Response(200, text="<html>not json</html>")
+    )
+    assert await TMDBClient("k", http_client).get_external_ids(502, "movie") is None
+
+
+@respx.mock
+async def test_tmdb_get_external_ids_missing_key_returns_none(http_client) -> None:
+    # 200 JSON with no imdb_id key -> None
+    respx.get("https://api.themoviedb.org/3/movie/503/external_ids").mock(
+        return_value=httpx.Response(200, json={"facebook_id": "x"})
+    )
+    assert await TMDBClient("k", http_client).get_external_ids(503, "movie") is None
+
+
+@respx.mock
+async def test_tmdb_get_external_ids_non_dict_body_returns_none(http_client) -> None:
+    # 200 whose body is valid JSON but not an object (a bare array) must NOT raise
+    # AttributeError — the never-raises contract covers malformed-but-JSON bodies too.
+    respx.get("https://api.themoviedb.org/3/movie/504/external_ids").mock(
+        return_value=httpx.Response(200, json=["unexpected"])
+    )
+    assert await TMDBClient("k", http_client).get_external_ids(504, "movie") is None
+
+
+# ---------------------------------------------------------------------------
+# TMDBClient.find_by_imdb_id — imdb -> TMDb detail via /find
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_movie(http_client) -> None:
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    respx.get("https://api.themoviedb.org/3/find/tt0371746").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "movie_results": [{"id": 1726, "title": "Iron Man", "release_date": "2008-04-30"}],
+                "tv_results": [],
+            },
+        )
+    )
+    r = await TMDBClient("k", http_client).find_by_imdb_id("tt0371746")
+    assert r.title == "Iron Man" and r.year == 2008 and r.kind == "movie"
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_tv(http_client) -> None:
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    respx.get("https://api.themoviedb.org/3/find/tt0944947").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "movie_results": [],
+                "tv_results": [{"id": 1399, "name": "Game of Thrones", "first_air_date": "2011-04-17"}],
+            },
+        )
+    )
+    r = await TMDBClient("k", http_client).find_by_imdb_id("tt0944947")
+    assert r.title == "Game of Thrones" and r.year == 2011 and r.kind == "tv"
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_no_match_raises(http_client) -> None:
+    import pytest as _pytest
+    from arm_backend.metadata.base import LookupError as MetaLookupError
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    respx.get("https://api.themoviedb.org/3/find/tt0000000").mock(
+        return_value=httpx.Response(200, json={"movie_results": [], "tv_results": []})
+    )
+    with _pytest.raises(MetaLookupError):
+        await TMDBClient("k", http_client).find_by_imdb_id("tt0000000")
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_non_json_raises(http_client) -> None:
+    import pytest as _pytest
+    from arm_backend.metadata.base import LookupError as MetaLookupError
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    # a 200 with a non-JSON body must raise the module LookupError (which the
+    # lookup router catches), NOT an uncaught ValueError (-> 500)
+    respx.get("https://api.themoviedb.org/3/find/tt0000001").mock(
+        return_value=httpx.Response(200, text="<html>not json</html>")
+    )
+    with _pytest.raises(MetaLookupError):
+        await TMDBClient("k", http_client).find_by_imdb_id("tt0000001")
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_auth_401_raises(http_client) -> None:
+    import pytest as _pytest
+    from arm_backend.metadata.base import LookupError as MetaLookupError
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    respx.get("https://api.themoviedb.org/3/find/tt0000002").mock(return_value=httpx.Response(401))
+    with _pytest.raises(MetaLookupError, match="auth failed"):
+        await TMDBClient("k", http_client).find_by_imdb_id("tt0000002")
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_non_200_raises(http_client) -> None:
+    import pytest as _pytest
+    from arm_backend.metadata.base import LookupError as MetaLookupError
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    respx.get("https://api.themoviedb.org/3/find/tt0000003").mock(return_value=httpx.Response(503))
+    with _pytest.raises(MetaLookupError, match="status=503"):
+        await TMDBClient("k", http_client).find_by_imdb_id("tt0000003")
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_timeout_raises_lookuptimeout(http_client) -> None:
+    import pytest as _pytest
+    from arm_backend.metadata.base import LookupTimeout
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    respx.get("https://api.themoviedb.org/3/find/tt0000004").mock(side_effect=httpx.TimeoutException("slow"))
+    with _pytest.raises(LookupTimeout):
+        await TMDBClient("k", http_client).find_by_imdb_id("tt0000004")
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_transport_error_raises(http_client) -> None:
+    import pytest as _pytest
+    from arm_backend.metadata.base import LookupError as MetaLookupError
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    respx.get("https://api.themoviedb.org/3/find/tt0000005").mock(side_effect=httpx.ConnectError("down"))
+    with _pytest.raises(MetaLookupError, match="transport error"):
+        await TMDBClient("k", http_client).find_by_imdb_id("tt0000005")
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_movie_missing_title_raises(http_client) -> None:
+    """A movie_results hit whose record has no title → _parse_one returns None
+    → LookupError (not a candidate with an empty title)."""
+    import pytest as _pytest
+    from arm_backend.metadata.base import LookupError as MetaLookupError
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    respx.get("https://api.themoviedb.org/3/find/tt0000006").mock(
+        return_value=httpx.Response(
+            200,
+            json={"movie_results": [{"id": 99, "release_date": "2008-04-30"}], "tv_results": []},
+        )
+    )
+    with _pytest.raises(MetaLookupError, match="missing title"):
+        await TMDBClient("k", http_client).find_by_imdb_id("tt0000006")
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_tv_missing_title_raises(http_client) -> None:
+    """A tv_results hit whose record has no name → _parse_one returns None
+    → LookupError."""
+    import pytest as _pytest
+    from arm_backend.metadata.base import LookupError as MetaLookupError
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    respx.get("https://api.themoviedb.org/3/find/tt0000007").mock(
+        return_value=httpx.Response(
+            200,
+            json={"movie_results": [], "tv_results": [{"id": 42, "first_air_date": "2011-04-17"}]},
+        )
+    )
+    with _pytest.raises(MetaLookupError, match="missing title"):
+        await TMDBClient("k", http_client).find_by_imdb_id("tt0000007")

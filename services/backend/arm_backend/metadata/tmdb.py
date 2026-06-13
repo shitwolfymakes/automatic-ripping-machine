@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Any, Literal
 
@@ -47,7 +48,14 @@ class TMDBClient:
         if r.status_code != 200:
             raise LookupError(f"tmdb {endpoint} status={r.status_code}")
 
-        results: list[dict[str, Any]] = r.json().get("results") or []
+        # A 200 with a non-JSON body must surface as the module LookupError (which
+        # the search router catches → degraded-200), not an uncaught ValueError → 500.
+        # Mirrors the json-guard in find_by_imdb_id / get_external_ids.
+        try:
+            body = r.json()
+        except ValueError as e:
+            raise LookupError(f"tmdb {endpoint} returned non-JSON response") from e
+        results: list[dict[str, Any]] = (body.get("results") if isinstance(body, dict) else None) or []
         return results
 
     @staticmethod
@@ -99,7 +107,78 @@ class TMDBClient:
             parsed = self._parse_one(top, kind)
             if parsed is not None:
                 out.append(parsed)
+        # Enrich each candidate with its imdb_id concurrently. Use .get("id") (not
+        # an index): a result without an id can't be enriched, so it skips the call
+        # and degrades to imdb_id=None rather than raising KeyError synchronously —
+        # which would escape the gather guard below. gather(return_exceptions=True)
+        # ensures one external_ids failure can't fail the batch.
+        enrichable = [r for r in out if r.payload.get("id") is not None]
+        if enrichable:
+            ids = await asyncio.gather(
+                *(self.get_external_ids(r.payload["id"], kind) for r in enrichable),
+                return_exceptions=True,
+            )
+            resolved = {id(r): (imdb if isinstance(imdb, str) else None) for r, imdb in zip(enrichable, ids)}
+        else:
+            resolved = {}
+        for r in out:
+            r.payload["imdb_id"] = resolved.get(id(r))
         return out
+
+    async def get_external_ids(self, tmdb_id: int | str, kind: Literal["movie", "tv"]) -> str | None:
+        """Fetch a result's imdb_id via TMDB external_ids. Returns None on any
+        failure (null imdb, non-200, transport error) — NEVER raises, since this
+        runs per-candidate in the search enrichment fan-out and one failure must
+        not fail the whole search."""
+        try:
+            r = await self._http.get(f"{_BASE_URL}/{kind}/{tmdb_id}/external_ids", headers=self._headers)
+        except httpx.HTTPError:
+            return None
+        if r.status_code != 200:
+            return None
+        try:
+            body = r.json()
+        except ValueError:
+            return None
+        # A 200 whose body is JSON but not an object (e.g. a bare array) would make
+        # .get() raise AttributeError, breaking the never-raises contract — guard it.
+        if not isinstance(body, dict):
+            return None
+        imdb = body.get("imdb_id")
+        return imdb if isinstance(imdb, str) and imdb else None
+
+    async def find_by_imdb_id(self, imdb_id: str) -> MetadataResult:
+        """Resolve an imdb_id to a TMDB record via /find. Used by the
+        provider-driven detail lookup when metadata_provider == 'tmdb'."""
+        try:
+            r = await self._http.get(
+                f"{_BASE_URL}/find/{imdb_id}",
+                params={"external_source": "imdb_id"},
+                headers=self._headers,
+            )
+        except httpx.TimeoutException as e:
+            raise LookupTimeout("tmdb find timeout") from e
+        except httpx.HTTPError as e:
+            raise LookupError(f"tmdb find transport error: {e}") from e
+        if r.status_code == 401:
+            raise LookupError("tmdb auth failed")
+        if r.status_code != 200:
+            raise LookupError(f"tmdb find status={r.status_code}")
+        try:
+            data = r.json()
+        except ValueError as e:
+            raise LookupError("tmdb find returned non-JSON response") from e
+        if data.get("movie_results"):
+            parsed = self._parse_one(data["movie_results"][0], "movie")
+            if parsed is None:
+                raise LookupError("tmdb find result missing title")
+            return parsed
+        if data.get("tv_results"):
+            parsed = self._parse_one(data["tv_results"][0], "tv")
+            if parsed is None:
+                raise LookupError("tmdb find result missing title")
+            return parsed
+        raise LookupError(f"tmdb find no results for {imdb_id}")
 
     async def _search(
         self,
