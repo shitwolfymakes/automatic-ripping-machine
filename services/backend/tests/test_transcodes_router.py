@@ -16,10 +16,14 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 import pytest  # noqa: E402
 
+from arm_backend.config import settings  # noqa: E402
 from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import transcodes as tx_router  # noqa: E402
 from arm_common import (  # noqa: E402
+    Gpu,
+    GpuStatus,
+    GpuVendor,
     SessionApplication,
     SessionApplicationStatus,
     TranscodeTaskStatus,
@@ -106,6 +110,17 @@ def _task(
     )
 
 
+def _gpu(gpu_id: str = "gpu_1", *, status: GpuStatus = GpuStatus.AVAILABLE, claimed_by_task_id: str | None = None) -> Gpu:
+    return Gpu(
+        id=gpu_id,
+        vendor=GpuVendor.VAAPI,
+        device_path="/dev/dri/renderD128",
+        encoder_kinds=["h264"],
+        status=status,
+        claimed_by_task_id=claimed_by_task_id,
+    )
+
+
 def test_list_all_and_filters(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
@@ -189,3 +204,48 @@ def test_delete_terminal_no_application_no_hub(signing_key: bytes) -> None:
     with TestClient(app) as client:
         r = client.delete("/api/transcodes/txt_orphan", headers=_auth(token))
     assert r.status_code == 204
+
+
+def test_stats_counts_tasks_and_gpus(signing_key: bytes) -> None:
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [
+        _task("txt_1", status=TranscodeTaskStatus.QUEUED),
+        _task("txt_2", status=TranscodeTaskStatus.QUEUED),
+        _task("txt_3", status=TranscodeTaskStatus.IN_PROGRESS),
+        _task("txt_4", status=TranscodeTaskStatus.DONE),
+        _task("txt_5", status=TranscodeTaskStatus.FAILED),
+    ]
+    db.rows["gpus"] = [
+        _gpu("gpu_1", status=GpuStatus.AVAILABLE),
+        _gpu("gpu_2", status=GpuStatus.BUSY, claimed_by_task_id="txt_3"),
+    ]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/stats", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["tasks_by_status"] == {"queued": 2, "in_progress": 1, "done": 1, "failed": 1}
+    assert body["total_tasks"] == 5
+    assert body["gpus_total"] == 2
+    assert body["gpus_available"] == 1
+    assert body["max_parallel"] == settings.MAX_PARALLEL_TRANSCODES
+
+
+def test_stats_empty_db_all_zero(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/stats", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["tasks_by_status"] == {}
+    assert body["total_tasks"] == 0
+    assert body["gpus_total"] == 0
+    assert body["gpus_available"] == 0
+
+
+def test_stats_requires_jwt(signing_key: bytes) -> None:
+    app, _ = _make_app(signing_key, FakeSession())
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/stats")
+    assert r.status_code == 401

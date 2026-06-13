@@ -16,10 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt
+from arm_backend.config import settings
 from arm_backend.db import get_session
-from arm_common import SessionApplication, TranscodeTaskStatus, User
+from arm_common import Gpu, GpuStatus, SessionApplication, TranscodeTaskStatus, User
 from arm_common.models import TranscodeTask
-from arm_common.schemas import TranscodeTaskView
+from arm_common.schemas import TranscodeStatsView, TranscodeTaskView
 
 router = APIRouter(prefix="/api/transcodes", tags=["transcodes"])
 
@@ -38,6 +39,27 @@ async def list_transcodes(
         stmt = stmt.where(col(TranscodeTask.session_application_id) == session_application_id)
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+@router.get("/stats", response_model=TranscodeStatsView)
+async def transcode_stats(
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> TranscodeStatsView:
+    tasks = list((await db.execute(select(TranscodeTask))).scalars().all())
+    by_status: dict[str, int] = {}
+    for t in tasks:
+        key = t.status.value if hasattr(t.status, "value") else str(t.status)
+        by_status[key] = by_status.get(key, 0) + 1
+    gpus = list((await db.execute(select(Gpu))).scalars().all())
+    gpus_available = len([g for g in gpus if g.status == GpuStatus.AVAILABLE])
+    return TranscodeStatsView(
+        tasks_by_status=by_status,
+        total_tasks=len(tasks),
+        gpus_total=len(gpus),
+        gpus_available=gpus_available,
+        max_parallel=settings.MAX_PARALLEL_TRANSCODES,
+    )
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
