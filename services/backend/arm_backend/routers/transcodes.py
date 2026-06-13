@@ -20,7 +20,7 @@ from arm_backend.config import settings
 from arm_backend.db import get_session
 from arm_common import Gpu, GpuStatus, SessionApplication, TranscodeTaskStatus, User
 from arm_common.models import TranscodeTask
-from arm_common.schemas import TranscodeStatsView, TranscodeTaskView
+from arm_common.schemas import TranscodeStatsView, TranscodeTaskView, TranscodeWorkerView
 
 router = APIRouter(prefix="/api/transcodes", tags=["transcodes"])
 
@@ -60,6 +60,32 @@ async def transcode_stats(
         gpus_available=gpus_available,
         max_parallel=settings.MAX_PARALLEL_TRANSCODES,
     )
+
+
+@router.get("/workers", response_model=list[TranscodeWorkerView])
+async def transcode_workers(
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> list[TranscodeWorkerView]:
+    in_progress = list(
+        (
+            await db.execute(select(TranscodeTask).where(col(TranscodeTask.status) == TranscodeTaskStatus.IN_PROGRESS))
+        ).scalars().all()
+    )
+    gpus = list((await db.execute(select(Gpu))).scalars().all())
+    gpu_by_task = {g.claimed_by_task_id: g.id for g in gpus if g.claimed_by_task_id is not None}
+    return [
+        TranscodeWorkerView(
+            task_id=t.id,
+            claimed_by=t.claimed_by,
+            progress_pct=t.progress_pct,
+            claim_heartbeat_at=t.claim_heartbeat_at,
+            gpu_id=gpu_by_task.get(t.id),
+            source_track_id=t.source_track_id,
+            output_path=t.output_path,
+        )
+        for t in in_progress
+    ]
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)

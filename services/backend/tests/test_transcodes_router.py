@@ -249,3 +249,40 @@ def test_stats_requires_jwt(signing_key: bytes) -> None:
     with TestClient(app) as c:
         r = c.get("/api/transcodes/stats")
     assert r.status_code == 401
+
+
+def test_workers_lists_only_in_progress_with_gpu(signing_key: bytes) -> None:
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [
+        _task("txt_run_gpu", status=TranscodeTaskStatus.IN_PROGRESS, source_track_id="trk_a"),
+        _task("txt_run_cpu", status=TranscodeTaskStatus.IN_PROGRESS, source_track_id="trk_b"),
+        _task("txt_queued", status=TranscodeTaskStatus.QUEUED),
+        _task("txt_done", status=TranscodeTaskStatus.DONE),
+    ]
+    db.rows["gpus"] = [_gpu("gpu_1", status=GpuStatus.BUSY, claimed_by_task_id="txt_run_gpu")]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/workers", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    workers = {w["task_id"]: w for w in r.json()}
+    assert set(workers) == {"txt_run_gpu", "txt_run_cpu"}  # only in-progress
+    assert workers["txt_run_gpu"]["gpu_id"] == "gpu_1"
+    assert workers["txt_run_cpu"]["gpu_id"] is None
+    assert workers["txt_run_gpu"]["source_track_id"] == "trk_a"
+
+
+def test_workers_empty_when_nothing_running(signing_key: bytes) -> None:
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [_task("txt_q", status=TranscodeTaskStatus.QUEUED)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/workers", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json() == []
+
+
+def test_workers_requires_jwt(signing_key: bytes) -> None:
+    app, _ = _make_app(signing_key, FakeSession())
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/workers")
+    assert r.status_code == 401
