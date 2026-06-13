@@ -13,8 +13,13 @@ class NamingVariablesResponse(BaseModel):
 
 class NamingPreviewItem(BaseModel):
     track_id: str
-    filename: str
+    track_number: int | None = None
+    output_path: str
+    output_dir: str
+    output_name: str
 
 
 class JobNamingPreviewResponse(BaseModel):
+    job_output_dir: str
+    job_output_name: str
     items: list[NamingPreviewItem]

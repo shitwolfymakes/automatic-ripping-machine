@@ -2,6 +2,8 @@
 transcode_apply.compute_outputs resolver so previews never drift from actual
 output. Ports neu's naming/variables + jobs/{id}/naming-preview."""
 
+from pathlib import PurePosixPath
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -9,6 +11,7 @@ from sqlmodel import col, select
 from arm_backend.routers._params import JobIdParam
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
+from arm_backend.path_sanitize import sanitize_path_component
 from arm_backend.path_template import TemplateValidationError, tokens_for_media
 from arm_backend.transcode_apply import compute_outputs
 from arm_common import Job, Session, Track, TranscodePreset, User
@@ -67,5 +70,25 @@ async def job_naming_preview(
     except TemplateValidationError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
-    items = [NamingPreviewItem(track_id=r.track_id, filename=r.output_path) for r in resolved]
-    return JobNamingPreviewResponse(items=items)
+    track_number_by_id = {t.id: t.index for t in tracks}
+    items: list[NamingPreviewItem] = []
+    for r in resolved:
+        p = PurePosixPath(r.output_path)
+        parent = str(p.parent)
+        output_dir = "" if parent == "." else parent
+        items.append(
+            NamingPreviewItem(
+                track_id=r.track_id,
+                track_number=track_number_by_id.get(r.track_id),
+                output_path=r.output_path,
+                output_dir=output_dir,
+                output_name=p.name,
+            )
+        )
+    job_output_dir = items[0].output_dir if items else ""
+    job_output_name = sanitize_path_component(job.title or "")
+    return JobNamingPreviewResponse(
+        job_output_dir=job_output_dir,
+        job_output_name=job_output_name,
+        items=items,
+    )
