@@ -10,10 +10,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from arm_common.secrets import HIDDEN_SECRET
 from arm_backend.notifications.catalog import build_catalog
 from arm_backend.notifications.url_composer import compose_apprise_url
 
-_HIDDEN_LITERAL = "<hidden>"
+_HIDDEN_LITERAL = HIDDEN_SECRET
 
 
 def _service(service_id: str | None) -> dict[str, Any] | None:
