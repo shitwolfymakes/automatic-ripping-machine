@@ -101,8 +101,20 @@ def test_secret_keys_match_registry():
 
     expected = {m.key for m in CONFIG_FIELD_META if m.tier == "secret"} & set(ConfigView.model_fields)
     assert _SECRET_KEYS == expected
-    assert {"tmdb_api_key", "omdb_api_key", "makemkv_key"} <= _SECRET_KEYS
-    assert "tvdb_api_key" not in _SECRET_KEYS  # not in ConfigView yet (B29)
+    assert {"tmdb_api_key", "omdb_api_key", "makemkv_key", "tvdb_api_key"} <= _SECRET_KEYS
+
+
+def test_tvdb_api_key_is_masked(signing_key):
+    # tvdb_api_key is registry-secret (exposed on ConfigView + registered), so
+    # _SECRET_KEYS includes it and it masks on read for free.
+    from arm_common.secrets import HIDDEN_SECRET
+
+    db = FakeSession()
+    _seed(db, tvdb_api_key="tvdb-real")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/config", headers=_auth(token))
+    assert r.json()["tvdb_api_key"] == HIDDEN_SECRET
 
 
 def test_patch_hidden_preserves_stored_secret(signing_key):
