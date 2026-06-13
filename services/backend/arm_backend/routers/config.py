@@ -30,14 +30,20 @@ from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_common import Config, User
 from arm_common.config_metadata import CONFIG_FIELD_META
 from arm_common.schemas import ConfigUpdateRequest, ConfigView
+from arm_common.secrets import HIDDEN_SECRET
 
 router = APIRouter(prefix="/api/config", tags=["config"])
 
 _NON_EDITABLE_KEYS = frozenset(m.key for m in CONFIG_FIELD_META if not m.editable)
 
+# Secret-tier config fields, derived from the registry so a future secret field
+# auto-masks. Intersected with ConfigView fields: tvdb_api_key is registry-secret
+# but not yet exposed on ConfigView (B29), so it's harmlessly excluded until then.
+_SECRET_KEYS = frozenset(m.key for m in CONFIG_FIELD_META if m.tier == "secret") & set(ConfigView.model_fields)
+
 
 def _to_view(cfg: Config) -> ConfigView:
-    return ConfigView(
+    view = ConfigView(
         tmdb_api_key=cfg.tmdb_api_key,
         omdb_api_key=cfg.omdb_api_key,
         tvdb_api_key=cfg.tvdb_api_key,
@@ -61,6 +67,10 @@ def _to_view(cfg: Config) -> ConfigView:
         updated_by_user_id=cfg.updated_by_user_id,
         updated_at=cfg.updated_at,
     )
+    for key in _SECRET_KEYS:
+        if getattr(view, key):  # non-empty stored secret → mask; None/"" stays as-is
+            setattr(view, key, HIDDEN_SECRET)
+    return view
 
 
 @router.get("", response_model=ConfigView)
