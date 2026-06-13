@@ -92,3 +92,30 @@ def test_year_omitted_when_none() -> None:
     assert title == "ARM: rip completed"
     assert "My Home Movie" in body
     assert "(None)" not in body
+
+
+def test_resolve_title_body_uses_override() -> None:
+    from arm_backend.notification_format import resolve_title_body
+
+    title, body = resolve_title_body(
+        event_type="rip.completed",
+        default_title="ARM: rip completed",
+        default_body="disc",
+        template={"title": "Custom {x}", "body": None},
+    )
+    assert title == "Custom {x}"
+    assert body == "disc"  # body falls back to default when override is None
+
+
+def test_resolve_title_body_no_template() -> None:
+    from arm_backend.notification_format import resolve_title_body
+
+    title, body = resolve_title_body(event_type="rip.completed", default_title="T", default_body="B", template=None)
+    assert (title, body) == ("T", "B")
+
+
+def test_synthetic_test_message() -> None:
+    from arm_backend.notification_format import synthetic_test_message
+
+    title, body = synthetic_test_message("rip.completed")
+    assert "test" in title.lower() or "test" in body.lower()

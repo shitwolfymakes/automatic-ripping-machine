@@ -1,9 +1,10 @@
-"""Phase 11 — `NotificationDispatcher._tick` exhaustive cases.
+"""Phase 11 — `MessageDispatcher._tick` exhaustive cases (via AppriseListener).
 
 Mirrors the FakeSession + db_factory shape used by the transcode
 dispatcher tests. The Apprise lib itself is bypassed — tests inject a
 `_FakeNotifier` that records `(urls, title, body)` calls and can be
-configured to raise.
+configured to raise. The end-to-end channel routing / dispatch-log /
+`last_*` behaviour now lives in `AppriseListener`; the dispatcher feeds it.
 """
 
 from __future__ import annotations
@@ -21,15 +22,17 @@ import pytest  # noqa: E402
 
 from arm_backend.config import Settings  # noqa: E402
 from arm_backend.notification_dispatcher import (  # noqa: E402
-    NotificationDispatcher,
+    MessageDispatcher,
     redact_apprise_url,
 )
+from arm_backend.notifications.apprise_listener import AppriseListener  # noqa: E402
 from arm_common import (  # noqa: E402
     Config,
     DiscType,
     Event,
     Job,
     JobStatus,
+    NotificationChannel,
     RetentionPolicy,
 )
 from tests._fakes import FakeSession  # noqa: E402
@@ -90,6 +93,26 @@ def _seed_config(
     ]
 
 
+def _seed_channel(
+    db: FakeSession,
+    *,
+    channel_id: str = "ncl_x",
+    url: str = "discord://AAA/BBB",
+    subscribed: list[str] | None = None,
+    enabled: bool = True,
+) -> NotificationChannel:
+    channel = NotificationChannel(
+        id=channel_id,
+        type="apprise",
+        name=channel_id,
+        enabled=enabled,
+        config={"type": "apprise", "url": url},
+        subscribed_events=subscribed or ["rip.completed"],
+    )
+    db.rows.setdefault("notification_channels", []).append(channel)
+    return channel
+
+
 def _seed_job(db: FakeSession) -> None:
     db.rows.setdefault("jobs", []).append(
         Job(
@@ -135,7 +158,7 @@ async def test_disabled_marks_notified_without_calling() -> None:
     db.rows["events"] = [event]
 
     notifier = _FakeNotifier()
-    dispatcher = NotificationDispatcher(_settings(), _db_factory(db), notifier)
+    dispatcher = MessageDispatcher(_settings(), _db_factory(db), [AppriseListener(notifier)])
     await dispatcher._tick()
 
     assert notifier.calls == []
@@ -144,15 +167,16 @@ async def test_disabled_marks_notified_without_calling() -> None:
 
 
 @pytest.mark.asyncio
-async def test_enabled_with_urls_dispatches_event() -> None:
+async def test_enabled_with_subscribed_channel_dispatches_event() -> None:
     db = FakeSession()
-    _seed_config(db, enabled=True, urls=["discord://AAA/BBB"])
+    _seed_config(db, enabled=True)
+    _seed_channel(db, url="discord://AAA/BBB", subscribed=["rip.completed"])
     _seed_job(db)
     event = _make_event()
     db.rows["events"] = [event]
 
     notifier = _FakeNotifier()
-    dispatcher = NotificationDispatcher(_settings(), _db_factory(db), notifier)
+    dispatcher = MessageDispatcher(_settings(), _db_factory(db), [AppriseListener(notifier)])
     await dispatcher._tick()
 
     assert len(notifier.calls) == 1
@@ -162,22 +186,30 @@ async def test_enabled_with_urls_dispatches_event() -> None:
     assert "Iron Man (2008)" in body
     assert "drive=drv_x" in body
     assert event.notified_at is not None
+    # a dispatch-log row records the successful send
+    logs = db.rows.get("notification_dispatch_log", [])
+    assert len(logs) == 1 and logs[0].success is True and logs[0].channel_id == "ncl_x"
 
 
 @pytest.mark.asyncio
-async def test_enabled_but_urls_empty_marks_without_calling() -> None:
+async def test_enabled_but_no_subscribed_channels_marks_without_calling() -> None:
+    # Channel exists but is subscribed to a different event type, so the
+    # rip.completed event has no target: it is still marked notified_at and
+    # the notifier is never called (the old "URL list empty → skip" intent).
     db = FakeSession()
-    _seed_config(db, enabled=True, urls=[])
+    _seed_config(db, enabled=True)
+    _seed_channel(db, subscribed=["rip.failed"])
     _seed_job(db)
     event = _make_event()
     db.rows["events"] = [event]
 
     notifier = _FakeNotifier()
-    dispatcher = NotificationDispatcher(_settings(), _db_factory(db), notifier)
+    dispatcher = MessageDispatcher(_settings(), _db_factory(db), [AppriseListener(notifier)])
     await dispatcher._tick()
 
     assert notifier.calls == []
     assert event.notified_at is not None
+    assert db.rows.get("notification_dispatch_log", []) == []
 
 
 @pytest.mark.asyncio
@@ -190,7 +222,7 @@ async def test_non_notifiable_event_type_ignored() -> None:
     db.rows["events"] = [skip, progress]
 
     notifier = _FakeNotifier()
-    dispatcher = NotificationDispatcher(_settings(), _db_factory(db), notifier)
+    dispatcher = MessageDispatcher(_settings(), _db_factory(db), [AppriseListener(notifier)])
     await dispatcher._tick()
 
     assert notifier.calls == []
@@ -207,7 +239,7 @@ async def test_already_notified_row_ignored() -> None:
     db.rows["events"] = [already]
 
     notifier = _FakeNotifier()
-    dispatcher = NotificationDispatcher(_settings(), _db_factory(db), notifier)
+    dispatcher = MessageDispatcher(_settings(), _db_factory(db), [AppriseListener(notifier)])
     await dispatcher._tick()
 
     assert notifier.calls == []
@@ -216,24 +248,37 @@ async def test_already_notified_row_ignored() -> None:
 @pytest.mark.asyncio
 async def test_notifier_raises_still_marks_notified(caplog: pytest.LogCaptureFixture) -> None:
     db = FakeSession()
-    _seed_config(db, enabled=True, urls=["discord://AAA/BBB"])
+    _seed_config(db, enabled=True)
+    channel = _seed_channel(db, subscribed=["rip.completed"])
     _seed_job(db)
     event = _make_event()
     db.rows["events"] = [event]
 
     notifier = _FakeNotifier(raises=RuntimeError("network down"))
-    dispatcher = NotificationDispatcher(_settings(), _db_factory(db), notifier)
+    dispatcher = MessageDispatcher(_settings(), _db_factory(db), [AppriseListener(notifier)])
     with caplog.at_level(logging.ERROR, logger="arm_backend.notification_dispatcher"):
         await dispatcher._tick()
 
     assert event.notified_at is not None
     assert any("notification failed" in rec.message for rec in caplog.records)
+    # failure is isolated to the channel + recorded in the dispatch log
+    assert channel.last_error is not None and channel.last_success_at is None
+    logs = db.rows.get("notification_dispatch_log", [])
+    assert len(logs) == 1 and logs[0].success is False
 
 
 @pytest.mark.asyncio
 async def test_multi_event_tick() -> None:
     db = FakeSession()
-    _seed_config(db, enabled=True, urls=["discord://AAA/BBB", "ntfy://my-topic"])
+    _seed_config(db, enabled=True)
+    # One channel subscribed to every event type these three events carry, so
+    # each event fans out to it (one notify call per event, per the per-channel
+    # routing model).
+    _seed_channel(
+        db,
+        url="discord://AAA/BBB",
+        subscribed=["rip.completed", "session.completed", "rip.failed"],
+    )
     _seed_job(db)
     older = _make_event(event_id="evt_a", emitted_at=datetime.now(UTC) - timedelta(seconds=30))
     newer = _make_event(event_id="evt_b", event_type="session.completed")
@@ -241,27 +286,31 @@ async def test_multi_event_tick() -> None:
     db.rows["events"] = [older, newer, third]
 
     notifier = _FakeNotifier()
-    dispatcher = NotificationDispatcher(_settings(), _db_factory(db), notifier)
+    dispatcher = MessageDispatcher(_settings(), _db_factory(db), [AppriseListener(notifier)])
     await dispatcher._tick()
 
     assert len(notifier.calls) == 3
     for urls, _title, _body in notifier.calls:
-        assert urls == ("discord://AAA/BBB", "ntfy://my-topic")
+        assert urls == ("discord://AAA/BBB",)
     for event in (older, newer, third):
         assert event.notified_at is not None
+    assert len(db.rows.get("notification_dispatch_log", [])) == 3
 
 
 @pytest.mark.asyncio
 async def test_log_lines_redact_credential_segment(caplog: pytest.LogCaptureFixture) -> None:
+    # The failure log line is the only place a channel URL is emitted; it must
+    # show the scheme-only redacted form, never the credential segment.
     db = FakeSession()
-    _seed_config(db, enabled=True, urls=["discord://AAA/BBB"])
+    _seed_config(db, enabled=True)
+    _seed_channel(db, url="discord://AAA/BBB", subscribed=["rip.completed"])
     _seed_job(db)
     event = _make_event()
     db.rows["events"] = [event]
 
-    notifier = _FakeNotifier()
-    dispatcher = NotificationDispatcher(_settings(), _db_factory(db), notifier)
-    with caplog.at_level(logging.INFO, logger="arm_backend.notification_dispatcher"):
+    notifier = _FakeNotifier(raises=RuntimeError("network down"))
+    dispatcher = MessageDispatcher(_settings(), _db_factory(db), [AppriseListener(notifier)])
+    with caplog.at_level(logging.INFO, logger="arm_backend.notifications.apprise_listener"):
         await dispatcher._tick()
 
     rendered = " ".join(rec.getMessage() for rec in caplog.records)

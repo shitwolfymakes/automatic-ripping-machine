@@ -1,22 +1,26 @@
-"""Phase 11 — outbound notification dispatcher.
+"""Phase 11 — message dispatcher core.
 
 Single asyncio task started in the FastAPI lifespan, mirroring the shape
 of `TranscodeDispatcher`. Each tick:
 
 1. Selects every `Event` row whose `notified_at IS NULL` and whose
-   `event_type` is in `NOTIFIABLE_EVENT_TYPES`.
-2. Loads the `Config` singleton and reads `notifications_enabled` and
-   `notification_apprise_urls`.
-3. If notifications are disabled OR the URL list is empty, marks every
-   selected event with `notified_at = now()` and returns. This is the
-   "off out of the box" exit behaviour — without it, events would pile
-   up indefinitely while disabled and turning notifications on later
-   would dump the entire backlog.
-4. Otherwise, for each event: load the `Job` (if any), format a (title,
-   body) pair, and call the configured `AppriseNotifier`. The notifier
-   exception is caught and logged; `notified_at` is set on the row
-   regardless. Notifications are best-effort — a permanently-broken URL
-   does not pile up retries forever.
+   `event_type` is in `NOTABLE_EVENT_TYPES` (the union of the
+   apprise-notifiable types and the inbox-default types, so inbox-only
+   events like `rip.needs_user_input` are still selected).
+2. Loads the `Config` singleton and reads `notifications_enabled`.
+3. If notifications are disabled, marks every selected event with
+   `notified_at = now()` and returns. This is the "off out of the box"
+   exit behaviour — without it, events would pile up indefinitely while
+   disabled and turning notifications on later would dump the entire
+   backlog.
+4. Otherwise, for each event: load the `Job` (if any), format the default
+   (title, body) into a `Message`, and feed that message to every
+   registered `NotificationListener`. Each listener decides internally
+   whether it cares and how it delivers (apprise fan-out, in-app inbox,
+   …). A listener's exception is caught and logged per-listener so one
+   listener's failure never blocks the others; `notified_at` is set on
+   the event once all listeners have been attempted (the per-event
+   watermark, set once). Delivery is best-effort.
 
 URL credentials never appear in log output. `redact_apprise_url(url)`
 returns `"<scheme>://****"` — scheme-only redaction is conservative
@@ -42,6 +46,7 @@ from sqlmodel import col, select
 
 from arm_backend.config import Settings
 from arm_backend.notification_format import format_event
+from arm_backend.notifications.message import Message, NotificationListener
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_common import Config, Event, Job, with_log_context
 
@@ -61,6 +66,23 @@ NOTIFIABLE_EVENT_TYPES: frozenset[str] = frozenset(
         "session.partial",
     }
 )
+
+
+# Events the in-app inbox records by default (the seeded inapp channel
+# starts subscribed to these). Broader than apprise — the bell is a good
+# place for the actionable needs-user-input prompt.
+DEFAULT_INBOX_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "rip.completed",
+        "rip.failed",
+        "rip.needs_user_input",
+        "session.completed",
+        "session.failed",
+    }
+)
+
+# The core's selection filter — any event a listener might care about.
+NOTABLE_EVENT_TYPES: frozenset[str] = NOTIFIABLE_EVENT_TYPES | DEFAULT_INBOX_EVENT_TYPES
 
 
 def redact_apprise_url(url: str) -> str:
@@ -108,16 +130,16 @@ class _RealAppriseNotifier:
         await ap.async_notify(title=title, body=body)
 
 
-class NotificationDispatcher:
+class MessageDispatcher:
     def __init__(
         self,
         settings: Settings,
         db_factory: async_sessionmaker[AsyncSession],
-        notifier: AppriseNotifier,
+        listeners: "list[NotificationListener]",
     ) -> None:
         self._settings = settings
         self._db_factory = db_factory
-        self._notifier = notifier
+        self._listeners = listeners
         self._stop = asyncio.Event()
         self._tick_interval = settings.ARM_NOTIFICATION_DISPATCH_INTERVAL_SECONDS
 
@@ -125,29 +147,25 @@ class NotificationDispatcher:
         self._stop.set()
 
     async def run(self) -> None:
-        logger.info("notification dispatcher starting: tick=%ds", self._tick_interval)
+        logger.info("message dispatcher starting: tick=%ds", self._tick_interval)
         while not self._stop.is_set():
             try:
                 await self._tick()
             except Exception as exc:  # never crash the loop
-                logger.exception("notification dispatcher tick failed: %s", exc)
+                logger.exception("message dispatcher tick failed: %s", exc)
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=self._tick_interval)
             except asyncio.TimeoutError:
                 pass
-        logger.info("notification dispatcher stopped")
+        logger.info("message dispatcher stopped")
 
     async def _tick(self) -> None:
         async with self._db_factory() as db:
-            # SQL filter on the indexed `event_type`; the small `notified_at
-            # IS NULL` predicate is applied in Python to stay compatible with
-            # the in-memory test fake (mirrors the Phase 9 crash-recovery
-            # helper for the same reason).
             candidates = (
                 (
                     await db.execute(
                         select(Event)
-                        .where(col(Event.event_type).in_(NOTIFIABLE_EVENT_TYPES))
+                        .where(col(Event.event_type).in_(NOTABLE_EVENT_TYPES))
                         .order_by(col(Event.emitted_at).asc())
                     )
                 )
@@ -160,52 +178,40 @@ class NotificationDispatcher:
 
             cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
             enabled = cfg is not None and cfg.notifications_enabled
-            urls = list(cfg.notification_apprise_urls or []) if cfg is not None else []
 
             now = datetime.now(UTC)
             if not enabled:
                 for event in unsent:
                     event.notified_at = now
                 await db.commit()
-                logger.info(
-                    "notification dispatch: %d event(s) skipped (notifications disabled)",
-                    len(unsent),
-                )
-                return
-            if not urls:
-                for event in unsent:
-                    event.notified_at = now
-                await db.commit()
-                logger.info(
-                    "notification dispatch: %d event(s) skipped (no urls configured)",
-                    len(unsent),
-                )
+                logger.info("message dispatch: %d event(s) skipped (notifications disabled)", len(unsent))
                 return
 
-            redacted = [redact_apprise_url(u) for u in urls]
             for event in unsent:
                 with with_log_context(
                     job_id=event.job_id,
                     session_application_id=event.session_application_id,
                 ):
                     job = await self._load_job(db, event.job_id)
-                    title, body = format_event(event, job)
-                    try:
-                        await self._notifier.notify(urls, title, body)
-                        logger.info(
-                            "notification sent: event_id=%s type=%s urls=%s",
-                            event.id,
-                            event.event_type,
-                            redacted,
-                        )
-                    except Exception as exc:
-                        logger.exception(
-                            "notification failed: event_id=%s type=%s urls=%s err=%s",
-                            event.id,
-                            event.event_type,
-                            redacted,
-                            exc,
-                        )
+                    default_title, default_body = format_event(event, job)
+                    message = Message(
+                        event_id=event.id,
+                        event_type=event.event_type,
+                        job_id=event.job_id,
+                        default_title=default_title,
+                        default_body=default_body,
+                        job=job,
+                    )
+                    for listener in self._listeners:
+                        try:
+                            await listener.handle(db, message)
+                        except Exception as exc:
+                            logger.exception(
+                                "listener %s failed for event_id=%s: %s",
+                                type(listener).__name__,
+                                event.id,
+                                exc,
+                            )
                     event.notified_at = datetime.now(UTC)
             await db.commit()
 

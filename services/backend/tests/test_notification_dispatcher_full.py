@@ -17,9 +17,10 @@ import pytest  # noqa: E402
 from arm_backend import notification_dispatcher as nd  # noqa: E402
 from arm_backend.config import settings  # noqa: E402
 from arm_backend.notification_dispatcher import (  # noqa: E402
-    NotificationDispatcher,
+    MessageDispatcher,
     _RealAppriseNotifier,
 )
+from arm_backend.notifications.apprise_listener import AppriseListener  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -47,7 +48,7 @@ async def test_real_apprise_notifier(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 async def test_load_job_none_returns_none() -> None:
-    d = NotificationDispatcher(settings, db_factory=lambda: None, notifier=_FakeApprise())  # type: ignore[arg-type]
+    d = MessageDispatcher(settings, db_factory=lambda: None, listeners=[AppriseListener(_RealAppriseNotifier())])  # type: ignore[arg-type]
     assert await d._load_job(FakeSession(), None) is None  # type: ignore[arg-type]
 
 
@@ -55,7 +56,7 @@ async def test_run_loop_swallows_tick_error_then_stops(monkeypatch: pytest.Monke
     """run() catches a _tick exception (132-133), the wait_for times out so
     the loop spins again (136-137), then stop() ends it cleanly."""
     monkeypatch.setattr(settings, "ARM_NOTIFICATION_DISPATCH_INTERVAL_SECONDS", 0.01)
-    d = NotificationDispatcher(settings, db_factory=lambda: None, notifier=_FakeApprise())  # type: ignore[arg-type]
+    d = MessageDispatcher(settings, db_factory=lambda: None, listeners=[AppriseListener(_RealAppriseNotifier())])  # type: ignore[arg-type]
 
     calls = 0
 
