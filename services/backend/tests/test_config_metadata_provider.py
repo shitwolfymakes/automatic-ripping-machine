@@ -102,3 +102,19 @@ def test_config_patch_metadata_provider_rejects_invalid(signing_key: bytes) -> N
         r = client.patch("/api/config", json={"metadata_provider": "netflix"}, headers=_auth(token))
     assert r.status_code == 400
     assert "metadata_provider" in r.json()["detail"]
+
+
+def test_config_view_exposes_makemkv_status(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    row = db.rows["config"][0]
+    row.makemkv_key_valid = True
+    row.makemkv_key_state = "valid"
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get("/api/config", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["makemkv_key_valid"] is True
+    assert body["makemkv_key_state"] == "valid"
+    assert "makemkv_key_checked_at" in body

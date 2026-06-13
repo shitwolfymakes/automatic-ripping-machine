@@ -52,6 +52,9 @@ def _to_view(cfg: Config) -> ConfigView:
         notification_apprise_urls=list(cfg.notification_apprise_urls or []),
         notifications_enabled=cfg.notifications_enabled,
         metadata_provider=cfg.metadata_provider or "tmdb",
+        makemkv_key_valid=cfg.makemkv_key_valid,
+        makemkv_key_state=cfg.makemkv_key_state,
+        makemkv_key_checked_at=cfg.makemkv_key_checked_at,
         updated_by_user_id=cfg.updated_by_user_id,
         updated_at=cfg.updated_at,
     )
