@@ -106,9 +106,11 @@ async def retry_transcode(
     row.progress_pct = 0
     row.last_error = None
     row.claimed_by = None
+    row.claim_heartbeat_at = None
     # attempts intentionally preserved (audit trail); the dispatcher's QUEUED
     # spawn loop picks the task up on its next tick — no dispatcher change here.
     await db.commit()
+    await db.refresh(row)
     return row
 
 

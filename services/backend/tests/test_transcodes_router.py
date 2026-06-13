@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import secrets
+from datetime import UTC, datetime
 from typing import Any
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
@@ -294,6 +295,7 @@ def test_retry_failed_requeues_and_resets(signing_key: bytes) -> None:
     failed.progress_pct = 47
     failed.last_error = "boom"
     failed.claimed_by = "transcoder-xyz"
+    failed.claim_heartbeat_at = datetime.now(UTC)
     failed.attempts = 2
     db.rows["transcode_tasks"] = [failed]
     app, token = _make_app(signing_key, db)
@@ -305,6 +307,7 @@ def test_retry_failed_requeues_and_resets(signing_key: bytes) -> None:
     assert body["progress_pct"] == 0
     assert body["last_error"] is None
     assert body["claimed_by"] is None
+    assert body["claim_heartbeat_at"] is None
     assert body["attempts"] == 2  # preserved for audit
     assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.QUEUED
 
