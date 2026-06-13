@@ -9,7 +9,13 @@ from arm_common.schemas.auth import (
     PasswordChangeRequest,
 )
 from arm_common.schemas.common import ErrorResponse, HealthResponse
-from arm_common.schemas.drives import DriveUpdateRequest
+from arm_common.schemas.drives import (
+    DriveDiagnosticItem,
+    DriveDiagnosticResponse,
+    DriveRescanResponse,
+    DriveUpdateRequest,
+)
+from arm_common.schemas.iso import IsoScanRequest, IsoScanResponse
 from arm_common.schemas.jobs import (
     AbandonJobRequest,
     BulkDeleteJobsResponse,
@@ -24,6 +30,13 @@ from arm_common.schemas.jobs import (
     RipProgressSummary,
     RipStartResponse,
     TrackView,
+)
+from arm_common.schemas.metadata import MetadataKeyTestResponse, MetadataProvider
+from arm_common.schemas.naming import (
+    JobNamingPreviewResponse,
+    NamingPreviewItem,
+    NamingVariable,
+    NamingVariablesResponse,
 )
 from arm_common.schemas.ripper import (
     DiscFingerprintInput,
@@ -78,6 +91,8 @@ from arm_common.schemas.ws import (
 
 __all__ = [
     "AbandonJobRequest",
+    "MetadataKeyTestResponse",
+    "MetadataProvider",
     "ApplySessionRequest",
     "BulkDeleteJobsResponse",
     "DiscFingerprintInput",
@@ -90,6 +105,9 @@ __all__ = [
     "ConfigView",
     "DiagnosticsResponse",
     "DiagnosticsServiceView",
+    "DriveDiagnosticItem",
+    "DriveDiagnosticResponse",
+    "DriveRescanResponse",
     "DriveUpdateRequest",
     "ErrorResponse",
     "FailTaskRequest",
@@ -97,14 +115,20 @@ __all__ = [
     "HealthResponse",
     "HeartbeatRequest",
     "IdentifyRequest",
+    "IsoScanRequest",
+    "IsoScanResponse",
     "JobCompleteRequest",
     "JobDetailView",
     "JobUpdateRequest",
     "JobView",
     "LoginRequest",
     "LoginResponse",
+    "JobNamingPreviewResponse",
     "ManualTriggerRequest",
     "ManualTriggerResponse",
+    "NamingPreviewItem",
+    "NamingVariable",
+    "NamingVariablesResponse",
     "PasswordChangeRequest",
     "RegisterRequest",
     "RegisterTranscoderRequest",

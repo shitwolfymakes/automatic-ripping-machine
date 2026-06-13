@@ -14,6 +14,7 @@ class Config(SQLModel, table=True):
     id: int = Field(sa_column=Column(Integer, primary_key=True, autoincrement=False))
     tmdb_api_key: str | None = Field(default=None)
     omdb_api_key: str | None = Field(default=None)
+    tvdb_api_key: str | None = Field(default=None)
     # Operator's MakeMKV registration key (a purchased perma-key or a beta key
     # pasted in by hand). When set it is the authoritative source the ripper
     # writes into ~/.MakeMKV/settings.conf before each rip, overriding the

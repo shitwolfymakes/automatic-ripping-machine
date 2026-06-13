@@ -1492,6 +1492,105 @@
         }
       }
     },
+    "/api/drives/diagnostic": {
+      "get": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Drive Diagnostic",
+        "operationId": "drive_diagnostic_api_drives_diagnostic_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveDiagnosticResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drives/rescan": {
+      "post": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Rescan Drives",
+        "description": "Reconcile drive freshness from heartbeats. Backend-side only: the\nripper owns hardware re-enumeration; this surfaces which registered drives\nare live vs stale based on their last media-status update.\n\nKept as POST (not GET) even though it currently only reads: a real rescan\ntriggers ripper-side hardware re-enumeration (a non-idempotent side effect),\nwhich a follow-up will add behind this same verb.",
+        "operationId": "rescan_drives_api_drives_rescan_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveRescanResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/drives/{drive_id}": {
       "patch": {
         "tags": [
@@ -3244,6 +3343,253 @@
         }
       }
     },
+    "/api/metadata/test-key": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Test Key",
+        "operationId": "test_key_api_metadata_test_key_get",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "omdb",
+                "tmdb",
+                "tvdb",
+                "makemkv"
+              ],
+              "type": "string",
+              "title": "Provider"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataKeyTestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/naming/variables": {
+      "get": {
+        "tags": [
+          "naming"
+        ],
+        "summary": "Naming Variables",
+        "operationId": "naming_variables_api_naming_variables_get",
+        "parameters": [
+          {
+            "name": "media_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/MediaType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Media Type"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NamingVariablesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/naming-preview": {
+      "get": {
+        "tags": [
+          "naming"
+        ],
+        "summary": "Job Naming Preview",
+        "operationId": "job_naming_preview_api_jobs__job_id__naming_preview_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobNamingPreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/iso/scan": {
+      "post": {
+        "tags": [
+          "iso"
+        ],
+        "summary": "Scan Iso",
+        "operationId": "scan_iso_api_jobs_iso_scan_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IsoScanRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IsoScanResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/logs/{job_id}.zip": {
       "get": {
         "tags": [
@@ -3585,6 +3931,17 @@
             ],
             "title": "Omdb Api Key"
           },
+          "tvdb_api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tvdb Api Key"
+          },
           "makemkv_key": {
             "anyOf": [
               {
@@ -3703,6 +4060,17 @@
             ],
             "title": "Omdb Api Key"
           },
+          "tvdb_api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tvdb Api Key"
+          },
           "makemkv_key": {
             "anyOf": [
               {
@@ -3779,6 +4147,7 @@
         "required": [
           "tmdb_api_key",
           "omdb_api_key",
+          "tvdb_api_key",
           "makemkv_key",
           "musicbrainz_user_agent",
           "auto_transcode_on_idle",
@@ -4018,6 +4387,72 @@
         ],
         "title": "Drive"
       },
+      "DriveDiagnosticItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "media_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveMediaStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "media_status_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Status At"
+          },
+          "healthy": {
+            "type": "boolean",
+            "title": "Healthy"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "media_status",
+          "media_status_at",
+          "healthy",
+          "notes"
+        ],
+        "title": "DriveDiagnosticItem"
+      },
+      "DriveDiagnosticResponse": {
+        "properties": {
+          "drives": {
+            "items": {
+              "$ref": "#/components/schemas/DriveDiagnosticItem"
+            },
+            "type": "array",
+            "title": "Drives"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drives"
+        ],
+        "title": "DriveDiagnosticResponse"
+      },
       "DriveMediaStatus": {
         "type": "string",
         "enum": [
@@ -4030,6 +4465,24 @@
         ],
         "title": "DriveMediaStatus",
         "description": "What the drive thinks is in its tray. Reported by each ripper\non a heartbeat so the backend can fail manual-trigger requests\nfast when the user clicks Start without loading a disc."
+      },
+      "DriveRescanResponse": {
+        "properties": {
+          "online": {
+            "type": "integer",
+            "title": "Online"
+          },
+          "stale": {
+            "type": "integer",
+            "title": "Stale"
+          }
+        },
+        "type": "object",
+        "required": [
+          "online",
+          "stale"
+        ],
+        "title": "DriveRescanResponse"
       },
       "DriveStatus": {
         "type": "string",
@@ -4224,6 +4677,55 @@
         ],
         "title": "IdentifyRequest"
       },
+      "IsoScanRequest": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "title": "IsoScanRequest"
+      },
+      "IsoScanResponse": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "suggested_title": {
+            "type": "string",
+            "title": "Suggested Title"
+          },
+          "suggested_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Year"
+          },
+          "exists": {
+            "type": "boolean",
+            "title": "Exists"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "suggested_title",
+          "suggested_year",
+          "exists"
+        ],
+        "title": "IsoScanResponse"
+      },
       "Job": {
         "properties": {
           "id": {
@@ -4390,6 +4892,32 @@
           "tracks"
         ],
         "title": "JobDetailView"
+      },
+      "JobNamingPreviewResponse": {
+        "properties": {
+          "job_output_dir": {
+            "type": "string",
+            "title": "Job Output Dir"
+          },
+          "job_output_name": {
+            "type": "string",
+            "title": "Job Output Name"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NamingPreviewItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_output_dir",
+          "job_output_name",
+          "items"
+        ],
+        "title": "JobNamingPreviewResponse"
       },
       "JobStatus": {
         "type": "string",
@@ -4619,6 +5147,117 @@
           "iso"
         ],
         "title": "MediaType"
+      },
+      "MetadataKeyTestResponse": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "omdb",
+              "tmdb",
+              "tvdb",
+              "makemkv"
+            ],
+            "title": "Provider"
+          },
+          "valid": {
+            "type": "boolean",
+            "title": "Valid"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "valid"
+        ],
+        "title": "MetadataKeyTestResponse"
+      },
+      "NamingPreviewItem": {
+        "properties": {
+          "track_id": {
+            "type": "string",
+            "title": "Track Id"
+          },
+          "track_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Number"
+          },
+          "output_path": {
+            "type": "string",
+            "title": "Output Path"
+          },
+          "output_dir": {
+            "type": "string",
+            "title": "Output Dir"
+          },
+          "output_name": {
+            "type": "string",
+            "title": "Output Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "track_id",
+          "output_path",
+          "output_dir",
+          "output_name"
+        ],
+        "title": "NamingPreviewItem"
+      },
+      "NamingVariable": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "description"
+        ],
+        "title": "NamingVariable"
+      },
+      "NamingVariablesResponse": {
+        "properties": {
+          "variables": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/NamingVariable"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Variables"
+          }
+        },
+        "type": "object",
+        "required": [
+          "variables"
+        ],
+        "title": "NamingVariablesResponse"
       },
       "OutputMode": {
         "type": "string",
