@@ -258,6 +258,59 @@
         }
       }
     },
+    "/api/ripper/makemkv-key-status": {
+      "post": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Makemkv Key Status",
+        "description": "A ripper reports its disc-free makemkv probe outcome. Global fact \u2014\nwritten to the Config singleton (last writer wins across multiple rippers,\nby design). test-key / preflight / config-view read it back.",
+        "operationId": "makemkv_key_status_api_ripper_makemkv_key_status_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MakemkvKeyStatusReport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ripper/register": {
       "post": {
         "tags": [
@@ -5913,6 +5966,40 @@
             "type": "string",
             "title": "Metadata Provider"
           },
+          "makemkv_key_valid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Makemkv Key Valid"
+          },
+          "makemkv_key_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Makemkv Key State"
+          },
+          "makemkv_key_checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Makemkv Key Checked At"
+          },
           "updated_by_user_id": {
             "anyOf": [
               {
@@ -6895,6 +6982,42 @@
         ],
         "title": "LoginResponse"
       },
+      "MakemkvKeyState": {
+        "type": "string",
+        "enum": [
+          "valid",
+          "unregistered_or_expired",
+          "binary_expired",
+          "format_invalid",
+          "probe_failed"
+        ],
+        "title": "MakemkvKeyState",
+        "description": "Outcome of the ripper's disc-free `makemkvcon info disc:9999` probe.\nStored on the Config singleton and read by test-key / preflight / config view.\n\nVALID                   \u2014 clean probe, key accepted.\nUNREGISTERED_OR_EXPIRED \u2014 MSG:5052/5055 (evaluation expired / no valid key).\nBINARY_EXPIRED          \u2014 MSG:5021 (60-day kill-switch; no key overrides it).\nFORMAT_INVALID          \u2014 configured key fails the M-/T- serial regex (pre-probe).\nPROBE_FAILED            \u2014 binary missing / timeout / undeterminable (\u2192 valid=null)."
+      },
+      "MakemkvKeyStatusReport": {
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/MakemkvKeyState"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "MakemkvKeyStatusReport",
+        "description": "Body of POST /api/ripper/makemkv-key-status \u2014 the ripper's disc-free\n`makemkvcon` probe outcome. Global (not per-drive); the backend writes it\nto the Config singleton. `detail` is a human-readable reason string."
+      },
       "ManualTriggerRequest": {
         "properties": {
           "drive_id": {
@@ -7020,7 +7143,14 @@
             "title": "Provider"
           },
           "valid": {
-            "type": "boolean",
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Valid"
           },
           "detail": {
@@ -7033,6 +7163,18 @@
               }
             ],
             "title": "Detail"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
           }
         },
         "type": "object",
