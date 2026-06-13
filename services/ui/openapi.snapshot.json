@@ -1657,6 +1657,55 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Delete Drive",
+        "operationId": "delete_drive_api_drives__drive_id__delete",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/sessions": {
@@ -3814,6 +3863,65 @@
         }
       }
     },
+    "/api/naming/validate": {
+      "post": {
+        "tags": [
+          "naming"
+        ],
+        "summary": "Naming Validate",
+        "operationId": "naming_validate_api_naming_validate_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NamingValidateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NamingValidateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/notifications/channels": {
       "get": {
         "tags": [
@@ -5088,6 +5196,55 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StatsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/version": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "System Version",
+        "operationId": "system_version_api_system_version_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemVersionResponse"
                 }
               }
             }
@@ -7011,6 +7168,41 @@
         ],
         "title": "NamingPreviewItem"
       },
+      "NamingValidateRequest": {
+        "properties": {
+          "template": {
+            "type": "string",
+            "title": "Template"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "has_transcode_preset": {
+            "type": "boolean",
+            "title": "Has Transcode Preset",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "template",
+          "media_type"
+        ],
+        "title": "NamingValidateRequest"
+      },
+      "NamingValidateResponse": {
+        "properties": {
+          "valid": {
+            "type": "boolean",
+            "title": "Valid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "valid"
+        ],
+        "title": "NamingValidateResponse"
+      },
       "NamingVariable": {
         "properties": {
           "token": {
@@ -8784,6 +8976,19 @@
           "events_unsent"
         ],
         "title": "StatsResponse"
+      },
+      "SystemVersionResponse": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "title": "SystemVersionResponse"
       },
       "TemplatePreviewRequest": {
         "properties": {

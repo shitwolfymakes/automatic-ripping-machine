@@ -926,3 +926,14 @@ async def test_get_release_not_found(http_client):
     respx.get("https://musicbrainz.org/ws/2/release/missing").mock(return_value=httpx.Response(404))
     with pytest.raises(LookupError, match="release not found"):
         await MusicBrainzClient("armv3", http_client).get_release("missing")
+
+
+@respx.mock
+async def test_get_release_missing_title_raises(http_client):
+    # A 200 release body with no `title` is a degenerate response — get_release
+    # must raise the metadata LookupError rather than build a result.
+    respx.get("https://musicbrainz.org/ws/2/release/no-title").mock(
+        return_value=httpx.Response(200, json={"id": "no-title", "date": "1973"})
+    )
+    with pytest.raises(LookupError, match="missing title"):
+        await MusicBrainzClient("armv3", http_client).get_release("no-title")

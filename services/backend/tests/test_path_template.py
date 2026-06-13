@@ -110,3 +110,18 @@ def test_validate_template_or_http_raises_http_422_on_bad_token() -> None:
     with pytest.raises(HTTPException) as exc:
         validate_template_or_http("{nope}", MediaType.MOVIE, True)
     assert exc.value.status_code == 422
+
+
+def test_music_allows_disc_token() -> None:
+    from arm_backend.path_template import tokens_for_media, validate_template
+    from arm_common.enums import MediaType
+
+    keys = {t["token"] for t in tokens_for_media(MediaType.MUSIC)}
+    assert "disc" in keys
+
+    # a music template referencing {disc} validates (transcode_slug present -> has preset)
+    validate_template(
+        "{artist}/{album}/Disc {disc}/{track} - {track_title}.{ext}",
+        MediaType.MUSIC,
+        has_transcode_preset=True,
+    )

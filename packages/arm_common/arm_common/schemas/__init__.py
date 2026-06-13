@@ -42,6 +42,8 @@ from arm_common.schemas.metadata import (
 from arm_common.schemas.naming import (
     JobNamingPreviewResponse,
     NamingPreviewItem,
+    NamingValidateRequest,
+    NamingValidateResponse,
     NamingVariable,
     NamingVariablesResponse,
 )
@@ -91,6 +93,7 @@ from arm_common.schemas.system import (
     PreflightCheck,
     PreflightResponse,
     StatsResponse,
+    SystemVersionResponse,
 )
 from arm_common.schemas.notifications import (
     AppriseChannelConfig,
@@ -172,6 +175,8 @@ __all__ = [
     "ManualTriggerRequest",
     "ManualTriggerResponse",
     "NamingPreviewItem",
+    "NamingValidateRequest",
+    "NamingValidateResponse",
     "NamingVariable",
     "NotificationChannelCreateRequest",
     "NotificationChannelTestRequest",
@@ -206,11 +211,12 @@ __all__ = [
     "ScanTitle",
     "ServiceCatalog",
     "SessionApplicationView",
-    "StatsResponse",
     "SessionCloneRequest",
     "SessionCreateRequest",
     "SessionUpdateRequest",
     "SessionView",
+    "StatsResponse",
+    "SystemVersionResponse",
     "TemplatePreviewRequest",
     "TemplatePreviewResponse",
     "TrackFilters",
