@@ -41,6 +41,7 @@ class ConfigView(BaseModel):
 
     tmdb_api_key: str | None
     omdb_api_key: str | None
+    tvdb_api_key: str | None
     makemkv_key: str | None
     musicbrainz_user_agent: str | None
     auto_transcode_on_idle: bool
@@ -56,6 +57,7 @@ class ConfigView(BaseModel):
 class ConfigUpdateRequest(BaseModel):
     tmdb_api_key: str | None = None
     omdb_api_key: str | None = None
+    tvdb_api_key: str | None = None
     makemkv_key: str | None = None
     musicbrainz_user_agent: str | None = None
     auto_transcode_on_idle: bool | None = None
