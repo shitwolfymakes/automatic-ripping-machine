@@ -39,6 +39,7 @@ from arm_backend.routers import (
     rip_presets,
     ripper,
     sessions,
+    settings as settings_router,
     system as system_router,
     transcode_presets,
     transcoder,
@@ -223,6 +224,7 @@ app.include_router(naming_router.router)
 app.include_router(notifications_router.router)
 app.include_router(iso_router.router)
 app.include_router(logs_router.router)
+app.include_router(settings_router.router)
 app.include_router(system_router.router)
 app.include_router(ws_router)
 
