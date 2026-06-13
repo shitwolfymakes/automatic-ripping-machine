@@ -21,8 +21,10 @@ from arm_backend.db import get_session
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.routers._params import JobIdParam
 from arm_backend.routers.logs import per_job_log_path
+from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_backend.ws import WSHub
 from arm_common import (
+    Config,
     DiscFingerprint,
     Drive,
     DriveMediaStatus,
@@ -501,6 +503,13 @@ async def manual_trigger(
     drive = (await db.execute(select(Drive).where(col(Drive.id) == req.drive_id))).scalar_one_or_none()
     if drive is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
+
+    cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    if cfg is not None and cfg.ripping_paused:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="ripping is paused; no new jobs accepted",
+        )
 
     in_flight = (
         await db.execute(

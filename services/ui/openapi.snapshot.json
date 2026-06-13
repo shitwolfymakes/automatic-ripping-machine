@@ -3407,6 +3407,289 @@
         }
       }
     },
+    "/api/metadata/search": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Search Metadata",
+        "operationId": "search_metadata_api_metadata_search_get",
+        "parameters": [
+          {
+            "name": "title",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Title"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "movie",
+                "tv"
+              ],
+              "type": "string",
+              "default": "movie",
+              "title": "Type"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "tmdb",
+                "omdb"
+              ],
+              "type": "string",
+              "default": "tmdb",
+              "title": "Provider"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metadata/lookup": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Lookup Metadata",
+        "operationId": "lookup_metadata_api_metadata_lookup_get",
+        "parameters": [
+          {
+            "name": "imdb_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Imdb Id"
+            }
+          },
+          {
+            "name": "crc64",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Crc64"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metadata/music/search": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Search Music",
+        "operationId": "search_music_api_metadata_music_search_get",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Query"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metadata/music/{release_id}": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Music Release Detail",
+        "operationId": "music_release_detail_api_metadata_music__release_id__get",
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataReleaseDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/naming/variables": {
       "get": {
         "tags": [
@@ -3715,6 +3998,153 @@
           }
         }
       }
+    },
+    "/api/system/preflight": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Preflight",
+        "operationId": "preflight_api_system_preflight_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreflightResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/paths": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Paths",
+        "operationId": "paths_api_system_paths_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PathsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/stats": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Stats",
+        "operationId": "stats_api_system_stats_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3997,6 +4427,17 @@
             ],
             "title": "Block On Miss"
           },
+          "ripping_paused": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ripping Paused"
+          },
           "default_retention_policy": {
             "anyOf": [
               {
@@ -4105,6 +4546,10 @@
             "type": "boolean",
             "title": "Block On Miss"
           },
+          "ripping_paused": {
+            "type": "boolean",
+            "title": "Ripping Paused"
+          },
           "default_retention_policy": {
             "$ref": "#/components/schemas/RetentionPolicy"
           },
@@ -4153,6 +4598,7 @@
           "auto_transcode_on_idle",
           "auto_rip_on_insert",
           "block_on_miss",
+          "ripping_paused",
           "default_retention_policy",
           "notification_apprise_urls",
           "notifications_enabled",
@@ -5148,6 +5594,57 @@
         ],
         "title": "MediaType"
       },
+      "MetadataCandidate": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "provider_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "kind"
+        ],
+        "title": "MetadataCandidate"
+      },
       "MetadataKeyTestResponse": {
         "properties": {
           "provider": {
@@ -5182,6 +5679,115 @@
           "valid"
         ],
         "title": "MetadataKeyTestResponse"
+      },
+      "MetadataReleaseDetail": {
+        "properties": {
+          "release_id": {
+            "type": "string",
+            "title": "Release Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "artist": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artist"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "tracks": {
+            "items": {
+              "$ref": "#/components/schemas/MetadataReleaseTrack"
+            },
+            "type": "array",
+            "title": "Tracks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "release_id",
+          "title"
+        ],
+        "title": "MetadataReleaseDetail"
+      },
+      "MetadataReleaseTrack": {
+        "properties": {
+          "position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "MetadataReleaseTrack"
+      },
+      "MetadataSearchResponse": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/MetadataCandidate"
+            },
+            "type": "array",
+            "title": "Candidates"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "candidates"
+        ],
+        "title": "MetadataSearchResponse"
       },
       "NamingPreviewItem": {
         "properties": {
@@ -5286,6 +5892,100 @@
           "new_password"
         ],
         "title": "PasswordChangeRequest"
+      },
+      "PathStatus": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "exists": {
+            "type": "boolean",
+            "title": "Exists"
+          },
+          "writable": {
+            "type": "boolean",
+            "title": "Writable"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "path",
+          "exists",
+          "writable"
+        ],
+        "title": "PathStatus"
+      },
+      "PathsResponse": {
+        "properties": {
+          "paths": {
+            "items": {
+              "$ref": "#/components/schemas/PathStatus"
+            },
+            "type": "array",
+            "title": "Paths"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paths"
+        ],
+        "title": "PathsResponse"
+      },
+      "PreflightCheck": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "status"
+        ],
+        "title": "PreflightCheck"
+      },
+      "PreflightResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/PreflightCheck"
+            },
+            "type": "array",
+            "title": "Checks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "checks"
+        ],
+        "title": "PreflightResponse"
       },
       "RegisterRequest": {
         "properties": {
@@ -6242,6 +6942,37 @@
           "updated_at"
         ],
         "title": "SessionView"
+      },
+      "StatsResponse": {
+        "properties": {
+          "uptime_seconds": {
+            "type": "integer",
+            "title": "Uptime Seconds"
+          },
+          "jobs_by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Jobs By Status"
+          },
+          "drives_online": {
+            "type": "integer",
+            "title": "Drives Online"
+          },
+          "events_unsent": {
+            "type": "integer",
+            "title": "Events Unsent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uptime_seconds",
+          "jobs_by_status",
+          "drives_online",
+          "events_unsent"
+        ],
+        "title": "StatsResponse"
       },
       "TemplatePreviewRequest": {
         "properties": {

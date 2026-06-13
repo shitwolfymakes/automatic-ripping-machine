@@ -38,13 +38,22 @@ class MusicBrainzClient:
         self._user_agent = user_agent
         self._http = http
 
-    async def lookup_disc_id(self, disc_id: str) -> MetadataResult:
+    async def _get(self, path: str, params: dict[str, Any], *, not_found_detail: str | None = None) -> dict[str, Any]:
+        """Rate-limit, execute GET, handle transport errors and bad statuses.
+
+        Enforces the 1 req/s rate limit, sets the required User-Agent header,
+        and converts transport failures and non-200 HTTP statuses into the
+        appropriate LookupError / LookupTimeout. Returns the parsed JSON body.
+
+        `not_found_detail`, when set, gives a 404 a caller-specific message
+        (e.g. "disc_id not found" — an expected miss, not a generic HTTP error).
+        """
         await _rate_limit()
 
         try:
             r = await self._http.get(
-                f"{_BASE_URL}/discid/{disc_id}",
-                params={"inc": "artists+recordings", "fmt": "json"},
+                f"{_BASE_URL}{path}",
+                params=params,
                 headers={"User-Agent": self._user_agent, "Accept": "application/json"},
             )
         except httpx.TimeoutException as e:
@@ -52,22 +61,29 @@ class MusicBrainzClient:
         except httpx.HTTPError as e:
             raise LookupError(f"musicbrainz transport error: {e}") from e
 
-        if r.status_code == 404:
-            raise LookupError("musicbrainz disc_id not found")
+        if not_found_detail is not None and r.status_code == 404:
+            raise LookupError(not_found_detail)
         if r.status_code >= 500:
             raise LookupError(f"musicbrainz 5xx status={r.status_code}")
         if r.status_code != 200:
             raise LookupError(f"musicbrainz status={r.status_code}")
 
-        body: dict[str, Any] = r.json()
+        return r.json()  # type: ignore[no-any-return]
+
+    async def lookup_disc_id(self, disc_id: str) -> MetadataResult:
+        body = await self._get(
+            f"/discid/{disc_id}",
+            params={"inc": "artists+recordings", "fmt": "json"},
+            not_found_detail="musicbrainz disc_id not found",
+        )
+
         releases = body.get("releases") or []
         if not releases:
             raise LookupError("musicbrainz disc_id has no releases")
 
         top = releases[0]
         title_val = top.get("title")
-        date = top.get("date") or ""
-        year_val = int(date[:4]) if date[:4].isdigit() else None
+        year_val = _parse_year(top.get("date") or "")
         if not title_val:
             raise LookupError("musicbrainz top release missing title")
 
@@ -87,6 +103,58 @@ class MusicBrainzClient:
         }
 
         return MetadataResult(title=title_val, year=year_val, kind="music", payload=payload)
+
+    async def get_release(self, release_id: str) -> MetadataResult:
+        """Fetch a single MusicBrainz release by MBID for interactive detail.
+
+        Mirrors lookup_disc_id's projection (artist/album/tracks spread over the
+        raw release dict) but keyed on a known release MBID instead of a disc-id
+        lookup. A 404 (unknown MBID) surfaces as the not-found LookupError.
+        """
+        body = await self._get(
+            f"/release/{release_id}",
+            params={"inc": "artists+recordings+labels", "fmt": "json"},
+            not_found_detail="musicbrainz release not found",
+        )
+        title_val = body.get("title")
+        if not title_val:
+            raise LookupError("musicbrainz release missing title")
+        year_val = _parse_year(body.get("date") or "")
+        artist = _join_artist_credit(body.get("artist-credit") or [])
+        media = body.get("media") or []
+        tracks = _extract_tracks(media[0] if media else None)
+        payload: dict[str, Any] = {
+            "artist": artist,
+            "album": title_val,
+            "tracks": tracks,
+            **body,
+        }
+        return MetadataResult(title=title_val, year=year_val, kind="music", payload=payload)
+
+    async def search_releases(self, query: str, limit: int = 10) -> list[MetadataResult]:
+        """Lucene release search for interactive lookup. Returns up to `limit`."""
+        body = await self._get(
+            "/release",
+            params={"query": query, "fmt": "json", "limit": limit},
+        )
+
+        results: list[MetadataResult] = []
+        # MB's `limit` query param is advisory; re-cap client-side as a guard.
+        for rel in (body.get("releases") or [])[:limit]:
+            title = rel.get("title")
+            if not title:
+                continue
+            year = _parse_year(rel.get("date") or "")
+            artist = _join_artist_credit(rel.get("artist-credit") or [])
+            payload: dict[str, Any] = {"artist": artist, "album": title, **rel}
+            results.append(MetadataResult(title=title, year=year, kind="music", payload=payload))
+
+        return results
+
+
+def _parse_year(date: str) -> int | None:
+    """Year from a MusicBrainz date string ("1973-03-01" -> 1973), or None."""
+    return int(date[:4]) if date[:4].isdigit() else None
 
 
 def _join_artist_credit(credit: list[dict[str, Any]]) -> str:

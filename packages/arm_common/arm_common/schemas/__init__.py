@@ -31,7 +31,14 @@ from arm_common.schemas.jobs import (
     RipStartResponse,
     TrackView,
 )
-from arm_common.schemas.metadata import MetadataKeyTestResponse, MetadataProvider
+from arm_common.schemas.metadata import (
+    MetadataCandidate,
+    MetadataKeyTestResponse,
+    MetadataProvider,
+    MetadataReleaseDetail,
+    MetadataReleaseTrack,
+    MetadataSearchResponse,
+)
 from arm_common.schemas.naming import (
     JobNamingPreviewResponse,
     NamingPreviewItem,
@@ -78,6 +85,13 @@ from arm_common.schemas.transcoder import (
     RegisterTranscoderRequest,
     RegisterTranscoderResponse,
 )
+from arm_common.schemas.system import (
+    PathStatus,
+    PathsResponse,
+    PreflightCheck,
+    PreflightResponse,
+    StatsResponse,
+)
 from arm_common.schemas.ws import (
     WSAck,
     WSAuthRequest,
@@ -91,8 +105,12 @@ from arm_common.schemas.ws import (
 
 __all__ = [
     "AbandonJobRequest",
+    "MetadataCandidate",
     "MetadataKeyTestResponse",
     "MetadataProvider",
+    "MetadataReleaseDetail",
+    "MetadataReleaseTrack",
+    "MetadataSearchResponse",
     "ApplySessionRequest",
     "BulkDeleteJobsResponse",
     "DiscFingerprintInput",
@@ -130,6 +148,10 @@ __all__ = [
     "NamingVariable",
     "NamingVariablesResponse",
     "PasswordChangeRequest",
+    "PathStatus",
+    "PathsResponse",
+    "PreflightCheck",
+    "PreflightResponse",
     "RegisterRequest",
     "RegisterTranscoderRequest",
     "RegisterTranscoderResponse",
@@ -146,6 +168,7 @@ __all__ = [
     "ScanResult",
     "ScanTitle",
     "SessionApplicationView",
+    "StatsResponse",
     "SessionCloneRequest",
     "SessionCreateRequest",
     "SessionUpdateRequest",
