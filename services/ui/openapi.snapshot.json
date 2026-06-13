@@ -3239,6 +3239,289 @@
         }
       }
     },
+    "/api/transcodes/stats": {
+      "get": {
+        "tags": [
+          "transcodes"
+        ],
+        "summary": "Transcode Stats",
+        "operationId": "transcode_stats_api_transcodes_stats_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscodeStatsView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcodes/workers": {
+      "get": {
+        "tags": [
+          "transcodes"
+        ],
+        "summary": "Transcode Workers",
+        "operationId": "transcode_workers_api_transcodes_workers_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TranscodeWorkerView"
+                  },
+                  "title": "Response Transcode Workers Api Transcodes Workers Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcodes/{task_id}/retry": {
+      "post": {
+        "tags": [
+          "transcodes"
+        ],
+        "summary": "Retry Transcode",
+        "operationId": "retry_transcode_api_transcodes__task_id__retry_post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscodeTaskView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcodes/{task_id}/log.zip": {
+      "get": {
+        "tags": [
+          "transcodes"
+        ],
+        "summary": "Download Transcode Log Zip",
+        "operationId": "download_transcode_log_zip_api_transcodes__task_id__log_zip_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcodes/{task_id}/log": {
+      "get": {
+        "tags": [
+          "transcodes"
+        ],
+        "summary": "Stream Transcode Log",
+        "operationId": "stream_transcode_log_api_transcodes__task_id__log_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 1000,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/transcodes/{task_id}": {
       "delete": {
         "tags": [
@@ -10004,6 +10287,42 @@
         ],
         "title": "TranscodePresetView"
       },
+      "TranscodeStatsView": {
+        "properties": {
+          "tasks_by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Tasks By Status"
+          },
+          "total_tasks": {
+            "type": "integer",
+            "title": "Total Tasks"
+          },
+          "gpus_total": {
+            "type": "integer",
+            "title": "Gpus Total"
+          },
+          "gpus_available": {
+            "type": "integer",
+            "title": "Gpus Available"
+          },
+          "max_parallel": {
+            "type": "integer",
+            "title": "Max Parallel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tasks_by_status",
+          "total_tasks",
+          "gpus_total",
+          "gpus_available",
+          "max_parallel"
+        ],
+        "title": "TranscodeStatsView"
+      },
       "TranscodeTaskStatus": {
         "type": "string",
         "enum": [
@@ -10134,6 +10453,74 @@
           "none"
         ],
         "title": "TranscodeTool"
+      },
+      "TranscodeWorkerView": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "claimed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed By"
+          },
+          "progress_pct": {
+            "type": "integer",
+            "title": "Progress Pct"
+          },
+          "claim_heartbeat_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Heartbeat At"
+          },
+          "gpu_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gpu Id"
+          },
+          "source_track_id": {
+            "type": "string",
+            "title": "Source Track Id"
+          },
+          "output_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "progress_pct",
+          "source_track_id"
+        ],
+        "title": "TranscodeWorkerView"
       },
       "ValidationError": {
         "properties": {
