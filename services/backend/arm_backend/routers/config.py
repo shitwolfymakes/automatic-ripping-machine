@@ -37,8 +37,9 @@ router = APIRouter(prefix="/api/config", tags=["config"])
 _NON_EDITABLE_KEYS = frozenset(m.key for m in CONFIG_FIELD_META if not m.editable)
 
 # Secret-tier config fields, derived from the registry so a future secret field
-# auto-masks. Intersected with ConfigView fields: tvdb_api_key is registry-secret
-# but not yet exposed on ConfigView (B29), so it's harmlessly excluded until then.
+# auto-masks. The `& ConfigView.model_fields` guard keeps masking aligned to what's
+# actually exposed: e.g. when tvdb_api_key gains its registry+ConfigView entry (B29),
+# it masks automatically; a secret-tier field not yet on ConfigView is skipped.
 _SECRET_KEYS = frozenset(m.key for m in CONFIG_FIELD_META if m.tier == "secret") & set(ConfigView.model_fields)
 
 
