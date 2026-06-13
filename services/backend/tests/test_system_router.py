@@ -57,6 +57,7 @@ def _make_app(signing_key: bytes, db: FakeSession, *, ingress_ok: bool, tmp) -> 
     app = FastAPI()
     app.state.signing_key = signing_key
     app.state.started_at = datetime.now(timezone.utc) - timedelta(seconds=42)
+    # transcode_dispatcher intentionally NOT set; tests that need it set it directly on app.state
     media = tmp / "media"
     media.mkdir()
     raw = tmp / "raw"
@@ -359,4 +360,4 @@ def test_preflight_overall_not_error_when_only_transcoder_warns(signing_key: byt
     body = r.json()
     transcoder = next(ch for ch in body["checks"] if ch["name"] == "transcoder")
     assert transcoder["status"] == "warning"
-    assert body["status"] != "error"
+    assert body["status"] == "warning"
