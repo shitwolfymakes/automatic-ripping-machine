@@ -3931,6 +3931,17 @@
             ],
             "title": "Omdb Api Key"
           },
+          "tvdb_api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tvdb Api Key"
+          },
           "makemkv_key": {
             "anyOf": [
               {
@@ -4049,6 +4060,17 @@
             ],
             "title": "Omdb Api Key"
           },
+          "tvdb_api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tvdb Api Key"
+          },
           "makemkv_key": {
             "anyOf": [
               {
@@ -4125,6 +4147,7 @@
         "required": [
           "tmdb_api_key",
           "omdb_api_key",
+          "tvdb_api_key",
           "makemkv_key",
           "musicbrainz_user_agent",
           "auto_transcode_on_idle",
@@ -4872,6 +4895,14 @@
       },
       "JobNamingPreviewResponse": {
         "properties": {
+          "job_output_dir": {
+            "type": "string",
+            "title": "Job Output Dir"
+          },
+          "job_output_name": {
+            "type": "string",
+            "title": "Job Output Name"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/NamingPreviewItem"
@@ -4882,6 +4913,8 @@
         },
         "type": "object",
         "required": [
+          "job_output_dir",
+          "job_output_name",
           "items"
         ],
         "title": "JobNamingPreviewResponse"
@@ -5156,15 +5189,36 @@
             "type": "string",
             "title": "Track Id"
           },
-          "filename": {
+          "track_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Number"
+          },
+          "output_path": {
             "type": "string",
-            "title": "Filename"
+            "title": "Output Path"
+          },
+          "output_dir": {
+            "type": "string",
+            "title": "Output Dir"
+          },
+          "output_name": {
+            "type": "string",
+            "title": "Output Name"
           }
         },
         "type": "object",
         "required": [
           "track_id",
-          "filename"
+          "output_path",
+          "output_dir",
+          "output_name"
         ],
         "title": "NamingPreviewItem"
       },
