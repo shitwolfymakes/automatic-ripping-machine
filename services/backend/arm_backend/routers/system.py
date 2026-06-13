@@ -12,6 +12,7 @@ from sqlmodel import col, select
 from arm_backend.auth import require_jwt
 from arm_backend.config import settings
 from arm_backend.db import get_session
+from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_common import Config, Drive, DriveStatus, Event, Job, User
 from arm_common.schemas import (
@@ -84,6 +85,16 @@ async def preflight(
             detail=None if drives else "no online drives registered",
         )
     )
+
+    mk_valid = cfg.makemkv_key_valid if cfg is not None else None
+    mk_state = cfg.makemkv_key_state if cfg is not None else None
+    if mk_valid is True:
+        mk_status, mk_detail = "ok", makemkv_state_detail("valid")
+    elif mk_valid is False:
+        mk_status, mk_detail = "error", (makemkv_state_detail(mk_state) or "MakeMKV key invalid")
+    else:
+        mk_status, mk_detail = "warning", "MakeMKV key not yet validated by a ripper"
+    checks.append(PreflightCheck(name="makemkv_key", status=mk_status, detail=mk_detail))
 
     overall = "ok"
     for ch in checks:

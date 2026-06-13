@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, LargeBinary, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, LargeBinary, String
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlmodel import Field, SQLModel
 
@@ -22,6 +22,12 @@ class Config(SQLModel, table=True):
     # var and then to the monthly forum beta-key scrape. See
     # services/ripper/arm_ripper/makemkv_key.py.
     makemkv_key: str | None = Field(default=None)
+    # Disc-free makemkv key-validity, reported by the ripper's probe (see
+    # services/ripper/arm_ripper/scan/makemkv.py probe_makemkv_key + the
+    # /api/ripper/makemkv-key-status endpoint). All null until a ripper reports.
+    makemkv_key_valid: bool | None = Field(sa_column=Column(Boolean, nullable=True))
+    makemkv_key_state: str | None = Field(sa_column=Column(String, nullable=True))
+    makemkv_key_checked_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
     # MusicBrainz requires a non-empty User-Agent (they 403 blank UAs); `armv3`
     # is a reasonable shared default that won't blow up the first audio-CD rip
     # on a fresh install. Operators are still encouraged to override with an
