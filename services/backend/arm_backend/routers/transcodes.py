@@ -115,9 +115,7 @@ async def retry_transcode(
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
 ) -> TranscodeTask:
-    row = (await db.execute(select(TranscodeTask).where(col(TranscodeTask.id) == task_id))).scalar_one_or_none()
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown transcode_task_id: {task_id}")
+    row = await _require_task(db, task_id)
     if row.status != TranscodeTaskStatus.FAILED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
