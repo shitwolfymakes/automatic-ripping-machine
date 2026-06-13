@@ -295,3 +295,68 @@ def test_paths_uses_settings_fallback(signing_key: bytes) -> None:
     names = {p["name"] for p in r.json()["paths"]}
     # settings defaults include MEDIA_ROOT, RAW_ROOT, ISO_INGRESS_ROOT, LOG_DIR
     assert "MEDIA_ROOT" in names
+
+
+class _StubDispatcher:
+    """Minimal stand-in for TranscodeDispatcher exposing only the gate the
+    preflight check reads. A real dispatcher needs a docker client + settings,
+    which the Tier-1 fake-session suite has no business constructing."""
+
+    def __init__(self, *, host_paths: bool) -> None:
+        self._host_paths = host_paths
+
+    def host_paths_set(self) -> bool:
+        return self._host_paths
+
+
+def test_preflight_transcoder_warning_when_no_dispatcher(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    # _make_app does not set app.state.transcode_dispatcher → getattr falls to None
+    with TestClient(app) as c:
+        r = c.get("/api/system/preflight", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
+    assert check["status"] == "warning"
+    assert "docker" in check["detail"]
+
+
+def test_preflight_transcoder_warning_when_host_paths_unset(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app.state.transcode_dispatcher = _StubDispatcher(host_paths=False)
+    with TestClient(app) as c:
+        r = c.get("/api/system/preflight", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
+    assert check["status"] == "warning"
+    assert "ARM_HOST" in check["detail"]
+
+
+def test_preflight_transcoder_ok_when_live(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app.state.transcode_dispatcher = _StubDispatcher(host_paths=True)
+    with TestClient(app) as c:
+        r = c.get("/api/system/preflight", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
+    assert check["status"] == "ok"
+    assert check["detail"] is None
+
+
+def test_preflight_overall_not_error_when_only_transcoder_warns(signing_key: bytes, tmp_path) -> None:
+    # ingress_ok=True means roots are fine; dispatcher absent → transcoder warns.
+    # Overall must be "warning" (degraded), never promoted to "error".
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/preflight", headers=_auth(token))
+    body = r.json()
+    transcoder = next(ch for ch in body["checks"] if ch["name"] == "transcoder")
+    assert transcoder["status"] == "warning"
+    assert body["status"] != "error"

@@ -96,6 +96,15 @@ async def preflight(
         mk_status, mk_detail = "warning", "MakeMKV key not yet validated by a ripper"
     checks.append(PreflightCheck(name="makemkv_key", status=mk_status, detail=mk_detail))
 
+    dispatcher = getattr(request.app.state, "transcode_dispatcher", None)
+    if dispatcher is None:
+        tc_status, tc_detail = "warning", "transcoder disabled: docker socket unavailable"
+    elif not dispatcher.host_paths_set():
+        tc_status, tc_detail = "warning", "transcoder disabled: ARM_HOST_*_PATH not set"
+    else:
+        tc_status, tc_detail = "ok", None
+    checks.append(PreflightCheck(name="transcoder", status=tc_status, detail=tc_detail))
+
     overall = "ok"
     for ch in checks:
         if _WORST[ch.status] > _WORST[overall]:
