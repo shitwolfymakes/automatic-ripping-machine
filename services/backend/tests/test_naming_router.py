@@ -485,6 +485,24 @@ def test_naming_preview_falls_back_to_synthetic(signing_key: bytes) -> None:
     assert r.json() == {"rendered": "Iron Man (2008).mkv"}
 
 
+def test_naming_preview_caller_variable_overrides_one_token(signing_key: bytes) -> None:
+    # title comes from the caller; year is omitted, so it falls back to the
+    # synthetic movie value (2008). Proves {**synthetic, **variables} merge order.
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {
+        "template": "{title} ({year})",
+        "media_type": "movie",
+        "has_transcode_preset": False,
+        "variables": {"title": "Alien"},
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/naming/preview", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json() == {"rendered": "Alien (2008)"}
+
+
 def test_naming_preview_rejects_unknown_token(signing_key: bytes) -> None:
     db = FakeSession()
     _seed(db)
@@ -514,6 +532,7 @@ def test_naming_preview_ignores_unreferenced_variable(signing_key: bytes) -> Non
     body = {
         "template": "{title}",
         "media_type": "movie",
+        "has_transcode_preset": False,
         "variables": {"title": "Dune", "bogus": "ignored"},
     }
     with TestClient(app) as client:
