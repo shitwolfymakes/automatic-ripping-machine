@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     # MEDIA_ROOT/RAW_ROOT; bind-mount a host dir here in compose.
     ISO_INGRESS_ROOT: str = "/ingress"
 
+    # Disk cache for the image-proxy router (GET /api/images/proxy). Posters
+    # fetched from allowlisted external hosts are cached here (LRU + 7-day TTL)
+    # so the UI can load them without browser CORS/ORB issues. Bind-mount a
+    # volume here in compose.
+    ARM_IMAGE_CACHE_PATH: str = "/data/cache/images"
+
     # Comma-separated list of `Origin` header values the WS endpoint accepts
     # from browser clients. Service-token connections (rippers, transcoders)
     # mark themselves with the `arm-service-token` subprotocol and skip this
