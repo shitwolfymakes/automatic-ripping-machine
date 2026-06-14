@@ -262,6 +262,7 @@ def test_list_returns_driveview_with_null_tuning(signing_key: bytes) -> None:
         assert row[f] is None
     assert row["current_job"] is None
     assert "rip_params_json" not in row
+    assert "last_seen_at" in row  # raw-Drive field preserved in the view (UI renders it)
 
 
 def test_current_job_is_active_job(signing_key: bytes) -> None:

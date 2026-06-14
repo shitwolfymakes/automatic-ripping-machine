@@ -26,6 +26,7 @@ class DriveView(BaseModel):
     device_path: str
     display_name: str | None
     status: DriveStatus
+    last_seen_at: datetime | None
     media_status: DriveMediaStatus | None
     media_status_at: datetime | None
     default_session_id: str | None

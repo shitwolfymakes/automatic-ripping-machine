@@ -7128,6 +7128,18 @@
           "status": {
             "$ref": "#/components/schemas/DriveStatus"
           },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
           "media_status": {
             "anyOf": [
               {
@@ -7279,6 +7291,7 @@
           "device_path",
           "display_name",
           "status",
+          "last_seen_at",
           "media_status",
           "media_status_at",
           "default_session_id",
