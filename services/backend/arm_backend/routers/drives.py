@@ -30,6 +30,7 @@ _STALE_AFTER = timedelta(minutes=5)
 _TERMINAL_JOB_STATUSES = {
     JobStatus.RIPPED,
     JobStatus.RIPPED_PARTIAL,
+    JobStatus.RIPPED_AWAITING_IDENTIFY,
     JobStatus.ABANDONED,
     JobStatus.FAILED,
 }
@@ -54,7 +55,9 @@ async def list_drives(
     _: User = Depends(require_jwt),
     session: AsyncSession = Depends(get_session),
 ) -> list[DriveView]:
-    drives = list((await session.execute(select(Drive).order_by(col(Drive.created_at).asc()))).scalars().all())
+    result = await session.execute(select(Drive).order_by(col(Drive.created_at).asc()))
+    drives = list(result.scalars().all())
+    # Fetch all jobs and group in Python — FakeSession cannot evaluate SQL GROUP BY.
     jobs = list((await session.execute(select(Job))).scalars().all())
     jobs_by_drive: dict[str, list[Job]] = {}
     for j in jobs:

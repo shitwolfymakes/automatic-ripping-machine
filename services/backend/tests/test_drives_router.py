@@ -289,6 +289,19 @@ def test_current_job_none_when_only_terminal(signing_key: bytes) -> None:
     assert row["current_job"] is None
 
 
+def test_current_job_none_when_ripped_awaiting_identify(signing_key: bytes) -> None:
+    # RIPPED_AWAITING_IDENTIFY is terminal — rip done, drive idle, awaiting a
+    # human identify. A drive carrying only this must show current_job=None.
+    db = FakeSession()
+    _seed(db)
+    db.rows["jobs"] = [_job("job_awaiting", status=JobStatus.RIPPED_AWAITING_IDENTIFY)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/drives", headers=_auth(token))
+    row = next(d for d in r.json() if d["id"] == "drv_x")
+    assert row["current_job"] is None
+
+
 def test_current_job_picks_most_recent_active(signing_key: bytes) -> None:
     db = FakeSession()
     _seed(db)
