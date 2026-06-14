@@ -380,3 +380,22 @@ def test_patch_unknown_tuning_field_422(signing_key: bytes) -> None:
     with TestClient(app) as c:
         r = c.patch("/api/drives/drv_x", json={"bogus_field": 1}, headers=_auth(token))
     assert r.status_code == 422
+
+
+def test_current_job_handles_none_created_at(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    # One active job with created_at=None (fresh row, unstamped) + one with a
+    # real timestamp. The None-created_at job must sort to the epoch-min
+    # sentinel (not crash), so the timestamped job wins.
+    db.rows["jobs"] = [
+        Job(id="job_none", drive_id="drv_x", disc_type=DiscType.DVD, status=JobStatus.RIPPING,
+            title="no-ts", created_at=None),
+        _job("job_ts", status=JobStatus.IDENTIFIED, title="has-ts", created=50),
+    ]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/drives", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    row = next(d for d in r.json() if d["id"] == "drv_x")
+    assert row["current_job"]["id"] == "job_ts"  # real timestamp beats the None-sentinel
