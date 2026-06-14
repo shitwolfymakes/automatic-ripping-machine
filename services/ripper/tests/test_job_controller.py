@@ -513,3 +513,26 @@ async def test_scan_retry_propagates_scanerror(monkeypatch):
     controller = JobController(FakeClient(), "drv_test")
     with pytest.raises(jc_module.ScanError):
         await controller._scan_with_ready_retry("/dev/sr0")
+
+
+async def test_run_command_kill_survives_process_lookup_error(monkeypatch):
+    class _DeadProc:
+        returncode = None
+
+        async def communicate(self):
+            raise asyncio.TimeoutError
+
+        def kill(self):
+            raise ProcessLookupError  # child already exited
+
+        async def wait(self):
+            return None
+
+    async def _fake_exec(*_a, **_k):
+        return _DeadProc()
+
+    monkeypatch.setattr(jc_module.asyncio, "create_subprocess_exec", _fake_exec)
+
+    rc, msg = await JobController._run_command("eject", "-sv", "/dev/sr0", log_failure=False)
+    assert rc is None
+    assert msg == "timeout"

@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import shutil
 from pathlib import Path
@@ -595,7 +596,8 @@ class JobController:
         try:
             _, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=EJECT_PROCESS_TIMEOUT)
         except asyncio.TimeoutError:
-            proc.kill()
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
             await proc.wait()
             if log_failure:
                 logger.warning("%s timed out", argv[0])
