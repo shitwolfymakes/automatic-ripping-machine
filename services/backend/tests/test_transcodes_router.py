@@ -112,7 +112,9 @@ def _task(
     )
 
 
-def _gpu(gpu_id: str = "gpu_1", *, status: GpuStatus = GpuStatus.AVAILABLE, claimed_by_task_id: str | None = None) -> Gpu:
+def _gpu(
+    gpu_id: str = "gpu_1", *, status: GpuStatus = GpuStatus.AVAILABLE, claimed_by_task_id: str | None = None
+) -> Gpu:
     return Gpu(
         id=gpu_id,
         vendor=GpuVendor.VAAPI,

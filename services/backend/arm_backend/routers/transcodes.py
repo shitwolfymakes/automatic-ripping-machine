@@ -89,9 +89,9 @@ async def transcode_workers(
     db: AsyncSession = Depends(get_session),
 ) -> list[TranscodeWorkerView]:
     in_progress = list(
-        (
-            await db.execute(select(TranscodeTask).where(col(TranscodeTask.status) == TranscodeTaskStatus.IN_PROGRESS))
-        ).scalars().all()
+        (await db.execute(select(TranscodeTask).where(col(TranscodeTask.status) == TranscodeTaskStatus.IN_PROGRESS)))
+        .scalars()
+        .all()
     )
     gpus = list((await db.execute(select(Gpu))).scalars().all())
     gpu_by_task = {g.claimed_by_task_id: g.id for g in gpus if g.claimed_by_task_id is not None}
