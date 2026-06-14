@@ -20,6 +20,7 @@ from arm_common import (  # noqa: E402
     ContainerFormat,
     DiscType,
     Drive,
+    DriveMode,
     DriveStatus,
     HwPreference,
     IdentificationMode,
@@ -315,3 +316,67 @@ def test_current_job_grouped_per_drive_no_crossleak(signing_key: bytes) -> None:
     by_id = {d["id"]: d for d in r.json()}
     assert by_id["drv_x"]["current_job"]["id"] == "job_x"
     assert by_id["drv_y"]["current_job"] is None
+
+
+def test_patch_tuning_fields_persisted(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {
+        "rip_speed": 8,
+        "drive_mode": "manual",
+        "uhd_capable": True,
+        "prescan_cache_mb": 1024,
+        "prescan_timeout": 30,
+        "prescan_retries": 3,
+        "disc_enum_timeout": 60,
+    }
+    with TestClient(app) as c:
+        r = c.patch("/api/drives/drv_x", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    row = r.json()
+    for k, v in body.items():
+        assert row[k] == v
+    assert db.rows["drives"][0].rip_speed == 8
+    assert db.rows["drives"][0].drive_mode == DriveMode.MANUAL
+
+
+def test_patch_invalid_drive_mode_422(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/drives/drv_x", json={"drive_mode": "bogus"}, headers=_auth(token))
+    assert r.status_code == 422
+
+
+def test_patch_partial_leaves_others_untouched(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["drives"][0].drive_mode = DriveMode.AUTO
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/drives/drv_x", json={"rip_speed": 4}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["rip_speed"] == 4
+    assert r.json()["drive_mode"] == "auto"
+
+
+def test_patch_explicit_null_clears_tuning(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["drives"][0].rip_speed = 9
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/drives/drv_x", json={"rip_speed": None}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["rip_speed"] is None
+
+
+def test_patch_unknown_tuning_field_422(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/drives/drv_x", json={"bogus_field": 1}, headers=_auth(token))
+    assert r.status_code == 422
