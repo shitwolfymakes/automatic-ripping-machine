@@ -577,6 +577,8 @@ async def update_job(
     if req.tracks is not None:
         rows = list((await db.execute(select(Track).where(col(Track.job_id) == job_id))).scalars().all())
         by_id = {t.id: t for t in rows}
+        # Duplicate track_ids in req.tracks → last-wins (idempotent setattr); a
+        # repeated track.updated event is benign. Callers needn't deduplicate.
         for edit in req.tracks:
             track = by_id.get(edit.track_id)
             if track is None:
@@ -589,8 +591,7 @@ async def update_job(
             db.add(track)
             edited_track_ids.append(track.id)
 
-    await db.commit()
-    await db.refresh(job)
+    await db.flush()
     for tid in edited_track_ids:
         await hub.emit(
             topic="ripper.events",
@@ -600,8 +601,8 @@ async def update_job(
             track_id=tid,
             session=db,
         )
-    if edited_track_ids:
-        await db.commit()
+    await db.commit()
+    await db.refresh(job)
     return job
 
 

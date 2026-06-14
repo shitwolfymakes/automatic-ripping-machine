@@ -765,3 +765,29 @@ def test_update_job_track_scoped_to_job_404(signing_key: bytes) -> None:
         r = c.patch(f"/api/jobs/{_JOB_ID_A}",
                     json={"tracks": [{"track_id": "trk_other", "title": "X"}]}, headers=_auth(token))
     assert r.status_code == 404
+
+
+def test_update_job_edits_multiple_tracks(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)  # job + _TRK_ID_A (index 1)
+    _TRK_ID_B = "trk_00000000000000000000000002"
+    db.rows["tracks"].append(
+        Track(id=_TRK_ID_B, job_id=_JOB_ID_A,
+              kind=TrackKind.VIDEO_TITLE, index=2, source_ref="1")
+    )
+    hub = _Hub()
+    app, token = _make_app(signing_key, db, hub=hub)
+    body = {"tracks": [
+        {"track_id": _TRK_ID_A, "episode_number": 1, "episode_name": "Pilot"},
+        {"track_id": _TRK_ID_B, "episode_number": 2, "episode_name": "Part Two"},
+    ]}
+    with TestClient(app) as c:
+        r = c.patch(f"/api/jobs/{_JOB_ID_A}", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    by_id = {t.id: t for t in db.rows["tracks"]}
+    assert by_id[_TRK_ID_A].episode_number == 1
+    assert by_id[_TRK_ID_A].episode_name == "Pilot"
+    assert by_id[_TRK_ID_B].episode_number == 2
+    assert by_id[_TRK_ID_B].episode_name == "Part Two"
+    updated = [e for e in hub.events if e["event_type"] == "track.updated"]
+    assert len(updated) == 2
