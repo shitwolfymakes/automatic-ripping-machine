@@ -133,6 +133,8 @@ _TOKEN_DESCRIPTIONS: dict[str, str] = {
     "show": "TV show name",
     "year": "Release year",
     "season": "Season number, zero-padded",
+    "episode": "Episode number, zero-padded",
+    "episode_title": "Episode title",
     "disc": "Disc number within the set",
     "track": "Track number, zero-padded",
     "track_title": "Per-track title (music)",

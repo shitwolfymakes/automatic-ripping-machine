@@ -312,3 +312,27 @@ def test_custom_filename_overrides_name_keeps_dir() -> None:
     # Filename should be "S01E01.mkv"; directory should be template-rendered
     assert path.endswith("S01E01.mkv")
     assert "My Show (2020)/Season 01" in path
+
+
+def test_custom_filename_already_has_correct_ext_no_double() -> None:
+    # custom_filename already carries the right extension — must not double it
+    job = _tv_job()
+    sess = _tv_session("{show} ({year})/Season {season}/{show} S01E{track} - {transcode_slug}.{ext}")
+    tp = _tv_preset()
+    track = _tv_track(1, custom_filename="S01E01.mkv")
+    resolved = compute_outputs(job, [track], sess, tp)
+    path = resolved[0].output_path
+    assert path.endswith("S01E01.mkv")
+    assert not path.endswith(".mkv.mkv")
+
+
+def test_custom_filename_different_ext_stripped_and_resolved_ext_appended() -> None:
+    # custom_filename carries a different extension — strip it, append the resolved one
+    job = _tv_job()
+    sess = _tv_session("{show} ({year})/Season {season}/{show} S01E{track} - {transcode_slug}.{ext}")
+    tp = _tv_preset()
+    track = _tv_track(1, custom_filename="S01E01.avi")
+    resolved = compute_outputs(job, [track], sess, tp)
+    path = resolved[0].output_path
+    assert path.endswith("S01E01.mkv")
+    assert not path.endswith(".avi.mkv")

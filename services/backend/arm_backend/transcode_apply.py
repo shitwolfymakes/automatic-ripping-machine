@@ -144,9 +144,12 @@ def compute_outputs(
         if track.custom_filename:
             p = PurePosixPath(path)
             ext = p.suffix
-            name = sanitize_path_component(track.custom_filename)
-            if ext and not name.endswith(ext):
-                name = f"{name}{ext}"
+            # Sanitize, then use the stem only (strip any extension the operator
+            # typed) so we never produce "name.avi.mkv"; fall back to a safe stem
+            # if the name sanitizes to empty (e.g. "..").
+            sanitized = sanitize_path_component(track.custom_filename)
+            stem = PurePosixPath(sanitized).stem or "untitled"
+            name = f"{stem}{ext}" if ext else stem
             parent = str(p.parent)
             path = name if parent == "." else f"{parent}/{name}"
         resolved.append(ResolvedTask(track_id=track.id, output_path=path))
