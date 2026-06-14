@@ -467,6 +467,23 @@ async def test_scan_retry_stops_when_disc_pulled(monkeypatch):
     assert calls["n"] == 1
 
 
+async def test_scan_retry_stops_pre_sleep_when_disc_absent(monkeypatch):
+    """Drive reports non-DISC_OK on the first status check (pre-sleep): stop immediately, no sleep."""
+    sleep_calls = {"n": 0}
+
+    async def _count_sleep(_):
+        sleep_calls["n"] += 1
+
+    monkeypatch.setattr(jc_module.asyncio, "sleep", _count_sleep)
+    monkeypatch.setattr(jc_module, "scan_disc", lambda _p: _async_return(_empty_scan()))
+    monkeypatch.setattr(jc_module, "read_drive_status", lambda _p: DriveState.NO_DISC)
+
+    controller = JobController(FakeClient(), "drv_test")
+    out = await controller._scan_with_ready_retry("/dev/sr0")
+    assert not out.titles
+    assert sleep_calls["n"] == 0  # exited before the backoff block — no sleep
+
+
 async def test_scan_retry_no_retry_on_first_success(monkeypatch):
     calls = {"n": 0, "status": 0}
 

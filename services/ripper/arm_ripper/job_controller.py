@@ -246,6 +246,11 @@ class JobController:
         SCSI read succeeds). Retry with backoff to wait out the settle. If the
         drive leaves DISC_OK (tray opened / disc pulled), stop. On exhaustion,
         return the last (empty) result — the caller handles the give-up.
+
+        Note: `read_drive_status` (os.open + ioctl) may raise OSError if the
+        device node vanishes mid-retry (USB autosuspend / passthrough teardown);
+        that propagates to the pipeline task boundary by design — the task ends
+        and the drive poller re-arms on the next disc-insert event.
         """
         last: ScanResult | None = None
         for attempt in range(1, SCAN_NOT_READY_MAX_ATTEMPTS + 1):
@@ -284,7 +289,7 @@ class JobController:
                         device_path,
                     )
                     assert last is not None
-                    return last
+                    return result
 
         logger.error(
             "DISC_UNREADABLE_AFTER_RETRIES device=%s drive_state=DISC_OK attempts=%d — "
