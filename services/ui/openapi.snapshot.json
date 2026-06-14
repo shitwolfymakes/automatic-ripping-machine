@@ -5467,6 +5467,49 @@
         }
       }
     },
+    "/api/images/proxy": {
+      "get": {
+        "tags": [
+          "images"
+        ],
+        "summary": "Proxy Image",
+        "description": "Proxy and cache external images to avoid browser ORB/CORS issues.",
+        "operationId": "proxy_image_api_images_proxy_get",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Image URL to proxy",
+              "title": "Url"
+            },
+            "description": "Image URL to proxy"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/settings/infra": {
       "get": {
         "tags": [
