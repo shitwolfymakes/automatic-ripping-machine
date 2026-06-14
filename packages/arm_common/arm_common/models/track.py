@@ -37,7 +37,7 @@ class Track(SQLModel, table=True):
     # Operator control. `excluded` omits this ripped title from transcode OUTPUT
     # (the disc still rips whole — makemkvcon `mkv all` invariant). `custom_filename`
     # overrides the pattern-rendered name for this track.
-    excluded: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
+    excluded: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default="false"))
     custom_filename: str | None = Field(default=None)
     expected_duration_seconds: int | None = Field(sa_column=Column(Integer, nullable=True))
     # Scan-time size estimate from MakeMKV TINFO:t,11. Lets the JobDetail
