@@ -10,10 +10,12 @@ from arm_common.schemas.auth import (
 )
 from arm_common.schemas.common import ErrorResponse, HealthResponse
 from arm_common.schemas.drives import (
+    DriveCurrentJobView,
     DriveDiagnosticItem,
     DriveDiagnosticResponse,
     DriveRescanResponse,
     DriveUpdateRequest,
+    DriveView,
 )
 from arm_common.schemas.iso import IsoScanRequest, IsoScanResponse
 from arm_common.schemas.jobs import (
@@ -161,10 +163,12 @@ __all__ = [
     "ConfigView",
     "DiagnosticsResponse",
     "DiagnosticsServiceView",
+    "DriveCurrentJobView",
     "DriveDiagnosticItem",
     "DriveDiagnosticResponse",
     "DriveRescanResponse",
     "DriveUpdateRequest",
+    "DriveView",
     "ErrorResponse",
     "FailTaskRequest",
     "HardwareCaps",
