@@ -199,9 +199,15 @@ def _tv_job(title: str = "My Show", year: int = 2020) -> Job:
     )
 
 
-def _tv_track(idx: int, *, episode_number: int | None = None, episode_name: str | None = None,
-               title: str | None = None, excluded: bool = False,
-               custom_filename: str | None = None) -> Track:
+def _tv_track(
+    idx: int,
+    *,
+    episode_number: int | None = None,
+    episode_name: str | None = None,
+    title: str | None = None,
+    excluded: bool = False,
+    custom_filename: str | None = None,
+) -> Track:
     return Track(
         id=f"trk_{idx}",
         job_id="job_01JZXR7K3M5Q8N4VWA0000000T",
@@ -273,7 +279,9 @@ def test_null_track_title_inherits_job() -> None:
 
 def test_episode_tokens_render_per_track() -> None:
     job = _tv_job()
-    sess = _tv_session("{show} ({year})/Season {season}/{show} S01E{episode} - {episode_title} - {transcode_slug}.{ext}")
+    sess = _tv_session(
+        "{show} ({year})/Season {season}/{show} S01E{episode} - {episode_title} - {transcode_slug}.{ext}"
+    )
     tp = _tv_preset()
     tracks = [
         _tv_track(1, episode_number=1, episode_name="Pilot"),

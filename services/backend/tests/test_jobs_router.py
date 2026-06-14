@@ -679,18 +679,23 @@ def test_apply_session_success(signing_key: bytes, monkeypatch: pytest.MonkeyPat
 # --- update_job track editing ------------------------------------------------
 
 
-_JOB_ID_A = "job_00000000000000000000000001"   # 26-char Crockford body
+_JOB_ID_A = "job_00000000000000000000000001"  # 26-char Crockford body
 _JOB_ID_B = "job_00000000000000000000000002"
 _TRK_ID_A = "trk_00000000000000000000000001"
 _DRV_ID_A = "drv_00000000000000000000000001"
 
 
-def _seed_job_with_track(db: FakeSession, *, job_id: str = _JOB_ID_A,
-                         track_id: str = _TRK_ID_A) -> None:
+def _seed_job_with_track(db: FakeSession, *, job_id: str = _JOB_ID_A, track_id: str = _TRK_ID_A) -> None:
     db.rows.setdefault("jobs", []).append(
-        Job(id=job_id, drive_id=_DRV_ID_A,
-            disc_type=DiscType.DVD, status=JobStatus.RIPPED, title="Box Set",
-            resumed_from_crash=False, metadata_json={})
+        Job(
+            id=job_id,
+            drive_id=_DRV_ID_A,
+            disc_type=DiscType.DVD,
+            status=JobStatus.RIPPED,
+            title="Box Set",
+            resumed_from_crash=False,
+            metadata_json={},
+        )
     )
     db.rows.setdefault("tracks", []).append(
         Track(id=track_id, job_id=job_id, kind=TrackKind.VIDEO_TITLE, index=1, source_ref="0")
@@ -702,9 +707,18 @@ def test_update_job_edits_track_fields(signing_key: bytes) -> None:
     _seed_job_with_track(db)
     hub = _Hub()
     app, token = _make_app(signing_key, db, hub=hub)
-    body = {"tracks": [{"track_id": _TRK_ID_A,
-                        "title": "Pilot", "episode_number": 1, "episode_name": "Pilot",
-                        "excluded": False, "custom_filename": "S01E01"}]}
+    body = {
+        "tracks": [
+            {
+                "track_id": _TRK_ID_A,
+                "title": "Pilot",
+                "episode_number": 1,
+                "episode_name": "Pilot",
+                "excluded": False,
+                "custom_filename": "S01E01",
+            }
+        ]
+    }
     with TestClient(app) as c:
         r = c.patch(f"/api/jobs/{_JOB_ID_A}", json=body, headers=_auth(token))
     assert r.status_code == 200, r.text
@@ -722,9 +736,9 @@ def test_update_job_track_partial_leaves_others(signing_key: bytes) -> None:
     db.rows["tracks"][0].episode_name = "Old"
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
-        r = c.patch(f"/api/jobs/{_JOB_ID_A}",
-                    json={"tracks": [{"track_id": _TRK_ID_A, "title": "New"}]},
-                    headers=_auth(token))
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}", json={"tracks": [{"track_id": _TRK_ID_A, "title": "New"}]}, headers=_auth(token)
+        )
     assert r.status_code == 200, r.text
     assert db.rows["tracks"][0].title == "New"
     assert db.rows["tracks"][0].episode_name == "Old"
@@ -735,8 +749,9 @@ def test_update_job_track_unknown_track_404(signing_key: bytes) -> None:
     _seed_job_with_track(db)
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
-        r = c.patch(f"/api/jobs/{_JOB_ID_A}",
-                    json={"tracks": [{"track_id": "trk_nope", "title": "X"}]}, headers=_auth(token))
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}", json={"tracks": [{"track_id": "trk_nope", "title": "X"}]}, headers=_auth(token)
+        )
     assert r.status_code == 404
     assert db.rows["tracks"][0].title is None
 
@@ -746,24 +761,33 @@ def test_update_job_track_unknown_field_422(signing_key: bytes) -> None:
     _seed_job_with_track(db)
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
-        r = c.patch(f"/api/jobs/{_JOB_ID_A}",
-                    json={"tracks": [{"track_id": _TRK_ID_A, "bogus": 1}]},
-                    headers=_auth(token))
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}", json={"tracks": [{"track_id": _TRK_ID_A, "bogus": 1}]}, headers=_auth(token)
+        )
     assert r.status_code == 422
 
 
 def test_update_job_track_scoped_to_job_404(signing_key: bytes) -> None:
     db = FakeSession()
     _seed_job_with_track(db)
-    db.rows["jobs"].append(Job(id=_JOB_ID_B, drive_id=_DRV_ID_A,
-                               disc_type=DiscType.DVD, status=JobStatus.RIPPED,
-                               resumed_from_crash=False, metadata_json={}))
-    db.rows["tracks"].append(Track(id="trk_other", job_id=_JOB_ID_B,
-                                   kind=TrackKind.VIDEO_TITLE, index=1, source_ref="0"))
+    db.rows["jobs"].append(
+        Job(
+            id=_JOB_ID_B,
+            drive_id=_DRV_ID_A,
+            disc_type=DiscType.DVD,
+            status=JobStatus.RIPPED,
+            resumed_from_crash=False,
+            metadata_json={},
+        )
+    )
+    db.rows["tracks"].append(
+        Track(id="trk_other", job_id=_JOB_ID_B, kind=TrackKind.VIDEO_TITLE, index=1, source_ref="0")
+    )
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
-        r = c.patch(f"/api/jobs/{_JOB_ID_A}",
-                    json={"tracks": [{"track_id": "trk_other", "title": "X"}]}, headers=_auth(token))
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}", json={"tracks": [{"track_id": "trk_other", "title": "X"}]}, headers=_auth(token)
+        )
     assert r.status_code == 404
 
 
@@ -771,16 +795,15 @@ def test_update_job_edits_multiple_tracks(signing_key: bytes) -> None:
     db = FakeSession()
     _seed_job_with_track(db)  # job + _TRK_ID_A (index 1)
     _TRK_ID_B = "trk_00000000000000000000000002"
-    db.rows["tracks"].append(
-        Track(id=_TRK_ID_B, job_id=_JOB_ID_A,
-              kind=TrackKind.VIDEO_TITLE, index=2, source_ref="1")
-    )
+    db.rows["tracks"].append(Track(id=_TRK_ID_B, job_id=_JOB_ID_A, kind=TrackKind.VIDEO_TITLE, index=2, source_ref="1"))
     hub = _Hub()
     app, token = _make_app(signing_key, db, hub=hub)
-    body = {"tracks": [
-        {"track_id": _TRK_ID_A, "episode_number": 1, "episode_name": "Pilot"},
-        {"track_id": _TRK_ID_B, "episode_number": 2, "episode_name": "Part Two"},
-    ]}
+    body = {
+        "tracks": [
+            {"track_id": _TRK_ID_A, "episode_number": 1, "episode_name": "Pilot"},
+            {"track_id": _TRK_ID_B, "episode_number": 2, "episode_name": "Part Two"},
+        ]
+    }
     with TestClient(app) as c:
         r = c.patch(f"/api/jobs/{_JOB_ID_A}", json=body, headers=_auth(token))
     assert r.status_code == 200, r.text

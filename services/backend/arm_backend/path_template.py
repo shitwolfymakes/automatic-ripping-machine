@@ -20,8 +20,18 @@ class TemplateValidationError(ValueError):
 # Per-media-type allowed tokens (arch §02 token table).
 _ALLOWED_TOKENS_BY_MEDIA: dict[MediaType, set[str]] = {
     MediaType.MOVIE: {"title", "year", "track", "duration_human", "transcode_slug", "ext"},
-    MediaType.TV: {"show", "year", "season", "disc", "track", "episode", "episode_title",
-                   "duration_human", "transcode_slug", "ext"},
+    MediaType.TV: {
+        "show",
+        "year",
+        "season",
+        "disc",
+        "track",
+        "episode",
+        "episode_title",
+        "duration_human",
+        "transcode_slug",
+        "ext",
+    },
     MediaType.MUSIC: {"artist", "album", "disc", "track", "track_title", "transcode_slug", "ext"},
     MediaType.DATA: {"title"},
     MediaType.ISO: {"title", "year", "ext"},
