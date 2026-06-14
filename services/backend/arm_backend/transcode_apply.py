@@ -13,7 +13,7 @@ each candidate path under `MEDIA_ROOT` to surface filesystem-only hits
 """
 
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -75,18 +75,26 @@ def _build_track_ctx(
             if isinstance(raw_title, str):
                 track_title = raw_title
 
+    # Per-track identity overrides job-level (null = inherit). Multi-title discs
+    # set these; a movie's single track leaves them null and inherits job identity.
+    eff_title = track.title or job.title or ""
+    eff_year = track.year if track.year is not None else job.year
+    episode = f"{track.episode_number:02d}" if track.episode_number is not None else ""
+
     # Human-readable metadata fields land inside path segments; sanitise
     # so titles like "Crown / She Said" don't introduce a phantom path
     # level that ffmpeg fails to open. `track`, `transcode_slug`, and
     # `ext` are already constrained by upstream code (zero-padded int,
     # slugify(), enum).
     ctx: dict[str, str] = {
-        "title": sanitize_path_component(job.title or ""),
-        "year": str(job.year) if job.year is not None else "",
+        "title": sanitize_path_component(eff_title),
+        "year": str(eff_year) if eff_year is not None else "",
         "show": sanitize_path_component(job.title or ""),
         "season": sanitize_path_component(str(metadata.get("season") or "")),
         "disc": sanitize_path_component(str(metadata.get("disc") or "")),
         "track": track_index_padded,
+        "episode": episode,
+        "episode_title": sanitize_path_component(track.episode_name or ""),
         "duration_human": _format_duration_human(track.expected_duration_seconds or track.duration_seconds),
         "artist": sanitize_path_component(str(metadata.get("artist") or "")),
         "album": sanitize_path_component(str(metadata.get("album") or "")),
@@ -118,7 +126,7 @@ def compute_outputs(
 ) -> list[ResolvedTask]:
     """Resolve every track's output path. Empty token → `TemplateValidationError`."""
     relevant_kinds = _track_kinds_for_media(session.media_type)
-    candidates = [t for t in tracks if t.kind in relevant_kinds]
+    candidates = [t for t in tracks if t.kind in relevant_kinds and not t.excluded]
     if not candidates:
         return []
 
@@ -133,6 +141,14 @@ def compute_outputs(
                     f"track index={track.index}: token {{{token}}} resolved empty against the job's metadata"
                 )
         path = expand_template(template, ctx)
+        if track.custom_filename:
+            p = PurePosixPath(path)
+            ext = p.suffix
+            name = sanitize_path_component(track.custom_filename)
+            if ext and not name.endswith(ext):
+                name = f"{name}{ext}"
+            parent = str(p.parent)
+            path = name if parent == "." else f"{parent}/{name}"
         resolved.append(ResolvedTask(track_id=track.id, output_path=path))
     return resolved
 
