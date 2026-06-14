@@ -1153,7 +1153,7 @@
           "jobs"
         ],
         "summary": "Update Job",
-        "description": "Edit user-controlled fields on a Job. Currently `poster_url_manual`\nonly \u2014 title/year are owned by the identify/resolve flow.",
+        "description": "Edit user-controlled fields on a Job + optional per-track operator edits.\nJob title/year stay behind identify/resolve; track `status` stays ripper-owned\n(not in TrackEditRequest).",
         "operationId": "update_job_api_jobs__job_id__patch",
         "parameters": [
           {
@@ -7741,11 +7741,26 @@
               }
             ],
             "title": "Poster Url Manual"
+          },
+          "tracks": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TrackEditRequest"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracks"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "JobUpdateRequest",
-        "description": "PATCH /api/jobs/{id} body. Currently only the manual poster override\nis editable \u2014 title/year live behind the identify/resolve flow."
+        "description": "PATCH /api/jobs/{id} body. `poster_url_manual` edits the job; `tracks`\napplies per-track operator edits in the same atomic save. The JOB's\ntitle/year still live behind identify/resolve."
       },
       "JobView": {
         "properties": {
@@ -10172,6 +10187,120 @@
         ],
         "title": "TemplatePreviewResponse"
       },
+      "TrackEditRequest": {
+        "properties": {
+          "track_id": {
+            "type": "string",
+            "title": "Track Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "imdb_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imdb Id"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "video_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Type"
+          },
+          "episode_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Number"
+          },
+          "episode_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Name"
+          },
+          "excluded": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded"
+          },
+          "custom_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Filename"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "track_id"
+        ],
+        "title": "TrackEditRequest",
+        "description": "One entry in JobUpdateRequest.tracks. `track_id` selects the row; every\nother field is an optional operator edit (omitted=untouched, null=clear)."
+      },
       "TrackKind": {
         "type": "string",
         "enum": [
@@ -10362,6 +10491,132 @@
               }
             ],
             "title": "Last Error"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "edition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edition"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "imdb_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imdb Id"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "video_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Type"
+          },
+          "episode_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Number"
+          },
+          "episode_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Name"
+          },
+          "excluded": {
+            "type": "boolean",
+            "title": "Excluded",
+            "default": false
+          },
+          "custom_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Filename"
           }
         },
         "type": "object",
