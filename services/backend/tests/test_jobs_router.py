@@ -674,3 +674,94 @@ def test_apply_session_success(signing_key: bytes, monkeypatch: pytest.MonkeyPat
     assert body["session_application"]["id"] == "sap_1"
     assert body["idempotent"] is True
     assert body["collisions"] == []
+
+
+# --- update_job track editing ------------------------------------------------
+
+
+_JOB_ID_A = "job_00000000000000000000000001"   # 26-char Crockford body
+_JOB_ID_B = "job_00000000000000000000000002"
+_TRK_ID_A = "trk_00000000000000000000000001"
+_DRV_ID_A = "drv_00000000000000000000000001"
+
+
+def _seed_job_with_track(db: FakeSession, *, job_id: str = _JOB_ID_A,
+                         track_id: str = _TRK_ID_A) -> None:
+    db.rows.setdefault("jobs", []).append(
+        Job(id=job_id, drive_id=_DRV_ID_A,
+            disc_type=DiscType.DVD, status=JobStatus.RIPPED, title="Box Set",
+            resumed_from_crash=False, metadata_json={})
+    )
+    db.rows.setdefault("tracks", []).append(
+        Track(id=track_id, job_id=job_id, kind=TrackKind.VIDEO_TITLE, index=1, source_ref="0")
+    )
+
+
+def test_update_job_edits_track_fields(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    hub = _Hub()
+    app, token = _make_app(signing_key, db, hub=hub)
+    body = {"tracks": [{"track_id": _TRK_ID_A,
+                        "title": "Pilot", "episode_number": 1, "episode_name": "Pilot",
+                        "excluded": False, "custom_filename": "S01E01"}]}
+    with TestClient(app) as c:
+        r = c.patch(f"/api/jobs/{_JOB_ID_A}", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    track = db.rows["tracks"][0]
+    assert track.title == "Pilot"
+    assert track.episode_number == 1
+    assert track.episode_name == "Pilot"
+    assert track.custom_filename == "S01E01"
+    assert any(e["event_type"] == "track.updated" for e in hub.events)
+
+
+def test_update_job_track_partial_leaves_others(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    db.rows["tracks"][0].episode_name = "Old"
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(f"/api/jobs/{_JOB_ID_A}",
+                    json={"tracks": [{"track_id": _TRK_ID_A, "title": "New"}]},
+                    headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert db.rows["tracks"][0].title == "New"
+    assert db.rows["tracks"][0].episode_name == "Old"
+
+
+def test_update_job_track_unknown_track_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(f"/api/jobs/{_JOB_ID_A}",
+                    json={"tracks": [{"track_id": "trk_nope", "title": "X"}]}, headers=_auth(token))
+    assert r.status_code == 404
+    assert db.rows["tracks"][0].title is None
+
+
+def test_update_job_track_unknown_field_422(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(f"/api/jobs/{_JOB_ID_A}",
+                    json={"tracks": [{"track_id": _TRK_ID_A, "bogus": 1}]},
+                    headers=_auth(token))
+    assert r.status_code == 422
+
+
+def test_update_job_track_scoped_to_job_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    db.rows["jobs"].append(Job(id=_JOB_ID_B, drive_id=_DRV_ID_A,
+                               disc_type=DiscType.DVD, status=JobStatus.RIPPED,
+                               resumed_from_crash=False, metadata_json={}))
+    db.rows["tracks"].append(Track(id="trk_other", job_id=_JOB_ID_B,
+                                   kind=TrackKind.VIDEO_TITLE, index=1, source_ref="0"))
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(f"/api/jobs/{_JOB_ID_A}",
+                    json={"tracks": [{"track_id": "trk_other", "title": "X"}]}, headers=_auth(token))
+    assert r.status_code == 404
