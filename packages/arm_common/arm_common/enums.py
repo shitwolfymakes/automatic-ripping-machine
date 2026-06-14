@@ -30,7 +30,7 @@ class DriveMediaStatus(StrEnum):
 
 
 class DriveMode(StrEnum):
-    AUTO = "auto"      # ripper auto-rips on disc insert
+    AUTO = "auto"  # ripper auto-rips on disc insert
     MANUAL = "manual"  # ripper waits for an explicit manual.trigger
 
 

@@ -257,8 +257,15 @@ def test_list_returns_driveview_with_null_tuning(signing_key: bytes) -> None:
         r = c.get("/api/drives", headers=_auth(token))
     assert r.status_code == 200, r.text
     row = r.json()[0]
-    for f in ("rip_speed", "drive_mode", "uhd_capable", "prescan_cache_mb",
-              "prescan_timeout", "prescan_retries", "disc_enum_timeout"):
+    for f in (
+        "rip_speed",
+        "drive_mode",
+        "uhd_capable",
+        "prescan_cache_mb",
+        "prescan_timeout",
+        "prescan_retries",
+        "disc_enum_timeout",
+    ):
         assert row[f] is None
     assert row["current_job"] is None
     assert "rip_params_json" not in row
@@ -320,9 +327,7 @@ def test_current_job_picks_most_recent_active(signing_key: bytes) -> None:
 def test_current_job_grouped_per_drive_no_crossleak(signing_key: bytes) -> None:
     db = FakeSession()
     _seed(db)
-    db.rows["drives"].append(
-        Drive(id="drv_y", hostname="host-2", device_path="/dev/sr1", status=DriveStatus.ONLINE)
-    )
+    db.rows["drives"].append(Drive(id="drv_y", hostname="host-2", device_path="/dev/sr1", status=DriveStatus.ONLINE))
     db.rows["jobs"] = [_job("job_x", drive_id="drv_x", status=JobStatus.RIPPING)]
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
@@ -403,8 +408,14 @@ def test_current_job_handles_none_created_at(signing_key: bytes) -> None:
     # real timestamp. The None-created_at job must sort to the epoch-min
     # sentinel (not crash), so the timestamped job wins.
     db.rows["jobs"] = [
-        Job(id="job_none", drive_id="drv_x", disc_type=DiscType.DVD, status=JobStatus.RIPPING,
-            title="no-ts", created_at=None),
+        Job(
+            id="job_none",
+            drive_id="drv_x",
+            disc_type=DiscType.DVD,
+            status=JobStatus.RIPPING,
+            title="no-ts",
+            created_at=None,
+        ),
         _job("job_ts", status=JobStatus.IDENTIFIED, title="has-ts", created=50),
     ]
     app, token = _make_app(signing_key, db)
