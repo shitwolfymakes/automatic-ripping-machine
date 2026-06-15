@@ -1,59 +1,41 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import DiscReviewWidget from '../DiscReviewWidget.svelte';
+import { createJob, createJobDetail, createTrack } from '../__fixtures__/job';
 
 vi.mock('$lib/api/jobs', () => ({
-	fetchJob: vi.fn(() => Promise.resolve({
-		job_id: 1, tracks: [], config: { MANUAL_WAIT_TIME: 60, MINLENGTH: 120 },
-		title: 'Test Movie', year: '2025', video_type: 'movie',
-		disctype: 'bluray', status: 'waiting'
-	})),
+	fetchJob: vi.fn(() =>
+		Promise.resolve({
+			...createJobDetail({ tracks: [createTrack({ id: 'trk_1', index: 0, source_ref: 't00.mkv', title: 'Main' })] }),
+			job: createJob({ title: 'Test Movie', disc_type: 'bluray' })
+		})
+	),
 	cancelWaitingJob: vi.fn(() => Promise.resolve()),
 	startWaitingJob: vi.fn(() => Promise.resolve()),
-	pauseWaitingJob: vi.fn(() => Promise.resolve()),
-	updateJobTitle: vi.fn(() => Promise.resolve()),
-	toggleMultiTitle: vi.fn(() => Promise.resolve()),
-	updateTrack: vi.fn(() => Promise.resolve()),
-	fetchNamingPreview: vi.fn(() => Promise.resolve({
-		success: true, job_title: 'Test Movie (2025)',
-		job_folder: 'Test Movie (2025)', tracks: []
-	}))
+	updateTrack: vi.fn(() => Promise.resolve(createJob())),
+	updateJobTitle: vi.fn(() => Promise.resolve(createJob())),
+	updateJobConfig: vi.fn(() => Promise.resolve(createJob())),
+	updateJobNaming: vi.fn(() => Promise.reject(new Error('not available'))),
+	updateJobTranscodeConfig: vi.fn(() => Promise.reject(new Error('not available'))),
+	updateTrackTitle: vi.fn(() => Promise.resolve(createJob())),
+	clearTrackTitle: vi.fn(() => Promise.resolve(createJob())),
+	searchMetadata: vi.fn(),
+	fetchMediaDetail: vi.fn(),
+	searchMusicMetadata: vi.fn(),
+	fetchMusicDetail: vi.fn(),
+	fetchNamingVariables: vi.fn(() => Promise.resolve({ variables: {} })),
+	namingPreview: vi.fn(() => Promise.resolve({ rendered: '' })),
+	validatePattern: vi.fn(() => Promise.resolve({ valid: true }))
 }));
 
-vi.mock('$lib/api/maintenance', () => ({
-	fetchSummary: vi.fn(() => Promise.resolve({}))
+vi.mock('$lib/api/settings', () => ({
+	fetchTranscoderScheme: vi.fn(() => Promise.resolve(null)),
+	fetchTranscoderPresets: vi.fn(() => Promise.resolve(null))
 }));
-
-const mockJob = {
-	job_id: 1, title: 'Test Movie', title_auto: 'Test Movie', year: '2025', year_auto: '2025',
-	video_type: 'movie', disctype: 'bluray', status: 'waiting', label: 'TEST_DISC',
-	imdb_id: '', poster_url: '', path: 'Test Movie (2025)', hasnicetitle: true,
-	crc_id: '', multi_title: false, disc_number: null, disc_total: null,
-	artist: '', album: '', season: '', episode: ''
-};
 
 function renderWidget(overrides = {}) {
 	return renderComponent(DiscReviewWidget, {
-		props: { job: { ...mockJob, ...overrides }, driveNames: {}, paused: false }
-	});
-}
-
-/** Open the Info panel and wait for the Title field to appear. */
-async function openInfoPanel() {
-	await fireEvent.click(screen.getByText('Info'));
-	await waitFor(() => {
-		expect(screen.getByText('Title')).toBeInTheDocument();
-	});
-}
-
-/** Open Info panel and edit the title field, triggering the save bar. */
-async function editTitleField(newValue = 'Changed Title') {
-	await openInfoPanel();
-	const titleLabel = screen.getByText('Title');
-	const titleInput = titleLabel.closest('label')!.querySelector('input')!;
-	await fireEvent.input(titleInput, { target: { value: newValue } });
-	await waitFor(() => {
-		expect(screen.queryAllByText('Unsaved changes').length).toBeGreaterThanOrEqual(1);
+		props: { job: createJob({ status: 'identified', ...overrides }), driveNames: {}, paused: false }
 	});
 }
 
@@ -63,59 +45,34 @@ describe('DiscReviewWidget', () => {
 		vi.clearAllMocks();
 	});
 
-	describe('save bar', () => {
-		it('does not show save bar on initial load', async () => {
+	describe('tracks', () => {
+		it('renders the v3 tracks table from data.tracks', async () => {
 			renderWidget();
-			await openInfoPanel();
-			expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
-		});
-
-		it('shows save bar when field is edited', async () => {
-			renderWidget();
-			await editTitleField();
-		});
-
-		it('save bar has Reset and Save buttons', async () => {
-			renderWidget();
-			await editTitleField();
-			expect(screen.queryAllByText('Reset').length).toBeGreaterThanOrEqual(1);
-			expect(screen.queryAllByText('Save').length).toBeGreaterThanOrEqual(1);
+			await waitFor(() => {
+				expect(screen.getByText('Main')).toBeInTheDocument();
+				expect(screen.getByText('t00.mkv')).toBeInTheDocument();
+			});
 		});
 	});
 
 	describe('button order', () => {
-		it('Cancel button appears before Start button', () => {
+		it('Cancel button appears before Start button', async () => {
 			renderWidget();
-			const cancelBtn = screen.getAllByText('Cancel')[0];
-			const startBtn = screen.getAllByText('Start')[0];
-			// Cancel should appear before Start in DOM order
+			await waitFor(() => expect(screen.getByText('Start')).toBeInTheDocument());
+			const cancelBtn = screen.getByText('Cancel');
+			const startBtn = screen.getByText('Start');
 			expect(cancelBtn.compareDocumentPosition(startBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 		});
 	});
 
-	describe('output path', () => {
-		it('shows Output Path label in info panel', async () => {
+	describe('sections', () => {
+		it('opens the rip settings section', async () => {
 			renderWidget();
-			await fireEvent.click(screen.getByText('Info'));
+			await waitFor(() => expect(screen.getByText('Settings')).toBeInTheDocument());
+			await fireEvent.click(screen.getByText('Settings'));
 			await waitFor(() => {
-				expect(screen.getByText('Output Path')).toBeInTheDocument();
+				expect(screen.getByText('Save Settings')).toBeInTheDocument();
 			});
-		});
-	});
-
-	describe('naming preview error handling', () => {
-		it('falls back gracefully when fetchNamingPreview fails', async () => {
-			const { fetchNamingPreview } = await import('$lib/api/jobs');
-			vi.mocked(fetchNamingPreview).mockRejectedValueOnce(new Error('API unavailable'));
-
-			renderWidget();
-			await fireEvent.click(screen.getByText('Info'));
-			await waitFor(() => {
-				expect(screen.getByText('Title')).toBeInTheDocument();
-			});
-			// Widget should still render without crashing — title input shows raw title as fallback
-			const titleLabel = screen.getByText('Title');
-			expect(titleLabel).toBeInTheDocument();
 		});
 	});
 });

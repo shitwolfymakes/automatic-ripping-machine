@@ -7,147 +7,125 @@ function jsonResponse(data: unknown, ok = true) {
 	return { ok, status: ok ? 200 : 500, statusText: ok ? 'OK' : 'Error', json: () => Promise.resolve(data) };
 }
 
-import { toggleMultiTitle, updateTrackTitle, clearTrackTitle, tvdbMatch, fetchTvdbEpisodes, updateTrack, fetchNamingPreview, updateJobNaming, validatePattern, fetchNamingVariables } from '../api/jobs';
+import {
+	updateTrackTitle, clearTrackTitle, updateTrack,
+	fetchNamingPreview, validatePattern, fetchNamingVariables, namingPreview,
+	// MISSING in v3
+	toggleMultiTitle, tvdbMatch, fetchTvdbEpisodes, updateJobNaming
+} from '../api/jobs';
 
 beforeEach(() => mockFetch.mockReset());
 
-describe('toggleMultiTitle', () => {
-	it('POSTs to /api/jobs/:id/multi-title', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ success: true }));
-		await toggleMultiTitle(1, true);
-		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/1/multi-title', expect.objectContaining({
-			method: 'POST',
-			body: JSON.stringify({ enabled: true })
-		}));
-	});
-});
+// ---------------------------------------------------------------------------
+// The bulk-PATCH delta: every single-track edit is wrapped into
+//   PATCH /api/jobs/{job_id}  body: { tracks: [{ track_id, ... }] }
+// ---------------------------------------------------------------------------
 
-describe('updateTrackTitle', () => {
-	it('PUTs to /api/jobs/:jobId/tracks/:trackId/title', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ success: true }));
-		await updateTrackTitle(1, 2, { title: 'New Title' });
-		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/1/tracks/2/title', expect.objectContaining({
-			method: 'PUT',
-			body: expect.stringContaining('New Title')
-		}));
-	});
-});
-
-describe('clearTrackTitle', () => {
-	it('DELETEs /api/jobs/:jobId/tracks/:trackId/title', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ success: true }));
-		await clearTrackTitle(1, 3);
-		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/1/tracks/3/title', expect.objectContaining({ method: 'DELETE' }));
-	});
-});
-
-describe('tvdbMatch', () => {
-	it('POSTs to /api/jobs/:id/tvdb-match', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ success: true, matches: [], match_count: 0 }));
-		await tvdbMatch(1, { season: 2, apply: true });
-		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/1/tvdb-match', expect.objectContaining({
-			method: 'POST',
-			body: JSON.stringify({ season: 2, tolerance: null, apply: true, disc_number: null, disc_total: null })
-		}));
-	});
-
-	it('uses null defaults when no options', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ success: true, matches: [] }));
-		await tvdbMatch(1);
-		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/1/tvdb-match', expect.objectContaining({
-			body: JSON.stringify({ season: null, tolerance: null, apply: false, disc_number: null, disc_total: null })
-		}));
-	});
-});
-
-describe('fetchTvdbEpisodes', () => {
-	it('GETs /api/jobs/:id/tvdb-episodes?season=N', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ episodes: [], tvdb_id: 123, season: 1 }));
-		const result = await fetchTvdbEpisodes(1, 1);
-		expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('/api/jobs/1/tvdb-episodes?season=1'), expect.any(Object));
-		expect(result.tvdb_id).toBe(123);
-	});
-});
-
-describe('updateTrack', () => {
-	it('PATCHes /api/jobs/:jobId/tracks/:trackId', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ success: true, updated: { enabled: false } }));
-		const result = await updateTrack(1, 2, { enabled: false });
-		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/1/tracks/2', expect.objectContaining({
+describe('updateTrackTitle (bulk-PATCH wrap)', () => {
+	it('PATCHes /api/jobs/{id} wrapping the track into tracks[]', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ id: 'job_1' }));
+		await updateTrackTitle('job_1', 'trk_2', { title: 'New Title', year: 1999 });
+		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/job_1', expect.objectContaining({
 			method: 'PATCH',
-			body: JSON.stringify({ enabled: false })
+			body: JSON.stringify({ tracks: [{ track_id: 'trk_2', title: 'New Title', year: 1999 }] })
 		}));
-		expect(result.success).toBe(true);
 	});
 });
+
+describe('clearTrackTitle (bulk-PATCH wrap, null=clear)', () => {
+	it('PATCHes /api/jobs/{id} clearing override fields to null', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ id: 'job_1' }));
+		await clearTrackTitle('job_1', 'trk_3');
+		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/job_1', expect.objectContaining({
+			method: 'PATCH',
+			body: JSON.stringify({
+				tracks: [{ track_id: 'trk_3', title: null, year: null, imdb_id: null, poster_url: null }]
+			})
+		}));
+	});
+});
+
+describe('updateTrack (bulk-PATCH wrap)', () => {
+	it('PATCHes /api/jobs/{id} wrapping arbitrary track fields', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ id: 'job_1' }));
+		await updateTrack('job_1', 'trk_2', { excluded: true, episode_number: 4 });
+		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/job_1', expect.objectContaining({
+			method: 'PATCH',
+			body: JSON.stringify({ tracks: [{ track_id: 'trk_2', excluded: true, episode_number: 4 }] })
+		}));
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Naming (EXISTS in v3, reshaped contracts)
+// ---------------------------------------------------------------------------
 
 describe('fetchNamingPreview', () => {
-	it('GETs /api/jobs/:id/naming-preview', async () => {
+	it('GETs /api/jobs/{id}/naming-preview and returns the v3 envelope', async () => {
 		const preview = {
-			success: true,
-			job_title: 'Test Show S01E01',
-			job_folder: 'Test Show/Season 01',
-			tracks: [
-				{ track_number: '0', rendered_title: 'Pilot S01E01', rendered_folder: 'Test Show/Season 01' },
-				{ track_number: '1', rendered_title: 'Episode 2 S01E02', rendered_folder: 'Test Show/Season 01' }
-			]
+			job_output_dir: 'Test Show/Season 01',
+			job_output_name: 'Test Show S01E01',
+			items: [{ track_id: 'trk_0', track_number: 0, output_path: 'Test Show/Season 01/Pilot.mkv' }]
 		};
 		mockFetch.mockResolvedValue(jsonResponse(preview));
-		const result = await fetchNamingPreview(42);
-		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/42/naming-preview', expect.objectContaining({
+		const result = await fetchNamingPreview('job_42');
+		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/job_42/naming-preview', expect.objectContaining({
 			headers: expect.objectContaining({ 'Content-Type': 'application/json' })
 		}));
-		expect(result.success).toBe(true);
-		expect(result.tracks).toHaveLength(2);
-		expect(result.tracks[0].rendered_title).toBe('Pilot S01E01');
+		expect(result.job_output_name).toBe('Test Show S01E01');
+		expect(result.items).toHaveLength(1);
 	});
 });
 
-describe('updateJobNaming', () => {
-	it('PATCHes /api/jobs/:id/naming with pattern overrides', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ success: true, title_pattern_override: '{title} - E{episode}', folder_pattern_override: null }));
-		const result = await updateJobNaming(1, { title_pattern_override: '{title} - E{episode}' });
-		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/1/naming', expect.objectContaining({
-			method: 'PATCH',
-			body: JSON.stringify({ title_pattern_override: '{title} - E{episode}' })
+describe('namingPreview', () => {
+	it('POSTs /api/naming/preview with template + media_type', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ rendered: 'The Matrix (1999)' }));
+		const result = await namingPreview('{title} ({year})', 'movie', { title: 'The Matrix', year: '1999' });
+		expect(mockFetch).toHaveBeenCalledWith('/api/naming/preview', expect.objectContaining({
+			method: 'POST',
+			body: JSON.stringify({
+				template: '{title} ({year})',
+				media_type: 'movie',
+				has_transcode_preset: false,
+				variables: { title: 'The Matrix', year: '1999' }
+			})
 		}));
-		expect(result.success).toBe(true);
-		expect(result.title_pattern_override).toBe('{title} - E{episode}');
-	});
-
-	it('clears override with null', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ success: true, title_pattern_override: null, folder_pattern_override: null }));
-		const result = await updateJobNaming(1, { title_pattern_override: null });
-		expect(result.title_pattern_override).toBeNull();
+		expect(result.rendered).toBe('The Matrix (1999)');
 	});
 });
 
 describe('validatePattern', () => {
-	it('POSTs to /api/naming/validate', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ valid: false, invalid_vars: ['episde'], suggestions: { episde: 'episode' } }));
-		const result = await validatePattern('{title} {episde}');
+	it('POSTs /api/naming/validate with template + media_type', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ valid: false }));
+		const result = await validatePattern('{title} {episde}', 'tv');
 		expect(mockFetch).toHaveBeenCalledWith('/api/naming/validate', expect.objectContaining({
 			method: 'POST',
-			body: JSON.stringify({ pattern: '{title} {episde}' })
+			body: JSON.stringify({ template: '{title} {episde}', media_type: 'tv', has_transcode_preset: false })
 		}));
 		expect(result.valid).toBe(false);
-		expect(result.invalid_vars).toContain('episde');
-		expect(result.suggestions.episde).toBe('episode');
-	});
-
-	it('returns valid for correct pattern', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ valid: true, invalid_vars: [], suggestions: {} }));
-		const result = await validatePattern('{title} S{season}E{episode}');
-		expect(result.valid).toBe(true);
 	});
 });
 
 describe('fetchNamingVariables', () => {
-	it('GETs /api/naming/variables', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ variables: ['album', 'artist', 'episode', 'label', 'season', 'title', 'video_type', 'year'], descriptions: {} }));
+	it('GETs /api/naming/variables and returns the grouped map', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ variables: { movie: [{ token: 'title', description: 'Title' }] } }));
 		const result = await fetchNamingVariables();
-		expect(result.variables).toHaveLength(8);
-		expect(result.variables).toContain('title');
-		expect(result.variables).toContain('episode');
+		expect(result.variables.movie[0].token).toBe('title');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// MISSING in v3 — reject before any fetch
+// ---------------------------------------------------------------------------
+
+describe('MISSING in v3', () => {
+	it.each([
+		['toggleMultiTitle', () => toggleMultiTitle('job_1', true)],
+		['tvdbMatch', () => tvdbMatch('job_1', { season: 2, apply: true })],
+		['fetchTvdbEpisodes', () => fetchTvdbEpisodes('job_1', 1)],
+		['updateJobNaming', () => updateJobNaming('job_1', { title_pattern_override: '{title}' })]
+	])('%s rejects with /not yet available in v3/', async (_name, call) => {
+		await expect(call()).rejects.toThrow(/not yet available in v3/);
+		expect(mockFetch).not.toHaveBeenCalled();
 	});
 });

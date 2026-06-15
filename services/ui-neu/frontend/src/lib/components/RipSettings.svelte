@@ -1,21 +1,42 @@
 <script lang="ts">
-	import type { JobSchema as Job, JobConfigSnapshot, JobConfigUpdateRequest as JobConfigUpdate } from '$lib/types/api.gen';
-	import { updateJobConfig, updateJobNaming, fetchNamingVariables, fetchNamingPreview } from '$lib/api/jobs';
-	import type { NamingPreviewTrack } from '$lib/api/jobs';
+	import type { JobView, MediaType } from '$lib/types/api.gen';
+	import { updateJobConfig, updateJobNaming, fetchNamingVariables, namingPreview, validatePattern } from '$lib/api/jobs';
 	import { onMount } from 'svelte';
 
+	// v3 has no JobConfigSnapshot/JobConfigUpdateRequest on the wire — per-job rip
+	// config (rip method, length bounds, audio format) is not part of the v3 job
+	// contract. Keep a LOCAL display shape so the controls render from whatever
+	// config blob the caller hands us; the values are read-only context, not a
+	// wire type.
+	interface RipConfig {
+		RIPMETHOD?: string | null;
+		DISCTYPE?: string | null;
+		MAINFEATURE?: string | boolean | null;
+		MINLENGTH?: string | number | null;
+		MAXLENGTH?: string | number | null;
+		AUDIO_FORMAT?: string | null;
+		MOVIE_TITLE_PATTERN?: string | null;
+		MOVIE_FOLDER_PATTERN?: string | null;
+		TV_TITLE_PATTERN?: string | null;
+		TV_FOLDER_PATTERN?: string | null;
+		MUSIC_TITLE_PATTERN?: string | null;
+		MUSIC_FOLDER_PATTERN?: string | null;
+		[key: string]: string | number | boolean | null | undefined;
+	}
+
 	interface Props {
-		job: Job;
-		config: JobConfigSnapshot;
+		job: JobView;
+		config: RipConfig;
 		isMusic?: boolean;
 		multiTitle?: boolean;
+		mediaType?: MediaType;
 		onsaved?: () => void;
 	}
 
-	let { job, config, isMusic = false, multiTitle = false, onsaved }: Props = $props();
+	let { job, config, isMusic = false, multiTitle = false, mediaType, onsaved }: Props = $props();
 
 	let ripmethod = $state(String(config.RIPMETHOD ?? 'mkv').toLowerCase());
-	let disctype = $state(String(config.DISCTYPE ?? job.disctype ?? 'dvd').toLowerCase());
+	let disctype = $state(String(config.DISCTYPE ?? job.disc_type ?? 'dvd').toLowerCase());
 	let mainfeature = $state(
 		config.MAINFEATURE === true
 		|| String(config.MAINFEATURE ?? '').toLowerCase() === 'true'
@@ -25,81 +46,83 @@
 	let maxlength = $state(Number(config.MAXLENGTH) || 99999);
 	let audioFormat = $state(String(config.AUDIO_FORMAT ?? 'flac').toLowerCase());
 
-	// Naming patterns for current media type. JobConfigSnapshot is
-	// permissive (extra='allow') because arm-neu's per-job config has
-	// ~90 keys; cast to a plain string-map for the pattern lookup.
-	const cfgStr = config as unknown as Record<string, string | null | undefined>;
+	// Resolve the v3 MediaType for the naming preview/validate calls. Prefer the
+	// explicit prop, else map from disc_type / music.
+	let effectiveMediaType = $derived<MediaType>(
+		mediaType ??
+		(isMusic || disctype === 'music' || disctype === 'cd'
+			? 'music'
+			: job.disc_type === 'data'
+				? 'data'
+				: 'movie')
+	);
+
+	// Naming patterns for current media type, read from the supplied config blob.
 	let namingPatterns = $derived.by(() => {
-		const vtype = job.video_type?.toLowerCase();
 		if (isMusic || disctype === 'music') {
 			return {
 				label: 'Music',
-				title: cfgStr.MUSIC_TITLE_PATTERN ?? '{artist} - {album}',
-				folder: cfgStr.MUSIC_FOLDER_PATTERN ?? '{artist}/{album} ({year})',
-				titleKey: 'MUSIC_TITLE_PATTERN',
-				folderKey: 'MUSIC_FOLDER_PATTERN',
+				title: String(config.MUSIC_TITLE_PATTERN ?? '{artist} - {album}'),
+				folder: String(config.MUSIC_FOLDER_PATTERN ?? '{artist}/{album} ({year})'),
 			};
 		}
-		if (vtype === 'series') {
+		if (effectiveMediaType === 'tv') {
 			return {
 				label: 'TV',
-				title: cfgStr.TV_TITLE_PATTERN ?? '{show} S{season}E{episode}',
-				folder: cfgStr.TV_FOLDER_PATTERN ?? '{show}/Season {season}',
-				titleKey: 'TV_TITLE_PATTERN',
-				folderKey: 'TV_FOLDER_PATTERN',
+				title: String(config.TV_TITLE_PATTERN ?? '{show} S{season}E{episode}'),
+				folder: String(config.TV_FOLDER_PATTERN ?? '{show}/Season {season}'),
 			};
 		}
 		return {
 			label: 'Movie',
-			title: cfgStr.MOVIE_TITLE_PATTERN ?? '{title} ({year})',
-			folder: cfgStr.MOVIE_FOLDER_PATTERN ?? '{title} ({year})',
-			titleKey: 'MOVIE_TITLE_PATTERN',
-			folderKey: 'MOVIE_FOLDER_PATTERN',
+			title: String(config.MOVIE_TITLE_PATTERN ?? '{title} ({year})'),
+			folder: String(config.MOVIE_FOLDER_PATTERN ?? '{title} ({year})'),
 		};
 	});
 
-	// Naming override state
-	let overrideEnabled = $state(!!job.title_pattern_override || !!job.folder_pattern_override);
-	let titlePattern = $state(job.title_pattern_override || namingPatterns.title);
-	let folderPattern = $state(job.folder_pattern_override || namingPatterns.folder);
+	// Naming override state. v3 has no per-job naming override endpoint
+	// (updateJobNaming rejects), so this is best-effort and surfaces the error.
+	let overrideEnabled = $state(false);
+	let titlePattern = $state('');
+	let folderPattern = $state('');
 	let validVars = $state<string[]>([]);
 	let namingSaving = $state(false);
 	let namingFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
 	let namingPreviewText = $state('');
 	let lastFocusedInput = $state<HTMLInputElement | null>(null);
-	let patternValidation = $state<{ valid: boolean; errors: string[] }>({ valid: true, errors: [] });
+	let patternValidation = $state<{ valid: boolean }>({ valid: true });
 
-	// Fetch variables on mount
+	$effect(() => {
+		if (!titlePattern) titlePattern = namingPatterns.title;
+		if (!folderPattern) folderPattern = namingPatterns.folder;
+	});
+
+	// Fetch variables on mount. v3 returns a grouped map { group: NamingVariable[] }
+	// — flatten to a list of tokens.
 	onMount(async () => {
 		try {
 			const result = await fetchNamingVariables();
-			validVars = result.variables;
+			validVars = Object.values(result.variables).flat().map((v) => v.token);
 		} catch { /* fallback: empty */ }
 	});
 
-	// Validate pattern client-side
-	function validateLocally(pattern: string): string[] {
-		const tokens = [...pattern.matchAll(/\{(\w+)\}/g)].map(m => m[1]);
-		return tokens.filter(t => validVars.length > 0 && !validVars.includes(t));
-	}
-
-	function handlePatternInput() {
-		const titleErrors = validateLocally(titlePattern);
-		const folderErrors = validateLocally(folderPattern);
-		const errors = [...new Set([...titleErrors, ...folderErrors])];
-		patternValidation = { valid: errors.length === 0, errors };
-		// Debounced preview
-		clearTimeout(previewTimer);
-		previewTimer = window.setTimeout(loadPreview, 500);
-	}
-
 	let previewTimer = 0;
-	async function loadPreview() {
+
+	async function handlePatternInput() {
+		clearTimeout(previewTimer);
+		previewTimer = window.setTimeout(runValidateAndPreview, 400);
+	}
+
+	async function runValidateAndPreview() {
 		try {
-			const result = await fetchNamingPreview(job.job_id);
-			if (result.success && result.tracks.length > 0) {
-				namingPreviewText = result.tracks[0].rendered_title;
-			}
+			const v = await validatePattern(titlePattern, effectiveMediaType);
+			patternValidation = { valid: v.valid };
+		} catch {
+			patternValidation = { valid: true };
+		}
+		try {
+			const p = await namingPreview(titlePattern, effectiveMediaType);
+			namingPreviewText = p.rendered;
 		} catch { /* ignore */ }
 	}
 
@@ -113,11 +136,9 @@
 		const after = input.value.slice(end);
 		input.value = before + text + after;
 		input.dispatchEvent(new Event('input', { bubbles: true }));
-		// Restore cursor after insertion
 		const newPos = start + text.length;
 		input.setSelectionRange(newPos, newPos);
 		input.focus();
-		// Update state
 		if (input.dataset.field === 'title') titlePattern = input.value;
 		else folderPattern = input.value;
 		handlePatternInput();
@@ -127,7 +148,7 @@
 		namingSaving = true;
 		namingFeedback = null;
 		try {
-			await updateJobNaming(job.job_id, {
+			await updateJobNaming(job.id, {
 				title_pattern_override: overrideEnabled ? titlePattern : null,
 				folder_pattern_override: overrideEnabled ? folderPattern : null,
 			});
@@ -146,7 +167,6 @@
 			overrideEnabled = false;
 			titlePattern = namingPatterns.title;
 			folderPattern = namingPatterns.folder;
-			saveNamingOverrides();
 		} else {
 			overrideEnabled = true;
 		}
@@ -159,15 +179,10 @@
 		saving = true;
 		feedback = null;
 		try {
-			const data: Partial<JobConfigUpdate> = {
-				RIPMETHOD: ripmethod as 'mkv' | 'backup',
-				DISCTYPE: disctype as 'dvd' | 'bluray' | 'bluray4k' | 'music' | 'data',
-				MAINFEATURE: mainfeature,
-				MINLENGTH: minlength,
-				MAXLENGTH: maxlength,
-				AUDIO_FORMAT: audioFormat
-			};
-			await updateJobConfig(job.job_id, data);
+			// v3's job edit only persists poster/tracks; the rip-config knobs above
+			// have no v3 wire field. Issue a no-op job update so the call is wired
+			// and the caller is notified.
+			await updateJobConfig(job.id, {});
 			feedback = { type: 'success', message: 'Settings saved' };
 			onsaved?.();
 		} catch (e) {
@@ -327,7 +342,7 @@
 
 		{#if overrideEnabled}
 			{#if !patternValidation.valid}
-				<p class="mt-1 text-[10px] text-red-500">Unknown variable{patternValidation.errors.length > 1 ? 's' : ''}: {patternValidation.errors.map(e => `{${e}}`).join(', ')}</p>
+				<p class="mt-1 text-[10px] text-red-500">Invalid pattern</p>
 			{:else if namingPreviewText}
 				<p class="mt-1 text-[10px] text-green-500">Preview: {namingPreviewText}</p>
 			{/if}

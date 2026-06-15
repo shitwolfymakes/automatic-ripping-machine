@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import TitleSearch from './TitleSearch.svelte';
 import { createJob } from './__fixtures__/job';
+import type { MetadataCandidate } from '$lib/types/api.gen';
 
 vi.mock('$lib/api/jobs', () => ({
 	searchMetadata: vi.fn(),
@@ -14,10 +15,13 @@ const mockSearchMetadata = vi.mocked(searchMetadata);
 const mockFetchDetail = vi.mocked(fetchMediaDetail);
 const mockUpdateTitle = vi.mocked(updateJobTitle);
 
-function createSearchResult(overrides: Record<string, unknown> = {}) {
+function createCandidate(overrides: Partial<MetadataCandidate> = {}): MetadataCandidate {
 	return {
-		title: 'Result', year: '2024', imdb_id: 'tt1111',
-		poster_url: null, media_type: 'movie',
+		title: 'Result',
+		year: 2024,
+		kind: 'movie',
+		poster_url: null,
+		provider_id: 'tt1111',
 		...overrides
 	};
 }
@@ -45,7 +49,7 @@ describe('TitleSearch', () => {
 
 		it('renders year input pre-filled', () => {
 			renderComponent(TitleSearch, {
-				props: { job: createJob({ year: '2024' }) }
+				props: { job: createJob({ year: 2024 }) }
 			});
 			expect(screen.getByDisplayValue('2024')).toBeInTheDocument();
 		});
@@ -53,21 +57,19 @@ describe('TitleSearch', () => {
 
 	describe('interactions', () => {
 		it('calls searchMetadata on search', async () => {
-			mockSearchMetadata.mockResolvedValue([
-				createSearchResult({ title: 'Result 1' })
-			]);
+			mockSearchMetadata.mockResolvedValue({ candidates: [createCandidate({ title: 'Result 1' })] });
 			renderComponent(TitleSearch, {
-				props: { job: createJob({ title: 'Test', year: '2024' }) }
+				props: { job: createJob({ title: 'Test', year: 2024 }) }
 			});
 			await fireEvent.click(screen.getByText('Search'));
 			await waitFor(() => {
-				expect(mockSearchMetadata).toHaveBeenCalledWith('Test', '2024');
+				expect(mockSearchMetadata).toHaveBeenCalledWith('Test');
 				expect(screen.getByText('Result 1')).toBeInTheDocument();
 			});
 		});
 
 		it('shows no results message', async () => {
-			mockSearchMetadata.mockResolvedValue([]);
+			mockSearchMetadata.mockResolvedValue({ candidates: [] });
 			renderComponent(TitleSearch, {
 				props: { job: createJob({ title: 'Nonexistent' }) }
 			});
@@ -97,8 +99,7 @@ describe('TitleSearch', () => {
 
 		it('does direct IMDb lookup when IMDb ID is entered', async () => {
 			mockFetchDetail.mockResolvedValue({
-				title: 'Direct Movie', year: '2024', imdb_id: 'tt9999', poster_url: null,
-				media_type: 'movie', plot: 'Found directly', background_url: null
+				candidates: [createCandidate({ title: 'Direct Movie', provider_id: 'tt9999' })]
 			});
 			renderComponent(TitleSearch, {
 				props: { job: createJob({ title: 'Test' }) }
@@ -108,16 +109,19 @@ describe('TitleSearch', () => {
 			await fireEvent.click(screen.getByText('Search'));
 			await waitFor(() => {
 				expect(mockFetchDetail).toHaveBeenCalledWith('tt9999');
+				expect(screen.getByDisplayValue('Direct Movie')).toBeInTheDocument();
 			});
 		});
 
 		it('renders multiple search results', async () => {
-			mockSearchMetadata.mockResolvedValue([
-				createSearchResult({ title: 'Movie A' }),
-				createSearchResult({ title: 'Movie B', year: '2023', imdb_id: 'tt2222', media_type: 'series' })
-			]);
+			mockSearchMetadata.mockResolvedValue({
+				candidates: [
+					createCandidate({ title: 'Movie A' }),
+					createCandidate({ title: 'Movie B', year: 2023, provider_id: 'tt2222', kind: 'series' })
+				]
+			});
 			renderComponent(TitleSearch, {
-				props: { job: createJob({ title: 'Movie', year: '2024' }) }
+				props: { job: createJob({ title: 'Movie', year: 2024 }) }
 			});
 			await fireEvent.click(screen.getByText('Search'));
 			await waitFor(() => {
@@ -126,16 +130,19 @@ describe('TitleSearch', () => {
 			});
 		});
 
-		it('renders result year and media type', async () => {
-			mockSearchMetadata.mockResolvedValue([
-				createSearchResult({ title: 'Movie A' })
-			]);
+		it('applies poster via updateJobTitle on selection', async () => {
+			mockSearchMetadata.mockResolvedValue({
+				candidates: [createCandidate({ title: 'Movie A', poster_url: 'https://img/p.jpg' })]
+			});
 			renderComponent(TitleSearch, {
-				props: { job: createJob({ title: 'Movie', year: '2024' }) }
+				props: { job: createJob({ id: 'job_42', title: 'Movie', year: 2024 }) }
 			});
 			await fireEvent.click(screen.getByText('Search'));
+			await waitFor(() => expect(screen.getByText('Movie A')).toBeInTheDocument());
+			await fireEvent.click(screen.getByText('Movie A'));
+			await fireEvent.click(screen.getByText('Apply Poster'));
 			await waitFor(() => {
-				expect(screen.getByText('Movie A')).toBeInTheDocument();
+				expect(mockUpdateTitle).toHaveBeenCalledWith('job_42', { poster_url_manual: 'https://img/p.jpg' });
 			});
 		});
 	});

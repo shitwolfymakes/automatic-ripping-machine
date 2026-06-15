@@ -1,14 +1,15 @@
 <script lang="ts">
-	import type { JobStats } from '$lib/api/jobs';
+	import type { JobStats } from './JobStatsPanel.svelte';
 
 	interface Props {
-		selectedJobs: Set<number>;
+		// v3 job ids are strings (was Set<number> under the BFF).
+		selectedJobs: Set<string>;
 		jobsStats: JobStats | null;
 		gearOpen: boolean;
 		bulkBusy: boolean;
 		onaction: (
-			action: 'delete' | 'purge',
-			params: { job_ids?: number[]; status?: string },
+			action: 'delete',
+			params: { job_ids?: string[]; status?: string },
 			description: string
 		) => void;
 		ontoggle: () => void;
@@ -19,15 +20,15 @@
 	const pillBase = 'px-2.5 py-1 rounded-md text-xs font-semibold cursor-pointer transition-colors';
 	const menuItemBase = 'w-full px-3 py-2 text-left text-sm';
 	const menuItemNormal = `${menuItemBase} text-gray-700 hover:bg-primary/5 dark:text-gray-300 dark:hover:bg-primary/10`;
-	const menuItemDanger = `${menuItemBase} text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20`;
 
-	type BulkItem = { action: 'delete' | 'purge'; label: string; description: string; params: { job_ids?: number[]; status?: string }; danger?: boolean };
+	// v3 only supports bulk DELETE (bulkPurgeJobs is MISSING), so the purge
+	// menu items are gone. Every remaining action routes through bulkDeleteJobs.
+	type BulkItem = { action: 'delete'; label: string; description: string; params: { job_ids?: string[]; status?: string } };
 
 	function bulkActions(): BulkItem[] {
 		return [
-			{ action: 'delete', label: `Delete All Failed${jobsStats?.fail ? ` (${jobsStats.fail})` : ''}`, description: `delete all failed jobs${jobsStats?.fail ? ` (${jobsStats.fail})` : ''}`, params: { status: 'fail' } },
-			{ action: 'purge', label: 'Purge All Failed', description: 'purge all failed jobs and their files', params: { status: 'fail' }, danger: true },
-			{ action: 'delete', label: `Delete All Successful${jobsStats?.success ? ` (${jobsStats.success})` : ''}`, description: `delete all successful jobs${jobsStats?.success ? ` (${jobsStats.success})` : ''}`, params: { status: 'success' } }
+			{ action: 'delete', label: `Delete All Failed${jobsStats?.fail ? ` (${jobsStats.fail})` : ''}`, description: `delete all failed jobs${jobsStats?.fail ? ` (${jobsStats.fail})` : ''}`, params: { status: 'failed' } },
+			{ action: 'delete', label: `Delete All Successful${jobsStats?.success ? ` (${jobsStats.success})` : ''}`, description: `delete all successful jobs${jobsStats?.success ? ` (${jobsStats.success})` : ''}`, params: { status: 'ripped' } }
 		];
 	}
 
@@ -35,8 +36,7 @@
 		const ids = [...selectedJobs];
 		const n = selectedJobs.size;
 		return [
-			{ action: 'delete', label: 'Delete Selected', description: `delete ${n} selected job(s)`, params: { job_ids: ids } },
-			{ action: 'purge', label: 'Purge Selected', description: `purge ${n} selected job(s) and their files`, params: { job_ids: ids }, danger: true }
+			{ action: 'delete', label: 'Delete Selected', description: `delete ${n} selected job(s)`, params: { job_ids: ids } }
 		];
 	}
 </script>
@@ -73,7 +73,7 @@
 				{#each selectedActions() as item}
 					<button
 						onclick={() => onaction(item.action, item.params, item.description)}
-						class={item.danger ? menuItemDanger : menuItemNormal}
+						class={menuItemNormal}
 					>{item.label}</button>
 				{/each}
 				<div class="my-1 border-t border-gray-200 dark:border-gray-700"></div>
@@ -83,7 +83,7 @@
 			{#each bulkActions() as item}
 				<button
 					onclick={() => onaction(item.action, item.params, item.description)}
-					class={item.danger ? menuItemDanger : menuItemNormal}
+					class={menuItemNormal}
 				>{item.label}</button>
 			{/each}
 		</div>

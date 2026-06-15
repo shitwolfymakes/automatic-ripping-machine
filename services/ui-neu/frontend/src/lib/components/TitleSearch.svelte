@@ -1,50 +1,44 @@
 <script lang="ts">
-	import type { JobSchema as Job, SearchResultSchema as SearchResult, MediaDetailSchema as MediaDetail, TitleUpdateRequest as TitleUpdate } from '$lib/types/api.gen';
+	import type { JobView, MetadataCandidate } from '$lib/types/api.gen';
 	import { searchMetadata, fetchMediaDetail, updateJobTitle } from '$lib/api/jobs';
 	import PosterImage from './PosterImage.svelte';
 
 	interface Props {
-		job: Job;
+		job: JobView;
 		onapply?: () => void;
-		onapplydetail?: (d: { plot?: string | null }) => void;
 		onepisodes?: () => void;
 	}
 
-	let { job, onapply, onapplydetail, onepisodes }: Props = $props();
+	let { job, onapply, onepisodes }: Props = $props();
 
-	let query = $state(job.title || job.label || '');
-	let yearInput = $state(job.year || '');
+	let query = $state(job.title || '');
+	let yearInput = $state(job.year != null ? String(job.year) : '');
 	let imdbInput = $state('');
 	let searching = $state(false);
-	let results = $state<SearchResult[]>([]);
+	let results = $state<MetadataCandidate[]>([]);
 	let searchError = $state<string | null>(null);
 
-	let selectedImdb = $state<string | null>(null);
-	let detail = $state<MediaDetail | null>(null);
+	let selected = $state<MetadataCandidate | null>(null);
+	let detail = $state<MetadataCandidate | null>(null);
 	let loadingDetail = $state(false);
 
 	let applying = $state(false);
 	let feedback = $state<{ type: 'success' | 'error'; message: string; showEpisodes?: boolean } | null>(null);
 
-	// Editable metadata fields (populated from detail)
+	// Editable metadata fields (populated from the selected candidate). v3's job
+	// edit only accepts poster_url_manual on the job; we surface the candidate
+	// poster as the one editable, applied via updateJobTitle.
 	let editTitle = $state('');
 	let editYear = $state('');
 	let editType = $state<'movie' | 'series'>('movie');
-	let editImdbId = $state('');
 	let editPosterUrl = $state('');
-	let editSeason = $state('');
-	let editEpisode = $state('');
 
 	$effect(() => {
 		if (detail) {
 			editTitle = detail.title;
-			editYear = detail.year;
-			editType = detail.media_type === 'series' ? 'series' : 'movie';
-			editImdbId = detail.imdb_id ?? '';
+			editYear = detail.year != null ? String(detail.year) : '';
+			editType = detail.kind === 'series' || detail.kind === 'tv' ? 'series' : 'movie';
 			editPosterUrl = detail.poster_url ?? '';
-			// Preserve existing season/episode when switching detail
-			if (!editSeason) editSeason = job.season || job.season_auto || '';
-			if (!editEpisode) editEpisode = job.episode || job.episode_auto || '';
 		}
 	});
 
@@ -55,11 +49,13 @@
 			searching = true;
 			searchError = null;
 			results = [];
-			selectedImdb = null;
+			selected = null;
 			detail = null;
 			try {
-				detail = await fetchMediaDetail(imdb);
-				selectedImdb = imdb;
+				const resp = await fetchMediaDetail(imdb);
+				detail = resp.candidates[0] ?? null;
+				selected = detail;
+				if (!detail) searchError = 'No match found for that IMDb ID.';
 			} catch (e) {
 				searchError = e instanceof Error ? e.message : 'IMDb lookup failed';
 			} finally {
@@ -71,10 +67,11 @@
 		searching = true;
 		searchError = null;
 		results = [];
-		selectedImdb = null;
+		selected = null;
 		detail = null;
 		try {
-			results = await searchMetadata(query.trim(), yearInput.trim() || undefined);
+			const resp = await searchMetadata(query.trim());
+			results = resp.candidates;
 			if (results.length === 0) {
 				searchError = 'No results found. Try a different search term.';
 			}
@@ -85,38 +82,23 @@
 		}
 	}
 
-	async function handleSelect(result: SearchResult) {
-		if (!result.imdb_id) {
-			// No IMDb ID — apply directly from search result
-			detail = { ...result, plot: null, background_url: null };
-			selectedImdb = null;
-			return;
-		}
-		if (selectedImdb === result.imdb_id) {
-			selectedImdb = null;
+	function handleSelect(result: MetadataCandidate) {
+		if (selected === result) {
+			selected = null;
 			detail = null;
 			return;
 		}
-		selectedImdb = result.imdb_id;
-		loadingDetail = true;
-		detail = null;
-		try {
-			detail = await fetchMediaDetail(result.imdb_id);
-		} catch {
-			// Fall back to search result data
-			detail = { ...result, plot: null, background_url: null };
-		} finally {
-			loadingDetail = false;
-		}
+		selected = result;
+		detail = result;
 	}
 
-	async function applyTitle(data: Partial<TitleUpdate>) {
+	async function applyPoster() {
 		applying = true;
 		feedback = null;
 		try {
-			await updateJobTitle(job.job_id, data);
-			const isSeries = data.video_type === 'series';
-			feedback = { type: 'success', message: 'Title updated', showEpisodes: isSeries };
+			await updateJobTitle(job.id, { poster_url_manual: editPosterUrl.trim() || null });
+			const isSeries = editType === 'series';
+			feedback = { type: 'success', message: 'Poster updated', showEpisodes: isSeries };
 			onapply?.();
 		} catch (e) {
 			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Update failed' };
@@ -125,26 +107,9 @@
 		}
 	}
 
-	function applyFromDetail() {
-		if (!editTitle.trim()) return;
-		const data: Partial<TitleUpdate> = {
-			title: editTitle.trim(),
-			year: editYear.trim() || undefined,
-			video_type: editType,
-			imdb_id: editImdbId.trim() || undefined,
-			poster_url: editPosterUrl.trim() || undefined,
-		};
-		if (editType === 'series') {
-			if (editSeason.trim()) data.season = editSeason.trim();
-			if (editEpisode.trim()) data.episode = editEpisode.trim();
-		}
-		applyTitle(data);
-		onapplydetail?.({ plot: detail?.plot });
-	}
-
 	function backToResults() {
 		detail = null;
-		selectedImdb = null;
+		selected = null;
 	}
 
 	function handleSearchKeydown(e: KeyboardEvent) {
@@ -211,7 +176,7 @@
 			{#each results as result}
 				<button
 					onclick={() => handleSelect(result)}
-					class="group flex flex-col overflow-hidden rounded-lg border text-left transition-all {selectedImdb === result.imdb_id
+					class="group flex flex-col overflow-hidden rounded-lg border text-left transition-all {selected === result
 						? 'border-primary ring-2 ring-primary/30'
 						: 'border-primary/20 hover:border-primary/40 dark:border-primary/20 dark:hover:border-primary/40'}"
 				>
@@ -238,13 +203,13 @@
 							{result.title}
 						</p>
 						<div class="mt-1 flex items-center gap-1.5">
-							<span class="text-xs text-gray-500 dark:text-gray-400">{result.year}</span>
+							<span class="text-xs text-gray-500 dark:text-gray-400">{result.year ?? ''}</span>
 							<span
-								class="rounded-sm px-1 py-0.5 text-[10px] font-medium uppercase {result.media_type === 'series'
+								class="rounded-sm px-1 py-0.5 text-[10px] font-medium uppercase {result.kind === 'series' || result.kind === 'tv'
 									? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
 									: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'}"
 							>
-								{result.media_type}
+								{result.kind}
 							</span>
 						</div>
 					</div>
@@ -260,14 +225,6 @@
 		</div>
 	{:else if detail}
 		<div class="overflow-hidden rounded-lg border border-primary/20 dark:border-primary/20">
-			{#if detail.background_url}
-				<div
-					class="relative h-40 bg-cover bg-center"
-					style="background-image: url({detail.background_url})"
-				>
-					<div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
-				</div>
-			{/if}
 			<div class="space-y-3 p-4">
 				{#if results.length > 0}
 					<button
@@ -297,35 +254,18 @@
 							<option value="series">Series</option>
 						</select>
 					</label>
-					<label>
-						<span class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">IMDb ID</span>
-						<input type="text" bind:value={editImdbId} placeholder="tt..." class="w-full {inputBase}" />
-					</label>
-					<label>
+					<label class="sm:col-span-2">
 						<span class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Poster URL</span>
 						<input type="text" bind:value={editPosterUrl} placeholder="https://..." class="w-full {inputBase}" />
 					</label>
-					{#if editType === 'series'}
-						<label>
-							<span class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Season</span>
-							<input type="number" bind:value={editSeason} min="1" placeholder="1" class="w-full {inputBase}" />
-						</label>
-						<label>
-							<span class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Episode</span>
-							<input type="text" bind:value={editEpisode} placeholder="e.g. 1 or 1-6" class="w-full {inputBase}" />
-						</label>
-					{/if}
 				</div>
-				{#if detail.plot}
-					<p class="text-sm text-gray-700 dark:text-gray-300">{detail.plot}</p>
-				{/if}
 				<div class="flex items-center gap-2">
 					<button
-						onclick={applyFromDetail}
-						disabled={applying || !editTitle.trim()}
+						onclick={applyPoster}
+						disabled={applying}
 						class="{btnBase} bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
 					>
-						{applying ? 'Applying...' : 'Apply This Title'}
+						{applying ? 'Applying...' : 'Apply Poster'}
 					</button>
 					{#if feedback}
 						<span

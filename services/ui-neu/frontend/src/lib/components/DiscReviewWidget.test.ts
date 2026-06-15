@@ -1,63 +1,49 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import DiscReviewWidget from './DiscReviewWidget.svelte';
-import { createJob } from './__fixtures__/job';
+import type { JobView, TrackView } from '$lib/types/api.gen';
+import { createJob, createJobDetail, createTrack } from './__fixtures__/job';
+
+/** Build a JobDetailView from explicit job overrides + tracks. */
+function detail(jobOverrides: Partial<JobView> = {}, tracks: TrackView[] = []) {
+	return { ...createJobDetail({ tracks }), job: createJob(jobOverrides) };
+}
 
 vi.mock('$lib/api/jobs', () => ({
-	fetchJob: vi.fn(() => Promise.resolve({
-		job: { job_id: 1, title: 'Test Movie', status: 'waiting', video_type: 'movie', disctype: 'bluray', label: 'TEST', year: '2024', no_of_titles: 5, crc_id: 'abc123', logfile: 'job_1.log', start_time: '2025-06-15T10:00:00Z', wait_start_time: '2025-06-15T11:55:00Z', devpath: '/dev/sr0', imdb_id: null, poster_url: null, errors: null, multi_title: false },
-		tracks: [],
-		config: {}
-	})),
+	fetchJob: vi.fn(() => Promise.resolve(createJobDetail())),
 	cancelWaitingJob: vi.fn(() => Promise.resolve()),
 	startWaitingJob: vi.fn(() => Promise.resolve()),
-	pauseWaitingJob: vi.fn(() => Promise.resolve()),
-	updateJobTitle: vi.fn(() => Promise.resolve()),
-	toggleMultiTitle: vi.fn(() => Promise.resolve()),
-	updateTrack: vi.fn(() => Promise.resolve()),
+	updateTrack: vi.fn(() => Promise.resolve(createJob())),
 	searchMetadata: vi.fn(),
 	fetchMediaDetail: vi.fn(),
 	searchMusicMetadata: vi.fn(),
 	fetchMusicDetail: vi.fn(),
-	setJobTracks: vi.fn(),
-	fetchCrcLookup: vi.fn(() => Promise.resolve({ no_crc: true })),
-	submitToCrcDb: vi.fn(),
-	updateJobConfig: vi.fn(() => Promise.resolve()),
-	updateJobTranscodeConfig: vi.fn(() => Promise.resolve()),
-	fetchNamingPreview: vi.fn(() => Promise.resolve({ success: true, job_title: 'Test Movie', job_folder: 'Test Movie (2024)', tracks: [] }))
+	updateJobTitle: vi.fn(() => Promise.resolve(createJob())),
+	updateJobConfig: vi.fn(() => Promise.resolve(createJob())),
+	updateJobNaming: vi.fn(() => Promise.reject(new Error('not available'))),
+	updateJobTranscodeConfig: vi.fn(() => Promise.reject(new Error('not available'))),
+	updateTrackTitle: vi.fn(() => Promise.resolve(createJob())),
+	clearTrackTitle: vi.fn(() => Promise.resolve(createJob())),
+	fetchNamingVariables: vi.fn(() => Promise.resolve({ variables: {} })),
+	namingPreview: vi.fn(() => Promise.resolve({ rendered: '' })),
+	validatePattern: vi.fn(() => Promise.resolve({ valid: true }))
 }));
 
 vi.mock('$lib/api/settings', () => ({
-	fetchSettings: vi.fn(() => Promise.resolve({ transcoder_config: { config: {} } })),
 	fetchTranscoderScheme: vi.fn(() => Promise.resolve(null)),
-	fetchTranscoderPresets: vi.fn(() => Promise.resolve([])),
-	createCustomPreset: vi.fn(() => Promise.resolve(null))
+	fetchTranscoderPresets: vi.fn(() => Promise.resolve(null))
 }));
 
-vi.mock('$lib/api/logs', () => ({
-	fetchStructuredLogContent: vi.fn(() => Promise.resolve({ entries: [] })),
-	fetchLogContent: vi.fn(() => Promise.resolve({ content: '' }))
-}));
-
-import { startWaitingJob, cancelWaitingJob, fetchJob, fetchNamingPreview, updateJobTitle, updateJobConfig } from '$lib/api/jobs';
+import { fetchJob, startWaitingJob, cancelWaitingJob, updateTrack } from '$lib/api/jobs';
+const mockFetchJob = vi.mocked(fetchJob);
 const mockStart = vi.mocked(startWaitingJob);
 const mockCancel = vi.mocked(cancelWaitingJob);
-const mockFetchJob = vi.mocked(fetchJob);
-const mockFetchNamingPreview = vi.mocked(fetchNamingPreview);
-const mockUpdateJobTitle = vi.mocked(updateJobTitle);
-const mockUpdateJobConfig = vi.mocked(updateJobConfig);
+const mockUpdateTrack = vi.mocked(updateTrack);
 
-vi.stubGlobal('confirm', vi.fn(() => true));
-
-/** Create a waiting job with common defaults. Merges overrides on top. */
-function waitingJob(overrides: Partial<Parameters<typeof createJob>[0]> = {}) {
-	return createJob({ status: 'waiting', wait_start_time: '2025-06-15T11:55:00Z', ...overrides });
-}
-
-/** Render the widget with a waiting job. Extra props (e.g. ondismiss) can be passed. */
+/** Render the widget with a JobView. */
 function renderWidget(jobOverrides: Partial<Parameters<typeof createJob>[0]> = {}, extraProps: Record<string, unknown> = {}) {
 	return renderComponent(DiscReviewWidget, {
-		props: { job: waitingJob(jobOverrides), ...extraProps }
+		props: { job: createJob({ status: 'identified', ...jobOverrides }), ...extraProps }
 	});
 }
 
@@ -65,12 +51,12 @@ describe('DiscReviewWidget', () => {
 	afterEach(() => {
 		cleanup();
 		vi.clearAllMocks();
-		vi.mocked(confirm).mockReturnValue(true);
+		mockFetchJob.mockResolvedValue(detail({ title: 'Test Movie', disc_type: 'bluray' }));
 	});
 
 	describe('rendering', () => {
-		it('renders job title after loading', async () => {
-			renderWidget();
+		it('renders job title', async () => {
+			renderWidget({ title: 'Test Movie' });
 			await waitFor(() => {
 				expect(screen.getByText('Test Movie')).toBeInTheDocument();
 			});
@@ -85,65 +71,61 @@ describe('DiscReviewWidget', () => {
 		});
 
 		it('renders disc type info', async () => {
-			renderWidget({ disctype: 'bluray' });
+			renderWidget({ disc_type: 'bluray' });
 			await waitFor(() => {
 				expect(screen.getByText('Blu-ray')).toBeInTheDocument();
 			});
 		});
 
 		it('renders drive name from driveNames prop', async () => {
-			renderWidget({ devpath: '/dev/sr0' }, { driveNames: { '/dev/sr0': 'Main Drive' } });
+			renderWidget({ drive_id: 'drv_1' }, { driveNames: { drv_1: 'Main Drive' } });
 			await waitFor(() => {
 				expect(screen.getByText('Main Drive')).toBeInTheDocument();
 			});
 		});
-
-		it('renders disc label', async () => {
-			renderWidget({ label: 'MOVIE_DISC' });
-			await waitFor(() => {
-				expect(screen.getByText('MOVIE_DISC')).toBeInTheDocument();
-			});
-		});
 	});
 
-	describe('Episodes button visibility', () => {
-		it('shows Episodes button when video_type is series and imdb_id is set', async () => {
-			renderWidget({ video_type: 'series', disctype: 'bluray', imdb_id: 'tt1234567' });
+	describe('search button visibility', () => {
+		it('shows Search button for video discs', async () => {
+			renderWidget({ disc_type: 'bluray' });
 			await waitFor(() => {
-				expect(screen.getByText('Episodes')).toBeInTheDocument();
+				expect(screen.getByText('Search')).toBeInTheDocument();
 			});
 		});
 
-		it.each([
-			{ desc: 'movie type even with imdb_id', overrides: { video_type: 'movie', disctype: 'bluray', imdb_id: 'tt1234567' } },
-			{ desc: 'series without imdb_id', overrides: { video_type: 'series', disctype: 'bluray', imdb_id: null } },
-			{ desc: 'music discs', overrides: { disctype: 'music', video_type: 'music' } },
-			{ desc: 'movie disc with no imdb_id', overrides: { video_type: 'movie', disctype: 'bluray', imdb_id: null } }
-		])('does NOT show Episodes button for $desc', async ({ overrides }) => {
-			renderWidget(overrides);
+		it('shows Transcode button for video discs', async () => {
+			renderWidget({ disc_type: 'bluray' });
+			await waitFor(() => {
+				expect(screen.getByText('Transcode')).toBeInTheDocument();
+			});
+		});
+
+		it('does NOT show Transcode button for music discs', async () => {
+			mockFetchJob.mockResolvedValue(detail({ disc_type: 'cd' }));
+			renderWidget({ disc_type: 'cd' });
 			await waitFor(() => {
 				expect(screen.getByText('Start')).toBeInTheDocument();
 			});
-			expect(screen.queryByText('Episodes')).not.toBeInTheDocument();
+			expect(screen.queryByText('Transcode')).not.toBeInTheDocument();
 		});
 	});
 
 	describe('interactions', () => {
-		it('calls startWaitingJob when Start is clicked', async () => {
-			renderWidget();
+		it('calls startWaitingJob with the job id when Start is clicked', async () => {
+			renderWidget({ id: 'job_9' });
 			await waitFor(() => expect(screen.getByText('Start')).toBeInTheDocument());
 			await fireEvent.click(screen.getByText('Start'));
 			await waitFor(() => {
-				expect(mockStart).toHaveBeenCalledWith(1);
+				expect(mockStart).toHaveBeenCalledWith('job_9');
 			});
 		});
 
-		it('calls cancelWaitingJob when Cancel is clicked', async () => {
-			renderWidget();
+		it('calls cancelWaitingJob with the job id when Cancel is clicked', async () => {
+			renderWidget({ id: 'job_9' });
 			await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
 			await fireEvent.click(screen.getByText('Cancel'));
 			await waitFor(() => {
-				expect(mockCancel).toHaveBeenCalledWith(1);
+				expect(mockCancel).toHaveBeenCalledWith('job_9');
 			});
 		});
 
@@ -168,181 +150,35 @@ describe('DiscReviewWidget', () => {
 		});
 	});
 
-	describe('rendered filenames', () => {
-		it('fetches naming preview on load and displays rendered titles in track table', async () => {
-			mockFetchJob.mockResolvedValue({
-				job_id: 1, title: 'Kolchak', status: 'waiting', video_type: 'series',
-				disctype: 'bluray', label: 'TEST', year: '1974', no_of_titles: 2,
-				crc_id: null, logfile: null, start_time: '2025-06-15T10:00:00Z',
-				wait_start_time: '2025-06-15T11:55:00Z', devpath: '/dev/sr0',
-				imdb_id: 'tt0071003', poster_url: null, errors: null, multi_title: false,
-				tracks: [
-					{ track_id: 1, track_number: '0', length: 3012, filename: 'Kolchak_t00.mkv', enabled: true, aspect_ratio: '16:9', fps: '23.976', ripped: false, basename: null, title: 'Demon in Lace', year: null, video_type: null, poster_url: null, episode_number: '16', episode_name: 'Demon in Lace' }
-				],
-				config: { MANUAL_WAIT_TIME: 60 }
-			} as any);
-			mockFetchNamingPreview.mockResolvedValue({
-				success: true,
-				job_title: 'Kolchak: The Night Stalker S01E16',
-				job_folder: 'Kolchak: The Night Stalker/Season 01',
-				tracks: [
-					{ track_number: '0', rendered_title: 'Demon in Lace S01E16', rendered_folder: 'Kolchak/Season 01' }
-				]
-			} as any);
-
-			renderWidget({ video_type: 'series', disctype: 'bluray', imdb_id: 'tt0071003' });
-
-			await waitFor(() => expect(screen.getByText('Info')).toBeInTheDocument());
-			await fireEvent.click(screen.getByText('Info'));
-
+	describe('tracks table', () => {
+		it('renders v3 track rows (index / title / source)', async () => {
+			mockFetchJob.mockResolvedValue(
+				detail({ title: 'Kolchak', disc_type: 'bluray' }, [
+					createTrack({ id: 'trk_1', index: 0, source_ref: 'Kolchak_t00.mkv', title: 'Demon in Lace', duration_seconds: 3012, episode_number: 16 })
+				])
+			);
+			renderWidget({ disc_type: 'bluray' });
 			await waitFor(() => {
-				expect(mockFetchNamingPreview).toHaveBeenCalledWith(1);
+				expect(screen.getByText('Demon in Lace')).toBeInTheDocument();
+				expect(screen.getByText('Kolchak_t00.mkv')).toBeInTheDocument();
 			});
-
-			await waitFor(() => {
-				expect(screen.getByText('Demon in Lace S01E16')).toBeInTheDocument();
-			});
-			expect(screen.queryByText('Kolchak_t00.mkv')).not.toBeInTheDocument();
 		});
 
-		it('falls back to raw filename when naming preview fails', async () => {
-			mockFetchJob.mockResolvedValue({
-				job_id: 1, title: 'Test Movie', status: 'waiting', video_type: 'movie',
-				disctype: 'bluray', label: 'TEST', year: '2024', no_of_titles: 1,
-				crc_id: null, logfile: null, start_time: '2025-06-15T10:00:00Z',
-				wait_start_time: '2025-06-15T11:55:00Z', devpath: '/dev/sr0',
-				imdb_id: null, poster_url: null, errors: null, multi_title: false,
-				tracks: [
-					{ track_id: 1, track_number: '0', length: 7200, filename: 'title_t00.mkv', enabled: true, aspect_ratio: '16:9', fps: '23.976', ripped: false, basename: null, title: null, year: null, video_type: null, poster_url: null, episode_number: null, episode_name: null }
-				],
-				config: { MANUAL_WAIT_TIME: 60 }
-			} as any);
-			mockFetchNamingPreview.mockRejectedValue(new Error('API down'));
-
-			renderWidget();
-
-			await waitFor(() => expect(screen.getByText('Info')).toBeInTheDocument());
-			await fireEvent.click(screen.getByText('Info'));
-
+		it('persists an episode-number edit via updateTrack bulk-PATCH', async () => {
+			mockFetchJob.mockResolvedValue(
+				detail({ disc_type: 'bluray' }, [createTrack({ id: 'trk_1', index: 0, source_ref: 't00.mkv', title: 'Ep' })])
+			);
+			renderWidget({ id: 'job_3', disc_type: 'bluray' });
+			await waitFor(() => expect(screen.getByText('Ep')).toBeInTheDocument());
+			const epInput = screen.getByPlaceholderText('--');
+			await fireEvent.change(epInput, { target: { value: '7' } });
 			await waitFor(() => {
-				expect(screen.getByText('title_t00.mkv')).toBeInTheDocument();
+				expect(mockUpdateTrack).toHaveBeenCalledWith('job_3', 'trk_1', { episode_number: 7 });
 			});
 		});
 	});
 
-	describe('multi-title toggle', () => {
-		it('renders Movie/Series buttons when multi_title=true', async () => {
-			renderWidget({ multi_title: true, video_type: 'movie', disctype: 'dvd' });
-			await waitFor(() => {
-				expect(screen.getByText('Movie')).toBeInTheDocument();
-				expect(screen.getByText('Series')).toBeInTheDocument();
-			});
-		});
-
-		it('does NOT render Movie/Series toggle when multi_title=false', async () => {
-			renderWidget({ multi_title: false, video_type: 'movie', disctype: 'dvd' });
-			await waitFor(() => {
-				expect(screen.getByText('Test Movie')).toBeInTheDocument();
-			});
-			expect(screen.queryByRole('button', { name: 'Movie' })).not.toBeInTheDocument();
-		});
-
-		it('calls updateJobTitle on toggle click', async () => {
-			mockUpdateJobTitle.mockResolvedValue(undefined as any);
-			renderWidget({ multi_title: true, video_type: 'movie', disctype: 'dvd' });
-			await waitFor(() => expect(screen.getByText('Series')).toBeInTheDocument());
-			await fireEvent.click(screen.getByText('Series'));
-			await waitFor(() => {
-				expect(mockUpdateJobTitle).toHaveBeenCalledWith(1, { video_type: 'series' });
-			});
-		});
-	});
-
-	describe('auto-default video_type', () => {
-		it('fires updateJobTitle({video_type:"movie"}) for unknown+multi_title+dvd', async () => {
-			mockUpdateJobTitle.mockResolvedValue(undefined as any);
-			renderWidget({ multi_title: true, video_type: 'unknown', disctype: 'dvd' });
-			await waitFor(() => {
-				expect(mockUpdateJobTitle).toHaveBeenCalledWith(1, { video_type: 'movie' });
-			});
-		});
-
-		it.each([
-			{ desc: 'series', overrides: { multi_title: true, video_type: 'series', disctype: 'dvd' } },
-			{ desc: 'single-title', overrides: { multi_title: false, video_type: 'unknown', disctype: 'dvd' } },
-			{ desc: 'null disctype', overrides: { multi_title: true, video_type: 'unknown', disctype: null } }
-		])('does NOT auto-default for $desc', async ({ overrides }) => {
-			mockUpdateJobTitle.mockClear();
-			renderWidget(overrides);
-			await waitFor(() => {
-				expect(screen.getByText('Test Movie')).toBeInTheDocument();
-			});
-			expect(mockUpdateJobTitle).not.toHaveBeenCalledWith(1, { video_type: 'movie' });
-		});
-	});
-
-	describe('skip transcode toggle', () => {
-		it('renders skip transcode toggle after clicking Transcode button', async () => {
-			renderWidget({ video_type: 'movie', disctype: 'bluray' });
-			await waitFor(() => expect(screen.getByText('Transcode')).toBeInTheDocument());
-			await fireEvent.click(screen.getByText('Transcode'));
-			await waitFor(() => {
-				expect(screen.getByText('Skip Transcoding')).toBeInTheDocument();
-			});
-		});
-
-		it('calls updateJobConfig with SKIP_TRANSCODE when toggled', async () => {
-			mockUpdateJobConfig.mockResolvedValue(undefined as any);
-			renderWidget({ video_type: 'movie', disctype: 'bluray' });
-			await waitFor(() => expect(screen.getByText('Transcode')).toBeInTheDocument());
-			await fireEvent.click(screen.getByText('Transcode'));
-			await waitFor(() => expect(screen.getByTitle('Files will be sent to transcoder')).toBeInTheDocument());
-			await fireEvent.click(screen.getByTitle('Files will be sent to transcoder'));
-			await waitFor(() => {
-				expect(mockUpdateJobConfig).toHaveBeenCalledWith(1, { SKIP_TRANSCODE: true });
-			});
-		});
-
-		it('reverts skipTranscode and shows error when updateJobConfig rejects', async () => {
-			mockUpdateJobConfig.mockRejectedValue(new Error('Network failure'));
-			renderWidget({ video_type: 'movie', disctype: 'bluray' });
-			await waitFor(() => expect(screen.getByText('Transcode')).toBeInTheDocument());
-			await fireEvent.click(screen.getByText('Transcode'));
-			// Toggle starts as off ("Files will be sent to transcoder")
-			await waitFor(() => expect(screen.getByTitle('Files will be sent to transcoder')).toBeInTheDocument());
-			await fireEvent.click(screen.getByTitle('Files will be sent to transcoder'));
-			// After rejection, toggle should revert back to off state
-			await waitFor(() => {
-				expect(screen.getByTitle('Files will be sent to transcoder')).toBeInTheDocument();
-			});
-			// Error message should be displayed
-			await waitFor(() => {
-				expect(screen.getByText(/Failed to update skip transcode.*Network failure/)).toBeInTheDocument();
-			});
-		});
-	});
-
-	describe('field visibility for multi-title', () => {
-		it('hides Search button for multi-title movie', async () => {
-			renderWidget({ multi_title: true, video_type: 'movie', disctype: 'dvd' });
-			await waitFor(() => {
-				expect(screen.getByText('Start')).toBeInTheDocument();
-			});
-			expect(screen.queryByText('Search')).not.toBeInTheDocument();
-		});
-
-		it.each([
-			{ desc: 'multi-title series', overrides: { multi_title: true, video_type: 'series', disctype: 'dvd' } },
-			{ desc: 'single-title movie', overrides: { multi_title: false, video_type: 'movie', disctype: 'dvd' } }
-		])('shows Search button for $desc', async ({ overrides }) => {
-			renderWidget(overrides);
-			await waitFor(() => {
-				expect(screen.getByText('Search')).toBeInTheDocument();
-			});
-		});
-	});
-
-	it('renders skeleton when primary data prop is omitted', () => {
+	it('renders skeleton when job prop is omitted', () => {
 		const { container } = renderComponent(DiscReviewWidget, { props: {} });
 		expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
 	});

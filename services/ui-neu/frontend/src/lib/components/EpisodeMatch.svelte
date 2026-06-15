@@ -1,14 +1,58 @@
 <script lang="ts">
-	import type { JobDetailSchema as JobDetail, Track } from '$lib/types/api.gen';
-	import type { TvdbEpisode, NamingPreviewTrack } from '$lib/api/jobs';
+	import type { JobDetailView, TrackView } from '$lib/types/api.gen';
 	import { tvdbMatch, fetchTvdbEpisodes, updateTrack, fetchNamingPreview } from '$lib/api/jobs';
 
+	// ---------------------------------------------------------------------------
+	// MISSING in v3 — TVDB episode matching / listing have no v3 endpoint
+	// (tvdbMatch / fetchTvdbEpisodes REJECT at runtime). This screen is
+	// feature-gated OFF; kept type-clean only. The BFF response shapes
+	// (TvdbEpisode / TvdbMatch / NamingPreviewTrack) were removed from jobs.ts,
+	// so they are declared LOCALLY here purely to type the now-dead state. No v3
+	// type fits — the feature is dead. (updateTrack EXISTS — bulk-PATCH wrap.)
+	// ---------------------------------------------------------------------------
+	interface TvdbEpisode {
+		number: number;
+		name: string;
+		runtime: number;
+		aired: string;
+	}
+	interface TvdbMatchEntry {
+		track_number: string;
+		episode_number: number;
+		episode_name: string;
+		episode_runtime: number;
+	}
+	interface NamingPreviewTrack {
+		rendered_title?: string;
+	}
+
 	interface Props {
-		job: JobDetail;
+		job: JobDetailView;
+		// season / season_auto / disc_number / disc_total / tvdb_id / imdb_id have
+		// no JobView equivalent (BFF-only); accept as optional props so the (dead)
+		// screen still type-checks.
+		season?: string | null;
+		seasonAuto?: string | null;
+		discNumber?: number | null;
+		discTotal?: number | null;
+		tvdbId?: number | null;
+		imdbId?: string | null;
 		onapply?: () => void;
 	}
 
-	let { job, onapply }: Props = $props();
+	let {
+		job,
+		season = null,
+		seasonAuto = null,
+		discNumber = null,
+		discTotal = null,
+		tvdbId = null,
+		imdbId = null,
+		onapply
+	}: Props = $props();
+
+	// v3 JobDetailView nests tracks under `job.tracks`.
+	let tracks = $derived<TrackView[]>(job.tracks || []);
 
 	// Controls - initialized empty, synced from job props via $effect
 	let seasonInput = $state('');
@@ -17,12 +61,12 @@
 	let toleranceInput = $state('600');
 	let controlsSynced = $state(false);
 
-	// Sync controls from job props when they become available
+	// Sync controls from props when they become available
 	$effect(() => {
 		if (!controlsSynced) {
-			const s = job.season || job.season_auto || '';
-			const d = job.disc_number?.toString() || '';
-			const dt = job.disc_total?.toString() || '';
+			const s = season || seasonAuto || '';
+			const d = discNumber?.toString() || '';
+			const dt = discTotal?.toString() || '';
 			if (s || d || dt) {
 				seasonInput = s;
 				discInput = d;
@@ -35,26 +79,21 @@
 	// State
 	let loading = $state(false);
 	let error = $state<string | null>(null);
-	let matches = $state<Array<{ track_number: string; episode_number: number; episode_name: string; episode_runtime: number }>>([]);
+	let matches = $state<TvdbMatchEntry[]>([]);
 	let episodes = $state<TvdbEpisode[]>([]);
 	let namingPreviews = $state<Record<string, NamingPreviewTrack>>({});
-	let matchedSeason = $state<number | null>(null);
 	let applying = $state(false);
 
-	// Editable assignments: track_number -> episode_number (null = unassigned)
+	// Editable assignments: track index (string) -> episode_number (null = unassigned)
 	let assignments = $state<Record<string, number | null>>({});
 
-	// Derived
+	// Derived — v3 tracks carry `index` / `duration_seconds`.
 	let mainTracks = $derived(
-		(job.tracks || []).filter((t) => (t.length ?? 0) >= 120).sort((a, b) => {
-			const an = parseInt(a.track_number ?? '0');
-			const bn = parseInt(b.track_number ?? '0');
-			return an - bn;
-		})
+		tracks
+			.filter((t) => (t.duration_seconds ?? 0) >= 120)
+			.sort((a, b) => a.index - b.index)
 	);
-	let shortTracks = $derived(
-		(job.tracks || []).filter((t) => (t.length ?? 0) < 120)
-	);
+	let shortTracks = $derived(tracks.filter((t) => (t.duration_seconds ?? 0) < 120));
 	let matchCount = $derived(
 		Object.values(assignments).filter((v) => v !== null && v !== undefined).length
 	);
@@ -84,13 +123,13 @@
 		return `${sign}${Math.floor(abs / 60)}m${(abs % 60).toString().padStart(2, '0')}s`;
 	}
 
-	async function loadEpisodeList(season: number, fallbackMatches?: typeof matches) {
+	async function loadEpisodeList(s: number, fallbackMatches?: TvdbMatchEntry[]) {
 		try {
-			const epResult = await fetchTvdbEpisodes(job.job_id, season);
+			const epResult = (await fetchTvdbEpisodes(job.job.id, s)) as { episodes: TvdbEpisode[] };
 			// API returns runtime in seconds - always convert to minutes
-			episodes = epResult.episodes.map(ep => ({
+			episodes = epResult.episodes.map((ep) => ({
 				...ep,
-				runtime: Math.round(ep.runtime / 60),
+				runtime: Math.round(ep.runtime / 60)
 			}));
 		} catch {
 			if (fallbackMatches?.length) {
@@ -103,7 +142,7 @@
 							number: m.episode_number,
 							name: m.episode_name,
 							runtime: m.episode_runtime ? Math.round(m.episode_runtime / 60) : 0,
-							aired: '',
+							aired: ''
 						});
 					}
 				}
@@ -116,14 +155,14 @@
 		loading = true;
 		error = null;
 		try {
-			const season = seasonInput ? Number(seasonInput) : null;
-			const result = await tvdbMatch(job.job_id, {
-				season,
+			const s = seasonInput ? Number(seasonInput) : null;
+			const result = (await tvdbMatch(job.job.id, {
+				season: s,
 				tolerance: Number(toleranceInput) || 300,
 				apply: false,
 				disc_number: discInput ? Number(discInput) : null,
-				disc_total: discTotalInput ? Number(discTotalInput) : null,
-			});
+				disc_total: discTotalInput ? Number(discTotalInput) : null
+			})) as { success?: boolean; error?: string; matches: TvdbMatchEntry[]; season: number };
 
 			if (!result.success) {
 				error = result.error || 'Match failed';
@@ -131,7 +170,6 @@
 			}
 
 			matches = result.matches;
-			matchedSeason = result.season;
 
 			// Update season input if auto-detected
 			if (!seasonInput && result.season) {
@@ -148,7 +186,7 @@
 			if (result.season) {
 				await loadEpisodeList(result.season, result.matches);
 			}
-			} catch (e) {
+		} catch (e) {
 			error = e instanceof Error ? e.message : 'Match failed';
 		} finally {
 			loading = false;
@@ -160,26 +198,27 @@
 		error = null;
 		try {
 			// Apply via tvdb-match with apply=true for auto-matched tracks
-			const season = seasonInput ? Number(seasonInput) : null;
-			await tvdbMatch(job.job_id, {
-				season,
+			const s = seasonInput ? Number(seasonInput) : null;
+			await tvdbMatch(job.job.id, {
+				season: s,
 				tolerance: Number(toleranceInput) || 300,
 				apply: true,
 				disc_number: discInput ? Number(discInput) : null,
-				disc_total: discTotalInput ? Number(discTotalInput) : null,
+				disc_total: discTotalInput ? Number(discTotalInput) : null
 			});
 
-			// Apply manual overrides for tracks that differ from auto-match
+			// Apply manual overrides for tracks that differ from auto-match.
+			// updateTrack EXISTS (bulk-PATCH wrap) and selects rows by track id.
 			for (const track of mainTracks) {
-				const tn = track.track_number ?? '';
+				const tn = String(track.index);
 				const assigned = assignments[tn];
 				const autoMatch = matches.find((m) => m.track_number === tn);
 
 				if (assigned !== undefined && assigned !== (autoMatch?.episode_number ?? null)) {
 					const ep = episodes.find((e) => e.number === assigned);
-					await updateTrack(job.job_id, track.track_id, {
-						episode_number: assigned?.toString() ?? '',
-						episode_name: ep?.name ?? '',
+					await updateTrack(job.job.id, track.id, {
+						episode_number: assigned ?? null,
+						episode_name: ep?.name ?? ''
 					});
 				}
 			}
@@ -196,14 +235,14 @@
 
 	async function loadNamingPreviews() {
 		try {
-			const result = await fetchNamingPreview(job.job_id);
-			if (result.success) {
-				const map: Record<string, NamingPreviewTrack> = {};
-				for (const t of result.tracks) {
-					map[t.track_number] = t;
+			const result = await fetchNamingPreview(job.job.id);
+			const map: Record<string, NamingPreviewTrack> = {};
+			for (const t of result.items) {
+				if (t.track_number != null) {
+					map[String(t.track_number)] = { rendered_title: t.output_name };
 				}
-				namingPreviews = map;
 			}
+			namingPreviews = map;
 		} catch {
 			// Non-critical - silently skip
 		}
@@ -215,16 +254,14 @@
 		episodes = [];
 	}
 
-	function getEpisodeForTrack(trackNumber: string): TvdbEpisode | undefined {
-		const epNum = assignments[trackNumber];
+	function getEpisodeForTrack(trackKey: string): TvdbEpisode | undefined {
+		const epNum = assignments[trackKey];
 		if (epNum == null) return undefined;
 		return episodes.find((e) => e.number === epNum);
 	}
 
 	// Tracks with existing episode assignments (from previous Apply)
-	let existingMatches = $derived(
-		mainTracks.filter(t => t.episode_number)
-	);
+	let existingMatches = $derived(mainTracks.filter((t) => t.episode_number));
 
 	// On mount: if tracks have existing episodes, restore into assignments
 	// and load full episode list for dropdowns. Otherwise auto-run match.
@@ -233,21 +270,21 @@
 			if (existingMatches.length > 0) {
 				// Populate assignments from DB track data
 				for (const t of existingMatches) {
-					assignments[t.track_number ?? ''] = Number(t.episode_number);
+					assignments[String(t.index)] = Number(t.episode_number);
 				}
 				// Set matches so the interactive table renders
-				matches = existingMatches.map(t => ({
-					track_number: t.track_number ?? '',
+				matches = existingMatches.map((t) => ({
+					track_number: String(t.index),
 					episode_number: Number(t.episode_number),
 					episode_name: t.episode_name || '',
-					episode_runtime: 0,
+					episode_runtime: 0
 				}));
 				// Load full episode list for dropdowns
-				if (job.tvdb_id) {
-					const s = Number(seasonInput || job.season || job.season_auto || 1);
+				if (tvdbId) {
+					const s = Number(seasonInput || season || seasonAuto || 1);
 					loadEpisodeList(s);
 				}
-			} else if (job.tvdb_id || job.imdb_id) {
+			} else if (tvdbId || imdbId) {
 				runMatch();
 			}
 		}
@@ -346,14 +383,14 @@
 				</thead>
 				<tbody>
 					{#each mainTracks as track}
-						{@const tn = track.track_number ?? ''}
+						{@const tn = String(track.index)}
 						{@const ep = getEpisodeForTrack(tn)}
 						<tr class="border-b border-primary/5 dark:border-primary/5">
 							<td class="px-2 py-2">
 								<span class="text-xs text-gray-500">T{tn}</span>
-								<span class="ml-1 text-xs text-gray-400 dark:text-gray-500">{(track.filename ?? '').slice(0, 30)}</span>
+								<span class="ml-1 text-xs text-gray-400 dark:text-gray-500">{(track.source_ref ?? '').slice(0, 30)}</span>
 							</td>
-							<td class="px-2 py-2 text-gray-300 dark:text-gray-300">{formatDuration(track.length)}</td>
+							<td class="px-2 py-2 text-gray-300 dark:text-gray-300">{formatDuration(track.duration_seconds)}</td>
 							<td class="px-2 py-2">
 								<select
 									class="w-full rounded border border-primary/20 bg-surface px-1.5 py-0.5 text-xs truncate dark:border-primary/20 dark:bg-surface-dark {assignments[tn] != null ? 'text-green-400' : 'text-gray-400'}"
@@ -375,8 +412,8 @@
 								{namingPreviews[tn]?.rendered_title || ep?.name || '-'}
 							</td>
 							<td class="px-2 py-2 text-right text-gray-400">{ep ? `${ep.runtime}m` : '-'}</td>
-							<td class="px-2 py-2 text-right {deltaClass(track.length, ep?.runtime ?? null)}">
-								{deltaText(track.length, ep?.runtime ?? null)}
+							<td class="px-2 py-2 text-right {deltaClass(track.duration_seconds, ep?.runtime ?? null)}">
+								{deltaText(track.duration_seconds, ep?.runtime ?? null)}
 							</td>
 						</tr>
 					{/each}
@@ -422,7 +459,7 @@
 		</div>
 	{:else if !error && !applying}
 		<div class="py-6 text-center text-sm text-gray-400 dark:text-gray-500">
-			{#if !job.tvdb_id && !job.imdb_id}
+			{#if !tvdbId && !imdbId}
 				No IMDB or TVDB ID set. Use <strong>Search</strong> to identify the show first.
 			{:else if mainTracks.length === 0}
 				No tracks found. The prescan may still be running.

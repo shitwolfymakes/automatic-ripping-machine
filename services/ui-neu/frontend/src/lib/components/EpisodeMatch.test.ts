@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup } from '$lib/test-utils';
 import EpisodeMatch from './EpisodeMatch.svelte';
 import { createJobDetail, createTrack } from './__fixtures__/job';
+import type { JobDetailView } from '$lib/types/api.gen';
 
 vi.mock('$lib/api/jobs', () => ({
 	tvdbMatch: vi.fn(() => Promise.resolve({
@@ -14,17 +15,23 @@ vi.mock('$lib/api/jobs', () => ({
 		alternatives: []
 	})),
 	fetchTvdbEpisodes: vi.fn(() => Promise.resolve({ episodes: [], tvdb_id: 12345, season: 1 })),
-	updateTrack: vi.fn(() => Promise.resolve({ success: true, updated: {} })),
-	fetchNamingPreview: vi.fn(() => Promise.resolve({ success: true, tracks: [] }))
+	updateTrack: vi.fn(() => Promise.resolve({ id: 'job_1' })),
+	fetchNamingPreview: vi.fn(() =>
+		Promise.resolve({ job_output_dir: '', job_output_name: '', items: [] })
+	)
 }));
 
-/** Create a series JobDetail with common defaults for EpisodeMatch tests. */
-function seriesJob(overrides: Partial<Parameters<typeof createJobDetail>[0]> = {}) {
+/** Create a series JobDetailView with common defaults for EpisodeMatch tests. */
+function seriesJob(overrides: { tracks?: JobDetailView['tracks'] } = {}): JobDetailView {
 	return createJobDetail({
-		title: 'Test Show', video_type: 'series', imdb_id: 'tt1234567',
-		label: 'TEST_SHOW', status: 'waiting', ...overrides
-	});
+		title: 'Test Show',
+		status: 'ripped',
+		tracks: overrides.tracks ?? []
+	} as Parameters<typeof createJobDetail>[0]);
 }
+
+// season / tvdb_id / imdb_id / disc are BFF-only — pass as component props now.
+const seriesProps = { tvdbId: 12345 as number | null, imdbId: 'tt1234567' as string | null };
 
 describe('EpisodeMatch', () => {
 	afterEach(() => {
@@ -35,14 +42,14 @@ describe('EpisodeMatch', () => {
 	describe('empty states', () => {
 		it('renders "No IMDB or TVDB ID" message when both are null', () => {
 			renderComponent(EpisodeMatch, {
-				props: { job: seriesJob({ tvdb_id: null, imdb_id: null, tracks: [] }) }
+				props: { job: seriesJob({ tracks: [] }), tvdbId: null, imdbId: null }
 			});
 			expect(screen.getByText(/No IMDB or TVDB ID set/)).toBeInTheDocument();
 		});
 
 		it('renders "No tracks found" when tvdb_id set but empty tracks', () => {
 			renderComponent(EpisodeMatch, {
-				props: { job: seriesJob({ tvdb_id: 12345, tracks: [] }) }
+				props: { job: seriesJob({ tracks: [] }), tvdbId: 12345, imdbId: null }
 			});
 			expect(screen.getByText(/No tracks found/)).toBeInTheDocument();
 		});
@@ -50,48 +57,44 @@ describe('EpisodeMatch', () => {
 
 	describe('controls bar', () => {
 		it('renders Season, Disc, Tolerance labels', () => {
-			renderComponent(EpisodeMatch, {
-				props: { job: seriesJob() }
-			});
+			renderComponent(EpisodeMatch, { props: { job: seriesJob(), ...seriesProps } });
 			expect(screen.getByText('Season')).toBeInTheDocument();
 			expect(screen.getByText('Disc')).toBeInTheDocument();
 			expect(screen.getByText('Tolerance')).toBeInTheDocument();
 		});
 
 		it('renders Match button', () => {
-			renderComponent(EpisodeMatch, {
-				props: { job: seriesJob() }
-			});
+			renderComponent(EpisodeMatch, { props: { job: seriesJob(), ...seriesProps } });
 			expect(screen.getByText('Match')).toBeInTheDocument();
 		});
 
-		it('season input prefills from job.season', () => {
+		it('season input prefills from season prop', () => {
 			const { container } = renderComponent(EpisodeMatch, {
-				props: { job: seriesJob({ season: '3' }) }
+				props: { job: seriesJob(), ...seriesProps, season: '3' }
 			});
 			const inputs = container.querySelectorAll('input[type="number"]');
 			expect((inputs[0] as HTMLInputElement).value).toBe('3');
 		});
 
-		it('season input prefills from job.season_auto when season is null', () => {
+		it('season input prefills from seasonAuto when season is null', () => {
 			const { container } = renderComponent(EpisodeMatch, {
-				props: { job: seriesJob({ season: null, season_auto: '2' }) }
+				props: { job: seriesJob(), ...seriesProps, season: null, seasonAuto: '2' }
 			});
 			const inputs = container.querySelectorAll('input[type="number"]');
 			expect((inputs[0] as HTMLInputElement).value).toBe('2');
 		});
 
-		it('disc input prefills from job.disc_number', () => {
+		it('disc input prefills from discNumber prop', () => {
 			const { container } = renderComponent(EpisodeMatch, {
-				props: { job: seriesJob({ disc_number: 4 }) }
+				props: { job: seriesJob(), ...seriesProps, discNumber: 4 }
 			});
 			const inputs = container.querySelectorAll('input[type="number"]');
 			expect((inputs[1] as HTMLInputElement).value).toBe('4');
 		});
 
-		it('disc total input prefills from job.disc_total', () => {
+		it('disc total input prefills from discTotal prop', () => {
 			const { container } = renderComponent(EpisodeMatch, {
-				props: { job: seriesJob({ disc_total: 6 }) }
+				props: { job: seriesJob(), ...seriesProps, discTotal: 6 }
 			});
 			const inputs = container.querySelectorAll('input[type="number"]');
 			expect((inputs[2] as HTMLInputElement).value).toBe('6');
@@ -99,7 +102,7 @@ describe('EpisodeMatch', () => {
 
 		it('tolerance defaults to 600', () => {
 			const { container } = renderComponent(EpisodeMatch, {
-				props: { job: seriesJob() }
+				props: { job: seriesJob(), ...seriesProps }
 			});
 			const inputs = container.querySelectorAll('input[type="number"]');
 			expect((inputs[3] as HTMLInputElement).value).toBe('600');
@@ -119,7 +122,7 @@ describe('EpisodeMatch', () => {
 				match_count: 1,
 				score: 100,
 				alternatives: []
-			});
+			} as never);
 			// API returns runtime in seconds (2700 = 45 minutes)
 			vi.mocked(fetchTvdbEpisodes).mockResolvedValueOnce({
 				episodes: [
@@ -128,10 +131,10 @@ describe('EpisodeMatch', () => {
 				],
 				tvdb_id: 12345,
 				season: 1
-			});
+			} as never);
 
 			const { container } = renderComponent(EpisodeMatch, {
-				props: { job: seriesJob({ imdb_id: 'tt1234567', tracks: [createTrack()] }) }
+				props: { job: seriesJob({ tracks: [createTrack()] }), ...seriesProps }
 			});
 
 			// Wait for auto-match to complete
@@ -143,7 +146,7 @@ describe('EpisodeMatch', () => {
 			// Check dropdown options show minutes not seconds
 			const select = container.querySelector('select')!;
 			const options = Array.from(select.options);
-			const pilotOption = options.find(o => o.textContent?.includes('Pilot'));
+			const pilotOption = options.find((o) => o.textContent?.includes('Pilot'));
 			expect(pilotOption?.textContent).toContain('45m');
 			expect(pilotOption?.textContent).not.toContain('2700m');
 		});
@@ -160,7 +163,7 @@ describe('EpisodeMatch', () => {
 				match_count: 1,
 				score: 100,
 				alternatives: []
-			});
+			} as never);
 			vi.mocked(fetchTvdbEpisodes).mockResolvedValueOnce({
 				episodes: [
 					{ number: 1, name: 'Episode 1', runtime: 2700, aired: '' },
@@ -171,10 +174,10 @@ describe('EpisodeMatch', () => {
 				],
 				tvdb_id: 12345,
 				season: 1
-			});
+			} as never);
 
 			const { container } = renderComponent(EpisodeMatch, {
-				props: { job: seriesJob({ imdb_id: 'tt1234567', tracks: [createTrack()] }) }
+				props: { job: seriesJob({ tracks: [createTrack()] }), ...seriesProps }
 			});
 
 			await vi.waitFor(() => {
@@ -184,7 +187,7 @@ describe('EpisodeMatch', () => {
 
 			// All 5 episodes should be in dropdown, not just matched episode 3
 			const select = container.querySelector('select')!;
-			const options = Array.from(select.options).filter(o => o.value !== '');
+			const options = Array.from(select.options).filter((o) => o.value !== '');
 			expect(options).toHaveLength(5);
 			expect(options[0].textContent).toContain('E1');
 			expect(options[4].textContent).toContain('E5');
@@ -203,16 +206,16 @@ describe('EpisodeMatch', () => {
 				match_count: 2,
 				score: 100,
 				alternatives: []
-			});
+			} as never);
 			vi.mocked(fetchTvdbEpisodes).mockRejectedValueOnce(new Error('No TVDB ID'));
 
 			const tracks = [
-				createTrack(),
-				createTrack({ track_id: 2, track_number: '1', filename: 't01.mkv' })
+				createTrack({ id: 'trk_1', index: 0, source_ref: 't00.mkv' }),
+				createTrack({ id: 'trk_2', index: 1, source_ref: 't01.mkv' })
 			];
 
 			const { container } = renderComponent(EpisodeMatch, {
-				props: { job: seriesJob({ imdb_id: 'tt1234567', tracks }) }
+				props: { job: seriesJob({ tracks }), ...seriesProps }
 			});
 
 			await vi.waitFor(() => {
@@ -222,7 +225,7 @@ describe('EpisodeMatch', () => {
 
 			// Should have 2 fallback episodes from match results
 			const select = container.querySelector('select')!;
-			const options = Array.from(select.options).filter(o => o.value !== '');
+			const options = Array.from(select.options).filter((o) => o.value !== '');
 			expect(options).toHaveLength(2);
 		});
 	});

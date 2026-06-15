@@ -1,29 +1,68 @@
 <script lang="ts">
-	import type { JobDetailSchema as JobDetail } from '$lib/types/api.gen';
-	import {
-		tvdbMatch,
-		fetchTvdbEpisodes,
-		type TvdbMatch,
-		type TvdbMatchResponse,
-		type TvdbAlternative,
-		type TvdbEpisode,
-		type TvdbEpisodesResponse
-	} from '$lib/api/jobs';
+	import type { JobDetailView, TrackView } from '$lib/types/api.gen';
+	import { tvdbMatch, fetchTvdbEpisodes } from '$lib/api/jobs';
+
+	// ---------------------------------------------------------------------------
+	// MISSING in v3 — TVDB episode matching / listing have no v3 endpoint
+	// (tvdbMatch / fetchTvdbEpisodes REJECT at runtime). This screen is
+	// feature-gated OFF; kept type-clean only. The BFF response shapes were
+	// removed from jobs.ts, so they are declared LOCALLY here purely to type the
+	// now-dead state. No v3 type fits — the feature is dead.
+	// ---------------------------------------------------------------------------
+	interface TvdbMatch {
+		track_number: string;
+		episode_number: number;
+		episode_name: string;
+		episode_runtime: number;
+	}
+	interface TvdbAlternative {
+		season: number;
+		match_count: number;
+	}
+	interface TvdbMatchResponse {
+		success?: boolean;
+		matcher?: string;
+		season: number;
+		matches: TvdbMatch[];
+		match_count: number;
+		score: number;
+		alternatives: TvdbAlternative[];
+		error?: string;
+	}
+	interface TvdbEpisode {
+		number: number;
+		name: string;
+		runtime: number;
+		aired: string;
+	}
+	interface TvdbEpisodesResponse {
+		episodes: TvdbEpisode[];
+		tvdb_id?: number | null;
+		season: number;
+	}
 
 	interface Props {
-		job: JobDetail;
+		job: JobDetailView;
+		// season / season_auto / tvdb_id have no JobView equivalent (BFF-only);
+		// accept them as optional props so the (dead) screen still type-checks.
+		season?: string | null;
+		seasonAuto?: string | null;
+		tvdbId?: number | null;
 		onapply?: () => void;
 	}
 
-	let { job, onapply }: Props = $props();
+	let { job, season = null, seasonAuto = null, tvdbId = null, onapply }: Props = $props();
+
+	// v3 JobDetailView nests tracks under `job.tracks`.
+	let tracks = $derived<TrackView[]>(job.tracks || []);
 
 	// --- Tabs ---
 	let activeTab = $state<'match' | 'browse'>('match');
 
 	// --- Match state ---
-	let seasonInput = $state(job.season || job.season_auto || '');
+	let seasonInput = $state(season || seasonAuto || '');
 	let toleranceInput = $state('300');
-	let autoDetect = $state(!seasonInput);
+	let autoDetect = $state(!(season || seasonAuto));
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let result = $state<TvdbMatchResponse | null>(null);
@@ -36,22 +75,22 @@
 	let selectedCount = $derived(selectedMatches.size);
 
 	// --- Browse state ---
-	let browseSeason = $state(Number(job.season || job.season_auto) || 1);
+	let browseSeason = $state(Number(season || seasonAuto) || 1);
 	let browseLoading = $state(false);
 	let browseError = $state<string | null>(null);
 	let browseResult = $state<TvdbEpisodesResponse | null>(null);
 
-	// Build a map of track lengths for display
+	// Build a map of track durations for display (track index → seconds).
 	let trackLengthMap = $derived(
-		Object.fromEntries((job.tracks || []).map((t) => [t.track_number, t.length]))
+		Object.fromEntries(tracks.map((t) => [String(t.index), t.duration_seconds]))
 	);
 
-	// Build a map of track episode assignments for browse view
+	// Build a map of track episode assignments for browse view.
 	let trackEpisodeMap = $derived(
 		Object.fromEntries(
-			(job.tracks || [])
+			tracks
 				.filter((t) => t.episode_number)
-				.map((t) => [t.episode_number, t.track_number])
+				.map((t) => [String(t.episode_number), String(t.index)])
 		)
 	);
 
@@ -61,11 +100,11 @@
 		result = null;
 		applyFeedback = null;
 		try {
-			result = await tvdbMatch(job.job_id, {
+			result = (await tvdbMatch(job.job.id, {
 				season: autoDetect ? null : Number(seasonInput) || null,
 				tolerance: Number(toleranceInput) || 300,
 				apply: false
-			});
+			})) as TvdbMatchResponse;
 			// Select all matches by default
 			selectedMatches = new Set(result.matches.map((m) => m.track_number));
 		} catch (e) {
@@ -80,7 +119,7 @@
 		applying = true;
 		applyFeedback = null;
 		try {
-			await tvdbMatch(job.job_id, {
+			await tvdbMatch(job.job.id, {
 				season: result.season ?? null,
 				tolerance: Number(toleranceInput) || 300,
 				apply: true
@@ -119,9 +158,9 @@
 		}
 	}
 
-	function switchToSeason(season: number) {
+	function switchToSeason(s: number) {
 		autoDetect = false;
-		seasonInput = String(season);
+		seasonInput = String(s);
 		handlePreview();
 	}
 
@@ -130,7 +169,7 @@
 		browseError = null;
 		browseResult = null;
 		try {
-			browseResult = await fetchTvdbEpisodes(job.job_id, browseSeason);
+			browseResult = (await fetchTvdbEpisodes(job.job.id, browseSeason)) as TvdbEpisodesResponse;
 		} catch (e) {
 			browseError = e instanceof Error ? e.message : 'Failed to fetch episodes';
 		} finally {
@@ -163,16 +202,16 @@
 <div class="space-y-4">
 	<!-- TVDB ID status -->
 	<div class="flex items-center gap-2 text-sm">
-		{#if job.tvdb_id}
-			<span class="font-mono text-xs text-gray-500 dark:text-gray-400">TVDB {job.tvdb_id}</span>
+		{#if tvdbId}
+			<span class="font-mono text-xs text-gray-500 dark:text-gray-400">TVDB {tvdbId}</span>
 		{:else}
 			<span class="text-gray-400 dark:text-gray-500 italic">TVDB ID resolves on first match</span>
 		{/if}
-		{#if job.season_auto}
+		{#if seasonAuto}
 			<span
 				class="rounded-sm bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
 			>
-				Season {job.season_auto}
+				Season {seasonAuto}
 			</span>
 		{/if}
 	</div>
@@ -378,18 +417,17 @@
 					{@const matchedTracks = new Set(
 						result.matches.map((m) => m.track_number)
 					)}
-					{@const unmatchedTracks = (job.tracks || []).filter(
+					{@const unmatchedTracks = tracks.filter(
 						(t) =>
-							t.track_number &&
-							!matchedTracks.has(t.track_number) &&
-							(t.length ?? 0) >= 120
+							!matchedTracks.has(String(t.index)) &&
+							(t.duration_seconds ?? 0) >= 120
 					)}
 					{#if unmatchedTracks.length > 0}
 						<p class="text-xs text-gray-400 dark:text-gray-500">
 							Unmatched tracks: {unmatchedTracks
 								.map(
 									(t) =>
-										`#${t.track_number} (${formatRuntime(t.length)})`
+										`#${t.index} (${formatRuntime(t.duration_seconds)})`
 								)
 								.join(', ')}
 						</p>

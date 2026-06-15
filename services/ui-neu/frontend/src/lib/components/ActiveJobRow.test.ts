@@ -20,18 +20,18 @@ describe('ActiveJobRow', () => {
 			expect(screen.getByText('Test Movie')).toBeInTheDocument();
 		});
 
-		it('renders Untitled when no title or label', () => {
+		it('renders Untitled when no title', () => {
 			renderComponent(ActiveJobRow, {
-				props: { job: createJob({ title: null, label: null }) }
+				props: { job: createJob({ title: null }) }
 			});
 			expect(screen.getAllByText('Untitled').length).toBeGreaterThan(0);
 		});
 
 		it('renders status badge', () => {
 			renderComponent(ActiveJobRow, {
-				props: { job: createJob({ status: 'success' }) }
+				props: { job: createJob({ status: 'ripped' }) }
 			});
-			expect(screen.getAllByText('Success').length).toBeGreaterThan(0);
+			expect(screen.getAllByText('ripped').length).toBeGreaterThan(0);
 		});
 
 		it('renders year when present', () => {
@@ -41,26 +41,6 @@ describe('ActiveJobRow', () => {
 	});
 
 	describe('props', () => {
-		it('renders drive name from driveNames map', () => {
-			renderComponent(ActiveJobRow, {
-				props: {
-					job: createJob({ devpath: '/dev/sr0' }),
-					driveNames: { '/dev/sr0': 'Main Drive' }
-				}
-			});
-			expect(screen.getAllByText('Main Drive').length).toBeGreaterThan(0);
-		});
-
-		it('falls back to devpath when no drive name', () => {
-			renderComponent(ActiveJobRow, {
-				props: {
-					job: createJob({ devpath: '/dev/sr1' }),
-					driveNames: {}
-				}
-			});
-			expect(screen.getAllByText('/dev/sr1').length).toBeGreaterThan(0);
-		});
-
 		it('shows indeterminate bar when active with no progress', () => {
 			const { container } = renderComponent(ActiveJobRow, {
 				props: { job: createJob({ status: 'ripping' }) }

@@ -1,14 +1,14 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import type { JobSchema as Job } from '$lib/types/api.gen';
-    import type { Scheme, Preset, Overrides } from '$lib/types/api.gen';
+    import type { JobView } from '$lib/types/api.gen';
+    import type { Scheme, Preset } from '$lib/types/api.gen';
     import type { PresetEditorState } from '$lib/types/presets';
     import { fetchTranscoderScheme, fetchTranscoderPresets } from '$lib/api/settings';
     import { updateJobTranscodeConfig } from '$lib/api/jobs';
     import PresetEditor from './PresetEditor.svelte';
 
     interface Props {
-        job: Job;
+        job: JobView;
         onsaved?: () => void;
     }
 
@@ -21,20 +21,11 @@
     let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
     let loaded = $state(false);
 
-    const initialState = $derived.by<PresetEditorState>(() => {
-        const o = job.transcode_overrides as Record<string, unknown> | null | undefined;
-        if (!o || typeof o !== 'object' || !('preset_slug' in o)) {
-            return { preset_slug: '', overrides: { shared: {}, tiers: {} } };
-        }
-        const raw = o.overrides as Partial<Overrides> | undefined;
-        return {
-            preset_slug: (o.preset_slug as string) ?? '',
-            overrides: {
-                shared: raw?.shared ?? {},
-                tiers: raw?.tiers ?? {}
-            }
-        };
-    });
+    // v3's JobView carries no per-job transcode_overrides field, and the
+    // per-job transcode-config endpoint is MISSING (updateJobTranscodeConfig
+    // rejects). Start from an empty preset state; saving is best-effort and
+    // surfaces the not-available error.
+    const initialState: PresetEditorState = { preset_slug: '', overrides: { shared: {}, tiers: {} } };
 
     async function loadData() {
         offline = false;
@@ -51,7 +42,7 @@
         saving = true;
         feedback = null;
         try {
-            await updateJobTranscodeConfig(job.job_id, {
+            await updateJobTranscodeConfig(job.id, {
                 preset_slug: state.preset_slug,
                 overrides: state.overrides
             });

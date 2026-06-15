@@ -1,10 +1,10 @@
 <script lang="ts">
-	import type { JobSchema as Job } from '$lib/types/api.gen';
-	import { abandonJob, deleteJob, fixJobPermissions, bulkPurgeJobs } from '$lib/api/jobs';
+	import type { JobView } from '$lib/types/api.gen';
+	import { abandonJob, deleteJob, fixJobPermissions } from '$lib/api/jobs';
 	import { isJobActive } from '$lib/utils/job-type';
 
 	interface Props {
-		job: Job;
+		job: JobView;
 		onaction?: () => void;
 		ondelete?: () => void;
 		compact?: boolean;
@@ -16,22 +16,29 @@
 	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
 
 	let active = $derived(isJobActive(job.status));
-	let statusLower = $derived(job.status?.toLowerCase() ?? '');
+	// v3 terminal JobStatus members that a finished job can land in.
+	const TERMINAL = new Set(['ripped', 'ripped_partial', 'ripped_awaiting_identify', 'abandoned', 'failed']);
 	let canAbandon = $derived(active);
-	let canDelete = $derived(statusLower === 'success' || statusLower === 'fail' || statusLower === 'waiting_transcode');
-	let canFixPerms = $derived(statusLower === 'success');
-	let canPurge = $derived(statusLower === 'fail' || statusLower === 'success');
+	let canDelete = $derived(TERMINAL.has(job.status));
+	// fixJobPermissions is MISSING in v3 (the stub rejects at runtime). It only
+	// ever applied to successfully-ripped jobs; map that to 'ripped'. The button
+	// stays wired so the call-site compiles and fails loudly if ever reached.
+	let canFixPerms = $derived(job.status === 'ripped');
 
 	function clearFeedback() {
 		setTimeout(() => (feedback = null), 3000);
 	}
 
+	function jobLabel(): string {
+		return job.title || job.id;
+	}
+
 	async function handleAbandon() {
-		if (!confirm(`Abandon job "${job.title || job.label || job.job_id}"?`)) return;
+		if (!confirm(`Abandon job "${jobLabel()}"?`)) return;
 		loading = 'abandon';
 		feedback = null;
 		try {
-			await abandonJob(job.job_id);
+			await abandonJob(job.id);
 			feedback = { type: 'success', message: 'Job abandoned' };
 			onaction?.();
 		} catch (e) {
@@ -43,11 +50,11 @@
 	}
 
 	async function handleDelete() {
-		if (!confirm(`Delete job "${job.title || job.label || job.job_id}"? This cannot be undone.`)) return;
+		if (!confirm(`Delete job "${jobLabel()}"? This cannot be undone.`)) return;
 		loading = 'delete';
 		feedback = null;
 		try {
-			await deleteJob(job.job_id);
+			await deleteJob(job.id);
 			if (ondelete) {
 				ondelete();
 				return;
@@ -63,35 +70,15 @@
 	}
 
 	async function handleFixPerms() {
-		if (!confirm(`Fix permissions for job "${job.title || job.label || job.job_id}"?`)) return;
+		if (!confirm(`Fix permissions for job "${jobLabel()}"?`)) return;
 		loading = 'fixperms';
 		feedback = null;
 		try {
-			await fixJobPermissions(job.job_id);
+			await fixJobPermissions(job.id);
 			feedback = { type: 'success', message: 'Permissions fixed' };
 			onaction?.();
 		} catch (e) {
 			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Failed to fix permissions' };
-		} finally {
-			loading = null;
-			clearFeedback();
-		}
-	}
-
-	async function handlePurge() {
-		if (!confirm(`Purge job "${job.title || job.label || job.job_id}"? This will delete the job record, log files, and raw files.`)) return;
-		loading = 'purge';
-		feedback = null;
-		try {
-			await bulkPurgeJobs({ job_ids: [job.job_id] });
-			if (ondelete) {
-				ondelete();
-				return;
-			}
-			feedback = { type: 'success', message: 'Job purged' };
-			onaction?.();
-		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Failed to purge' };
 		} finally {
 			loading = null;
 			clearFeedback();
@@ -105,7 +92,7 @@
 	);
 </script>
 
-{#if canAbandon || canDelete || canFixPerms || canPurge}
+{#if canAbandon || canDelete || canFixPerms}
 	<div class="flex flex-wrap items-center gap-1.5">
 		{#if canAbandon}
 			<button
@@ -132,15 +119,6 @@
 				class="{btnBase} bg-red-100 text-red-700 ring-1 ring-red-200 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-800 dark:hover:bg-red-900/50"
 			>
 				{loading === 'delete' ? 'Deleting...' : 'Delete'}
-			</button>
-		{/if}
-		{#if canPurge}
-			<button
-				onclick={handlePurge}
-				disabled={loading !== null}
-				class="{btnBase} bg-orange-100 text-orange-700 ring-1 ring-orange-200 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:ring-orange-800 dark:hover:bg-orange-900/50"
-			>
-				{loading === 'purge' ? 'Purging...' : 'Purge'}
 			</button>
 		{/if}
 		{#if feedback}

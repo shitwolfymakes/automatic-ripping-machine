@@ -22,7 +22,7 @@ describe('CrcLookup', () => {
 		it('shows loading state initially', () => {
 			mockFetchCrcLookup.mockReturnValue(new Promise(() => {}));
 			renderComponent(CrcLookup, {
-				props: { job: createJob({ crc_id: 'abc123' }) }
+				props: { job: createJob(), crcId: 'abc123' }
 			});
 			expect(screen.getByText('Looking up CRC database...')).toBeInTheDocument();
 		});
@@ -30,15 +30,15 @@ describe('CrcLookup', () => {
 		it('shows CRC hash when present', () => {
 			mockFetchCrcLookup.mockReturnValue(new Promise(() => {}));
 			renderComponent(CrcLookup, {
-				props: { job: createJob({ crc_id: 'abc123def456' }) }
+				props: { job: createJob(), crcId: 'abc123def456' }
 			});
 			expect(screen.getByText('abc123def456')).toBeInTheDocument();
 		});
 
 		it('shows no matches message', async () => {
-			mockFetchCrcLookup.mockResolvedValue({ found: false, results: [], has_api_key: true });
+			mockFetchCrcLookup.mockResolvedValue({ found: false, results: [], has_api_key: true } as never);
 			renderComponent(CrcLookup, {
-				props: { job: createJob({ crc_id: 'abc123' }) }
+				props: { job: createJob(), crcId: 'abc123' }
 			});
 			await waitFor(() => {
 				expect(screen.getByText('No matches found in the CRC database.')).toBeInTheDocument();
@@ -46,7 +46,7 @@ describe('CrcLookup', () => {
 		});
 
 		it('shows no CRC message for non-applicable discs', async () => {
-			mockFetchCrcLookup.mockResolvedValue({ found: false, results: [], no_crc: true });
+			mockFetchCrcLookup.mockResolvedValue({ found: false, results: [], no_crc: true } as never);
 			renderComponent(CrcLookup, {
 				props: { job: createJob() }
 			});
@@ -56,9 +56,9 @@ describe('CrcLookup', () => {
 		});
 
 		it('shows error from lookup response', async () => {
-			mockFetchCrcLookup.mockResolvedValue({ found: false, results: [], error: 'Service unavailable' });
+			mockFetchCrcLookup.mockResolvedValue({ found: false, results: [], error: 'Service unavailable' } as never);
 			renderComponent(CrcLookup, {
-				props: { job: createJob({ crc_id: 'abc123' }) }
+				props: { job: createJob(), crcId: 'abc123' }
 			});
 			await waitFor(() => {
 				expect(screen.getByText('Service unavailable')).toBeInTheDocument();
@@ -68,7 +68,7 @@ describe('CrcLookup', () => {
 		it('shows lookup error on fetch failure', async () => {
 			mockFetchCrcLookup.mockRejectedValue(new Error('Network error'));
 			renderComponent(CrcLookup, {
-				props: { job: createJob({ crc_id: 'abc123' }) }
+				props: { job: createJob(), crcId: 'abc123' }
 			});
 			await waitFor(() => {
 				expect(screen.getByText('Network error')).toBeInTheDocument();
@@ -92,9 +92,9 @@ describe('CrcLookup', () => {
 					validated: 'True',
 					date_added: '2025-01-01T00:00:00.000'
 				}]
-			});
+			} as never);
 			renderComponent(CrcLookup, {
-				props: { job: createJob({ crc_id: 'abc123' }) }
+				props: { job: createJob(), crcId: 'abc123' }
 			});
 			await waitFor(() => {
 				expect(screen.getByText('Found Movie')).toBeInTheDocument();
@@ -105,9 +105,9 @@ describe('CrcLookup', () => {
 
 	describe('submit section', () => {
 		it('shows submit form when has_api_key is true', async () => {
-			mockFetchCrcLookup.mockResolvedValue({ found: false, results: [], has_api_key: true });
+			mockFetchCrcLookup.mockResolvedValue({ found: false, results: [], has_api_key: true } as never);
 			renderComponent(CrcLookup, {
-				props: { job: createJob({ crc_id: 'abc123' }) }
+				props: { job: createJob(), crcId: 'abc123' }
 			});
 			await waitFor(() => {
 				expect(screen.getByText('Submit to CRC Database')).toBeInTheDocument();
@@ -115,9 +115,9 @@ describe('CrcLookup', () => {
 		});
 
 		it('pre-fills form with job metadata', async () => {
-			mockFetchCrcLookup.mockResolvedValue({ found: false, results: [], has_api_key: true });
+			mockFetchCrcLookup.mockResolvedValue({ found: false, results: [], has_api_key: true } as never);
 			renderComponent(CrcLookup, {
-				props: { job: createJob({ title: 'My Film', year: '2023' }) }
+				props: { job: createJob({ title: 'My Film', year: 2023 }) }
 			});
 			await waitFor(() => {
 				expect(screen.getByDisplayValue('My Film')).toBeInTheDocument();

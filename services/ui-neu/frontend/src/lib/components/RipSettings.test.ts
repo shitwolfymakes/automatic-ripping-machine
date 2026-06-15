@@ -4,10 +4,24 @@ import RipSettings from './RipSettings.svelte';
 import { createJob } from './__fixtures__/job';
 
 vi.mock('$lib/api/jobs', () => ({
-	updateJobConfig: vi.fn(() => Promise.resolve()),
-	updateJobNaming: vi.fn(() => Promise.resolve({ success: true, title_pattern_override: null, folder_pattern_override: null })),
-	fetchNamingVariables: vi.fn(() => Promise.resolve({ variables: ['title', 'year', 'season', 'episode', 'label', 'video_type', 'artist', 'album'], descriptions: {} })),
-	fetchNamingPreview: vi.fn(() => Promise.resolve({ success: true, tracks: [{ track_number: '0', rendered_title: 'Preview', rendered_folder: 'Folder' }] }))
+	updateJobConfig: vi.fn(() => Promise.resolve({})),
+	updateJobNaming: vi.fn(() => Promise.reject(new Error('Per-job naming overrides is not yet available in v3'))),
+	fetchNamingVariables: vi.fn(() =>
+		Promise.resolve({
+			variables: {
+				common: [
+					{ token: 'title', description: 'Title' },
+					{ token: 'year', description: 'Year' }
+				],
+				tv: [
+					{ token: 'season', description: 'Season' },
+					{ token: 'episode', description: 'Episode' }
+				]
+			}
+		})
+	),
+	namingPreview: vi.fn(() => Promise.resolve({ rendered: 'Preview' })),
+	validatePattern: vi.fn(() => Promise.resolve({ valid: true }))
 }));
 
 const defaultConfig: Record<string, string | null> = {
@@ -95,19 +109,18 @@ describe('RipSettings', () => {
 	});
 
 	describe('naming patterns', () => {
-		it('shows movie naming for movie video type', () => {
+		it('shows movie naming for movie media type', () => {
 			renderComponent(RipSettings, {
-				props: { job: createJob({ video_type: 'movie' }), config: defaultConfig }
+				props: { job: createJob(), config: defaultConfig, mediaType: 'movie' }
 			});
 			expect(screen.getByText('Movie Naming')).toBeInTheDocument();
-			// title and folder patterns may both be '{title} ({year})'
 			const matches = screen.getAllByText('{title} ({year})');
 			expect(matches.length).toBeGreaterThanOrEqual(1);
 		});
 
-		it('shows TV naming for series video type', () => {
+		it('shows TV naming for tv media type', () => {
 			renderComponent(RipSettings, {
-				props: { job: createJob({ video_type: 'series' }), config: defaultConfig }
+				props: { job: createJob(), config: defaultConfig, mediaType: 'tv' }
 			});
 			expect(screen.getByText('TV Naming')).toBeInTheDocument();
 		});
@@ -136,32 +149,26 @@ describe('RipSettings', () => {
 	describe('naming overrides', () => {
 		it('shows Override toggle button', () => {
 			renderComponent(RipSettings, {
-				props: { job: createJob({ video_type: 'series' }), config: defaultConfig }
+				props: { job: createJob(), config: defaultConfig, mediaType: 'tv' }
 			});
 			expect(screen.getByText('Override')).toBeInTheDocument();
 		});
 
-		it('shows editable inputs when job has pattern override', async () => {
+		it('shows editable inputs and Save Pattern when override is enabled', async () => {
 			renderComponent(RipSettings, {
-				props: {
-					job: createJob({ video_type: 'series', title_pattern_override: '{title} - E{episode}' }),
-					config: defaultConfig
-				}
+				props: { job: createJob(), config: defaultConfig, mediaType: 'tv' }
 			});
-			// Override is auto-enabled when job has an override
+			await fireEvent.click(screen.getByText('Override'));
 			await waitFor(() => {
 				expect(screen.getByText('Save Pattern')).toBeInTheDocument();
 			});
 		});
 
-		it('shows variable badges when override is enabled', async () => {
+		it('shows flattened variable badges when override is enabled', async () => {
 			renderComponent(RipSettings, {
-				props: {
-					job: createJob({ video_type: 'series', title_pattern_override: '{title}' }),
-					config: defaultConfig
-				}
+				props: { job: createJob(), config: defaultConfig, mediaType: 'tv' }
 			});
-			// Wait for fetchNamingVariables to resolve
+			await fireEvent.click(screen.getByText('Override'));
 			await waitFor(() => {
 				expect(screen.getByText('{title}')).toBeInTheDocument();
 				expect(screen.getByText('{episode}')).toBeInTheDocument();
@@ -171,9 +178,8 @@ describe('RipSettings', () => {
 
 		it('shows read-only pattern when override is disabled', () => {
 			renderComponent(RipSettings, {
-				props: { job: createJob({ video_type: 'series' }), config: defaultConfig }
+				props: { job: createJob(), config: defaultConfig, mediaType: 'tv' }
 			});
-			// Should show the global pattern as read-only text
 			expect(screen.getByText('{title} S{season}E{episode}')).toBeInTheDocument();
 		});
 	});

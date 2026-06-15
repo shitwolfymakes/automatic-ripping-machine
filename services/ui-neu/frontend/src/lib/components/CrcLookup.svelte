@@ -1,16 +1,48 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { JobSchema as Job } from '$lib/types/api.gen';
+	import type { JobView } from '$lib/types/api.gen';
 	import { fetchCrcLookup, submitToCrcDb, updateJobTitle } from '$lib/api/jobs';
-	import type { CrcLookupResponse, CrcLookupResult } from '$lib/api/jobs';
 	import PosterImage from './PosterImage.svelte';
 
+	// ---------------------------------------------------------------------------
+	// MISSING in v3 — CRC lookup / submission have no v3 endpoint (fetchCrcLookup /
+	// submitToCrcDb REJECT at runtime). This screen is feature-gated OFF; it is
+	// kept type-clean only. The BFF response shapes (CrcLookupResponse /
+	// CrcLookupResult) were removed from jobs.ts, so they are declared LOCALLY
+	// here purely to type the now-dead state. No v3 type fits — the feature is dead.
+	// ---------------------------------------------------------------------------
+	interface CrcLookupResult {
+		title: string;
+		year: string;
+		video_type?: string;
+		disctype?: string;
+		label?: string;
+		imdb_id?: string;
+		tmdb_id?: string;
+		poster_url?: string;
+		hasnicetitle?: string;
+		validated?: string;
+		date_added?: string;
+	}
+	interface CrcLookupResponse {
+		found?: boolean;
+		no_crc?: boolean;
+		error?: string;
+		has_api_key?: boolean;
+		results?: CrcLookupResult[];
+	}
+
 	interface Props {
-		job: Job;
+		job: JobView;
+		// CRC / video-type metadata have no JobView equivalent (BFF-only); accept
+		// them as optional props so the (dead) screen still type-checks.
+		crcId?: string | null;
+		videoType?: string | null;
+		imdbId?: string | null;
 		onapply?: () => void;
 	}
 
-	let { job, onapply }: Props = $props();
+	let { job, crcId = null, videoType = null, imdbId = null, onapply }: Props = $props();
 
 	let loading = $state(true);
 	let lookup = $state<CrcLookupResponse | null>(null);
@@ -21,24 +53,24 @@
 
 	// Editable fields for CRC submission
 	let subTitle = $state(job.title || '');
-	let subYear = $state(job.year || '');
-	let subType = $state(job.video_type || 'movie');
-	let subImdbId = $state(job.imdb_id || '');
+	let subYear = $state(job.year != null ? String(job.year) : '');
+	let subType = $state(videoType || 'movie');
+	let subImdbId = $state(imdbId || '');
 
 	let canSubmit = $derived(subTitle.trim() !== '' && subYear.trim() !== '');
 
 	let subDirty = $derived(
 		subTitle !== (job.title || '') ||
-		subYear !== (job.year || '') ||
-		subType !== (job.video_type || 'movie') ||
-		subImdbId !== (job.imdb_id || '')
+		subYear !== (job.year != null ? String(job.year) : '') ||
+		subType !== (videoType || 'movie') ||
+		subImdbId !== (imdbId || '')
 	);
 
 	async function doLookup() {
 		loading = true;
 		lookupError = null;
 		try {
-			lookup = await fetchCrcLookup(job.job_id);
+			lookup = (await fetchCrcLookup(job.id)) as CrcLookupResponse;
 		} catch (e) {
 			lookupError = e instanceof Error ? e.message : 'Lookup failed';
 		} finally {
@@ -50,17 +82,14 @@
 		submitting = true;
 		submitFeedback = null;
 		try {
-			// Save edits to job first if changed
+			// Save edits to job first if changed. v3 only accepts poster_url_manual
+			// on the job; title/year/type live behind identify/resolve, so the
+			// edited values are silently dropped (dead screen).
 			if (subDirty) {
-				await updateJobTitle(job.job_id, {
-					title: subTitle.trim(),
-					year: subYear.trim(),
-					video_type: subType || undefined,
-					imdb_id: subImdbId.trim() || undefined
-				});
+				await updateJobTitle(job.id, {});
 				onapply?.();
 			}
-			await submitToCrcDb(job.job_id);
+			await submitToCrcDb(job.id);
 			submitFeedback = { type: 'success', message: 'Submitted successfully' };
 			await doLookup();
 		} catch (e) {
@@ -73,17 +102,12 @@
 	let applying = $state(false);
 	let applyFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
 
-	async function handleApply(result: CrcLookupResult) {
+	async function handleApply(_result: CrcLookupResult) {
 		applying = true;
 		applyFeedback = null;
 		try {
-			await updateJobTitle(job.job_id, {
-				title: result.title,
-				year: result.year,
-				video_type: result.video_type || undefined,
-				imdb_id: result.imdb_id || undefined,
-				poster_url: result.poster_url || undefined
-			});
+			// v3 only accepts poster_url_manual on the job (dead screen).
+			await updateJobTitle(job.id, { poster_url_manual: _result.poster_url || null });
 			applyFeedback = { type: 'success', message: 'Job updated' };
 			onapply?.();
 		} catch (e) {
@@ -114,10 +138,10 @@
 
 <div class="space-y-4">
 	<!-- CRC64 hash display -->
-	{#if job.crc_id}
+	{#if crcId}
 		<div class="flex items-center gap-2 text-sm">
 			<span class="text-gray-500 dark:text-gray-400">CRC64:</span>
-			<code class="rounded-sm bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-800 dark:bg-gray-800 dark:text-gray-300">{job.crc_id}</code>
+			<code class="rounded-sm bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-800 dark:bg-gray-800 dark:text-gray-300">{crcId}</code>
 		</div>
 	{/if}
 

@@ -3,19 +3,18 @@ import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-
 import JobActions from './JobActions.svelte';
 import { createJob } from './__fixtures__/job';
 
-// Mock the API module
+// Mock the API module. fixJobPermissions is MISSING in v3 (rejects at runtime),
+// but the button stays wired so we mock it here to keep the success-path test.
 vi.mock('$lib/api/jobs', () => ({
 	abandonJob: vi.fn(() => Promise.resolve()),
 	deleteJob: vi.fn(() => Promise.resolve()),
-	fixJobPermissions: vi.fn(() => Promise.resolve()),
-	bulkPurgeJobs: vi.fn(() => Promise.resolve({ purged: 1, errors: [] }))
+	fixJobPermissions: vi.fn(() => Promise.resolve())
 }));
 
-import { abandonJob, deleteJob, fixJobPermissions, bulkPurgeJobs } from '$lib/api/jobs';
+import { abandonJob, deleteJob, fixJobPermissions } from '$lib/api/jobs';
 const mockAbandon = vi.mocked(abandonJob);
 const mockDelete = vi.mocked(deleteJob);
 const mockFixPerms = vi.mocked(fixJobPermissions);
-const mockPurge = vi.mocked(bulkPurgeJobs);
 
 // Mock window.confirm
 vi.stubGlobal('confirm', vi.fn(() => true));
@@ -37,46 +36,47 @@ describe('JobActions', () => {
 
 		it('shows Delete button for completed jobs', () => {
 			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'success' }) }
+				props: { job: createJob({ status: 'ripped' }) }
 			});
 			expect(screen.getByText('Delete')).toBeInTheDocument();
 		});
 
 		it('shows Delete button for failed jobs', () => {
 			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'fail' }) }
+				props: { job: createJob({ status: 'failed' }) }
 			});
 			expect(screen.getByText('Delete')).toBeInTheDocument();
 		});
 
-		it('shows Fix Permissions button only for success status', () => {
+		it('shows Fix Permissions button only for ripped status', () => {
 			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'success' }) }
+				props: { job: createJob({ status: 'ripped' }) }
 			});
 			expect(screen.getByText('Fix Permissions')).toBeInTheDocument();
 		});
 
 		it('does not show Fix Permissions for failed jobs', () => {
 			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'fail' }) }
+				props: { job: createJob({ status: 'failed' }) }
 			});
 			expect(screen.queryByText('Fix Permissions')).not.toBeInTheDocument();
 		});
 
-		it('renders nothing for jobs with no available actions', () => {
+		it('shows Abandon for in-flight jobs', () => {
 			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'identifying' }) }
+				props: { job: createJob({ status: 'identified' }) }
 			});
-			// identifying is active, so Abandon should show
+			// identified is non-terminal/active, so Abandon should show.
 			expect(screen.getByText('Abandon')).toBeInTheDocument();
 		});
 
-		it('does not show any buttons for cancelled status', () => {
+		it('shows only Delete for abandoned status', () => {
+			// abandoned is terminal: Delete is available but no Abandon / Fix Perms.
 			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'cancelled' }) }
+				props: { job: createJob({ status: 'abandoned' }) }
 			});
+			expect(screen.getByText('Delete')).toBeInTheDocument();
 			expect(screen.queryByText('Abandon')).not.toBeInTheDocument();
-			expect(screen.queryByText('Delete')).not.toBeInTheDocument();
 			expect(screen.queryByText('Fix Permissions')).not.toBeInTheDocument();
 		});
 	});
@@ -89,7 +89,7 @@ describe('JobActions', () => {
 			});
 			await fireEvent.click(screen.getByText('Abandon'));
 			await waitFor(() => {
-				expect(mockAbandon).toHaveBeenCalledWith(1);
+				expect(mockAbandon).toHaveBeenCalledWith('job_1');
 				expect(onaction).toHaveBeenCalled();
 			});
 		});
@@ -97,22 +97,22 @@ describe('JobActions', () => {
 		it('calls deleteJob when Delete is clicked and confirmed', async () => {
 			const onaction = vi.fn();
 			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'success' }), onaction }
+				props: { job: createJob({ status: 'ripped' }), onaction }
 			});
 			await fireEvent.click(screen.getByText('Delete'));
 			await waitFor(() => {
-				expect(mockDelete).toHaveBeenCalledWith(1);
+				expect(mockDelete).toHaveBeenCalledWith('job_1');
 			});
 		});
 
 		it('calls fixJobPermissions when Fix Permissions is clicked', async () => {
 			const onaction = vi.fn();
 			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'success' }), onaction }
+				props: { job: createJob({ status: 'ripped' }), onaction }
 			});
 			await fireEvent.click(screen.getByText('Fix Permissions'));
 			await waitFor(() => {
-				expect(mockFixPerms).toHaveBeenCalledWith(1);
+				expect(mockFixPerms).toHaveBeenCalledWith('job_1');
 				expect(onaction).toHaveBeenCalled();
 			});
 		});
@@ -147,9 +147,9 @@ describe('JobActions', () => {
 			expect(mockAbandon).not.toHaveBeenCalled();
 		});
 
-		it('shows Delete button for waiting_transcode status', () => {
+		it('shows Delete button for ripped_partial status', () => {
 			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'waiting_transcode' }) }
+				props: { job: createJob({ status: 'ripped_partial' }) }
 			});
 			expect(screen.getByText('Delete')).toBeInTheDocument();
 		});
@@ -158,27 +158,10 @@ describe('JobActions', () => {
 			const ondelete = vi.fn();
 			const onaction = vi.fn();
 			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'success' }), ondelete, onaction }
+				props: { job: createJob({ status: 'ripped' }), ondelete, onaction }
 			});
 			await fireEvent.click(screen.getByText('Delete'));
 			await waitFor(() => {
-				expect(ondelete).toHaveBeenCalled();
-				expect(onaction).not.toHaveBeenCalled();
-			});
-		});
-
-		it('calls ondelete after purge so detail page redirects (job is gone)', async () => {
-			// Bug guard: Purge wipes the job record, so the detail page must
-			// navigate away via ondelete just like Delete does. Without this
-			// the user sees a stale detail page that 404s on next refresh.
-			const ondelete = vi.fn();
-			const onaction = vi.fn();
-			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'fail' }), ondelete, onaction }
-			});
-			await fireEvent.click(screen.getByText('Purge'));
-			await waitFor(() => {
-				expect(mockPurge).toHaveBeenCalledWith({ job_ids: [1] });
 				expect(ondelete).toHaveBeenCalled();
 				expect(onaction).not.toHaveBeenCalled();
 			});
@@ -188,7 +171,7 @@ describe('JobActions', () => {
 	describe('props', () => {
 		it('renders compact buttons when compact is true', () => {
 			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'success' }), compact: true }
+				props: { job: createJob({ status: 'ripped' }), compact: true }
 			});
 			const deleteBtn = screen.getByText('Delete');
 			expect(deleteBtn).toHaveClass('text-xs');
@@ -196,7 +179,7 @@ describe('JobActions', () => {
 
 		it('renders standard buttons when compact is false', () => {
 			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'success' }), compact: false }
+				props: { job: createJob({ status: 'ripped' }), compact: false }
 			});
 			const deleteBtn = screen.getByText('Delete');
 			expect(deleteBtn).toHaveClass('text-xs');

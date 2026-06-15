@@ -1,6 +1,18 @@
-<script lang="ts">
-	import type { JobStats } from '$lib/api/jobs';
+<script lang="ts" module>
+	// v3 has no job-stats endpoint (fetchJobStats is MISSING and rejects), and
+	// the BFF's JobStats interface was removed from $lib/api/jobs. Declare it
+	// locally so this panel still type-checks; the feature is effectively dead
+	// until a v3 stats endpoint exists.
+	export interface JobStats {
+		total: number;
+		active: number;
+		success: number;
+		fail: number;
+		waiting: number;
+	}
+</script>
 
+<script lang="ts">
 	interface Props {
 		stats?: JobStats;
 		statusFilter: string;

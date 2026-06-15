@@ -8,32 +8,23 @@ vi.mock('$lib/api/jobs', () => ({
 }));
 
 import { tvdbMatch, fetchTvdbEpisodes } from '$lib/api/jobs';
-import { createJob } from './__fixtures__/job';
-import type { JobDetailSchema as JobDetail } from '$lib/types/api.gen';
+import { createJobDetail, createTrack } from './__fixtures__/job';
 const mockTvdbMatch = vi.mocked(tvdbMatch);
 const mockFetchEpisodes = vi.mocked(fetchTvdbEpisodes);
 
-function createTrack(id: number, trackNum: string, length: number) {
-	return {
-		track_id: id, job_id: 1, track_number: trackNum, length, aspect_ratio: null, fps: null,
-		enabled: true, basename: `t${id}`, filename: `t${id}.mkv`, orig_filename: `t${id}.mkv`,
-		new_filename: null, ripped: true, status: null, error: null, source: null,
-		title: null, year: null, imdb_id: null, poster_url: null, video_type: null,
-		episode_number: null, episode_name: null
-	};
-}
-
-function createJobDetail(overrides: Record<string, unknown> = {}): JobDetail {
-	const base = createJob({
-		title: 'Test Series', status: 'success', video_type: 'series',
-		year: '2024', disctype: 'bluray', season: '2', season_auto: null,
-		tvdb_id: 12345, ...overrides
-	});
-	return {
-		...base,
-		tracks: [createTrack(1, '1', 2400), createTrack(2, '2', 2500), createTrack(3, '3', 2300)],
-		config: {}
-	} as JobDetail;
+// v3 JobDetailView { job, tracks, fingerprints }. Tracks carry index /
+// duration_seconds (BFF track_number/length are gone).
+function seriesDetail() {
+	return createJobDetail({
+		title: 'Test Series',
+		status: 'ripped',
+		year: 2024,
+		tracks: [
+			createTrack({ id: 'trk_1', index: 1, duration_seconds: 2400 }),
+			createTrack({ id: 'trk_2', index: 2, duration_seconds: 2500 }),
+			createTrack({ id: 'trk_3', index: 3, duration_seconds: 2300 })
+		]
+	} as Parameters<typeof createJobDetail>[0]);
 }
 
 describe('TvdbMatch', () => {
@@ -44,23 +35,23 @@ describe('TvdbMatch', () => {
 
 	describe('rendering', () => {
 		it('renders tab buttons', () => {
-			renderComponent(TvdbMatch, { props: { job: createJobDetail() } });
+			renderComponent(TvdbMatch, { props: { job: seriesDetail(), season: '2', tvdbId: 12345 } });
 			expect(screen.getByText('Match Tracks')).toBeInTheDocument();
 			expect(screen.getByText('Browse Episodes')).toBeInTheDocument();
 		});
 
 		it('renders Preview Match button', () => {
-			renderComponent(TvdbMatch, { props: { job: createJobDetail() } });
+			renderComponent(TvdbMatch, { props: { job: seriesDetail(), season: '2', tvdbId: 12345 } });
 			expect(screen.getByText('Preview Match')).toBeInTheDocument();
 		});
 
-		it('pre-fills season from job', () => {
-			renderComponent(TvdbMatch, { props: { job: createJobDetail({ season: '3' }) } });
+		it('pre-fills season from props', () => {
+			renderComponent(TvdbMatch, { props: { job: seriesDetail(), season: '3', tvdbId: 12345 } });
 			expect(screen.getByDisplayValue('3')).toBeInTheDocument();
 		});
 
 		it('shows TVDB ID when present', () => {
-			renderComponent(TvdbMatch, { props: { job: createJobDetail() } });
+			renderComponent(TvdbMatch, { props: { job: seriesDetail(), season: '2', tvdbId: 12345 } });
 			expect(screen.getByText('TVDB 12345')).toBeInTheDocument();
 		});
 	});
@@ -73,11 +64,11 @@ describe('TvdbMatch', () => {
 					{ track_number: '1', episode_number: 1, episode_name: 'Pilot', episode_runtime: 2400 }
 				],
 				match_count: 1, score: 95, alternatives: []
-			});
-			renderComponent(TvdbMatch, { props: { job: createJobDetail() } });
+			} as never);
+			renderComponent(TvdbMatch, { props: { job: seriesDetail(), season: '2', tvdbId: 12345 } });
 			await fireEvent.click(screen.getByText('Preview Match'));
 			await waitFor(() => {
-				expect(mockTvdbMatch).toHaveBeenCalledWith(1, expect.objectContaining({ apply: false }));
+				expect(mockTvdbMatch).toHaveBeenCalledWith('job_1', expect.objectContaining({ apply: false }));
 				expect(screen.getByText('Pilot')).toBeInTheDocument();
 			});
 		});
@@ -87,8 +78,8 @@ describe('TvdbMatch', () => {
 				success: true, matcher: 'runtime', season: 2,
 				matches: [{ track_number: '1', episode_number: 1, episode_name: 'Pilot', episode_runtime: 2400 }],
 				match_count: 1, score: 90, alternatives: []
-			});
-			renderComponent(TvdbMatch, { props: { job: createJobDetail() } });
+			} as never);
+			renderComponent(TvdbMatch, { props: { job: seriesDetail(), season: '2', tvdbId: 12345 } });
 			await fireEvent.click(screen.getByText('Preview Match'));
 			await waitFor(() => {
 				expect(screen.getByText(/Apply 1 Match/)).toBeInTheDocument();
@@ -97,7 +88,7 @@ describe('TvdbMatch', () => {
 
 		it('shows error on match failure', async () => {
 			mockTvdbMatch.mockRejectedValue(new Error('TVDB unavailable'));
-			renderComponent(TvdbMatch, { props: { job: createJobDetail() } });
+			renderComponent(TvdbMatch, { props: { job: seriesDetail(), season: '2', tvdbId: 12345 } });
 			await fireEvent.click(screen.getByText('Preview Match'));
 			await waitFor(() => {
 				expect(screen.getByText('TVDB unavailable')).toBeInTheDocument();
@@ -113,8 +104,8 @@ describe('TvdbMatch', () => {
 					{ number: 2, name: 'Episode Two', runtime: 42, aired: '2024-01-22' }
 				],
 				tvdb_id: 12345, season: 2
-			});
-			renderComponent(TvdbMatch, { props: { job: createJobDetail() } });
+			} as never);
+			renderComponent(TvdbMatch, { props: { job: seriesDetail(), season: '2', tvdbId: 12345 } });
 			await fireEvent.click(screen.getByText('Browse Episodes'));
 			await fireEvent.click(screen.getByText('Load Episodes'));
 			await waitFor(() => {
@@ -125,7 +116,7 @@ describe('TvdbMatch', () => {
 
 		it('shows error on browse failure', async () => {
 			mockFetchEpisodes.mockRejectedValue(new Error('Not found'));
-			renderComponent(TvdbMatch, { props: { job: createJobDetail() } });
+			renderComponent(TvdbMatch, { props: { job: seriesDetail(), season: '2', tvdbId: 12345 } });
 			await fireEvent.click(screen.getByText('Browse Episodes'));
 			await fireEvent.click(screen.getByText('Load Episodes'));
 			await waitFor(() => {

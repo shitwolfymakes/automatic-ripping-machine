@@ -26,17 +26,17 @@ describe('JobRow', () => {
 			renderInTable({ job: createJob() });
 			const link = screen.getByText('Test Movie');
 			expect(link).toBeInTheDocument();
-			expect(link.closest('a')).toHaveAttribute('href', '/jobs/1');
+			expect(link.closest('a')).toHaveAttribute('href', '/jobs/job_1');
 		});
 
-		it('renders Untitled when no title or label', () => {
-			renderInTable({ job: createJob({ title: null, label: null }) });
+		it('renders Untitled when no title', () => {
+			renderInTable({ job: createJob({ title: null }) });
 			expect(screen.getByText('Untitled')).toBeInTheDocument();
 		});
 
 		it('renders status badge', () => {
-			renderInTable({ job: createJob({ status: 'success' }) });
-			expect(screen.getByText('Success')).toBeInTheDocument();
+			renderInTable({ job: createJob({ status: 'ripped' }) });
+			expect(screen.getByText('ripped')).toBeInTheDocument();
 		});
 
 		it('renders year when present', () => {
@@ -46,48 +46,24 @@ describe('JobRow', () => {
 	});
 
 	describe('props', () => {
-		it('renders drive name from driveNames map', () => {
-			renderInTable({
-				job: createJob({ devpath: '/dev/sr0' }),
-				driveNames: { '/dev/sr0': 'Main Drive' }
-			});
-			expect(screen.getByText('Main Drive')).toBeInTheDocument();
+		it('renders disc type label', () => {
+			renderInTable({ job: createJob({ disc_type: 'bluray' }) });
+			expect(screen.getByText('Blu-ray')).toBeInTheDocument();
 		});
 
-		it('falls back to devpath when no drive name', () => {
-			renderInTable({
-				job: createJob({ devpath: '/dev/sr1' }),
-				driveNames: {}
+		it('invokes onselect with the job id when checkbox toggled', async () => {
+			let captured: [string, boolean] | null = null;
+			const { container } = renderComponent(JobRow, {
+				props: {
+					job: createJob(),
+					onselect: (id: string, sel: boolean) => {
+						captured = [id, sel];
+					}
+				}
 			});
-			expect(screen.getByText('/dev/sr1')).toBeInTheDocument();
-		});
-
-		it('shows IMDb link when imdb_id present', () => {
-			renderInTable({ job: createJob({ imdb_id: 'tt1234567' }) });
-			const imdbLink = screen.getByText('IMDb');
-			expect(imdbLink.closest('a')).toHaveAttribute('href', 'https://www.imdb.com/title/tt1234567/');
-		});
-
-		it('shows disc label when it differs from title', () => {
-			renderInTable({
-				job: createJob({ title: 'My Movie', label: 'DISC_LABEL' })
-			});
-			expect(screen.getByText('DISC_LABEL')).toBeInTheDocument();
-		});
-
-		it('shows stage for active jobs', () => {
-			renderInTable({
-				job: createJob({ status: 'ripping', stage: 'Ripping track 3' })
-			});
-			expect(screen.getByText('Ripping track 3')).toBeInTheDocument();
-		});
-
-		it('shows errors indicator when job has errors', () => {
-			renderInTable({
-				job: createJob({ errors: 'Something went wrong', logfile: 'job_1.log' })
-			});
-			const errLink = screen.getByText('errors');
-			expect(errLink.closest('a')).toHaveAttribute('href', '/logs/job_1.log');
+			const checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+			checkbox.click();
+			expect(captured).toEqual(['job_1', true]);
 		});
 	});
 

@@ -1,7 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { renderComponent, cleanup } from '$lib/test-utils';
-import JobStatsPanel from './JobStatsPanel.svelte';
-import type { JobStats } from '$lib/api/jobs';
+import JobStatsPanel, { type JobStats } from './JobStatsPanel.svelte';
 
 const noop = () => {};
 

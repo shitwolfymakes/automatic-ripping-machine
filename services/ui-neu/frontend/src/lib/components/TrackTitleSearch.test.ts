@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import TrackTitleSearch from './TrackTitleSearch.svelte';
-import type { Track } from '$lib/types/api.gen';
+import { createTrack } from './__fixtures__/job';
+import type { MetadataCandidate } from '$lib/types/api.gen';
+
 vi.mock('$lib/api/jobs', () => ({
 	searchMetadata: vi.fn(),
 	fetchMediaDetail: vi.fn(),
@@ -15,39 +17,13 @@ const mockFetchDetail = vi.mocked(fetchMediaDetail);
 const mockUpdateTrackTitle = vi.mocked(updateTrackTitle);
 const mockClearTrackTitle = vi.mocked(clearTrackTitle);
 
-function createSearchResult(overrides: Record<string, unknown> = {}) {
+function createCandidate(overrides: Partial<MetadataCandidate> = {}): MetadataCandidate {
 	return {
-		title: 'Result', year: '2024', imdb_id: 'tt1111',
-		poster_url: null, media_type: 'movie',
-		...overrides
-	};
-}
-
-function createTrack(overrides: Partial<Track> = {}): Track {
-	return {
-		track_id: 1,
-		job_id: 1,
-		track_number: '1',
-		length: 7200,
-		aspect_ratio: '16:9',
-		fps: 24,
-		enabled: true,
-		basename: 'title_01',
-		filename: 'title_01.mkv',
-		orig_filename: 'title_01.mkv',
-		new_filename: null,
-		ripped: false,
-		status: null,
-		error: null,
-		source: null,
-		title: 'Track Title',
-		year: '2024',
-		imdb_id: null,
+		title: 'Result',
+		year: 2024,
+		kind: 'movie',
 		poster_url: null,
-		video_type: null,
-		episode_number: null,
-		episode_name: null,
-		custom_filename: null,
+		provider_id: 'tt1111',
 		...overrides
 	};
 }
@@ -61,21 +37,21 @@ describe('TrackTitleSearch', () => {
 	describe('rendering', () => {
 		it('renders search form with pre-filled track title', () => {
 			renderComponent(TrackTitleSearch, {
-				props: { jobId: 1, track: createTrack() }
+				props: { jobId: 'job_1', track: createTrack({ title: 'Track Title' }) }
 			});
 			expect(screen.getByDisplayValue('Track Title')).toBeInTheDocument();
 		});
 
 		it('renders search button', () => {
 			renderComponent(TrackTitleSearch, {
-				props: { jobId: 1, track: createTrack() }
+				props: { jobId: 'job_1', track: createTrack() }
 			});
 			expect(screen.getByText('Search')).toBeInTheDocument();
 		});
 
-		it('falls back to basename when no title', () => {
+		it('falls back to source_ref basename when no title', () => {
 			renderComponent(TrackTitleSearch, {
-				props: { jobId: 1, track: createTrack({ title: null, basename: 'title_02' }) }
+				props: { jobId: 'job_1', track: createTrack({ title: null, source_ref: 'title_02.mkv' }) }
 			});
 			expect(screen.getByDisplayValue('title_02')).toBeInTheDocument();
 		});
@@ -83,22 +59,21 @@ describe('TrackTitleSearch', () => {
 
 	describe('interactions', () => {
 		it('calls searchMetadata on search', async () => {
-			mockSearchMetadata.mockResolvedValue([
-				createSearchResult({ title: 'Found Title', imdb_id: 'tt2222' })
-			]);
+			mockSearchMetadata.mockResolvedValue({ candidates: [createCandidate({ title: 'Found Title', provider_id: 'tt2222' })] });
 			renderComponent(TrackTitleSearch, {
-				props: { jobId: 1, track: createTrack() }
+				props: { jobId: 'job_1', track: createTrack() }
 			});
 			await fireEvent.click(screen.getByText('Search'));
 			await waitFor(() => {
+				expect(mockSearchMetadata).toHaveBeenCalledWith('t00');
 				expect(screen.getByText('Found Title')).toBeInTheDocument();
 			});
 		});
 
 		it('shows no results message', async () => {
-			mockSearchMetadata.mockResolvedValue([]);
+			mockSearchMetadata.mockResolvedValue({ candidates: [] });
 			renderComponent(TrackTitleSearch, {
-				props: { jobId: 1, track: createTrack() }
+				props: { jobId: 'job_1', track: createTrack() }
 			});
 			await fireEvent.click(screen.getByText('Search'));
 			await waitFor(() => {
@@ -109,7 +84,7 @@ describe('TrackTitleSearch', () => {
 		it('shows error on search failure', async () => {
 			mockSearchMetadata.mockRejectedValue(new Error('Search failed'));
 			renderComponent(TrackTitleSearch, {
-				props: { jobId: 1, track: createTrack() }
+				props: { jobId: 'job_1', track: createTrack() }
 			});
 			await fireEvent.click(screen.getByText('Search'));
 			await waitFor(() => {
@@ -117,29 +92,24 @@ describe('TrackTitleSearch', () => {
 			});
 		});
 
-		it('fetches detail when result is selected', async () => {
-			mockSearchMetadata.mockResolvedValue([
-				createSearchResult({ imdb_id: 'tt3333' })
-			]);
-			mockFetchDetail.mockResolvedValue({
-				title: 'Result', year: '2024', imdb_id: 'tt3333', poster_url: null,
-				media_type: 'movie', plot: 'A plot', background_url: null
-			});
+		it('shows detail editor when result is selected', async () => {
+			mockSearchMetadata.mockResolvedValue({ candidates: [createCandidate({ title: 'Picked', provider_id: 'tt3333' })] });
 			renderComponent(TrackTitleSearch, {
-				props: { jobId: 1, track: createTrack() }
+				props: { jobId: 'job_1', track: createTrack() }
 			});
 			await fireEvent.click(screen.getByText('Search'));
-			await waitFor(() => expect(screen.getByText('Result')).toBeInTheDocument());
-			await fireEvent.click(screen.getByText('Result'));
+			await waitFor(() => expect(screen.getByText('Picked')).toBeInTheDocument());
+			await fireEvent.click(screen.getByText('Picked'));
 			await waitFor(() => {
-				expect(mockFetchDetail).toHaveBeenCalledWith('tt3333');
+				expect(screen.getByDisplayValue('Picked')).toBeInTheDocument();
+				expect(screen.getByText('Apply')).toBeInTheDocument();
 			});
 		});
 
 		it('renders close button when onclose provided', () => {
 			const onclose = vi.fn();
 			renderComponent(TrackTitleSearch, {
-				props: { jobId: 1, track: createTrack(), onclose }
+				props: { jobId: 'job_1', track: createTrack(), onclose }
 			});
 			const closeBtn = screen.getByTitle('Close');
 			expect(closeBtn).toBeInTheDocument();
@@ -147,7 +117,7 @@ describe('TrackTitleSearch', () => {
 
 		it('renders Clear Override button when track has title', () => {
 			renderComponent(TrackTitleSearch, {
-				props: { jobId: 1, track: createTrack({ title: 'Override Title' }) }
+				props: { jobId: 'job_1', track: createTrack({ title: 'Override Title' }) }
 			});
 			expect(screen.getByText('Clear Override')).toBeInTheDocument();
 		});
@@ -155,20 +125,34 @@ describe('TrackTitleSearch', () => {
 		it('calls clearTrackTitle on Clear Override click', async () => {
 			const onclear = vi.fn();
 			renderComponent(TrackTitleSearch, {
-				props: { jobId: 1, track: createTrack({ title: 'Override' }), onclear }
+				props: { jobId: 'job_7', track: createTrack({ id: 'trk_9', title: 'Override' }), onclear }
 			});
 			await fireEvent.click(screen.getByText('Clear Override'));
 			await waitFor(() => {
-				expect(mockClearTrackTitle).toHaveBeenCalledWith(1, 1);
+				expect(mockClearTrackTitle).toHaveBeenCalledWith('job_7', 'trk_9');
 				expect(onclear).toHaveBeenCalled();
 			});
 		});
 
 		it('renders year input with pre-filled value', () => {
 			renderComponent(TrackTitleSearch, {
-				props: { jobId: 1, track: createTrack({ year: '2023' }) }
+				props: { jobId: 'job_1', track: createTrack({ year: 2023 }) }
 			});
 			expect(screen.getByDisplayValue('2023')).toBeInTheDocument();
+		});
+
+		it('applies a track title edit via bulk-PATCH wrap', async () => {
+			mockSearchMetadata.mockResolvedValue({ candidates: [createCandidate({ title: 'Picked', year: 2021 })] });
+			renderComponent(TrackTitleSearch, {
+				props: { jobId: 'job_3', track: createTrack({ id: 'trk_5' }) }
+			});
+			await fireEvent.click(screen.getByText('Search'));
+			await waitFor(() => expect(screen.getByText('Picked')).toBeInTheDocument());
+			await fireEvent.click(screen.getByText('Picked'));
+			await fireEvent.click(screen.getByText('Apply'));
+			await waitFor(() => {
+				expect(mockUpdateTrackTitle).toHaveBeenCalledWith('job_3', 'trk_5', expect.objectContaining({ title: 'Picked', year: 2021 }));
+			});
 		});
 	});
 });

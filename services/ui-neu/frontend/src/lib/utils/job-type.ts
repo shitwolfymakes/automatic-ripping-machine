@@ -97,6 +97,10 @@ export function getVideoTypeConfig(
 // 'waiting' split into 'manual_paused'/'makemkv_throttled'. Old strings kept
 // as defensive fallbacks for in-flight jobs observed mid-deploy.
 const ACTIVE_STATUSES = new Set([
+	// v3 JobStatus non-terminal members.
+	'created',
+	'awaiting_user_id',
+	'identified',
 	'identifying',
 	'ready',
 	'ripping',                  // legacy pre-v2.0.0
