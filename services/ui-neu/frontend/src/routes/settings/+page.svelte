@@ -4,8 +4,8 @@
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import { fetchSettings, saveArmConfig, saveTranscoderConfig, testMetadataKey, testTranscoderConnection, testTranscoderWebhook, fetchSystemInfo, fetchAbcdeConfig, saveAbcdeConfig } from '$lib/api/settings';
-	import type { ConnectionTestResult, WebhookTestResult, SystemInfoData } from '$lib/api/settings';
-	import type { SettingsResponse as SettingsData, DriveView as Drive, DriveDiagnosticResponse } from '$lib/types/api.gen';
+	import type { ConnectionTestResult, WebhookTestResult, SystemInfoData, SettingsData } from '$lib/api/settings';
+	import type { DriveView as Drive, DriveDiagnosticResponse } from '$lib/types/api.gen';
 	import { theme, toggleTheme } from '$lib/stores/theme';
 	import { colorScheme, COLOR_SCHEMES, schemeLocksMode, allSchemes, loadThemesFromApi } from '$lib/stores/colorScheme';
 	import { uploadTheme, deleteTheme as deleteThemeApi } from '$lib/api/themes';
@@ -17,9 +17,8 @@
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import SystemHealth from '$lib/components/settings/SystemHealth.svelte';
 	import PresetEditor from '$lib/components/PresetEditor.svelte';
-	import { fetchTranscoderScheme, fetchTranscoderPresets, createCustomPreset } from '$lib/api/settings';
-	import type { Scheme, Preset, Overrides } from '$lib/types/api.gen';
-	import type { PresetEditorState } from '$lib/types/presets';
+	import { fetchTranscoderScheme, createCustomPreset } from '$lib/api/settings';
+	import type { Scheme, Preset, Overrides, PresetEditorState } from '$lib/types/presets';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { get } from 'svelte/store';
@@ -70,38 +69,42 @@
 
 	async function loadPresetData() {
 		presetOffline = false;
-		const [s, p] = await Promise.all([fetchTranscoderScheme(), fetchTranscoderPresets()]);
-		if (s === null || p === null) {
+		// v3 has no transcoder-scheme endpoint; fetchTranscoderScheme resolves
+		// null, so the preset editor renders its offline banner. Presets stay [].
+		const s = await fetchTranscoderScheme();
+		if (s === null) {
 			presetOffline = true;
 			return;
 		}
 		presetScheme = s;
-		presets = p.presets;
 	}
 
-	async function handlePresetSave(state: PresetEditorState) {
+	async function handlePresetSave(_state: PresetEditorState) {
+		// Saving global transcoder overrides hits the transcoder service config,
+		// which is MISSING in v3. The editor is offline, so this is unreachable;
+		// kept for prop stability.
 		presetSaving = true;
 		try {
-			await saveTranscoderConfig({
-				selected_preset_slug: state.preset_slug,
-				global_overrides: state.overrides
-			});
-			await loadSettings();
+			presetOffline = true;
 		} finally {
 			presetSaving = false;
 		}
 	}
 
 	async function handlePresetSaveAsNew(body: { name: string; parent_slug: string; overrides: Overrides }) {
+		// The BFF scheme-driven "save as new preset" body has no v3 equivalent
+		// (v3's TranscodePresetCreateRequest is a flat media_type/tool/container
+		// shape). The editor is offline under v3 so this never fires; we forward
+		// the name to the real v3 create endpoint best-effort and refresh.
 		presetSaving = true;
 		try {
-			const newPreset = await createCustomPreset(body);
-			await loadPresetData();
-			await saveTranscoderConfig({
-				selected_preset_slug: newPreset.slug,
-				global_overrides: { shared: {}, tiers: {} }
+			await createCustomPreset({
+				name: body.name,
+				media_type: 'movie',
+				tool: 'handbrake',
+				container: 'mkv'
 			});
-			await loadSettings();
+			await loadPresetData();
 		} finally {
 			presetSaving = false;
 		}

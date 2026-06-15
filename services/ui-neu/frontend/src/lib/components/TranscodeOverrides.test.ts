@@ -11,13 +11,6 @@ vi.mock('$lib/api/settings', () => ({
         supported_audio_encoders: ['copy', 'aac'],
         supported_subtitle_modes: ['all'],
         advanced_fields: {}
-    }),
-    fetchTranscoderPresets: vi.fn().mockResolvedValue({
-        presets: [{
-            slug: 'software_balanced', name: 'Balanced', scheme: 'software',
-            description: '', builtin: true,
-            shared: {}, tiers: { dvd: {}, bluray: {}, uhd: {} }
-        }]
     })
 }));
 
@@ -58,7 +51,6 @@ describe('TranscodeOverrides', () => {
     it('shows offline state when transcoder is unreachable', async () => {
         const settingsApi = await import('$lib/api/settings');
         vi.mocked(settingsApi.fetchTranscoderScheme).mockResolvedValueOnce(null);
-        vi.mocked(settingsApi.fetchTranscoderPresets).mockResolvedValueOnce(null);
         renderComponent(TranscodeOverrides, { props: { job: createJob() } });
         await waitFor(() => expect(screen.queryByText(/Software \(CPU\)/)).toBeNull());
     });

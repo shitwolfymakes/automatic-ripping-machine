@@ -1,9 +1,8 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import type { JobView } from '$lib/types/api.gen';
-    import type { Scheme, Preset } from '$lib/types/api.gen';
-    import type { PresetEditorState } from '$lib/types/presets';
-    import { fetchTranscoderScheme, fetchTranscoderPresets } from '$lib/api/settings';
+    import type { Scheme, Preset, PresetEditorState } from '$lib/types/presets';
+    import { fetchTranscoderScheme } from '$lib/api/settings';
     import { updateJobTranscodeConfig } from '$lib/api/jobs';
     import PresetEditor from './PresetEditor.svelte';
 
@@ -29,13 +28,14 @@
 
     async function loadData() {
         offline = false;
-        const [s, p] = await Promise.all([fetchTranscoderScheme(), fetchTranscoderPresets()]);
-        if (s === null || p === null) {
+        // v3 has no transcoder-scheme endpoint; fetchTranscoderScheme resolves
+        // null, so the editor renders its offline banner. Presets stay empty.
+        const s = await fetchTranscoderScheme();
+        if (s === null) {
             offline = true;
             return;
         }
         scheme = s;
-        presets = p.presets;
     }
 
     async function handleSave(state: PresetEditorState) {

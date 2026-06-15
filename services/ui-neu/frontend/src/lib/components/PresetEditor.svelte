@@ -1,7 +1,6 @@
 <script lang="ts">
     import { onDestroy, onMount } from 'svelte';
-    import type { Scheme, Preset, Overrides } from '$lib/types/api.gen';
-    import type { PresetEditorState } from '$lib/types/presets';
+    import type { Scheme, Preset, Overrides, PresetEditorState } from '$lib/types/presets';
     import { listHandbrakePresets } from '$lib/api/transcoder';
     interface Props {
         scope: 'global' | 'job';

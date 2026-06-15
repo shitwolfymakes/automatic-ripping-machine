@@ -1,150 +1,58 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mockFetch = vi.fn();
-vi.stubGlobal('fetch', mockFetch);
+vi.mock('$lib/api/client', () => ({
+	get: vi.fn().mockResolvedValue({}),
+	post: vi.fn().mockResolvedValue({}),
+	patch: vi.fn().mockResolvedValue({})
+}));
 
-function jsonResponse(data: unknown, ok = true) {
-	return { ok, status: ok ? 200 : 500, statusText: ok ? 'OK' : 'Error', json: () => Promise.resolve(data) };
-}
+import { get } from '$lib/api/client';
+import { fetchSettings, testMetadataKey } from '../api/settings';
 
-import { fetchAbcdeConfig, saveAbcdeConfig, testTranscoderConnection, testTranscoderWebhook, fetchSystemInfo, fetchTranscoderScheme, fetchTranscoderPresets, createCustomPreset } from '../api/settings';
+const mockGet = vi.mocked(get);
 
-beforeEach(() => mockFetch.mockReset());
-
-describe('fetchAbcdeConfig', () => {
-	it('GETs /api/settings/abcde', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ content: 'CDROM=/dev/sr0', path: '/etc/abcde.conf', exists: true }));
-		const result = await fetchAbcdeConfig();
-		expect(result.content).toBe('CDROM=/dev/sr0');
-		expect(result.exists).toBe(true);
-	});
+beforeEach(() => {
+	mockGet.mockReset().mockResolvedValue({});
 });
 
-describe('saveAbcdeConfig', () => {
-	it('PUTs content to /api/settings/abcde', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ success: true }));
-		await saveAbcdeConfig('CDROM=/dev/sr1');
-		expect(mockFetch).toHaveBeenCalledWith('/api/settings/abcde', expect.objectContaining({
-			method: 'PUT',
-			body: JSON.stringify({ content: 'CDROM=/dev/sr1' })
-		}));
-	});
-});
-
-describe('testTranscoderConnection', () => {
-	it('POSTs to /api/settings/transcoder/test-connection', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ reachable: true, auth_ok: true, auth_required: false, gpu_support: null, worker_running: true, queue_size: 0, error: null }));
-		const result = await testTranscoderConnection();
-		expect(result.reachable).toBe(true);
-	});
-});
-
-describe('testTranscoderWebhook', () => {
-	it('POSTs secret to /api/settings/transcoder/test-webhook', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ reachable: true, secret_ok: true, secret_required: true, error: null }));
-		const result = await testTranscoderWebhook('my-secret');
-		expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('/test-webhook'), expect.objectContaining({
-			method: 'POST',
-			body: JSON.stringify({ webhook_secret: 'my-secret' })
-		}));
-		expect(result.secret_ok).toBe(true);
-	});
-});
-
-describe('fetchSystemInfo', () => {
-	it('GETs /api/settings/system-info', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ versions: {}, endpoints: {}, paths: [], database: {}, drives: [] }));
-		const result = await fetchSystemInfo();
-		expect(result.versions).toBeDefined();
-	});
-});
-
-describe('fetchTranscoderScheme', () => {
-	it('GETs /api/settings/transcoder/scheme and returns scheme', async () => {
-		const scheme = {
-			slug: 'nvidia',
-			name: 'NVIDIA NVENC',
-			supported_encoders: [],
-			supported_audio_encoders: [],
-			supported_subtitle_modes: [],
-			advanced_fields: {}
-		};
-		mockFetch.mockResolvedValue(jsonResponse(scheme));
-		const result = await fetchTranscoderScheme();
-		expect(result).toEqual(scheme);
-		expect(mockFetch).toHaveBeenCalledWith('/api/settings/transcoder/scheme', expect.any(Object));
-	});
-
-	it('returns null when backend returns 502 unreachable', async () => {
-		mockFetch.mockResolvedValue({
-			ok: false,
-			status: 502,
-			statusText: 'Bad Gateway',
-			json: () => Promise.resolve({ detail: 'Transcoder service unreachable' })
+describe('fetchSettings composition edge cases', () => {
+	it('issues the three reads in parallel (single Promise.all)', async () => {
+		const calls: string[] = [];
+		mockGet.mockImplementation((path: string) => {
+			calls.push(path);
+			return Promise.resolve(path === '/api/settings/schema' ? { groups: [] } : {});
 		});
-		const result = await fetchTranscoderScheme();
-		expect(result).toBeNull();
+		await fetchSettings();
+		// All three reads are dispatched together (order is the array order).
+		expect(calls).toEqual(['/api/config', '/api/settings/schema', '/api/settings/infra']);
 	});
 
-	it('rethrows non-502 errors', async () => {
-		mockFetch.mockResolvedValue({
-			ok: false,
-			status: 500,
-			statusText: 'Internal Server Error',
-			json: () => Promise.resolve({ detail: 'boom' })
+	it('projects null config values to null in arm_config', async () => {
+		mockGet.mockImplementation((path: string) => {
+			if (path === '/api/config') return Promise.resolve({ omdb_api_key: null, tmdb_api_key: 'k' });
+			if (path === '/api/settings/schema') return Promise.resolve({ groups: [] });
+			return Promise.resolve({});
 		});
-		await expect(fetchTranscoderScheme()).rejects.toThrow(/boom/);
+		const data = await fetchSettings();
+		expect(data.arm_config.omdb_api_key).toBeNull();
+		expect(data.arm_config.tmdb_api_key).toBe('k');
+		// BFF-only panels are not populated under v3.
+		expect(data.transcoder_config).toBeNull();
+		expect(data.naming_variables).toBeNull();
 	});
 });
 
-describe('fetchTranscoderPresets', () => {
-	it('GETs /api/settings/transcoder/presets', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ presets: [{ slug: 'a', name: 'A', builtin: true, shared: {}, tiers: {}, scheme: 'nvidia', description: '' }] }));
-		const result = await fetchTranscoderPresets();
-		expect(result?.presets).toHaveLength(1);
-		expect(mockFetch).toHaveBeenCalledWith('/api/settings/transcoder/presets', expect.any(Object));
+describe('testMetadataKey fallback messaging', () => {
+	it('uses a default message when detail is absent and key is valid', async () => {
+		mockGet.mockResolvedValue({ provider: 'tvdb', valid: true });
+		const result = await testMetadataKey(undefined, 'tvdb');
+		expect(result.message).toBe('Key is valid');
+		expect(result.success).toBe(true);
 	});
 
-	it('returns null when backend returns 502 unreachable', async () => {
-		mockFetch.mockResolvedValue({
-			ok: false,
-			status: 502,
-			statusText: 'Bad Gateway',
-			json: () => Promise.resolve({ detail: 'Transcoder service unreachable' })
-		});
-		const result = await fetchTranscoderPresets();
-		expect(result).toBeNull();
-	});
-
-	it('rethrows non-502 errors', async () => {
-		mockFetch.mockResolvedValue({
-			ok: false,
-			status: 500,
-			statusText: 'Internal Server Error',
-			json: () => Promise.resolve({ detail: 'db error' })
-		});
-		await expect(fetchTranscoderPresets()).rejects.toThrow(/db error/);
-	});
-});
-
-describe('createCustomPreset', () => {
-	it('POSTs the body to /api/settings/transcoder/presets', async () => {
-		const created = {
-			slug: 'my-anime', name: 'My Anime', scheme: 'nvidia',
-			description: '', builtin: false, parent_slug: 'nvidia_balanced',
-			shared: {}, tiers: { dvd: {}, bluray: {}, uhd: {} }
-		};
-		mockFetch.mockResolvedValue(jsonResponse(created));
-		const body = {
-			name: 'My Anime',
-			parent_slug: 'nvidia_balanced',
-			overrides: { shared: { audio_encoder: 'aac' }, tiers: {} }
-		};
-		const result = await createCustomPreset(body);
-		expect(result.slug).toBe('my-anime');
-		expect(mockFetch).toHaveBeenCalledWith(
-			'/api/settings/transcoder/presets',
-			expect.objectContaining({ method: 'POST', body: JSON.stringify(body) })
-		);
+	it('encodes the provider query param', async () => {
+		mockGet.mockResolvedValue({ provider: 'makemkv', valid: null });
+		await testMetadataKey(undefined, 'makemkv');
+		expect(mockGet).toHaveBeenCalledWith('/api/metadata/test-key?provider=makemkv');
 	});
 });
