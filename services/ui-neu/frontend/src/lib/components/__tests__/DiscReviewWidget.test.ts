@@ -10,8 +10,7 @@ vi.mock('$lib/api/jobs', () => ({
 			job: createJob({ title: 'Test Movie', disc_type: 'bluray' })
 		})
 	),
-	cancelWaitingJob: vi.fn(() => Promise.resolve()),
-	startWaitingJob: vi.fn(() => Promise.resolve()),
+	abandonJob: vi.fn(() => Promise.resolve(createJob())),
 	updateTrack: vi.fn(() => Promise.resolve(createJob())),
 	updateJobTitle: vi.fn(() => Promise.resolve(createJob())),
 	updateJobConfig: vi.fn(() => Promise.resolve(createJob())),
@@ -55,13 +54,15 @@ describe('DiscReviewWidget', () => {
 		});
 	});
 
-	describe('button order', () => {
-		it('Cancel button appears before Start button', async () => {
+	describe('action buttons', () => {
+		it('renders Cancel before the (disabled, coming-soon) Start control', async () => {
 			renderWidget();
 			await waitFor(() => expect(screen.getByText('Start')).toBeInTheDocument());
 			const cancelBtn = screen.getByText('Cancel');
 			const startBtn = screen.getByText('Start');
 			expect(cancelBtn.compareDocumentPosition(startBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+			// Start is now a ComingSoon placeholder (no v3 manual-start) — disabled.
+			expect(startBtn).toBeDisabled();
 		});
 	});
 
