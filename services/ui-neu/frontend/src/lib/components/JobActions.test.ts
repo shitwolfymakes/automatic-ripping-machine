@@ -3,18 +3,16 @@ import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-
 import JobActions from './JobActions.svelte';
 import { createJob } from './__fixtures__/job';
 
-// Mock the API module. fixJobPermissions is MISSING in v3 (rejects at runtime),
-// but the button stays wired so we mock it here to keep the success-path test.
+// Mock the API module. Fix-permissions has no v3 backend yet, so the component
+// renders a disabled ComingSoon control instead of calling an API.
 vi.mock('$lib/api/jobs', () => ({
 	abandonJob: vi.fn(() => Promise.resolve()),
-	deleteJob: vi.fn(() => Promise.resolve()),
-	fixJobPermissions: vi.fn(() => Promise.resolve())
+	deleteJob: vi.fn(() => Promise.resolve())
 }));
 
-import { abandonJob, deleteJob, fixJobPermissions } from '$lib/api/jobs';
+import { abandonJob, deleteJob } from '$lib/api/jobs';
 const mockAbandon = vi.mocked(abandonJob);
 const mockDelete = vi.mocked(deleteJob);
-const mockFixPerms = vi.mocked(fixJobPermissions);
 
 // Mock window.confirm
 vi.stubGlobal('confirm', vi.fn(() => true));
@@ -105,16 +103,13 @@ describe('JobActions', () => {
 			});
 		});
 
-		it('calls fixJobPermissions when Fix Permissions is clicked', async () => {
-			const onaction = vi.fn();
+		it('renders Fix Permissions as a disabled ComingSoon control', () => {
 			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'ripped' }), onaction }
+				props: { job: createJob({ status: 'ripped' }) }
 			});
-			await fireEvent.click(screen.getByText('Fix Permissions'));
-			await waitFor(() => {
-				expect(mockFixPerms).toHaveBeenCalledWith('job_1');
-				expect(onaction).toHaveBeenCalled();
-			});
+			const fixPermsBtn = screen.getByText('Fix Permissions');
+			expect(fixPermsBtn).toBeInTheDocument();
+			expect(fixPermsBtn).toBeDisabled();
 		});
 
 		it('shows success feedback after action', async () => {

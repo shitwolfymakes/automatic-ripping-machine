@@ -1,7 +1,8 @@
 <script lang="ts">
 	import type { JobView } from '$lib/types/api.gen';
-	import { abandonJob, deleteJob, fixJobPermissions } from '$lib/api/jobs';
+	import { abandonJob, deleteJob } from '$lib/api/jobs';
 	import { isJobActive } from '$lib/utils/job-type';
+	import ComingSoon from './ComingSoon.svelte';
 
 	interface Props {
 		job: JobView;
@@ -20,9 +21,8 @@
 	const TERMINAL = new Set(['ripped', 'ripped_partial', 'ripped_awaiting_identify', 'abandoned', 'failed']);
 	let canAbandon = $derived(active);
 	let canDelete = $derived(TERMINAL.has(job.status));
-	// fixJobPermissions is MISSING in v3 (the stub rejects at runtime). It only
-	// ever applied to successfully-ripped jobs; map that to 'ripped'. The button
-	// stays wired so the call-site compiles and fails loudly if ever reached.
+	// Fix-permissions only ever applied to successfully-ripped jobs; map that to
+	// 'ripped'. Its v3 backend isn't built yet, so the control is a ComingSoon.
 	let canFixPerms = $derived(job.status === 'ripped');
 
 	function clearFeedback() {
@@ -69,22 +69,6 @@
 		}
 	}
 
-	async function handleFixPerms() {
-		if (!confirm(`Fix permissions for job "${jobLabel()}"?`)) return;
-		loading = 'fixperms';
-		feedback = null;
-		try {
-			await fixJobPermissions(job.id);
-			feedback = { type: 'success', message: 'Permissions fixed' };
-			onaction?.();
-		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Failed to fix permissions' };
-		} finally {
-			loading = null;
-			clearFeedback();
-		}
-	}
-
 	let btnBase = $derived(
 		compact
 			? 'rounded px-2 py-0.5 text-xs font-medium disabled:opacity-50 transition-colors'
@@ -104,13 +88,7 @@
 			</button>
 		{/if}
 		{#if canFixPerms}
-			<button
-				onclick={handleFixPerms}
-				disabled={loading !== null}
-				class="{btnBase} bg-blue-100 text-blue-700 ring-1 ring-blue-200 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-800 dark:hover:bg-blue-900/50"
-			>
-				{loading === 'fixperms' ? 'Fixing...' : 'Fix Permissions'}
-			</button>
+			<ComingSoon label="Fix Permissions" feature="Fix permissions" />
 		{/if}
 		{#if canDelete}
 			<button
