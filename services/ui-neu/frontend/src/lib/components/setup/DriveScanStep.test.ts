@@ -6,7 +6,7 @@ function mockFetchJson(data: unknown) {
 	vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(data) })));
 }
 
-const sampleDrive = { drive_id: 1, name: 'Main Drive', mount: '/dev/sr0', maker: 'LG', model: 'WH16NS40', capabilities: ['CD', 'DVD', 'BD'] };
+const sampleDrive = { id: 'drv_1', display_name: 'Main Drive', device_path: '/dev/sr0', hostname: 'arm-host', status: 'online' };
 
 describe('DriveScanStep', () => {
 	afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -18,15 +18,13 @@ describe('DriveScanStep', () => {
 		await waitFor(() => expect(screen.getByText('No optical drives detected')).toBeInTheDocument());
 	});
 
-	it('shows drive info and capability badges', async () => {
+	it('shows drive name, device path, and hostname', async () => {
 		mockFetchJson([sampleDrive]);
 		renderComponent(DriveScanStep);
 		await waitFor(() => {
 			expect(screen.getByText('Main Drive')).toBeInTheDocument();
-			expect(screen.getByText('LG WH16NS40')).toBeInTheDocument();
-			expect(screen.getByText('CD')).toBeInTheDocument();
-			expect(screen.getByText('DVD')).toBeInTheDocument();
-			expect(screen.getByText('Blu-ray')).toBeInTheDocument();
+			expect(screen.getByText('/dev/sr0')).toBeInTheDocument();
+			expect(screen.getByText(/arm-host/)).toBeInTheDocument();
 		});
 	});
 

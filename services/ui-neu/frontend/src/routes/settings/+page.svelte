@@ -5,13 +5,12 @@
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import { fetchSettings, saveArmConfig, saveTranscoderConfig, testMetadataKey, testTranscoderConnection, testTranscoderWebhook, fetchSystemInfo, fetchAbcdeConfig, saveAbcdeConfig } from '$lib/api/settings';
 	import type { ConnectionTestResult, WebhookTestResult, SystemInfoData } from '$lib/api/settings';
-	import type { SettingsResponse as SettingsData, DriveSchema as Drive } from '$lib/types/api.gen';
+	import type { SettingsResponse as SettingsData, DriveView as Drive, DriveDiagnosticResponse } from '$lib/types/api.gen';
 	import { theme, toggleTheme } from '$lib/stores/theme';
 	import { colorScheme, COLOR_SCHEMES, schemeLocksMode, allSchemes, loadThemesFromApi } from '$lib/stores/colorScheme';
 	import { uploadTheme, deleteTheme as deleteThemeApi } from '$lib/api/themes';
 	import { createPollingStore } from '$lib/stores/polling';
 	import { fetchDrives, fetchDriveDiagnostic, rescanDrives } from '$lib/api/drives';
-	import type { DiagnosticResult } from '$lib/api/drives';
 	import DriveCard from '$lib/components/DriveCard.svelte';
 	import { restartArm, restartTranscoder } from '$lib/api/system';
 	import { fetchImageCacheStats, clearImageCache, type ImageCacheStats } from '$lib/api/maintenance';
@@ -175,7 +174,7 @@
 
 	// --- Drive diagnostics ---
 	let diagRunning = $state(false);
-	let diagResult = $state<DiagnosticResult | null>(null);
+	let diagResult = $state<DriveDiagnosticResponse | null>(null);
 	let diagError = $state<string | null>(null);
 	let diagOpen = $state(false);
 	let rescanning = $state(false);
@@ -2398,7 +2397,7 @@
 					<p class="py-8 text-center text-gray-400">No drives detected.</p>
 				{:else}
 					<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-						{#each $drives as drive (drive.drive_id)}
+						{#each $drives as drive (drive.id)}
 							<DriveCard {drive} onupdate={() => drives.refresh()} globalDefaults={{
 								prescan_cache_mb: Number(settings?.arm_config?.PRESCAN_CACHE_MB) || 1,
 								prescan_timeout: Number(settings?.arm_config?.PRESCAN_TIMEOUT) || 300,
@@ -2462,53 +2461,38 @@
 							</div>
 
 							{#if diagResult}
+								{@const unhealthy = diagResult.drives.filter(d => !d.healthy || d.notes.length > 0)}
 								<!-- Status bar -->
 								<div class="mb-2 flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 text-xs
-									{diagResult.issues.length > 0 || diagResult.drives.some(d => d.issues.length > 0)
+									{unhealthy.length > 0
 										? 'border-amber-500/15 bg-amber-500/5'
 										: 'border-green-500/15 bg-green-500/5'}">
-									<span class="inline-flex items-center gap-1.5">
-										<div class="h-1.5 w-1.5 rounded-full {diagResult.udevd_running ? 'bg-green-500' : 'bg-red-500'}"></div>
-										<span class="font-medium text-gray-700 dark:text-gray-300">udevd {diagResult.udevd_running ? 'running' : 'not running'}</span>
-									</span>
-									<span class="text-gray-500 dark:text-gray-400">
-										Kernel: {diagResult.kernel_drives.length > 0 ? diagResult.kernel_drives.join(', ') : 'none'}
-									</span>
 									<span class="text-gray-500 dark:text-gray-400">
 										{diagResult.drives.length} drive{diagResult.drives.length !== 1 ? 's' : ''}
 									</span>
-									<span class="font-medium {diagResult.issues.length > 0 || diagResult.drives.some(d => d.issues.length > 0) ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}">
-										{diagResult.issues.length > 0 || diagResult.drives.some(d => d.issues.length > 0) ? 'Issues Found' : 'All OK'}
+									<span class="font-medium {unhealthy.length > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}">
+										{unhealthy.length > 0 ? 'Issues Found' : 'All OK'}
 									</span>
 								</div>
 
-								<!-- System-level issues -->
-								{#if diagResult.issues.length > 0}
-									<div class="mb-2 rounded-lg border border-red-500/15 bg-red-500/5 p-2.5">
-										{#each diagResult.issues as issue}
-											<div class="flex items-start gap-1.5 text-xs">
-												<svg class="mt-0.5 h-3 w-3 flex-shrink-0 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-												</svg>
-												<span class="text-red-700 dark:text-red-300">{issue}</span>
-											</div>
-										{/each}
-									</div>
-								{/if}
-
 								<!-- Per-drive issues only -->
-								{#each diagResult.drives.filter(d => d.issues.length > 0) as diag}
+								{#each unhealthy as diag}
 									<div class="mb-1.5 rounded-lg border border-amber-500/15 bg-amber-500/5 p-2.5">
-										{#each diag.issues as issue}
+										{#each diag.notes as note}
 											<div class="flex items-start gap-1.5 text-xs">
 												<svg class="mt-0.5 h-3 w-3 flex-shrink-0 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
 												</svg>
 												<span class="text-amber-700 dark:text-amber-400">
-													<span class="font-medium">/dev/{diag.devname}</span> — {issue}
+													<span class="font-medium">{diag.id}</span> — {note}
 												</span>
 											</div>
 										{/each}
+										{#if diag.notes.length === 0 && !diag.healthy}
+											<div class="text-xs text-amber-700 dark:text-amber-400">
+												<span class="font-medium">{diag.id}</span> — unhealthy
+											</div>
+										{/if}
 									</div>
 								{/each}
 							{:else if !diagRunning}

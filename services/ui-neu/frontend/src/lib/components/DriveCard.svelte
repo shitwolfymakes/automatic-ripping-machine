@@ -1,8 +1,7 @@
 <script lang="ts">
-	import type { DriveSchema as Drive } from '$lib/types/api.gen';
+	import type { DriveView as Drive } from '$lib/types/api.gen';
 	import { updateDrive, scanDrive, deleteDrive, ejectDrive } from '$lib/api/drives';
 	import StatusBadge from './StatusBadge.svelte';
-	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
 
 	interface Props {
@@ -70,7 +69,7 @@
 		if (!drive) return;
 		savingPrescan = true;
 		try {
-			await updateDrive(drive.drive_id, { [field.key]: newVal });
+			await updateDrive(drive.id, { [field.key]: newVal });
 			onupdate?.();
 		} catch {
 			field.setInput(field.current() != null ? String(field.current()) : '');
@@ -99,7 +98,7 @@
 
 		savingSpeed = true;
 		try {
-			await updateDrive(drive.drive_id, { rip_speed: newSpeed });
+			await updateDrive(drive.id, { rip_speed: newSpeed });
 			onupdate?.();
 		} catch {
 			// revert input on failure
@@ -119,13 +118,13 @@
 		}
 	}
 
-	let isStale = $derived(!drive?.mount || drive?.stale === true);
+	let isStale = $derived(drive?.status === 'offline');
 
 	async function handleScan() {
 		if (!drive || scanning || scanCooldown) return;
 		scanning = true;
 		try {
-			await scanDrive(drive.drive_id);
+			await scanDrive(drive.id);
 		} catch {
 			// ignore — scan is fire-and-forget
 		} finally {
@@ -137,10 +136,10 @@
 
 	async function handleRemove() {
 		if (!drive) return;
-		if (!confirm(`Remove "${drive.name || drive.mount || `Drive ${drive.drive_id}`}" from the database? This drive will reappear on the next rescan if it's still connected.`)) return;
+		if (!confirm(`Remove "${drive.display_name || drive.device_path || `Drive ${drive.id}`}" from the database? This drive will reappear on the next rescan if it's still connected.`)) return;
 		removing = true;
 		try {
-			await deleteDrive(drive.drive_id);
+			await deleteDrive(drive.id);
 			onupdate?.();
 		} catch {
 			removing = false;
@@ -148,7 +147,7 @@
 	}
 
 	function startEdit() {
-		editName = drive?.name || '';
+		editName = drive?.display_name || '';
 		editing = true;
 	}
 
@@ -160,7 +159,7 @@
 		if (!drive) return;
 		saving = true;
 		try {
-			await updateDrive(drive.drive_id, { name: editName });
+			await updateDrive(drive.id, { display_name: editName });
 			editing = false;
 			onupdate?.();
 		} catch {
@@ -174,7 +173,7 @@
 		if (!drive) return;
 		togglingUhd = true;
 		try {
-			await updateDrive(drive.drive_id, { uhd_capable: !drive.uhd_capable });
+			await updateDrive(drive.id, { uhd_capable: !drive.uhd_capable });
 			onupdate?.();
 		} catch {
 			// ignore
@@ -192,7 +191,7 @@
 		if (!drive) return;
 		ejecting = true;
 		try {
-			await ejectDrive(drive.drive_id, method);
+			await ejectDrive(drive.id, method);
 		} catch {
 			// ignore — tray action is best-effort
 		} finally {
@@ -205,7 +204,7 @@
 		togglingMode = true;
 		const newMode = drive.drive_mode === 'manual' ? 'auto' : 'manual';
 		try {
-			await updateDrive(drive.drive_id, { drive_mode: newMode });
+			await updateDrive(drive.id, { drive_mode: newMode });
 			onupdate?.();
 		} catch {
 			// ignore
@@ -236,7 +235,7 @@
 	<div class="mb-1 flex items-center justify-between">
 		<div class="flex min-w-0 items-center gap-1.5">
 			<h3 class="truncate font-semibold text-gray-900 dark:text-white">
-				{drive.name || drive.mount || `Drive ${drive.drive_id}`}
+				{drive.display_name || drive.device_path || `Drive ${drive.id}`}
 			</h3>
 			{#if isStale}
 				<span class="flex-shrink-0 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">Stale</span>
@@ -279,65 +278,50 @@
 
 	<!-- Drive info -->
 	<div class="mb-1.5 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-		{#if drive.maker || drive.model}
-			<span>{[drive.maker, drive.model].filter(Boolean).join(' ')}</span>
+		{#if drive.device_path}
+			<span class="font-mono text-[10px]">{drive.device_path}</span>
 		{/if}
-		{#if drive.mount}
-			{#if drive.maker || drive.model} · {/if}<span class="font-mono text-[10px]">{drive.mount}</span>
+		{#if drive.hostname}
+			{#if drive.device_path} · {/if}<span>{drive.hostname}</span>
 		{/if}
-		{#if drive.connection || drive.firmware || drive.rip_speed}
-			<br/>
-			{#if drive.connection}<span>{drive.connection}</span>{/if}
-			{#if drive.connection && drive.firmware} · {/if}
-			{#if drive.firmware}<span class="font-mono text-[10px]">FW {drive.firmware}</span>{/if}
-			{#if drive.rip_speed != null}
-				<span class="ml-1 inline-flex items-center gap-0.5 rounded-sm bg-blue-500/15 px-1.5 py-0.5 text-[9px] font-medium text-blue-400">
-					<svg class="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-					{drive.rip_speed}x speed
-				</span>
-			{/if}
+		<br/>
+		{#if drive.rip_speed != null}
+			<span class="ml-1 inline-flex items-center gap-0.5 rounded-sm bg-blue-500/15 px-1.5 py-0.5 text-[9px] font-medium text-blue-400">
+				<svg class="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+				{drive.rip_speed}x speed
+			</span>
+		{/if}
+		{#if [drive.prescan_cache_mb, drive.prescan_timeout, drive.prescan_retries, drive.disc_enum_timeout].some(v => v != null)}
 			{@const prescanOverrideCount = [drive.prescan_cache_mb, drive.prescan_timeout, drive.prescan_retries, drive.disc_enum_timeout].filter(v => v != null).length}
-			{#if prescanOverrideCount > 0}
-				<span class="ml-1 inline-flex items-center gap-0.5 rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-medium text-amber-600 dark:text-amber-400">
-					{prescanOverrideCount} custom
-				</span>
-			{/if}
+			<span class="ml-1 inline-flex items-center gap-0.5 rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-medium text-amber-600 dark:text-amber-400">
+				{prescanOverrideCount} custom
+			</span>
 		{/if}
 	</div>
 
-	<!-- Disc type badges + 4K -->
+	<!-- Media status + 4K -->
 	<div class="mb-2 flex flex-wrap items-center gap-1">
-		{#if drive.capabilities?.includes('CD')}
-			<span class="inline-flex items-center gap-1 rounded-sm bg-green-500/20 px-1.5 py-0.5 text-[10px] text-green-700 dark:text-green-400">
-				<DiscTypeIcon disctype="music" size="h-3.5 w-3.5" />CD
-			</span>
-		{/if}
-		{#if drive.capabilities?.includes('DVD')}
+		{#if drive.media_status}
 			<span class="inline-flex items-center gap-1 rounded-sm bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary-text dark:text-primary-text-dark">
-				<DiscTypeIcon disctype="dvd" size="h-3.5 w-3.5" />DVD
+				{drive.media_status.replace('_', ' ')}
 			</span>
 		{/if}
-		{#if drive.capabilities?.includes('BD')}
-			<span class="inline-flex items-center gap-1 rounded-sm bg-purple-500/20 px-1.5 py-0.5 text-[10px] text-purple-700 dark:text-purple-400">
-				<DiscTypeIcon disctype="bluray" size="h-3.5 w-3.5" />Blu-ray
-			</span>
-			<label
-				class="inline-flex items-center gap-1 rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700 dark:text-amber-400"
-				title="Display only — UHD disc detection and transcoding presets are applied automatically regardless of this setting."
-			>
-				<input
-					type="checkbox"
-					checked={drive.uhd_capable ?? false}
-					disabled={togglingUhd}
-					onchange={toggleUhd}
-					class="h-3 w-3 rounded-sm border-gray-300 text-amber-600 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700"
-				/>
-				4K
-				<svg class="h-3 w-3 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-				</svg>
-			</label>
-		{/if}
+		<label
+			class="inline-flex items-center gap-1 rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700 dark:text-amber-400"
+			title="Display only — UHD disc detection and transcoding presets are applied automatically regardless of this setting."
+		>
+			<input
+				type="checkbox"
+				checked={drive.uhd_capable ?? false}
+				disabled={togglingUhd}
+				onchange={toggleUhd}
+				class="h-3 w-3 rounded-sm border-gray-300 text-amber-600 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700"
+			/>
+			4K
+			<svg class="h-3 w-3 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+			</svg>
+		</label>
 	</div>
 
 	<!-- Consolidated action bar -->
@@ -416,9 +400,9 @@
 				>
 					<div class="mb-2 text-[9px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Drive Settings</div>
 					<div class="flex items-center justify-between gap-2">
-						<label for="rip-speed-{drive.drive_id}" class="text-[11px] text-gray-600 dark:text-gray-300">Rip Speed</label>
+						<label for="rip-speed-{drive.id}" class="text-[11px] text-gray-600 dark:text-gray-300">Rip Speed</label>
 						<input
-							id="rip-speed-{drive.drive_id}"
+							id="rip-speed-{drive.id}"
 							type="number"
 							min="1"
 							max="99"
@@ -434,11 +418,11 @@
 						{#each PRESCAN_FIELDS as field}
 							<div>
 								<div class="flex items-center justify-between gap-2">
-									<label for="prescan-{field.key}-{drive.drive_id}" class="text-[11px] text-gray-600 dark:text-gray-300">
+									<label for="prescan-{field.key}-{drive.id}" class="text-[11px] text-gray-600 dark:text-gray-300">
 										{field.label}{#if field.unit}&nbsp;<span class="text-[9px] text-gray-400">({field.unit})</span>{/if}
 									</label>
 									<input
-										id="prescan-{field.key}-{drive.drive_id}"
+										id="prescan-{field.key}-{drive.id}"
 										type="number"
 										min={field.min}
 										max={field.max}
@@ -476,23 +460,13 @@
 		{/if}
 	</div>
 
-	<!-- Current rip / previous job -->
-	{#if drive.current_job || drive.job_id_previous}
+	<!-- Current rip -->
+	{#if drive.current_job}
 		<div class="mt-2 border-t border-primary/10 pt-1.5 dark:border-primary/15">
-			{#if drive.current_job}
-				<span class="text-[10px] font-semibold text-gray-500 dark:text-gray-400">Current Rip</span>
-				<a href="/jobs/{drive.current_job.job_id}" class="block truncate text-[11px] text-primary-text hover:underline dark:text-primary-text-dark">
-					{drive.current_job.title || drive.current_job.label || 'Active Job'}
-				</a>
-			{/if}
-			{#if drive.job_id_previous}
-				<div class="mt-0.5">
-					<span class="text-[9px] text-gray-400 dark:text-gray-500">Prev: </span>
-					<a href="/jobs/{drive.job_id_previous}" class="text-[9px] text-gray-500 hover:underline dark:text-gray-400">
-						Job #{drive.job_id_previous}
-					</a>
-				</div>
-			{/if}
+			<span class="text-[10px] font-semibold text-gray-500 dark:text-gray-400">Current Rip</span>
+			<a href="/jobs/{drive.current_job.id}" class="block truncate text-[11px] text-primary-text hover:underline dark:text-primary-text-dark">
+				{drive.current_job.title || 'Active Job'}
+			</a>
 		</div>
 	{/if}
 </div>

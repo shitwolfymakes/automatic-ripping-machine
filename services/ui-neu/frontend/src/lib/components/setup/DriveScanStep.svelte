@@ -1,7 +1,6 @@
 <script lang="ts">
-	import type { DriveSchema as Drive } from '$lib/types/api.gen';
+	import type { DriveView as Drive } from '$lib/types/api.gen';
 	import { onMount } from 'svelte';
-	import DiscTypeIcon from '$lib/components/DiscTypeIcon.svelte';
 
 	let drives = $state<Drive[]>([]);
 	let loading = $state(true);
@@ -60,31 +59,13 @@
 				<div class="rounded-lg border border-primary/20 bg-surface p-4 dark:border-primary/20 dark:bg-surface-dark">
 					<div class="flex items-center justify-between">
 						<h3 class="font-semibold text-gray-900 dark:text-white">
-							{drive.name || drive.mount || `Drive ${drive.drive_id}`}
+							{drive.display_name || drive.device_path || `Drive ${drive.id}`}
 						</h3>
 					</div>
-					{#if drive.maker || drive.model}
-						<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-							{[drive.maker, drive.model].filter(Boolean).join(' ')}
-						</p>
-					{/if}
-					<div class="mt-2 flex flex-wrap gap-1.5">
-						{#if drive.capabilities?.includes('CD')}
-							<span class="inline-flex items-center gap-1 rounded-sm bg-green-500/20 px-1.5 py-0.5 text-xs text-green-700 dark:text-green-400">
-								<DiscTypeIcon disctype="music" size="h-3.5 w-3.5" />CD
-							</span>
-						{/if}
-						{#if drive.capabilities?.includes('DVD')}
-							<span class="inline-flex items-center gap-1 rounded-sm bg-primary/15 px-1.5 py-0.5 text-xs text-primary-text dark:text-primary-text-dark">
-								<DiscTypeIcon disctype="dvd" size="h-3.5 w-3.5" />DVD
-							</span>
-						{/if}
-						{#if drive.capabilities?.includes('BD')}
-							<span class="inline-flex items-center gap-1 rounded-sm bg-purple-500/20 px-1.5 py-0.5 text-xs text-purple-700 dark:text-purple-400">
-								<DiscTypeIcon disctype="bluray" size="h-3.5 w-3.5" />Blu-ray
-							</span>
-						{/if}
-					</div>
+					<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+						<span class="font-mono text-xs">{drive.device_path}</span>
+						{#if drive.hostname} · {drive.hostname}{/if}
+					</p>
 				</div>
 			{/each}
 		</div>

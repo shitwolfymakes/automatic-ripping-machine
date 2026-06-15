@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
 import DriveCard from './DriveCard.svelte';
-import type { DriveSchema as Drive } from '$lib/types/api.gen';
+import type { DriveView as Drive } from '$lib/types/api.gen';
 vi.mock('$lib/api/drives', () => ({
 	updateDrive: vi.fn(() => Promise.resolve()),
 	scanDrive: vi.fn(() => Promise.resolve()),
@@ -11,13 +11,25 @@ vi.mock('$lib/api/drives', () => ({
 
 function createDrive(overrides: Partial<Drive> = {}): Drive {
 	return {
-		drive_id: 1, name: 'Main Drive', mount: '/dev/sr0',
-		job_id_current: null, job_id_previous: null, description: null, drive_mode: null,
-		maker: 'LG', model: 'WH16NS40', serial: null, connection: null,
-		capabilities: ['CD', 'DVD', 'BD'],
-		firmware: null, stale: false,
-		uhd_capable: false, current_job: null, rip_speed: null,
-		prescan_cache_mb: null, prescan_timeout: null, prescan_retries: null, disc_enum_timeout: null,
+		id: 'drv_1',
+		hostname: 'arm-host',
+		device_path: '/dev/sr0',
+		display_name: 'Main Drive',
+		status: 'online',
+		last_seen_at: null,
+		media_status: null,
+		media_status_at: null,
+		default_session_id: null,
+		rip_speed: null,
+		drive_mode: null,
+		uhd_capable: false,
+		prescan_cache_mb: null,
+		prescan_timeout: null,
+		prescan_retries: null,
+		disc_enum_timeout: null,
+		created_at: null,
+		updated_at: null,
+		current_job: null,
 		...overrides
 	};
 }
@@ -30,13 +42,12 @@ describe('DriveCard', () => {
 	afterEach(() => cleanup());
 
 	describe('rendering', () => {
-		it('renders drive name, maker/model, capabilities, and action bar', () => {
+		it('renders drive name, device path, 4K toggle, and action bar', () => {
 			renderDrive();
 			expect(screen.getByText('Main Drive')).toBeInTheDocument();
 			expect(screen.getByText('Idle')).toBeInTheDocument();
-			expect(screen.getByText('CD')).toBeInTheDocument();
-			expect(screen.getByText('DVD')).toBeInTheDocument();
-			expect(screen.getByText('Blu-ray')).toBeInTheDocument();
+			const matches = screen.getAllByText('/dev/sr0');
+			expect(matches.length).toBeGreaterThan(0);
 			// Action bar buttons
 			expect(screen.getByText('Eject')).toBeInTheDocument();
 			expect(screen.getByText('Insert')).toBeInTheDocument();
@@ -44,35 +55,34 @@ describe('DriveCard', () => {
 			expect(screen.queryByText('Remove')).not.toBeInTheDocument();
 		});
 
-		it('shows drive info fields when available', () => {
-			renderDrive({ connection: 'USB 3.0', firmware: '1.03' });
-			expect(screen.getByText(/USB 3\.0/)).toBeInTheDocument();
-			expect(screen.getByText(/FW 1\.03/)).toBeInTheDocument();
+		it('shows hostname when available', () => {
+			renderDrive({ hostname: 'media-box' });
+			expect(screen.getByText(/media-box/)).toBeInTheDocument();
 		});
 
-		it('shows 4K tag for Blu-ray drives', () => {
-			renderDrive({ capabilities: ['CD', 'DVD', 'BD'] });
+		it('shows the 4K toggle', () => {
+			renderDrive();
 			expect(screen.getByText('4K')).toBeInTheDocument();
 		});
 
-		it('hides 4K tag for non-Blu-ray drives', () => {
-			renderDrive({ capabilities: ['CD', 'DVD'] });
-			expect(screen.queryByText('4K')).not.toBeInTheDocument();
+		it('shows media status badge when present', () => {
+			renderDrive({ media_status: 'loaded' });
+			expect(screen.getByText('loaded')).toBeInTheDocument();
 		});
 
-		it('falls back to mount path when no name', () => {
-			renderDrive({ name: null });
+		it('falls back to device path when no display name', () => {
+			renderDrive({ display_name: null });
 			const matches = screen.getAllByText('/dev/sr0');
-			expect(matches.find(el => el.tagName === 'H3')).toBeDefined();
+			expect(matches.find((el) => el.tagName === 'H3')).toBeDefined();
 		});
 
-		it('falls back to Drive ID when no name or mount', () => {
-			renderDrive({ name: null, mount: null });
-			expect(screen.getByText('Drive 1')).toBeInTheDocument();
+		it('falls back to Drive id when no display name or device path', () => {
+			renderDrive({ display_name: null, device_path: '' });
+			expect(screen.getByText('Drive drv_1')).toBeInTheDocument();
 		});
 
-		it('shows Stale badge and Remove button for stale drives', () => {
-			renderDrive({ stale: true });
+		it('shows Stale badge and Remove button for offline drives', () => {
+			renderDrive({ status: 'offline' });
 			expect(screen.getByText('Stale')).toBeInTheDocument();
 			expect(screen.getByText('Remove')).toBeInTheDocument();
 		});
@@ -80,12 +90,12 @@ describe('DriveCard', () => {
 
 	describe('prescan overrides badge', () => {
 		it('shows custom badge when prescan overrides are set', () => {
-			renderDrive({ prescan_cache_mb: 64, prescan_timeout: 600, connection: 'USB' });
+			renderDrive({ prescan_cache_mb: 64, prescan_timeout: 600 });
 			expect(screen.getByText('2 custom')).toBeInTheDocument();
 		});
 
 		it('hides custom badge when no prescan overrides', () => {
-			renderDrive({ connection: 'USB' });
+			renderDrive();
 			expect(screen.queryByText(/custom/)).not.toBeInTheDocument();
 		});
 	});
@@ -126,7 +136,7 @@ describe('DriveCard', () => {
 			const cacheInput = screen.getByLabelText(/Pre-scan Cache/) as HTMLInputElement;
 			await fireEvent.input(cacheInput, { target: { value: '64' } });
 			await fireEvent.blur(cacheInput);
-			expect(updateDrive).toHaveBeenCalledWith(1, { prescan_cache_mb: 64 });
+			expect(updateDrive).toHaveBeenCalledWith('drv_1', { prescan_cache_mb: 64 });
 		});
 	});
 
