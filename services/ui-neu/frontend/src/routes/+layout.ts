@@ -1,6 +1,8 @@
 import { redirect } from '@sveltejs/kit';
 import type { LayoutLoad } from './$types';
 import { hydrateConfig } from '$lib/stores/config';
+import { getToken } from '$lib/api/client';
+import { features } from '$lib/features';
 
 export const prerender = false;
 export const ssr = false;
@@ -19,8 +21,21 @@ export const load: LayoutLoad = async ({ url, fetch }) => {
 		configHydrated = true;
 	}
 
+	const path = url.pathname;
+	const isAuthRoute = path.startsWith('/login') || path.startsWith('/change-password');
+
+	// Auth guard: unauthenticated users go to /login (except on the auth routes).
+	if (!isAuthRoute && getToken() === null) {
+		redirect(307, '/login');
+	}
+
 	// Skip setup check if already on /setup
 	if (url.pathname.startsWith('/setup')) return {};
+
+	// Setup wizard backend is MISSING in v3 — skip the first-run redirect until a
+	// setup-status endpoint lands (feature-flagged off). The block below revives
+	// when features.setup flips to true.
+	if (!features.setup) return {};
 
 	// Skip if we already know setup is done (cached from a previous navigation)
 	if (setupConfirmedComplete) return {};

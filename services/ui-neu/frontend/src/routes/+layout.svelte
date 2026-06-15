@@ -12,6 +12,10 @@
 	import { showImportWizard } from '$lib/stores/importWizard';
 	import ImportWizard from '$lib/components/ImportWizard.svelte';
 	import { onMount } from 'svelte';
+	import { setUnauthorizedHandler } from '$lib/api/client';
+	import { logoutLocal, initAuth } from '$lib/stores/auth';
+	import { isScreenEnabled } from '$lib/features';
+	import { logout as apiLogout } from '$lib/api/auth';
 	let { children } = $props();
 
 	let sidebarOpen = $state(false);
@@ -62,6 +66,14 @@
 	}
 
 	onMount(() => {
+		initAuth();
+		// Register the 401 handler ONCE here. It MUST route through logoutLocal
+		// (not client.clearToken directly) so the in-memory auth store and the
+		// persisted token clear together, then redirect to /login.
+		setUnauthorizedHandler(() => {
+			logoutLocal();
+			goto('/login');
+		});
 		// Load themes from API (falls back to built-in if backend unreachable)
 		loadThemesFromApi();
 		// Start dashboard polling (provides sidebar stats on all pages)
@@ -77,7 +89,11 @@
 		{ href: '/transcoder', label: 'Transcoder', icon: 'M7 4V2a1 1 0 012 0v2h6V2a1 1 0 012 0v2h1a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h1zm0 8h10m-10 4h6' },
 		{ href: '/settings', label: 'Settings', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
 	];
-	const navItems = $derived($transcoderEnabled ? allNavItems : allNavItems.filter(i => i.href !== '/transcoder'));
+	const navItems = $derived(
+		allNavItems
+			.filter(i => isScreenEnabled(i.href))
+			.filter(i => i.href !== '/transcoder' || $transcoderEnabled)
+	);
 
 	function isActive(href: string, pathname: string): boolean {
 		if (href === '/') return pathname === '/';
@@ -267,6 +283,16 @@
 						</div>
 					{/if}
 				</div>
+				<button
+					onclick={async () => { try { await apiLogout(); } catch { /* ignore */ } logoutLocal(); goto('/login'); }}
+					class="rounded-lg p-2 text-gray-500 hover:bg-primary/10 dark:text-gray-300 dark:hover:bg-primary/15"
+					title="Sign out"
+					aria-label="Sign out"
+				>
+					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+					</svg>
+				</button>
 				<!-- Dark mode toggle (hidden when theme locks the mode) -->
 				{#if !$schemeLocksMode}
 					<button
