@@ -1,23 +1,18 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
-	import { fetchTranscoderJobs, retryTranscoderJob, deleteTranscoderJob, retranscodeTranscoderJob } from '$lib/api/transcoder';
-	import { fetchStructuredTranscoderLogContent } from '$lib/api/logs';
-	import { posterSrc, posterFallback } from '$lib/utils/poster';
-	import type { TranscoderJobListResponse } from '$lib/types/api.gen';
-	import { getVideoTypeConfig, discTypeLabel } from '$lib/utils/job-type';
+	import { fetchTranscoderJobs, retryTranscoderJob, deleteTranscoderJob } from '$lib/api/transcoder';
+	import type { TranscodeTaskView } from '$lib/types/api.gen';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
-	import DiscTypeIcon from '$lib/components/DiscTypeIcon.svelte';
 	import ProgressBar from '$lib/components/ProgressBar.svelte';
 	import TimeAgo from '$lib/components/TimeAgo.svelte';
-	import InlineLogFeed from '$lib/components/InlineLogFeed.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import { fadeIn, fadeOut } from '$lib/transitions';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { transcoderStats, transcoderWorkers, getJobsCache, setJobsCache } from '$lib/stores/transcoder';
 
-	const emptyJobs: TranscoderJobListResponse = { jobs: [], total: 0 };
+	const emptyJobs: TranscodeTaskView[] = [];
 
 	// Singleton stores (see $lib/stores/transcoder) so stats/workers survive
 	// navigation and don't flash the offline/empty state on every visit.
@@ -28,9 +23,24 @@
 	let activeTab = $state('all');
 	// Seed jobs from the per-tab cache so a revisit paints the last cards
 	// immediately instead of dropping to a skeleton.
-	let jobs = $state<TranscoderJobListResponse>(getJobsCache('all') ?? emptyJobs);
+	let jobs = $state<TranscodeTaskView[]>(getJobsCache('all') ?? emptyJobs);
 	let loadingJobs = $state(getJobsCache('all') == null);
 	let jobsError = $state<Error | null>(null);
+
+	// v3 statuses: queued | in_progress | done | failed. The UI tabs map onto
+	// these; "online" is implied by a successful poll (store.initialized).
+	const TAB_STATUS: Record<string, string | undefined> = {
+		all: undefined,
+		queued: 'queued',
+		in_progress: 'in_progress',
+		done: 'done',
+		failed: 'failed'
+	};
+
+	let s = $derived($stats);
+	function statusCount(status: string): number {
+		return s.tasks_by_status?.[status] ?? 0;
+	}
 
 	function formatDuration(startISO: string | null, endISO?: string | null): string | null {
 		if (!startISO) return null;
@@ -41,10 +51,10 @@
 		const diffSec = Math.max(0, Math.floor((end - start) / 1000));
 		const h = Math.floor(diffSec / 3600);
 		const m = Math.floor((diffSec % 3600) / 60);
-		const s = diffSec % 60;
-		if (h > 0) return `${h}h ${m}m ${s}s`;
-		if (m > 0) return `${m}m ${s}s`;
-		return `${s}s`;
+		const sec = diffSec % 60;
+		if (h > 0) return `${h}h ${m}m ${sec}s`;
+		if (m > 0) return `${m}m ${sec}s`;
+		return `${sec}s`;
 	}
 
 	function sourceBasename(path: string | null | undefined): string {
@@ -57,8 +67,7 @@
 		if (showLoading) loadingJobs = true;
 		jobsError = null;
 		try {
-			const statusParam = activeTab === 'all' ? undefined : activeTab;
-			jobs = await fetchTranscoderJobs({ status: statusParam });
+			jobs = await fetchTranscoderJobs({ status: TAB_STATUS[activeTab] });
 			setJobsCache(activeTab, jobs);
 		} catch (e) {
 			jobsError = e instanceof Error ? e : new Error('Failed to load jobs');
@@ -75,26 +84,15 @@
 		loadJobs(getJobsCache(tab) == null);
 	}
 
-	async function handleRetry(id: number) {
+	async function handleRetry(id: string) {
 		await retryTranscoderJob(id);
 		loadJobs();
 	}
 
 	let actionFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
 
-	async function handleRetranscode(id: number) {
-		actionFeedback = null;
-		try {
-			await retranscodeTranscoderJob(id);
-			actionFeedback = { type: 'success', message: 'Job re-queued for transcoding' };
-		} catch (e) {
-			actionFeedback = { type: 'error', message: e instanceof Error ? e.message : 'Re-transcode failed' };
-		}
-		loadJobs();
-	}
-
-	async function handleDelete(id: number) {
-		if (confirm('Delete this transcode job?')) {
+	async function handleDelete(id: string) {
+		if (confirm('Delete this transcode task?')) {
 			await deleteTranscoderJob(id);
 			loadJobs();
 		}
@@ -111,10 +109,9 @@
 		if (jobsTimer) { clearInterval(jobsTimer); jobsTimer = null; }
 	}
 
-	// Auto-refresh jobs when any are processing or pending
+	// Auto-refresh jobs when any are queued or in progress.
 	$effect(() => {
-		const s = $stats.stats;
-		if (s && ((s.processing ?? 0) > 0 || (s.pending ?? 0) > 0)) {
+		if (statusCount('in_progress') > 0 || statusCount('queued') > 0) {
 			startJobsPolling();
 		} else {
 			stopJobsPolling();
@@ -129,7 +126,7 @@
 		return () => { stats.stop(); workers.stop(); stopJobsPolling(); };
 	});
 
-	const tabs = ['all', 'pending', 'processing', 'completed', 'failed'];
+	const tabs = ['all', 'queued', 'in_progress', 'done', 'failed'];
 
 	function vendorPillClasses(vendor: string): string {
 		switch (vendor.toLowerCase()) {
@@ -173,7 +170,7 @@
 				{/each}
 			</div>
 		</div>
-	{:else if !$stats.online}
+	{:else if $statsError}
 		<!-- Offline banner -->
 		<div in:fade={fadeIn} out:fade={fadeOut} class="flex items-center gap-3 rounded-lg border border-primary/25 bg-page p-4 dark:border-primary/25 dark:bg-page-dark">
 			<div class="h-3 w-3 shrink-0 rounded-full bg-gray-400"></div>
@@ -182,44 +179,40 @@
 				<p class="text-sm text-gray-500 dark:text-gray-400">The transcoder service is not responding. Transcoding features are unavailable.</p>
 			</div>
 		</div>
-	{:else if $stats.online && $stats.stats}
+	{:else}
 		<!-- Worker pool + Stats cards -->
-		{@const s = $stats.stats}
 		{@const w = $workers}
 		<div in:fade={fadeIn} out:fade={fadeOut} class="space-y-4">
 		<!-- Worker pool status -->
 		<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
 			<div class="mb-3 flex items-center justify-between">
 				<div class="flex items-center gap-2">
-					<div class="h-2.5 w-2.5 rounded-full {s.worker_running ? 'bg-green-500' : 'bg-yellow-500'}"></div>
+					<div class="h-2.5 w-2.5 rounded-full {w.length > 0 ? 'bg-green-500' : 'bg-yellow-500'}"></div>
 					<span class="text-sm font-semibold text-gray-700 dark:text-gray-300">
-						Workers {w.active_count}/{w.max_concurrent} active
+						Workers {w.length}/{s.max_parallel} active
 					</span>
 				</div>
-				<span class="text-xs text-gray-400 dark:text-gray-500">Queue: {s.pending} pending</span>
+				<span class="text-xs text-gray-400 dark:text-gray-500">
+					GPUs: {s.gpus_available}/{s.gpus_total} available &middot; Queue: {statusCount('queued')} queued
+				</span>
 			</div>
-			{#if (w.workers ?? []).length > 0}
-				<div class="grid gap-2 {(w.max_concurrent ?? 0) > 1 ? 'sm:grid-cols-2 lg:grid-cols-3' : ''}">
-					{#each (w.workers ?? []) as worker}
-						<div class="flex items-center gap-3 rounded-md border px-3 py-2
-							{worker.status === 'processing'
-								? 'border-indigo-200 bg-indigo-50/50 dark:border-indigo-800 dark:bg-indigo-900/20'
-								: 'border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-800/30'}">
-							<div class="h-2 w-2 rounded-full {worker.status === 'processing' ? 'bg-indigo-500 animate-pulse' : 'bg-gray-400'}"></div>
+			{#if w.length > 0}
+				<div class="grid gap-2 {s.max_parallel > 1 ? 'sm:grid-cols-2 lg:grid-cols-3' : ''}">
+					{#each w as worker (worker.task_id)}
+						<div class="flex items-center gap-3 rounded-md border border-indigo-200 bg-indigo-50/50 px-3 py-2 dark:border-indigo-800 dark:bg-indigo-900/20">
+							<div class="h-2 w-2 rounded-full bg-indigo-500 animate-pulse"></div>
 							<div class="min-w-0 flex-1">
-								<p class="text-sm font-medium text-gray-700 dark:text-gray-300">
-									Worker {worker.worker_id}
-									{#if worker.status === 'processing' && worker.current_job}
-										<span class="font-normal text-gray-500 dark:text-gray-400"> &mdash; {worker.current_job}</span>
+								<p class="truncate text-sm font-medium text-gray-700 dark:text-gray-300" title={worker.output_path ?? worker.source_track_id}>
+									Task #{worker.task_id}
+									{#if worker.claimed_by}
+										<span class="font-normal text-gray-500 dark:text-gray-400"> &mdash; {worker.claimed_by}</span>
 									{/if}
 								</p>
-								{#if worker.status === 'processing' && worker.started_at}
-									{@const dur = formatDuration(worker.started_at)}
-									{#if dur}
-										<p class="text-xs text-indigo-600 dark:text-indigo-400">Running for {dur}</p>
-									{/if}
+								{#if worker.claim_heartbeat_at}
+									{@const dur = formatDuration(worker.claim_heartbeat_at)}
+									<p class="text-xs text-indigo-600 dark:text-indigo-400">{worker.progress_pct}%{#if dur} &middot; {dur} since heartbeat{/if}</p>
 								{:else}
-									<p class="text-xs text-gray-400 dark:text-gray-500">Idle</p>
+									<p class="text-xs text-gray-400 dark:text-gray-500">{worker.progress_pct}%</p>
 								{/if}
 							</div>
 						</div>
@@ -229,24 +222,24 @@
 		</div>
 		<div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
 			<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
-				<p class="text-sm text-gray-500 dark:text-gray-400">Pending</p>
-				<p class="mt-1 text-3xl font-bold text-primary-text dark:text-primary-text-dark">{s.pending}</p>
+				<p class="text-sm text-gray-500 dark:text-gray-400">Queued</p>
+				<p class="mt-1 text-3xl font-bold text-primary-text dark:text-primary-text-dark">{statusCount('queued')}</p>
 			</div>
 			<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
-				<p class="text-sm text-gray-500 dark:text-gray-400">Processing</p>
-				<p class="mt-1 text-3xl font-bold text-indigo-600 dark:text-indigo-400">{s.processing}</p>
+				<p class="text-sm text-gray-500 dark:text-gray-400">In Progress</p>
+				<p class="mt-1 text-3xl font-bold text-indigo-600 dark:text-indigo-400">{statusCount('in_progress')}</p>
 			</div>
 			<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
-				<p class="text-sm text-gray-500 dark:text-gray-400">Completed</p>
-				<p class="mt-1 text-3xl font-bold text-green-600 dark:text-green-400">{s.completed}</p>
+				<p class="text-sm text-gray-500 dark:text-gray-400">Done</p>
+				<p class="mt-1 text-3xl font-bold text-green-600 dark:text-green-400">{statusCount('done')}</p>
 			</div>
 			<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
 				<p class="text-sm text-gray-500 dark:text-gray-400">Failed</p>
-				<p class="mt-1 text-3xl font-bold text-red-600 dark:text-red-400">{s.failed}</p>
+				<p class="mt-1 text-3xl font-bold text-red-600 dark:text-red-400">{statusCount('failed')}</p>
 			</div>
 			<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
-				<p class="text-sm text-gray-500 dark:text-gray-400">Cancelled</p>
-				<p class="mt-1 text-3xl font-bold text-gray-500 dark:text-gray-400">{s.cancelled}</p>
+				<p class="text-sm text-gray-500 dark:text-gray-400">Total</p>
+				<p class="mt-1 text-3xl font-bold text-gray-500 dark:text-gray-400">{s.total_tasks}</p>
 			</div>
 		</div>
 		</div>
@@ -338,7 +331,7 @@
 			data={jobs}
 			loading={loadingJobs}
 			error={jobsError}
-			isEmpty={(d) => (d.jobs ?? []).length === 0}
+			isEmpty={(d) => d.length === 0}
 			transitionKey="transcoder-jobs"
 		>
 			{#snippet loadingSlot()}
@@ -349,148 +342,87 @@
 				</div>
 			{/snippet}
 			{#snippet empty()}
-				<p class="py-8 text-center text-gray-400">No transcode jobs found.</p>
+				<p class="py-8 text-center text-gray-400">No transcode tasks found.</p>
 			{/snippet}
-			{#snippet ready(jobsData)}
-				{@const jobList = jobsData.jobs ?? []}
+			{#snippet ready(jobList)}
 			<div class="space-y-3">
 				{#each jobList as job (job.id)}
-					{@const typeConfig = getVideoTypeConfig(job.video_type ?? null, job.disctype ?? null)}
-					<div in:fade={fadeIn} out:fade={fadeOut} class="rounded-lg border border-primary/20 border-l-4 {typeConfig.accentBorder} bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
-						<div class="flex gap-4">
-							<!-- Poster -->
-							{#if job.poster_url}
-								<img
-									src={posterSrc(job.poster_url)}
-									alt={job.title ?? 'Poster'}
-									class="h-24 w-16 shrink-0 rounded-sm object-cover"
-									onerror={posterFallback}
-								/>
-							{:else}
-								<div class="flex h-24 w-16 shrink-0 items-center justify-center rounded-sm {typeConfig.placeholderClasses}">
-									<svg class="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-										<circle cx="12" cy="12" r="10" />
-										<circle cx="12" cy="12" r="3" />
-										<circle cx="12" cy="12" r="6.5" stroke-width="0.75" opacity="0.4" />
-									</svg>
+					{@const sourceFile = sourceBasename(job.output_path)}
+					<div in:fade={fadeIn} out:fade={fadeOut} class="rounded-lg border border-primary/20 border-l-4 border-l-primary bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
+						<div class="min-w-0 flex-1">
+							<!-- Row 1: Title + Status + Actions -->
+							<div class="flex items-start justify-between gap-2">
+								<div class="flex min-w-0 items-center gap-3">
+									<h3 class="truncate font-semibold text-gray-900 dark:text-white" title={job.output_path ?? job.source_track_id}>
+										{sourceFile || `Task #${job.id}`}
+									</h3>
+									<StatusBadge status={job.status} />
+								</div>
+								<div class="flex shrink-0 gap-2">
+									{#if job.status === 'failed'}
+										<button
+											onclick={() => handleRetry(job.id)}
+											class="rounded-sm bg-primary px-2.5 py-1 text-xs font-medium text-on-primary hover:bg-primary-hover"
+										>Retry</button>
+									{/if}
+									<button
+										onclick={() => handleDelete(job.id)}
+										class="rounded-sm bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700"
+									>Delete</button>
+								</div>
+							</div>
+
+							<!-- Row 2: ARM job link, attempts -->
+							<div class="mt-0.5 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+								<a
+									href="/jobs/{job.session_application_id}"
+									class="inline-flex items-center rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary-text hover:bg-primary/20 dark:bg-primary/15 dark:text-primary-text-dark dark:hover:bg-primary/25"
+								>Job #{job.session_application_id}</a>
+								{#if job.attempts > 0}
+									<span class="text-xs">Attempt {job.attempts}</span>
+								{/if}
+								{#if job.claimed_by}
+									<span class="truncate font-mono text-xs text-gray-400 dark:text-gray-500">{job.claimed_by}</span>
+								{/if}
+							</div>
+
+							<!-- Error message for failed tasks -->
+							{#if job.status === 'failed' && job.last_error}
+								<p class="mt-2 rounded-sm bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
+									{job.last_error}
+								</p>
+							{/if}
+
+							<!-- Progress bar for queued/in_progress -->
+							{#if job.status === 'queued' || job.status === 'in_progress'}
+								<div class="mt-3">
+									<ProgressBar value={job.progress_pct} color="bg-indigo-500" />
 								</div>
 							{/if}
 
-							<div class="min-w-0 flex-1">
-								<!-- Row 1: Title + Status + Actions -->
-								<div class="flex items-start justify-between gap-2">
-									<div class="flex min-w-0 items-center gap-3">
-										<h3 class="truncate font-semibold text-gray-900 dark:text-white" title={job.title}>
-											{job.title || 'Untitled'}
-										</h3>
-										<StatusBadge status={job.status} />
-									</div>
-									<div class="flex shrink-0 gap-2">
-										{#if job.status === 'completed' || job.status === 'failed'}
-										{@const sourceDeleted = job.status === 'completed' && (job.config_overrides?.delete_source !== false)}
-											<button
-												onclick={() => handleRetranscode(job.id)}
-												disabled={sourceDeleted}
-												title={sourceDeleted ? 'Source files were deleted after transcoding' : 'Re-queue this job for transcoding'}
-												class="rounded-sm px-2.5 py-1 text-xs font-medium {sourceDeleted ? 'bg-gray-400 text-gray-200 cursor-not-allowed dark:bg-gray-600' : 'bg-indigo-600 text-white hover:bg-indigo-700'}"
-											>Re-transcode</button>
-										{/if}
-										{#if job.status === 'failed'}
-											<button
-												onclick={() => handleRetry(job.id)}
-												class="rounded-sm bg-primary px-2.5 py-1 text-xs font-medium text-on-primary hover:bg-primary-hover"
-											>Retry</button>
-										{/if}
-										<button
-											onclick={() => handleDelete(job.id)}
-											class="rounded-sm bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700"
-										>Delete</button>
-									</div>
-								</div>
-
-								<!-- Row 2: Year, ARM link, source basename -->
-								<div class="mt-0.5 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-									{#if job.year}
-										<span>{job.year}</span>
-									{/if}
-									<a
-										href="/jobs/{job.id}"
-										class="inline-flex items-center rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary-text hover:bg-primary/20 dark:bg-primary/15 dark:text-primary-text-dark dark:hover:bg-primary/25"
-									>Job #{job.id}</a>
-									{#if job.source_path}
-										<span class="truncate font-mono text-xs text-gray-400 dark:text-gray-500" title={job.source_path}>{sourceBasename(job.source_path)}</span>
-									{/if}
-								</div>
-
-								<!-- Row 3: Type badge, disc type, tracks -->
-								<div class="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-									<span class="rounded-sm px-1.5 py-0.5 font-medium {typeConfig.badgeClasses}">{typeConfig.label}</span>
-									{#if job.disctype}
-										<span class="inline-flex items-center gap-1 rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">
-											<DiscTypeIcon disctype={job.disctype} size="h-3.5 w-3.5" />
-											{discTypeLabel(job.disctype)}
-										</span>
-									{/if}
-									{#if job.total_tracks != null && job.total_tracks > 0}
-										<span>{job.total_tracks} track{job.total_tracks === 1 ? '' : 's'}</span>
-									{/if}
-								</div>
-
-								<!-- Error message for failed jobs -->
-								{#if job.status === 'failed' && job.error}
-									<p class="mt-2 rounded-sm bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
-										{job.error}
-									</p>
+							<!-- Timestamps -->
+							<div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+								{#if job.created_at}
+									<span>Queued <TimeAgo date={job.created_at} /></span>
 								{/if}
-
-								<!-- Progress bar for pending/processing -->
-								{#if (job.status === 'pending' || job.status === 'processing') && typeof job.progress === 'number'}
-									<div class="mt-3">
-										<ProgressBar value={job.progress} color="bg-indigo-500" />
-									</div>
+								{#if job.updated_at}
+									<span>Updated <TimeAgo date={job.updated_at} /></span>
 								{/if}
-
-								<!-- Timestamps + duration -->
-								<div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-									{#if job.created_at}
-										<span>Queued <TimeAgo date={job.created_at} /></span>
+								{#if job.status === 'done' && job.created_at && job.updated_at}
+									{@const dur = formatDuration(job.created_at, job.updated_at)}
+									{#if dur}
+										<span class="text-green-600 dark:text-green-400">Took {dur}</span>
 									{/if}
-									{#if job.started_at}
-										<span>Started <TimeAgo date={job.started_at} /></span>
-									{/if}
-									{#if job.status === 'completed' && job.started_at}
-										{@const dur = formatDuration(job.started_at, job.completed_at)}
-										{#if dur}
-											<span class="text-green-600 dark:text-green-400">Took {dur}</span>
-										{/if}
-									{:else if job.status === 'processing' && job.started_at}
-										{@const dur = formatDuration(job.started_at)}
-										{#if dur}
-											<span class="text-indigo-600 dark:text-indigo-400">Running for {dur}</span>
-										{/if}
-									{/if}
-								</div>
-
-								<!-- Per-job log preview -->
-								{#if job.logfile}
-									<InlineLogFeed
-										logfile={job.logfile}
-										maxEntries={8}
-										fetchFn={fetchStructuredTranscoderLogContent}
-										logLinkBase="/logs/transcoder"
-										autoRefresh={job.status === 'processing'}
-										containerClass="mt-3"
-									/>
-								{/if}
-
-								<!-- Output path for completed jobs -->
-								{#if job.status === 'completed' && job.output_path}
-									<p class="mt-2 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-										<span class="text-gray-400 dark:text-gray-500">&rarr;</span>
-										<span class="truncate font-mono" title={job.output_path}>{sourceBasename(job.output_path)}</span>
-									</p>
 								{/if}
 							</div>
+
+							<!-- Output path for done tasks -->
+							{#if job.status === 'done' && job.output_path}
+								<p class="mt-2 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+									<span class="text-gray-400 dark:text-gray-500">&rarr;</span>
+									<span class="truncate font-mono" title={job.output_path}>{sourceFile}</span>
+								</p>
+							{/if}
 						</div>
 					</div>
 				{/each}

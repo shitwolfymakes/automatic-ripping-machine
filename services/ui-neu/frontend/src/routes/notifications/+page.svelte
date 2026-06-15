@@ -2,16 +2,16 @@
 	import { onMount } from 'svelte';
 	import { fetchNotifications, dismissNotification } from '$lib/api/notifications';
 	import { purgeNotifications } from '$lib/api/maintenance';
-	import type { NotificationSchema as Notification } from '$lib/types/api.gen';
+	import type { NotificationInboxView } from '$lib/types/api.gen';
 	import { formatDateTime, timeAgo } from '$lib/utils/format';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 
-	let notifications = $state<Notification[]>([]);
+	let notifications = $state<NotificationInboxView[]>([]);
 	let notifsLoading = $state(true);
 	let notifsError = $state<Error | null>(null);
-	let dismissing = $state<Set<number>>(new Set());
+	let dismissing = $state<Set<string>>(new Set());
 	let showCleared = $state(false);
 	let purging = $state(false);
 	let purgeConfirmOpen = $state(false);
@@ -33,7 +33,7 @@
 		}
 	}
 
-	async function dismiss(id: number) {
+	async function dismiss(id: string) {
 		dismissing = new Set([...dismissing, id]);
 		try {
 			await dismissNotification(id);
@@ -170,9 +170,9 @@
 									{#if notif.message}
 										<p class="mt-1 text-sm text-gray-600 dark:text-gray-400">{notif.message}</p>
 									{/if}
-									{#if notif.trigger_time}
-										<p class="mt-1.5 text-xs text-gray-400 dark:text-gray-500" title={formatDateTime(notif.trigger_time)}>
-											{timeAgo(notif.trigger_time)}
+									{#if notif.created_at}
+										<p class="mt-1.5 text-xs text-gray-400 dark:text-gray-500" title={formatDateTime(notif.created_at)}>
+											{timeAgo(notif.created_at)}
 										</p>
 									{/if}
 								</div>

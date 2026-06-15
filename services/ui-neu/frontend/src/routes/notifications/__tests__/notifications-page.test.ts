@@ -4,8 +4,8 @@ import NotificationsPage from '../+page.svelte';
 
 vi.mock('$lib/api/notifications', () => ({
 	fetchNotifications: vi.fn(() => Promise.resolve([
-		{ id: 1, title: 'Job Complete', message: 'Movie ripped successfully', seen: false, cleared: false, trigger_time: '2025-06-15T12:00:00Z' },
-		{ id: 2, title: 'Error', message: 'Rip failed', seen: true, cleared: true, trigger_time: '2025-06-14T10:00:00Z' }
+		{ id: 'n-1', event_id: null, channel_id: null, event_type: 'job.rip_complete', title: 'Job Complete', message: 'Movie ripped successfully', job_id: null, seen: false, cleared: false, seen_at: null, cleared_at: null, created_at: '2025-06-15T12:00:00Z' },
+		{ id: 'n-2', event_id: null, channel_id: null, event_type: 'job.failed', title: 'Error', message: 'Rip failed', job_id: null, seen: true, cleared: true, seen_at: null, cleared_at: null, created_at: '2025-06-14T10:00:00Z' }
 	])),
 	dismissNotification: vi.fn(() => Promise.resolve({})),
 	dismissAllNotifications: vi.fn(() => Promise.resolve())
@@ -64,7 +64,7 @@ describe('Notifications Page', () => {
 		it('does not show Purge Cleared button when no cleared notifications', async () => {
 			const { fetchNotifications } = await import('$lib/api/notifications');
 			vi.mocked(fetchNotifications).mockResolvedValueOnce([
-				{ id: 1, title: 'Job Complete', message: 'Movie ripped successfully', seen: false, cleared: false, trigger_time: '2025-06-15T12:00:00Z' }
+				{ id: 'n-1', event_id: null, channel_id: null, event_type: 'job.rip_complete', title: 'Job Complete', message: 'Movie ripped successfully', job_id: null, seen: false, cleared: false, seen_at: null, cleared_at: null, created_at: '2025-06-15T12:00:00Z' }
 			]);
 			renderComponent(NotificationsPage);
 			await waitFor(() => {

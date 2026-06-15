@@ -3,24 +3,31 @@ import { renderComponent, screen, cleanup } from '$lib/test-utils';
 import TranscoderPage from '../+page.svelte';
 
 vi.mock('$lib/api/transcoder', () => ({
+	// v3 bare TranscodeStatsView.
 	fetchTranscoderStats: vi.fn(() => Promise.resolve({
-		online: true,
-		stats: { pending: 2, processing: 1, completed: 10, failed: 0, cancelled: 0, worker_running: true, current_job: null, active_count: 1, max_concurrent: 2 }
+		tasks_by_status: { queued: 2, in_progress: 1, done: 10, failed: 0 },
+		total_tasks: 13,
+		gpus_total: 1,
+		gpus_available: 0,
+		max_parallel: 2
 	})),
-	fetchTranscoderJobs: vi.fn(() => Promise.resolve({
-		jobs: [
-			{ id: 1, title: 'Movie 1', source_path: '/raw/movie1.mkv', status: 'processing', progress: 50, error: null, logfile: 'tc_1.log', video_type: 'movie', year: '2024', disctype: 'bluray', output_path: null, total_tracks: null, poster_url: null, config_overrides: null, created_at: '2025-06-15T10:00:00Z', started_at: '2025-06-15T10:05:00Z', completed_at: null }
-		],
-		total: 1
-	})),
-	fetchTranscoderWorkers: vi.fn(() => Promise.resolve({
-		max_concurrent: 2,
-		active_count: 1,
-		workers: [
-			{ worker_id: 0, status: 'processing', current_job: 'Movie 1', current_job_id: 1, started_at: '2025-06-15T10:05:00Z' },
-			{ worker_id: 1, status: 'idle', current_job: null, current_job_id: null, started_at: null }
-		]
-	})),
+	// v3 bare TranscodeTaskView[].
+	fetchTranscoderJobs: vi.fn(() => Promise.resolve([
+		{
+			id: 't-1', session_application_id: 'job-1', source_track_id: 'track-1',
+			status: 'in_progress', output_path: '/media/transcode/movie1.mkv', progress_pct: 50,
+			attempts: 0, claimed_by: 'gpu-0', claim_heartbeat_at: '2025-06-15T10:05:00Z',
+			last_error: null, created_at: '2025-06-15T10:00:00Z', updated_at: '2025-06-15T10:05:00Z'
+		}
+	])),
+	// v3 bare TranscodeWorkerView[].
+	fetchTranscoderWorkers: vi.fn(() => Promise.resolve([
+		{
+			task_id: 't-1', claimed_by: 'gpu-0', progress_pct: 50,
+			claim_heartbeat_at: '2025-06-15T10:05:00Z', gpu_id: 'gpu-0',
+			source_track_id: 'track-1', output_path: '/media/transcode/movie1.mkv'
+		}
+	])),
 	retryTranscoderJob: vi.fn(),
 	deleteTranscoderJob: vi.fn(),
 	retranscodeTranscoderJob: vi.fn()

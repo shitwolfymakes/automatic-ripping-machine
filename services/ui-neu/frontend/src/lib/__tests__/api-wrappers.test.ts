@@ -6,7 +6,6 @@ vi.mock('$lib/api/client', () => ({
 
 import { apiFetch } from '$lib/api/client';
 import { fetchDashboard, setRippingEnabled } from '../api/dashboard';
-import { fetchNotifications } from '../api/notifications';
 
 const mockApiFetch = vi.mocked(apiFetch);
 
@@ -40,10 +39,7 @@ describe('dashboard API', () => {
 // drives API is covered by drives-api.test.ts (repointed to v3: get/patch
 // helpers, DriveView, string ids). It was removed from this wrapper test
 // because drives.ts no longer routes through the mocked `apiFetch`.
-
-describe('notifications API', () => {
-	it('fetchNotifications calls /api/notifications', async () => {
-		await fetchNotifications();
-		expect(mockApiFetch).toHaveBeenCalledWith('/api/notifications');
-	});
-});
+//
+// notifications API is covered by notifications-api.test.ts (repointed to v3:
+// get/patch/post helpers, NotificationInboxView, string ids). It was removed
+// here because notifications.ts no longer routes through the mocked `apiFetch`.

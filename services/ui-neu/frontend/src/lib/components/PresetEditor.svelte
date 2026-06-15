@@ -108,7 +108,14 @@
     );
     const handbrakeAvailable = $derived(handbrakeKnown.size > 0);
     onMount(async () => {
-        handbrakePresetGroups = await listHandbrakePresets();
+        // listHandbrakePresets is MISSING in v3 (no handbrake-presets endpoint)
+        // and rejects via the notAvailable stub. The empty fallback is the agreed
+        // sentinel — the field drops to free-text entry, never un-editable.
+        try {
+            handbrakePresetGroups = await listHandbrakePresets();
+        } catch {
+            handbrakePresetGroups = {};
+        }
     });
 
     function handleDropdownChange(newSlug: string) {

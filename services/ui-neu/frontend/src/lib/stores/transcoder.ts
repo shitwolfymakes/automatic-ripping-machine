@@ -1,9 +1,19 @@
 import { createPollingStore } from './polling';
 import { fetchTranscoderStats, fetchTranscoderWorkers } from '$lib/api/transcoder';
-import type { TranscoderStatsResponse as TranscoderStats, TranscoderJobListResponse, WorkersResponse } from '$lib/types/api.gen';
+import type { TranscodeStatsView, TranscodeWorkerView, TranscodeTaskView } from '$lib/types/api.gen';
 
-export const emptyStats: TranscoderStats = { online: false, stats: null };
-export const emptyWorkers: WorkersResponse = { max_concurrent: 0, active_count: 0, workers: [] };
+// v3 stats are the bare TranscodeStatsView (no {online, stats} envelope); the
+// poll store's `initialized`/`error` flags carry the online signal instead.
+export const emptyStats: TranscodeStatsView = {
+	tasks_by_status: {},
+	total_tasks: 0,
+	gpus_total: 0,
+	gpus_available: 0,
+	max_parallel: 0
+};
+// Was WorkersResponse { max_concurrent, active_count, workers }; v3 is a bare
+// worker array.
+export const emptyWorkers: TranscodeWorkerView[] = [];
 
 /**
  * Singleton transcoder stores — they survive page navigations and retain their
@@ -15,15 +25,15 @@ export const emptyWorkers: WorkersResponse = { max_concurrent: 0, active_count: 
 export const transcoderStats = createPollingStore(fetchTranscoderStats, emptyStats, 5000);
 export const transcoderWorkers = createPollingStore(fetchTranscoderWorkers, emptyWorkers, 5000);
 
-// Last successful jobs response per tab, so navigating back (or to a
+// Last successful task list per tab, so navigating back (or to a
 // previously-viewed tab) shows the cards immediately while we refresh in the
 // background, rather than dropping to a skeleton each time.
-let jobsCache: { tab: string; data: TranscoderJobListResponse } | null = null;
+let jobsCache: { tab: string; data: TranscodeTaskView[] } | null = null;
 
-export function getJobsCache(tab: string): TranscoderJobListResponse | null {
+export function getJobsCache(tab: string): TranscodeTaskView[] | null {
 	return jobsCache && jobsCache.tab === tab ? jobsCache.data : null;
 }
 
-export function setJobsCache(tab: string, data: TranscoderJobListResponse): void {
+export function setJobsCache(tab: string, data: TranscodeTaskView[]): void {
 	jobsCache = { tab, data };
 }
