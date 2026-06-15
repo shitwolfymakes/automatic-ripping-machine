@@ -20,17 +20,18 @@ describe('config store', () => {
 		expect(get(transcoderEnabled)).toBe(true);
 	});
 
-	it('hydrateConfig calls /api/config and updates store', async () => {
-		// v3 ConfigView exposes auto_transcode_on_idle; fetchConfig projects it
-		// down to transcoder_enabled.
+	it('hydrateConfig calls /api/config and keeps transcoder always enabled in v3', async () => {
+		// The transcoder subsystem is ALWAYS present in v3, so fetchConfig maps to
+		// transcoder_enabled=true regardless of the auto_transcode_on_idle policy.
 		globalThis.fetch = vi.fn().mockResolvedValueOnce({
 			ok: true,
 			json: async () => ({ auto_transcode_on_idle: false })
 		}) as unknown as typeof fetch;
 
-		const { transcoderEnabled, hydrateConfig } = await import('../config');
+		const { transcoderEnabled, hydrateConfig, setTranscoderEnabled } = await import('../config');
+		setTranscoderEnabled(false);
 		await hydrateConfig();
-		expect(get(transcoderEnabled)).toBe(false);
+		expect(get(transcoderEnabled)).toBe(true);
 	});
 
 	it('hydrateConfig falls back to true on fetch failure', async () => {

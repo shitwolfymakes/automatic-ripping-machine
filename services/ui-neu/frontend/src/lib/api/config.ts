@@ -1,15 +1,17 @@
 import type { ConfigView } from '$lib/types/api.gen';
 import { get } from './client';
 
-// v3 exposes GET /api/config -> ConfigView. The BFF's flat AppConfig with a
-// dedicated `transcoder_enabled` flag is gone; v3's nearest equivalent is
-// `auto_transcode_on_idle`. We project ConfigView down to the single boolean
-// the config store still consumes, defaulting to enabled when absent.
+// v3 exposes GET /api/config -> ConfigView. The config store still consumes a
+// single `transcoder_enabled` boolean that gates the Transcoder nav item. In v3
+// the transcoder subsystem is ALWAYS present — the old BFF could disable the
+// whole subsystem, v3 cannot — so this flag stays true. (Do not derive it from
+// `auto_transcode_on_idle`: that's an auto-transcode-when-idle policy, not a
+// subsystem-availability feature flag.)
 export interface AppConfig {
 	transcoder_enabled: boolean;
 }
 
 export async function fetchConfig(): Promise<AppConfig> {
-	const cfg = await get<ConfigView>('/api/config');
-	return { transcoder_enabled: cfg.auto_transcode_on_idle ?? true };
+	await get<ConfigView>('/api/config');
+	return { transcoder_enabled: true };
 }

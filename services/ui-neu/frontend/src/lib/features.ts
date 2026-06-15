@@ -4,7 +4,7 @@
 export const features = {
 	dashboard: true,
 	notifications: true,
-	logs: true,
+	logs: false, // log browser MISSING in v3 (logs are job-id-scoped, no filename listing)
 	settings: true,
 	transcoder: true, // additionally gated at runtime by transcoderEnabled
 	files: false, // file-browser API MISSING in v3
