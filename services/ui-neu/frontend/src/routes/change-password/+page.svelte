@@ -13,6 +13,10 @@
 		e.preventDefault();
 		if (submitting) return;
 		error = '';
+		if (next === current) {
+			error = 'New password must differ from the current password';
+			return;
+		}
 		if (next.length < 8) {
 			error = 'New password must be at least 8 characters';
 			return;

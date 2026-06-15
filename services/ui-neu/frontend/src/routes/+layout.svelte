@@ -49,6 +49,9 @@
 	}
 
 	let isSetupPage = $derived($page.url.pathname.startsWith('/setup'));
+	let isAuthPage = $derived(
+		$page.url.pathname.startsWith('/login') || $page.url.pathname.startsWith('/change-password')
+	);
 
 	async function toggleRipping() {
 		if (togglingPause) return;
@@ -74,6 +77,12 @@
 			logoutLocal();
 			goto('/login');
 		});
+		// Auth pages (/login, /change-password) render bare and must NOT poll the
+		// dashboard — the user has no usable session there, so the poll would 401
+		// (login) or 403 (change-password) on a loop.
+		if ($page.url.pathname.startsWith('/login') || $page.url.pathname.startsWith('/change-password')) {
+			return;
+		}
 		// Load themes from API (falls back to built-in if backend unreachable)
 		loadThemesFromApi();
 		// Start dashboard polling (provides sidebar stats on all pages)
@@ -101,7 +110,7 @@
 	}
 </script>
 
-{#if isSetupPage}
+{#if isSetupPage || isAuthPage}
 	<div class={$theme}>
 		{@render children()}
 	</div>
