@@ -6,7 +6,6 @@ vi.mock('$lib/api/client', () => ({
 
 import { apiFetch } from '$lib/api/client';
 import { fetchDashboard, setRippingEnabled } from '../api/dashboard';
-import { fetchDrives, updateDrive } from '../api/drives';
 import { fetchNotifications } from '../api/notifications';
 
 const mockApiFetch = vi.mocked(apiFetch);
@@ -38,20 +37,9 @@ describe('dashboard API', () => {
 	});
 });
 
-describe('drives API', () => {
-	it('fetchDrives calls /api/drives', async () => {
-		await fetchDrives();
-		expect(mockApiFetch).toHaveBeenCalledWith('/api/drives');
-	});
-
-	it('updateDrive PATCHes with data', async () => {
-		await updateDrive(1, { name: 'My Drive', uhd_capable: true });
-		expect(mockApiFetch).toHaveBeenCalledWith('/api/drives/1', {
-			method: 'PATCH',
-			body: JSON.stringify({ name: 'My Drive', uhd_capable: true })
-		});
-	});
-});
+// drives API is covered by drives-api.test.ts (repointed to v3: get/patch
+// helpers, DriveView, string ids). It was removed from this wrapper test
+// because drives.ts no longer routes through the mocked `apiFetch`.
 
 describe('notifications API', () => {
 	it('fetchNotifications calls /api/notifications', async () => {

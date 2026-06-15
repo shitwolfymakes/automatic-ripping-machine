@@ -46,12 +46,16 @@ function childSnippet() {
 describe('Layout', () => {
 	afterEach(() => cleanup());
 
-	it('renders navigation links', () => {
+	it('renders navigation links for v3-supported screens', () => {
 		renderComponent(Layout, { props: { children: childSnippet() } });
 		expect(screen.getByText('Dashboard')).toBeInTheDocument();
 		expect(screen.getByText('Logs')).toBeInTheDocument();
-		expect(screen.getByText('Files')).toBeInTheDocument();
 		expect(screen.getByText('Settings')).toBeInTheDocument();
+	});
+
+	it('hides nav items for feature-flagged-off screens (Files — MISSING in v3)', () => {
+		renderComponent(Layout, { props: { children: childSnippet() } });
+		expect(screen.queryByText('Files')).not.toBeInTheDocument();
 	});
 
 	it('renders children content', () => {
