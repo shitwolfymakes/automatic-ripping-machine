@@ -1,16 +1,14 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/test-utils';
 import CrcLookup from './CrcLookup.svelte';
 import { createJob } from './__fixtures__/job';
 
 vi.mock('$lib/api/jobs', () => ({
-	fetchCrcLookup: vi.fn(),
-	submitToCrcDb: vi.fn(() => Promise.resolve()),
 	updateJobTitle: vi.fn(() => Promise.resolve())
 }));
 
-import { fetchCrcLookup } from '$lib/api/jobs';
-const mockFetchCrcLookup = vi.mocked(fetchCrcLookup);
+import { updateJobTitle } from '$lib/api/jobs';
+const mockUpdateJobTitle = vi.mocked(updateJobTitle);
 
 describe('CrcLookup', () => {
 	afterEach(() => {
@@ -19,109 +17,53 @@ describe('CrcLookup', () => {
 	});
 
 	describe('rendering', () => {
-		it('shows loading state initially', () => {
-			mockFetchCrcLookup.mockReturnValue(new Promise(() => {}));
-			renderComponent(CrcLookup, {
-				props: { job: createJob(), crcId: 'abc123' }
-			});
-			expect(screen.getByText('Looking up CRC database...')).toBeInTheDocument();
-		});
-
 		it('shows CRC hash when present', () => {
-			mockFetchCrcLookup.mockReturnValue(new Promise(() => {}));
 			renderComponent(CrcLookup, {
 				props: { job: createJob(), crcId: 'abc123def456' }
 			});
 			expect(screen.getByText('abc123def456')).toBeInTheDocument();
 		});
 
-		it('shows no matches message', async () => {
-			mockFetchCrcLookup.mockResolvedValue({ found: false, results: [], has_api_key: true } as never);
+		it('shows the manual poster URL form', () => {
 			renderComponent(CrcLookup, {
 				props: { job: createJob(), crcId: 'abc123' }
 			});
-			await waitFor(() => {
-				expect(screen.getByText('No matches found in the CRC database.')).toBeInTheDocument();
-			});
-		});
-
-		it('shows no CRC message for non-applicable discs', async () => {
-			mockFetchCrcLookup.mockResolvedValue({ found: false, results: [], no_crc: true } as never);
-			renderComponent(CrcLookup, {
-				props: { job: createJob() }
-			});
-			await waitFor(() => {
-				expect(screen.getByText('No CRC hash for this disc type.')).toBeInTheDocument();
-			});
-		});
-
-		it('shows error from lookup response', async () => {
-			mockFetchCrcLookup.mockResolvedValue({ found: false, results: [], error: 'Service unavailable' } as never);
-			renderComponent(CrcLookup, {
-				props: { job: createJob(), crcId: 'abc123' }
-			});
-			await waitFor(() => {
-				expect(screen.getByText('Service unavailable')).toBeInTheDocument();
-			});
-		});
-
-		it('shows lookup error on fetch failure', async () => {
-			mockFetchCrcLookup.mockRejectedValue(new Error('Network error'));
-			renderComponent(CrcLookup, {
-				props: { job: createJob(), crcId: 'abc123' }
-			});
-			await waitFor(() => {
-				expect(screen.getByText('Network error')).toBeInTheDocument();
-			});
-		});
-
-		it('renders results with Apply button', async () => {
-			mockFetchCrcLookup.mockResolvedValue({
-				found: true,
-				has_api_key: true,
-				results: [{
-					title: 'Found Movie',
-					year: '2024',
-					video_type: 'movie',
-					disctype: 'bluray',
-					label: 'FOUND_MOVIE',
-					imdb_id: 'tt9999999',
-					tmdb_id: '',
-					poster_url: '',
-					hasnicetitle: 'True',
-					validated: 'True',
-					date_added: '2025-01-01T00:00:00.000'
-				}]
-			} as never);
-			renderComponent(CrcLookup, {
-				props: { job: createJob(), crcId: 'abc123' }
-			});
-			await waitFor(() => {
-				expect(screen.getByText('Found Movie')).toBeInTheDocument();
-				expect(screen.getByText('Apply to Job')).toBeInTheDocument();
-			});
+			expect(screen.getByText('Manual poster URL')).toBeInTheDocument();
+			expect(screen.getByText('Apply to Job')).toBeInTheDocument();
 		});
 	});
 
-	describe('submit section', () => {
-		it('shows submit form when has_api_key is true', async () => {
-			mockFetchCrcLookup.mockResolvedValue({ found: false, results: [], has_api_key: true } as never);
+	describe('coming-soon controls', () => {
+		it('renders the CRC lookup control disabled (coming soon)', () => {
 			renderComponent(CrcLookup, {
 				props: { job: createJob(), crcId: 'abc123' }
 			});
-			await waitFor(() => {
-				expect(screen.getByText('Submit to CRC Database')).toBeInTheDocument();
-			});
+			const lookupBtn = screen.getByRole('button', { name: 'Look up' });
+			expect(lookupBtn).toBeDisabled();
 		});
 
-		it('pre-fills form with job metadata', async () => {
-			mockFetchCrcLookup.mockResolvedValue({ found: false, results: [], has_api_key: true } as never);
+		it('renders the CRC submit control disabled (coming soon)', () => {
 			renderComponent(CrcLookup, {
-				props: { job: createJob({ title: 'My Film', year: 2023 }) }
+				props: { job: createJob(), crcId: 'abc123' }
 			});
+			const submitBtn = screen.getByRole('button', { name: 'Submit to CRC Database' });
+			expect(submitBtn).toBeDisabled();
+		});
+	});
+
+	describe('apply (live)', () => {
+		it('applies the manual poster URL via updateJobTitle', async () => {
+			renderComponent(CrcLookup, {
+				props: { job: createJob({ id: 'job-1' }), crcId: 'abc123' }
+			});
+			const input = screen.getByPlaceholderText('https://...');
+			await fireEvent.input(input, { target: { value: 'https://example.com/poster.jpg' } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Apply to Job' }));
 			await waitFor(() => {
-				expect(screen.getByDisplayValue('My Film')).toBeInTheDocument();
-				expect(screen.getByDisplayValue('2023')).toBeInTheDocument();
+				expect(mockUpdateJobTitle).toHaveBeenCalledWith('job-1', {
+					poster_url_manual: 'https://example.com/poster.jpg'
+				});
+				expect(screen.getByText('Job updated')).toBeInTheDocument();
 			});
 		});
 	});
