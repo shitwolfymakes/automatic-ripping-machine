@@ -11,8 +11,7 @@ function detail(jobOverrides: Partial<JobView> = {}, tracks: TrackView[] = []) {
 
 vi.mock('$lib/api/jobs', () => ({
 	fetchJob: vi.fn(() => Promise.resolve(createJobDetail())),
-	cancelWaitingJob: vi.fn(() => Promise.resolve()),
-	startWaitingJob: vi.fn(() => Promise.resolve()),
+	abandonJob: vi.fn(() => Promise.resolve()),
 	updateTrack: vi.fn(() => Promise.resolve(createJob())),
 	searchMetadata: vi.fn(),
 	fetchMediaDetail: vi.fn(),
@@ -34,10 +33,9 @@ vi.mock('$lib/api/settings', () => ({
 	fetchTranscoderPresets: vi.fn(() => Promise.resolve(null))
 }));
 
-import { fetchJob, startWaitingJob, cancelWaitingJob, updateTrack } from '$lib/api/jobs';
+import { fetchJob, abandonJob, updateTrack } from '$lib/api/jobs';
 const mockFetchJob = vi.mocked(fetchJob);
-const mockStart = vi.mocked(startWaitingJob);
-const mockCancel = vi.mocked(cancelWaitingJob);
+const mockCancel = vi.mocked(abandonJob);
 const mockUpdateTrack = vi.mocked(updateTrack);
 
 /** Render the widget with a JobView. */
@@ -111,16 +109,13 @@ describe('DiscReviewWidget', () => {
 	});
 
 	describe('interactions', () => {
-		it('calls startWaitingJob with the job id when Start is clicked', async () => {
+		it('renders Start as a disabled coming-soon control', async () => {
 			renderWidget({ id: 'job_9' });
 			await waitFor(() => expect(screen.getByText('Start')).toBeInTheDocument());
-			await fireEvent.click(screen.getByText('Start'));
-			await waitFor(() => {
-				expect(mockStart).toHaveBeenCalledWith('job_9');
-			});
+			expect(screen.getByText('Start')).toBeDisabled();
 		});
 
-		it('calls cancelWaitingJob with the job id when Cancel is clicked', async () => {
+		it('calls abandonJob with the job id when Cancel is clicked', async () => {
 			renderWidget({ id: 'job_9' });
 			await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
 			await fireEvent.click(screen.getByText('Cancel'));
@@ -139,11 +134,11 @@ describe('DiscReviewWidget', () => {
 			});
 		});
 
-		it('calls onrefresh after start', async () => {
+		it('calls onrefresh after cancel', async () => {
 			const onrefresh = vi.fn();
 			renderWidget({}, { onrefresh });
-			await waitFor(() => expect(screen.getByText('Start')).toBeInTheDocument());
-			await fireEvent.click(screen.getByText('Start'));
+			await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
+			await fireEvent.click(screen.getByText('Cancel'));
 			await waitFor(() => {
 				expect(onrefresh).toHaveBeenCalled();
 			});

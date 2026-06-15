@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { JobView, JobDetailView, TrackView, MediaType } from '$lib/types/api.gen';
-	import { cancelWaitingJob, startWaitingJob, fetchJob, updateTrack } from '$lib/api/jobs';
+	import { abandonJob, fetchJob, updateTrack } from '$lib/api/jobs';
+	import ComingSoon from './ComingSoon.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
 	import PosterImage from './PosterImage.svelte';
 	import TitleSearch from './TitleSearch.svelte';
@@ -30,7 +31,6 @@
 	let showRipSettings = $state(false);
 	let showTranscodeSettings = $state(false);
 	let cancelling = $state(false);
-	let starting = $state(false);
 	let openSearchTrackIds = $state<Set<string>>(new Set());
 	let savingTrackField = $state<string | null>(null);
 	let errorMessage = $state<string | null>(null);
@@ -85,28 +85,11 @@
 		loadDetail();
 	}
 
-	async function handleStart() {
-		if (!job) return;
-		errorMessage = null;
-		starting = true;
-		try {
-			await startWaitingJob(job.id);
-		} catch (e) {
-			errorMessage = `Failed to start job: ${e instanceof Error ? e.message : 'Unknown error'}`;
-		} finally {
-			starting = false;
-			if (!errorMessage) {
-				ondismiss?.();
-				onrefresh?.();
-			}
-		}
-	}
-
 	async function handleCancel() {
 		if (!job) return;
 		cancelling = true;
 		try {
-			await cancelWaitingJob(job.id);
+			await abandonJob(job.id);
 		} catch {
 			// still dismiss — next refresh will reconcile
 		} finally {
@@ -244,13 +227,7 @@
 		>
 			{cancelling ? 'Cancelling...' : 'Cancel'}
 		</button>
-		<button
-			onclick={handleStart}
-			disabled={starting}
-			class="{btnBase} bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 dark:bg-emerald-700 dark:hover:bg-emerald-600"
-		>
-			{starting ? 'Starting...' : 'Start'}
-		</button>
+		<ComingSoon label="Start" feature="Manual start" />
 	</div>
 
 	<!-- Tracks table -->
