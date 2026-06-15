@@ -1,27 +1,36 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { apiFetch } from '../api/client';
+import {
+	apiFetch,
+	apiFormPost,
+	get,
+	post,
+	patch,
+	del,
+	buildQuery,
+	setToken,
+	clearToken,
+	getToken,
+	setUnauthorizedHandler
+} from '../api/client';
 
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
 function jsonResponse(data: unknown, ok = true, status = 200, statusText = 'OK') {
-	return {
-		ok,
-		status,
-		statusText,
-		json: () => Promise.resolve(data)
-	};
+	return { ok, status, statusText, json: () => Promise.resolve(data) };
 }
 
 beforeEach(() => {
 	mockFetch.mockReset();
+	clearToken();
+	setUnauthorizedHandler(() => {});
+	localStorage.clear();
 });
 
-describe('apiFetch', () => {
+describe('apiFetch (preserved behaviors)', () => {
 	it('returns parsed JSON on success', async () => {
 		mockFetch.mockResolvedValue(jsonResponse({ id: 1 }));
-		const result = await apiFetch('/api/test');
-		expect(result).toEqual({ id: 1 });
+		expect(await apiFetch('/api/test')).toEqual({ id: 1 });
 	});
 
 	it('sends Content-Type application/json by default', async () => {
@@ -41,7 +50,7 @@ describe('apiFetch', () => {
 		expect(mockFetch).toHaveBeenCalledWith(
 			'/api/test',
 			expect.objectContaining({
-				headers: { 'Content-Type': 'application/json', 'X-Custom': 'value' }
+				headers: expect.objectContaining({ 'Content-Type': 'application/json', 'X-Custom': 'value' })
 			})
 		);
 	});
@@ -51,10 +60,7 @@ describe('apiFetch', () => {
 		await apiFetch('/api/test', { method: 'POST', body: JSON.stringify({ key: 'val' }) });
 		expect(mockFetch).toHaveBeenCalledWith(
 			'/api/test',
-			expect.objectContaining({
-				method: 'POST',
-				body: '{"key":"val"}'
-			})
+			expect.objectContaining({ method: 'POST', body: '{"key":"val"}' })
 		);
 	});
 
@@ -76,5 +82,143 @@ describe('apiFetch', () => {
 			json: () => Promise.reject(new Error('not json'))
 		});
 		await expect(apiFetch('/api/bad')).rejects.toThrow('API 502: Bad Gateway');
+	});
+
+	it('stringifies a non-string detail (validation array) in the error', async () => {
+		mockFetch.mockResolvedValue(
+			jsonResponse({ detail: [{ msg: 'bad', loc: ['body', 'x'] }] }, false, 422, 'Unprocessable')
+		);
+		await expect(apiFetch('/api/v')).rejects.toThrow(
+			JSON.stringify([{ msg: 'bad', loc: ['body', 'x'] }])
+		);
+	});
+});
+
+describe('auth: token + bearer injection', () => {
+	it('attaches Authorization: Bearer when a token is set', async () => {
+		setToken('tok-abc');
+		mockFetch.mockResolvedValue(jsonResponse({}));
+		await apiFetch('/api/test');
+		expect(mockFetch).toHaveBeenCalledWith(
+			'/api/test',
+			expect.objectContaining({
+				headers: expect.objectContaining({ Authorization: 'Bearer tok-abc' })
+			})
+		);
+	});
+
+	it('omits Authorization when no token', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({}));
+		await apiFetch('/api/test');
+		const init = mockFetch.mock.calls[0][1];
+		expect(init.headers).not.toHaveProperty('Authorization');
+	});
+
+	it('persists the token in localStorage and reads it back', () => {
+		setToken('tok-xyz');
+		expect(localStorage.getItem('arm_token')).toBe('tok-xyz');
+		expect(getToken()).toBe('tok-xyz');
+		clearToken();
+		expect(getToken()).toBeNull();
+		expect(localStorage.getItem('arm_token')).toBeNull();
+	});
+});
+
+describe('401 handling', () => {
+	it('invokes the unauthorized handler and throws on 401', async () => {
+		const on401 = vi.fn();
+		setUnauthorizedHandler(on401);
+		mockFetch.mockResolvedValue(jsonResponse({ detail: 'nope' }, false, 401, 'Unauthorized'));
+		await expect(apiFetch('/api/secure')).rejects.toThrow();
+		expect(on401).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('verb helpers', () => {
+	it('get issues a GET and returns JSON', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ ok: true }));
+		expect(await get('/api/x')).toEqual({ ok: true });
+		expect(mockFetch.mock.calls[0][1].method).toBe('GET');
+	});
+
+	it('post serializes the body and sets method', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ created: 1 }));
+		await post('/api/x', { a: 1 });
+		const init = mockFetch.mock.calls[0][1];
+		expect(init.method).toBe('POST');
+		expect(init.body).toBe('{"a":1}');
+		expect(init.headers).toEqual(expect.objectContaining({ 'Content-Type': 'application/json' }));
+	});
+
+	it('post with no body sends no body', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({}));
+		await post('/api/x');
+		const init = mockFetch.mock.calls[0][1];
+		expect(init.method).toBe('POST');
+		expect(init.body).toBeUndefined();
+	});
+
+	it('patch serializes the body', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({}));
+		await patch('/api/x', { b: 2 });
+		const init = mockFetch.mock.calls[0][1];
+		expect(init.method).toBe('PATCH');
+		expect(init.body).toBe('{"b":2}');
+	});
+
+	it('del issues a DELETE and tolerates an empty (204-style) body', async () => {
+		mockFetch.mockResolvedValue({
+			ok: true,
+			status: 204,
+			statusText: 'No Content',
+			json: () => Promise.reject(new Error('no body'))
+		});
+		await expect(del('/api/x')).resolves.toBeUndefined();
+		expect(mockFetch.mock.calls[0][1].method).toBe('DELETE');
+	});
+});
+
+describe('buildQuery', () => {
+	it('builds a query string from defined params, prefixed with ?', () => {
+		expect(buildQuery({ a: 1, b: 'two' })).toBe('?a=1&b=two');
+	});
+
+	it('omits undefined and null params', () => {
+		expect(buildQuery({ a: 1, b: undefined, c: null })).toBe('?a=1');
+	});
+
+	it('returns empty string when no params remain', () => {
+		expect(buildQuery({ a: undefined })).toBe('');
+		expect(buildQuery({})).toBe('');
+	});
+
+	it('encodes values', () => {
+		expect(buildQuery({ path: '/a b/c' })).toBe('?path=%2Fa%20b%2Fc');
+	});
+
+	it('includes falsy-but-valid values (0, false, empty string)', () => {
+		expect(buildQuery({ a: 0, b: false, c: '' })).toBe('?a=0&b=false&c=');
+	});
+});
+
+describe('apiFormPost', () => {
+	it('attaches bearer auth but no Content-Type (lets the browser set multipart boundary)', async () => {
+		setToken('tok-form');
+		mockFetch.mockResolvedValue(jsonResponse({ ok: true }));
+		const fd = new FormData();
+		fd.append('file', 'x');
+		await apiFormPost('/api/upload', fd);
+		const init = mockFetch.mock.calls[0][1];
+		expect(init.method).toBe('POST');
+		expect(init.headers).toEqual(expect.objectContaining({ Authorization: 'Bearer tok-form' }));
+		expect(init.headers).not.toHaveProperty('Content-Type');
+		expect(init.body).toBe(fd);
+	});
+
+	it('omits Authorization when no token', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({}));
+		await apiFormPost('/api/upload', new FormData());
+		const init = mockFetch.mock.calls[0][1];
+		expect(init.headers).not.toHaveProperty('Authorization');
 	});
 });
