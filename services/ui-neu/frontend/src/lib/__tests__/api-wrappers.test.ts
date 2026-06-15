@@ -5,7 +5,7 @@ vi.mock('$lib/api/client', () => ({
 }));
 
 import { apiFetch } from '$lib/api/client';
-import { fetchDashboard, setRippingEnabled } from '../api/dashboard';
+import { setRippingEnabled } from '../api/dashboard';
 
 const mockApiFetch = vi.mocked(apiFetch);
 
@@ -13,25 +13,26 @@ beforeEach(() => {
 	mockApiFetch.mockClear();
 });
 
+// fetchDashboard is no longer a thin BFF wrapper — v3 has no /api/dashboard
+// endpoint, so it composes client-side by fanning out across the drives/jobs/
+// transcoder/notifications/config modules (each routes through its own get/post
+// helper, not the mocked apiFetch here). Its composition + sticky-merge
+// behaviour is covered by dashboard-store.test.ts. Only setRippingEnabled still
+// routes through the client helper, so that's all this block asserts.
 describe('dashboard API', () => {
-	it('fetchDashboard calls /api/dashboard', async () => {
-		await fetchDashboard();
-		expect(mockApiFetch).toHaveBeenCalledWith('/api/dashboard');
-	});
-
-	it('setRippingEnabled POSTs enabled=true', async () => {
+	it('setRippingEnabled PATCHes /api/config with ripping_paused=false when enabled', async () => {
 		await setRippingEnabled(true);
-		expect(mockApiFetch).toHaveBeenCalledWith('/api/system/ripping-enabled', {
-			method: 'POST',
-			body: JSON.stringify({ enabled: true })
+		expect(mockApiFetch).toHaveBeenCalledWith('/api/config', {
+			method: 'PATCH',
+			body: JSON.stringify({ ripping_paused: false })
 		});
 	});
 
-	it('setRippingEnabled POSTs enabled=false', async () => {
+	it('setRippingEnabled PATCHes /api/config with ripping_paused=true when disabled', async () => {
 		await setRippingEnabled(false);
-		expect(mockApiFetch).toHaveBeenCalledWith('/api/system/ripping-enabled', {
-			method: 'POST',
-			body: JSON.stringify({ enabled: false })
+		expect(mockApiFetch).toHaveBeenCalledWith('/api/config', {
+			method: 'PATCH',
+			body: JSON.stringify({ ripping_paused: true })
 		});
 	});
 });

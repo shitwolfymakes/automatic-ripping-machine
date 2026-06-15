@@ -3,7 +3,7 @@
 	import { fetchDashboard } from '$lib/api/dashboard';
 	import { fetchJobs, bulkDeleteJobs } from '$lib/api/jobs';
 	import type { JobView } from '$lib/types/api.gen';
-	import type { DashboardResponse as DashboardData } from '$lib/types/api.gen';
+	import type { DashboardData } from '$lib/api/dashboard';
 	import DiscReviewWidget from '$lib/components/DiscReviewWidget.svelte';
 	import JobCard from '$lib/components/JobCard.svelte';
 	import ActiveJobRow from '$lib/components/ActiveJobRow.svelte';

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { HardwareInfoSchema as HardwareInfo, SystemStatsSchema as SystemStats } from '$lib/types/api.gen';
+	import type { HardwareInfo, SystemStats } from '$lib/api/dashboard';
 	import ProgressBar from './ProgressBar.svelte';
 	import { transcoderEnabled } from '$lib/stores/config';
 

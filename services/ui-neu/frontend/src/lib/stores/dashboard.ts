@@ -1,6 +1,6 @@
 import { createPollingStore } from './polling';
 import { fetchDashboard } from '$lib/api/dashboard';
-import type { DashboardResponse as DashboardData } from '$lib/types/api.gen';
+import type { DashboardData } from '$lib/api/dashboard';
 const emptyDashboard: DashboardData = {
 	db_available: true,
 	arm_online: false,
