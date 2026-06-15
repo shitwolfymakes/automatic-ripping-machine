@@ -1,9 +1,20 @@
 <script lang="ts">
 	import { scanFolder, createFolderJob, scanIso, createIsoJob } from '$lib/api/import-jobs';
-	import type { IsoScanResult } from '$lib/api/import-jobs';
+	import type { IsoScanResult, FolderScanResult, FolderCreateRequest } from '$lib/api/import-jobs';
 	import { searchMetadata, fetchMediaDetail } from '$lib/api/jobs';
-	import type { FolderScanResult, SearchResultSchema as SearchResult, MediaDetailSchema as MediaDetail, FolderCreateRequest } from '$lib/types/api.gen';
 	import IngressBrowser from '$lib/components/IngressBrowser.svelte';
+
+	// Local metadata shapes the (dormant) wizard reads. v3's metadata search
+	// returns a candidate envelope; this screen is feature-flagged OFF, so the
+	// adapters below just satisfy the type-checker.
+	interface SearchResult {
+		title: string;
+		year: string;
+		media_type?: string;
+		imdb_id?: string | null;
+		poster_url?: string | null;
+	}
+	type MediaDetail = SearchResult;
 
 	import PosterImage from './PosterImage.svelte';
 
@@ -149,7 +160,14 @@
 		searchResults = [];
 		detail = null;
 		try {
-			searchResults = await searchMetadata(searchQuery.trim(), editYear.trim() || undefined);
+			const resp = await searchMetadata(searchQuery.trim());
+			searchResults = resp.candidates.map((c) => ({
+				title: c.title,
+				year: c.year != null ? String(c.year) : '',
+				media_type: c.kind,
+				imdb_id: c.provider_id ?? null,
+				poster_url: c.poster_url ?? null
+			}));
 			if (searchResults.length === 0) {
 				searchError = 'No results found.';
 			}
@@ -174,7 +192,16 @@
 		if (result.imdb_id) {
 			loadingDetail = true;
 			try {
-				detail = await fetchMediaDetail(result.imdb_id);
+				const lookup = await fetchMediaDetail(result.imdb_id);
+				const cand = lookup.candidates[0];
+				if (!cand) throw new Error('No detail');
+				detail = {
+					title: cand.title,
+					year: cand.year != null ? String(cand.year) : '',
+					media_type: cand.kind,
+					imdb_id: cand.provider_id ?? null,
+					poster_url: cand.poster_url ?? null
+				};
 				editTitle = detail.title;
 				editYear = detail.year;
 				editType = detail.media_type === 'series' ? 'series' : 'movie';

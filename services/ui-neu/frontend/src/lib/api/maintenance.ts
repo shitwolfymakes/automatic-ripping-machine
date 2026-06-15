@@ -1,32 +1,71 @@
-import { apiFetch } from './client';
-import type {
-	MaintenanceSummary,
-	OrphanLogList,
-	OrphanFolderList,
-	OrphanLogEntry,
-	OrphanFolderEntry,
-	MaintenanceDeleteResult,
-	MaintenanceBulkDeleteResult,
-	ClearRawResult,
-	ImageCacheStats,
-	CleanupTranscoderResult,
-} from '$lib/types/api.gen';
+import { notAvailable } from './_stub';
 
-export type {
-	MaintenanceSummary,
-	OrphanLogList,
-	OrphanFolderList,
-	OrphanLogEntry,
-	OrphanFolderEntry,
-	ClearRawResult,
-	ImageCacheStats,
-	CleanupTranscoderResult,
-};
+// Orphan cleanup / maintenance has no v3 backend (ALL MISSING). The orphan-logs
+// and orphan-folders modals and the transcoder/image-cache cleanup actions are
+// dormant, so these stubs reject before any fetch.
+//
+// The shapes the (dormant) maintenance UI reads are declared locally here and
+// re-exported under the names the pages import; api.gen no longer carries them.
 
-// Legacy aliases - the surrounding pages import these names. The generated
-// equivalents are MaintenanceDeleteResult / MaintenanceBulkDeleteResult /
-// OrphanLogList / OrphanFolderList; these aliases keep the call sites
-// untouched.
+export interface OrphanLogEntry {
+	path: string;
+	relative_path: string;
+	size_bytes: number;
+}
+
+export interface OrphanFolderEntry {
+	path: string;
+	name: string;
+	size_bytes: number;
+	category: string;
+}
+
+export interface OrphanLogList {
+	files: OrphanLogEntry[];
+	root?: string;
+	total_size_bytes?: number;
+}
+
+export interface OrphanFolderList {
+	folders: OrphanFolderEntry[];
+	roots?: string[];
+	total_size_bytes?: number;
+}
+
+export interface MaintenanceSummary {
+	orphan_logs: number;
+	orphan_folders: number;
+}
+
+export interface MaintenanceDeleteResult {
+	success: boolean;
+	path: string;
+}
+
+export interface MaintenanceBulkDeleteResult {
+	removed: string[];
+	errors: string[];
+}
+
+export interface CleanupTranscoderResult {
+	deleted: number;
+	errors: string[];
+}
+
+export interface ImageCacheStats {
+	count: number;
+	size_mb: number;
+	cleared?: number;
+	freed_bytes?: number;
+}
+
+export interface ClearRawResult {
+	cleared: number;
+	freed_bytes: number;
+	path: string;
+}
+
+// Legacy aliases — the surrounding pages import these names.
 export type OrphanLog = OrphanLogEntry;
 export type OrphanFolder = OrphanFolderEntry;
 export type OrphanLogsResponse = OrphanLogList;
@@ -34,54 +73,54 @@ export type OrphanFoldersResponse = OrphanFolderList;
 export type DeleteResult = MaintenanceDeleteResult;
 export type BulkDeleteResult = MaintenanceBulkDeleteResult;
 
-export function fetchSummary(): Promise<MaintenanceSummary> {
-	return apiFetch('/api/maintenance/summary');
+export async function fetchSummary(): Promise<MaintenanceSummary> {
+	notAvailable('Maintenance summary');
 }
 
-export function fetchOrphanLogs(): Promise<OrphanLogList> {
-	return apiFetch('/api/maintenance/orphan-logs');
+export async function fetchOrphanLogs(): Promise<OrphanLogList> {
+	notAvailable('Orphan logs');
 }
 
-export function fetchOrphanFolders(): Promise<OrphanFolderList> {
-	return apiFetch('/api/maintenance/orphan-folders');
+export async function fetchOrphanFolders(): Promise<OrphanFolderList> {
+	notAvailable('Orphan folders');
 }
 
-export function deleteLog(path: string): Promise<MaintenanceDeleteResult> {
-	return apiFetch('/api/maintenance/delete-log', { method: 'POST', body: JSON.stringify({ path }) });
+export async function deleteLog(_path: string): Promise<MaintenanceDeleteResult> {
+	notAvailable('Maintenance delete log');
 }
 
-export function deleteFolder(path: string): Promise<MaintenanceDeleteResult> {
-	return apiFetch('/api/maintenance/delete-folder', { method: 'POST', body: JSON.stringify({ path }) });
+export async function deleteFolder(_path: string): Promise<MaintenanceDeleteResult> {
+	notAvailable('Maintenance delete folder');
 }
 
-export function bulkDeleteLogs(paths: string[]): Promise<MaintenanceBulkDeleteResult> {
-	return apiFetch('/api/maintenance/bulk-delete-logs', { method: 'POST', body: JSON.stringify({ paths }) });
+export async function bulkDeleteLogs(_paths: string[]): Promise<MaintenanceBulkDeleteResult> {
+	notAvailable('Maintenance bulk-delete logs');
 }
 
-export function bulkDeleteFolders(paths: string[]): Promise<MaintenanceBulkDeleteResult> {
-	return apiFetch('/api/maintenance/bulk-delete-folders', { method: 'POST', body: JSON.stringify({ paths }) });
+export async function bulkDeleteFolders(_paths: string[]): Promise<MaintenanceBulkDeleteResult> {
+	notAvailable('Maintenance bulk-delete folders');
 }
 
-export function dismissAllNotifications(): Promise<{ success: boolean; count: number }> {
-	return apiFetch('/api/maintenance/dismiss-all-notifications', { method: 'POST' });
+export async function dismissAllNotifications(): Promise<{ success: boolean; count: number }> {
+	notAvailable('Dismiss all notifications (maintenance)');
 }
 
-export function purgeNotifications(): Promise<{ success: boolean; count: number }> {
-	return apiFetch('/api/maintenance/purge-notifications', { method: 'POST' });
+export async function purgeNotifications(): Promise<{ success: boolean; count: number }> {
+	notAvailable('Purge notifications');
 }
 
-export function cleanupTranscoder(): Promise<CleanupTranscoderResult> {
-	return apiFetch('/api/maintenance/cleanup-transcoder', { method: 'POST' });
+export async function cleanupTranscoder(): Promise<CleanupTranscoderResult> {
+	notAvailable('Cleanup transcoder');
 }
 
-export function fetchImageCacheStats(): Promise<ImageCacheStats> {
-	return apiFetch('/api/maintenance/image-cache-stats');
+export async function fetchImageCacheStats(): Promise<ImageCacheStats> {
+	notAvailable('Image cache stats');
 }
 
-export function clearImageCache(): Promise<ImageCacheStats> {
-	return apiFetch('/api/maintenance/clear-image-cache', { method: 'POST' });
+export async function clearImageCache(): Promise<ImageCacheStats> {
+	notAvailable('Clear image cache');
 }
 
-export function clearRaw(): Promise<ClearRawResult> {
-	return apiFetch('/api/maintenance/clear-raw', { method: 'POST' });
+export async function clearRaw(): Promise<ClearRawResult> {
+	notAvailable('Clear raw');
 }

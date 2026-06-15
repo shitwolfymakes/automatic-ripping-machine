@@ -3,7 +3,7 @@
 	import { fetchLogs, fetchTranscoderLogs, deleteLog, logDownloadUrl } from '$lib/api/logs';
 	import { fetchOrphanLogs, deleteLog as deleteOrphanLog, bulkDeleteLogs } from '$lib/api/maintenance';
 	import type { OrphanLogsResponse } from '$lib/api/maintenance';
-	import type { LogFileSchema as LogFile } from '$lib/types/api.gen';
+	import type { LogFile } from '$lib/api/logs';
 	import { formatBytes, formatDateTime } from '$lib/utils/format';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';

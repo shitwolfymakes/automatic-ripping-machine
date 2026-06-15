@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { SetupStatus } from '$lib/types/api.gen';
+	import type { SetupStatus } from '$lib/api/setup';
 	import { onMount } from 'svelte';
 	import InfoCard from './InfoCard.svelte';
 	import StatusIcon from './StatusIcon.svelte';

@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { fetchIngressRoot, fetchIngressDirectory } from '$lib/api/import-jobs';
 	import { showImportWizard } from '$lib/stores/importWizard';
-	import type { FileEntry } from '$lib/types/api.gen';
+	import type { FileEntry } from '$lib/api/files';
 	import { Folder, FolderArchive, Disc, File as FileIcon } from 'lucide-svelte';
 
 	// NOTE: kind/importable are computed client-side until the BFF (arm-neu PR #333)

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { LogContentResponse as LogContent } from '$lib/types/api.gen';
 	import { fetchLogContent } from '$lib/api/logs';
+	import type { LogContent } from '$lib/api/logs';
 
 	interface Props {
 		filename: string;

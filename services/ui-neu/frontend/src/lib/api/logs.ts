@@ -1,83 +1,106 @@
-import type { LogContentResponse as LogContent, LogFileSchema as LogFile, StructuredLogResponse as StructuredLogContent } from '$lib/types/api.gen';
-import { apiFetch } from './client';
+import { notAvailable } from './_stub';
 
-export function fetchLogs(): Promise<LogFile[]> {
-	return apiFetch<LogFile[]>('/api/logs');
+// v3 logs are JOB-ID scoped (GET /api/logs/{job_id}, /{job_id}.zip), not
+// filename-based. The BFF's filename-based log browser + transcoder log feed
+// have no v3 equivalent (MISSING). The Logs screen and the inline log feeds are
+// dormant, so these stubs reject before any fetch.
+//
+// The shapes the (dormant) log viewers read are declared locally here and
+// re-exported; api.gen no longer carries LogFileSchema / LogContentResponse /
+// StructuredLogResponse / LogEntrySchema.
+
+export interface LogFile {
+	filename: string;
+	size: number;
+	modified: string;
 }
 
-export function fetchLogContent(
-	filename: string,
-	mode: 'tail' | 'full' = 'tail',
-	lines: number = 100
+export interface LogContent {
+	content: string;
+	filename?: string;
+}
+
+export interface LogEntry {
+	timestamp?: string | null;
+	level: string;
+	logger: string;
+	event: string;
+	job_id?: number | string | null;
+	label?: string | null;
+}
+
+export interface StructuredLogContent {
+	entries: LogEntry[];
+	filename?: string;
+}
+
+// Re-exported under the names the components import.
+export type { LogFile as LogFileSchema, LogContent as LogContentResponse };
+export type { StructuredLogContent as StructuredLogResponse, LogEntry as LogEntrySchema };
+
+export async function fetchLogs(): Promise<LogFile[]> {
+	notAvailable('Log file listing');
+}
+
+export async function fetchLogContent(
+	_filename: string,
+	_mode: 'tail' | 'full' = 'tail',
+	_lines: number = 100
 ): Promise<LogContent> {
-	return apiFetch<LogContent>(`/api/logs/${encodeURIComponent(filename)}?mode=${mode}&lines=${lines}`);
+	notAvailable('Log content');
 }
 
-export function fetchStructuredLogContent(
-	filename: string,
-	mode: 'tail' | 'full' = 'tail',
-	lines: number = 100,
-	level?: string,
-	search?: string
+export async function fetchStructuredLogContent(
+	_filename: string,
+	_mode: 'tail' | 'full' = 'tail',
+	_lines: number = 100,
+	_level?: string,
+	_search?: string
 ): Promise<StructuredLogContent> {
-	const params = new URLSearchParams({ mode, lines: String(lines) });
-	if (level) params.set('level', level);
-	if (search) params.set('search', search);
-	return apiFetch<StructuredLogContent>(
-		`/api/logs/${encodeURIComponent(filename)}/structured?${params}`
-	);
+	notAvailable('Structured log content');
 }
 
-export function fetchTranscoderLogs(): Promise<LogFile[]> {
-	return apiFetch<LogFile[]>('/api/transcoder/logs');
+export async function fetchTranscoderLogs(): Promise<LogFile[]> {
+	notAvailable('Transcoder log listing');
 }
 
-export function fetchTranscoderLogContent(
-	filename: string,
-	mode: 'tail' | 'full' = 'tail',
-	lines: number = 100
+export async function fetchTranscoderLogContent(
+	_filename: string,
+	_mode: 'tail' | 'full' = 'tail',
+	_lines: number = 100
 ): Promise<LogContent> {
-	return apiFetch<LogContent>(
-		`/api/transcoder/logs/${encodeURIComponent(filename)}?mode=${mode}&lines=${lines}`
-	);
+	notAvailable('Transcoder log content');
 }
 
-export function fetchStructuredTranscoderLogContent(
-	filename: string,
-	mode: 'tail' | 'full' = 'tail',
-	lines: number = 100,
-	level?: string,
-	search?: string
+export async function fetchStructuredTranscoderLogContent(
+	_filename: string,
+	_mode: 'tail' | 'full' = 'tail',
+	_lines: number = 100,
+	_level?: string,
+	_search?: string
 ): Promise<StructuredLogContent> {
-	const params = new URLSearchParams({ mode, lines: String(lines) });
-	if (level) params.set('level', level);
-	if (search) params.set('search', search);
-	return apiFetch<StructuredLogContent>(
-		`/api/transcoder/logs/${encodeURIComponent(filename)}/structured?${params}`
-	);
+	notAvailable('Structured transcoder log content');
 }
 
-export function deleteLog(filename: string): Promise<{ success: boolean; filename: string }> {
-	return apiFetch(`/api/logs/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+export async function deleteLog(
+	_filename: string
+): Promise<{ success: boolean; filename: string }> {
+	notAvailable('Log delete');
 }
 
+// Pure URL builder — kept as a string so the (dormant) download links compile.
 export function logDownloadUrl(filename: string): string {
 	return `/api/logs/${encodeURIComponent(filename)}/download`;
 }
 
-export async function fetchTranscoderLogForArmJob(
-	armJobId: number
-): Promise<{
+export async function fetchTranscoderLogForArmJob(_armJobId: number): Promise<{
 	found: boolean;
 	logfile?: string;
 	transcoder_job_id?: number;
 	status?: string;
-	/** Sub-status inside JobStatus.processing — surfaces what the worker is doing
-	 * during periods where no encoder progress is being reported. Wire values
-	 * come from arm_contracts.TranscodePhase. */
 	phase?: string | null;
 	progress?: number | null;
 	current_fps?: number | null;
 }> {
-	return apiFetch(`/api/transcoder/job-for-arm/${armJobId}`);
+	notAvailable('Transcoder log for ARM job');
 }

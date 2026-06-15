@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { fetchRoots, fetchDirectory, renameFile, moveFile, deleteFile, createDirectory, fixPermissions } from '$lib/api/files';
-	import type { FileRoot, DirectoryListing, FileEntry } from '$lib/types/api.gen';
+	import type { FileRoot, DirectoryListing } from '$lib/api/files';
 	import { formatBytes, formatDateTime } from '$lib/utils/format';
 	import { fetchOrphanFolders, deleteFolder as deleteOrphanFolder, bulkDeleteFolders, cleanupTranscoder } from '$lib/api/maintenance';
 	import type { OrphanFoldersResponse } from '$lib/api/maintenance';

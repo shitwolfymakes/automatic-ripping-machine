@@ -21,9 +21,11 @@ describe('config store', () => {
 	});
 
 	it('hydrateConfig calls /api/config and updates store', async () => {
+		// v3 ConfigView exposes auto_transcode_on_idle; fetchConfig projects it
+		// down to transcoder_enabled.
 		globalThis.fetch = vi.fn().mockResolvedValueOnce({
 			ok: true,
-			json: async () => ({ transcoder_enabled: false })
+			json: async () => ({ auto_transcode_on_idle: false })
 		}) as unknown as typeof fetch;
 
 		const { transcoderEnabled, hydrateConfig } = await import('../config');

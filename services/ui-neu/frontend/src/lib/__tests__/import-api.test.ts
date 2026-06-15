@@ -1,67 +1,56 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
-vi.mock('$lib/api/client', () => ({
-	apiFetch: vi.fn().mockResolvedValue({})
-}));
-
-import { apiFetch } from '$lib/api/client';
 import {
-	scanFolder, createFolderJob, fetchIngressDirectory, fetchIngressRoot
+	scanFolder, createFolderJob, createIsoJob, fetchIngressDirectory, fetchIngressRoot
 } from '../api/import-jobs';
 
-const mockApiFetch = vi.mocked(apiFetch);
-
-beforeEach(() => {
-	mockApiFetch.mockClear();
-});
-
-describe('scanFolder', () => {
-	it('POSTs path to /api/jobs/folder/scan', async () => {
-		await scanFolder('/media/movies/MyMovie');
-		expect(mockApiFetch).toHaveBeenCalledWith('/api/jobs/folder/scan', {
-			method: 'POST',
-			body: JSON.stringify({ path: '/media/movies/MyMovie' })
-		});
-	});
-});
-
-describe('createFolderJob', () => {
-	it('POSTs job data to /api/jobs/folder', async () => {
-		const data = {
-			source_path: '/media/ingress/MyMovie',
-			title: 'My Movie',
-			year: '2024',
-			video_type: 'movie',
-			disctype: 'bluray',
-			imdb_id: 'tt1234567'
-		};
-		await createFolderJob(data);
-		expect(mockApiFetch).toHaveBeenCalledWith('/api/jobs/folder', {
-			method: 'POST',
-			body: JSON.stringify(data)
-		});
-	});
-});
-
-describe('fetchIngressDirectory', () => {
-	it('encodes path in query param', async () => {
-		await fetchIngressDirectory('/media/my folder');
-		expect(mockApiFetch).toHaveBeenCalledWith(
-			'/api/files/list?path=%2Fmedia%2Fmy%20folder'
-		);
+// Folder import + ingress browser + ISO job creation are MISSING in v3 — these
+// functions are stubs that reject before any fetch. The Import wizard screen is
+// feature-flagged OFF.
+describe('import-jobs MISSING stubs', () => {
+	it('scanFolder rejects', async () => {
+		await expect(scanFolder('/media/movies/MyMovie')).rejects.toThrow(/not yet available in v3/);
 	});
 
-	it('handles simple paths', async () => {
-		await fetchIngressDirectory('/media/ingress');
-		expect(mockApiFetch).toHaveBeenCalledWith(
-			'/api/files/list?path=%2Fmedia%2Fingress'
-		);
+	it('createFolderJob rejects', async () => {
+		await expect(
+			createFolderJob({
+				source_path: '/media/ingress/MyMovie',
+				title: 'My Movie',
+				year: '2024',
+				video_type: 'movie',
+				disctype: 'bluray',
+				imdb_id: 'tt1234567',
+				poster_url: null,
+				season: null,
+				disc_number: null,
+				disc_total: null
+			})
+		).rejects.toThrow(/not yet available in v3/);
 	});
-});
 
-describe('fetchIngressRoot', () => {
-	it('calls /api/files/roots', async () => {
-		await fetchIngressRoot();
-		expect(mockApiFetch).toHaveBeenCalledWith('/api/files/roots');
+	it('createIsoJob rejects', async () => {
+		await expect(
+			createIsoJob({
+				source_path: '/media/ingress/MyMovie.iso',
+				title: 'My Movie',
+				year: '2024',
+				video_type: 'movie',
+				disctype: 'bluray',
+				imdb_id: null,
+				poster_url: null,
+				season: null,
+				disc_number: null,
+				disc_total: null
+			})
+		).rejects.toThrow(/not yet available in v3/);
+	});
+
+	it('fetchIngressDirectory rejects', async () => {
+		await expect(fetchIngressDirectory('/media/ingress')).rejects.toThrow(/not yet available in v3/);
+	});
+
+	it('fetchIngressRoot rejects', async () => {
+		await expect(fetchIngressRoot()).rejects.toThrow(/not yet available in v3/);
 	});
 });

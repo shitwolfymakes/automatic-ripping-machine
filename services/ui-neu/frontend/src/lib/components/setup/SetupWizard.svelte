@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { SetupStatus } from '$lib/types/api.gen';
+	import type { SetupStatus } from '$lib/api/setup';
 	import type { Component } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { completeSetup } from '$lib/api/setup';

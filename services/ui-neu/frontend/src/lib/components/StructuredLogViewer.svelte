@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { LogEntrySchema as LogEntry, StructuredLogResponse as StructuredLogContent } from '$lib/types/api.gen';
 	import { fetchStructuredLogContent } from '$lib/api/logs';
+	import type { LogEntry, StructuredLogContent } from '$lib/api/logs';
 
 	type FetchFn = (
 		filename: string,
