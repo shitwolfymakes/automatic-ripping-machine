@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Regenerate frontend/src/lib/types/api.gen.ts from the FastAPI app's
-# OpenAPI schema. Runs the Python dump step then the Node generator.
-# Pre-commit hook and CI codegen-check both invoke this script.
+# Regenerate services/ui-neu/frontend/src/lib/types/api.gen.ts from the v3
+# Backend's committed OpenAPI snapshot (services/ui/openapi.snapshot.json),
+# then run the Node generator. Pre-commit hook and CI codegen-check invoke this.
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
