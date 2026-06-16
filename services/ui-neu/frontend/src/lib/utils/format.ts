@@ -76,10 +76,12 @@ export function etaTime(
  * to the primary brand color so unrecognized statuses still pick up
  * theme tinting.
  *
- * Accepts JobState (arm-neu Job.status), JobStatus (transcoder), or
- * TrackStatus values. v2.0.0 disambiguated 'ripping' into
- * 'video_ripping'/'audio_ripping' and 'waiting' into
- * 'manual_paused'/'makemkv_throttled'; both new and legacy strings are
+ * Accepts a job status (v3 JobStatus), a transcode-task status
+ * (v3 TaskStatus), or a track status (TrackStatus) value. The status
+ * vocabulary is now owned by v3 — see the generated `$lib/types/api.gen`
+ * (`JobStatus` / `TaskStatus` / `TrackStatus`), not arm_contracts. v2.0.0
+ * disambiguated 'ripping' into 'video_ripping'/'audio_ripping' and 'waiting'
+ * into 'manual_paused'/'makemkv_throttled'; both new and legacy strings are
  * mapped here so in-flight jobs observed mid-deploy still tint correctly.
  */
 export function statusAccentVar(status: string | null | undefined): string {
@@ -121,17 +123,18 @@ export function statusAccentVar(status: string | null | undefined): string {
 
 /**
  * Map a status string to a CSS class. Receives values from three different
- * enums depending on caller:
- *   - arm_contracts.JobState (arm-neu Job.status) - StatusBadge in JobRow,
- *     JobCard, ActiveJobRow, DriveCard, jobs/[id]. Disambiguated in v2.0.0:
- *     'ripping' -> 'video_ripping'/'audio_ripping', 'waiting' ->
+ * v3 status enums (all in the generated `$lib/types/api.gen`, not
+ * arm_contracts) depending on caller:
+ *   - JobStatus (Job.status) - StatusBadge in JobRow, JobCard, ActiveJobRow,
+ *     DriveCard, jobs/[id]. Disambiguated in v2.0.0: 'ripping' ->
+ *     'video_ripping'/'audio_ripping', 'waiting' ->
  *     'manual_paused'/'makemkv_throttled'. Old strings kept as defensive
  *     fallbacks for in-flight jobs observed mid-deploy.
- *   - arm_contracts.JobStatus (transcoder TranscodeJob.status) - StatusBadge
- *     in TranscodeCard, transcoder/+page.svelte
- *   - arm_contracts.TrackStatus (Track.status) - StatusBadge at jobs/[id]:849.
+ *   - TaskStatus (transcode-task status) - StatusBadge in TranscodeCard,
+ *     transcoder/+page.svelte
+ *   - TrackStatus (Track.status) - StatusBadge at jobs/[id]:849.
  *     'failed' is a real TrackStatus member as of v2.0.0 (was previously
- *     only handled defensively for transcoder JobStatus).
+ *     only handled defensively for transcode-task status).
  * Plus two locally-generated literals: 'importing' (folder-import override
  * for status='ripping') and 'skipped' (UI-only marker for filtered/disabled
  * tracks). Both are produced inline at the StatusBadge call site, not by any
@@ -151,20 +154,20 @@ export function statusColor(status: string | null | undefined): string {
 		case 'ejecting':
 			return 'status-finishing';
 		case 'transcoding':
-		case 'processing': // JobStatus (transcoder) - TranscodeCard / transcoder page
+		case 'processing': // TaskStatus (transcode task) - TranscodeCard / transcoder page
 			return 'status-processing';
 		case 'success':
-		case 'completed': // JobStatus (transcoder) terminal
+		case 'completed': // TaskStatus (transcode task) terminal
 		case 'transcoded': // TrackStatus terminal (transcode-phase)
 			return 'status-success';
 		case 'fail':
-		case 'failed': // JobStatus (transcoder) terminal AND TrackStatus.failed (v2.0.0+)
+		case 'failed': // TaskStatus (transcode task) terminal AND TrackStatus.failed (v2.0.0+)
 			return 'status-error';
 		case 'waiting':         // legacy pre-v2.0.0; in-flight jobs mid-deploy
 		case 'manual_paused':
 		case 'makemkv_throttled':
 		case 'waiting_transcode':
-		case 'pending': // JobStatus (transcoder) + TrackStatus member
+		case 'pending': // TaskStatus (transcode task) + TrackStatus member
 			return 'status-warning';
 		case 'skipped': // locally generated for !track.enabled || filtered (jobs/[id]:849)
 			return 'status-unknown';

@@ -85,11 +85,11 @@ export function getVideoTypeConfig(
 	return FALLBACK_CONFIG;
 }
 
-// Source of truth: arm_contracts.JobState (see components/contracts).
-// isJobActive() is only ever called with arm-neu Job.status values
+// Source of truth: v3 JobStatus (generated in `$lib/types/api.gen`).
+// isJobActive() is only ever called with Job.status values
 // (ActiveJobRow / JobCard / JobRow / JobActions / job-fields / jobs/[id]),
-// so this set deliberately tracks JobState's non-terminal members and
-// nothing else. Transcoder-side JobStatus ('processing', 'pending') and
+// so this set deliberately tracks JobStatus's non-terminal members and
+// nothing else. Transcode-task TaskStatus ('processing', 'pending') and
 // TrackStatus ('pending') are intentionally absent - they never reach
 // isJobActive in current code paths.
 //
