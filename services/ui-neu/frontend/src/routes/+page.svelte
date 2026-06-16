@@ -33,38 +33,21 @@
 	let dismissedJobIds = $state(new Set<string>());
 	let activeJobs = $derived(dash.active_jobs ?? []);
 	let scanningJobs = $derived(
-		activeJobs.filter((j: JobView) => {
-			const s = j.status?.toLowerCase();
-			return s === 'identifying' || s === 'ready';
-		})
+		activeJobs.filter((j: JobView) => j.status?.toLowerCase() === 'created')
 	);
 	let waitingJobs = $derived(
 		activeJobs.filter((j: JobView) => {
 			const s = j.status?.toLowerCase();
-			return (s === 'manual_paused' || s === 'waiting') && !dismissedJobIds.has(j.id);
+			return (s === 'awaiting_user_id' || s === 'ripped_awaiting_identify') && !dismissedJobIds.has(j.id);
 		})
 	);
 	let nonWaitingActiveJobs = $derived(
-		activeJobs.filter((j: JobView) => {
-			const s = j.status?.toLowerCase();
-			return (
-				s !== 'waiting' &&
-				s !== 'manual_paused' &&
-				s !== 'makemkv_throttled' &&
-				s !== 'transcoding' &&
-				s !== 'waiting_transcode' &&
-				s !== 'identifying' &&
-				s !== 'ready' &&
-				s !== 'copying' &&
-				s !== 'ejecting'
-			);
-		})
+		activeJobs.filter((j: JobView) => j.status?.toLowerCase() === 'ripping')
 	);
 	let finishingJobs = $derived(
 		activeJobs.filter((j: JobView) => {
 			const s = j.status?.toLowerCase();
-			if (!$transcoderEnabled && s === 'waiting_transcode') return false;
-			return s === 'copying' || s === 'ejecting' || s === 'waiting_transcode';
+			return s === 'identified' || s === 'ripped' || s === 'ripped_partial';
 		})
 	);
 
@@ -281,7 +264,7 @@
 		</section>
 	{/if}
 
-	<!-- Finishing (copying / ejecting / waiting_transcode) -->
+	<!-- Finishing (identified / ripped / ripped_partial) -->
 	{#if finishingJobs.length > 0}
 		<section in:fade={fadeIn} out:fade={fadeOut}>
 			<SectionFrame variant="full" accent="var(--color-amber-500, #f59e0b)" label="FINISHING — {finishingJobs.length} {finishingJobs.length === 1 ? 'JOB' : 'JOBS'}">

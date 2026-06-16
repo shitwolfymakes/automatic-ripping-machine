@@ -69,37 +69,69 @@ async function renderDashboardTable() {
 
 describe('Dashboard job grouping logic', () => {
 	function groupJobs(jobs: Array<{ status: string | null; id: string }>) {
-		const scanning = jobs.filter((j) => j.status?.toLowerCase() === 'identifying');
-		const waiting = jobs.filter((j) => j.status?.toLowerCase() === 'waiting');
-		const active = jobs.filter((j) => {
+		const waiting = jobs.filter((j) => {
 			const s = j.status?.toLowerCase();
-			return s !== 'waiting' && s !== 'transcoding' && s !== 'waiting_transcode' && s !== 'identifying';
+			return s === 'awaiting_user_id' || s === 'ripped_awaiting_identify';
 		});
-		return { scanning, waiting, active };
+		const scanning = jobs.filter((j) => j.status?.toLowerCase() === 'created');
+		const active = jobs.filter((j) => j.status?.toLowerCase() === 'ripping');
+		const finishing = jobs.filter((j) => {
+			const s = j.status?.toLowerCase();
+			return s === 'identified' || s === 'ripped' || s === 'ripped_partial';
+		});
+		return { scanning, waiting, active, finishing };
 	}
 
-	it('identifying jobs go to scanning group, not active', () => {
-		const jobs = [
-			{ id: 'a', status: 'identifying' },
+	it('created jobs go to scanning, not active', () => {
+		const { scanning, active } = groupJobs([
+			{ id: 'a', status: 'created' },
 			{ id: 'b', status: 'ripping' }
-		];
-		const { scanning, active } = groupJobs(jobs);
-		expect(scanning).toHaveLength(1);
-		expect(scanning[0].id).toBe('a');
-		expect(active).toHaveLength(1);
-		expect(active[0].id).toBe('b');
+		]);
+		expect(scanning.map((j) => j.id)).toEqual(['a']);
+		expect(active.map((j) => j.id)).toEqual(['b']);
 	});
 
-	it('waiting jobs excluded from both scanning and active', () => {
-		const jobs = [
-			{ id: 'a', status: 'identifying' },
-			{ id: 'b', status: 'waiting' },
+	it('awaiting_user_id + ripped_awaiting_identify go to waiting', () => {
+		const { waiting } = groupJobs([
+			{ id: 'a', status: 'awaiting_user_id' },
+			{ id: 'b', status: 'ripped_awaiting_identify' },
 			{ id: 'c', status: 'ripping' }
+		]);
+		expect(waiting.map((j) => j.id).sort()).toEqual(['a', 'b']);
+	});
+
+	it('ripping is the only ACTIVE-RIPS status', () => {
+		const { active } = groupJobs([
+			{ id: 'a', status: 'ripping' },
+			{ id: 'b', status: 'ripped' },
+			{ id: 'c', status: 'created' }
+		]);
+		expect(active.map((j) => j.id)).toEqual(['a']);
+	});
+
+	it('identified + ripped + ripped_partial go to finishing', () => {
+		const { finishing } = groupJobs([
+			{ id: 'a', status: 'identified' },
+			{ id: 'b', status: 'ripped' },
+			{ id: 'c', status: 'ripped_partial' },
+			{ id: 'd', status: 'ripping' }
+		]);
+		expect(finishing.map((j) => j.id).sort()).toEqual(['a', 'b', 'c']);
+	});
+
+	it('all 7 non-terminal statuses are partitioned with no gaps/overlaps', () => {
+		const jobs = [
+			{ id: '1', status: 'created' },
+			{ id: '2', status: 'awaiting_user_id' },
+			{ id: '3', status: 'identified' },
+			{ id: '4', status: 'ripping' },
+			{ id: '5', status: 'ripped' },
+			{ id: '6', status: 'ripped_partial' },
+			{ id: '7', status: 'ripped_awaiting_identify' }
 		];
-		const { scanning, waiting, active } = groupJobs(jobs);
-		expect(scanning).toHaveLength(1);
-		expect(waiting).toHaveLength(1);
-		expect(active).toHaveLength(1);
+		const { scanning, waiting, active, finishing } = groupJobs(jobs);
+		const all = [...scanning, ...waiting, ...active, ...finishing].map((j) => j.id).sort();
+		expect(all).toEqual(['1', '2', '3', '4', '5', '6', '7']);
 	});
 });
 
