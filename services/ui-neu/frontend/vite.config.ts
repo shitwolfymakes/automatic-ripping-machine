@@ -7,8 +7,15 @@ export default defineConfig({
 	server: {
 		proxy: {
 			'/api': {
-				target: 'http://localhost:8888',
-				changeOrigin: true
+				target: 'https://localhost:8443',
+				changeOrigin: true,
+				secure: false
+			},
+			'/ws': {
+				target: 'wss://localhost:8443',
+				changeOrigin: true,
+				ws: true,
+				secure: false
 			}
 		}
 	}
