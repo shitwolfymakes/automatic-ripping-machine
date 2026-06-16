@@ -1,1 +1,0 @@
-# backend/common — shared utilities
