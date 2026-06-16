@@ -207,7 +207,7 @@
 			<div class="h-3 w-3 shrink-0 rounded-full bg-amber-500"></div>
 			<div>
 				<p class="font-medium text-amber-800 dark:text-amber-300">Ripping Paused</p>
-				<p class="text-sm text-amber-700 dark:text-amber-400">New discs will wait for manual start. Click "Start Ripping" on individual jobs or toggle "Auto-Start" to resume.</p>
+				<p class="text-sm text-amber-700 dark:text-amber-400">New discs won't start ripping while paused.</p>
 			</div>
 		</div>
 	{/if}
