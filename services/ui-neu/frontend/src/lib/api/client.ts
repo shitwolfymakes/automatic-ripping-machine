@@ -16,6 +16,17 @@ export function clearToken(): void {
 	localStorage.removeItem(TOKEN_KEY);
 }
 
+export class ApiError extends Error {
+	status: number;
+	body: unknown;
+	constructor(status: number, message: string, body: unknown) {
+		super(message);
+		this.name = 'ApiError';
+		this.status = status;
+		this.body = body;
+	}
+}
+
 let on401: () => void = () => {};
 
 export function setUnauthorizedHandler(fn: () => void): void {
@@ -32,19 +43,28 @@ function authHeaders(extra?: HeadersInit): Record<string, string> {
 async function handle<T>(res: Response): Promise<T> {
 	if (res.status === 401) {
 		on401();
-		throw new Error('API 401: Unauthorized');
+		let body: unknown = null;
+		try {
+			body = await res.json();
+		} catch {
+			/* no/non-JSON body */
+		}
+		throw new ApiError(401, 'API 401: Unauthorized', body);
 	}
 	if (!res.ok) {
 		let message = `API ${res.status}: ${res.statusText}`;
+		let body: unknown = null;
 		try {
-			const body = await res.json();
-			if (body && body.detail) {
-				message = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
+			body = await res.json();
+			// Only a string detail becomes the message; object detail stays on .body.
+			const detail = (body as { detail?: unknown } | null)?.detail;
+			if (typeof detail === 'string') {
+				message = detail;
 			}
 		} catch {
 			/* use default message */
 		}
-		throw new Error(message);
+		throw new ApiError(res.status, message, body);
 	}
 	try {
 		return (await res.json()) as T;

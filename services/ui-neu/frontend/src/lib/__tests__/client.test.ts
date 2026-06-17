@@ -10,7 +10,8 @@ import {
 	setToken,
 	clearToken,
 	getToken,
-	setUnauthorizedHandler
+	setUnauthorizedHandler,
+	ApiError
 } from '../api/client';
 
 const mockFetch = vi.fn();
@@ -84,13 +85,51 @@ describe('apiFetch (preserved behaviors)', () => {
 		await expect(apiFetch('/api/bad')).rejects.toThrow('API 502: Bad Gateway');
 	});
 
-	it('stringifies a non-string detail (validation array) in the error', async () => {
-		mockFetch.mockResolvedValue(
-			jsonResponse({ detail: [{ msg: 'bad', loc: ['body', 'x'] }] }, false, 422, 'Unprocessable')
+	it('keeps the status-text message for a non-string detail and preserves the body', async () => {
+		const errorBody = { detail: [{ msg: 'bad', loc: ['body', 'x'] }] };
+		mockFetch.mockResolvedValue(jsonResponse(errorBody, false, 422, 'Unprocessable'));
+		await apiFetch('/api/v').then(
+			() => {
+				throw new Error('should have thrown');
+			},
+			(e) => {
+				expect(e).toBeInstanceOf(ApiError);
+				expect(e.message).toBe('API 422: Unprocessable');
+				expect(e.body).toEqual(errorBody);
+			}
 		);
-		await expect(apiFetch('/api/v')).rejects.toThrow(
-			JSON.stringify([{ msg: 'bad', loc: ['body', 'x'] }])
+	});
+});
+
+describe('structured error body', () => {
+	it('throws ApiError with status + parsed body on non-2xx', async () => {
+		const body = { detail: { message: 'collisions', collisions: [{ output_path: '/x', reason: 'on_disk' }] } };
+		mockFetch.mockResolvedValue(jsonResponse(body, false, 409, 'Conflict'));
+		await apiFetch('/api/x').then(
+			() => {
+				throw new Error('should have thrown');
+			},
+			(e) => {
+				expect(e).toBeInstanceOf(ApiError);
+				expect(e.status).toBe(409);
+				expect(e.body).toEqual(body);
+			}
 		);
+	});
+
+	it('string detail still yields a readable message (back-compat)', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ detail: 'Not found' }, false, 404, 'Not Found'));
+		await expect(apiFetch('/api/x')).rejects.toThrow('Not found');
+	});
+
+	it('non-JSON error still throws with status-text message', async () => {
+		mockFetch.mockResolvedValue({
+			ok: false,
+			status: 502,
+			statusText: 'Bad Gateway',
+			json: () => Promise.reject(new Error('x'))
+		});
+		await expect(apiFetch('/api/x')).rejects.toThrow('API 502: Bad Gateway');
 	});
 });
 
