@@ -39,7 +39,15 @@ const { buildDetail } = vi.hoisted(() => {
 
 vi.mock('$lib/api/jobs', () => ({
 	fetchJob: vi.fn(() => Promise.resolve(buildDetail())),
-	updateTrack: vi.fn(() => Promise.resolve())
+	updateTrack: vi.fn(() => Promise.resolve()),
+	resolveJob: vi.fn(() => Promise.resolve({ job: {}, fan_out: [] })),
+	applySession: vi.fn(() =>
+		Promise.resolve({ session_application: {}, tasks: [], collisions: [], idempotent: false })
+	)
+}));
+
+vi.mock('$lib/api/sessions', () => ({
+	fetchSessions: vi.fn(() => Promise.resolve([]))
 }));
 
 vi.mock('$lib/api/logs', () => ({
@@ -89,14 +97,16 @@ describe('Job Detail Page', () => {
 			expect(container).toBeInTheDocument();
 		});
 
-		it('shows the Identify tab for video discs', async () => {
+		it('shows the poster/metadata-search tab for video discs', async () => {
 			renderComponent(JobDetailPage);
 			await waitFor(() => {
-				expect(screen.getByRole('button', { name: 'Identify' })).toBeInTheDocument();
+				expect(
+					screen.getByRole('button', { name: /Poster & metadata search/ })
+				).toBeInTheDocument();
 			});
 		});
 
-		it('hides the Identify tab for non-video discs', async () => {
+		it('hides the poster/metadata-search tab for non-video discs', async () => {
 			const { fetchJob } = await import('$lib/api/jobs');
 			const detail = buildDetail({ id: 'job_2', title: 'Data Disc', disc_type: 'data' });
 			detail.tracks = [];
@@ -106,7 +116,17 @@ describe('Job Detail Page', () => {
 			await waitFor(() => {
 				expect(screen.getByRole('heading', { name: 'Data Disc' })).toBeInTheDocument();
 			});
-			expect(screen.queryByRole('button', { name: 'Identify' })).not.toBeInTheDocument();
+			expect(
+				screen.queryByRole('button', { name: /Poster & metadata search/ })
+			).not.toBeInTheDocument();
+		});
+
+		it('shows the Identify (resolve) and Apply session buttons for a resolvable status', async () => {
+			renderComponent(JobDetailPage);
+			await waitFor(() => {
+				expect(screen.getByTestId('identify-open')).toBeInTheDocument();
+			});
+			expect(screen.getByTestId('apply-open')).toBeInTheDocument();
 		});
 	});
 

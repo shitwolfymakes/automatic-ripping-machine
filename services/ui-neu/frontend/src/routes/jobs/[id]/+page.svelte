@@ -5,11 +5,13 @@
 	import { fetchJob } from '$lib/api/jobs';
 	import { posterSrc, posterFallback } from '$lib/utils/poster';
 	import PosterImage from '$lib/components/PosterImage.svelte';
-	import type { JobDetailView } from '$lib/types/api.gen';
+	import type { JobDetailView, ResolveResponse, ApplySessionResponse } from '$lib/types/api.gen';
 	import JobActions from '$lib/components/JobActions.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import TitleSearch from '$lib/components/TitleSearch.svelte';
 	import TrackTitleSearch from '$lib/components/TrackTitleSearch.svelte';
+	import IdentifyDialog from '$lib/components/IdentifyDialog.svelte';
+	import ApplySessionDialog from '$lib/components/ApplySessionDialog.svelte';
 	import JobLifecycle from '$lib/components/JobLifecycle.svelte';
 	import { discTypeLabel, isJobActive } from '$lib/utils/job-type';
 	import { buildMetadataFields } from '$lib/utils/job-fields';
@@ -21,6 +23,59 @@
 	let jobError = $state<Error | null>(null);
 	let activePanel = $state<string | null>(null);
 	let editingTrackId = $state<string | null>(null);
+
+	// Dialog visibility + a transient note shown after a resolve/apply lands.
+	let showIdentify = $state(false);
+	let showApply = $state(false);
+	let actionNote = $state<string | null>(null);
+	let noteTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Statuses where identify (resolve) and apply-session are offered. These
+	// mirror the dialog gating in the spec: resolvable shows "Identify"/"Edit
+	// identity"; apply-session shows once an identity exists or a rip is done.
+	const RESOLVABLE_STATUSES = [
+		'awaiting_user_id',
+		'ripped_awaiting_identify',
+		'identified',
+		'ripped',
+		'ripped_partial'
+	];
+	const APPLY_STATUSES = ['identified', 'ripped', 'ripped_partial', 'awaiting_user_id'];
+
+	let canResolve = $derived(!!detail && RESOLVABLE_STATUSES.includes(detail.job.status));
+	let canApply = $derived(!!detail && APPLY_STATUSES.includes(detail.job.status));
+
+	// Identify is "Edit identity" once an identity already exists (post-rip /
+	// identified), otherwise "Identify disc" for the auto-id-failed case.
+	let identifyLabel = $derived(
+		detail && ['awaiting_user_id', 'ripped_awaiting_identify'].includes(detail.job.status)
+			? 'Identify disc'
+			: 'Edit identity'
+	);
+
+	function flashNote(message: string) {
+		actionNote = message;
+		if (noteTimer) clearTimeout(noteTimer);
+		noteTimer = setTimeout(() => {
+			actionNote = null;
+		}, 6000);
+	}
+
+	function handleIdentified(resp: ResolveResponse) {
+		showIdentify = false;
+		loadJob();
+		if (resp.fan_out?.length) {
+			const n = resp.fan_out.length;
+			flashNote(`${n} session${n === 1 ? '' : 's'} resumed`);
+		}
+	}
+
+	function handleApplied(resp: ApplySessionResponse) {
+		showApply = false;
+		loadJob();
+		const n = resp.tasks?.length ?? 0;
+		flashNote(`${n} transcode task${n === 1 ? '' : 's'} queued`);
+	}
 
 	let isVideoDisc = $derived(
 		detail?.job.disc_type === 'dvd' || detail?.job.disc_type === 'bluray'
@@ -121,6 +176,15 @@
 			<span class="text-gray-500 dark:text-gray-400">{job.title || 'Untitled'}</span>
 		</nav>
 
+		{#if actionNote}
+			<div
+				data-testid="action-note"
+				class="rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm text-primary-text dark:border-primary/30 dark:bg-primary/10 dark:text-primary-text-dark"
+			>
+				{actionNote}
+			</div>
+		{/if}
+
 		<!-- Main header container -->
 		<div class="rounded-lg border border-primary/20 bg-surface shadow-xs overflow-hidden dark:border-primary/20 dark:bg-surface-dark">
 
@@ -136,6 +200,26 @@
 
 				<!-- Action buttons pushed right -->
 				<div class="flex flex-wrap items-center gap-2 ml-auto">
+					{#if canResolve}
+						<button
+							type="button"
+							data-testid="identify-open"
+							onclick={() => (showIdentify = true)}
+							class="rounded-lg border border-primary/30 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 dark:border-primary/30 dark:text-primary dark:hover:bg-primary/10"
+						>
+							{identifyLabel}
+						</button>
+					{/if}
+					{#if canApply}
+						<button
+							type="button"
+							data-testid="apply-open"
+							onclick={() => (showApply = true)}
+							class="rounded-lg border border-primary/30 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 dark:border-primary/30 dark:text-primary dark:hover:bg-primary/10"
+						>
+							Apply session
+						</button>
+					{/if}
 					<JobActions {job} onaction={loadJob} ondelete={() => goto('/')} />
 				</div>
 			</div>
@@ -169,10 +253,11 @@
 				</div>
 			</div>
 
-			<!-- Panel toggle bar -->
+			<!-- Panel toggle bar: poster override (manual poster_url_manual quick-edit).
+			     Disc identity now commits through the IdentifyDialog (resolve), not here. -->
 			{#if isVideoDisc}
 				<div class="flex border-t border-primary/15 bg-surface/50 dark:border-primary/15 dark:bg-surface-dark/50">
-					<button onclick={() => (activePanel = activePanel === 'title' ? null : 'title')} class={panelTabClass('title', true)}>Identify</button>
+					<button onclick={() => (activePanel = activePanel === 'title' ? null : 'title')} class={panelTabClass('title', true)}>Poster &amp; metadata search</button>
 				</div>
 			{/if}
 
@@ -251,5 +336,12 @@
 			</section>
 		{/if}
 	</div>
+
+	{#if showIdentify}
+		<IdentifyDialog {job} onclose={() => (showIdentify = false)} onidentified={handleIdentified} />
+	{/if}
+	{#if showApply}
+		<ApplySessionDialog {job} onclose={() => (showApply = false)} onapplied={handleApplied} />
+	{/if}
 	{/snippet}
 </LoadState>

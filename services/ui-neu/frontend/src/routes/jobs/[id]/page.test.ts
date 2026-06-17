@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-utils';
 import Page from './+page.svelte';
 import { createJob, createTrack } from '$lib/components/__fixtures__/job';
 
@@ -31,7 +31,15 @@ vi.mock('$lib/api/jobs', () => ({
 			fingerprints: []
 		})
 	),
-	updateTrack: vi.fn()
+	updateTrack: vi.fn(),
+	resolveJob: vi.fn(() => Promise.resolve({ job: createJob({ id: 'job_42' }), fan_out: [] })),
+	applySession: vi.fn(() =>
+		Promise.resolve({ session_application: {}, tasks: [], collisions: [], idempotent: false })
+	)
+}));
+
+vi.mock('$lib/api/sessions', () => ({
+	fetchSessions: vi.fn(() => Promise.resolve([]))
 }));
 
 vi.mock('$lib/api/logs', () => ({
@@ -88,6 +96,32 @@ describe('Job detail page (v3)', () => {
 		renderComponent(Page);
 		await waitFor(() => {
 			expect(mockGoto).toHaveBeenCalledWith('/');
+		});
+	});
+
+	it('shows the Identify (Edit identity) button for a resolvable status', async () => {
+		renderComponent(Page);
+		await waitFor(() => {
+			expect(screen.getByTestId('identify-open')).toBeInTheDocument();
+		});
+	});
+
+	it('opens the IdentifyDialog when the Identify button is clicked', async () => {
+		renderComponent(Page);
+		const btn = await screen.findByTestId('identify-open');
+		await fireEvent.click(btn);
+		await waitFor(() => {
+			expect(screen.getByRole('dialog')).toBeInTheDocument();
+			expect(screen.getByTestId('identify-submit')).toBeInTheDocument();
+		});
+	});
+
+	it('shows the Apply session button and opens the ApplySessionDialog', async () => {
+		renderComponent(Page);
+		const btn = await screen.findByTestId('apply-open');
+		await fireEvent.click(btn);
+		await waitFor(() => {
+			expect(screen.getByTestId('apply-session-select')).toBeInTheDocument();
 		});
 	});
 });
