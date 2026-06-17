@@ -10,9 +10,11 @@ import type {
 	NamingPreviewResponse,
 	NamingValidateResponse,
 	NamingVariablesResponse,
-	MediaType
+	MediaType,
+	ResolveResponse,
+	ApplySessionResponse
 } from '$lib/types/api.gen';
-import { apiFetch } from './client';
+import { apiFetch, post } from './client';
 import { notAvailable } from './_stub';
 
 // ---------------------------------------------------------------------------
@@ -112,6 +114,36 @@ export function updateJobTitle(jobId: string, data: { poster_url_manual?: string
 
 export function updateJobConfig(jobId: string, data: JobUpdateRequest): Promise<JobView> {
 	return patchJob(jobId, data);
+}
+
+// ---------------------------------------------------------------------------
+// Identify / resolve + apply-session (EXISTS in v3)
+// ---------------------------------------------------------------------------
+
+// v3 POST /api/jobs/{id}/resolve  body: ResolveRequest { title, year?, metadata }.
+// Stamps the chosen identity onto the job (status → identified). `year` defaults
+// to null and `metadata` to {} so the body always matches the v3 contract.
+export function resolveJob(
+	jobId: string,
+	body: { title: string; year?: number | null; metadata?: Record<string, unknown> }
+): Promise<ResolveResponse> {
+	return post<ResolveResponse>(`/api/jobs/${jobId}/resolve`, {
+		title: body.title,
+		year: body.year ?? null,
+		metadata: body.metadata ?? {}
+	});
+}
+
+// v3 POST /api/jobs/{id}/transcode  body: ApplySessionRequest { session_id, overwrite }.
+// Applies a transcode session to the job; `overwrite` defaults to false.
+export function applySession(
+	jobId: string,
+	body: { session_id: string; overwrite?: boolean }
+): Promise<ApplySessionResponse> {
+	return post<ApplySessionResponse>(`/api/jobs/${jobId}/transcode`, {
+		session_id: body.session_id,
+		overwrite: body.overwrite ?? false
+	});
 }
 
 // ---------------------------------------------------------------------------

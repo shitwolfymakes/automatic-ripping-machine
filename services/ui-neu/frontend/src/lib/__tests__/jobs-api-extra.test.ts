@@ -10,6 +10,7 @@ function jsonResponse(data: unknown, ok = true) {
 import {
 	updateTrackTitle, clearTrackTitle, updateTrack,
 	fetchNamingPreview, validatePattern, fetchNamingVariables, namingPreview,
+	resolveJob, applySession,
 	// MISSING in v3
 	toggleMultiTitle, tvdbMatch, fetchTvdbEpisodes, updateJobNaming
 } from '../api/jobs';
@@ -111,6 +112,50 @@ describe('fetchNamingVariables', () => {
 		mockFetch.mockResolvedValue(jsonResponse({ variables: { movie: [{ token: 'title', description: 'Title' }] } }));
 		const result = await fetchNamingVariables();
 		expect(result.variables.movie[0].token).toBe('title');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Identify / resolve + apply-session (EXISTS in v3)
+// ---------------------------------------------------------------------------
+
+describe('resolveJob', () => {
+	it('POSTs /api/jobs/{id}/resolve with {title, year, metadata} (video case)', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ job: { id: 'job_1' }, fan_out: [] }));
+		await resolveJob('job_1', { title: 'X', year: 2020, metadata: {} });
+		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/job_1/resolve', expect.objectContaining({
+			method: 'POST',
+			body: JSON.stringify({ title: 'X', year: 2020, metadata: {} })
+		}));
+	});
+
+	it('POSTs the music case with a metadata payload and defaults year to null', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ job: { id: 'job_2' }, fan_out: [] }));
+		await resolveJob('job_2', { title: 'Album', metadata: { artist: 'A', tracks: [{ title: 'T1' }] } });
+		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/job_2/resolve', expect.objectContaining({
+			method: 'POST',
+			body: JSON.stringify({ title: 'Album', year: null, metadata: { artist: 'A', tracks: [{ title: 'T1' }] } })
+		}));
+	});
+});
+
+describe('applySession', () => {
+	it('POSTs /api/jobs/{id}/transcode with {session_id, overwrite:false} by default', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ collisions: [] }));
+		await applySession('job_1', { session_id: 'ses_1' });
+		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/job_1/transcode', expect.objectContaining({
+			method: 'POST',
+			body: JSON.stringify({ session_id: 'ses_1', overwrite: false })
+		}));
+	});
+
+	it('passes overwrite:true through', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ collisions: [] }));
+		await applySession('job_1', { session_id: 'ses_1', overwrite: true });
+		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/job_1/transcode', expect.objectContaining({
+			method: 'POST',
+			body: JSON.stringify({ session_id: 'ses_1', overwrite: true })
+		}));
 	});
 });
 
