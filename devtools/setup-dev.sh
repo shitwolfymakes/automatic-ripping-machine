@@ -441,5 +441,8 @@ cat <<EOF
 done — next:
   docker compose -f ${ROOT_DIR}/docker-compose.yml up -d --build
 
+  optional — trust the local CA so browsers/curl skip the self-signed warning:
+    bash devtools/trust-ca.sh
+
 IDE: point your interpreter at ${ROOT_DIR}/.venv/bin/python
 EOF

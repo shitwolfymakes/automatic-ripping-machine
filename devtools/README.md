@@ -39,6 +39,44 @@ Defaults to caching the ISO under `~/arm-corpus/` (override with `ISO_CACHE_DIR`
 
 Phase 9 + 15 backend crash-recovery drill. Injects a synthetic in-flight job into the DB, force-kills the backend, brings it back, and asserts the lifespan-startup sweep recovered the job. Destructive — confirms before touching anything; `--yes` skips the prompt.
 
+## seed-test-data.sh
+
+Populates the running dev DB with a fixture so the UI shows real data instead
+of the empty state: one seed drive + 7 jobs spanning statuses
+(ripping / ripped / identified / awaiting-id / ripped-partial / failed /
+abandoned, mixed disc types, real titles + TMDB posters) + 3 tracks on the
+ripped job.
+
+```bash
+bash devtools/seed-test-data.sh            # clean-then-seed (idempotent; safe to re-run)
+bash devtools/seed-test-data.sh --clean    # remove the seed rows and exit
+```
+
+Requires the dev stack running (`docker compose up -d` — needs `arm-db` for the
+inserts and `arm-backend` to mint valid ULID ids). Seed rows are tagged
+`metadata_json {"seed":true}` (the drive by its display_name); `--clean` and
+re-runs key off those, so it never touches real jobs. Dev-only — not invoked by
+`setup-dev.sh` or CI. View the result at `https://localhost:8082` (or the Vue UI
+at `:8081`).
+
+## trust-ca.sh
+
+Trusts the ARM v3 local CA (`arm/certs/arm-ca.crt`) on your dev machine so
+`https://localhost:8081` / `:8082` load without the self-signed-cert warning and
+`curl`/`wget` stop needing `-k`.
+
+```bash
+bash devtools/trust-ca.sh            # trust (idempotent / rotation-safe; re-run freely)
+bash devtools/trust-ca.sh --untrust  # remove the CA from the trust store(s)
+```
+
+Installs into the Linux trust store (`update-ca-certificates`, needs `sudo`) and —
+when running under WSL — the **Windows CurrentUser Root** store (`certutil.exe`, no
+UAC) so Chrome/Edge on Windows trust it too. Idempotent (remove-then-add), so it's
+safe to re-run after `install.sh --rotate-ca`. Dev-only — not run by `setup-dev.sh`
+or CI. `install.sh` owns CA *generation*; this only *trusts* an existing CA. See
+[../docs/arch/05-cross-cutting.md § Transport (TLS)](../docs/arch/05-cross-cutting.md#transport-tls).
+
 ## regen-openapi-snapshot.sh
 
 Regenerates `services/ui/openapi.snapshot.json` from the live FastAPI app. The CI `openapi-drift` job points at this script in its failure message.
