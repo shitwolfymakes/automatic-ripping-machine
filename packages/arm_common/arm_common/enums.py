@@ -168,3 +168,23 @@ class MakemkvKeyState(StrEnum):
     BINARY_EXPIRED = "binary_expired"
     FORMAT_INVALID = "format_invalid"
     PROBE_FAILED = "probe_failed"
+
+
+class KeydbState(StrEnum):
+    """Outcome of the ripper's community-keydb fetch (`update_keydb.sh`),
+    stored on the Config singleton and surfaced by /api/system/preflight.
+
+    OK              — downloaded, filtered, installed; vuk_count set.
+    DISABLED        — community keydb gated off via config.
+    FRESH_KEPT      — age-gated skip; existing keydb retained (age_days set).
+    DOWNLOAD_FAILED — all download retries failed; existing keydb retained.
+    EMPTY           — fetched file not a ZIP / no keydb.cfg / no VUK entries.
+    PROBE_FAILED    — wrapper could not run or parse the script.
+    """
+
+    OK = "ok"
+    DISABLED = "disabled"
+    FRESH_KEPT = "fresh_kept"
+    DOWNLOAD_FAILED = "download_failed"
+    EMPTY = "empty"
+    PROBE_FAILED = "probe_failed"
