@@ -351,6 +351,10 @@ export type ConfigUpdateRequest = {
      */
     block_on_miss?: boolean | null;
     /**
+     * Community Keydb Enabled
+     */
+    community_keydb_enabled?: boolean | null;
+    /**
      * Ripping Paused
      */
     ripping_paused?: boolean | null;
@@ -402,6 +406,10 @@ export type ConfigView = {
      * Block On Miss
      */
     block_on_miss: boolean;
+    /**
+     * Community Keydb Enabled
+     */
+    community_keydb_enabled: boolean;
     /**
      * Ripping Paused
      */
@@ -1091,6 +1099,41 @@ export type JobView = {
      */
     resumed_from_crash: boolean;
     rip_progress?: RipProgressSummary | null;
+};
+
+/**
+ * KeydbState
+ *
+ * Outcome of the ripper's community-keydb fetch (`update_keydb.sh`),
+ * stored on the Config singleton and surfaced by /api/system/preflight.
+ *
+ * OK              — downloaded, filtered, installed; vuk_count set.
+ * DISABLED        — community keydb gated off via config.
+ * FRESH_KEPT      — age-gated skip; existing keydb retained (age_days set).
+ * DOWNLOAD_FAILED — all download retries failed; existing keydb retained.
+ * EMPTY           — fetched file not a ZIP / no keydb.cfg / no VUK entries.
+ * PROBE_FAILED    — wrapper could not run or parse the script.
+ */
+export type KeydbState = 'ok' | 'disabled' | 'fresh_kept' | 'download_failed' | 'empty' | 'probe_failed';
+
+/**
+ * KeydbStatusReport
+ *
+ * Body of POST /api/ripper/keydb-status — the ripper's community-keydb
+ * fetch outcome. Global (not per-drive); the backend writes it to the Config
+ * singleton. `vuk_count` / `age_days` are present on ok / fresh_kept.
+ * Both fields are None on all other states.
+ */
+export type KeydbStatusReport = {
+    state: KeydbState;
+    /**
+     * Vuk Count
+     */
+    vuk_count?: number | null;
+    /**
+     * Age Days
+     */
+    age_days?: number | null;
 };
 
 /**
@@ -2088,6 +2131,10 @@ export type RipperConfigView = {
      * Makemkv Key
      */
     makemkv_key?: string | null;
+    /**
+     * Community Keydb Enabled
+     */
+    community_keydb_enabled?: boolean;
 };
 
 /**
@@ -3075,6 +3122,37 @@ export type MakemkvKeyStatusApiRipperMakemkvKeyStatusPostResponses = {
 };
 
 export type MakemkvKeyStatusApiRipperMakemkvKeyStatusPostResponse = MakemkvKeyStatusApiRipperMakemkvKeyStatusPostResponses[keyof MakemkvKeyStatusApiRipperMakemkvKeyStatusPostResponses];
+
+export type KeydbStatusApiRipperKeydbStatusPostData = {
+    body: KeydbStatusReport;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/ripper/keydb-status';
+};
+
+export type KeydbStatusApiRipperKeydbStatusPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type KeydbStatusApiRipperKeydbStatusPostError = KeydbStatusApiRipperKeydbStatusPostErrors[keyof KeydbStatusApiRipperKeydbStatusPostErrors];
+
+export type KeydbStatusApiRipperKeydbStatusPostResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type KeydbStatusApiRipperKeydbStatusPostResponse = KeydbStatusApiRipperKeydbStatusPostResponses[keyof KeydbStatusApiRipperKeydbStatusPostResponses];
 
 export type RegisterApiRipperRegisterPostData = {
     body: RegisterRequest;

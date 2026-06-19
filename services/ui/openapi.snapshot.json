@@ -317,7 +317,7 @@
           "ripper"
         ],
         "summary": "Keydb Status",
-        "description": "A ripper reports its community-keydb fetch outcome. Global fact \u2014\nwritten to the Config singleton (last writer wins across rippers, by\ndesign). /api/system/preflight reads it back.",
+        "description": "A ripper reports its community-keydb fetch outcome. Global fact \u2014\nwritten to the Config singleton (last writer wins across rippers, by\ndesign). /api/system/preflight reads it back. `age_days` is accepted for\nsymmetry with the ripper's status line but not persisted (no column for\nit); only state + vuk_count are durable.",
         "operationId": "keydb_status_api_ripper_keydb_status_post",
         "parameters": [
           {
