@@ -49,10 +49,11 @@ def _to_view(cfg: Config) -> ConfigView:
         auto_transcode_on_idle=cfg.auto_transcode_on_idle,
         auto_rip_on_insert=cfg.auto_rip_on_insert,
         block_on_miss=cfg.block_on_miss,
-        # `bool(...)` coerces the None a bare in-memory Config carries (the
-        # server_default is DB-level only) to False, so _to_view works for
-        # rows/fixtures predating this column. The sibling bools predate their
-        # consumers' fixtures so they don't need it.
+        # `bool(...)` coerces the None a bare in-memory Config carries (these
+        # columns' server_default is DB-level only) to False, so _to_view works
+        # for rows/fixtures predating them. The sibling bools above predate their
+        # consumers' fixtures, so they don't need it.
+        community_keydb_enabled=bool(cfg.community_keydb_enabled),
         ripping_paused=bool(cfg.ripping_paused),
         default_retention_policy=cfg.default_retention_policy,
         notification_apprise_urls=list(cfg.notification_apprise_urls or []),

@@ -28,6 +28,13 @@ class Config(SQLModel, table=True):
     makemkv_key_valid: bool | None = Field(sa_column=Column(Boolean, nullable=True))
     makemkv_key_state: str | None = Field(sa_column=Column(String, nullable=True))
     makemkv_key_checked_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
+    # Community-keydb (FindVUK) auto-fetch: operator toggle + ripper-reported
+    # status. The ripper downloads/filters/installs ~/.MakeMKV/keydb.cfg per rip
+    # (fire-and-forget) when enabled; see services/ripper/arm_ripper/community_keydb.py.
+    community_keydb_enabled: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
+    community_keydb_state: str | None = Field(sa_column=Column(String, nullable=True))
+    community_keydb_vuk_count: int | None = Field(sa_column=Column(Integer, nullable=True))
+    community_keydb_checked_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
     # MusicBrainz requires a non-empty User-Agent (they 403 blank UAs); `armv3`
     # is a reasonable shared default that won't blow up the first audio-CD rip
     # on a fresh install. Operators are still encouraged to override with an

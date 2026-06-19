@@ -95,6 +95,16 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         editable=True,
     ),
     ConfigFieldMeta(
+        key="community_keydb_enabled",
+        group="Ripping",
+        tier="operator",
+        label="Community keydb (FindVUK)",
+        help="Auto-download community AACS VUK keys so MakeMKV can decrypt "
+        "Blu-rays its own key server no longer covers.",
+        type="bool",
+        editable=True,
+    ),
+    ConfigFieldMeta(
         key="ripping_paused",
         group="Ripping",
         tier="operator",
