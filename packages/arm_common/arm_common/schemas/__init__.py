@@ -31,6 +31,7 @@ from arm_common.schemas.jobs import (
     ResolveResponse,
     RipProgressSummary,
     RipStartResponse,
+    TrackEditRequest,
     TrackView,
 )
 from arm_common.schemas.metadata import (
@@ -237,6 +238,7 @@ __all__ = [
     "SystemVersionResponse",
     "TemplatePreviewRequest",
     "TemplatePreviewResponse",
+    "TrackEditRequest",
     "TrackFilters",
     "TrackUpdateRequest",
     "TrackView",

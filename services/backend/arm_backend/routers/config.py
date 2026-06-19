@@ -22,10 +22,6 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
-from arm_backend.notification_dispatcher import (
-    _first_invalid_apprise_url,
-    redact_apprise_url,
-)
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_common import Config, User
 from arm_common.config_metadata import CONFIG_FIELD_META
@@ -115,13 +111,6 @@ async def update_config(
     for key in _SECRET_KEYS:
         if fields.get(key) == HIDDEN_SECRET:
             del fields[key]
-    if fields.get("notification_apprise_urls"):
-        bad = _first_invalid_apprise_url(fields["notification_apprise_urls"])
-        if bad is not None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"invalid apprise URL: {redact_apprise_url(bad)}",
-            )
     if "metadata_provider" in fields and fields["metadata_provider"] not in ("tmdb", "omdb"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

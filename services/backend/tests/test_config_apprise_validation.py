@@ -1,9 +1,10 @@
-"""Phase 11 — `PATCH /api/config` apprise URL validation + view round-trip.
+"""`PATCH /api/config` notification + view round-trip.
 
-Validation runs whether `notifications_enabled` is True or False — saving
-bad URLs is invalid input regardless of the master toggle. The 400 detail
-must redact the offending URL (scheme-only) so the response is safe to
-paste into a bug report.
+As of the settings audit (§1.2), `notification_apprise_urls` is no longer on
+the editable surface — it's dropped from `ConfigUpdateRequest`, so a PATCH that
+sends it is silently ignored (the legacy flat list never dispatches; channels
+do). It still round-trips in `ConfigView` for read back-compat. These tests
+assert the field is inert on write but readable on GET.
 """
 
 from __future__ import annotations
@@ -70,9 +71,11 @@ def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_valid_url_list_accepted(signing_key: bytes) -> None:
+def test_apprise_urls_patch_is_ignored(signing_key: bytes) -> None:
+    # The field is off the editable surface, so a PATCH carrying it is silently
+    # dropped (200) and the stored list is unchanged — but it still reads back.
     db = FakeSession()
-    _seed(db)
+    _seed(db, urls=["mailto://orig@host"])
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.patch(
@@ -81,10 +84,14 @@ def test_valid_url_list_accepted(signing_key: bytes) -> None:
             headers=_auth(token),
         )
     assert r.status_code == 200, r.text
-    assert r.json()["notification_apprise_urls"] == ["mailto://user:pass@gmail.com"]
+    # Unchanged: the PATCH value never reached the row.
+    assert r.json()["notification_apprise_urls"] == ["mailto://orig@host"]
+    assert db.rows["config"][0].notification_apprise_urls == ["mailto://orig@host"]
 
 
-def test_invalid_url_returns_400_with_redacted_detail(signing_key: bytes) -> None:
+def test_invalid_apprise_url_no_longer_validated(signing_key: bytes) -> None:
+    # No write-path validation remains: a bogus URL in the PATCH body is ignored
+    # rather than rejected, because the field is no longer accepted at all.
     db = FakeSession()
     _seed(db)
     app, token = _make_app(signing_key, db)
@@ -94,42 +101,20 @@ def test_invalid_url_returns_400_with_redacted_detail(signing_key: bytes) -> Non
             json={"notification_apprise_urls": ["not-a-url://AAA-BBB-CCC"]},
             headers=_auth(token),
         )
-    assert r.status_code == 400
-    detail = r.json()["detail"]
-    assert "invalid apprise URL" in detail
-    assert "****" in detail
-    assert "AAA-BBB-CCC" not in detail
+    assert r.status_code == 200, r.text
+    # inert on write: the bogus URL was neither rejected nor persisted
+    assert db.rows["config"][0].notification_apprise_urls == []
 
 
-def test_clearing_urls_is_allowed(signing_key: bytes) -> None:
+def test_apprise_urls_readable_in_view(signing_key: bytes) -> None:
+    # GET still projects the stored list for back-compat.
     db = FakeSession()
     _seed(db, urls=["mailto://user@host"])
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
-        r = client.patch(
-            "/api/config",
-            json={"notification_apprise_urls": []},
-            headers=_auth(token),
-        )
+        r = client.get("/api/config", headers=_auth(token))
     assert r.status_code == 200, r.text
-    assert r.json()["notification_apprise_urls"] == []
-
-
-def test_validation_runs_when_enabled_too(signing_key: bytes) -> None:
-    db = FakeSession()
-    _seed(db, enabled=True)
-    app, token = _make_app(signing_key, db)
-    with TestClient(app) as client:
-        r = client.patch(
-            "/api/config",
-            json={
-                "notifications_enabled": True,
-                "notification_apprise_urls": ["totally-bogus://AAA"],
-            },
-            headers=_auth(token),
-        )
-    assert r.status_code == 400
-    assert "AAA" not in r.json()["detail"]
+    assert r.json()["notification_apprise_urls"] == ["mailto://user@host"]
 
 
 def test_notifications_enabled_round_trips(signing_key: bytes) -> None:

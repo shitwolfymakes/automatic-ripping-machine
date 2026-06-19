@@ -69,8 +69,6 @@ class ConfigUpdateRequest(BaseModel):
     auto_rip_on_insert: bool | None = None
     block_on_miss: bool | None = None
     ripping_paused: bool | None = None
-    default_retention_policy: RetentionPolicy | None = None
-    notification_apprise_urls: list[str] | None = None
     notifications_enabled: bool | None = None
     metadata_provider: str | None = None
 
