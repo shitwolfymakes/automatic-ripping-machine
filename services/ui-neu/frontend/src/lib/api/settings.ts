@@ -174,12 +174,6 @@ export interface SystemInfoData {
 	}>;
 }
 
-export interface AbcdeConfigData {
-	content: string;
-	path: string;
-	exists: boolean;
-}
-
 // Transcoder service config lives in the transcoder service, not the v3 backend.
 // These keep their BFF data-shape return types so consumers that destructure the
 // result still type-check; the async body rejects via notAvailable before any
@@ -188,14 +182,6 @@ export async function saveTranscoderConfig(
 	_config: Record<string, unknown>
 ): Promise<{ success: boolean; applied?: Record<string, unknown> }> {
 	notAvailable('Transcoder config');
-}
-
-export async function fetchAbcdeConfig(): Promise<AbcdeConfigData> {
-	notAvailable('abcde config');
-}
-
-export async function saveAbcdeConfig(_content: string): Promise<{ success: boolean }> {
-	notAvailable('abcde config');
 }
 
 export async function testTranscoderConnection(): Promise<ConnectionTestResult> {

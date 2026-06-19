@@ -115,7 +115,7 @@
 		{#if isEditMode}
 			<p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
 				Update the title, year, and metadata for this job. Status stays as-is. Existing
-				transcoded files keep their original filenames — re-apply a session if you want new
+				transcoded files keep their original filenames - re-apply a session if you want new
 				outputs under the corrected name.
 			</p>
 		{:else}
@@ -233,7 +233,7 @@
 					data-testid="identify-submit"
 					class="rounded-lg px-4 py-2 text-sm font-medium confirm-btn-primary disabled:cursor-not-allowed disabled:opacity-50"
 				>
-					{submitting ? 'Saving…' : isEditMode ? 'Edit identity' : 'Identify disc'}
+					{submitting ? 'Saving...' : isEditMode ? 'Edit identity' : 'Identify disc'}
 				</button>
 			</div>
 		</form>

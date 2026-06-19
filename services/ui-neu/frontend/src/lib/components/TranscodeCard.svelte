@@ -60,7 +60,7 @@
 			<!-- ETA (active) or Elapsed (otherwise) -->
 			{#if isActive}
 				<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400" title="Estimated time remaining">
-					{etaDisplay ? `~${etaDisplay}` : (job.created_at ? elapsedTime(job.created_at) : '—')}
+					{etaDisplay ? `~${etaDisplay}` : (job.created_at ? elapsedTime(job.created_at) : '-')}
 				</span>
 			{:else if job.created_at}
 				<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">{elapsedTime(job.created_at)}</span>
@@ -113,13 +113,13 @@
 							<td class="py-1 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap">Attempts</td>
 							<td class="py-1 text-gray-900 dark:text-white">{job.attempts}</td>
 							<td class="py-1 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap pl-6">Output</td>
-							<td class="py-1 font-mono text-gray-600 dark:text-gray-400 truncate" title={job.output_path ?? ''}>{sourceFile || '—'}</td>
+							<td class="py-1 font-mono text-gray-600 dark:text-gray-400 truncate" title={job.output_path ?? ''}>{sourceFile || '-'}</td>
 						</tr>
 						<tr>
 							<td class="py-1 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap">Started</td>
-							<td class="py-1 text-gray-900 dark:text-white">{#if job.created_at}<TimeAgo date={job.created_at} />{:else}—{/if}</td>
+							<td class="py-1 text-gray-900 dark:text-white">{#if job.created_at}<TimeAgo date={job.created_at} />{:else}-{/if}</td>
 							<td class="py-1 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap pl-6">Updated</td>
-							<td class="py-1 text-gray-900 dark:text-white">{#if job.updated_at}<TimeAgo date={job.updated_at} />{:else}—{/if}</td>
+							<td class="py-1 text-gray-900 dark:text-white">{#if job.updated_at}<TimeAgo date={job.updated_at} />{:else}-{/if}</td>
 						</tr>
 						<tr>
 							<td class="py-1 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap">Progress</td>

@@ -1,8 +1,8 @@
 <script lang="ts">
-	import type { Channel, Catalog, CatalogService, ChannelTemplate, AppriseConfig } from '$lib/types/notifications';
+	import type { Channel, Catalog, CatalogService, AppriseConfig } from '$lib/types/notifications';
+	import type { ChannelTemplate } from '$lib/types/notifications';
 	import ConfigureSection from './sections/ConfigureSection.svelte';
 	import EventsSection from './sections/EventsSection.svelte';
-	import TemplatesSection from './sections/TemplatesSection.svelte';
 
 	export interface EditorBody {
 		name: string;
@@ -82,7 +82,7 @@
 	{#if channel.type === 'apprise'}
 		{#if unknownService}
 			<p class="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-300">
-				Unknown service '{serviceId}' — recreate this channel to edit its destination.
+				Unknown service '{serviceId}' - recreate this channel to edit its destination.
 			</p>
 		{:else if noFields}
 			<p class="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-300">
@@ -94,8 +94,7 @@
 	{:else}
 		<ConfigureSection type={channel.type} bind:name bind:enabled bind:config {service} />
 	{/if}
-	<EventsSection bind:selected={events} />
-	<TemplatesSection subscribedEvents={events} bind:templates />
+	<EventsSection bind:selected={events} bind:templates />
 
 	<div class="flex flex-wrap items-center gap-2">
 		<button type="button" disabled={!dirty} onclick={() => onsave(body())} class="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-hover disabled:opacity-40">Save changes</button>

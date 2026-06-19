@@ -12,7 +12,9 @@ import type {
 	NamingVariablesResponse,
 	MediaType,
 	ResolveResponse,
-	ApplySessionResponse
+	ApplySessionResponse,
+	ManualTriggerRequest,
+	ManualTriggerResponse
 } from '$lib/types/api.gen';
 import { apiFetch, post } from './client';
 import { notAvailable } from './_stub';
@@ -132,6 +134,12 @@ export function resolveJob(
 		year: body.year ?? null,
 		metadata: body.metadata ?? {}
 	});
+}
+
+// v3 POST /api/jobs/manual  body: ManualTriggerRequest { drive_id, session_id? }.
+// Kicks off a manual rip on the given drive, optionally pinning a transcode session.
+export function triggerManual(body: ManualTriggerRequest): Promise<ManualTriggerResponse> {
+	return post<ManualTriggerResponse>('/api/jobs/manual', body);
 }
 
 // v3 POST /api/jobs/{id}/transcode  body: ApplySessionRequest { session_id, overwrite }.

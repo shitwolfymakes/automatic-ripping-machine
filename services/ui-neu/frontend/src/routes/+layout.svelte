@@ -6,8 +6,6 @@
 	import { dashboard } from '$lib/stores/dashboard';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { setRippingEnabled } from '$lib/api/dashboard';
-	import SidebarStats from '$lib/components/SidebarStats.svelte';
-	import BottomStatsBar from '$lib/components/BottomStatsBar.svelte';
 	import { goto } from '$app/navigation';
 	import { showImportWizard } from '$lib/stores/importWizard';
 	import ImportWizard from '$lib/components/ImportWizard.svelte';
@@ -19,7 +17,6 @@
 	let { children } = $props();
 
 	let sidebarOpen = $state(false);
-	let mobileDrawerView = $state<'menu' | 'stats'>('menu');
 	let togglingPause = $state(false);
 	let quickMenuOpen = $state(false);
 	const rippingCount = $derived(($dashboard.active_jobs ?? []).filter(j => {
@@ -144,10 +141,6 @@
 					</a>
 				{/each}
 			</nav>
-			<hr class="border-primary/20 dark:border-primary/20" />
-			<div class="hidden 2xl:block">
-				<SidebarStats systemInfo={$dashboard.system_info} systemStats={$dashboard.system_stats} transcoderInfo={$dashboard.transcoder_info} transcoderStats={$dashboard.transcoder_system_stats} armOnline={$dashboard.arm_online} transcoderOnline={$dashboard.transcoder_online} />
-			</div>
 		</div>
 	</aside>
 
@@ -183,9 +176,9 @@
 					</a>
 					<a href="/settings#ripping/makemkv" class="flex items-center gap-1.5 hover:opacity-75 transition-opacity"
 						title={$dashboard.makemkv_key_valid === true
-							? `MakeMKV key valid${$dashboard.makemkv_key_checked_at ? ' — checked ' + new Date($dashboard.makemkv_key_checked_at).toLocaleString() : ''}`
+							? `MakeMKV key valid${$dashboard.makemkv_key_checked_at ? ' - checked ' + new Date($dashboard.makemkv_key_checked_at).toLocaleString() : ''}`
 							: $dashboard.makemkv_key_valid === false
-								? 'MakeMKV key invalid — click to update'
+								? 'MakeMKV key invalid - click to update'
 								: 'MakeMKV key not checked yet'}
 					>
 						<div class="h-2 w-2 shrink-0 rounded-full {$dashboard.makemkv_key_valid === true ? 'bg-green-500' : 'bg-red-500'}"></div>
@@ -332,63 +325,35 @@
 						<img src="/img/arm-logo-white.png" alt="ARM" class="hidden h-20 w-20 dark:block" />
 					</div>
 					<hr class="border-primary/20 dark:border-primary/20" />
-					<!-- Drawer view toggle (mobile) -->
-					<div class="px-3 pt-3">
-						<div class="flex rounded-sm bg-primary/10 p-0.5 dark:bg-primary/10">
-							<button
-								onclick={() => mobileDrawerView = 'menu'}
-								class="flex-1 rounded-sm px-2 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors
-									{mobileDrawerView === 'menu'
-										? 'bg-primary/20 text-primary-text shadow-xs dark:bg-primary/25 dark:text-primary-text-dark'
-										: 'text-primary-text/50 hover:text-primary-text dark:text-primary-text-dark/50 dark:hover:text-primary-text-dark'}"
-							>Menu</button>
-							<button
-								onclick={() => mobileDrawerView = 'stats'}
-								class="flex-1 rounded-sm px-2 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors
-									{mobileDrawerView === 'stats'
-										? 'bg-primary/20 text-primary-text shadow-xs dark:bg-primary/25 dark:text-primary-text-dark'
-										: 'text-primary-text/50 hover:text-primary-text dark:text-primary-text-dark/50 dark:hover:text-primary-text-dark'}"
-							>Stats</button>
-						</div>
-					</div>
-					{#if mobileDrawerView === 'menu'}
-						<nav class="flex-1 overflow-y-auto space-y-1 px-3 py-4">
-							{#each navItems as item}
-								<a
-									href={item.href}
-									onclick={() => sidebarOpen = false}
-									data-active={isActive(item.href, $page.url.pathname) || undefined}
-									class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors
-										{isActive(item.href, $page.url.pathname)
-											? 'bg-primary-light-bg text-primary-text dark:bg-primary-light-bg-dark/30 dark:text-primary-text-dark'
-											: 'text-gray-700 hover:bg-primary/10 dark:text-gray-300 dark:hover:bg-primary/15'}"
-								>
-									<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={item.icon} />
-									</svg>
-									{item.label}
-									{#if item.href === '/notifications' && ($dashboard.notification_count ?? 0) > 0}
-										<span class="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-xs font-medium text-white">{$dashboard.notification_count}</span>
+					<nav class="flex-1 overflow-y-auto space-y-1 px-3 py-4">
+						{#each navItems as item}
+							<a
+								href={item.href}
+								onclick={() => sidebarOpen = false}
+								data-active={isActive(item.href, $page.url.pathname) || undefined}
+								class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors
+									{isActive(item.href, $page.url.pathname)
+										? 'bg-primary-light-bg text-primary-text dark:bg-primary-light-bg-dark/30 dark:text-primary-text-dark'
+										: 'text-gray-700 hover:bg-primary/10 dark:text-gray-300 dark:hover:bg-primary/15'}"
+							>
+								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={item.icon} />
+								</svg>
+								{item.label}
+								{#if item.href === '/notifications' && ($dashboard.notification_count ?? 0) > 0}
+									<span class="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-xs font-medium text-white">{$dashboard.notification_count}</span>
 								{/if}
-								</a>
-							{/each}
-						</nav>
-					{:else}
-						<div class="flex-1 overflow-y-auto">
-							<SidebarStats systemInfo={$dashboard.system_info} systemStats={$dashboard.system_stats} transcoderInfo={$dashboard.transcoder_info} transcoderStats={$dashboard.transcoder_system_stats} armOnline={$dashboard.arm_online} transcoderOnline={$dashboard.transcoder_online} />
-						</div>
-					{/if}
+							</a>
+						{/each}
+					</nav>
 				</aside>
 			</div>
 		{/if}
 
 		<!-- Page content -->
-		<main class="flex-1 overflow-y-auto p-4 lg:p-6 lg:pb-16 2xl:pb-6">
+		<main class="flex-1 overflow-y-auto p-4 lg:p-6">
 			{@render children()}
 		</main>
-
-		<!-- Bottom stats bar — visible only at lg (1024-1279px), visibility controlled by component root -->
-		<BottomStatsBar systemInfo={$dashboard.system_info} systemStats={$dashboard.system_stats} transcoderInfo={$dashboard.transcoder_info} transcoderStats={$dashboard.transcoder_system_stats} armOnline={$dashboard.arm_online} transcoderOnline={$dashboard.transcoder_online} />
 	</div>
 </div>
 {/if}

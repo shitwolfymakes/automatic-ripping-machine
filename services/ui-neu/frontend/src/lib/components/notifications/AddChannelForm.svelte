@@ -1,9 +1,9 @@
 <script lang="ts">
-	import type { Catalog, CatalogService, ChannelType, ChannelTemplate } from '$lib/types/notifications';
+	import type { Catalog, CatalogService, ChannelType } from '$lib/types/notifications';
+	import type { ChannelTemplate } from '$lib/types/notifications';
 	import ConfigureSection from './sections/ConfigureSection.svelte';
 	import LabelEnabledRow from './sections/LabelEnabledRow.svelte';
 	import EventsSection from './sections/EventsSection.svelte';
-	import TemplatesSection from './sections/TemplatesSection.svelte';
 	import ServiceDropdown from './ServiceDropdown.svelte';
 	import { missingRequirements } from './channelHelpers';
 
@@ -91,8 +91,7 @@
 		{/if}
 
 		<ConfigureSection {type} bind:name bind:enabled bind:config {service} showLabelRow={false} />
-		<EventsSection bind:selected={events} />
-		<TemplatesSection subscribedEvents={events} bind:templates />
+		<EventsSection bind:selected={events} bind:templates />
 	</div>
 
 	<div class="flex items-center justify-between border-t border-primary/20 px-5 py-3.5">

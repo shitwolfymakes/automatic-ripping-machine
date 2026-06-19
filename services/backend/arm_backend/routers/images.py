@@ -6,10 +6,12 @@ import time
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
 
 from arm_backend import image_cache
+from arm_backend.auth import require_jwt
+from arm_common import User
 
 _NEGATIVE_CACHE: dict[str, float] = {}
 _NEGATIVE_TTL_SECONDS = 3600
@@ -88,3 +90,15 @@ async def proxy_image(url: str = Query(..., description="Image URL to proxy")) -
     except httpx.HTTPError:
         _NEGATIVE_CACHE[safe_url] = now + _NEGATIVE_TTL_SECONDS
         return _not_found("Failed to fetch image")
+
+
+@router.get("/images/cache")
+async def image_cache_stats(_: User = Depends(require_jwt)) -> dict[str, object]:
+    """Image-cache statistics (count, size)."""
+    return image_cache.stats()
+
+
+@router.post("/images/cache/clear")
+async def image_cache_clear(_: User = Depends(require_jwt)) -> dict[str, object]:
+    """Clear the image cache. Returns {success, cleared, freed_bytes}."""
+    return image_cache.clear()

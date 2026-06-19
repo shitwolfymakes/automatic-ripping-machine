@@ -64,7 +64,7 @@
 					</div>
 					<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
 						<span class="font-mono text-xs">{drive.device_path}</span>
-						{#if drive.hostname} · {drive.hostname}{/if}
+						{#if drive.hostname} | {drive.hostname}{/if}
 					</p>
 				</div>
 			{/each}

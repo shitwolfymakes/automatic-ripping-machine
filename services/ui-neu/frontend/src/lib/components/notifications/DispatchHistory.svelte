@@ -24,7 +24,7 @@
 				<span class="font-medium">{row.event_key}</span>
 				<span class="text-gray-400">{row.created_at ?? ''}</span>
 				{#if row.last_error}
-					<span class="text-status-error">· {row.last_error}</span>
+					<span class="text-status-error">| {row.last_error}</span>
 				{/if}
 			</li>
 		{/each}

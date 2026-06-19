@@ -24,7 +24,7 @@
 
 	const status = $derived(channelStatus(channel));
 	const secondary = $derived(
-		`${typeLabel(channel.type)} · ${channel.subscribed_events.length} events`
+		`${typeLabel(channel.type)} | ${channel.subscribed_events.length} events`
 	);
 </script>
 
@@ -47,7 +47,7 @@
 	<div class="min-w-0">
 		<p class="truncate text-sm font-medium text-gray-900 dark:text-white">{channel.name}</p>
 		<p class="truncate text-xs text-gray-500 dark:text-gray-400">
-			{secondary}{#if channel.last_error}<span class="text-status-error"> · {channel.last_error}</span>{/if}
+			{secondary}{#if channel.last_error}<span class="text-status-error"> | {channel.last_error}</span>{/if}
 		</p>
 	</div>
 

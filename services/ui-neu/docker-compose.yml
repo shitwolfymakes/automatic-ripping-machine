@@ -19,8 +19,8 @@
 services:
   arm-ui-neu:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: services/ui-neu/Dockerfile
     container_name: armv3-ui-neu
     restart: unless-stopped
     ports:

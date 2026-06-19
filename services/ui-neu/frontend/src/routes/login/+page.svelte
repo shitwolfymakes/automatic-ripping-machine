@@ -40,7 +40,7 @@
 			<input bind:value={password} type="password" required autocomplete="current-password" class="w-full rounded border border-primary/20 px-3 py-2 dark:bg-surface-dark" />
 		</label>
 		<button type="submit" disabled={submitting} class="w-full rounded bg-primary px-4 py-2 font-medium text-white disabled:opacity-60">
-			{submitting ? 'Signing in…' : 'Sign in'}
+			{submitting ? 'Signing in...' : 'Sign in'}
 		</button>
 	</form>
 </div>

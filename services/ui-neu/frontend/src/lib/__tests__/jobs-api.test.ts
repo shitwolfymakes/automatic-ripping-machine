@@ -1,14 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('$lib/api/client', () => ({
-	apiFetch: vi.fn().mockResolvedValue({})
+	apiFetch: vi.fn().mockResolvedValue({}),
+	post: vi.fn().mockResolvedValue({})
 }));
 
-import { apiFetch } from '$lib/api/client';
+import { apiFetch, post } from '$lib/api/client';
 import {
 	fetchJobs, fetchJob, abandonJob, deleteJob, bulkDeleteJobs,
 	searchMetadata, fetchMediaDetail, searchMusicMetadata, fetchMusicDetail,
-	updateJobTitle, updateJobConfig,
+	updateJobTitle, updateJobConfig, triggerManual,
 	// MISSING in v3
 	cancelWaitingJob, startWaitingJob, pauseWaitingJob, fixJobPermissions,
 	skipAndFinalize, forceComplete, submitToCrcDb, fetchCrcLookup,
@@ -16,9 +17,11 @@ import {
 } from '../api/jobs';
 
 const mockApiFetch = vi.mocked(apiFetch);
+const mockPost = vi.mocked(post);
 
 beforeEach(() => {
 	mockApiFetch.mockClear();
+	mockPost.mockClear();
 });
 
 describe('fetchJobs', () => {
@@ -145,5 +148,23 @@ describe('MISSING in v3 — reject before any fetch', () => {
 	])('%s rejects with /not yet available in v3/', async (_name, call) => {
 		await expect(call()).rejects.toThrow(/not yet available in v3/);
 		expect(mockApiFetch).not.toHaveBeenCalled();
+	});
+});
+
+describe('triggerManual (EXISTS in v3)', () => {
+	it('POSTs /api/jobs/manual with drive_id + session_id', async () => {
+		await triggerManual({ drive_id: 'drv_1', session_id: 'ses_1' });
+		expect(mockPost).toHaveBeenCalledWith('/api/jobs/manual', {
+			drive_id: 'drv_1',
+			session_id: 'ses_1'
+		});
+	});
+
+	it('POSTs with session_id null when none chosen', async () => {
+		await triggerManual({ drive_id: 'drv_1', session_id: null });
+		expect(mockPost).toHaveBeenCalledWith('/api/jobs/manual', {
+			drive_id: 'drv_1',
+			session_id: null
+		});
 	});
 });

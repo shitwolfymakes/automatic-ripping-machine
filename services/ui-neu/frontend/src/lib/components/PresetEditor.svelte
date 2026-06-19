@@ -84,7 +84,7 @@
     }
 
     const TIER_LABELS: Record<string, string> = { dvd: 'DVD', bluray: 'Blu-ray', uhd: 'UHD' };
-    const TIER_HINTS: Record<string, string> = { dvd: '< 720p', bluray: '720p–1080p', uhd: '> 1080p' };
+    const TIER_HINTS: Record<string, string> = { dvd: '< 720p', bluray: '720p-1080p', uhd: '> 1080p' };
 
     const dirtyRing = 'rounded-lg ring-2 ring-primary/40 dark:ring-primary/50';
     const inputClass = 'rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-sm focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary dark:border-primary/30 dark:bg-primary/10 dark:text-white';
@@ -205,7 +205,7 @@
                 <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Active scheme</p>
                 <p class="text-base font-semibold text-gray-900 dark:text-white">{scheme.name}</p>
             </div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">{builtinCount} built-in · {customCount} custom</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">{builtinCount} built-in | {customCount} custom</p>
         </div>
         <div>
             <label for="preset-select" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Preset</label>
@@ -291,7 +291,7 @@
                 {#each ['dvd', 'bluray', 'uhd'] as tier}
                     <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
                         <p class="mb-2 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                            {TIER_LABELS[tier]} <span class="text-gray-400">· {TIER_HINTS[tier]}</span>
+                            {TIER_LABELS[tier]} <span class="text-gray-400">| {TIER_HINTS[tier]}</span>
                         </p>
                         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                             <label class="space-y-1">

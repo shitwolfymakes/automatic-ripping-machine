@@ -26,6 +26,6 @@
 			class="rounded px-2.5 py-1 text-xs font-medium {active === p.key
 				? 'bg-primary/15 text-primary'
 				: 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'}"
-		>{p.label} · {counts[p.key]}</button>
+		>{p.label} | {counts[p.key]}</button>
 	{/each}
 </div>

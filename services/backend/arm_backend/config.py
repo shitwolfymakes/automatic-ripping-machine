@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     # volume here in compose.
     ARM_IMAGE_CACHE_PATH: str = "/data/cache/images"
 
+    # User-uploaded themes live here; built-in themes ship read-only in the
+    # image (arm_backend/themes/builtin/). Bind-mounted via ./arm/themes:/data/themes
+    # (sub-plan A). The themes service merges both, user overriding built-in by id.
+    ARM_THEMES_PATH: str = "/data/themes"
+
     # Comma-separated list of `Origin` header values the WS endpoint accepts
     # from browser clients. Service-token connections (rippers, transcoders)
     # mark themselves with the `arm-service-token` subprotocol and skip this
@@ -99,7 +104,10 @@ class Settings(BaseSettings):
     # parses it at lifespan startup to fill the `gpus` table — it does NOT probe
     # hardware itself. Empty/absent => CPU-only transcoding. See gpu_probe.py
     # for the schema. Re-run the installer after a GPU/driver change.
-    ARM_GPUS: str = ""
+    # Default "[]" so config.py, .env.example, and compose all agree on the
+    # canonical "no GPUs" value; gpu_probe treats "" and "[]" identically (it
+    # short-circuits blank input before json.loads).
+    ARM_GPUS: str = "[]"
 
     # GID of the host's /dev/dri render node group (detected host-side, like
     # CDROM_GID for the ripper). The dispatcher adds it via `group_add` to each

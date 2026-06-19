@@ -33,6 +33,12 @@ export function setUnauthorizedHandler(fn: () => void): void {
 	on401 = fn;
 }
 
+/** Invoke the registered unauthorized handler — for raw-fetch callers (e.g.
+ *  NDJSON endpoints) that bypass apiFetch but must still trigger session expiry. */
+export function notifyUnauthorized(): void {
+	on401();
+}
+
 function authHeaders(extra?: HeadersInit): Record<string, string> {
 	const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 	const token = getToken();

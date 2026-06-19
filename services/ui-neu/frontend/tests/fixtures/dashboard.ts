@@ -4,7 +4,6 @@ export const emptyDashboard: DashboardData = {
     db_available: true,
     arm_online: true,
     active_jobs: [],
-    system_info: null,
     drives_online: 0,
     drive_names: {},
     notification_count: 0,
@@ -13,10 +12,7 @@ export const emptyDashboard: DashboardData = {
     makemkv_key_checked_at: null,
     transcoder_online: true,
     transcoder_stats: null,
-    transcoder_system_stats: null,
-    active_transcodes: [],
-    system_stats: null,
-    transcoder_info: null
+    active_transcodes: []
 };
 
 export const emptyJobs = {

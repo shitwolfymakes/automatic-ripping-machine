@@ -26,7 +26,6 @@ vi.mock('$lib/api/dashboard', () => ({
 			db_available: true,
 			arm_online: true,
 			active_jobs: [ACTIVE_JOB],
-			system_info: null,
 			drives_online: 1,
 			drive_names: { drv_1: 'Main Drive' },
 			notification_count: 2,
@@ -35,10 +34,7 @@ vi.mock('$lib/api/dashboard', () => ({
 			makemkv_key_checked_at: null,
 			transcoder_online: false,
 			transcoder_stats: null,
-			transcoder_system_stats: null,
-			active_transcodes: [],
-			system_stats: null,
-			transcoder_info: null
+			active_transcodes: []
 		})
 	)
 }));

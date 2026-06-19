@@ -222,7 +222,7 @@
 	<!-- Disc review (waiting jobs) -->
 	{#if waitingJobs.length > 0}
 		<section in:fade={fadeIn} out:fade={fadeOut}>
-			<SectionFrame variant="full" accent="var(--color-primary)" label="WAITING FOR REVIEW — {waitingJobs.length} DISC{waitingJobs.length > 1 ? 'S' : ''}">
+			<SectionFrame variant="full" accent="var(--color-primary)" label="WAITING FOR REVIEW - {waitingJobs.length} DISC{waitingJobs.length > 1 ? 'S' : ''}">
 				<div class="grid gap-4">
 					{#each waitingJobs as job (job.id)}
 						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
@@ -237,7 +237,7 @@
 	<!-- Scanning -->
 	{#if scanningJobs.length > 0}
 		<section in:fade={fadeIn} out:fade={fadeOut}>
-			<SectionFrame variant="full" accent="var(--color-cyan-500, #06b6d4)" label="SCANNING — {scanningJobs.length} {scanningJobs.length === 1 ? 'DISC' : 'DISCS'}">
+			<SectionFrame variant="full" accent="var(--color-cyan-500, #06b6d4)" label="SCANNING - {scanningJobs.length} {scanningJobs.length === 1 ? 'DISC' : 'DISCS'}">
 				<div class="space-y-2">
 					{#each scanningJobs as job (job.id)}
 						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
@@ -252,7 +252,7 @@
 	<!-- Active rips -->
 	{#if nonWaitingActiveJobs.length > 0}
 		<section in:fade={fadeIn} out:fade={fadeOut}>
-			<SectionFrame variant="full" accent="var(--color-primary)" label="ACTIVE RIPS — {nonWaitingActiveJobs.length} IN PROGRESS">
+			<SectionFrame variant="full" accent="var(--color-primary)" label="ACTIVE RIPS - {nonWaitingActiveJobs.length} IN PROGRESS">
 				<div class="space-y-2">
 					{#each nonWaitingActiveJobs as job (job.id)}
 						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
@@ -267,7 +267,7 @@
 	<!-- Finishing (identified / ripped / ripped_partial) -->
 	{#if finishingJobs.length > 0}
 		<section in:fade={fadeIn} out:fade={fadeOut}>
-			<SectionFrame variant="full" accent="var(--color-amber-500, #f59e0b)" label="FINISHING — {finishingJobs.length} {finishingJobs.length === 1 ? 'JOB' : 'JOBS'}">
+			<SectionFrame variant="full" accent="var(--color-amber-500, #f59e0b)" label="FINISHING - {finishingJobs.length} {finishingJobs.length === 1 ? 'JOB' : 'JOBS'}">
 				<div class="space-y-2">
 					{#each finishingJobs as job (job.id)}
 						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
@@ -282,7 +282,7 @@
 	<!-- Active transcodes -->
 	{#if $transcoderEnabled && dash.active_transcodes.length > 0}
 		<section in:fade={fadeIn} out:fade={fadeOut}>
-			<SectionFrame variant="full" accent="var(--color-primary)" label="TRANSCODING — {dash.active_transcodes.length} ACTIVE">
+			<SectionFrame variant="full" accent="var(--color-primary)" label="TRANSCODING - {dash.active_transcodes.length} ACTIVE">
 				<div class="space-y-2">
 					{#each dash.active_transcodes as tc (tc.id)}
 						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>

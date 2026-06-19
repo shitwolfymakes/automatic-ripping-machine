@@ -34,7 +34,7 @@ describe('JobCard', () => {
 
 		it('renders status badge', () => {
 			renderComponent(JobCard, { props: { job: createJob({ status: 'ripped' }) } });
-			expect(screen.getByText('ripped')).toBeInTheDocument();
+			expect(screen.getByText('Ripped')).toBeInTheDocument();
 		});
 	});
 

@@ -54,7 +54,7 @@
 			<div class="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-primary">
 				<ServiceGlyph id={service.id} name={service.name} size={18} />
 				{service.name} configuration
-				<span class="ml-1 font-mono text-[11px] normal-case tracking-normal text-gray-500">{service.url_scheme}://…</span>
+				<span class="ml-1 font-mono text-[11px] normal-case tracking-normal text-gray-500">{service.url_scheme}://...</span>
 			</div>
 			{#if preserveExisting}
 				<p class="mb-3 text-xs text-gray-500 dark:text-gray-400">Re-enter credentials to change the destination. Leave blank to keep the current settings.</p>

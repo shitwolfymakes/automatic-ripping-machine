@@ -58,7 +58,7 @@
 			<input bind:value={confirm} type="password" required autocomplete="new-password" class="w-full rounded border border-primary/20 px-3 py-2 dark:bg-surface-dark" />
 		</label>
 		<button type="submit" disabled={submitting} class="w-full rounded bg-primary px-4 py-2 font-medium text-white disabled:opacity-60">
-			{submitting ? 'Saving…' : 'Set new password'}
+			{submitting ? 'Saving...' : 'Set new password'}
 		</button>
 	</form>
 </div>

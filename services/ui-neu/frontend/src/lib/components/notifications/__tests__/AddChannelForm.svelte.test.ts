@@ -24,6 +24,8 @@ describe('AddChannelForm', () => {
 		await fireEvent.input(screen.getByLabelText('Channel Label'), { target: { value: 'My Hook' } });
 		await fireEvent.input(screen.getByLabelText(/webhook url/i), { target: { value: 'https://hooks.example/x' } });
 		await fireEvent.click(screen.getByLabelText('Job started'));
+		// Now that the event is enabled, its inline template inputs appear.
+		await fireEvent.input(screen.getByLabelText('job.started title'), { target: { value: 'Hi {job_title}' } });
 
 		await waitFor(() => expect(screen.getByRole('button', { name: /save channel/i })).toBeEnabled());
 		await fireEvent.click(screen.getByRole('button', { name: /save channel/i }));
@@ -33,7 +35,8 @@ describe('AddChannelForm', () => {
 				type: 'webhook',
 				name: 'My Hook',
 				config: expect.objectContaining({ url: 'https://hooks.example/x' }),
-				subscribed_events: ['job.started']
+				subscribed_events: ['job.started'],
+				templates: expect.objectContaining({ 'job.started': { title: 'Hi {job_title}', body: null } })
 			})
 		);
 	});

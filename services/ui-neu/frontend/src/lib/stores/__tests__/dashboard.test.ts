@@ -21,7 +21,6 @@ describe('dashboard store sticky merge', () => {
 			db_available: true,
 			arm_online: true,
 			active_jobs: [{ id: 1 } as unknown],
-			system_info: null,
 			drives_online: 2,
 			drive_names: { '/dev/sr0': 'Drive 1' },
 			notification_count: 7,
@@ -30,10 +29,7 @@ describe('dashboard store sticky merge', () => {
 			makemkv_key_checked_at: null,
 			transcoder_online: false,
 			transcoder_stats: null,
-			transcoder_system_stats: null,
 			active_transcodes: [],
-			system_stats: null,
-			transcoder_info: null,
 			...overrides
 		};
 	}

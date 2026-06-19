@@ -87,7 +87,9 @@ export function etaTime(
 export function statusAccentVar(status: string | null | undefined): string {
 	switch (status?.toLowerCase()) {
 		case 'identifying':
+		case 'created': // v3 JobStatus
 			return 'var(--color-status-scanning)';
+		case 'identified': // v3 JobStatus — queued to rip
 		case 'ready':
 		case 'active':
 		case 'ripping':         // legacy pre-v2.0.0
@@ -105,6 +107,7 @@ export function statusAccentVar(status: string | null | undefined): string {
 		case 'completed':
 		case 'complete':
 		case 'transcoded':
+		case 'ripped': // v3 JobStatus — terminal rip success
 			return 'var(--color-status-success)';
 		case 'fail':
 		case 'failed':
@@ -115,8 +118,11 @@ export function statusAccentVar(status: string | null | undefined): string {
 		case 'makemkv_throttled':
 		case 'waiting_transcode':
 		case 'pending':
+		case 'awaiting_user_id': // v3 JobStatus
+		case 'ripped_partial': // v3 JobStatus — partial success
+		case 'ripped_awaiting_identify': // v3 JobStatus
 			return 'var(--color-status-waiting)';
-		default:
+		default: // incl. 'abandoned' (v3) — neutral
 			return 'var(--color-primary)';
 	}
 }
@@ -143,7 +149,12 @@ export function statusAccentVar(status: string | null | undefined): string {
 export function statusColor(status: string | null | undefined): string {
 	switch (status?.toLowerCase()) {
 		case 'identifying':
+		case 'created': // v3 JobStatus — disc inserted, not yet identified
 			return 'status-scanning';
+		case 'awaiting_user_id': // v3 JobStatus — needs manual identification
+		case 'ripped_awaiting_identify': // v3 JobStatus — ripped, still needs ID
+			return 'status-warning';
+		case 'identified': // v3 JobStatus — identified, queued/ready to rip
 		case 'ready':
 		case 'ripping':         // legacy pre-v2.0.0; in-flight jobs mid-deploy
 		case 'video_ripping':
@@ -159,7 +170,10 @@ export function statusColor(status: string | null | undefined): string {
 		case 'success':
 		case 'completed': // TaskStatus (transcode task) terminal
 		case 'transcoded': // TrackStatus terminal (transcode-phase)
+		case 'ripped': // v3 JobStatus — rip complete (terminal)
 			return 'status-success';
+		case 'ripped_partial': // v3 JobStatus — rip finished with some titles failed
+			return 'status-warning';
 		case 'fail':
 		case 'failed': // TaskStatus (transcode task) terminal AND TrackStatus.failed (v2.0.0+)
 			return 'status-error';
@@ -169,6 +183,7 @@ export function statusColor(status: string | null | undefined): string {
 		case 'waiting_transcode':
 		case 'pending': // TaskStatus (transcode task) + TrackStatus member
 			return 'status-warning';
+		case 'abandoned': // v3 JobStatus — user abandoned (terminal)
 		case 'skipped': // locally generated for !track.enabled || filtered (jobs/[id]:849)
 			return 'status-unknown';
 		default:
@@ -177,6 +192,15 @@ export function statusColor(status: string | null | undefined): string {
 }
 
 const STATUS_LABELS: Record<string, string> = {
+	// v3 JobStatus values (packages/arm_common enums.py)
+	created: 'Created',
+	awaiting_user_id: 'Awaiting ID',
+	identified: 'Identified',
+	ripped: 'Ripped',
+	ripped_partial: 'Ripped (partial)',
+	ripped_awaiting_identify: 'Ripped (awaiting ID)',
+	abandoned: 'Abandoned',
+	// generic / legacy / per-track / per-task statuses
 	identifying: 'Scanning',
 	ready: 'Ready',
 	active: 'Active',

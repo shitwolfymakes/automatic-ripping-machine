@@ -37,7 +37,7 @@
 			class="flex min-w-[120px] flex-1 cursor-pointer items-center gap-3 rounded-lg border-l-4 {card.border} {card.bg} px-4 py-3 transition-shadow hover:shadow-md {statusFilter === card.filter ? 'ring-2 ring-primary/40' : ''}"
 		>
 			<div>
-				<div class="text-2xl font-bold {card.text}">{stats ? stats[card.key] : '—'}</div>
+				<div class="text-2xl font-bold {card.text}">{stats ? stats[card.key] : '-'}</div>
 				<div class="text-xs font-medium text-gray-500 dark:text-gray-400">{card.label}</div>
 			</div>
 		</button>

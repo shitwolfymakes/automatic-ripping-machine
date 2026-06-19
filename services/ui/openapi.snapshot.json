@@ -5510,6 +5510,398 @@
         }
       }
     },
+    "/api/images/cache": {
+      "get": {
+        "tags": [
+          "images"
+        ],
+        "summary": "Image Cache Stats",
+        "description": "Image-cache statistics (count, size).",
+        "operationId": "image_cache_stats_api_images_cache_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Image Cache Stats Api Images Cache Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/images/cache/clear": {
+      "post": {
+        "tags": [
+          "images"
+        ],
+        "summary": "Image Cache Clear",
+        "description": "Clear the image cache. Returns {success, cleared, freed_bytes}.",
+        "operationId": "image_cache_clear_api_images_cache_clear_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Image Cache Clear Api Images Cache Clear Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/themes": {
+      "get": {
+        "tags": [
+          "themes"
+        ],
+        "summary": "List Themes",
+        "description": "List all themes (metadata only, no CSS).",
+        "operationId": "list_themes_api_themes_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response List Themes Api Themes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "themes"
+        ],
+        "summary": "Upload Theme",
+        "description": "Upload a user theme (JSON file + optional CSS).",
+        "operationId": "upload_theme_api_themes_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_theme_api_themes_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Upload Theme Api Themes Post"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/themes/{theme_id}": {
+      "get": {
+        "tags": [
+          "themes"
+        ],
+        "summary": "Get Theme",
+        "description": "Full theme data including CSS.",
+        "operationId": "get_theme_api_themes__theme_id__get",
+        "parameters": [
+          {
+            "name": "theme_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Theme Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Theme Api Themes  Theme Id  Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Theme not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "themes"
+        ],
+        "summary": "Delete Theme",
+        "description": "Delete a user theme. Built-ins cannot be deleted.",
+        "operationId": "delete_theme_api_themes__theme_id__delete",
+        "parameters": [
+          {
+            "name": "theme_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Theme Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Theme Api Themes  Theme Id  Delete"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/themes/{theme_id}/css": {
+      "get": {
+        "tags": [
+          "themes"
+        ],
+        "summary": "Get Theme Css",
+        "description": "Theme CSS as text/css. 404 if the theme is unknown or has no CSS.",
+        "operationId": "get_theme_css_api_themes__theme_id__css_get",
+        "parameters": [
+          {
+            "name": "theme_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Theme Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Theme not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/settings/infra": {
       "get": {
         "tags": [
@@ -5929,6 +6321,27 @@
         },
         "type": "object",
         "title": "AppriseChannelConfig"
+      },
+      "Body_upload_theme_api_themes_post": {
+        "properties": {
+          "theme_json": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Theme Json",
+            "description": "Theme JSON file"
+          },
+          "theme_css": {
+            "type": "string",
+            "title": "Theme Css",
+            "description": "Optional custom CSS",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "theme_json"
+        ],
+        "title": "Body_upload_theme_api_themes_post"
       },
       "BulkDeleteJobsResponse": {
         "properties": {
@@ -6370,30 +6783,6 @@
               }
             ],
             "title": "Ripping Paused"
-          },
-          "default_retention_policy": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RetentionPolicy"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "notification_apprise_urls": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notification Apprise Urls"
           },
           "notifications_enabled": {
             "anyOf": [

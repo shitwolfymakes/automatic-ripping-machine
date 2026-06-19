@@ -5,7 +5,6 @@ const emptyDashboard: DashboardData = {
 	db_available: true,
 	arm_online: false,
 	active_jobs: [],
-	system_info: null,
 	drives_online: 0,
 	drive_names: {},
 	notification_count: 0,
@@ -14,10 +13,7 @@ const emptyDashboard: DashboardData = {
 	makemkv_key_checked_at: null,
 	transcoder_online: false,
 	transcoder_stats: null,
-	transcoder_system_stats: null,
-	active_transcodes: [],
-	system_stats: null,
-	transcoder_info: null
+	active_transcodes: []
 };
 
 // Fields the BFF marks `null` when their underlying ARM endpoint blipped on

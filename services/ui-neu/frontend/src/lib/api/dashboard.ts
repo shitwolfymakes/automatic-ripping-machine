@@ -16,46 +16,11 @@ import { fetchNotificationCount } from './notifications';
 //
 // v3 has NO single dashboard/BFF endpoint — the legacy `DashboardResponse`
 // aggregation is gone. We FAN OUT across the v3 endpoints and compose the
-// 18-field shape the dashboard store + sidebar components consume. Each field
+// shape the dashboard store + sidebar components consume. Each field
 // degrades independently (Promise.allSettled): one failing endpoint nulls/zeros
 // that field instead of taking the whole dashboard down, and the store layer
 // (STICKY_FIELDS / TWO_STRIKE_FIELDS) holds last-good values through blips.
-//
-// Hardware metrics (CPU/RAM/GPU live stats) have NO v3 source. The legacy BFF
-// surfaced these from arm-neu's /system/stats hardware probe; v3 exposes only
-// aggregate counters (StatsResponse: uptime/jobs_by_status/drives_online). So
-// `system_info` / `system_stats` / `transcoder_info` / `transcoder_system_stats`
-// are always null here and consumers optional-chain them.
 // ---------------------------------------------------------------------------
-
-// Local hardware-info shapes preserved for the sidebar/bottom-bar components.
-// No v3 source populates them yet, but the components type-import them and
-// render defensively, so we keep the structural contract.
-export interface SystemStats {
-	cpu_percent?: number | null;
-	cpu_temp?: number | null;
-	memory?: { used_gb: number; total_gb: number; percent: number } | null;
-	storage?: { name: string; path: string; free_gb: number; percent: number }[] | null;
-	gpu?: GpuInfo | null;
-}
-
-export interface GpuInfo {
-	vendor: string;
-	temperature_c?: number | null;
-	utilization_percent?: number | null;
-	encoder_percent?: number | null;
-	memory_used_mb?: number | null;
-	memory_total_mb?: number | null;
-	power_draw_w?: number | null;
-	power_limit_w?: number | null;
-	clock_core_mhz?: number | null;
-	clock_memory_mhz?: number | null;
-}
-
-export interface HardwareInfo {
-	cpu?: string | null;
-	memory_total_gb?: number | null;
-}
 
 // Transcoder summary as the sidebar reads it. v3's TranscodeStatsView has no
 // worker_running/pending fields, so those stay undefined; the dashboard badges
@@ -69,7 +34,6 @@ export interface DashboardData {
 	db_available: boolean;
 	arm_online: boolean;
 	active_jobs: JobView[];
-	system_info: HardwareInfo | null;
 	drives_online: number;
 	drive_names: Record<string, string>;
 	notification_count: number;
@@ -78,10 +42,7 @@ export interface DashboardData {
 	makemkv_key_checked_at: string | null;
 	transcoder_online: boolean;
 	transcoder_stats: TranscoderStats | null;
-	transcoder_system_stats: SystemStats | null;
 	active_transcodes: TranscodeTaskView[];
-	system_stats: SystemStats | null;
-	transcoder_info: HardwareInfo | null;
 }
 
 // JobView.status values that mean "in-flight" (non-terminal). v3 GET /api/jobs
@@ -153,8 +114,6 @@ export async function fetchDashboard(): Promise<DashboardData> {
 		db_available: config !== null,
 		arm_online: armOnline,
 		active_jobs: activeJobs,
-		// No v3 hardware-metrics source — kept null (consumers optional-chain).
-		system_info: null,
 		drives_online: drives?.length ?? 0,
 		drive_names: driveNames,
 		notification_count: notifications?.unseen ?? 0,
@@ -165,10 +124,7 @@ export async function fetchDashboard(): Promise<DashboardData> {
 		// v3 TranscodeStatsView has no worker_running/pending — surface nothing
 		// rather than a wrong value; the badges optional-chain these.
 		transcoder_stats: transcoderStatsRes.status === 'fulfilled' ? {} : null,
-		transcoder_system_stats: null,
-		active_transcodes: activeTranscodes,
-		system_stats: null,
-		transcoder_info: null
+		active_transcodes: activeTranscodes
 	};
 }
 

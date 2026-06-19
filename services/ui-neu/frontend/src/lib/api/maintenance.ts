@@ -1,4 +1,5 @@
 import { notAvailable } from './_stub';
+import { get, post } from './client';
 
 // Orphan cleanup / maintenance has no v3 backend (ALL MISSING). The orphan-logs
 // and orphan-folders modals and the transcoder/image-cache cleanup actions are
@@ -113,12 +114,12 @@ export async function cleanupTranscoder(): Promise<CleanupTranscoderResult> {
 	notAvailable('Cleanup transcoder');
 }
 
-export async function fetchImageCacheStats(): Promise<ImageCacheStats> {
-	notAvailable('Image cache stats');
+export function fetchImageCacheStats(): Promise<ImageCacheStats> {
+	return get<ImageCacheStats>('/api/images/cache');
 }
 
-export async function clearImageCache(): Promise<ImageCacheStats> {
-	notAvailable('Clear image cache');
+export function clearImageCache(): Promise<ImageCacheStats> {
+	return post<ImageCacheStats>('/api/images/cache/clear');
 }
 
 export async function clearRaw(): Promise<ClearRawResult> {

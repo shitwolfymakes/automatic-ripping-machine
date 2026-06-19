@@ -43,6 +43,7 @@ from arm_backend.routers import (
     sessions,
     settings as settings_router,
     system as system_router,
+    themes as themes_router,
     transcode_presets,
     transcoder,
     transcodes,
@@ -230,6 +231,7 @@ app.include_router(notifications_router.router)
 app.include_router(iso_router.router)
 app.include_router(logs_router.router)
 app.include_router(images_router.router)
+app.include_router(themes_router.router)
 app.include_router(settings_router.router)
 app.include_router(system_router.router)
 app.include_router(ws_router)

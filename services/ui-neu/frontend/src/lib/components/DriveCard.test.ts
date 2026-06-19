@@ -1,13 +1,18 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import DriveCard from './DriveCard.svelte';
-import type { DriveView as Drive } from '$lib/types/api.gen';
+import type { DriveView as Drive, SessionView } from '$lib/types/api.gen';
 vi.mock('$lib/api/drives', () => ({
 	updateDrive: vi.fn(() => Promise.resolve()),
-	scanDrive: vi.fn(() => Promise.resolve()),
-	deleteDrive: vi.fn(() => Promise.resolve()),
-	ejectDrive: vi.fn(() => Promise.resolve())
+	deleteDrive: vi.fn(() => Promise.resolve())
 }));
+vi.mock('$lib/api/jobs', () => ({
+	triggerManual: vi.fn(() => Promise.resolve({ drive_id: 'drv_1', session_id: null }))
+}));
+import { triggerManual } from '$lib/api/jobs';
+const triggerManualMock = vi.mocked(triggerManual);
+import { updateDrive } from '$lib/api/drives';
+const updateDriveMock = vi.mocked(updateDrive);
 
 function createDrive(overrides: Partial<Drive> = {}): Drive {
 	return {
@@ -34,12 +39,15 @@ function createDrive(overrides: Partial<Drive> = {}): Drive {
 	};
 }
 
-function renderDrive(overrides: Partial<Drive> = {}) {
-	return renderComponent(DriveCard, { props: { drive: createDrive(overrides) } });
+function renderDrive(overrides: Partial<Drive> = {}, sessions: SessionView[] = []) {
+	return renderComponent(DriveCard, { props: { drive: createDrive(overrides), sessions } });
 }
 
 describe('DriveCard', () => {
-	afterEach(() => cleanup());
+	afterEach(() => {
+		cleanup();
+		vi.clearAllMocks();
+	});
 
 	describe('rendering', () => {
 		it('renders drive name, device path, 4K toggle, and action bar', () => {
@@ -49,9 +57,8 @@ describe('DriveCard', () => {
 			const matches = screen.getAllByText('/dev/sr0');
 			expect(matches.length).toBeGreaterThan(0);
 			// Action bar buttons
-			expect(screen.getByText('Eject')).toBeInTheDocument();
-			expect(screen.getByText('Insert')).toBeInTheDocument();
-			expect(screen.getByText('Scan')).toBeInTheDocument();
+			expect(screen.getByTestId('drive-start-rip')).toBeInTheDocument();
+			expect(screen.getByTestId('drive-session-select')).toBeInTheDocument();
 			expect(screen.queryByText('Remove')).not.toBeInTheDocument();
 		});
 
@@ -148,6 +155,105 @@ describe('DriveCard', () => {
 			expect(screen.getByText('Save')).toBeInTheDocument();
 			await fireEvent.click(screen.getByText('Cancel'));
 			expect(screen.getByText('Rename')).toBeInTheDocument();
+		});
+	});
+
+	describe('manual rip', () => {
+		it('renders the session select with "— none —" and prop sessions (built-in flagged)', () => {
+			renderDrive({}, [
+				{ id: 'ses_1', name: 'Movies', is_builtin: false } as SessionView,
+				{ id: 'ses_2', name: 'Stock', is_builtin: true } as SessionView
+			]);
+			const sel = screen.getByTestId('drive-session-select') as HTMLSelectElement;
+			const opts = Array.from(sel.options).map((o) => o.textContent?.trim());
+			expect(opts[0]).toBe('- none -');
+			expect(opts).toContain('Movies');
+			expect(opts).toContain('Stock (built-in)');
+		});
+
+		it('Start rip triggers manual with the drive id and null session by default', async () => {
+			renderDrive({ id: 'drv_1' });
+			await fireEvent.click(screen.getByTestId('drive-start-rip'));
+			expect(triggerManualMock).toHaveBeenCalledWith({ drive_id: 'drv_1', session_id: null });
+		});
+
+		it('Start rip sends the chosen session id', async () => {
+			renderDrive({ id: 'drv_1' }, [{ id: 'ses_1', name: 'Movies', is_builtin: false } as SessionView]);
+			await fireEvent.change(screen.getByTestId('drive-session-select'), { target: { value: 'ses_1' } });
+			await fireEvent.click(screen.getByTestId('drive-start-rip'));
+			expect(triggerManualMock).toHaveBeenCalledWith({ drive_id: 'drv_1', session_id: 'ses_1' });
+		});
+
+		it('surfaces a trigger error inline', async () => {
+			triggerManualMock.mockRejectedValueOnce(new Error('ripping is paused; no new jobs accepted'));
+			renderDrive({ id: 'drv_1' });
+			await fireEvent.click(screen.getByTestId('drive-start-rip'));
+			await waitFor(() =>
+				expect(screen.getByTestId('drive-manual-error')).toHaveTextContent('ripping is paused')
+			);
+		});
+
+		it('resets the session selection and calls onupdate after a successful rip', async () => {
+			const onupdate = vi.fn();
+			renderComponent(DriveCard, {
+				props: {
+					drive: createDrive({ id: 'drv_1' }),
+					sessions: [{ id: 'ses_1', name: 'Movies', is_builtin: false } as SessionView],
+					onupdate
+				}
+			});
+			const sel = screen.getByTestId('drive-session-select') as HTMLSelectElement;
+			await fireEvent.change(sel, { target: { value: 'ses_1' } });
+			expect(sel.value).toBe('ses_1');
+			await fireEvent.click(screen.getByTestId('drive-start-rip'));
+			await waitFor(() => expect(onupdate).toHaveBeenCalledTimes(1));
+			expect(sel.value).toBe('');
+		});
+	});
+
+	describe('default session', () => {
+		const sessions = [
+			{ id: 'ses_1', name: 'Movies', is_builtin: false } as SessionView,
+			{ id: 'ses_2', name: 'Stock', is_builtin: true } as SessionView
+		];
+
+		it('seeds the select from drive.default_session_id and lists "— none —" + sessions', async () => {
+			renderDrive({ default_session_id: 'ses_1' }, sessions);
+			await fireEvent.click(screen.getByTitle('Drive settings'));
+			const sel = screen.getByTestId('drive-default-session') as HTMLSelectElement;
+			expect(sel.value).toBe('ses_1');
+			const opts = Array.from(sel.options).map((o) => o.textContent?.trim());
+			expect(opts[0]).toBe('- none -');
+			expect(opts).toContain('Movies');
+			expect(opts).toContain('Stock (built-in)');
+		});
+
+		it('saves the chosen session on change', async () => {
+			renderDrive({ id: 'drv_1', default_session_id: null }, sessions);
+			await fireEvent.click(screen.getByTitle('Drive settings'));
+			await fireEvent.change(screen.getByTestId('drive-default-session'), { target: { value: 'ses_2' } });
+			await waitFor(() =>
+				expect(updateDriveMock).toHaveBeenCalledWith('drv_1', { default_session_id: 'ses_2' })
+			);
+		});
+
+		it('clears the default (null) when "— none —" is chosen', async () => {
+			renderDrive({ id: 'drv_1', default_session_id: 'ses_1' }, sessions);
+			await fireEvent.click(screen.getByTitle('Drive settings'));
+			await fireEvent.change(screen.getByTestId('drive-default-session'), { target: { value: '' } });
+			await waitFor(() =>
+				expect(updateDriveMock).toHaveBeenCalledWith('drv_1', { default_session_id: null })
+			);
+		});
+
+		it('surfaces a save error inline', async () => {
+			updateDriveMock.mockRejectedValueOnce(new Error('default boom'));
+			renderDrive({ id: 'drv_1', default_session_id: null }, sessions);
+			await fireEvent.click(screen.getByTitle('Drive settings'));
+			await fireEvent.change(screen.getByTestId('drive-default-session'), { target: { value: 'ses_1' } });
+			await waitFor(() =>
+				expect(screen.getByTestId('drive-default-session-error')).toHaveTextContent('default boom')
+			);
 		});
 	});
 

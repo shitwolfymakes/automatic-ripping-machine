@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
 import EventsSection from '../sections/EventsSection.svelte';
 import ConfigureSection from '../sections/ConfigureSection.svelte';
-import type { CatalogField, CatalogService } from '$lib/types/notifications';
+import type { CatalogField, CatalogService, ChannelTemplate } from '$lib/types/notifications';
 
 function appriseService(over: { required_fields?: CatalogField[]; advanced_fields?: CatalogField[] } = {}): CatalogService {
 	return {
@@ -16,7 +16,7 @@ describe('EventsSection', () => {
 	afterEach(() => cleanup());
 
 	it('select all checks every event; clear empties them', async () => {
-		const props = $state({ selected: [] as string[] });
+		const props = $state({ selected: [] as string[], templates: {} as Record<string, ChannelTemplate> });
 		renderComponent(EventsSection, { props });
 		await fireEvent.click(screen.getByRole('button', { name: /select all/i }));
 		expect(props.selected.length).toBe(6);

@@ -133,7 +133,7 @@
 	}
 
 	async function handleTestSaved(c: Channel) {
-		addToast({ tone: 'info', title: `Sending test to ${c.name}…` });
+		addToast({ tone: 'info', title: `Sending test to ${c.name}...` });
 		try {
 			const { dispatch_id } = await testSendChannel(c.id, c.subscribed_events[0] ?? 'job.started');
 			// Poll up to ~5s for a terminal status.
@@ -216,15 +216,10 @@
 </script>
 
 <div class="space-y-5">
-	<div>
-		<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Notifications</h2>
-		<p class="text-sm text-gray-500 dark:text-gray-400">Manage notification channels — Discord, Slack, webhooks, scripts, and more.</p>
-	</div>
-
 	{#if loadError}
 		<p class="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/40 dark:bg-red-900/20 dark:text-red-300">{loadError}</p>
 	{:else if !loaded}
-		<div class="py-8 text-center text-gray-400">Loading channels…</div>
+		<div class="py-8 text-center text-gray-400">Loading channels...</div>
 	{:else}
 		<StatStrip total={counts.total} issues={counts.issues} subscribedEvents={counts.subscribedEvents} />
 

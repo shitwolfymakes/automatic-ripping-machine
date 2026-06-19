@@ -20,7 +20,7 @@ describe('JobStatsPanel', () => {
 			const { container } = renderComponent(JobStatsPanel, {
 				props: { statusFilter: '', onfilter: noop }
 			});
-			expect(container.textContent).toContain('—');
+			expect(container.textContent).toContain('-');
 		});
 
 		it('renders all stat labels when stats is undefined', () => {

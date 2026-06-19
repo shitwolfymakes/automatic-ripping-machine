@@ -36,7 +36,7 @@ describe('JobRow', () => {
 
 		it('renders status badge', () => {
 			renderInTable({ job: createJob({ status: 'ripped' }) });
-			expect(screen.getByText('ripped')).toBeInTheDocument();
+			expect(screen.getByText('Ripped')).toBeInTheDocument();
 		});
 
 		it('renders year when present', () => {

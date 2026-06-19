@@ -18,20 +18,20 @@
 <SectionFrame label="Ripping Statistics" accent="#10b981">
 	<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
 		<div class="text-center">
-			<div class="text-2xl font-bold text-gray-900 dark:text-white">{stats ? stats.total : '—'}</div>
+			<div class="text-2xl font-bold text-gray-900 dark:text-white">{stats ? stats.total : '-'}</div>
 			<div class="text-xs text-gray-500 dark:text-gray-400">Total Rips</div>
 		</div>
 		<div class="text-center">
-			<div class="text-2xl font-bold text-green-600 dark:text-green-400">{stats ? (stats.by_status.success ?? 0) : '—'}</div>
+			<div class="text-2xl font-bold text-green-600 dark:text-green-400">{stats ? (stats.by_status.success ?? 0) : '-'}</div>
 			<div class="text-xs text-gray-500 dark:text-gray-400">Success</div>
 		</div>
 		<div class="text-center">
-			<div class="text-2xl font-bold text-red-600 dark:text-red-400">{stats ? (stats.by_status.fail ?? 0) : '—'}</div>
+			<div class="text-2xl font-bold text-red-600 dark:text-red-400">{stats ? (stats.by_status.fail ?? 0) : '-'}</div>
 			<div class="text-xs text-gray-500 dark:text-gray-400">Failed</div>
 		</div>
 		<div class="text-center">
 			<div class="text-2xl font-bold text-blue-600 dark:text-blue-400">
-				{stats ? (stats.by_status.ripping ?? 0) + (stats.by_status.transcoding ?? 0) : '—'}
+				{stats ? (stats.by_status.ripping ?? 0) + (stats.by_status.transcoding ?? 0) : '-'}
 			</div>
 			<div class="text-xs text-gray-500 dark:text-gray-400">Active</div>
 		</div>

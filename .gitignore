@@ -220,3 +220,6 @@ node_modules/
 /certs/
 .claude/scheduled_tasks.lock
 services/ui/src/api/generated.ts
+.superpowers/
+.playwright-mcp/
+services/ui-neu/nginx.http.conf

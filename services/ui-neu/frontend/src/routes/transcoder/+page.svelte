@@ -9,7 +9,6 @@
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import { fadeIn, fadeOut } from '$lib/transitions';
-	import { dashboard } from '$lib/stores/dashboard';
 	import { transcoderStats, transcoderWorkers, getJobsCache, setJobsCache } from '$lib/stores/transcoder';
 
 	const emptyJobs: TranscodeTaskView[] = [];
@@ -127,15 +126,6 @@
 	});
 
 	const tabs = ['all', 'queued', 'in_progress', 'done', 'failed'];
-
-	function vendorPillClasses(vendor: string): string {
-		switch (vendor.toLowerCase()) {
-			case 'nvidia': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
-			case 'amd': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
-			case 'intel': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
-			default: return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400';
-		}
-	}
 </script>
 
 <svelte:head>
@@ -242,61 +232,6 @@
 				<p class="mt-1 text-3xl font-bold text-gray-500 dark:text-gray-400">{s.total_tasks}</p>
 			</div>
 		</div>
-		</div>
-	{/if}
-
-	<!-- GPU stats -->
-	{#if $dashboard.transcoder_online && $dashboard.transcoder_system_stats?.gpu}
-		{@const gpu = $dashboard.transcoder_system_stats.gpu}
-		<div in:fade={fadeIn} out:fade={fadeOut} class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
-			<div class="mb-3 flex items-center gap-2">
-				<p class="text-sm font-semibold text-gray-700 dark:text-gray-300">GPU</p>
-				<span class="rounded-full px-2.5 py-0.5 text-[10px] font-semibold capitalize {vendorPillClasses(gpu.vendor)}">{gpu.vendor}</span>
-			</div>
-			<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-				{#if gpu.utilization_percent != null}
-					<div>
-						<p class="text-xs text-gray-500 dark:text-gray-400">Load</p>
-						<p class="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">{gpu.utilization_percent.toFixed(0)}%</p>
-					</div>
-				{/if}
-				{#if gpu.encoder_percent != null}
-					<div>
-						<p class="text-xs text-gray-500 dark:text-gray-400">Encoder</p>
-						<p class="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">{gpu.encoder_percent.toFixed(0)}%</p>
-					</div>
-				{/if}
-				{#if gpu.memory_used_mb != null && gpu.memory_total_mb != null}
-					<div>
-						<p class="text-xs text-gray-500 dark:text-gray-400">VRAM</p>
-						<p class="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">{(gpu.memory_used_mb / 1024).toFixed(1)}<span class="text-base font-normal text-gray-400"> / {(gpu.memory_total_mb / 1024).toFixed(1)} GB</span></p>
-					</div>
-				{/if}
-				{#if gpu.temperature_c != null}
-					<div>
-						<p class="text-xs text-gray-500 dark:text-gray-400">Temperature</p>
-						<p class="mt-1 text-2xl font-bold text-orange-500">{gpu.temperature_c.toFixed(0)}&deg;C</p>
-					</div>
-				{/if}
-				{#if gpu.power_draw_w != null}
-					<div>
-						<p class="text-xs text-gray-500 dark:text-gray-400">Power</p>
-						<p class="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">{gpu.power_draw_w.toFixed(0)}<span class="text-base font-normal text-gray-400">{#if gpu.power_limit_w != null} / {gpu.power_limit_w.toFixed(0)}{/if} W</span></p>
-					</div>
-				{/if}
-				{#if gpu.clock_core_mhz != null}
-					<div>
-						<p class="text-xs text-gray-500 dark:text-gray-400">Core Clock</p>
-						<p class="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">{gpu.clock_core_mhz.toFixed(0)}<span class="text-base font-normal text-gray-400"> MHz</span></p>
-					</div>
-				{/if}
-				{#if gpu.clock_memory_mhz != null}
-					<div>
-						<p class="text-xs text-gray-500 dark:text-gray-400">Memory Clock</p>
-						<p class="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">{gpu.clock_memory_mhz.toFixed(0)}<span class="text-base font-normal text-gray-400"> MHz</span></p>
-					</div>
-				{/if}
-			</div>
 		</div>
 	{/if}
 

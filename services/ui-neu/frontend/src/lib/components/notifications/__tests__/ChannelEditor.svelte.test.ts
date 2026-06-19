@@ -37,6 +37,19 @@ describe('ChannelEditor', () => {
 		expect(ondelete).toHaveBeenCalled();
 	});
 
+	it('editing a subscribed event template enables Save and emits templates in the body', async () => {
+		const onsave = vi.fn();
+		// webhookChannel is subscribed to job.started, so its inline template inputs render.
+		renderEditor(ch, catalog, { onsave });
+		expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled();
+		await fireEvent.input(screen.getByLabelText('job.started title'), { target: { value: 'Custom {job_title}' } });
+		await waitFor(() => expect(screen.getByRole('button', { name: /save changes/i })).toBeEnabled());
+		await fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+		expect(onsave.mock.calls[0][0].templates).toEqual(
+			expect.objectContaining({ 'job.started': { title: 'Custom {job_title}', body: null } })
+		);
+	});
+
 	it('apprise editor renders the service fields resolved from service_id', async () => {
 		renderEditor(appriseDiscord(), discordCatalog);
 		const wid = await screen.findByLabelText(/Webhook ID/i) as HTMLInputElement;

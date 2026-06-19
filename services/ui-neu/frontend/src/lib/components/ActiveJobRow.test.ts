@@ -31,7 +31,7 @@ describe('ActiveJobRow', () => {
 			renderComponent(ActiveJobRow, {
 				props: { job: createJob({ status: 'ripped' }) }
 			});
-			expect(screen.getAllByText('ripped').length).toBeGreaterThan(0);
+			expect(screen.getAllByText('Ripped').length).toBeGreaterThan(0);
 		});
 
 		it('renders year when present', () => {

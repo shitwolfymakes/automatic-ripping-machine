@@ -21,7 +21,7 @@
 		class="inline-flex items-center gap-0.5"
 		role="img"
 		aria-label="Job lifecycle"
-		title={nodes.map((n) => `${n.label}: ${n.state}`).join(' · ')}
+		title={nodes.map((n) => `${n.label}: ${n.state}`).join(' | ')}
 	>
 		{#each nodes as node (node.id)}
 			<span

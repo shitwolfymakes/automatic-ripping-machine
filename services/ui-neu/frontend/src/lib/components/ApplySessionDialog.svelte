@@ -116,7 +116,7 @@
 					bind:value={selected}
 					class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
 				>
-					<option value="" disabled>Choose…</option>
+					<option value="" disabled>Choose...</option>
 					{#each filteredSessions as s (s.id)}
 						<option value={s.id}>{s.name} ({s.media_type})</option>
 					{/each}
@@ -138,7 +138,7 @@
 					onclick={() => applyOnce(false)}
 					class="confirm-btn-primary rounded-lg px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
 				>
-					{submitting ? 'Applying…' : 'Apply'}
+					{submitting ? 'Applying...' : 'Apply'}
 				</button>
 			</div>
 		{:else}
@@ -156,9 +156,9 @@
 
 			{#if hasDuplicateInRequest}
 				<p class="mt-3 text-sm text-gray-500 dark:text-gray-400">
-					Two or more tracks resolve to the same output path — the session's template doesn't
+					Two or more tracks resolve to the same output path - the session's template doesn't
 					differentiate per track. Pick a session whose template includes <code>{'{track}'}</code>
-					(e.g. <em>Movie → Archive MKV</em>), or rip with a single-track preset.
+					(e.g. <em>Movie -> Archive MKV</em>), or rip with a single-track preset.
 					<strong>Overwrite</strong> won't help here.
 				</p>
 			{:else}
@@ -184,7 +184,7 @@
 						onclick={() => applyOnce(true)}
 						class="confirm-btn-danger rounded-lg px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
 					>
-						{submitting ? 'Applying…' : 'Overwrite'}
+						{submitting ? 'Applying...' : 'Overwrite'}
 					</button>
 				{/if}
 			</div>

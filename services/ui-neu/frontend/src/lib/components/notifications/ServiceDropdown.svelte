@@ -57,7 +57,7 @@
 				<span class="text-gray-800 dark:text-gray-100">{selected.name}</span>
 			</span>
 		{:else}
-			<span class="text-gray-500 dark:text-gray-400">Select a service…</span>
+			<span class="text-gray-500 dark:text-gray-400">Select a service...</span>
 		{/if}
 		<svg class="h-4 w-4 transform transition-transform {open ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
 	</button>

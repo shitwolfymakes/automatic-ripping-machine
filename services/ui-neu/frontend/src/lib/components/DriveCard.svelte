@@ -1,12 +1,14 @@
 <script lang="ts">
-	import type { DriveView as Drive } from '$lib/types/api.gen';
-	import { updateDrive, scanDrive, deleteDrive, ejectDrive } from '$lib/api/drives';
+	import type { DriveView as Drive, SessionView } from '$lib/types/api.gen';
+	import { updateDrive, deleteDrive } from '$lib/api/drives';
+	import { triggerManual } from '$lib/api/jobs';
 	import StatusBadge from './StatusBadge.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
 
 	interface Props {
 		drive?: Drive;
 		onupdate?: () => void;
+		sessions?: SessionView[];
 		globalDefaults?: {
 			prescan_cache_mb?: number;
 			prescan_timeout?: number;
@@ -15,17 +17,19 @@
 		};
 	}
 
-	let { drive, onupdate, globalDefaults = {} }: Props = $props();
+	let { drive, onupdate, globalDefaults = {}, sessions = [] }: Props = $props();
 
 	let editing = $state(false);
 	let editName = $state('');
 	let saving = $state(false);
 	let togglingUhd = $state(false);
-	let scanning = $state(false);
-	let scanCooldown = $state(false);
 	let removing = $state(false);
-	let ejecting = $state(false);
 	let togglingMode = $state(false);
+	let selectedSessionId = $state('');
+	let triggering = $state(false);
+	let manualError = $state<string | null>(null);
+	let savingDefaultSession = $state(false);
+	let defaultSessionError = $state<string | null>(null);
 	let showSettings = $state(false);
 	let speedInput = $state('');
 	let savingSpeed = $state(false);
@@ -120,17 +124,32 @@
 
 	let isStale = $derived(drive?.status === 'offline');
 
-	async function handleScan() {
-		if (!drive || scanning || scanCooldown) return;
-		scanning = true;
+	async function startManualRip() {
+		if (!drive || triggering) return;
+		triggering = true;
+		manualError = null;
 		try {
-			await scanDrive(drive.id);
-		} catch {
-			// ignore — scan is fire-and-forget
+			await triggerManual({ drive_id: drive.id, session_id: selectedSessionId || null });
+			selectedSessionId = '';
+			onupdate?.();
+		} catch (e) {
+			manualError = e instanceof Error ? e.message : 'Manual rip failed';
 		} finally {
-			scanning = false;
-			scanCooldown = true;
-			setTimeout(() => (scanCooldown = false), 10000);
+			triggering = false;
+		}
+	}
+
+	async function saveDefaultSession(value: string) {
+		if (!drive) return;
+		savingDefaultSession = true;
+		defaultSessionError = null;
+		try {
+			await updateDrive(drive.id, { default_session_id: value || null });
+			onupdate?.();
+		} catch (e) {
+			defaultSessionError = e instanceof Error ? e.message : 'Failed to set default session';
+		} finally {
+			savingDefaultSession = false;
 		}
 	}
 
@@ -185,18 +204,6 @@
 	function onKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter') saveEdit();
 		if (e.key === 'Escape') cancelEdit();
-	}
-
-	async function handleEject(method: 'eject' | 'close') {
-		if (!drive) return;
-		ejecting = true;
-		try {
-			await ejectDrive(drive.id, method);
-		} catch {
-			// ignore — tray action is best-effort
-		} finally {
-			ejecting = false;
-		}
 	}
 
 	async function toggleMode() {
@@ -282,7 +289,7 @@
 			<span class="font-mono text-[10px]">{drive.device_path}</span>
 		{/if}
 		{#if drive.hostname}
-			{#if drive.device_path} · {/if}<span>{drive.hostname}</span>
+			{#if drive.device_path} | {/if}<span>{drive.hostname}</span>
 		{/if}
 		<br/>
 		{#if drive.rip_speed != null}
@@ -308,7 +315,7 @@
 		{/if}
 		<label
 			class="inline-flex items-center gap-1 rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700 dark:text-amber-400"
-			title="Display only — UHD disc detection and transcoding presets are applied automatically regardless of this setting."
+			title="Display only - UHD disc detection and transcoding presets are applied automatically regardless of this setting."
 		>
 			<input
 				type="checkbox"
@@ -339,40 +346,26 @@
 			{drive.drive_mode === 'manual' ? 'Manual' : 'Auto'}
 		</button>
 
-		<div class="h-6 w-px bg-primary/10 dark:bg-primary/15"></div>
-
-		<button
-			onclick={() => handleEject('eject')}
-			disabled={ejecting}
-			class="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary/10 px-2 py-1.5 text-xs text-primary-text transition-colors hover:bg-primary/20 disabled:opacity-50 dark:text-primary-text-dark dark:hover:bg-primary/25"
-			title="Eject tray"
+		<select
+			bind:value={selectedSessionId}
+			data-testid="drive-session-select"
+			disabled={triggering}
+			title="Optional session - auto-applies when the rip completes"
+			class="min-w-0 flex-1 rounded-md border border-primary/15 bg-primary/5 px-2 py-1.5 text-xs text-gray-900 dark:border-primary/20 dark:bg-primary/10 dark:text-white disabled:opacity-50"
 		>
-			<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7M5 19h14" />
-			</svg>
-			Eject
-		</button>
+			<option value="">- none -</option>
+			{#each sessions as s (s.id)}
+				<option value={s.id}>{s.name}{s.is_builtin ? ' (built-in)' : ''}</option>
+			{/each}
+		</select>
 		<button
-			onclick={() => handleEject('close')}
-			disabled={ejecting}
-			class="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary/10 px-2 py-1.5 text-xs text-primary-text transition-colors hover:bg-primary/20 disabled:opacity-50 dark:text-primary-text-dark dark:hover:bg-primary/25"
-			title="Close tray"
+			onclick={startManualRip}
+			disabled={triggering}
+			data-testid="drive-start-rip"
+			class="flex items-center justify-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-on-primary transition-colors hover:bg-primary-hover disabled:opacity-50"
+			title="Start a manual rip on this drive"
 		>
-			<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7M5 5h14" />
-			</svg>
-			Insert
-		</button>
-		<button
-			onclick={handleScan}
-			disabled={scanning || scanCooldown}
-			class="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary/10 px-2 py-1.5 text-xs text-primary-text transition-colors hover:bg-primary/20 disabled:opacity-50 dark:text-primary-text-dark dark:hover:bg-primary/25"
-			title="Force scan for media"
-		>
-			<svg class="h-3.5 w-3.5 {scanning ? 'animate-spin' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-			</svg>
-			{scanning ? 'Scanning...' : scanCooldown ? 'Sent' : 'Scan'}
+			{triggering ? 'Starting...' : 'Start rip'}
 		</button>
 
 		<div class="h-6 w-px bg-primary/10 dark:bg-primary/15"></div>
@@ -399,6 +392,26 @@
 					onkeydown={(e) => { if (e.key === 'Escape') showSettings = false; }}
 				>
 					<div class="mb-2 text-[9px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Drive Settings</div>
+					<div class="mb-2">
+						<label for="default-session-{drive.id}" class="mb-1 block text-[11px] text-gray-600 dark:text-gray-300">Default session</label>
+						<select
+							id="default-session-{drive.id}"
+							data-testid="drive-default-session"
+							value={drive.default_session_id ?? ''}
+							onchange={(e) => saveDefaultSession((e.currentTarget as HTMLSelectElement).value)}
+							disabled={savingDefaultSession}
+							class="w-full rounded-md border border-primary/25 bg-primary/5 px-2 py-1 text-xs text-gray-900 dark:border-primary/30 dark:bg-primary/10 dark:text-white disabled:opacity-50"
+						>
+							<option value="">- none -</option>
+							{#each sessions as s (s.id)}
+								<option value={s.id}>{s.name}{s.is_builtin ? ' (built-in)' : ''}</option>
+							{/each}
+						</select>
+						<p class="mt-1 text-[9px] leading-snug text-gray-400 dark:text-gray-500">Auto-applied to auto-mode rips on this drive.</p>
+						{#if defaultSessionError}
+							<p class="mt-1 text-[10px] text-red-600 dark:text-red-400" data-testid="drive-default-session-error">{defaultSessionError}</p>
+						{/if}
+					</div>
 					<div class="flex items-center justify-between gap-2">
 						<label for="rip-speed-{drive.id}" class="text-[11px] text-gray-600 dark:text-gray-300">Rip Speed</label>
 						<input
@@ -459,6 +472,10 @@
 			</button>
 		{/if}
 	</div>
+
+	{#if manualError}
+		<p class="mt-1 text-[11px] text-red-600 dark:text-red-400" data-testid="drive-manual-error">{manualError}</p>
+	{/if}
 
 	<!-- Current rip -->
 	{#if drive.current_job}

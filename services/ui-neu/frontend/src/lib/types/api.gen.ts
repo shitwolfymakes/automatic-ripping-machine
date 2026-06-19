@@ -77,6 +77,24 @@ export type AppriseChannelConfig = {
 };
 
 /**
+ * Body_upload_theme_api_themes_post
+ */
+export type BodyUploadThemeApiThemesPost = {
+    /**
+     * Theme Json
+     *
+     * Theme JSON file
+     */
+    theme_json: Blob | File;
+    /**
+     * Theme Css
+     *
+     * Optional custom CSS
+     */
+    theme_css?: string;
+};
+
+/**
  * BulkDeleteJobsResponse
  *
  * DELETE /api/jobs response. `deleted_ids` lists the jobs whose DB
@@ -336,11 +354,6 @@ export type ConfigUpdateRequest = {
      * Ripping Paused
      */
     ripping_paused?: boolean | null;
-    default_retention_policy?: RetentionPolicy | null;
-    /**
-     * Notification Apprise Urls
-     */
-    notification_apprise_urls?: Array<string> | null;
     /**
      * Notifications Enabled
      */
@@ -6007,6 +6020,270 @@ export type ProxyImageApiImagesProxyGetErrors = {
 export type ProxyImageApiImagesProxyGetError = ProxyImageApiImagesProxyGetErrors[keyof ProxyImageApiImagesProxyGetErrors];
 
 export type ProxyImageApiImagesProxyGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ImageCacheStatsApiImagesCacheGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/images/cache';
+};
+
+export type ImageCacheStatsApiImagesCacheGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImageCacheStatsApiImagesCacheGetError = ImageCacheStatsApiImagesCacheGetErrors[keyof ImageCacheStatsApiImagesCacheGetErrors];
+
+export type ImageCacheStatsApiImagesCacheGetResponses = {
+    /**
+     * Response Image Cache Stats Api Images Cache Get
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ImageCacheStatsApiImagesCacheGetResponse = ImageCacheStatsApiImagesCacheGetResponses[keyof ImageCacheStatsApiImagesCacheGetResponses];
+
+export type ImageCacheClearApiImagesCacheClearPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/images/cache/clear';
+};
+
+export type ImageCacheClearApiImagesCacheClearPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImageCacheClearApiImagesCacheClearPostError = ImageCacheClearApiImagesCacheClearPostErrors[keyof ImageCacheClearApiImagesCacheClearPostErrors];
+
+export type ImageCacheClearApiImagesCacheClearPostResponses = {
+    /**
+     * Response Image Cache Clear Api Images Cache Clear Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ImageCacheClearApiImagesCacheClearPostResponse = ImageCacheClearApiImagesCacheClearPostResponses[keyof ImageCacheClearApiImagesCacheClearPostResponses];
+
+export type ListThemesApiThemesGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/themes';
+};
+
+export type ListThemesApiThemesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListThemesApiThemesGetError = ListThemesApiThemesGetErrors[keyof ListThemesApiThemesGetErrors];
+
+export type ListThemesApiThemesGetResponses = {
+    /**
+     * Response List Themes Api Themes Get
+     *
+     * Successful Response
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type ListThemesApiThemesGetResponse = ListThemesApiThemesGetResponses[keyof ListThemesApiThemesGetResponses];
+
+export type UploadThemeApiThemesPostData = {
+    body: BodyUploadThemeApiThemesPost;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/themes';
+};
+
+export type UploadThemeApiThemesPostErrors = {
+    /**
+     * Invalid request
+     */
+    400: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadThemeApiThemesPostError = UploadThemeApiThemesPostErrors[keyof UploadThemeApiThemesPostErrors];
+
+export type UploadThemeApiThemesPostResponses = {
+    /**
+     * Response Upload Theme Api Themes Post
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type UploadThemeApiThemesPostResponse = UploadThemeApiThemesPostResponses[keyof UploadThemeApiThemesPostResponses];
+
+export type DeleteThemeApiThemesThemeIdDeleteData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Theme Id
+         */
+        theme_id: string;
+    };
+    query?: never;
+    url: '/api/themes/{theme_id}';
+};
+
+export type DeleteThemeApiThemesThemeIdDeleteErrors = {
+    /**
+     * Invalid request
+     */
+    400: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteThemeApiThemesThemeIdDeleteError = DeleteThemeApiThemesThemeIdDeleteErrors[keyof DeleteThemeApiThemesThemeIdDeleteErrors];
+
+export type DeleteThemeApiThemesThemeIdDeleteResponses = {
+    /**
+     * Response Delete Theme Api Themes  Theme Id  Delete
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type DeleteThemeApiThemesThemeIdDeleteResponse = DeleteThemeApiThemesThemeIdDeleteResponses[keyof DeleteThemeApiThemesThemeIdDeleteResponses];
+
+export type GetThemeApiThemesThemeIdGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Theme Id
+         */
+        theme_id: string;
+    };
+    query?: never;
+    url: '/api/themes/{theme_id}';
+};
+
+export type GetThemeApiThemesThemeIdGetErrors = {
+    /**
+     * Theme not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetThemeApiThemesThemeIdGetError = GetThemeApiThemesThemeIdGetErrors[keyof GetThemeApiThemesThemeIdGetErrors];
+
+export type GetThemeApiThemesThemeIdGetResponses = {
+    /**
+     * Response Get Theme Api Themes  Theme Id  Get
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetThemeApiThemesThemeIdGetResponse = GetThemeApiThemesThemeIdGetResponses[keyof GetThemeApiThemesThemeIdGetResponses];
+
+export type GetThemeCssApiThemesThemeIdCssGetData = {
+    body?: never;
+    path: {
+        /**
+         * Theme Id
+         */
+        theme_id: string;
+    };
+    query?: never;
+    url: '/api/themes/{theme_id}/css';
+};
+
+export type GetThemeCssApiThemesThemeIdCssGetErrors = {
+    /**
+     * Theme not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetThemeCssApiThemesThemeIdCssGetError = GetThemeCssApiThemesThemeIdCssGetErrors[keyof GetThemeCssApiThemesThemeIdCssGetErrors];
+
+export type GetThemeCssApiThemesThemeIdCssGetResponses = {
     /**
      * Successful Response
      */

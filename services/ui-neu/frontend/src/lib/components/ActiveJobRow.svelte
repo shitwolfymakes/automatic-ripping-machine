@@ -137,7 +137,7 @@
 							style="background: {accentVar}; opacity: 0.6"
 						></div>
 					</div>
-					<span class="min-w-[3ch] text-right text-xs text-gray-500 dark:text-gray-400">…</span>
+					<span class="min-w-[3ch] text-right text-xs text-gray-500 dark:text-gray-400">...</span>
 				</div>
 			{/if}
 		</div>
@@ -160,7 +160,7 @@
 									onclick={handleAbandon}
 									disabled={abandoning}
 									class="text-xs font-medium text-red-500 hover:underline disabled:opacity-50 dark:text-red-400"
-								>{abandoning ? 'Abandoning…' : 'Abandon'}</button>
+								>{abandoning ? 'Abandoning...' : 'Abandon'}</button>
 							{/if}
 						</div>
 					</div>
@@ -185,19 +185,19 @@
 									{#if job.disc_type}
 										<span class="inline-flex items-center gap-1"><DiscTypeIcon disctype={job.disc_type} size="h-3.5 w-3.5" />{discTypeLabel(job.disc_type)}</span>
 									{:else}
-										—
+										-
 									{/if}
 								</td>
 							</tr>
 							<tr>
 								<td class="py-1 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap">Year</td>
-								<td class="py-1 text-gray-900 dark:text-white">{job.year || '—'}</td>
+								<td class="py-1 text-gray-900 dark:text-white">{job.year || '-'}</td>
 								<td class="py-1 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap pl-6">Tracks</td>
 								<td class="py-1 text-gray-900 dark:text-white">
 									{#if displayTotal > 0}
 										{displayRipped} / {displayTotal} ripped
 									{:else}
-										—
+										-
 									{/if}
 								</td>
 							</tr>
@@ -207,7 +207,7 @@
 									{#if active && progressStage}
 										{formatStage(progressStage)}
 									{:else}
-										—
+										-
 									{/if}
 								</td>
 							</tr>

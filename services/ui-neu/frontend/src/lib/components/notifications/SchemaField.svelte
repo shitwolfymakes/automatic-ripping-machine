@@ -11,7 +11,7 @@
 	const HIDDEN = '<hidden>';
 	const isPrivateHidden = $derived(field.private && value === HIDDEN);
 	const displayValue = $derived(isPrivateHidden ? '' : (value ?? ''));
-	const placeholder = $derived(isPrivateHidden ? '•••••••• (set, leave blank to keep)' : '');
+	const placeholder = $derived(isPrivateHidden ? '******** (set, leave blank to keep)' : '');
 
 	function onInput(e: Event) {
 		value = (e.currentTarget as HTMLInputElement).value;

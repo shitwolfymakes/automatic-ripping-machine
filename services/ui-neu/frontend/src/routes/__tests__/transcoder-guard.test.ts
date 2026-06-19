@@ -15,7 +15,6 @@ vi.mock('@sveltejs/kit', () => ({
 
 const GUARDED_ROUTES = [
 	{ name: 'transcoder route guard', path: '../transcoder/+page' },
-	{ name: 'logs/transcoder/[filename] route guard', path: '../logs/transcoder/[filename]/+page' },
 ] as const;
 
 describe.each(GUARDED_ROUTES)('$name', ({ path }) => {

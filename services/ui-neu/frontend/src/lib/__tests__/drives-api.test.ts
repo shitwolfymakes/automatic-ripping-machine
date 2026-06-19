@@ -16,9 +16,7 @@ import {
 	updateDrive,
 	deleteDrive,
 	rescanDrives,
-	fetchDriveDiagnostic,
-	scanDrive,
-	ejectDrive
+	fetchDriveDiagnostic
 } from '../api/drives';
 
 beforeEach(() => mockFetch.mockReset());
@@ -73,19 +71,5 @@ describe('fetchDriveDiagnostic', () => {
 		const result = await fetchDriveDiagnostic();
 		expect(mockFetch).toHaveBeenCalledWith('/api/drives/diagnostic', expect.objectContaining({ method: 'GET' }));
 		expect(result).toEqual({ drives: [] });
-	});
-});
-
-describe('scanDrive (MISSING in v3)', () => {
-	it('rejects with a not-available error', async () => {
-		await expect(scanDrive('drv_x')).rejects.toThrow(/not yet available in v3/);
-		expect(mockFetch).not.toHaveBeenCalled();
-	});
-});
-
-describe('ejectDrive (MISSING in v3)', () => {
-	it('rejects with a not-available error', async () => {
-		await expect(ejectDrive('drv_x', 'eject')).rejects.toThrow(/not yet available in v3/);
-		expect(mockFetch).not.toHaveBeenCalled();
 	});
 });

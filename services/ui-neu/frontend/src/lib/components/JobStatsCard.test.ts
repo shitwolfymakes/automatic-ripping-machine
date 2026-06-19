@@ -11,7 +11,7 @@ describe('JobStatsCard', () => {
 
 	it('displays em-dash placeholders while stats are loading', () => {
 		const { container } = renderComponent(JobStatsCard, { props: {} });
-		expect(container.textContent).toContain('—');
+		expect(container.textContent).toContain('-');
 	});
 
 	it('renders Total Rips label while loading', () => {

@@ -17,8 +17,6 @@ import {
 	createCustomPreset,
 	fetchTranscoderScheme,
 	saveTranscoderConfig,
-	fetchAbcdeConfig,
-	saveAbcdeConfig,
 	testTranscoderConnection,
 	testTranscoderWebhook,
 	fetchSystemInfo
@@ -106,15 +104,9 @@ describe('fetchTranscoderScheme (MISSING in v3)', () => {
 	});
 });
 
-describe('MISSING transcoder/abcde/system endpoints reject before fetch', () => {
+describe('MISSING transcoder/system endpoints reject before fetch', () => {
 	it('saveTranscoderConfig rejects', async () => {
 		await expect(saveTranscoderConfig({})).rejects.toThrow(/not yet available/);
-	});
-	it('fetchAbcdeConfig rejects', async () => {
-		await expect(fetchAbcdeConfig()).rejects.toThrow(/not yet available/);
-	});
-	it('saveAbcdeConfig rejects', async () => {
-		await expect(saveAbcdeConfig('x')).rejects.toThrow(/not yet available/);
 	});
 	it('testTranscoderConnection rejects', async () => {
 		await expect(testTranscoderConnection()).rejects.toThrow(/not yet available/);
@@ -129,8 +121,6 @@ describe('MISSING transcoder/abcde/system endpoints reject before fetch', () => 
 	it('none of the MISSING stubs hit the client', async () => {
 		await Promise.allSettled([
 			saveTranscoderConfig({}),
-			fetchAbcdeConfig(),
-			saveAbcdeConfig('x'),
 			testTranscoderConnection(),
 			testTranscoderWebhook('s'),
 			fetchSystemInfo()

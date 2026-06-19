@@ -14,7 +14,7 @@
 	<button
 		type="button"
 		disabled
-		title={`${feature} — coming soon (not yet available in v3)`}
+		title={`${feature} - coming soon (not yet available in v3)`}
 		class="cursor-not-allowed rounded px-2 py-0.5 text-xs font-medium opacity-50 {klass}"
 	>
 		{label}

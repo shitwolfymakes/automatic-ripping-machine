@@ -60,7 +60,7 @@
 				href="/settings"
 				class="text-sm text-primary-text hover:underline dark:text-primary-text-dark"
 			>
-				Edit all settings →
+				Edit all settings ->
 			</a>
 		</div>
 	{:else}

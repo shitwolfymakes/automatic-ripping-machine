@@ -25,10 +25,10 @@ vi.mock('$lib/stores/colorScheme', async () => {
 vi.mock('$lib/stores/dashboard', async () => {
 	const { writable } = await import('svelte/store');
 	const store = writable({
-		db_available: true, arm_online: true, active_jobs: [], system_info: null,
+		db_available: true, arm_online: true, active_jobs: [],
 		drives_online: 0, drive_names: {}, notification_count: 0, ripping_enabled: true,
-		transcoder_online: false, transcoder_stats: null, transcoder_system_stats: null,
-		active_transcodes: [], system_stats: null, transcoder_info: null
+		transcoder_online: false, transcoder_stats: null,
+		active_transcodes: []
 	});
 	return { dashboard: { ...store, start: vi.fn(), stop: vi.fn(), error: writable(null) } };
 });
@@ -53,10 +53,14 @@ describe('Layout', () => {
 		expect(screen.getByText('Settings')).toBeInTheDocument();
 	});
 
-	it('hides nav items for feature-flagged-off screens (Files, Logs — MISSING in v3)', () => {
+	it('hides nav items for feature-flagged-off screens (Files — MISSING in v3)', () => {
 		renderComponent(Layout, { props: { children: childSnippet() } });
 		expect(screen.queryByText('Files')).not.toBeInTheDocument();
-		expect(screen.queryByText('Logs')).not.toBeInTheDocument();
+	});
+
+	it('shows the Logs nav item (job-scoped log browser is enabled)', () => {
+		renderComponent(Layout, { props: { children: childSnippet() } });
+		expect(screen.getByText('Logs')).toBeInTheDocument();
 	});
 
 	it('renders children content', () => {
@@ -80,12 +84,11 @@ describe('Layout', () => {
 				{ job_id: 1, status: 'ripping', title: 'Movie A' },
 				{ job_id: 2, status: 'transcoding', title: 'Movie B' },
 			] as never[],
-			system_info: null, drives_online: 1, drive_names: {},
+			drives_online: 1, drive_names: {},
 			notification_count: 0, ripping_enabled: true,
 			makemkv_key_valid: null, makemkv_key_checked_at: null,
 			transcoder_online: false, transcoder_stats: null,
-			transcoder_system_stats: null, active_transcodes: [],
-			system_stats: null, transcoder_info: null
+			active_transcodes: []
 		}));
 
 		renderComponent(Layout, { props: { children: childSnippet() } });
