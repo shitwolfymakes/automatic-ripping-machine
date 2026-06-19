@@ -349,6 +349,43 @@ def test_preflight_transcoder_ok_when_live(signing_key: bytes, tmp_path) -> None
     assert check["detail"] is None
 
 
+@pytest.mark.parametrize(
+    "state,expected_status",
+    [
+        ("ok", "ok"),
+        ("fresh_kept", "ok"),
+        ("disabled", "ok"),
+        ("download_failed", "warning"),
+        ("empty", "warning"),
+        ("probe_failed", "warning"),
+        (None, "warning"),
+    ],
+)
+def test_preflight_community_keydb_check(signing_key: bytes, tmp_path, state, expected_status) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["config"][0].community_keydb_state = state
+    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/preflight", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "community_keydb")
+    assert check["status"] == expected_status
+
+
+def test_preflight_community_keydb_ok_reports_vuk_count(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["config"][0].community_keydb_state = "ok"
+    db.rows["config"][0].community_keydb_vuk_count = 4200
+    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/preflight", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "community_keydb")
+    assert check["detail"] == "4200 VUK keys installed"
+
+
 def test_preflight_overall_not_error_when_only_transcoder_warns(signing_key: bytes, tmp_path) -> None:
     # ingress_ok=True means roots are fine; dispatcher absent → transcoder warns.
     # Overall must be "warning" (degraded), never promoted to "error".
