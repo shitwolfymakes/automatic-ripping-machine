@@ -311,6 +311,59 @@
         }
       }
     },
+    "/api/ripper/keydb-status": {
+      "post": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Keydb Status",
+        "description": "A ripper reports its community-keydb fetch outcome. Global fact \u2014\nwritten to the Config singleton (last writer wins across rippers, by\ndesign). /api/system/preflight reads it back.",
+        "operationId": "keydb_status_api_ripper_keydb_status_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeydbStatusReport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ripper/register": {
       "post": {
         "tags": [
@@ -6773,6 +6826,17 @@
             ],
             "title": "Block On Miss"
           },
+          "community_keydb_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Keydb Enabled"
+          },
           "ripping_paused": {
             "anyOf": [
               {
@@ -6879,6 +6943,10 @@
             "type": "boolean",
             "title": "Block On Miss"
           },
+          "community_keydb_enabled": {
+            "type": "boolean",
+            "title": "Community Keydb Enabled"
+          },
           "ripping_paused": {
             "type": "boolean",
             "title": "Ripping Paused"
@@ -6969,6 +7037,7 @@
           "auto_transcode_on_idle",
           "auto_rip_on_insert",
           "block_on_miss",
+          "community_keydb_enabled",
           "ripping_paused",
           "default_retention_policy",
           "notification_apprise_urls",
@@ -8286,6 +8355,54 @@
           "resumed_from_crash"
         ],
         "title": "JobView"
+      },
+      "KeydbState": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "disabled",
+          "fresh_kept",
+          "download_failed",
+          "empty",
+          "probe_failed"
+        ],
+        "title": "KeydbState",
+        "description": "Outcome of the ripper's community-keydb fetch (`update_keydb.sh`),\nstored on the Config singleton and surfaced by /api/system/preflight.\n\nOK              \u2014 downloaded, filtered, installed; vuk_count set.\nDISABLED        \u2014 community keydb gated off via config.\nFRESH_KEPT      \u2014 age-gated skip; existing keydb retained (age_days set).\nDOWNLOAD_FAILED \u2014 all download retries failed; existing keydb retained.\nEMPTY           \u2014 fetched file not a ZIP / no keydb.cfg / no VUK entries.\nPROBE_FAILED    \u2014 wrapper could not run or parse the script."
+      },
+      "KeydbStatusReport": {
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/KeydbState"
+          },
+          "vuk_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vuk Count"
+          },
+          "age_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "KeydbStatusReport",
+        "description": "Body of POST /api/ripper/keydb-status \u2014 the ripper's community-keydb\nfetch outcome. Global (not per-drive); the backend writes it to the Config\nsingleton. `vuk_count` / `age_days` are present on ok / fresh_kept.\nBoth fields are None on all other states."
       },
       "LoginRequest": {
         "properties": {
@@ -10019,6 +10136,11 @@
               }
             ],
             "title": "Makemkv Key"
+          },
+          "community_keydb_enabled": {
+            "type": "boolean",
+            "title": "Community Keydb Enabled",
+            "default": true
           }
         },
         "type": "object",
