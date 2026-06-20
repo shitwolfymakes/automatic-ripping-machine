@@ -17,6 +17,7 @@ def test_image_cache_caps_default_to_current_values():
 
 def test_image_cache_accessors_read_settings(monkeypatch):
     from arm_backend import config, image_cache
+
     monkeypatch.setattr(config.settings, "ARM_IMAGE_CACHE_MAX_ENTRIES", 5)
     monkeypatch.setattr(config.settings, "ARM_IMAGE_CACHE_MAX_BYTES", 123)
     monkeypatch.setattr(config.settings, "ARM_IMAGE_CACHE_TTL_SECONDS", 99)

@@ -22,8 +22,10 @@ def test_allowed_hosts_includes_defaults_and_extras(monkeypatch):
     # setenv wouldn't reach it; _allowed_image_hosts() reads the live object,
     # so patch its attribute directly.
     from arm_backend import config
+
     monkeypatch.setattr(config.settings, "ARM_EXTRA_IMAGE_HOSTS", ["posters.lan"])
     from arm_backend.routers import images
+
     hosts = images._allowed_image_hosts()
-    assert "image.tmdb.org" in hosts          # built-in default preserved
-    assert "posters.lan" in hosts             # extra added
+    assert "image.tmdb.org" in hosts  # built-in default preserved
+    assert "posters.lan" in hosts  # extra added
