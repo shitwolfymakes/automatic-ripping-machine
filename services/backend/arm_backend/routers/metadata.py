@@ -22,7 +22,7 @@ from arm_backend.metadata.omdb import OMDBClient
 from arm_backend.metadata.tmdb import TMDBClient
 from arm_backend.metadata.tvdb import TVDBClient
 from arm_backend.seeders import CONFIG_SINGLETON_ID
-from arm_common import Config, User
+from arm_common import DEFAULT_MUSICBRAINZ_USER_AGENT, Config, User
 from arm_common.schemas import (
     MetadataCandidate,
     MetadataKeyTestResponse,
@@ -208,7 +208,7 @@ async def search_music(
     db: AsyncSession = Depends(get_session),
 ) -> MetadataSearchResponse:
     cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-    ua = (cfg.musicbrainz_user_agent if cfg else None) or "armv3"
+    ua = (cfg.musicbrainz_user_agent if cfg else None) or DEFAULT_MUSICBRAINZ_USER_AGENT
     http: httpx.AsyncClient = request.app.state.http
     try:
         results = await MusicBrainzClient(ua, http).search_releases(query)
@@ -227,7 +227,7 @@ async def music_release_detail(
     db: AsyncSession = Depends(get_session),
 ) -> MetadataReleaseDetail:
     cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-    ua = (cfg.musicbrainz_user_agent if cfg else None) or "armv3"
+    ua = (cfg.musicbrainz_user_agent if cfg else None) or DEFAULT_MUSICBRAINZ_USER_AGENT
     http: httpx.AsyncClient = request.app.state.http
     try:
         result = await MusicBrainzClient(ua, http).get_release(release_id)

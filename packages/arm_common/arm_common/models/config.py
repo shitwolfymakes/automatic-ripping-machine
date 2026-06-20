@@ -7,6 +7,13 @@ from sqlmodel import Field, SQLModel
 from arm_common.models._columns import enum_column, updated_at_column
 from arm_common.enums import RetentionPolicy
 
+# MusicBrainz 403s any User-Agent that doesn't follow their etiquette guide's
+# `AppName/version ( contact )` shape — a bare token like `armv3` is rejected.
+# This well-formed default keeps the first audio-CD rip working on a fresh
+# install; it is the single source of truth for the model default AND the
+# router fallback when an operator hasn't set their own.
+DEFAULT_MUSICBRAINZ_USER_AGENT = "ARM/3.0.0 ( https://github.com/automatic-ripping-machine/automatic-ripping-machine )"
+
 
 class Config(SQLModel, table=True):
     __tablename__ = "config"
@@ -35,12 +42,9 @@ class Config(SQLModel, table=True):
     community_keydb_state: str | None = Field(sa_column=Column(String, nullable=True))
     community_keydb_vuk_count: int | None = Field(sa_column=Column(Integer, nullable=True))
     community_keydb_checked_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
-    # MusicBrainz requires a non-empty User-Agent (they 403 blank UAs); `armv3`
-    # is a reasonable shared default that won't blow up the first audio-CD rip
-    # on a fresh install. Operators are still encouraged to override with an
-    # app-name-plus-contact-info string per MB's etiquette guide — see the UI
-    # form's placeholder hint.
-    musicbrainz_user_agent: str | None = Field(default="armv3")
+    # See DEFAULT_MUSICBRAINZ_USER_AGENT above — a bare token 403s; operators are
+    # still encouraged to override with their own contact info (UI placeholder hint).
+    musicbrainz_user_agent: str | None = Field(default=DEFAULT_MUSICBRAINZ_USER_AGENT)
     # Persisted metadata provider for the identify flow (search + detail).
     # Default `tmdb` — free, effectively unlimited, richer than OMDb. Validated
     # app-side to {tmdb, omdb}; tvdb/makemkv are key-test-only, not search providers.
