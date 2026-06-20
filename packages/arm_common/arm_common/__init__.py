@@ -27,6 +27,7 @@ from arm_common.enums import (
     VideoCodec,
 )
 from arm_common.models import (
+    DEFAULT_MUSICBRAINZ_USER_AGENT,
     Config,
     DiscFingerprint,
     Drive,
@@ -47,6 +48,7 @@ from arm_common.models import (
 from arm_common.ulid import new_id
 
 __all__ = [
+    "DEFAULT_MUSICBRAINZ_USER_AGENT",
     "Config",
     "ContainerFormat",
     "DiscFingerprint",
