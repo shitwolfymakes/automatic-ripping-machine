@@ -8,14 +8,16 @@ vi.mock('$lib/api/jobs', () => ({
 	searchMetadata: vi.fn(),
 	fetchMediaDetail: vi.fn(),
 	updateTrackTitle: vi.fn(() => Promise.resolve()),
-	clearTrackTitle: vi.fn(() => Promise.resolve())
+	clearTrackTitle: vi.fn(() => Promise.resolve()),
+	updateTrack: vi.fn(() => Promise.resolve())
 }));
 
-import { searchMetadata, fetchMediaDetail, updateTrackTitle, clearTrackTitle } from '$lib/api/jobs';
+import { searchMetadata, fetchMediaDetail, updateTrackTitle, clearTrackTitle, updateTrack } from '$lib/api/jobs';
 const mockSearchMetadata = vi.mocked(searchMetadata);
 const mockFetchDetail = vi.mocked(fetchMediaDetail);
 const mockUpdateTrackTitle = vi.mocked(updateTrackTitle);
 const mockClearTrackTitle = vi.mocked(clearTrackTitle);
+const mockUpdateTrack = vi.mocked(updateTrack);
 
 function createCandidate(overrides: Partial<MetadataCandidate> = {}): MetadataCandidate {
 	return {
@@ -153,6 +155,62 @@ describe('TrackTitleSearch', () => {
 			await waitFor(() => {
 				expect(mockUpdateTrackTitle).toHaveBeenCalledWith('job_3', 'trk_5', expect.objectContaining({ title: 'Picked', year: 2021 }));
 			});
+		});
+	});
+
+	describe('track options (custom filename + episode)', () => {
+		it('saves a custom_filename via updateTrack', async () => {
+			renderComponent(TrackTitleSearch, {
+				props: { jobId: 'job_9', track: createTrack({ id: 'trk_7' }) }
+			});
+			const input = screen.getByPlaceholderText('Custom filename (optional)');
+			await fireEvent.input(input, { target: { value: 'My Feature.mkv' } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Save options' }));
+			await waitFor(() =>
+				expect(mockUpdateTrack).toHaveBeenCalledWith('job_9', 'trk_7', {
+					custom_filename: 'My Feature.mkv'
+				})
+			);
+		});
+
+		it('hides episode inputs for non-series tracks', () => {
+			renderComponent(TrackTitleSearch, {
+				props: { jobId: 'job_9', track: createTrack({ video_type: 'movie' }) }
+			});
+			expect(screen.queryByPlaceholderText('Episode #')).toBeNull();
+		});
+
+		it('shows episode inputs for series tracks and sends them', async () => {
+			renderComponent(TrackTitleSearch, {
+				props: { jobId: 'job_9', track: createTrack({ id: 'trk_8', video_type: 'series' }) }
+			});
+			await fireEvent.input(screen.getByPlaceholderText('Episode #'), { target: { value: '3' } });
+			await fireEvent.input(screen.getByPlaceholderText('Episode name'), {
+				target: { value: 'The One' }
+			});
+			await fireEvent.click(screen.getByRole('button', { name: 'Save options' }));
+			await waitFor(() =>
+				expect(mockUpdateTrack).toHaveBeenCalledWith('job_9', 'trk_8', {
+					custom_filename: null,
+					episode_number: 3,
+					episode_name: 'The One'
+				})
+			);
+		});
+
+		it('coerces a non-numeric episode # to null', async () => {
+			renderComponent(TrackTitleSearch, {
+				props: { jobId: 'job_9', track: createTrack({ id: 'trk_9', video_type: 'series' }) }
+			});
+			await fireEvent.input(screen.getByPlaceholderText('Episode #'), { target: { value: 'abc' } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Save options' }));
+			await waitFor(() =>
+				expect(mockUpdateTrack).toHaveBeenCalledWith('job_9', 'trk_9', {
+					custom_filename: null,
+					episode_number: null,
+					episode_name: null
+				})
+			);
 		});
 	});
 });

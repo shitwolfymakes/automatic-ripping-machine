@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { TrackView, MetadataCandidate } from '$lib/types/api.gen';
-	import { searchMetadata, fetchMediaDetail, updateTrackTitle, clearTrackTitle } from '$lib/api/jobs';
+	import type { TrackView, MetadataCandidate, TrackEditRequest } from '$lib/types/api.gen';
+	import { searchMetadata, fetchMediaDetail, updateTrackTitle, clearTrackTitle, updateTrack } from '$lib/api/jobs';
 	import PosterImage from './PosterImage.svelte';
 
 	interface Props {
@@ -26,6 +26,34 @@
 	let applying = $state(false);
 	let clearing = $state(false);
 	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+
+	let editFilename = $state(track.custom_filename ?? '');
+	let editEpisodeNum = $state(track.episode_number != null ? String(track.episode_number) : '');
+	let editEpisodeName = $state(track.episode_name ?? '');
+	let savingOptions = $state(false);
+	let isSeries = $derived(track.video_type === 'series');
+
+	async function saveOptions() {
+		savingOptions = true;
+		feedback = null;
+		try {
+			const episodeNum = editEpisodeNum.trim() ? Number(editEpisodeNum.trim()) : null;
+			const data: Omit<TrackEditRequest, 'track_id'> = {
+				custom_filename: editFilename.trim() || null,
+				...(isSeries && {
+					episode_number: Number.isFinite(episodeNum as number) ? episodeNum : null,
+					episode_name: editEpisodeName.trim() || null
+				})
+			};
+			await updateTrack(jobId, track.id, data);
+			feedback = { type: 'success', message: 'Track options saved' };
+			onapply?.();
+		} catch (e) {
+			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Save failed' };
+		} finally {
+			savingOptions = false;
+		}
+	}
 
 	// Editable fields populated from the selected candidate
 	let editTitle = $state('');
@@ -151,6 +179,29 @@
 		<button onclick={handleSearch} disabled={searching || (!query.trim() && !imdbInput.trim())} class="{btnBase} w-[62px] text-center bg-primary text-on-primary hover:bg-primary-hover">
 			{searching ? '...' : 'Search'}
 		</button>
+	</div>
+
+	<!-- Track output options: custom filename + (series) episode -->
+	<div class="space-y-2 rounded-md border border-primary/10 bg-page/40 p-2 dark:border-primary/15 dark:bg-surface-dark/40">
+		<div class="flex flex-wrap items-end gap-1.5">
+			<label class="min-w-[150px] flex-1">
+				<span class="mb-0.5 block text-[10px] font-medium text-gray-500 dark:text-gray-400">Custom filename</span>
+				<input type="text" bind:value={editFilename} placeholder="Custom filename (optional)" class="w-full {inputBase}" />
+			</label>
+			{#if isSeries}
+				<label class="w-20">
+					<span class="mb-0.5 block text-[10px] font-medium text-gray-500 dark:text-gray-400">Episode</span>
+					<input type="text" bind:value={editEpisodeNum} placeholder="Episode #" class="w-full {inputBase}" />
+				</label>
+				<label class="min-w-[120px] flex-1">
+					<span class="mb-0.5 block text-[10px] font-medium text-gray-500 dark:text-gray-400">Episode name</span>
+					<input type="text" bind:value={editEpisodeName} placeholder="Episode name" class="w-full {inputBase}" />
+				</label>
+			{/if}
+			<button onclick={saveOptions} disabled={savingOptions} class="{btnBase} bg-primary text-on-primary hover:bg-primary-hover">
+				{savingOptions ? 'Saving...' : 'Save options'}
+			</button>
+		</div>
 	</div>
 
 	{#if searchError}
