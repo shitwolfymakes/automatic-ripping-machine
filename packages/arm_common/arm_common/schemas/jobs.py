@@ -114,13 +114,15 @@ class TrackEditRequest(BaseModel):
 
 
 class JobUpdateRequest(BaseModel):
-    """PATCH /api/jobs/{id} body. `poster_url_manual` edits the job; `tracks`
-    applies per-track operator edits in the same atomic save. The JOB's
+    """PATCH /api/jobs/{id} body. `poster_url_manual` + disc fields edit the job;
+    `tracks` applies per-track operator edits in the same atomic save. The JOB's
     title/year still live behind identify/resolve."""
 
     model_config = ConfigDict(extra="forbid")
 
     poster_url_manual: str | None = None
+    disc_number: int | None = None
+    disc_total: int | None = None
     tracks: list[TrackEditRequest] | None = None
 
 
