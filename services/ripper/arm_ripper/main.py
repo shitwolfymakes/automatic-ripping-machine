@@ -7,7 +7,7 @@ import httpx
 
 from arm_common import DriveMediaStatus, configure_service_logging
 from arm_ripper.backend_client import BackendClient
-from arm_ripper.config import MAKEMKV_KEYCHECK_INTERVAL_SECONDS, settings
+from arm_ripper.config import settings
 from arm_ripper.drive_poll import DriveState, InsertDetector, read_drive_status
 from arm_ripper.drive_status import probe_drive_media
 from arm_ripper.job_controller import JobController
@@ -106,11 +106,11 @@ async def makemkv_keycheck_loop(client: BackendClient) -> None:
             logger.warning("makemkv keycheck failed: %s", exc)
         except Exception:  # noqa: BLE001 — keycheck is best-effort; never let it kill the loop
             logger.exception("makemkv keycheck: unexpected error")
-        await asyncio.sleep(MAKEMKV_KEYCHECK_INTERVAL_SECONDS)
+        await asyncio.sleep(settings.MAKEMKV_KEYCHECK_INTERVAL_SECONDS)
 
 
 async def poll_loop(controller: JobController) -> None:
-    detector = InsertDetector()
+    detector = InsertDetector(not_ready_rearm_polls=settings.ARM_NOT_READY_REARM_POLLS)
     last_state: DriveState | None = None
     active_task: asyncio.Task[None] | None = None
     while True:

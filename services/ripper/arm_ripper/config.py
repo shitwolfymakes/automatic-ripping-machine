@@ -29,8 +29,11 @@ class Settings(BaseSettings):
     # cancellation. Intended for local smoke tests against the
     # matrix256-corpus ISOs; production deployments leave this unset.
     ARM_MANUAL_TRIGGER_ISO: str | None = None
+    # Tier-4: how often the ripper re-probes makemkv key validity (daily default).
+    MAKEMKV_KEYCHECK_INTERVAL_SECONDS: int = 86400
+    # Tier-4: consecutive NOT_READY polls before re-arming insert detection.
+    # Flaky USB-BD vs cheap optical need different swap-detection windows.
+    ARM_NOT_READY_REARM_POLLS: int = 3
 
 
 settings = Settings()  # type: ignore[call-arg]  # fields loaded from env by pydantic-settings
-
-MAKEMKV_KEYCHECK_INTERVAL_SECONDS = 86400
