@@ -4856,7 +4856,7 @@ export type StreamTranscodeLogApiTranscodesTaskIdLogGetData = {
         /**
          * Limit
          */
-        limit?: number;
+        limit?: number | null;
     };
     url: '/api/transcodes/{task_id}/log';
 };
@@ -5975,7 +5975,7 @@ export type StreamJobLogsApiLogsJobIdGetData = {
         /**
          * Limit
          */
-        limit?: number;
+        limit?: number | null;
     };
     url: '/api/logs/{job_id}';
 };
