@@ -126,5 +126,17 @@ class Settings(BaseSettings):
     ARM_MUSICBRAINZ_BASE_URL: str = "https://musicbrainz.org/ws/2"
     ARM_ARMSERVER_BASE_URL: str = "https://1337server.pythonanywhere.com/api/v1/"
 
+    # Tier-3: additional hostnames the image-proxy allowlist accepts, on TOP of
+    # the built-in set (never replacing it — the allowlist is an SSRF guard).
+    # Comma-separated bare hostnames (no scheme/path). Empty => built-ins only.
+    ARM_EXTRA_IMAGE_HOSTS: Annotated[list[str], NoDecode] = []
+
+    @field_validator("ARM_EXTRA_IMAGE_HOSTS", mode="before")
+    @classmethod
+    def _split_extra_image_hosts(cls, v: object) -> object:
+        if isinstance(v, str):
+            return [s.strip() for s in v.split(",") if s.strip()]
+        return v
+
 
 settings = Settings()  # type: ignore[call-arg]  # fields loaded from env by pydantic-settings

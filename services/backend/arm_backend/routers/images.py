@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse, Response
 
 from arm_backend import image_cache
 from arm_backend.auth import require_jwt
+from arm_backend.config import settings
 from arm_common import User
 
 _NEGATIVE_CACHE: dict[str, float] = {}
@@ -35,6 +36,13 @@ _ALLOWED_IMAGE_HOSTS = {
 }
 
 
+def _allowed_image_hosts() -> frozenset[str]:
+    """Built-in allowlist plus any operator-added ARM_EXTRA_IMAGE_HOSTS.
+
+    Additive only — extras never remove a built-in (SSRF guard property)."""
+    return frozenset(_ALLOWED_IMAGE_HOSTS) | frozenset(settings.ARM_EXTRA_IMAGE_HOSTS)
+
+
 def _not_found(detail: str) -> Response:
     """Return a cacheable 404 so the browser stops re-requesting missing images."""
     return JSONResponse(
@@ -52,7 +60,7 @@ async def proxy_image(url: str = Query(..., description="Image URL to proxy")) -
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         return _not_found("Only HTTP(S) URLs are allowed")
-    if parsed.hostname not in _ALLOWED_IMAGE_HOSTS:
+    if parsed.hostname not in _allowed_image_hosts():
         return _not_found("Image host not allowed")
 
     safe_url = parsed.geturl()

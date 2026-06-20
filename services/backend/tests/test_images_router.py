@@ -78,6 +78,17 @@ def test_rejects_non_allowlisted_host(client):
     assert "not allowed" in r.json()["detail"]
 
 
+def test_extra_image_host_not_rejected(client, monkeypatch):
+    # ARM_EXTRA_IMAGE_HOSTS adds an operator host; a proxy request to it must NOT
+    # hit the "not allowed" SSRF-guard path. It proceeds to the fetch (which we
+    # stub to succeed), proving the host is accepted, not rejected.
+    monkeypatch.setattr(images_router.settings, "ARM_EXTRA_IMAGE_HOSTS", ["posters.lan"])
+    _patch_fetch(monkeypatch, content=b"IMG", content_type="image/png")
+    r = client.get("/api/images/proxy", params={"url": "https://posters.lan/x.jpg"})
+    assert r.status_code == 200
+    assert r.content == b"IMG"
+
+
 def test_rejects_non_http_scheme(client):
     r = client.get("/api/images/proxy", params={"url": "ftp://image.tmdb.org/x.jpg"})
     assert r.status_code == 404
