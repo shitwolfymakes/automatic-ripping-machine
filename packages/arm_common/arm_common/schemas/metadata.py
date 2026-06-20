@@ -24,6 +24,8 @@ class MetadataCandidate(BaseModel):
 class MetadataReleaseTrack(BaseModel):
     position: int | None = None
     title: str
+    length_ms: int | None = None
+    disc_number: int | None = None
 
 
 class MetadataReleaseDetail(BaseModel):
@@ -32,6 +34,13 @@ class MetadataReleaseDetail(BaseModel):
     artist: str | None = None
     year: int | None = None
     poster_url: str | None = None
+    catalog_number: str | None = None
+    barcode: str | None = None
+    country: str | None = None
+    format: str | None = None
+    status: str | None = None
+    disc_count: int | None = None
+    track_count: int | None = None
     tracks: list[MetadataReleaseTrack] = Field(default_factory=list)
 
 
