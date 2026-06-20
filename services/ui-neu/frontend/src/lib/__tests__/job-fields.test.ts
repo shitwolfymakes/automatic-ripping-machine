@@ -101,3 +101,21 @@ describe('buildMetadataFields', () => {
 		});
 	});
 });
+
+describe('buildMetadataFields — drive + crash', () => {
+	it('includes the drive id', () => {
+		const fields = buildMetadataFields(createJob({ drive_id: 'drv_ABC' }));
+		const drive = fields.find((f) => f.label === 'Drive');
+		expect(drive?.value).toBe('drv_ABC');
+	});
+
+	it('flags resumed_from_crash when true', () => {
+		const fields = buildMetadataFields(createJob({ resumed_from_crash: true }));
+		expect(fields.some((f) => f.label === 'Recovery' && f.value === 'Resumed from crash')).toBe(true);
+	});
+
+	it('omits the recovery field when not resumed', () => {
+		const fields = buildMetadataFields(createJob({ resumed_from_crash: false }));
+		expect(fields.some((f) => f.label === 'Recovery')).toBe(false);
+	});
+});
