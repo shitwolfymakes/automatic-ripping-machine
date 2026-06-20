@@ -10,6 +10,7 @@
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import TitleSearch from '$lib/components/TitleSearch.svelte';
 	import TrackTitleSearch from '$lib/components/TrackTitleSearch.svelte';
+	import MusicSearch from '$lib/components/MusicSearch.svelte';
 	import IdentifyDialog from '$lib/components/IdentifyDialog.svelte';
 	import ApplySessionDialog from '$lib/components/ApplySessionDialog.svelte';
 	import JobLifecycle from '$lib/components/JobLifecycle.svelte';
@@ -81,6 +82,8 @@
 		detail?.job.disc_type === 'dvd' || detail?.job.disc_type === 'bluray'
 	);
 
+	let isCdDisc = $derived(detail?.job.disc_type === 'cd');
+
 	let metadataFields = $derived(detail ? buildMetadataFields(detail.job) : []);
 
 	const panelTabBase = 'flex-1 border-r border-primary/15 px-4 py-2.5 text-center text-sm font-medium transition-colors dark:border-primary/15';
@@ -122,6 +125,11 @@
 	}
 
 	function handleTitleApply() {
+		activePanel = null;
+		loadJob();
+	}
+
+	function handleMusicApply() {
 		activePanel = null;
 		loadJob();
 	}
@@ -259,12 +267,21 @@
 				<div class="flex border-t border-primary/15 bg-surface/50 dark:border-primary/15 dark:bg-surface-dark/50">
 					<button onclick={() => (activePanel = activePanel === 'title' ? null : 'title')} class={panelTabClass('title', true)}>Poster &amp; metadata search</button>
 				</div>
+			{:else if isCdDisc}
+				<div class="flex border-t border-primary/15 bg-surface/50 dark:border-primary/15 dark:bg-surface-dark/50">
+					<button onclick={() => (activePanel = activePanel === 'music' ? null : 'music')} class={panelTabClass('music', true)}>Match CD</button>
+				</div>
 			{/if}
 
 			<!-- Active panel content -->
 			{#if activePanel === 'title'}
 				<div class="border-t border-primary/15 p-5 dark:border-primary/15">
 					<TitleSearch {job} onapply={handleTitleApply} />
+				</div>
+			{/if}
+			{#if activePanel === 'music'}
+				<div class="border-t border-primary/15 p-5 dark:border-primary/15">
+					<MusicSearch {job} discTracks={tracks} onapply={handleMusicApply} />
 				</div>
 			{/if}
 		</div>

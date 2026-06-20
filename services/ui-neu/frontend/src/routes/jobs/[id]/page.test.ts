@@ -35,7 +35,9 @@ vi.mock('$lib/api/jobs', () => ({
 	resolveJob: vi.fn(() => Promise.resolve({ job: createJob({ id: 'job_42' }), fan_out: [] })),
 	applySession: vi.fn(() =>
 		Promise.resolve({ session_application: {}, tasks: [], collisions: [], idempotent: false })
-	)
+	),
+	searchMusicMetadata: vi.fn(() => Promise.resolve({ candidates: [] })),
+	fetchMusicDetail: vi.fn(() => Promise.resolve({}))
 }));
 
 vi.mock('$lib/api/sessions', () => ({
@@ -123,5 +125,25 @@ describe('Job detail page (v3)', () => {
 		await waitFor(() => {
 			expect(screen.getByTestId('apply-session-select')).toBeInTheDocument();
 		});
+	});
+
+	it('shows the Match CD tab only for cd jobs', async () => {
+		mockFetchJob.mockResolvedValueOnce({
+			job: createJob({ id: 'job_cd', disc_type: 'cd', status: 'ripped', title: 'Abbey Road' }),
+			tracks: [],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() =>
+			expect(screen.getByRole('button', { name: 'Match CD' })).toBeInTheDocument()
+		);
+	});
+
+	it('does not show the Match CD tab for video jobs', async () => {
+		renderComponent(Page);
+		await waitFor(() => {
+			expect(screen.getByRole('heading', { name: 'Test Movie' })).toBeInTheDocument();
+		});
+		expect(screen.queryByRole('button', { name: 'Match CD' })).not.toBeInTheDocument();
 	});
 });
