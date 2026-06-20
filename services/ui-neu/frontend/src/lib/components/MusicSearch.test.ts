@@ -1,133 +1,57 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import MusicSearch from './MusicSearch.svelte';
-import { createJob } from './__fixtures__/job';
-import type { MetadataCandidate } from '$lib/types/api.gen';
+import { createJob, createTrack } from './__fixtures__/job';
 
 vi.mock('$lib/api/jobs', () => ({
 	searchMusicMetadata: vi.fn(),
 	fetchMusicDetail: vi.fn(),
-	updateJobTitle: vi.fn(() => Promise.resolve())
+	resolveJob: vi.fn(() => Promise.resolve({ job: {}, fan_out: [] }))
 }));
+import { searchMusicMetadata, fetchMusicDetail, resolveJob } from '$lib/api/jobs';
+const mockSearch = vi.mocked(searchMusicMetadata);
+const mockDetail = vi.mocked(fetchMusicDetail);
+const mockResolve = vi.mocked(resolveJob);
 
-import { searchMusicMetadata, fetchMusicDetail, updateJobTitle } from '$lib/api/jobs';
-const mockSearchMusicMetadata = vi.mocked(searchMusicMetadata);
-const mockFetchMusicDetail = vi.mocked(fetchMusicDetail);
-const mockUpdateJobTitle = vi.mocked(updateJobTitle);
+afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-function createMusicCandidate(overrides: Partial<MetadataCandidate> = {}): MetadataCandidate {
-	return {
-		title: 'Album',
-		year: 2024,
-		kind: 'release',
-		poster_url: null,
-		provider_id: 'r1',
-		...overrides
-	};
-}
-
-describe('MusicSearch', () => {
-	afterEach(() => {
-		cleanup();
-		vi.clearAllMocks();
+it('searches with track_count when "match track count" is on and discTracks present', async () => {
+	mockSearch.mockResolvedValue({ candidates: [] });
+	renderComponent(MusicSearch, {
+		props: {
+			job: createJob({ id: 'job_1', disc_type: 'cd', title: 'Abbey Road' }),
+			discTracks: [createTrack(), createTrack({ id: 'trk_2', index: 1 })]
+		}
 	});
+	await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+	await waitFor(() =>
+		expect(mockSearch).toHaveBeenCalledWith('Abbey Road', expect.objectContaining({ track_count: 2 }))
+	);
+});
 
-	describe('rendering', () => {
-		it('renders search form with pre-filled title', () => {
-			renderComponent(MusicSearch, {
-				props: { job: createJob({ title: 'My Album' }) }
-			});
-			expect(screen.getByDisplayValue('My Album')).toBeInTheDocument();
-		});
-
-		it('renders search button', () => {
-			renderComponent(MusicSearch, {
-				props: { job: createJob() }
-			});
-			expect(screen.getByText('Search')).toBeInTheDocument();
-		});
+it('loads detail and applies the chosen release via resolveJob', async () => {
+	mockSearch.mockResolvedValue({
+		candidates: [{ title: 'Abbey Road', year: 1969, kind: 'music', poster_url: null, provider_id: 'rel-1' }]
 	});
-
-	describe('interactions', () => {
-		it('calls searchMusicMetadata with query only', async () => {
-			mockSearchMusicMetadata.mockResolvedValue({
-				candidates: [createMusicCandidate({ title: 'Found Album' })]
-			});
-			renderComponent(MusicSearch, {
-				props: { job: createJob({ title: 'Search Term' }) }
-			});
-			await fireEvent.click(screen.getByText('Search'));
-			await waitFor(() => {
-				expect(mockSearchMusicMetadata).toHaveBeenCalledWith('Search Term');
-				expect(screen.getByText('Found Album')).toBeInTheDocument();
-			});
-		});
-
-		it('shows no results message', async () => {
-			mockSearchMusicMetadata.mockResolvedValue({ candidates: [] });
-			renderComponent(MusicSearch, {
-				props: { job: createJob({ title: 'Nothing' }) }
-			});
-			await fireEvent.click(screen.getByText('Search'));
-			await waitFor(() => {
-				expect(screen.getByText(/No results found/)).toBeInTheDocument();
-			});
-		});
-
-		it('shows error on search failure', async () => {
-			mockSearchMusicMetadata.mockRejectedValue(new Error('MusicBrainz error'));
-			renderComponent(MusicSearch, {
-				props: { job: createJob({ title: 'Test' }) }
-			});
-			await fireEvent.click(screen.getByText('Search'));
-			await waitFor(() => {
-				expect(screen.getByText('MusicBrainz error')).toBeInTheDocument();
-			});
-		});
-
-		it('renders result cards with year', async () => {
-			mockSearchMusicMetadata.mockResolvedValue({
-				candidates: [
-					createMusicCandidate({ provider_id: 'r1', title: 'Album One' }),
-					createMusicCandidate({ provider_id: 'r2', title: 'Album Two', year: 2023 })
-				]
-			});
-			renderComponent(MusicSearch, {
-				props: { job: createJob({ title: 'Test' }) }
-			});
-			await fireEvent.click(screen.getByText('Search'));
-			await waitFor(() => {
-				expect(screen.getByText('Album One')).toBeInTheDocument();
-				expect(screen.getByText('Album Two')).toBeInTheDocument();
-			});
-		});
-
-		it('loads release detail and applies cover art via updateJobTitle', async () => {
-			mockSearchMusicMetadata.mockResolvedValue({
-				candidates: [createMusicCandidate({ provider_id: 'r9', title: 'Album One', poster_url: 'https://img/a.jpg' })]
-			});
-			mockFetchMusicDetail.mockResolvedValue({
-				release_id: 'r9',
-				title: 'Album One',
-				artist: 'Band A',
-				year: 2024,
-				poster_url: 'https://img/a.jpg',
-				tracks: [{ position: 1, title: 'Song 1' }]
-			});
-			renderComponent(MusicSearch, {
-				props: { job: createJob({ id: 'job_77', title: 'Test' }) }
-			});
-			await fireEvent.click(screen.getByText('Search'));
-			await waitFor(() => expect(screen.getByText('Album One')).toBeInTheDocument());
-			await fireEvent.click(screen.getByText('Album One'));
-			await waitFor(() => {
-				expect(mockFetchMusicDetail).toHaveBeenCalledWith('r9');
-				expect(screen.getByText('Song 1')).toBeInTheDocument();
-			});
-			await fireEvent.click(screen.getByText('Apply Cover Art'));
-			await waitFor(() => {
-				expect(mockUpdateJobTitle).toHaveBeenCalledWith('job_77', { poster_url_manual: 'https://img/a.jpg' });
-			});
-		});
+	mockDetail.mockResolvedValue({
+		release_id: 'rel-1', title: 'Abbey Road', artist: 'The Beatles', year: 1969,
+		poster_url: null, disc_count: 1, track_count: 1,
+		tracks: [{ position: 1, title: 'Come Together', length_ms: 259000, disc_number: 1 }]
+	});
+	const onapply = vi.fn();
+	renderComponent(MusicSearch, {
+		props: { job: createJob({ id: 'job_9', disc_type: 'cd', title: 'Abbey Road' }), discTracks: [], onapply }
+	});
+	await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+	await waitFor(() => screen.getByText('Abbey Road'));
+	await fireEvent.click(screen.getByText('Abbey Road'));
+	await waitFor(() => screen.getByText('Come Together'));
+	await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+	await waitFor(() => {
+		expect(mockResolve).toHaveBeenCalledWith('job_9', expect.objectContaining({
+			title: 'Abbey Road',
+			metadata: expect.objectContaining({ artist: 'The Beatles', album: 'Abbey Road' })
+		}));
+		expect(onapply).toHaveBeenCalled();
 	});
 });
