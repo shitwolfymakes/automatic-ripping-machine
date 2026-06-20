@@ -9,6 +9,8 @@ from arm_common.enums import DiscType, JobStatus, SessionApplicationStatus, Trac
 class ResolveRequest(BaseModel):
     title: str
     year: int | None = None
+    disc_number: int | None = None
+    disc_total: int | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

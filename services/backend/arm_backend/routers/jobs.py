@@ -648,6 +648,8 @@ async def resolve(
 
     job.title = req.title
     job.year = req.year
+    job.disc_number = req.disc_number
+    job.disc_total = req.disc_total
     job.metadata_json = new_metadata
     if job.status in _RESOLVABLE_STATUSES_PROMOTE:
         job.status = JobStatus.IDENTIFIED
