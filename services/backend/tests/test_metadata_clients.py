@@ -957,9 +957,7 @@ async def test_get_release_success(http_client):
     assert result.year == 1973
     assert result.kind == "music"
     assert result.payload["artist"] == "Pink Floyd"
-    assert result.payload["tracks"] == [
-        {"title": "Speak to Me", "position": 1, "length_ms": None, "disc_number": 1}
-    ]
+    assert result.payload["tracks"] == [{"title": "Speak to Me", "position": 1, "length_ms": None, "disc_number": 1}]
 
 
 @respx.mock
@@ -983,19 +981,28 @@ async def test_get_release_missing_title_raises(http_client):
 @respx.mock
 async def test_get_release_extracts_length_and_release_fields(http_client):
     respx.get("https://musicbrainz.org/ws/2/release/mbid-2").mock(
-        return_value=httpx.Response(200, json={
-            "id": "mbid-2", "title": "Abbey Road", "date": "1969-09-26",
-            "artist-credit": [{"name": "The Beatles"}],
-            "country": "GB", "barcode": "0094638246619", "status": "Official",
-            "label-info": [{"catalog-number": "PCS 7088"}],
-            "media": [{
-                "format": "CD",
-                "tracks": [
-                    {"position": "1", "title": "Come Together", "length": 259000},
-                    {"position": "2", "title": "Something", "length": 182000},
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "mbid-2",
+                "title": "Abbey Road",
+                "date": "1969-09-26",
+                "artist-credit": [{"name": "The Beatles"}],
+                "country": "GB",
+                "barcode": "0094638246619",
+                "status": "Official",
+                "label-info": [{"catalog-number": "PCS 7088"}],
+                "media": [
+                    {
+                        "format": "CD",
+                        "tracks": [
+                            {"position": "1", "title": "Come Together", "length": 259000},
+                            {"position": "2", "title": "Something", "length": 182000},
+                        ],
+                    }
                 ],
-            }],
-        })
+            },
+        )
     )
     result = await MusicBrainzClient("armv3", http_client).get_release("mbid-2")
     p = result.payload
@@ -1012,14 +1019,19 @@ async def test_get_release_extracts_length_and_release_fields(http_client):
 @respx.mock
 async def test_get_release_multi_disc_tags_disc_number(http_client):
     respx.get("https://musicbrainz.org/ws/2/release/mbid-3").mock(
-        return_value=httpx.Response(200, json={
-            "id": "mbid-3", "title": "The Wall", "date": "1979",
-            "artist-credit": [{"name": "Pink Floyd"}],
-            "media": [
-                {"format": "CD", "tracks": [{"position": "1", "title": "In the Flesh?", "length": 199000}]},
-                {"format": "CD", "tracks": [{"position": "1", "title": "Hey You", "length": 280000}]},
-            ],
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "mbid-3",
+                "title": "The Wall",
+                "date": "1979",
+                "artist-credit": [{"name": "Pink Floyd"}],
+                "media": [
+                    {"format": "CD", "tracks": [{"position": "1", "title": "In the Flesh?", "length": 199000}]},
+                    {"format": "CD", "tracks": [{"position": "1", "title": "Hey You", "length": 280000}]},
+                ],
+            },
+        )
     )
     p = (await MusicBrainzClient("armv3", http_client).get_release("mbid-3")).payload
     assert p["disc_count"] == 2

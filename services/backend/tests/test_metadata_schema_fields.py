@@ -14,9 +14,15 @@ def test_release_track_fields_default_none():
 
 def test_release_detail_has_enriched_fields():
     d = MetadataReleaseDetail(
-        release_id="r1", title="Abbey Road",
-        catalog_number="PCS 7088", barcode="0094638246619", country="GB",
-        format="CD", status="Official", disc_count=1, track_count=17,
+        release_id="r1",
+        title="Abbey Road",
+        catalog_number="PCS 7088",
+        barcode="0094638246619",
+        country="GB",
+        format="CD",
+        status="Official",
+        disc_count=1,
+        track_count=17,
     )
     assert d.catalog_number == "PCS 7088"
     assert d.barcode == "0094638246619"

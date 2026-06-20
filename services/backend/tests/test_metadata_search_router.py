@@ -566,9 +566,7 @@ def test_music_detail_maps_enriched_fields(signing_key: bytes) -> None:
                 "barcode": "0094638246619",
                 "status": "Official",
                 "label-info": [{"catalog-number": "PCS 7088"}],
-                "media": [
-                    {"format": "CD", "tracks": [{"position": "1", "title": "Come Together", "length": 259000}]}
-                ],
+                "media": [{"format": "CD", "tracks": [{"position": "1", "title": "Come Together", "length": 259000}]}],
             },
         )
     )
