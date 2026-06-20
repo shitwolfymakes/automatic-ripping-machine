@@ -398,6 +398,31 @@
 				</div>
 			</section>
 		{/if}
+
+		<!-- Disc fingerprints (read-only) -->
+		{#if d.fingerprints && d.fingerprints.length > 0}
+			<section>
+				<h2 class="mb-3 text-lg font-semibold text-gray-900 dark:text-white">Disc fingerprints</h2>
+				<div class="overflow-x-auto rounded-lg border border-primary/20 dark:border-primary/20">
+					<table class="responsive-table w-full text-left text-sm">
+						<thead class="bg-page text-gray-600 dark:bg-primary/5 dark:text-gray-400">
+							<tr>
+								<th class="px-4 py-3 font-medium">Algorithm</th>
+								<th class="px-4 py-3 font-medium">Value</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+							{#each d.fingerprints as fp}
+								<tr>
+									<td class="px-4 py-3 uppercase" data-label="Algorithm">{fp.algo}</td>
+									<td class="max-w-[420px] truncate px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300" data-label="Value" title={fp.value}>{fp.value}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</section>
+		{/if}
 	</div>
 
 	{#if showIdentify}
