@@ -127,7 +127,7 @@ def test_grep_per_file_limit_clamps_each_file(
 
 def test_grep_hard_cap_pins_at_10000(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
-    monkeypatch.setattr(logs_router, "PER_FILE_HARD_CAP", 3)  # cheap cap for the test
+    monkeypatch.setattr(logs_router.settings, "ARM_LOG_PER_FILE_HARD_CAP", 3)  # cheap cap for the test
     _seed(tmp_path, service="svc", lines=[_line(msg=f"m{i}") for i in range(10)])
     app, token = _make_app(signing_key)
     with TestClient(app) as client:
@@ -192,7 +192,7 @@ def test_zip_contains_one_entry_per_service_with_matching_lines(
 
 def test_zip_per_entry_line_cap(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
-    monkeypatch.setattr(logs_router, "ZIP_PER_ENTRY_LINE_CAP", 3)
+    monkeypatch.setattr(logs_router.settings, "ARM_LOG_ZIP_PER_ENTRY_LINE_CAP", 3)
     _seed(tmp_path, service="svc", lines=[_line(msg=f"m{i}") for i in range(10)])
     app, token = _make_app(signing_key)
     with TestClient(app) as client:

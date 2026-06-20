@@ -431,7 +431,7 @@ def test_log_zip_respects_hard_cap(signing_key: bytes, tmp_path: Path, monkeypat
     import zipfile
 
     monkeypatch.setattr(tx_router, "LOG_DIR", tmp_path)
-    monkeypatch.setattr(tx_router, "PER_FILE_HARD_CAP", 2)  # cheap cap for the test
+    monkeypatch.setattr(settings, "ARM_LOG_PER_FILE_HARD_CAP", 2)  # cheap cap for the test
     db = FakeSession()
     db.rows["transcode_tasks"] = [_task("txt_zipcap000001", status=TranscodeTaskStatus.DONE)]
     _write_task_log(tmp_path, "txt_zipcap000001", ["x1", "x2", "x3", "x4"])
@@ -441,7 +441,7 @@ def test_log_zip_respects_hard_cap(signing_key: bytes, tmp_path: Path, monkeypat
     assert r.status_code == 200, r.text
     zf = zipfile.ZipFile(io.BytesIO(r.content))
     content = zf.read("arm-transcode-zipcap000001.log").decode()
-    assert content.count("\n") == 2  # capped at PER_FILE_HARD_CAP lines
+    assert content.count("\n") == 2  # capped at ARM_LOG_PER_FILE_HARD_CAP lines
 
 
 def test_log_zip_unknown_task_404(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

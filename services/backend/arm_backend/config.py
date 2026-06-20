@@ -145,5 +145,13 @@ class Settings(BaseSettings):
     ARM_IMAGE_CACHE_MAX_BYTES: int = 2 * 1024 * 1024  # 2 MB
     ARM_IMAGE_CACHE_TTL_SECONDS: int = 7 * 24 * 3600  # 7 days
 
+    # --- Tier-4: log query/zip caps ----------------------------------------
+    # Multi-drive deployments outgrow the defaults; safe defaults match the
+    # former hardcoded constants in routers/logs.py.
+    ARM_LOG_PER_FILE_DEFAULT: int = 1000
+    ARM_LOG_PER_FILE_HARD_CAP: int = 10_000
+    ARM_LOG_ZIP_PER_ENTRY_LINE_CAP: int = 5000
+    ARM_LOG_ZIP_PER_ENTRY_BYTE_CAP: int = 5 * 1024 * 1024
+
 
 settings = Settings()  # type: ignore[call-arg]  # fields loaded from env by pydantic-settings

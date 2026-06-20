@@ -33,6 +33,7 @@ from fastapi import APIRouter, Depends, Response
 from fastapi.responses import StreamingResponse
 
 from arm_backend.auth import require_jwt
+from arm_backend.config import settings
 from arm_backend.routers._params import JobIdParam
 from arm_common import User
 from arm_common.ulid import is_valid_id
@@ -58,16 +59,10 @@ def per_job_log_path(job_id: str) -> Path:
     return LOG_DIR / "jobs" / os.path.basename(f"{job_id}.log")
 
 
-# Defaults / caps for the streaming grep endpoint. Per-file (not global)
-# — see the module docstring.
-PER_FILE_DEFAULT = 1000
-PER_FILE_HARD_CAP = 10_000
-
-# Caps for each zip entry. 5000 lines × 5 MB matches the homelab-scale
-# expectation: a worst-case rip emits ~hundreds of lines, never 5k+.
-ZIP_PER_ENTRY_LINE_CAP = 5000
-ZIP_PER_ENTRY_BYTE_CAP = 5 * 1024 * 1024
-
+# Defaults / caps for the streaming grep + zip endpoints are env-tunable via
+# the `ARM_LOG_*` settings (see config.py); resolved at call time so a
+# `monkeypatch.setattr(settings, ...)` or env override flows through. Per-file
+# (not global) — see the module docstring.
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
@@ -117,7 +112,7 @@ async def download_job_logs_zip(
 @router.get("/{job_id}")
 async def stream_job_logs(
     job_id: JobIdParam,
-    limit: int = PER_FILE_DEFAULT,
+    limit: int | None = None,
     _: User = Depends(require_jwt),
 ) -> StreamingResponse:
     """NDJSON stream of every line tagged with `job_id`.
@@ -127,7 +122,8 @@ async def stream_job_logs(
     within a file in append order; no cross-file resort — the consumer
     can sort by `ts` if global ordering matters).
     """
-    cap = max(0, min(limit, PER_FILE_HARD_CAP))
+    eff_limit = settings.ARM_LOG_PER_FILE_DEFAULT if limit is None else limit
+    cap = max(0, min(eff_limit, settings.ARM_LOG_PER_FILE_HARD_CAP))
 
     def gen() -> Iterator[bytes]:
         per_job = per_job_log_path(job_id)
@@ -180,7 +176,10 @@ def _read_capped_lines(path: Path, predicate: Callable[[str], bool]) -> list[str
             normalised = line if line.endswith("\n") else line + "\n"
             out.append(normalised)
             byte_count += len(normalised)
-            if len(out) >= ZIP_PER_ENTRY_LINE_CAP or byte_count >= ZIP_PER_ENTRY_BYTE_CAP:
+            if (
+                len(out) >= settings.ARM_LOG_ZIP_PER_ENTRY_LINE_CAP
+                or byte_count >= settings.ARM_LOG_ZIP_PER_ENTRY_BYTE_CAP
+            ):
                 break
     return out
 
