@@ -151,7 +151,7 @@ class Settings(BaseSettings):
     ARM_LOG_PER_FILE_DEFAULT: int = 1000
     ARM_LOG_PER_FILE_HARD_CAP: int = 10_000
     ARM_LOG_ZIP_PER_ENTRY_LINE_CAP: int = 5000
-    ARM_LOG_ZIP_PER_ENTRY_BYTE_CAP: int = 5 * 1024 * 1024
+    ARM_LOG_ZIP_PER_ENTRY_BYTE_CAP: int = 5 * 1024 * 1024  # 5 MB
 
 
 settings = Settings()  # type: ignore[call-arg]  # fields loaded from env by pydantic-settings

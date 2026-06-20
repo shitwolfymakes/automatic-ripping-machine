@@ -11,7 +11,8 @@ Two read-only endpoints scoped to a single `job_id`:
 - `GET /api/logs/{job_id}.zip` — in-memory zip. Single entry sourced
   from the per-job file when present; legacy fallback walks the
   service logs and writes one entry per service. Per-entry caps:
-  5000 lines or 5 MB, whichever hits first.
+  `ARM_LOG_ZIP_PER_ENTRY_LINE_CAP` lines or `ARM_LOG_ZIP_PER_ENTRY_BYTE_CAP`
+  bytes (env-tunable; defaults: 5000 lines / 5 MB), whichever hits first.
 
 Both endpoints require a UI JWT — service-token callers are rejected.
 The download URL the UI hardcodes is `/api/logs/{jobId}.zip`; there's
@@ -29,7 +30,7 @@ import zipfile
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import StreamingResponse
 
 from arm_backend.auth import require_jwt
@@ -112,7 +113,7 @@ async def download_job_logs_zip(
 @router.get("/{job_id}")
 async def stream_job_logs(
     job_id: JobIdParam,
-    limit: int | None = None,
+    limit: int | None = Query(default=None, ge=0),
     _: User = Depends(require_jwt),
 ) -> StreamingResponse:
     """NDJSON stream of every line tagged with `job_id`.
