@@ -204,6 +204,8 @@ async def lookup_metadata(
 async def search_music(
     request: Request,
     query: str,
+    artist: str | None = None,
+    track_count: int | None = None,
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
 ) -> MetadataSearchResponse:
@@ -211,7 +213,7 @@ async def search_music(
     ua = (cfg.musicbrainz_user_agent if cfg else None) or DEFAULT_MUSICBRAINZ_USER_AGENT
     http: httpx.AsyncClient = request.app.state.http
     try:
-        results = await MusicBrainzClient(ua, http).search_releases(query)
+        results = await MusicBrainzClient(ua, http).search_releases(query, artist=artist, track_count=track_count)
     except (MetaLookupError, LookupTimeout) as exc:
         return MetadataSearchResponse(candidates=[], detail=str(exc))
     except httpx.HTTPError as exc:
@@ -243,12 +245,27 @@ async def music_release_detail(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"musicbrainz unavailable: {exc}") from exc
     payload = result.payload or {}
     raw_tracks = payload.get("tracks") or []
-    tracks = [MetadataReleaseTrack(position=t.get("position"), title=t.get("title") or "") for t in raw_tracks]
+    tracks = [
+        MetadataReleaseTrack(
+            position=t.get("position"),
+            title=t.get("title") or "",
+            length_ms=t.get("length_ms"),
+            disc_number=t.get("disc_number"),
+        )
+        for t in raw_tracks
+    ]
     return MetadataReleaseDetail(
         release_id=release_id,
         title=result.title,
         artist=payload.get("artist"),
         year=result.year,
         poster_url=extract_poster_url(result),
+        catalog_number=payload.get("catalog_number"),
+        barcode=payload.get("barcode"),
+        country=payload.get("country"),
+        format=payload.get("format"),
+        status=payload.get("status"),
+        disc_count=payload.get("disc_count"),
+        track_count=payload.get("track_count"),
         tracks=tracks,
     )
