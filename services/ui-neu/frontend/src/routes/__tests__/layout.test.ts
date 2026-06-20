@@ -8,6 +8,24 @@ vi.mock('$app/stores', async () => {
 	return { page: readable({ url: { pathname: '/' }, params: {} }) };
 });
 
+// Capture the unauthorized handler the layout registers, so the test can fire
+// a simulated session-expiry 401 and assert the layout's response.
+let capturedOn401: (() => void) | null = null;
+vi.mock('$lib/api/client', () => ({
+	setUnauthorizedHandler: (fn: () => void) => {
+		capturedOn401 = fn;
+	}
+}));
+
+const gotoMock = vi.fn();
+vi.mock('$app/navigation', () => ({ goto: (...args: unknown[]) => gotoMock(...args) }));
+
+const logoutLocalMock = vi.fn();
+vi.mock('$lib/stores/auth', () => ({
+	initAuth: vi.fn(),
+	logoutLocal: () => logoutLocalMock()
+}));
+
 vi.mock('$lib/stores/theme', async () => {
 	const { writable } = await import('svelte/store');
 	return { theme: writable('dark'), toggleTheme: vi.fn() };
@@ -44,7 +62,44 @@ function childSnippet() {
 }
 
 describe('Layout', () => {
-	afterEach(() => cleanup());
+	afterEach(() => {
+		cleanup();
+		capturedOn401 = null;
+		gotoMock.mockClear();
+		logoutLocalMock.mockClear();
+	});
+
+	describe('session expiry (401 handler)', () => {
+		it('stops dashboard polling when the session goes stale', async () => {
+			const { dashboard } = await import('$lib/stores/dashboard');
+			renderComponent(Layout, { props: { children: childSnippet() } });
+			expect(capturedOn401).toBeTypeOf('function');
+			(dashboard.stop as ReturnType<typeof vi.fn>).mockClear();
+
+			// Simulate a poll request 401ing after the session expired.
+			capturedOn401!();
+
+			// The poll loop MUST be stopped so it can't keep 401-storming.
+			expect(dashboard.stop).toHaveBeenCalled();
+			expect(logoutLocalMock).toHaveBeenCalled();
+			expect(gotoMock).toHaveBeenCalledWith('/login');
+		});
+
+		it('does not re-navigate on repeated 401s once already on /login', async () => {
+			renderComponent(Layout, { props: { children: childSnippet() } });
+			// First 401 redirects to /login.
+			capturedOn401!();
+			expect(gotoMock).toHaveBeenCalledTimes(1);
+			gotoMock.mockClear();
+
+			// The dashboard's allSettled fan-out fires on401 once per failed
+			// request (6 endpoints) per tick. Subsequent fires must NOT pile up
+			// redundant goto('/login') calls (which deselect login inputs).
+			capturedOn401!();
+			capturedOn401!();
+			expect(gotoMock).not.toHaveBeenCalled();
+		});
+	});
 
 	it('renders navigation links for v3-supported screens', () => {
 		renderComponent(Layout, { props: { children: childSnippet() } });

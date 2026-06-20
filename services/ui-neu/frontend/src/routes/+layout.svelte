@@ -19,6 +19,10 @@
 	let sidebarOpen = $state(false);
 	let togglingPause = $state(false);
 	let quickMenuOpen = $state(false);
+	// Guards the 401 handler against firing redundant goto('/login') calls when
+	// multiple in-flight requests 401 at once. Reset once the user is back on a
+	// real (non-auth) page, so a future session expiry can redirect again.
+	let redirectingToLogin = false;
 	const rippingCount = $derived(($dashboard.active_jobs ?? []).filter(j => {
 		const s = j.status?.toLowerCase();
 		return s !== 'transcoding' && s !== 'waiting_transcode';
@@ -49,6 +53,11 @@
 	let isAuthPage = $derived(
 		$page.url.pathname.startsWith('/login') || $page.url.pathname.startsWith('/change-password')
 	);
+	// Once the user is back on a real page (logged in again), re-arm the 401
+	// redirect guard so a later session expiry can route to /login afresh.
+	$effect(() => {
+		if (!isAuthPage) redirectingToLogin = false;
+	});
 
 	async function toggleRipping() {
 		if (togglingPause) return;
@@ -70,9 +79,21 @@
 		// Register the 401 handler ONCE here. It MUST route through logoutLocal
 		// (not client.clearToken directly) so the in-memory auth store and the
 		// persisted token clear together, then redirect to /login.
+		//
+		// The dashboard poll (a 6-endpoint allSettled fan-out every 5s) survives
+		// `goto('/login')` because the root layout persists across navigations —
+		// so it would keep firing requests that 401, re-entering this handler
+		// many times per tick and re-navigating to /login on each (which steals
+		// focus from the login inputs). Fix: stop the poll loop the moment the
+		// session is known stale, and guard the redirect so repeated 401s from
+		// in-flight requests don't pile up redundant navigations.
 		setUnauthorizedHandler(() => {
+			dashboard.stop();
 			logoutLocal();
-			goto('/login');
+			if (!redirectingToLogin) {
+				redirectingToLogin = true;
+				goto('/login');
+			}
 		});
 		// Auth pages (/login, /change-password) render bare and must NOT poll the
 		// dashboard — the user has no usable session there, so the poll would 401
