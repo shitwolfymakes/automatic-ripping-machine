@@ -138,5 +138,12 @@ class Settings(BaseSettings):
             return [s.strip() for s in v.split(",") if s.strip()]
         return v
 
+    # --- Tier-4: image-proxy disk-cache caps -------------------------------
+    # Homelab vs large installs differ; safe defaults match the former
+    # hardcoded constants in image_cache.py.
+    ARM_IMAGE_CACHE_MAX_ENTRIES: int = 1000
+    ARM_IMAGE_CACHE_MAX_BYTES: int = 2 * 1024 * 1024  # 2 MB
+    ARM_IMAGE_CACHE_TTL_SECONDS: int = 7 * 24 * 3600  # 7 days
+
 
 settings = Settings()  # type: ignore[call-arg]  # fields loaded from env by pydantic-settings

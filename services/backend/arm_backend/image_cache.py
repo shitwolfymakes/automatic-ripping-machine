@@ -20,9 +20,19 @@ def _cache_dir() -> str:
 
 _index: dict[str, dict[str, Any]] = {}
 
-_MAX_ENTRIES = 1000
-_MAX_IMAGE_BYTES = 2 * 1024 * 1024  # 2 MB
-_TTL_SECONDS = 7 * 24 * 3600  # 7 days
+# tunable via ARM_IMAGE_CACHE_MAX_ENTRIES / ARM_IMAGE_CACHE_MAX_BYTES / ARM_IMAGE_CACHE_TTL_SECONDS
+
+
+def _max_entries() -> int:
+    return settings.ARM_IMAGE_CACHE_MAX_ENTRIES
+
+
+def _max_image_bytes() -> int:
+    return settings.ARM_IMAGE_CACHE_MAX_BYTES
+
+
+def _ttl_seconds() -> int:
+    return settings.ARM_IMAGE_CACHE_TTL_SECONDS
 
 
 def _url_to_filename(url: str) -> str:
@@ -50,11 +60,11 @@ def reset() -> None:
 
 def store(url: str, data: bytes, content_type: str) -> bool:
     """Store an image in the cache. Returns False if too large."""
-    if len(data) > _MAX_IMAGE_BYTES:
+    if len(data) > _max_image_bytes():
         return False
 
     # Evict LRU if full
-    while len(_index) >= _MAX_ENTRIES:
+    while len(_index) >= _max_entries():
         oldest_url = min(_index, key=lambda u: _index[u]["accessed_at"])
         _remove(oldest_url)
 
@@ -91,7 +101,7 @@ def retrieve(url: str) -> tuple[bytes, str] | None:
         return None
 
     # Check TTL
-    if time.time() - entry["cached_at"] > _TTL_SECONDS:
+    if time.time() - entry["cached_at"] > _ttl_seconds():
         _remove(url)
         return None
 
@@ -158,7 +168,7 @@ def startup_scan() -> None:
                 meta_path.unlink()
                 log.debug("Removed orphaned metadata: %s", meta_path.name)
                 continue
-            if now - meta["cached_at"] > _TTL_SECONDS:
+            if now - meta["cached_at"] > _ttl_seconds():
                 meta_path.unlink()
                 img_path.unlink()
                 log.debug("Removed expired cache entry: %s", meta_path.name)

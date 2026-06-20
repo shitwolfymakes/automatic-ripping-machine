@@ -43,7 +43,7 @@ def test_ttl_expiry_evicts(cache_dir, monkeypatch):
 
 
 def test_lru_eviction_at_capacity(cache_dir, monkeypatch):
-    monkeypatch.setattr(image_cache, "_MAX_ENTRIES", 2)
+    monkeypatch.setattr(image_cache.settings, "ARM_IMAGE_CACHE_MAX_ENTRIES", 2)
     image_cache.store("http://h/a.jpg", b"a", "image/jpeg")
     image_cache.store("http://h/b.jpg", b"b", "image/jpeg")
     image_cache.retrieve("http://h/a.jpg")
@@ -90,7 +90,7 @@ def test_startup_scan_rebuilds_index(cache_dir):
 def test_startup_scan_drops_expired(cache_dir, monkeypatch):
     image_cache.store("http://h/a.jpg", b"a", "image/jpeg")
     image_cache.reset()
-    monkeypatch.setattr(image_cache, "_TTL_SECONDS", -1)
+    monkeypatch.setattr(image_cache.settings, "ARM_IMAGE_CACHE_TTL_SECONDS", -1)
     image_cache.startup_scan()
     assert image_cache.retrieve("http://h/a.jpg") is None
 
