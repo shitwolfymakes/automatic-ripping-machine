@@ -5,11 +5,16 @@ from typing import Any
 
 import httpx
 
+from arm_backend.config import settings
 from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult
 
 logger = logging.getLogger("arm_backend.metadata.musicbrainz")
 
-_BASE_URL = "https://musicbrainz.org/ws/2"
+
+def _base_url() -> str:
+    return settings.ARM_MUSICBRAINZ_BASE_URL
+
+
 _MIN_INTERVAL_SECONDS = 1.0
 
 _lock = asyncio.Lock()
@@ -52,7 +57,7 @@ class MusicBrainzClient:
 
         try:
             r = await self._http.get(
-                f"{_BASE_URL}{path}",
+                f"{_base_url()}{path}",
                 params=params,
                 headers={"User-Agent": self._user_agent, "Accept": "application/json"},
             )
