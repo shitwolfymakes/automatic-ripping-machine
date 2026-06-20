@@ -122,16 +122,24 @@ export function updateJobConfig(jobId: string, data: JobUpdateRequest): Promise<
 // Identify / resolve + apply-session (EXISTS in v3)
 // ---------------------------------------------------------------------------
 
-// v3 POST /api/jobs/{id}/resolve  body: ResolveRequest { title, year?, metadata }.
+// v3 POST /api/jobs/{id}/resolve  body: ResolveRequest { title, year?, disc_number?, disc_total?, metadata }.
 // Stamps the chosen identity onto the job (status → identified). `year` defaults
-// to null and `metadata` to {} so the body always matches the v3 contract.
+// to null, disc fields to null, and `metadata` to {} so the body always matches the v3 contract.
 export function resolveJob(
 	jobId: string,
-	body: { title: string; year?: number | null; metadata?: Record<string, unknown> }
+	body: {
+		title: string;
+		year?: number | null;
+		disc_number?: number | null;
+		disc_total?: number | null;
+		metadata?: Record<string, unknown>;
+	}
 ): Promise<ResolveResponse> {
 	return post<ResolveResponse>(`/api/jobs/${jobId}/resolve`, {
 		title: body.title,
 		year: body.year ?? null,
+		disc_number: body.disc_number ?? null,
+		disc_total: body.disc_total ?? null,
 		metadata: body.metadata ?? {}
 	});
 }
@@ -175,10 +183,14 @@ export function fetchMediaDetail(imdbId: string): Promise<MetadataSearchResponse
 	return apiFetch<MetadataSearchResponse>(`/api/metadata/lookup?${params}`);
 }
 
-// v3 music search takes a single `query` param; the BFF's artist/format/country
-// filters and offset paging are gone.
-export function searchMusicMetadata(query: string): Promise<MetadataSearchResponse> {
+// v3 music search: query + optional artist + track_count (Lucene narrowing).
+export function searchMusicMetadata(
+	query: string,
+	opts?: { artist?: string; track_count?: number }
+): Promise<MetadataSearchResponse> {
 	const params = new URLSearchParams({ query });
+	if (opts?.artist) params.set('artist', opts.artist);
+	if (opts?.track_count != null) params.set('track_count', String(opts.track_count));
 	return apiFetch<MetadataSearchResponse>(`/api/metadata/music/search?${params}`);
 }
 

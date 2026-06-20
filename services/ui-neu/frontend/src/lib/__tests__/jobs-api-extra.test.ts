@@ -125,7 +125,7 @@ describe('resolveJob', () => {
 		await resolveJob('job_1', { title: 'X', year: 2020, metadata: {} });
 		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/job_1/resolve', expect.objectContaining({
 			method: 'POST',
-			body: JSON.stringify({ title: 'X', year: 2020, metadata: {} })
+			body: JSON.stringify({ title: 'X', year: 2020, disc_number: null, disc_total: null, metadata: {} })
 		}));
 	});
 
@@ -134,7 +134,7 @@ describe('resolveJob', () => {
 		await resolveJob('job_2', { title: 'Album', metadata: { artist: 'A', tracks: [{ title: 'T1' }] } });
 		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/job_2/resolve', expect.objectContaining({
 			method: 'POST',
-			body: JSON.stringify({ title: 'Album', year: null, metadata: { artist: 'A', tracks: [{ title: 'T1' }] } })
+			body: JSON.stringify({ title: 'Album', year: null, disc_number: null, disc_total: null, metadata: { artist: 'A', tracks: [{ title: 'T1' }] } })
 		}));
 	});
 });
