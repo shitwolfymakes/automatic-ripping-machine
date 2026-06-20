@@ -107,7 +107,7 @@
 			const yr = editYear.trim() ? Number(editYear.trim()) : null;
 			const dn = discNumber.trim() ? Number(discNumber.trim()) : null;
 			const dt = discTotal.trim() ? Number(discTotal.trim()) : null;
-			const tracks = (detail.tracks ?? []).map((t) => ({
+			const tracks = visibleTracks.map((t) => ({
 				position: t.position,
 				title: t.title,
 				length_ms: t.length_ms ?? null,
