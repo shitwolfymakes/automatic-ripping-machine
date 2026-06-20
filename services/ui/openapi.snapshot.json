@@ -4036,6 +4036,38 @@
             }
           },
           {
+            "name": "artist",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Artist"
+            }
+          },
+          {
+            "name": "track_count",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Track Count"
+            }
+          },
+          {
             "name": "authorization",
             "in": "header",
             "required": false,
@@ -8057,6 +8089,28 @@
             ],
             "title": "Year"
           },
+          "disc_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Number"
+          },
+          "disc_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Total"
+          },
           "poster_url": {
             "anyOf": [
               {
@@ -8145,6 +8199,8 @@
           "drive_id",
           "disc_type",
           "year",
+          "disc_number",
+          "disc_total",
           "poster_url",
           "poster_url_manual",
           "status",
@@ -8243,6 +8299,28 @@
             ],
             "title": "Poster Url Manual"
           },
+          "disc_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Number"
+          },
+          "disc_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Total"
+          },
           "tracks": {
             "anyOf": [
               {
@@ -8261,7 +8339,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "JobUpdateRequest",
-        "description": "PATCH /api/jobs/{id} body. `poster_url_manual` edits the job; `tracks`\napplies per-track operator edits in the same atomic save. The JOB's\ntitle/year still live behind identify/resolve."
+        "description": "PATCH /api/jobs/{id} body. `poster_url_manual` + disc fields edit the job;\n`tracks` applies per-track operator edits in the same atomic save. The JOB's\ntitle/year still live behind identify/resolve."
       },
       "JobView": {
         "properties": {
@@ -8300,6 +8378,28 @@
               }
             ],
             "title": "Year"
+          },
+          "disc_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Number"
+          },
+          "disc_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Total"
           },
           "poster_url": {
             "anyOf": [
@@ -8691,6 +8791,83 @@
             ],
             "title": "Poster Url"
           },
+          "catalog_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Number"
+          },
+          "barcode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "disc_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Count"
+          },
+          "track_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Count"
+          },
           "tracks": {
             "items": {
               "$ref": "#/components/schemas/MetadataReleaseTrack"
@@ -8722,6 +8899,28 @@
           "title": {
             "type": "string",
             "title": "Title"
+          },
+          "length_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Length Ms"
+          },
+          "disc_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Number"
           }
         },
         "type": "object",
@@ -9800,6 +9999,28 @@
               }
             ],
             "title": "Year"
+          },
+          "disc_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Number"
+          },
+          "disc_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Total"
           },
           "metadata": {
             "additionalProperties": true,

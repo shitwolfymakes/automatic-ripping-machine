@@ -954,6 +954,14 @@ export type Job = {
      */
     year: number | null;
     /**
+     * Disc Number
+     */
+    disc_number: number | null;
+    /**
+     * Disc Total
+     */
+    disc_total: number | null;
+    /**
      * Poster Url
      */
     poster_url: string | null;
@@ -1043,8 +1051,8 @@ export type JobStatus = 'created' | 'awaiting_user_id' | 'identified' | 'ripping
 /**
  * JobUpdateRequest
  *
- * PATCH /api/jobs/{id} body. `poster_url_manual` edits the job; `tracks`
- * applies per-track operator edits in the same atomic save. The JOB's
+ * PATCH /api/jobs/{id} body. `poster_url_manual` + disc fields edit the job;
+ * `tracks` applies per-track operator edits in the same atomic save. The JOB's
  * title/year still live behind identify/resolve.
  */
 export type JobUpdateRequest = {
@@ -1052,6 +1060,14 @@ export type JobUpdateRequest = {
      * Poster Url Manual
      */
     poster_url_manual?: string | null;
+    /**
+     * Disc Number
+     */
+    disc_number?: number | null;
+    /**
+     * Disc Total
+     */
+    disc_total?: number | null;
     /**
      * Tracks
      */
@@ -1080,6 +1096,14 @@ export type JobView = {
      * Year
      */
     year: number | null;
+    /**
+     * Disc Number
+     */
+    disc_number?: number | null;
+    /**
+     * Disc Total
+     */
+    disc_total?: number | null;
     /**
      * Poster Url
      */
@@ -1308,6 +1332,34 @@ export type MetadataReleaseDetail = {
      */
     poster_url?: string | null;
     /**
+     * Catalog Number
+     */
+    catalog_number?: string | null;
+    /**
+     * Barcode
+     */
+    barcode?: string | null;
+    /**
+     * Country
+     */
+    country?: string | null;
+    /**
+     * Format
+     */
+    format?: string | null;
+    /**
+     * Status
+     */
+    status?: string | null;
+    /**
+     * Disc Count
+     */
+    disc_count?: number | null;
+    /**
+     * Track Count
+     */
+    track_count?: number | null;
+    /**
      * Tracks
      */
     tracks?: Array<MetadataReleaseTrack>;
@@ -1325,6 +1377,14 @@ export type MetadataReleaseTrack = {
      * Title
      */
     title: string;
+    /**
+     * Length Ms
+     */
+    length_ms?: number | null;
+    /**
+     * Disc Number
+     */
+    disc_number?: number | null;
 };
 
 /**
@@ -1949,6 +2009,14 @@ export type ResolveRequest = {
      * Year
      */
     year?: number | null;
+    /**
+     * Disc Number
+     */
+    disc_number?: number | null;
+    /**
+     * Disc Total
+     */
+    disc_total?: number | null;
     /**
      * Metadata
      */
@@ -5218,6 +5286,14 @@ export type SearchMusicApiMetadataMusicSearchGetData = {
          * Query
          */
         query: string;
+        /**
+         * Artist
+         */
+        artist?: string | null;
+        /**
+         * Track Count
+         */
+        track_count?: number | null;
     };
     url: '/api/metadata/music/search';
 };
