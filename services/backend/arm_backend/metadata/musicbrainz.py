@@ -92,8 +92,8 @@ class MusicBrainzClient:
         # extract_poster_url() can still derive the Cover Art Archive URL
         # from release["id"], and downstream debugging has the full payload.
         artist = _join_artist_credit(top.get("artist-credit") or [])
-        medium = _pick_medium_for_disc(top.get("media") or [], disc_id)
-        tracks = _extract_tracks(medium)
+        medium, disc_number = _pick_medium_for_disc(top.get("media") or [], disc_id)
+        tracks = _extract_tracks(medium, disc_number)
 
         payload: dict[str, Any] = {
             "artist": artist,
@@ -122,39 +122,60 @@ class MusicBrainzClient:
         year_val = _parse_year(body.get("date") or "")
         artist = _join_artist_credit(body.get("artist-credit") or [])
         media = body.get("media") or []
-        tracks = _extract_tracks(media[0] if media else None)
+        tracks: list[dict[str, Any]] = []
+        for i, medium in enumerate(media):
+            tracks.extend(_extract_tracks(medium, i + 1))
+        label_info = body.get("label-info") or []
+        catalog_number = None
+        if label_info and isinstance(label_info[0], dict):
+            catalog_number = label_info[0].get("catalog-number")
+        fmt = media[0].get("format") if media and isinstance(media[0], dict) else None
         payload: dict[str, Any] = {
             "artist": artist,
             "album": title_val,
             "tracks": tracks,
+            "catalog_number": catalog_number,
+            "format": fmt,
+            "disc_count": len(media),
+            "track_count": len(tracks),
             **body,
         }
         return MetadataResult(title=title_val, year=year_val, kind="music", payload=payload)
 
-    async def search_releases(self, query: str, limit: int = 10) -> list[MetadataResult]:
-        """Lucene release search for interactive lookup. Returns up to `limit`."""
+    async def search_releases(
+        self, query: str, limit: int = 10, artist: str | None = None, track_count: int | None = None
+    ) -> list[MetadataResult]:
+        """Lucene release search for interactive lookup. Returns up to `limit`.
+        `artist` and `track_count`, when given, narrow the Lucene query."""
+        lucene = query
+        if artist:
+            lucene = f'{query} AND artist:"{_escape_lucene(artist)}"'
+        if track_count is not None:
+            lucene = f"{lucene} AND tracks:{track_count}"
         body = await self._get(
             "/release",
-            params={"query": query, "fmt": "json", "limit": limit},
+            params={"query": lucene, "fmt": "json", "limit": limit},
         )
-
         results: list[MetadataResult] = []
-        # MB's `limit` query param is advisory; re-cap client-side as a guard.
         for rel in (body.get("releases") or [])[:limit]:
             title = rel.get("title")
             if not title:
                 continue
             year = _parse_year(rel.get("date") or "")
-            artist = _join_artist_credit(rel.get("artist-credit") or [])
-            payload: dict[str, Any] = {"artist": artist, "album": title, **rel}
+            artist_name = _join_artist_credit(rel.get("artist-credit") or [])
+            payload: dict[str, Any] = {"artist": artist_name, "album": title, **rel}
             results.append(MetadataResult(title=title, year=year, kind="music", payload=payload))
-
         return results
 
 
 def _parse_year(date: str) -> int | None:
     """Year from a MusicBrainz date string ("1973-03-01" -> 1973), or None."""
     return int(date[:4]) if date[:4].isdigit() else None
+
+
+def _escape_lucene(term: str) -> str:
+    """Escape Lucene double-quotes/backslashes so a quoted phrase term is safe."""
+    return term.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _join_artist_credit(credit: list[dict[str, Any]]) -> str:
@@ -176,31 +197,21 @@ def _join_artist_credit(credit: list[dict[str, Any]]) -> str:
     return "".join(parts).strip()
 
 
-def _pick_medium_for_disc(media: list[dict[str, Any]], disc_id: str) -> dict[str, Any] | None:
-    """Pick the medium whose `discs[].id` matches `disc_id`.
-
-    For multi-disc releases (e.g. a 2-CD album), MB returns each medium
-    separately and tags each with its own disc-id list. Matching by disc-id
-    is the only way to know whether we're looking at Disc 1 or Disc 2.
-    Falls back to `media[0]` when no disc-id match is found — single-disc
-    releases sometimes omit the `discs[]` array entirely.
-    """
-    for medium in media:
+def _pick_medium_for_disc(media: list[dict[str, Any]], disc_id: str) -> tuple[dict[str, Any] | None, int]:
+    """Return (medium, 1-based disc_number) for the medium whose discs[].id matches
+    disc_id; fall back to (media[0], 1). (None, 1) when media is empty."""
+    for i, medium in enumerate(media):
         for disc in medium.get("discs") or []:
             if isinstance(disc, dict) and disc.get("id") == disc_id:
-                return medium
+                return medium, i + 1
     if media:
-        return media[0]
-    return None
+        return media[0], 1
+    return None, 1
 
 
-def _extract_tracks(medium: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Build the `metadata_json["tracks"]` array consumed by `_build_track_ctx`.
-
-    Each entry is `{"title": str, "position": int}`. Position is parsed from
-    the string MB returns; a non-integer position falls through with the raw
-    string preserved.
-    """
+def _extract_tracks(medium: dict[str, Any] | None, disc_number: int) -> list[dict[str, Any]]:
+    """Build `metadata_json["tracks"]` entries for one medium (disc). Each entry
+    is {title, position?, length_ms, disc_number}. `length` from MB is already ms."""
     if medium is None:
         return []
     out: list[dict[str, Any]] = []
@@ -214,5 +225,8 @@ def _extract_tracks(medium: dict[str, Any] | None) -> list[dict[str, Any]]:
             entry["position"] = int(position)
         elif isinstance(position, int):
             entry["position"] = position
+        length = raw.get("length")
+        entry["length_ms"] = length if isinstance(length, int) else None
+        entry["disc_number"] = disc_number
         out.append(entry)
     return out
