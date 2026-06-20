@@ -81,6 +81,8 @@ class JobView(BaseModel):
     status: JobStatus
     title: str | None
     year: int | None
+    disc_number: int | None = None
+    disc_total: int | None = None
     # Computed at identify; UI prefers `poster_url_manual` if set.
     poster_url: str | None = None
     poster_url_manual: str | None = None
