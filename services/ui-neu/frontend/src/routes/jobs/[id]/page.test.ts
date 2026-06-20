@@ -31,7 +31,8 @@ vi.mock('$lib/api/jobs', () => ({
 			fingerprints: []
 		})
 	),
-	updateTrack: vi.fn(),
+	updateTrack: vi.fn(() => Promise.resolve()),
+	fetchNamingPreview: vi.fn(() => Promise.resolve({ job_output_dir: '', job_output_name: '', items: [] })),
 	resolveJob: vi.fn(() => Promise.resolve({ job: createJob({ id: 'job_42' }), fan_out: [] })),
 	applySession: vi.fn(() =>
 		Promise.resolve({ session_application: {}, tasks: [], collisions: [], idempotent: false })
@@ -53,8 +54,9 @@ vi.mock('$lib/api/settings', () => ({
 	fetchSettings: vi.fn(() => Promise.resolve({ transcoder_config: { config: {} } }))
 }));
 
-import { fetchJob } from '$lib/api/jobs';
+import { fetchJob, updateTrack } from '$lib/api/jobs';
 const mockFetchJob = vi.mocked(fetchJob);
+const mockUpdateTrack = vi.mocked(updateTrack);
 
 describe('Job detail page (v3)', () => {
 	afterEach(() => {
@@ -86,9 +88,10 @@ describe('Job detail page (v3)', () => {
 	it('renders tracks from JobDetailView.tracks', async () => {
 		renderComponent(Page);
 		await waitFor(() => {
-			expect(screen.getByText('title_01.mkv')).toBeInTheDocument();
+			expect(screen.getByText('Tracks (1)')).toBeInTheDocument();
 		});
-		expect(screen.getByText('Tracks (1)')).toBeInTheDocument();
+		// Source column was replaced by Kind + Filename; assert on the Kind header.
+		expect(screen.getByRole('columnheader', { name: 'Kind' })).toBeInTheDocument();
 	});
 
 	it('redirects to home on 404', async () => {
@@ -122,6 +125,20 @@ describe('Job detail page (v3)', () => {
 		await fireEvent.click(btn);
 		await waitFor(() => {
 			expect(screen.getByTestId('apply-session-select')).toBeInTheDocument();
+		});
+	});
+
+	it('excludes a track via the Rip checkbox', async () => {
+		renderComponent(Page);
+		await waitFor(() => {
+			expect(screen.getByText('Tracks (1)')).toBeInTheDocument();
+		});
+		// Single track row → exactly one Rip checkbox, checked for a non-excluded track.
+		const checkbox = screen.getByRole('checkbox') as HTMLInputElement;
+		expect(checkbox.checked).toBe(true);
+		await fireEvent.click(checkbox);
+		await waitFor(() => {
+			expect(mockUpdateTrack).toHaveBeenCalledWith('job_42', 'trk_1', { excluded: true });
 		});
 	});
 });

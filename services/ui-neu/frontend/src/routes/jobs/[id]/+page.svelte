@@ -2,10 +2,10 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
-	import { fetchJob } from '$lib/api/jobs';
+	import { fetchJob, fetchNamingPreview, updateTrack } from '$lib/api/jobs';
 	import { posterSrc, posterFallback } from '$lib/utils/poster';
 	import PosterImage from '$lib/components/PosterImage.svelte';
-	import type { JobDetailView, ResolveResponse, ApplySessionResponse } from '$lib/types/api.gen';
+	import type { JobDetailView, ResolveResponse, ApplySessionResponse, NamingPreviewItem } from '$lib/types/api.gen';
 	import JobActions from '$lib/components/JobActions.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import TitleSearch from '$lib/components/TitleSearch.svelte';
@@ -15,6 +15,7 @@
 	import JobLifecycle from '$lib/components/JobLifecycle.svelte';
 	import { discTypeLabel, isJobActive } from '$lib/utils/job-type';
 	import { buildMetadataFields } from '$lib/utils/job-fields';
+	import { trackKindLabel, trackSizeLabel } from '$lib/utils/track-fields';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 
@@ -23,6 +24,8 @@
 	let jobError = $state<Error | null>(null);
 	let activePanel = $state<string | null>(null);
 	let editingTrackId = $state<string | null>(null);
+	let previewItems = $state<NamingPreviewItem[]>([]);
+	let previewByTrack = $derived(new Map(previewItems.map((i) => [i.track_id, i])));
 
 	// Dialog visibility + a transient note shown after a resolve/apply lands.
 	let showIdentify = $state(false);
@@ -96,6 +99,16 @@
 		loadJob();
 	}
 
+	async function toggleExcluded(trackId: string, excluded: boolean) {
+		try {
+			await updateTrack($page.params.id ?? '', trackId, { excluded });
+		} finally {
+			// Refetch regardless: on success to pick up new naming/derived state,
+			// on failure to restore the last server-truth value in the checkbox.
+			await loadJob();
+		}
+	}
+
 	async function loadJob() {
 		const id = $page.params.id ?? '';
 		// Only flip into the loading state on the FIRST load. The 5s poll
@@ -110,6 +123,14 @@
 		jobError = null;
 		try {
 			detail = await fetchJob(id);
+			// Rendered filename preview is a best-effort SECOND fetch — never block
+			// or fail the job render on it. Excluded tracks may be absent from items[].
+			try {
+				const preview = await fetchNamingPreview(id);
+				previewItems = preview.items;
+			} catch {
+				previewItems = [];
+			}
 		} catch (e) {
 			if (e instanceof Error && e.message.includes('404')) {
 				goto('/');
@@ -287,17 +308,21 @@
 						<thead class="bg-page text-gray-600 dark:bg-primary/5 dark:text-gray-400">
 							<tr>
 								<th class="px-4 py-3 font-medium">#</th>
-								<th class="px-4 py-3 font-medium">Source</th>
+								<th class="px-4 py-3 font-medium">Kind</th>
 								<th class="px-4 py-3 font-medium">Title</th>
+								<th class="px-4 py-3 font-medium">Filename</th>
 								<th class="px-4 py-3 font-medium">Length</th>
+								<th class="px-4 py-3 font-medium">Size</th>
+								<th class="px-4 py-3 font-medium">Rip</th>
 								<th class="px-4 py-3 font-medium">Status</th>
 							</tr>
 						</thead>
 						<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
 							{#each tracks as track}
-								<tr class="hover:bg-page dark:hover:bg-gray-800/50">
+								{@const preview = previewByTrack.get(track.id)}
+								<tr class="hover:bg-page dark:hover:bg-gray-800/50 {track.excluded ? 'opacity-50' : ''}">
 									<td class="px-4 py-3" data-label="#">{track.index}</td>
-									<td class="max-w-[250px] truncate px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300" data-label="Source">{track.source_ref}</td>
+									<td class="px-4 py-3 text-gray-700 dark:text-gray-300" data-label="Kind">{trackKindLabel(track.kind)}</td>
 									<td
 										class="px-4 py-3 cursor-pointer hover:bg-primary/5 dark:hover:bg-primary/10"
 										data-label="Title"
@@ -319,9 +344,47 @@
 											<span class="text-xs text-gray-400">{job.title || 'Untitled'}{#if job.year} ({job.year}){/if}</span>
 										{/if}
 									</td>
-									<td class="px-4 py-3" data-label="Length">{formatDuration(track.duration_seconds)}</td>
-									<td class="px-4 py-3" data-label="Status"><StatusBadge status={track.status} /></td>
+									<td class="max-w-[260px] truncate px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300" data-label="Filename" title={preview?.output_name ?? ''}>
+										{#if preview?.output_name}
+											<span>{preview.output_name}</span>
+											{#if track.custom_filename}
+												<span class="ml-1 rounded-sm bg-amber-100 px-1 py-0.5 text-[9px] font-semibold uppercase text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">custom</span>
+											{/if}
+										{:else}
+											<span class="text-gray-400">{track.excluded ? 'excluded' : '—'}</span>
+										{/if}
+									</td>
+									<td class="px-4 py-3" data-label="Length">
+										{#if track.duration_seconds != null}
+											{formatDuration(track.duration_seconds)}
+										{:else if track.expected_duration_seconds != null}
+											<span class="text-gray-400">~{formatDuration(track.expected_duration_seconds)}</span>
+										{:else}—{/if}
+									</td>
+									<td class="px-4 py-3 text-gray-700 dark:text-gray-300" data-label="Size">{trackSizeLabel(track)}</td>
+									<td class="px-4 py-3" data-label="Rip">
+										<input
+											type="checkbox"
+											checked={!track.excluded}
+											onchange={(e) => toggleExcluded(track.id, !(e.currentTarget as HTMLInputElement).checked)}
+											title="Include this track in transcode output (the disc still rips in full)"
+											class="h-4 w-4 rounded border-primary/30 text-primary focus:ring-primary"
+										/>
+									</td>
+									<td class="px-4 py-3" data-label="Status">
+										<StatusBadge status={track.status} />
+										{#if track.attempts > 1}
+											<span class="ml-1 text-[10px] text-gray-400" title="Rip attempts">×{track.attempts}</span>
+										{/if}
+									</td>
 								</tr>
+								{#if track.status === 'failed' && track.last_error}
+									<tr>
+										<td colspan="99" class="bg-red-50 px-4 py-2 text-xs text-red-700 dark:bg-red-900/15 dark:text-red-300" data-label="">
+											<span class="font-semibold">Error:</span> {track.last_error}
+										</td>
+									</tr>
+								{/if}
 								{#if editingTrackId === track.id}
 									<tr>
 										<td colspan="99" class="px-4 py-3" data-label="">

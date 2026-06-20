@@ -39,6 +39,9 @@ const { buildDetail } = vi.hoisted(() => {
 
 vi.mock('$lib/api/jobs', () => ({
 	fetchJob: vi.fn(() => Promise.resolve(buildDetail())),
+	fetchNamingPreview: vi.fn(() =>
+		Promise.resolve({ job_output_dir: '', job_output_name: '', items: [] })
+	),
 	updateTrack: vi.fn(() => Promise.resolve()),
 	resolveJob: vi.fn(() => Promise.resolve({ job: {}, fan_out: [] })),
 	applySession: vi.fn(() =>
@@ -87,8 +90,9 @@ describe('Job Detail Page', () => {
 
 		it('renders tracks table', async () => {
 			renderComponent(JobDetailPage);
+			// Source column was replaced by Kind + Filename; assert on the Kind header.
 			await waitFor(() => {
-				expect(screen.getByText('title_01.mkv')).toBeInTheDocument();
+				expect(screen.getByRole('columnheader', { name: 'Kind' })).toBeInTheDocument();
 			});
 		});
 
