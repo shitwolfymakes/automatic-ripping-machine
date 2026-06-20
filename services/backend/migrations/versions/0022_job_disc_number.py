@@ -3,8 +3,8 @@
 Stores the disc index and total disc count for multi-disc CD sets,
 populated during music metadata matching.
 
-Revision ID: 0021_job_disc_number
-Revises: 0020_track_operator_fields
+Revision ID: 0022_job_disc_number
+Revises: 0021_community_keydb_fields
 Create Date: 2026-06-20
 
 """
@@ -14,8 +14,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0021_job_disc_number"
-down_revision: Union[str, None] = "0020_track_operator_fields"
+revision: str = "0022_job_disc_number"
+down_revision: Union[str, None] = "0021_community_keydb_fields"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
