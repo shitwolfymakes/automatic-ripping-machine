@@ -54,9 +54,10 @@ vi.mock('$lib/api/settings', () => ({
 	fetchSettings: vi.fn(() => Promise.resolve({ transcoder_config: { config: {} } }))
 }));
 
-import { fetchJob, updateTrack } from '$lib/api/jobs';
+import { fetchJob, updateTrack, fetchNamingPreview } from '$lib/api/jobs';
 const mockFetchJob = vi.mocked(fetchJob);
 const mockUpdateTrack = vi.mocked(updateTrack);
+const mockFetchNamingPreview = vi.mocked(fetchNamingPreview);
 
 describe('Job detail page (v3)', () => {
 	afterEach(() => {
@@ -140,5 +141,47 @@ describe('Job detail page (v3)', () => {
 		await waitFor(() => {
 			expect(mockUpdateTrack).toHaveBeenCalledWith('job_42', 'trk_1', { excluded: true });
 		});
+	});
+
+	it('renders filename, fingerprints, and music tracklist when data is present', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({
+				id: 'job_42',
+				title: 'Test Album',
+				disc_type: 'cd',
+				status: 'ripped',
+				metadata_json: { tracks: [{ title: 'Opening', duration_ms: 95000 }] }
+			}),
+			tracks: [createTrack({ id: 'trk_1', kind: 'audio_track', status: 'done' })],
+			fingerprints: [{ algo: 'crc64', value: 'ABCDEF0123456789' }]
+		});
+		mockFetchNamingPreview.mockResolvedValue({
+			job_output_dir: 'Album',
+			job_output_name: 'Album',
+			items: [
+				{
+					track_id: 'trk_1',
+					track_number: 1,
+					output_path: 'Album/01 Opening.flac',
+					output_dir: 'Album',
+					output_name: '01 Opening.flac'
+				}
+			]
+		});
+
+		renderComponent(Page);
+
+		// Disc fingerprints section renders its populated row.
+		await waitFor(() => {
+			expect(screen.getByText('Disc fingerprints')).toBeInTheDocument();
+		});
+		expect(screen.getByText('ABCDEF0123456789')).toBeInTheDocument();
+
+		// Filename cell renders the naming-preview output_name.
+		expect(screen.getByText('01 Opening.flac')).toBeInTheDocument();
+
+		// Music tracklist section renders the metadata_json track row.
+		expect(screen.getByText('Tracklist')).toBeInTheDocument();
+		expect(screen.getByText('Opening')).toBeInTheDocument();
 	});
 });
