@@ -16,6 +16,14 @@ fi
 TMPSCHEMA="$V3_SNAPSHOT"
 
 cd "$REPO_ROOT/services/ui-neu/frontend"
+
+# `tsconfig.json` extends `./.svelte-kit/tsconfig.json`, a build artifact that
+# only exists after a SvelteKit sync/build. @hey-api/openapi-ts reads tsconfig
+# during output resolution, so on a fresh checkout (CI after bare `npm ci`, no
+# dev/build run yet) the missing `extends` target makes codegen fail with
+# "Couldn't read tsconfig". Generate it first so codegen is reproducible.
+npx svelte-kit sync
+
 npx --yes @hey-api/openapi-ts \
     --input "$TMPSCHEMA" \
     --output src/lib/types/api.gen.ts \

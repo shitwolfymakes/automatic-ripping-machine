@@ -3,7 +3,7 @@
 // removes an editable config key, update this list in the same change — the
 // config-fields-guard test pins it so a field can't be silently dropped from the
 // form again (settings audit §1.3 / structural fix 3).
-import type { ConfigUpdateRequest } from '../api/types';
+import type { ConfigUpdateRequest } from '../api/types'
 
 export const CONFIG_FORM_KEYS = [
   'tmdb_api_key',
@@ -17,4 +17,4 @@ export const CONFIG_FORM_KEYS = [
   'block_on_miss',
   'ripping_paused',
   'notifications_enabled',
-] as const satisfies readonly (keyof ConfigUpdateRequest)[];
+] as const satisfies readonly (keyof ConfigUpdateRequest)[]
