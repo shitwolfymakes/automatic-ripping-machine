@@ -15,6 +15,7 @@
 	import JobLifecycle from '$lib/components/JobLifecycle.svelte';
 	import { discTypeLabel, isJobActive } from '$lib/utils/job-type';
 	import { buildMetadataFields } from '$lib/utils/job-fields';
+	import { extractMusicTracks } from '$lib/utils/music-tracks';
 	import { trackKindLabel, trackSizeLabel } from '$lib/utils/track-fields';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
@@ -85,6 +86,7 @@
 	);
 
 	let metadataFields = $derived(detail ? buildMetadataFields(detail.job) : []);
+	let musicTracks = $derived(detail ? extractMusicTracks(detail.job.metadata_json) : []);
 
 	const panelTabBase = 'flex-1 border-r border-primary/15 px-4 py-2.5 text-center text-sm font-medium transition-colors dark:border-primary/15';
 	const panelTabActive = 'text-primary border-b-2 border-b-primary bg-primary/5 dark:bg-primary/10';
@@ -416,6 +418,33 @@
 								<tr>
 									<td class="px-4 py-3 uppercase" data-label="Algorithm">{fp.algo}</td>
 									<td class="max-w-[420px] truncate px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300" data-label="Value" title={fp.value}>{fp.value}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</section>
+		{/if}
+
+		<!-- Music tracklist (CD jobs; read-only) -->
+		{#if musicTracks.length > 0}
+			<section>
+				<h2 class="mb-3 text-lg font-semibold text-gray-900 dark:text-white">Tracklist</h2>
+				<div class="overflow-x-auto rounded-lg border border-primary/20 dark:border-primary/20">
+					<table class="responsive-table w-full text-left text-sm">
+						<thead class="bg-page text-gray-600 dark:bg-primary/5 dark:text-gray-400">
+							<tr>
+								<th class="px-4 py-3 font-medium">#</th>
+								<th class="px-4 py-3 font-medium">Title</th>
+								<th class="px-4 py-3 text-right font-medium">Duration</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+							{#each musicTracks as mt}
+								<tr>
+									<td class="px-4 py-3" data-label="#">{mt.number}</td>
+									<td class="px-4 py-3 text-gray-900 dark:text-white" data-label="Title">{mt.title}</td>
+									<td class="px-4 py-3 text-right text-gray-700 dark:text-gray-300" data-label="Duration">{mt.durationLabel}</td>
 								</tr>
 							{/each}
 						</tbody>
