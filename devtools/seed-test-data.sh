@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Seed the running dev DB with comprehensive test data to exercise the whole UI:
-# 1 drive + 8 status-spanning jobs + video/audio tracks (full enriched column
+# 1 drive + 9 status-spanning jobs + video/audio tracks (full enriched column
 # set) + disc fingerprints (crc64 / aacs / musicbrainz) + music CDs (single +
 # multi-disc) carrying a MusicBrainz-shaped tracklist in metadata_json, plus a
 # per-job aggregated log file for each job (so the Logs screen has data).
@@ -26,7 +26,7 @@ usage() {
 Usage: bash devtools/seed-test-data.sh [--clean] [-h|--help]
 
   (no args)   Clean any existing seed rows, then insert a fresh fixture:
-              1 drive + 8 jobs (spanning statuses) + tracks + fingerprints +
+              1 drive + 9 jobs (spanning statuses) + tracks + fingerprints +
               music tracklists (single + multi-disc) + per-job logs.
   --clean     Remove the seed rows (jobs+tracks+fingerprints+drive) + logs.
   -h, --help  Show this help.
@@ -84,8 +84,8 @@ PY
 }
 
 # --- write a per-job aggregated log for each seeded job ---
-# Args: the 8 job ULIDs in fixture order (Blade Runner, Matrix, Dune, untitled,
-# Oppenheimer, Scratched Disc, Abbey Road, The Wall). Emits realistic status-
+# Args: the 9 job ULIDs in fixture order (Blade Runner, Matrix, Dune, untitled,
+# Oppenheimer, Scratched Disc, Abbey Road, The Wall, Cult Double Feature). Emits
 # appropriate NDJSON in the arm_common log shape so the Logs screen + its
 # level/text filters have data. Status is derived from the job's position
 # (matches the INSERT order below).
@@ -105,6 +105,7 @@ META = [
     ("Scratched Disc",    "failed"),
     ("Abbey Road",        "ripped"),
     ("The Wall",          "awaiting_user_id"),
+    ("Cult Double Feature", "ripped"),
 ]
 
 def script(title, status):
@@ -186,23 +187,25 @@ EOF
 fi
 
 # --- generate real ULIDs via the backend (authoritative; matches route patterns) ---
-# 1 drive + 8 jobs + 8 tracks + 3 fingerprints
+# 1 drive + 9 jobs + 11 tracks + 4 fingerprints. The 9th job is a multi-title DVD
+# (Cult Double Feature) whose 3 video tracks are each matched independently; the
+# detail routes validate the ULID pattern, so these must be real backend ULIDs.
 ids="$(docker compose exec -T arm-backend python -c "
 from arm_common.ulid import new_id
 print(new_id('drv'))
-for _ in range(8): print(new_id('job'))
-for _ in range(8): print(new_id('trk'))
-for _ in range(3): print(new_id('dfp'))
+for _ in range(9): print(new_id('job'))
+for _ in range(11): print(new_id('trk'))
+for _ in range(4): print(new_id('dfp'))
 ")"
 mapfile -t ID <<<"$ids"
-if [[ "${#ID[@]}" -ne 20 ]]; then
-    echo "ULID generation failed (expected 20 ids, got ${#ID[@]})" >&2
+if [[ "${#ID[@]}" -ne 25 ]]; then
+    echo "ULID generation failed (expected 25 ids, got ${#ID[@]})" >&2
     exit 1
 fi
 DRV="${ID[0]}"
-J=("${ID[@]:1:8}")
-T=("${ID[@]:9:8}")
-F=("${ID[@]:17:3}")
+J=("${ID[@]:1:9}")
+T=("${ID[@]:10:11}")
+F=("${ID[@]:21:4}")
 
 # --- MusicBrainz-shaped tracklists (ASCII only) for the CD jobs ---
 # Abbey Road (single disc, 17 tracks) for the ripped music CD.
@@ -245,7 +248,7 @@ ${CLEAN_SQL}
 INSERT INTO drives (id, hostname, device_path, display_name, status, media_status, media_status_at, drive_mode, uhd_capable)
 VALUES ('${DRV}', 'seed-host', '/dev/sr-seed', 'Test Drive (seed)', 'online', 'loaded', now(), 'auto', false);
 
--- 8 jobs spanning statuses + disc types. resumed_from_crash on one; disc_number/total on the multi-disc CD.
+-- 9 jobs spanning statuses + disc types (incl. a multi-title DVD). resumed_from_crash on one; disc_number/total on the multi-disc CD.
 INSERT INTO jobs (id, drive_id, disc_type, title, year, status, metadata_json, resumed_from_crash, disc_number, disc_total, started_at, ripped_at, created_at, poster_url) VALUES
  ('${J[0]}', '${DRV}', 'bluray', 'Blade Runner 2049', 2017, 'ripping',          '{"seed":true}'::jsonb,                                              false, NULL, NULL, now()-interval '5 min',  NULL,                    now()-interval '5 min',  'https://image.tmdb.org/t/p/w300/gajva2L0rPYkEWjzgFlBXCAVBE5.jpg'),
  ('${J[1]}', '${DRV}', 'dvd',    'The Matrix',         1999, 'ripped',           '{"seed":true}'::jsonb,                                              true,  NULL, NULL, now()-interval '2 hour', now()-interval '90 min', now()-interval '2 hour', 'https://image.tmdb.org/t/p/w300/p96dm7sCMn4VYAStA6siNz30G1r.jpg'),
@@ -254,7 +257,8 @@ INSERT INTO jobs (id, drive_id, disc_type, title, year, status, metadata_json, r
  ('${J[4]}', '${DRV}', 'bluray', 'Oppenheimer',        2023, 'ripped_partial',   '{"seed":true}'::jsonb,                                              false, NULL, NULL, now()-interval '3 hour', now()-interval '2 hour', now()-interval '3 hour', 'https://image.tmdb.org/t/p/w300/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg'),
  ('${J[5]}', '${DRV}', 'dvd',    'Scratched Disc',     2010, 'failed',           '{"seed":true}'::jsonb,                                              false, NULL, NULL, now()-interval '1 day',  NULL,                    now()-interval '1 day',  NULL),
  ('${J[6]}', '${DRV}', 'cd',     'Abbey Road',         1969, 'ripped',           jsonb_build_object('seed',true,'artist','The Beatles','album','Abbey Road','tracks', '${ABBEY_TRACKS}'::jsonb), false, 1, 1, now()-interval '6 hour', now()-interval '5 hour', now()-interval '6 hour', 'https://coverartarchive.org/release/6bb3793b-f991-378e-9bff-0bd3117f2298/front'),
- ('${J[7]}', '${DRV}', 'cd',     'The Wall',           1979, 'awaiting_user_id', jsonb_build_object('seed',true,'artist','Pink Floyd','album','The Wall','tracks', '${WALL_TRACKS}'::jsonb),  false, 2, 2, NULL,                    NULL,                    now()-interval '20 min', NULL);
+ ('${J[7]}', '${DRV}', 'cd',     'The Wall',           1979, 'awaiting_user_id', jsonb_build_object('seed',true,'artist','Pink Floyd','album','The Wall','tracks', '${WALL_TRACKS}'::jsonb),  false, 2, 2, NULL,                    NULL,                    now()-interval '20 min', NULL),
+ ('${J[8]}', '${DRV}', 'dvd',    'Cult Double Feature', NULL, 'ripped',          jsonb_build_object('seed',true,'multi_title',true),                  false, NULL, NULL, now()-interval '4 hour', now()-interval '3 hour', now()-interval '4 hour', NULL);
 
 -- Video tracks for The Matrix (J1): main feature + special feature (excluded + custom filename) + a FAILED audio track with last_error.
 INSERT INTO tracks (id, job_id, kind, index, source_ref, label, status, attempts, duration_seconds, expected_duration_seconds, size_bytes, expected_size_bytes, output_path, last_error, excluded, custom_filename, title) VALUES
@@ -295,21 +299,31 @@ INSERT INTO tracks (id, job_id, kind, index, source_ref, label, status, attempts
  ('trk_seedabbeyroad000000016', '${J[6]}', 'audio_track', 15, '16', 'The End',                                  'done', 1, 140, 140, '/media/music/The Beatles/Abbey Road/16 The End.flac'),
  ('trk_seedabbeyroad000000017', '${J[6]}', 'audio_track', 16, '17', 'Her Majesty',                              'done', 1, 25,  25,  '/media/music/The Beatles/Abbey Road/17 Her Majesty.flac');
 
--- Disc fingerprints (read-only fingerprints section): DVD crc64, Blu-ray aacs, CD musicbrainz.
+-- Multi-title DVD (J8, ripped): a double feature whose 3 video tracks are each a
+-- separate movie. Titles are UNSET on purpose so the disc demonstrates per-track
+-- matching (click a track's Title cell -> search/Set manually -> applies to that
+-- track only). Two main features + a short excluded trailers reel.
+INSERT INTO tracks (id, job_id, kind, index, source_ref, label, status, attempts, duration_seconds, expected_duration_seconds, size_bytes, expected_size_bytes, output_path, excluded) VALUES
+ ('${T[8]}',  '${J[8]}', 'video_title', 0, 'title00', 'Feature A', 'done', 1, 5520, 5520, 6900000000, 6900000000, '/media/movie/Cult Double Feature/title00.mkv', false),
+ ('${T[9]}',  '${J[8]}', 'video_title', 1, 'title01', 'Feature B', 'done', 1, 5280, 5280, 6600000000, 6600000000, '/media/movie/Cult Double Feature/title01.mkv', false),
+ ('${T[10]}', '${J[8]}', 'video_title', 2, 'title02', 'Trailers',  'done', 1, 540,  540,  700000000,  700000000,  '/media/movie/Cult Double Feature/title02.mkv', true);
+
+-- Disc fingerprints (read-only fingerprints section): DVD crc64, Blu-ray aacs, CD musicbrainz, multi-DVD crc64.
 INSERT INTO disc_fingerprints (id, job_id, algo, value, created_at) VALUES
  ('${F[0]}', '${J[1]}', 'crc64',       'A1B2C3D4E5F60789',                      now()-interval '2 hour'),
  ('${F[1]}', '${J[0]}', 'aacs',        'aacs-0123456789abcdef0123456789abcdef', now()-interval '5 min'),
- ('${F[2]}', '${J[6]}', 'musicbrainz', '6bb3793b-f991-378e-9bff-0bd3117f2298',  now()-interval '6 hour');
+ ('${F[2]}', '${J[6]}', 'musicbrainz', '6bb3793b-f991-378e-9bff-0bd3117f2298',  now()-interval '6 hour'),
+ ('${F[3]}', '${J[8]}', 'crc64',       'D00BLEFEATURE1234',                     now()-interval '4 hour');
 
 COMMIT;
 EOF
 
 # Seed logs: prune any prior seed log files (their job ids were regenerated),
-# then write a fresh per-job log for each of the 8 new job ids.
+# then write a fresh per-job log for each of the 9 new job ids.
 clean_seed_logs >/dev/null
 seed_logs "${J[*]}"
 
-echo "seeded 1 drive + 8 jobs + 8 tracks + 3 fingerprints + per-job logs (tagged metadata_json {\"seed\":true})"
+echo "seeded 1 drive + 9 jobs + 26 tracks + 4 fingerprints + per-job logs (tagged metadata_json {\"seed\":true})"
 echo "  spans: ripping / ripped / identified / awaiting_user_id / ripped_partial / failed,"
 echo "  video tracks (excluded, custom_filename, failed+last_error, mixed status), CD music"
 echo "  tracklists (single + multi-disc), crc64/aacs/musicbrainz fingerprints, and per-job logs."
