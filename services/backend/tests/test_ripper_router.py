@@ -597,6 +597,21 @@ def test_held_job_paused_flag_from_global() -> None:
     assert r.json()["paused"] is True
 
 
+def test_held_job_paused_flag_from_per_job_manual_pause() -> None:
+    """paused is global ripping_paused OR this disc's manual_pause — a per-job
+    pause alone (global off) still marks it paused for reboot recovery."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(ripping_paused=False)]
+    held = _job("job_01JZXR7K3M5Q8N4VWA0000H07", status=JobStatus.AWAITING_REVIEW)
+    held.manual_pause = True
+    db.rows["jobs"] = [held]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["paused"] is True
+
+
 def test_held_job_multi_row_logs_and_returns_first(caplog: pytest.LogCaptureFixture) -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]

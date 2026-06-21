@@ -128,9 +128,11 @@ class JobController:
 
     async def on_ws_command(self, envelope: WSEnvelope) -> None:
         """Handler registered for `ripper.commands.{drive_id}` topic."""
-        if envelope.event_type in ("identify.resolved", "rip.start"):
-            # Both wake the per-job wait Event; the waiter re-fetches status and
-            # decides (identify.resolved -> identified; rip.start -> ripping).
+        if envelope.event_type in ("identify.resolved", "rip.start", "review.pause"):
+            # All wake the per-job wait Event; the waiter re-fetches the job and
+            # re-evaluates (identify.resolved -> identified; rip.start -> ripping;
+            # review.pause -> re-read manual_pause/wait_start_time so a per-job
+            # pause/resume applies promptly instead of on the next periodic poll).
             job_id = envelope.payload.get("job_id") if isinstance(envelope.payload, dict) else None
             if not isinstance(job_id, str):
                 logger.warning("%s without job_id payload: %s", envelope.event_type, envelope.payload)
@@ -410,10 +412,13 @@ class JobController:
 
     async def _review_countdown_expired(self, view: JobView) -> bool:
         """True when a held disc's auto-start countdown has elapsed AND it is not
-        paused. Paused (global `ripping_paused` — or, later, per-job pause) keeps
-        the countdown suspended, so it returns False and the wait continues. The
-        config is re-read each poll so a mid-wait pause / duration change applies.
+        paused. Paused — global `ripping_paused` OR this disc's per-job
+        `manual_pause` — keeps the countdown suspended, so it returns False and the
+        wait continues. The job view + config are re-read each poll so a mid-wait
+        pause / resume / duration change applies on the next cycle.
         """
+        if view.manual_pause:
+            return False
         cfg = await self._safe_get_ripper_config()
         if cfg is None or cfg.ripping_paused:
             return False

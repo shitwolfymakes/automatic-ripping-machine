@@ -13,6 +13,7 @@ vi.mock('$lib/api/jobs', () => ({
 	fetchJob: vi.fn(() => Promise.resolve(createJobDetail())),
 	abandonJob: vi.fn(() => Promise.resolve()),
 	startWaitingJob: vi.fn(() => Promise.resolve(createJob())),
+	pauseWaitingJob: vi.fn(() => Promise.resolve(createJob())),
 	updateTrack: vi.fn(() => Promise.resolve(createJob())),
 	patchJob: vi.fn(() => Promise.resolve(createJob())),
 	applySession: vi.fn(() => Promise.resolve({ created_task_ids: [], collisions: [] })),
@@ -47,11 +48,12 @@ vi.mock('$lib/api/transcodePresets', () => ({
 	fetchTranscodePresets: vi.fn(() => Promise.resolve([]))
 }));
 
-import { fetchJob, abandonJob, updateTrack, startWaitingJob } from '$lib/api/jobs';
+import { fetchJob, abandonJob, updateTrack, startWaitingJob, pauseWaitingJob } from '$lib/api/jobs';
 const mockFetchJob = vi.mocked(fetchJob);
 const mockCancel = vi.mocked(abandonJob);
 const mockUpdateTrack = vi.mocked(updateTrack);
 const mockStart = vi.mocked(startWaitingJob);
+const mockPause = vi.mocked(pauseWaitingJob);
 
 /** Render the widget with a JobView. */
 function renderWidget(jobOverrides: Partial<Parameters<typeof createJob>[0]> = {}, extraProps: Record<string, unknown> = {}) {
@@ -159,6 +161,19 @@ describe('DiscReviewWidget', () => {
 			const btn = await screen.findByText('Start rip');
 			await fireEvent.click(btn);
 			await waitFor(() => expect(mockStart).toHaveBeenCalledWith('job_9'));
+		});
+
+		it('the countdown pause control toggles per-job pause', async () => {
+			// awaiting_review + a wait_start_time renders the CountdownTimer with a
+			// pause toggle; clicking it calls pauseWaitingJob(id, true).
+			renderWidget({
+				id: 'job_9',
+				status: 'awaiting_review',
+				wait_start_time: new Date().toISOString()
+			});
+			const pauseBtn = await screen.findByTitle('Pause timer');
+			await fireEvent.click(pauseBtn);
+			await waitFor(() => expect(mockPause).toHaveBeenCalledWith('job_9', true));
 		});
 
 		it('calls abandonJob with the job id when Cancel is clicked', async () => {

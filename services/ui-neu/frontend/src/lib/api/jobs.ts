@@ -268,8 +268,10 @@ export function startWaitingJob(id: string): Promise<JobView> {
 	return apiFetch<JobView>(`/api/jobs/${id}/rip-start-review`, { method: 'POST' });
 }
 
-export async function pauseWaitingJob(_id: string, _paused?: boolean): Promise<never> {
-	notAvailable('Pause waiting job');
+// Timed review gate: per-job pause/resume. paused=true freezes this disc's
+// countdown; paused=false resumes with a fresh countdown.
+export function pauseWaitingJob(id: string, paused = true): Promise<JobView> {
+	return apiFetch<JobView>(`/api/jobs/${id}/review-pause?paused=${paused}`, { method: 'POST' });
 }
 
 export async function fixJobPermissions(_id: string): Promise<never> {

@@ -93,6 +93,8 @@ class JobView(BaseModel):
     # Timed review gate: when the countdown started (AWAITING_REVIEW). Drives the
     # ripper's remaining-delay calc + the UI's cosmetic countdown. Null otherwise.
     wait_start_time: datetime | None = None
+    # Per-job review-gate pause: freezes this disc's countdown (UI shows paused).
+    manual_pause: bool = False
     # Populated only by the list endpoint for ripping jobs; None on
     # detail responses and on terminal/early-state jobs.
     rip_progress: RipProgressSummary | None = None

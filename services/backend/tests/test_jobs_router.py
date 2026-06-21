@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import secrets
+from datetime import datetime, timezone
 from typing import Any
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
@@ -274,6 +275,78 @@ def test_rip_start_review_404(signing_key: bytes) -> None:
     assert r.status_code == 404
 
 
+def test_rip_start_review_succeeds_while_globally_paused(signing_key: bytes) -> None:
+    """Explicit Start must rip even when the machine is globally paused — Start =
+    'I've reviewed it, go now', so the global pause does not block it."""
+    from arm_common import Config, RetentionPolicy
+
+    db = FakeSession()
+    db.rows["config"] = [Config(id=1, ripping_paused=True, hold_for_review=True, default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION)]
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW)]
+    db.rows["tracks"] = [_track("trk_01JZXR7K3M5Q8N4VWA0000T03", status=TrackStatus.QUEUED)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token)
+        )
+    assert r.status_code == 200
+    assert r.json()["status"] == "ripping"
+
+
+# --- review-pause (per-job pause) ---------------------------------------------
+
+
+def test_review_pause_sets_manual_pause(signing_key: bytes) -> None:
+    db = FakeSession()
+    hub = _Hub()
+    app, token = _make_app(signing_key, db, hub)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW)]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/review-pause?paused=true", headers=_auth(token)
+        )
+    assert r.status_code == 200
+    assert db.rows["jobs"][0].manual_pause is True
+    assert any(e["event_type"] == "review.pause" for e in hub.events)
+
+
+def test_review_resume_clears_pause_and_resets_countdown(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _job(status=JobStatus.AWAITING_REVIEW)
+    job.manual_pause = True
+    job.wait_start_time = datetime(2020, 1, 1, tzinfo=timezone.utc)  # long-expired
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/review-pause?paused=false", headers=_auth(token)
+        )
+    assert r.status_code == 200
+    assert db.rows["jobs"][0].manual_pause is False
+    # resume restarts a FRESH countdown rather than honoring the expired one
+    assert db.rows["jobs"][0].wait_start_time > datetime(2025, 1, 1, tzinfo=timezone.utc)
+
+
+def test_review_pause_wrong_status_409(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/review-pause", headers=_auth(token)
+        )
+    assert r.status_code == 409
+    assert "awaiting_review" in r.json()["detail"]
+
+
+def test_review_pause_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA0000404X/review-pause", headers=_auth(token))
+    assert r.status_code == 404
+
+
 # --- delete_job log-cleanup error branch -------------------------------------
 
 
@@ -300,8 +373,6 @@ def test_delete_job_swallows_log_unlink_error(
 
 
 def _drive(*, media: DriveMediaStatus | None = None, fresh: bool = True) -> Drive:
-    from datetime import datetime, timezone
-
     d = Drive(id="drv_x", hostname="h", device_path="/dev/sr0", status=DriveStatus.ONLINE)
     if media is not None:
         d.media_status = media

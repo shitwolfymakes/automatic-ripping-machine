@@ -321,6 +321,48 @@ async def rip_start_review(
     return job
 
 
+@router.post("/{job_id}/review-pause", response_model=JobView)
+async def review_pause(
+    job_id: JobIdParam,
+    paused: bool = True,
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
+) -> Job:
+    """Pause/resume ONE held disc's review countdown (per-job pause, spec §11).
+
+    `?paused=true` freezes this disc's auto-start countdown (waits indefinitely
+    for Start) while other discs keep counting; `?paused=false` resumes with a
+    FRESH countdown (new wait_start_time) so it doesn't auto-rip instantly on a
+    long-paused disc. Only valid for AWAITING_REVIEW. Emits a WS command so the
+    parked ripper re-evaluates the countdown on its next poll.
+    """
+    job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
+    if job.status != JobStatus.AWAITING_REVIEW:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"review-pause only valid for awaiting_review, got {job.status.value}",
+        )
+    job.manual_pause = paused
+    if not paused:
+        job.wait_start_time = datetime.now(timezone.utc)  # fresh countdown on resume
+    db.add(job)
+    await db.flush()
+    await hub.emit(
+        topic=f"ripper.commands.{job.drive_id}",
+        event_type="review.pause",
+        payload={"job_id": job.id, "drive_id": job.drive_id, "paused": paused},
+        job_id=job.id,
+        session=db,
+    )
+    await db.commit()
+    await db.refresh(job)
+    logger.info("review-pause job_id=%s paused=%s", job.id, paused)
+    return job
+
+
 _TERMINAL_STATUSES: frozenset[JobStatus] = frozenset(
     {
         JobStatus.RIPPED,

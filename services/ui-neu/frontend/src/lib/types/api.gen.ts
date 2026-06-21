@@ -1169,6 +1169,10 @@ export type Job = {
      */
     wait_start_time: string | null;
     /**
+     * Manual Pause
+     */
+    manual_pause?: boolean;
+    /**
      * Started At
      */
     started_at: string | null;
@@ -1314,6 +1318,10 @@ export type JobView = {
      * Wait Start Time
      */
     wait_start_time?: string | null;
+    /**
+     * Manual Pause
+     */
+    manual_pause?: boolean;
     rip_progress?: RipProgressSummary | null;
 };
 
@@ -4139,6 +4147,47 @@ export type RipStartReviewApiJobsJobIdRipStartReviewPostResponses = {
 };
 
 export type RipStartReviewApiJobsJobIdRipStartReviewPostResponse = RipStartReviewApiJobsJobIdRipStartReviewPostResponses[keyof RipStartReviewApiJobsJobIdRipStartReviewPostResponses];
+
+export type ReviewPauseApiJobsJobIdReviewPausePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: {
+        /**
+         * Paused
+         */
+        paused?: boolean;
+    };
+    url: '/api/jobs/{job_id}/review-pause';
+};
+
+export type ReviewPauseApiJobsJobIdReviewPausePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReviewPauseApiJobsJobIdReviewPausePostError = ReviewPauseApiJobsJobIdReviewPausePostErrors[keyof ReviewPauseApiJobsJobIdReviewPausePostErrors];
+
+export type ReviewPauseApiJobsJobIdReviewPausePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: JobView;
+};
+
+export type ReviewPauseApiJobsJobIdReviewPausePostResponse = ReviewPauseApiJobsJobIdReviewPausePostResponses[keyof ReviewPauseApiJobsJobIdReviewPausePostResponses];
 
 export type ManualTriggerApiJobsManualPostData = {
     body: ManualTriggerRequest;

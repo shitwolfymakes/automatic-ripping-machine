@@ -608,9 +608,10 @@ async def get_held_job(drive_id: str, session: AsyncSession = Depends(get_sessio
             drive_id,
         )
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-    # paused = the hold survives a reboot. Today only the global toggle exists;
-    # OR in a per-job pause field here when manual_pause lands (no ripper change).
-    paused = bool(cfg.ripping_paused) if cfg is not None else False
+    # paused = the hold survives a reboot: global ripping_paused OR this disc's
+    # per-job manual_pause. Either means the operator deliberately held it.
+    global_paused = bool(cfg.ripping_paused) if cfg is not None else False
+    paused = global_paused or bool(rows[0].manual_pause)
     return HeldJobView(job=JobView.model_validate(rows[0]), paused=paused)
 
 

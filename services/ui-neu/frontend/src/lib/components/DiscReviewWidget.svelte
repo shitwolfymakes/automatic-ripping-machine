@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { JobView, JobDetailView, TrackView } from '$lib/types/api.gen';
-	import { abandonJob, fetchJob, updateTrack, patchJob, startWaitingJob } from '$lib/api/jobs';
+	import { abandonJob, fetchJob, updateTrack, patchJob, startWaitingJob, pauseWaitingJob } from '$lib/api/jobs';
 	import CountdownTimer from './CountdownTimer.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
 	import PosterImage from './PosterImage.svelte';
@@ -30,6 +30,9 @@
 	// statuses (awaiting_user_id / ripped_awaiting_identify) are identify-only.
 	let isReviewGate = $derived(job?.status === 'awaiting_review');
 	let starting = $state(false);
+	let pauseBusy = $state(false);
+	// The countdown is frozen by the global pause OR this disc's own pause.
+	let countdownPaused = $derived(paused || !!job?.manual_pause);
 
 	let data = $state<JobDetailView | null>(null);
 	let initialLoading = $state(true);
@@ -160,6 +163,20 @@
 		}
 	}
 
+	async function handlePauseToggle(paused: boolean) {
+		if (!job) return;
+		pauseBusy = true;
+		errorMessage = null;
+		try {
+			await pauseWaitingJob(job.id, paused);
+			onrefresh?.();
+		} catch (e) {
+			errorMessage = e instanceof Error ? e.message : 'Failed to update pause';
+		} finally {
+			pauseBusy = false;
+		}
+	}
+
 	function handleTrackTitleApply(trackId?: string) {
 		if (trackId != null) {
 			openSearchTrackIds = new Set([...openSearchTrackIds].filter((id) => id !== trackId));
@@ -217,9 +234,19 @@
 			</span>
 		</div>
 		<!-- Timed review gate: cosmetic countdown to auto-start (the ripper owns the
-		     real clock). Shows paused when global ripping is paused. -->
+		     real clock). Frozen by the global pause OR this disc's own pause. The
+		     timer's pause/resume toggles THIS disc only (per-job manual_pause);
+		     it's hidden while globally paused since one disc can't un-pause the
+		     whole machine. -->
 		{#if isReviewGate && job.wait_start_time}
-			<CountdownTimer startTime={job.wait_start_time} waitSeconds={manualWaitSeconds} {paused} inverted />
+			<CountdownTimer
+				startTime={job.wait_start_time}
+				waitSeconds={manualWaitSeconds}
+				paused={countdownPaused}
+				inverted
+				onpause={paused || pauseBusy ? undefined : () => handlePauseToggle(true)}
+				onresume={paused || pauseBusy ? undefined : () => handlePauseToggle(false)}
+			/>
 		{/if}
 	</div>
 

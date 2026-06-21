@@ -37,7 +37,13 @@ def _job(status: JobStatus, *, title: str | None = None) -> Job:
     )
 
 
-def _view(status: JobStatus, *, title: str | None = None, wait_start_time: datetime | None = None) -> JobView:
+def _view(
+    status: JobStatus,
+    *,
+    title: str | None = None,
+    wait_start_time: datetime | None = None,
+    manual_pause: bool = False,
+) -> JobView:
     return JobView(
         id="job_test",
         drive_id="drv_test",
@@ -48,6 +54,7 @@ def _view(status: JobStatus, *, title: str | None = None, wait_start_time: datet
         metadata_json={},
         resumed_from_crash=False,
         wait_start_time=wait_start_time,
+        manual_pause=manual_pause,
     )
 
 
@@ -272,6 +279,27 @@ async def test_review_gate_paused_does_not_auto_start(stub_scan, stub_eject, mon
     await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
 
     # Paused suppresses auto-start: the wait expired without ripping.
+    assert client.rip_start_calls == []
+    assert client.rip_complete_calls == []
+
+
+async def test_review_gate_per_job_pause_does_not_auto_start(stub_scan, stub_eject, monkeypatch):
+    """Per-job manual_pause freezes THIS disc's countdown even when the machine is
+    not globally paused — countdown elapsed but no auto-start."""
+    monkeypatch.setattr(jc_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 0.05)
+    client = FakeClient()
+    client.manual_wait_seconds = 1
+    client.ripping_paused = False  # global NOT paused
+    past = datetime.now(timezone.utc) - timedelta(seconds=10)
+    client.identify_responses.append(_job(JobStatus.AWAITING_REVIEW, title="Held Movie"))
+    # The held views carry manual_pause=True -> countdown stays frozen.
+    client.get_job_responses.extend(
+        [_view(JobStatus.AWAITING_REVIEW, wait_start_time=past, manual_pause=True) for _ in range(6)]
+    )
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
     assert client.rip_start_calls == []
     assert client.rip_complete_calls == []
 

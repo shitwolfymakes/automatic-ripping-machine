@@ -1525,6 +1525,76 @@
         }
       }
     },
+    "/api/jobs/{job_id}/review-pause": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Review Pause",
+        "description": "Pause/resume ONE held disc's review countdown (per-job pause, spec \u00a711).\n\n`?paused=true` freezes this disc's auto-start countdown (waits indefinitely\nfor Start) while other discs keep counting; `?paused=false` resumes with a\nFRESH countdown (new wait_start_time) so it doesn't auto-rip instantly on a\nlong-paused disc. Only valid for AWAITING_REVIEW. Emits a WS command so the\nparked ripper re-evaluates the countdown on its next poll.",
+        "operationId": "review_pause_api_jobs__job_id__review_pause_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "paused",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Paused"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/jobs/manual": {
       "post": {
         "tags": [
@@ -9117,6 +9187,11 @@
             ],
             "title": "Wait Start Time"
           },
+          "manual_pause": {
+            "type": "boolean",
+            "title": "Manual Pause",
+            "default": false
+          },
           "started_at": {
             "anyOf": [
               {
@@ -9417,6 +9492,11 @@
               }
             ],
             "title": "Wait Start Time"
+          },
+          "manual_pause": {
+            "type": "boolean",
+            "title": "Manual Pause",
+            "default": false
           },
           "rip_progress": {
             "anyOf": [
