@@ -40,7 +40,7 @@
 
 	function isAwaiting(j: JobView): boolean {
 		const s = j.status?.toLowerCase();
-		return s === 'awaiting_user_id' || s === 'ripped_awaiting_identify';
+		return s === 'awaiting_user_id' || s === 'ripped_awaiting_identify' || s === 'awaiting_review';
 	}
 
 	// Record jobs seen in review so they stick through a post-apply `identified`.
@@ -57,7 +57,8 @@
 	let waitingJobs = $derived(
 		activeJobs.filter((j: JobView) => {
 			if (dismissedJobIds.has(j.id)) return false;
-			// In review while awaiting, or sticky after an apply promoted it to identified.
+			// In review while awaiting (incl. awaiting_review), or sticky after an
+			// apply promoted it to identified.
 			return isAwaiting(j) || (stickyReviewIds.has(j.id) && j.status?.toLowerCase() === 'identified');
 		})
 	);

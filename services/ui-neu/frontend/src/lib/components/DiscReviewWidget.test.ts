@@ -12,6 +12,7 @@ function detail(jobOverrides: Partial<JobView> = {}, tracks: TrackView[] = []) {
 vi.mock('$lib/api/jobs', () => ({
 	fetchJob: vi.fn(() => Promise.resolve(createJobDetail())),
 	abandonJob: vi.fn(() => Promise.resolve()),
+	startWaitingJob: vi.fn(() => Promise.resolve(createJob())),
 	updateTrack: vi.fn(() => Promise.resolve(createJob())),
 	patchJob: vi.fn(() => Promise.resolve(createJob())),
 	applySession: vi.fn(() => Promise.resolve({ created_task_ids: [], collisions: [] })),
@@ -46,10 +47,11 @@ vi.mock('$lib/api/transcodePresets', () => ({
 	fetchTranscodePresets: vi.fn(() => Promise.resolve([]))
 }));
 
-import { fetchJob, abandonJob, updateTrack } from '$lib/api/jobs';
+import { fetchJob, abandonJob, updateTrack, startWaitingJob } from '$lib/api/jobs';
 const mockFetchJob = vi.mocked(fetchJob);
 const mockCancel = vi.mocked(abandonJob);
 const mockUpdateTrack = vi.mocked(updateTrack);
+const mockStart = vi.mocked(startWaitingJob);
 
 /** Render the widget with a JobView. */
 function renderWidget(jobOverrides: Partial<Parameters<typeof createJob>[0]> = {}, extraProps: Record<string, unknown> = {}) {
@@ -73,12 +75,18 @@ describe('DiscReviewWidget', () => {
 			});
 		});
 
-		it('renders Start and Cancel buttons', async () => {
-			renderWidget();
+		it('renders the Start rip button for awaiting_review + Cancel always', async () => {
+			renderWidget({ status: 'awaiting_review' });
 			await waitFor(() => {
-				expect(screen.getByText('Start')).toBeInTheDocument();
+				expect(screen.getByText('Start rip')).toBeInTheDocument();
 				expect(screen.getByText('Cancel')).toBeInTheDocument();
 			});
+		});
+
+		it('hides Start for non-review statuses (identify-only waiting)', async () => {
+			renderWidget({ status: 'awaiting_user_id' });
+			await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
+			expect(screen.queryByText('Start rip')).not.toBeInTheDocument();
 		});
 
 		it('renders disc type info', async () => {
@@ -146,10 +154,11 @@ describe('DiscReviewWidget', () => {
 	});
 
 	describe('interactions', () => {
-		it('renders Start as a disabled coming-soon control', async () => {
-			renderWidget({ id: 'job_9' });
-			await waitFor(() => expect(screen.getByText('Start')).toBeInTheDocument());
-			expect(screen.getByText('Start')).toBeDisabled();
+		it('Start rip calls startWaitingJob for an awaiting_review job', async () => {
+			renderWidget({ id: 'job_9', status: 'awaiting_review' });
+			const btn = await screen.findByText('Start rip');
+			await fireEvent.click(btn);
+			await waitFor(() => expect(mockStart).toHaveBeenCalledWith('job_9'));
 		});
 
 		it('calls abandonJob with the job id when Cancel is clicked', async () => {

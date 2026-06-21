@@ -21,6 +21,7 @@
 		<option value="">All Status</option>
 		<option value="created">Created</option>
 		<option value="awaiting_user_id">Awaiting ID</option>
+		<option value="awaiting_review">Ready — review</option>
 		<option value="identified">Identified</option>
 		<option value="ripping">Ripping</option>
 		<option value="ripped">Ripped</option>

@@ -53,6 +53,8 @@ const STATUS_TO_STAGE: Record<string, LifecycleStageId> = {
 	// Identifying
 	'info':               'identifying',
 	'identifying':        'identifying',
+	'awaiting_user_id':   'identifying',   // v3 — needs manual ID
+	'awaiting_review':    'identifying',   // v3 — held for the timed review gate
 	// Ripping (disc rip)
 	'ripping':            'ripping',          // legacy pre-v2.0.0
 	'video_ripping':      'ripping',

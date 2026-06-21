@@ -262,8 +262,10 @@ export async function cancelWaitingJob(_id: string): Promise<never> {
 	notAvailable('Cancel waiting job');
 }
 
-export async function startWaitingJob(_id: string): Promise<never> {
-	notAvailable('Start waiting job');
+// Timed review gate: operator Start for a disc held in awaiting_review.
+// Transitions AWAITING_REVIEW -> RIPPING and unblocks the parked ripper.
+export function startWaitingJob(id: string): Promise<JobView> {
+	return apiFetch<JobView>(`/api/jobs/${id}/rip-start-review`, { method: 'POST' });
 }
 
 export async function pauseWaitingJob(_id: string, _paused?: boolean): Promise<never> {

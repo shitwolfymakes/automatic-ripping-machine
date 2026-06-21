@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { JobView, JobDetailView, TrackView } from '$lib/types/api.gen';
-	import { abandonJob, fetchJob, updateTrack, patchJob } from '$lib/api/jobs';
-	import ComingSoon from './ComingSoon.svelte';
+	import { abandonJob, fetchJob, updateTrack, patchJob, startWaitingJob } from '$lib/api/jobs';
+	import CountdownTimer from './CountdownTimer.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
 	import PosterImage from './PosterImage.svelte';
 	import TitleSearch from './TitleSearch.svelte';
@@ -16,12 +16,20 @@
 		job?: JobView;
 		driveNames?: Record<string, string> | null;
 		paused?: boolean;
+		/** Review countdown duration (config manual_wait_seconds). Cosmetic — the
+		 *  ripper owns the authoritative clock; this only drives the UI timer. */
+		manualWaitSeconds?: number;
 		onrefresh?: () => void;
 		ondismiss?: () => void;
 	}
 
-	let { job, driveNames, onrefresh, ondismiss }: Props = $props();
+	let { job, driveNames, paused = false, manualWaitSeconds = 60, onrefresh, ondismiss }: Props = $props();
 	let driveName = $derived(job?.drive_id ? (driveNames?.[job.drive_id] ?? null) : null);
+
+	// awaiting_review = the timed review gate (Start / countdown); other waiting
+	// statuses (awaiting_user_id / ripped_awaiting_identify) are identify-only.
+	let isReviewGate = $derived(job?.status === 'awaiting_review');
+	let starting = $state(false);
 
 	let data = $state<JobDetailView | null>(null);
 	let initialLoading = $state(true);
@@ -137,6 +145,21 @@
 		}
 	}
 
+	async function handleStart() {
+		if (!job) return;
+		starting = true;
+		errorMessage = null;
+		try {
+			await startWaitingJob(job.id);
+			ondismiss?.();
+			onrefresh?.();
+		} catch (e) {
+			errorMessage = e instanceof Error ? e.message : 'Failed to start the rip';
+		} finally {
+			starting = false;
+		}
+	}
+
 	function handleTrackTitleApply(trackId?: string) {
 		if (trackId != null) {
 			openSearchTrackIds = new Set([...openSearchTrackIds].filter((id) => id !== trackId));
@@ -189,8 +212,15 @@
 	<div class="flex items-center justify-between bg-primary px-4 py-1.5">
 		<div class="flex items-center gap-2">
 			<div class="h-2 w-2 animate-pulse rounded-full bg-white/80"></div>
-			<span class="text-sm font-semibold text-on-primary">Awaiting Review</span>
+			<span class="text-sm font-semibold text-on-primary">
+				{isReviewGate ? 'Ready — Review & Start' : 'Awaiting Review'}
+			</span>
 		</div>
+		<!-- Timed review gate: cosmetic countdown to auto-start (the ripper owns the
+		     real clock). Shows paused when global ripping is paused. -->
+		{#if isReviewGate && job.wait_start_time}
+			<CountdownTimer startTime={job.wait_start_time} waitSeconds={manualWaitSeconds} {paused} inverted />
+		{/if}
 	</div>
 
 	<!-- Header -->
@@ -269,7 +299,15 @@
 		>
 			{cancelling ? 'Cancelling...' : 'Cancel'}
 		</button>
-		<ComingSoon label="Start" feature="Manual start" />
+		{#if isReviewGate}
+			<button
+				onclick={handleStart}
+				disabled={starting}
+				class="{btnBase} bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 dark:bg-green-500 dark:hover:bg-green-600"
+			>
+				{starting ? 'Starting...' : 'Start rip'}
+			</button>
+		{/if}
 	</div>
 
 	<!-- Tracks table -->

@@ -134,7 +134,6 @@ describe('job/track edits via bulk-PATCH (EXISTS in v3)', () => {
 describe('MISSING in v3 — reject before any fetch', () => {
 	it.each([
 		['cancelWaitingJob', () => cancelWaitingJob('job_1')],
-		['startWaitingJob', () => startWaitingJob('job_1')],
 		['pauseWaitingJob', () => pauseWaitingJob('job_1', true)],
 		['fixJobPermissions', () => fixJobPermissions('job_1')],
 		['skipAndFinalize', () => skipAndFinalize('job_1')],
@@ -148,6 +147,13 @@ describe('MISSING in v3 — reject before any fetch', () => {
 	])('%s rejects with /not yet available in v3/', async (_name, call) => {
 		await expect(call()).rejects.toThrow(/not yet available in v3/);
 		expect(mockApiFetch).not.toHaveBeenCalled();
+	});
+});
+
+describe('startWaitingJob (EXISTS in v3 — timed review gate Start)', () => {
+	it('POSTs /api/jobs/{id}/rip-start-review', async () => {
+		await startWaitingJob('job_1');
+		expect(mockApiFetch).toHaveBeenCalledWith('/api/jobs/job_1/rip-start-review', { method: 'POST' });
 	});
 });
 

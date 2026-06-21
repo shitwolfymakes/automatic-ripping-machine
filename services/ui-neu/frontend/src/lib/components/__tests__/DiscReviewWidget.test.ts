@@ -11,6 +11,7 @@ vi.mock('$lib/api/jobs', () => ({
 		})
 	),
 	abandonJob: vi.fn(() => Promise.resolve(createJob())),
+	startWaitingJob: vi.fn(() => Promise.resolve(createJob())),
 	updateTrack: vi.fn(() => Promise.resolve(createJob())),
 	updateJobTitle: vi.fn(() => Promise.resolve(createJob())),
 	updateJobConfig: vi.fn(() => Promise.resolve(createJob())),
@@ -55,14 +56,14 @@ describe('DiscReviewWidget', () => {
 	});
 
 	describe('action buttons', () => {
-		it('renders Cancel before the (disabled, coming-soon) Start control', async () => {
-			renderWidget();
-			await waitFor(() => expect(screen.getByText('Start')).toBeInTheDocument());
+		it('renders Cancel before the (enabled) Start rip control for awaiting_review', async () => {
+			renderWidget({ status: 'awaiting_review' });
+			await waitFor(() => expect(screen.getByText('Start rip')).toBeInTheDocument());
 			const cancelBtn = screen.getByText('Cancel');
-			const startBtn = screen.getByText('Start');
+			const startBtn = screen.getByText('Start rip');
 			expect(cancelBtn.compareDocumentPosition(startBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-			// Start is now a ComingSoon placeholder (no v3 manual-start) — disabled.
-			expect(startBtn).toBeDisabled();
+			// Start rip is a real action (v3 timed review gate) — enabled.
+			expect(startBtn).not.toBeDisabled();
 		});
 	});
 
