@@ -98,7 +98,7 @@ async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -
     doesn't double-insert (audit M1) — Track rows have no unique constraint.
     """
     preset_id = _DEFAULT_RIP_PRESET_BY_DISC_TYPE.get(job.disc_type)
-    if preset_id is None:
+    if preset_id is None:  # pragma: no cover - every DiscType has a default preset
         logger.warning("no default rip preset for disc_type=%s; skipping review tracks", job.disc_type.value)
         return
     preset = (await db.execute(select(RipPreset).where(col(RipPreset.id) == preset_id))).scalar_one_or_none()

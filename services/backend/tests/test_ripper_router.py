@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import os
 import secrets
+from datetime import datetime, timezone
 from typing import Any
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
@@ -345,6 +346,50 @@ def test_identify_with_hold_parks_review(signing_key: bytes) -> None:
     assert by_ref["2"].excluded is True  # short extra excluded by default
 
 
+async def test_persist_review_tracks_is_idempotent() -> None:
+    """Idempotency (audit M1): a title whose Track row already exists (ripper
+    re-POSTed identify on the same held disc) is NOT re-inserted."""
+    from arm_backend.routers.ripper import _persist_review_tracks
+    from arm_common import Job as _Job, Track as _Track, TrackKind as _TrackKind
+    from arm_common.schemas import ScanResult as _ScanResult, ScanTitle as _ScanTitle
+
+    db = FakeSession()
+    db.rows["rip_presets"] = [_movie_preset()]
+    job = _Job(id="job_01JZXR7K3M5Q8N4VWA0000I01", drive_id="drv_x", disc_type=DiscType.DVD, status=JobStatus.AWAITING_REVIEW)
+    # Title index 1 already persisted (source_ref "1"); index 2 is new.
+    db.rows["tracks"] = [
+        _Track(id="trk_pre", job_id=job.id, kind=_TrackKind.VIDEO_TITLE, index=1, source_ref="1")
+    ]
+    scan = _ScanResult(
+        disc_type=DiscType.DVD,
+        titles=[_ScanTitle(index=1, duration_seconds=4200), _ScanTitle(index=2, duration_seconds=3600)],
+    )
+    await _persist_review_tracks(db, job, scan)
+    added_refs = {t.source_ref for t in db.added if type(t).__name__ == "Track"}
+    assert added_refs == {"2"}  # index 1 skipped (already exists), only 2 added
+
+
+def test_identify_with_hold_parks_without_preset_seeded() -> None:
+    """hold_for_review on but the default rip preset isn't seeded -> still parks in
+    AWAITING_REVIEW (review-track persistence is skipped, logged) rather than
+    failing identify."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(hold_for_review=True)]
+    db.rows["rip_presets"] = []  # not seeded
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    assert r.json()["status"] == "awaiting_review"
+    assert [row for row in db.added if type(row).__name__ == "Track"] == []
+
+
 def test_identify_with_hold_parks_even_when_paused() -> None:
     """When hold_for_review is on, a paused machine still scans + identifies +
     parks (pause only suppresses auto-start at expiry) — it does NOT 409."""
@@ -506,6 +551,99 @@ def test_in_flight_single_and_multi(caplog: pytest.LogCaptureFixture) -> None:
     assert any("data-model violation" in rec.message for rec in caplog.records)
 
 
+# --- /held-job + /recovery-abandon (timed review gate reboot recovery) --------
+
+
+def test_held_job_unknown_drive_404() -> None:
+    db = FakeSession()
+    db.rows["drives"] = []
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 404
+    assert "unknown drive_id" in r.json()["detail"]
+
+
+def test_held_job_none_404() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 404
+    assert "no held job" in r.json()["detail"]
+
+
+def test_held_job_returns_job_unpaused() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(ripping_paused=False)]
+    db.rows["jobs"] = [_job("job_01JZXR7K3M5Q8N4VWA0000H01", status=JobStatus.AWAITING_REVIEW)]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    out = r.json()
+    assert out["job"]["id"] == "job_01JZXR7K3M5Q8N4VWA0000H01"
+    assert out["paused"] is False
+
+
+def test_held_job_paused_flag_from_global() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(ripping_paused=True)]
+    db.rows["jobs"] = [_job("job_01JZXR7K3M5Q8N4VWA0000H02", status=JobStatus.AWAITING_REVIEW)]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["paused"] is True
+
+
+def test_held_job_multi_row_logs_and_returns_first(caplog: pytest.LogCaptureFixture) -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    db.rows["jobs"] = [
+        _job("job_01JZXR7K3M5Q8N4VWA0000H03", status=JobStatus.AWAITING_REVIEW),
+        _job("job_01JZXR7K3M5Q8N4VWA0000H04", status=JobStatus.AWAITING_REVIEW),
+    ]
+    with TestClient(_make_app(db)) as client:
+        with caplog.at_level("ERROR", logger="arm_backend.routers.ripper"):
+            r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["job"]["id"] == "job_01JZXR7K3M5Q8N4VWA0000H03"
+    assert any("data-model violation" in rec.message for rec in caplog.records)
+
+
+def test_recovery_abandon_transitions_and_emits() -> None:
+    db = FakeSession()
+    hub = _Hub()
+    db.rows["jobs"] = [_job("job_01JZXR7K3M5Q8N4VWA0000H05", status=JobStatus.AWAITING_REVIEW)]
+    with TestClient(_make_app(db, hub=hub)) as client:
+        r = client.post(
+            "/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA0000H05/recovery-abandon", headers=_SERVICE_AUTH
+        )
+    assert r.status_code == 200
+    assert r.json()["status"] == "abandoned"
+    assert any(e["event_type"] == "rip.abandoned" for e in hub.events)
+
+
+def test_recovery_abandon_unknown_404() -> None:
+    db = FakeSession()
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA0000404/recovery-abandon", headers=_SERVICE_AUTH)
+    assert r.status_code == 404
+
+
+def test_recovery_abandon_wrong_status_409() -> None:
+    db = FakeSession()
+    db.rows["jobs"] = [_job("job_01JZXR7K3M5Q8N4VWA0000H06", status=JobStatus.RIPPING)]
+    with TestClient(_make_app(db)) as client:
+        r = client.post(
+            "/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA0000H06/recovery-abandon", headers=_SERVICE_AUTH
+        )
+    assert r.status_code == 409
+    assert "awaiting_review" in r.json()["detail"]
+
+
 # --- /rip-start --------------------------------------------------------------
 
 
@@ -528,6 +666,38 @@ def test_rip_start_returns_existing_tracks() -> None:
         r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 200
     assert [t["id"] for t in r.json()["tracks"]] == ["trk_1"]
+
+
+def test_rip_start_existing_tracks_transitions_non_ripping() -> None:
+    """Timed-review auto-start: rip-start on a held job whose review tracks were
+    pre-persisted must transition AWAITING_REVIEW -> RIPPING (audit B2), not
+    return early without transitioning. started_at is stamped (was None)."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW)]
+    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED)]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    assert db.rows["jobs"][0].status == JobStatus.RIPPING
+    assert db.rows["jobs"][0].started_at is not None
+
+
+def test_rip_start_existing_tracks_preserves_started_at() -> None:
+    """The transition keeps an already-set started_at (covers the started_at-not-
+    None branch) rather than overwriting it."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    job = _job(status=JobStatus.AWAITING_REVIEW)
+    stamped = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    job.started_at = stamped
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED)]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    assert db.rows["jobs"][0].status == JobStatus.RIPPING
+    assert db.rows["jobs"][0].started_at == stamped  # preserved, not overwritten
 
 
 def test_rip_start_not_identified_409() -> None:
