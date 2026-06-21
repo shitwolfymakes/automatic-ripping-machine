@@ -191,6 +191,9 @@ _NON_TERMINAL_STATUSES: frozenset[JobStatus] = frozenset(
         JobStatus.AWAITING_USER_ID,
         JobStatus.IDENTIFIED,
         JobStatus.RIPPING,
+        # A held review-gate disc is non-terminal so Cancel-via-abandon works and
+        # the delete/retry guards treat it as live (timed review gate).
+        JobStatus.AWAITING_REVIEW,
     }
 )
 
@@ -617,7 +620,15 @@ _RESOLVABLE_STATUSES_PROMOTE: frozenset[JobStatus] = frozenset(
     {JobStatus.AWAITING_USER_ID, JobStatus.RIPPED_AWAITING_IDENTIFY}
 )
 _RESOLVABLE_STATUSES_PRESERVE: frozenset[JobStatus] = frozenset(
-    {JobStatus.IDENTIFIED, JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL}
+    {
+        JobStatus.IDENTIFIED,
+        JobStatus.RIPPED,
+        JobStatus.RIPPED_PARTIAL,
+        # A held review-gate disc accepts identity edits WITHOUT flipping status —
+        # resolve = "I've identified it"; the separate Start = "begin ripping".
+        # PRESERVE (not PROMOTE) keeps it in AWAITING_REVIEW after an edit.
+        JobStatus.AWAITING_REVIEW,
+    }
 )
 _RESOLVABLE_STATUSES: frozenset[JobStatus] = _RESOLVABLE_STATUSES_PROMOTE | _RESOLVABLE_STATUSES_PRESERVE
 

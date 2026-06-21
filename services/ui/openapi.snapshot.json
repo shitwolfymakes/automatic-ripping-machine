@@ -7385,6 +7385,28 @@
             ],
             "title": "Ripping Paused"
           },
+          "hold_for_review": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold For Review"
+          },
+          "manual_wait_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Wait Seconds"
+          },
           "notifications_enabled": {
             "anyOf": [
               {
@@ -7488,6 +7510,14 @@
             "type": "boolean",
             "title": "Ripping Paused"
           },
+          "hold_for_review": {
+            "type": "boolean",
+            "title": "Hold For Review"
+          },
+          "manual_wait_seconds": {
+            "type": "integer",
+            "title": "Manual Wait Seconds"
+          },
           "default_retention_policy": {
             "$ref": "#/components/schemas/RetentionPolicy"
           },
@@ -7576,6 +7606,8 @@
           "block_on_miss",
           "community_keydb_enabled",
           "ripping_paused",
+          "hold_for_review",
+          "manual_wait_seconds",
           "default_retention_policy",
           "notification_apprise_urls",
           "notifications_enabled",
@@ -9012,6 +9044,7 @@
           "ripping",
           "ripped",
           "ripped_partial",
+          "awaiting_review",
           "ripped_awaiting_identify",
           "abandoned",
           "failed"

@@ -49,6 +49,8 @@ class ConfigView(BaseModel):
     block_on_miss: bool
     community_keydb_enabled: bool
     ripping_paused: bool
+    hold_for_review: bool
+    manual_wait_seconds: int
     default_retention_policy: RetentionPolicy
     notification_apprise_urls: list[str]
     notifications_enabled: bool
@@ -71,6 +73,8 @@ class ConfigUpdateRequest(BaseModel):
     block_on_miss: bool | None = None
     community_keydb_enabled: bool | None = None
     ripping_paused: bool | None = None
+    hold_for_review: bool | None = None
+    manual_wait_seconds: int | None = None
     notifications_enabled: bool | None = None
     metadata_provider: str | None = None
 

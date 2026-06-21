@@ -13,7 +13,7 @@ class ConfigFieldMeta(BaseModel):
     tier: str  # "secret" | "operator" | "infra"
     label: str
     help: str
-    type: str  # "string" | "bool" | "enum" | "string[]"
+    type: str  # "string" | "bool" | "int" | "enum" | "string[]"
     editable: bool
     enum_values: list[str] | None = None
 
@@ -111,6 +111,26 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         label="Pause new rips",
         help="Reject new rip jobs (in-flight rips continue).",
         type="bool",
+        editable=True,
+    ),
+    ConfigFieldMeta(
+        key="hold_for_review",
+        group="Ripping",
+        tier="operator",
+        label="Hold discs for review",
+        help="Hold each inserted disc in a timed review state after scan + "
+        "identify, so you can correct it before the rip starts. The rip "
+        "auto-starts when the countdown ends (unless rips are paused).",
+        type="bool",
+        editable=True,
+    ),
+    ConfigFieldMeta(
+        key="manual_wait_seconds",
+        group="Ripping",
+        tier="operator",
+        label="Review countdown (seconds)",
+        help="How long a held disc waits for review before the rip auto-starts.",
+        type="int",
         editable=True,
     ),
     # NOTE: default_retention_policy is intentionally NOT registered — the column

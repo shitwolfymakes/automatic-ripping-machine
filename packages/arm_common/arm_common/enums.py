@@ -41,6 +41,12 @@ class JobStatus(StrEnum):
     RIPPING = "ripping"
     RIPPED = "ripped"
     RIPPED_PARTIAL = "ripped_partial"
+    # A scanned + identified disc held for operator review (timed review gate).
+    # The rip pipeline parks here, counting down `manual_wait_seconds`; on expiry
+    # it auto-starts (unless globally paused), or the operator Starts/Cancels.
+    # Distinct from AWAITING_USER_ID ("could not identify — needs operator ID").
+    # Resolvable (PRESERVE) for identity edits; non-terminal; not an APPLY status.
+    AWAITING_REVIEW = "awaiting_review"
     # Set by the (future) deferred-placeholder rip path when a disc rips
     # successfully but identification never landed. Resolvable via the
     # /resolve endpoint just like AWAITING_USER_ID. Inert today — no code

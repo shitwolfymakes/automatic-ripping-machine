@@ -359,6 +359,14 @@ export type ConfigUpdateRequest = {
      */
     ripping_paused?: boolean | null;
     /**
+     * Hold For Review
+     */
+    hold_for_review?: boolean | null;
+    /**
+     * Manual Wait Seconds
+     */
+    manual_wait_seconds?: number | null;
+    /**
      * Notifications Enabled
      */
     notifications_enabled?: boolean | null;
@@ -414,6 +422,14 @@ export type ConfigView = {
      * Ripping Paused
      */
     ripping_paused: boolean;
+    /**
+     * Hold For Review
+     */
+    hold_for_review: boolean;
+    /**
+     * Manual Wait Seconds
+     */
+    manual_wait_seconds: number;
     default_retention_policy: RetentionPolicy;
     /**
      * Notification Apprise Urls
@@ -1196,7 +1212,7 @@ export type JobNamingPreviewResponse = {
 /**
  * JobStatus
  */
-export type JobStatus = 'created' | 'awaiting_user_id' | 'identified' | 'ripping' | 'ripped' | 'ripped_partial' | 'ripped_awaiting_identify' | 'abandoned' | 'failed';
+export type JobStatus = 'created' | 'awaiting_user_id' | 'identified' | 'ripping' | 'ripped' | 'ripped_partial' | 'awaiting_review' | 'ripped_awaiting_identify' | 'abandoned' | 'failed';
 
 /**
  * JobUpdateRequest

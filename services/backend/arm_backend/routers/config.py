@@ -55,6 +55,10 @@ def _to_view(cfg: Config) -> ConfigView:
         # consumers' fixtures, so they don't need it.
         community_keydb_enabled=bool(cfg.community_keydb_enabled),
         ripping_paused=bool(cfg.ripping_paused),
+        # bool()/int() coerce the None a bare in-memory Config carries (DB-level
+        # server_default only) for rows/fixtures predating these columns.
+        hold_for_review=bool(cfg.hold_for_review),
+        manual_wait_seconds=int(cfg.manual_wait_seconds) if cfg.manual_wait_seconds is not None else 60,
         default_retention_policy=cfg.default_retention_policy,
         notification_apprise_urls=list(cfg.notification_apprise_urls or []),
         notifications_enabled=cfg.notifications_enabled,
