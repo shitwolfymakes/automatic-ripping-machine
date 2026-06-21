@@ -134,11 +134,7 @@ async def update_config(
 
     if unpausing:
         now = datetime.now(timezone.utc)
-        held = (
-            (await session.execute(select(Job).where(col(Job.status) == JobStatus.AWAITING_REVIEW)))
-            .scalars()
-            .all()
-        )
+        held = (await session.execute(select(Job).where(col(Job.status) == JobStatus.AWAITING_REVIEW))).scalars().all()
         for job in held:
             job.wait_start_time = now
             session.add(job)
