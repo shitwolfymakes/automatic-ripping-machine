@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
@@ -31,6 +32,37 @@ EJECT_GRACE_SECONDS = 3.0
 # and return — the next disc-insert event re-triggers identify.
 RESOLUTION_WAIT_TIMEOUT_SECONDS = 30 * 60.0
 RESOLUTION_WS_FIRST_WAIT_SECONDS = 5.0
+
+
+@dataclass(frozen=True)
+class _WaitSpec:
+    """Parameterizes the park-and-wait machine for a held job.
+
+    `parked` is the status the job sits in while waiting; `success` is the set of
+    statuses that mean "stop waiting, proceed to rip". Any other status means the
+    job left the gate some other way (abandoned, failed, …) → give up. This lets
+    one wait loop serve both the identify gate (park awaiting_user_id, succeed on
+    identified) and the review gate (park awaiting_review, succeed on
+    identified/ripping)."""
+
+    parked: JobStatus
+    success: frozenset[JobStatus]
+    label: str
+
+
+# Identify gate: disc couldn't auto-ID; wait for the operator to resolve identity.
+_IDENTIFY_WAIT = _WaitSpec(
+    parked=JobStatus.AWAITING_USER_ID,
+    success=frozenset({JobStatus.IDENTIFIED}),
+    label="awaiting_user_id",
+)
+# Review gate (timed): disc identified but held for review; wait for Start (which
+# transitions to ripping) or the auto-start path (identified). Either proceeds.
+_REVIEW_WAIT = _WaitSpec(
+    parked=JobStatus.AWAITING_REVIEW,
+    success=frozenset({JobStatus.IDENTIFIED, JobStatus.RIPPING}),
+    label="awaiting_review",
+)
 # After makemkvcon exits, the kernel takes up to ~5s to release exclusive
 # access on the optical drive — `eject` then sees EBUSY on open(). The
 # delay schedule below is "best-effort with growing patience"; a healthy
@@ -87,17 +119,19 @@ class JobController:
 
     async def on_ws_command(self, envelope: WSEnvelope) -> None:
         """Handler registered for `ripper.commands.{drive_id}` topic."""
-        if envelope.event_type == "identify.resolved":
+        if envelope.event_type in ("identify.resolved", "rip.start"):
+            # Both wake the per-job wait Event; the waiter re-fetches status and
+            # decides (identify.resolved -> identified; rip.start -> ripping).
             job_id = envelope.payload.get("job_id") if isinstance(envelope.payload, dict) else None
             if not isinstance(job_id, str):
-                logger.warning("identify.resolved without job_id payload: %s", envelope.payload)
+                logger.warning("%s without job_id payload: %s", envelope.event_type, envelope.payload)
                 return
             event = self._resolution_events.get(job_id)
             if event is not None:
                 event.set()
-                logger.info("ws identify.resolved received for job_id=%s", job_id)
+                logger.info("ws %s received for job_id=%s", envelope.event_type, job_id)
             else:
-                logger.debug("identify.resolved for job_id=%s but no waiter registered", job_id)
+                logger.debug("%s for job_id=%s but no waiter registered", envelope.event_type, job_id)
         elif envelope.event_type == "manual.trigger":
             payload = envelope.payload if isinstance(envelope.payload, dict) else {}
             session_id = payload.get("session_id")
@@ -206,12 +240,21 @@ class JobController:
                 # Phase 12 — every log line below carries job_id once identify lands.
                 with with_log_context(job_id=job.id):
                     if job.status == JobStatus.AWAITING_USER_ID:
-                        resolved = await self._await_resolution(job.id)
+                        resolved = await self._await_resolution(job.id, _IDENTIFY_WAIT)
                         if resolved is None:
                             return
                         job.status = resolved.status
 
-                    if job.status != JobStatus.IDENTIFIED:
+                    # Timed review gate: the backend parks an identified disc here
+                    # when hold_for_review is on. Wait for Start (-> ripping) or the
+                    # auto-start path (-> identified); either proceeds to the rip.
+                    if job.status == JobStatus.AWAITING_REVIEW:
+                        resolved = await self._await_resolution(job.id, _REVIEW_WAIT)
+                        if resolved is None:
+                            return
+                        job.status = resolved.status
+
+                    if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING):
                         logger.info("job %s in unexpected status %s; not ripping", job.id, job.status.value)
                         return
 
@@ -275,85 +318,75 @@ class JobController:
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, IDENTIFY_RETRY_MAX_SECONDS)
 
-    async def _await_resolution(self, job_id: str) -> JobView | None:
-        """Wait for the user to resolve identity.
+    async def _await_resolution(self, job_id: str, spec: _WaitSpec = _IDENTIFY_WAIT) -> JobView | None:
+        """Park a held job on an Event and wait for it to leave the gate.
 
-        Primary path: the resolution arrives via WS (`identify.resolved`
-        on `ripper.commands.{drive_id}`); we park on an asyncio.Event
-        keyed by job_id and the WS handler sets it.
+        Primary path: a WS command on `ripper.commands.{drive_id}`
+        (`identify.resolved` for the identify gate, `rip.start` for the review
+        gate) sets the per-job Event. Fallback path: if no WS event arrives within
+        RESOLUTION_WS_FIRST_WAIT_SECONDS, do one REST get_job to cover the
+        boot-race where the disc left the gate before WSClient finished its
+        handshake; then slow-poll so a WS outage doesn't strand the job.
 
-        Fallback path: if no WS event arrives within
-        RESOLUTION_WS_FIRST_WAIT_SECONDS, do one REST get_job to cover
-        the boot-race case where the disc landed `awaiting_user_id`
-        before WSClient finished its handshake. After that, fall back
-        to slow polling so an extended WS outage doesn't strand a job.
+        `spec` selects which gate (parked status + success statuses). Defaults to
+        the identify gate so existing callers are unchanged.
         """
-        logger.info("job %s awaiting_user_id; waiting for resolve", job_id)
+        logger.info("job %s %s; waiting", job_id, spec.label)
         event = asyncio.Event()
         self._resolution_events[job_id] = event
         try:
-            return await self._wait_for_resolution(job_id, event)
+            return await self._wait_for_resolution(job_id, event, spec)
         finally:
             self._resolution_events.pop(job_id, None)
 
-    async def _wait_for_resolution(self, job_id: str, event: asyncio.Event) -> JobView | None:
+    def _classify_wait(self, view: JobView | None, job_id: str, spec: _WaitSpec) -> tuple[str, JobView | None]:
+        """Decide the wait outcome from a freshly-fetched job view.
+
+        Returns ("proceed", view) on a success status, ("wait", None) while still
+        parked (keep waiting), or ("abandon", None) when the job left the gate any
+        other way (abandoned/failed/…). A None view (transient REST failure during
+        the long poll) maps to "wait" so a blip doesn't abandon the job."""
+        if view is None:
+            return ("wait", None)
+        if view.status in spec.success:
+            logger.info("job %s left %s -> %s title=%s", job_id, spec.label, view.status.value, view.title)
+            return ("proceed", view)
+        if view.status == spec.parked:
+            return ("wait", None)
+        logger.info("job %s left %s with status=%s; abandoning", job_id, spec.label, view.status.value)
+        return ("abandon", None)
+
+    async def _wait_for_resolution(self, job_id: str, event: asyncio.Event, spec: _WaitSpec) -> JobView | None:
         # First-wait window: covers the boot race where we missed the
-        # resolve-event broadcast before subscribing.
+        # gate-leaving broadcast before subscribing.
         try:
             await asyncio.wait_for(event.wait(), timeout=RESOLUTION_WS_FIRST_WAIT_SECONDS)
         except asyncio.TimeoutError:
-            view = await self._safe_get_job(job_id)
-            if view is not None:
-                if view.status == JobStatus.IDENTIFIED:
-                    logger.info("job %s resolved (REST fallback) title=%s", job_id, view.title)
-                    return view
-                if view.status != JobStatus.AWAITING_USER_ID:
-                    logger.info(
-                        "job %s left awaiting_user_id with status=%s; abandoning",
-                        job_id,
-                        view.status.value,
-                    )
-                    return None
+            outcome, view = self._classify_wait(await self._safe_get_job(job_id), job_id, spec)
+            if outcome == "proceed":
+                return view
+            if outcome == "abandon":
+                return None
 
         # Long wait: WS-driven, with periodic REST sanity polls so we
         # don't hang forever on a torn WS connection.
         deadline = asyncio.get_event_loop().time() + RESOLUTION_WAIT_TIMEOUT_SECONDS
         while asyncio.get_event_loop().time() < deadline:
+            woke_via_ws = True
             try:
                 await asyncio.wait_for(event.wait(), timeout=POLL_MAX_SECONDS)
-                # WS event fired — confirm via REST.
-                view = await self._safe_get_job(job_id)
-                if view is None:
-                    return None
-                if view.status == JobStatus.IDENTIFIED:
-                    logger.info("job %s resolved -> identified title=%s", job_id, view.title)
-                    return view
-                if view.status != JobStatus.AWAITING_USER_ID:
-                    logger.info(
-                        "job %s left awaiting_user_id with status=%s; abandoning",
-                        job_id,
-                        view.status.value,
-                    )
-                    return None
-                # Spurious WS wake — clear and re-arm.
-                event.clear()
             except asyncio.TimeoutError:
-                # Periodic sanity poll — handles torn WS connections.
-                view = await self._safe_get_job(job_id)
-                if view is None:
-                    continue
-                if view.status == JobStatus.IDENTIFIED:
-                    logger.info("job %s resolved (poll catch-up) title=%s", job_id, view.title)
-                    return view
-                if view.status != JobStatus.AWAITING_USER_ID:
-                    logger.info(
-                        "job %s left awaiting_user_id with status=%s; abandoning",
-                        job_id,
-                        view.status.value,
-                    )
-                    return None
+                woke_via_ws = False  # periodic sanity poll — handles torn WS connections
+            outcome, view = self._classify_wait(await self._safe_get_job(job_id), job_id, spec)
+            if outcome == "proceed":
+                return view
+            if outcome == "abandon":
+                return None
+            # Still parked. If a WS wake was spurious, clear+re-arm the Event.
+            if woke_via_ws:
+                event.clear()
 
-        logger.warning("job %s resolution timed out after %.0fs", job_id, RESOLUTION_WAIT_TIMEOUT_SECONDS)
+        logger.warning("job %s %s wait timed out after %.0fs", job_id, spec.label, RESOLUTION_WAIT_TIMEOUT_SECONDS)
         return None
 
     async def _safe_get_job(self, job_id: str) -> JobView | None:

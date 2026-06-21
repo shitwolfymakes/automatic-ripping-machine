@@ -182,6 +182,79 @@ async def test_unexpected_status_stops_without_rip(stub_scan, stub_eject):
     assert client.rip_complete_calls == []
 
 
+# --- timed review gate: park on awaiting_review, resume on Start / auto-start ---
+
+
+async def test_review_gate_parks_then_rips_on_start(stub_scan, stub_eject):
+    """Identify lands the disc in awaiting_review (hold_for_review on). The
+    controller parks; once the operator Starts, the job transitions to RIPPING
+    and the rip proceeds — it is NOT self-abandoned while parked."""
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.AWAITING_REVIEW, title="Held Movie"))
+    client.get_job_responses.extend(
+        [
+            _view(JobStatus.AWAITING_REVIEW),  # still parked on the first poll
+            _view(JobStatus.AWAITING_REVIEW),  # still parked
+            _view(JobStatus.RIPPING, title="Held Movie"),  # operator pressed Start
+        ]
+    )
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert client.rip_start_calls == ["job_test"]
+    assert client.rip_complete_calls == ["job_test"]
+
+
+async def test_review_gate_auto_start_path_identified_rips(stub_scan, stub_eject):
+    """Auto-start at countdown expiry transitions the held job back to IDENTIFIED
+    (the rip then proceeds) — also a success status for the review gate."""
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.AWAITING_REVIEW, title="Held Movie"))
+    client.get_job_responses.append(_view(JobStatus.IDENTIFIED, title="Held Movie"))
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert client.rip_start_calls == ["job_test"]
+    assert client.rip_complete_calls == ["job_test"]
+
+
+async def test_review_gate_cancel_abandons_without_rip(stub_scan, stub_eject):
+    """Cancel (abandon) while held leaves the gate as a terminal status; the
+    controller gives up and does not rip."""
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.AWAITING_REVIEW, title="Held Movie"))
+    client.get_job_responses.append(_view(JobStatus.ABANDONED))
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert client.rip_start_calls == []
+    assert client.rip_complete_calls == []
+
+
+async def test_rip_start_ws_command_wakes_review_waiter():
+    """A `rip.start` WS command sets the per-job wait Event (the review-gate
+    analogue of identify.resolved)."""
+    client = FakeClient()
+    controller = JobController(client, "drv_test")
+    event = asyncio.Event()
+    controller._resolution_events["job_test"] = event
+
+    await controller.on_ws_command(
+        WSEnvelope(
+            event_id="evt_1",
+            event_type="rip.start",
+            emitted_at=datetime.now(timezone.utc),
+            topic="ripper.commands.drv_test",
+            payload={"job_id": "job_test"},
+        )
+    )
+
+    assert event.is_set()
+
+
 async def test_ws_event_unblocks_resolution_faster_than_rest(monkeypatch, stub_scan, stub_eject):
     """An identify.resolved WS event makes _await_resolution return immediately.
 
