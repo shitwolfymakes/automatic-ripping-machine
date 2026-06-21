@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import secrets
+from datetime import datetime, timezone
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
@@ -20,7 +21,7 @@ from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import config as config_router  # noqa: E402
 from arm_backend.seeders import CONFIG_SINGLETON_ID  # noqa: E402
-from arm_common import Config, RetentionPolicy, User  # noqa: E402
+from arm_common import Config, DiscType, Job, JobStatus, RetentionPolicy, User  # noqa: E402
 from arm_common.secrets import HIDDEN_SECRET  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
@@ -145,3 +146,45 @@ def test_patch_empty_clears_secret(signing_key):
         r = c.patch("/api/config", json={"tmdb_api_key": ""}, headers=_auth(token))
     assert r.status_code == 200, r.text
     assert (db.rows["config"][0].tmdb_api_key or "") == ""
+
+
+# --- timed review gate: un-pause resets held discs' countdown -----------------
+
+
+def _held_job(job_id: str) -> Job:
+    return Job(
+        id=job_id,
+        drive_id="drv_x",
+        disc_type=DiscType.DVD,
+        status=JobStatus.AWAITING_REVIEW,
+        wait_start_time=datetime(2020, 1, 1, tzinfo=timezone.utc),  # long-expired
+    )
+
+
+def test_unpause_resets_held_review_countdowns(signing_key):
+    """Flipping ripping_paused ON -> OFF gives held awaiting_review discs a FRESH
+    wait_start_time so they don't auto-rip instantly on un-pause (spec §6.3)."""
+    db = FakeSession()
+    _seed(db, ripping_paused=True, hold_for_review=True)
+    held = _held_job("job_01JZXR7K3M5Q8N4VWA0000U01")
+    db.rows["jobs"] = [held]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/config", json={"ripping_paused": False}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    # wait_start_time was bumped to ~now (no longer the 2020 expired anchor).
+    assert held.wait_start_time > datetime(2025, 1, 1, tzinfo=timezone.utc)
+
+
+def test_pause_does_not_touch_countdowns(signing_key):
+    """Pausing (OFF -> ON), or any non-unpause PATCH, leaves wait_start_time alone."""
+    db = FakeSession()
+    _seed(db, ripping_paused=False, hold_for_review=True)
+    held = _held_job("job_01JZXR7K3M5Q8N4VWA0000U02")
+    original = held.wait_start_time
+    db.rows["jobs"] = [held]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/config", json={"ripping_paused": True}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert held.wait_start_time == original  # unchanged on pause
