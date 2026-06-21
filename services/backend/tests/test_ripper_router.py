@@ -311,17 +311,25 @@ def test_identify_success_sets_identified_and_poster() -> None:
 
 def test_identify_with_hold_parks_review(signing_key: bytes) -> None:
     """hold_for_review on + a genuine identify success -> AWAITING_REVIEW with a
-    countdown anchor, and a rip.awaiting_review event."""
+    countdown anchor, a rip.awaiting_review event, AND the scan's titles persisted
+    as Track rows (every title; preset-rejected ones excluded by default)."""
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config(hold_for_review=True)]
+    db.rows["rip_presets"] = [_movie_preset()]  # ALL_TRACKS default (drops <60s)
     result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
     hub = _Hub()
     app = _make_app(db, dispatcher=_Dispatcher(result), hub=hub)
+    scan = _scan_dict()
+    # Two titles: a long feature (kept) + a sub-minlength stub (excluded default).
+    scan["titles"] = [
+        {"index": 1, "duration_seconds": 4200},
+        {"index": 2, "duration_seconds": 5},
+    ]
     with TestClient(app) as client:
         r = client.post(
             "/api/ripper/identify",
-            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            json={"drive_id": "drv_x", "scan_result": scan},
             headers=_SERVICE_AUTH,
         )
     assert r.status_code == 200
@@ -330,6 +338,11 @@ def test_identify_with_hold_parks_review(signing_key: bytes) -> None:
     assert out["title"] == "Iron Man"
     assert out["wait_start_time"] is not None
     assert any(e["event_type"] == "rip.awaiting_review" for e in hub.events)
+    tracks = [row for row in db.added if type(row).__name__ == "Track"]
+    assert {t.source_ref for t in tracks} == {"1", "2"}  # every title persisted
+    by_ref = {t.source_ref: t for t in tracks}
+    assert by_ref["1"].excluded is False  # main feature kept by default
+    assert by_ref["2"].excluded is True  # short extra excluded by default
 
 
 def test_identify_with_hold_parks_even_when_paused() -> None:
