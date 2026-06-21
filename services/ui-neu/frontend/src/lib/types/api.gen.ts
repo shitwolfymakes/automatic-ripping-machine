@@ -1032,6 +1032,24 @@ export type HeartbeatRequest = {
 };
 
 /**
+ * HeldJobView
+ *
+ * Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).
+ *
+ * `paused` is true when the held disc should survive a ripper reboot as a hold
+ * (global `ripping_paused` on — or, once it lands, a per-job pause). The ripper
+ * uses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)
+ * on restart. See the timed-review-gate spec §6.3.
+ */
+export type HeldJobView = {
+    job: JobView;
+    /**
+     * Paused
+     */
+    paused: boolean;
+};
+
+/**
  * HwPreference
  */
 export type HwPreference = 'cpu_only' | 'any';
@@ -3679,6 +3697,78 @@ export type GetInFlightJobApiRipperDrivesDriveIdInFlightJobGetResponses = {
 };
 
 export type GetInFlightJobApiRipperDrivesDriveIdInFlightJobGetResponse = GetInFlightJobApiRipperDrivesDriveIdInFlightJobGetResponses[keyof GetInFlightJobApiRipperDrivesDriveIdInFlightJobGetResponses];
+
+export type GetHeldJobApiRipperDrivesDriveIdHeldJobGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Drive Id
+         */
+        drive_id: string;
+    };
+    query?: never;
+    url: '/api/ripper/drives/{drive_id}/held-job';
+};
+
+export type GetHeldJobApiRipperDrivesDriveIdHeldJobGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetHeldJobApiRipperDrivesDriveIdHeldJobGetError = GetHeldJobApiRipperDrivesDriveIdHeldJobGetErrors[keyof GetHeldJobApiRipperDrivesDriveIdHeldJobGetErrors];
+
+export type GetHeldJobApiRipperDrivesDriveIdHeldJobGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: HeldJobView;
+};
+
+export type GetHeldJobApiRipperDrivesDriveIdHeldJobGetResponse = GetHeldJobApiRipperDrivesDriveIdHeldJobGetResponses[keyof GetHeldJobApiRipperDrivesDriveIdHeldJobGetResponses];
+
+export type RecoveryAbandonApiRipperJobsJobIdRecoveryAbandonPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/ripper/jobs/{job_id}/recovery-abandon';
+};
+
+export type RecoveryAbandonApiRipperJobsJobIdRecoveryAbandonPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RecoveryAbandonApiRipperJobsJobIdRecoveryAbandonPostError = RecoveryAbandonApiRipperJobsJobIdRecoveryAbandonPostErrors[keyof RecoveryAbandonApiRipperJobsJobIdRecoveryAbandonPostErrors];
+
+export type RecoveryAbandonApiRipperJobsJobIdRecoveryAbandonPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: JobView;
+};
+
+export type RecoveryAbandonApiRipperJobsJobIdRecoveryAbandonPostResponse = RecoveryAbandonApiRipperJobsJobIdRecoveryAbandonPostResponses[keyof RecoveryAbandonApiRipperJobsJobIdRecoveryAbandonPostResponses];
 
 export type UpdateTrackApiRipperTracksTrackIdPatchData = {
     body: TrackUpdateRequest;

@@ -36,6 +36,7 @@ from arm_common import (
 )
 from arm_common.models import Track
 from arm_common.schemas import (
+    HeldJobView,
     IdentifyRequest,
     JobCompleteRequest,
     JobView,
@@ -508,6 +509,88 @@ async def get_in_flight_job(drive_id: str, session: AsyncSession = Depends(get_s
             drive_id,
         )
     return rows[0]
+
+
+@router.get(
+    "/drives/{drive_id}/held-job",
+    response_model=HeldJobView,
+    dependencies=[Depends(require_service_token)],
+)
+async def get_held_job(drive_id: str, session: AsyncSession = Depends(get_session)) -> HeldJobView:
+    """Boot-probe lookup for a disc held in AWAITING_REVIEW (timed review gate).
+
+    Returns the held job plus `paused` (true when the disc should survive a ripper
+    reboot as a hold — global `ripping_paused`, or a per-job pause once that
+    lands). The ripper uses `paused` to choose re-park vs. abandon on restart
+    (timed-review-gate spec §6.3). 404 when the drive is unknown or no held job
+    exists. Distinct from `/in-flight-job` (RIPPING-only) so the two recovery
+    paths stay separate.
+    """
+    drive = (await session.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
+    if drive is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {drive_id}")
+    rows = (
+        (
+            await session.execute(
+                select(Job).where(col(Job.drive_id) == drive_id).where(col(Job.status) == JobStatus.AWAITING_REVIEW)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no held job on this drive")
+    if len(rows) > 1:
+        logger.error(
+            "data-model violation: %d AWAITING_REVIEW jobs on drive_id=%s; returning first",
+            len(rows),
+            drive_id,
+        )
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    # paused = the hold survives a reboot. Today only the global toggle exists;
+    # OR in a per-job pause field here when manual_pause lands (no ripper change).
+    paused = bool(cfg.ripping_paused) if cfg is not None else False
+    return HeldJobView(job=JobView.model_validate(rows[0]), paused=paused)
+
+
+@router.post(
+    "/jobs/{job_id}/recovery-abandon",
+    response_model=JobView,
+    dependencies=[Depends(require_service_token)],
+)
+async def recovery_abandon(
+    job_id: str,
+    session: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
+) -> Job:
+    """Service-token abandon for ripper reboot recovery (timed review gate §6.3).
+
+    A held disc that was only COUNTING DOWN (not paused) when the ripper restarted
+    is abandoned here so the drive frees; the seated disc then re-fires the
+    ripper's InsertDetector and re-enters review with a fresh countdown. Only
+    AWAITING_REVIEW is abandonable via this path (the operator-facing
+    `/jobs/{id}/abandon` covers the rest); no WS job.abandoned is emitted because
+    the ripper is the caller and has no active task to cancel.
+    """
+    job = (await session.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
+    if job.status != JobStatus.AWAITING_REVIEW:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"recovery-abandon only valid for awaiting_review, got {job.status.value}",
+        )
+    job.status = JobStatus.ABANDONED
+    session.add(job)
+    await session.flush()
+    await hub.emit(
+        topic="ripper.events",
+        event_type="rip.abandoned",
+        payload={"job_id": job.id, "drive_id": job.drive_id, "status": job.status.value},
+        job_id=job.id,
+        session=session,
+    )
+    return job
 
 
 @router.patch("/tracks/{track_id}", response_model=TrackView)

@@ -748,6 +748,124 @@
         }
       }
     },
+    "/api/ripper/drives/{drive_id}/held-job": {
+      "get": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Get Held Job",
+        "description": "Boot-probe lookup for a disc held in AWAITING_REVIEW (timed review gate).\n\nReturns the held job plus `paused` (true when the disc should survive a ripper\nreboot as a hold \u2014 global `ripping_paused`, or a per-job pause once that\nlands). The ripper uses `paused` to choose re-park vs. abandon on restart\n(timed-review-gate spec \u00a76.3). 404 when the drive is unknown or no held job\nexists. Distinct from `/in-flight-job` (RIPPING-only) so the two recovery\npaths stay separate.",
+        "operationId": "get_held_job_api_ripper_drives__drive_id__held_job_get",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeldJobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ripper/jobs/{job_id}/recovery-abandon": {
+      "post": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Recovery Abandon",
+        "description": "Service-token abandon for ripper reboot recovery (timed review gate \u00a76.3).\n\nA held disc that was only COUNTING DOWN (not paused) when the ripper restarted\nis abandoned here so the drive frees; the seated disc then re-fires the\nripper's InsertDetector and re-enters review with a fresh countdown. Only\nAWAITING_REVIEW is abandonable via this path (the operator-facing\n`/jobs/{id}/abandon` covers the rest); no WS job.abandoned is emitted because\nthe ripper is the caller and has no active task to cancel.",
+        "operationId": "recovery_abandon_api_ripper_jobs__job_id__recovery_abandon_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ripper/tracks/{track_id}": {
       "patch": {
         "tags": [
@@ -8711,6 +8829,24 @@
           "progress_pct"
         ],
         "title": "HeartbeatRequest"
+      },
+      "HeldJobView": {
+        "properties": {
+          "job": {
+            "$ref": "#/components/schemas/JobView"
+          },
+          "paused": {
+            "type": "boolean",
+            "title": "Paused"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job",
+          "paused"
+        ],
+        "title": "HeldJobView",
+        "description": "Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).\n\n`paused` is true when the held disc should survive a ripper reboot as a hold\n(global `ripping_paused` on \u2014 or, once it lands, a per-job pause). The ripper\nuses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)\non restart. See the timed-review-gate spec \u00a76.3."
       },
       "HwPreference": {
         "type": "string",

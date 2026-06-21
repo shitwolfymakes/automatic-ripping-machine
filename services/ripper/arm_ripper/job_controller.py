@@ -449,7 +449,7 @@ class JobController:
         if self._keydb_tasks:
             await asyncio.gather(*self._keydb_tasks, return_exceptions=True)
 
-    async def _run_rip(self, job: Job, device_path: str) -> None:
+    async def _run_rip(self, job: Job | JobView, device_path: str) -> None:
         rip_start = await self._rip_start_with_retry(job.id)
         logger.info(
             "rip-start job_id=%s preset=%s tracks=%d",
@@ -463,6 +463,32 @@ class JobController:
             device_path=device_path,
             rip_start=rip_start,
         )
+
+    async def recover_held_job(self, job: JobView, device_path: str) -> None:
+        """Reboot recovery for a disc that was PAUSED in the review gate
+        (timed review gate §6.3). Re-park the review wait so the operator can
+        still Start it; on Start (-> ripping) or auto-start (-> identified), run
+        the rip. Unlike resume_inflight_job this does NOT wipe /raw or re-rip —
+        the disc never ripped. A re-parked disc waits for an explicit Start; it
+        does not auto-rip on boot even if its countdown had expired.
+        """
+        async with self._active_lock:
+            self._active_task = asyncio.current_task()
+            self._active_job_id = job.id
+            try:
+                with with_log_context(job_id=job.id):
+                    logger.info("reboot recovery: re-parking held job %s", job.id)
+                    resolved = await self._await_resolution(job.id, _REVIEW_WAIT)
+                    if resolved is None:
+                        return
+                    job = resolved
+                    if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING):
+                        logger.info("recovered job %s in status %s; not ripping", job.id, job.status.value)
+                        return
+                    await self._run_rip(job, device_path)
+            finally:
+                self._active_task = None
+                self._active_job_id = None
 
     async def resume_inflight_job(self, job: JobView, device_path: str) -> None:
         """Phase 9 — drive a crash-recovered rip from the boot probe.
