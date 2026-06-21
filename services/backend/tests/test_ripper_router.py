@@ -355,11 +355,11 @@ async def test_persist_review_tracks_is_idempotent() -> None:
 
     db = FakeSession()
     db.rows["rip_presets"] = [_movie_preset()]
-    job = _Job(id="job_01JZXR7K3M5Q8N4VWA0000I01", drive_id="drv_x", disc_type=DiscType.DVD, status=JobStatus.AWAITING_REVIEW)
+    job = _Job(
+        id="job_01JZXR7K3M5Q8N4VWA0000I01", drive_id="drv_x", disc_type=DiscType.DVD, status=JobStatus.AWAITING_REVIEW
+    )
     # Title index 1 already persisted (source_ref "1"); index 2 is new.
-    db.rows["tracks"] = [
-        _Track(id="trk_pre", job_id=job.id, kind=_TrackKind.VIDEO_TITLE, index=1, source_ref="1")
-    ]
+    db.rows["tracks"] = [_Track(id="trk_pre", job_id=job.id, kind=_TrackKind.VIDEO_TITLE, index=1, source_ref="1")]
     scan = _ScanResult(
         disc_type=DiscType.DVD,
         titles=[_ScanTitle(index=1, duration_seconds=4200), _ScanTitle(index=2, duration_seconds=3600)],
@@ -633,9 +633,7 @@ def test_recovery_abandon_transitions_and_emits() -> None:
     hub = _Hub()
     db.rows["jobs"] = [_job("job_01JZXR7K3M5Q8N4VWA0000H05", status=JobStatus.AWAITING_REVIEW)]
     with TestClient(_make_app(db, hub=hub)) as client:
-        r = client.post(
-            "/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA0000H05/recovery-abandon", headers=_SERVICE_AUTH
-        )
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA0000H05/recovery-abandon", headers=_SERVICE_AUTH)
     assert r.status_code == 200
     assert r.json()["status"] == "abandoned"
     assert any(e["event_type"] == "rip.abandoned" for e in hub.events)
@@ -652,11 +650,22 @@ def test_recovery_abandon_wrong_status_409() -> None:
     db = FakeSession()
     db.rows["jobs"] = [_job("job_01JZXR7K3M5Q8N4VWA0000H06", status=JobStatus.RIPPING)]
     with TestClient(_make_app(db)) as client:
-        r = client.post(
-            "/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA0000H06/recovery-abandon", headers=_SERVICE_AUTH
-        )
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA0000H06/recovery-abandon", headers=_SERVICE_AUTH)
     assert r.status_code == 409
     assert "awaiting_review" in r.json()["detail"]
+
+
+def test_recovery_abandon_unknown_status_409_not_500() -> None:
+    """A forward-incompatible status (raw str from _StrEnumString) must yield the
+    intended 409 here, not an AttributeError 500 from f-string `.value`."""
+    db = FakeSession()
+    job = _job("job_01JZXR7K3M5Q8N4VWA0000H08", status=JobStatus.RIPPING)
+    object.__setattr__(job, "status", "some_future_status")
+    db.rows["jobs"] = [job]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA0000H08/recovery-abandon", headers=_SERVICE_AUTH)
+    assert r.status_code == 409
+    assert "some_future_status" in r.json()["detail"]
 
 
 # --- /rip-start --------------------------------------------------------------
@@ -715,6 +724,25 @@ def test_rip_start_existing_tracks_preserves_started_at() -> None:
     assert db.rows["jobs"][0].started_at == stamped  # preserved, not overwritten
 
 
+def test_rip_start_awaiting_review_no_tracks_selects_and_rips() -> None:
+    """Timed-review auto-start where NO review tracks were persisted (a genuinely
+    identified disc whose scan yielded zero persistable titles -> select_tracks_for_review
+    added nothing). rip-start must fall through and select tracks now, exactly as
+    for a never-parked IDENTIFIED disc — NOT 409. A 409 here is non-retryable on the
+    ripper, so the disc would be stuck in AWAITING_REVIEW forever."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW, meta={"scan_result": _scan_dict()})]
+    db.rows["tracks"] = []
+    db.rows["rip_presets"] = [_movie_preset()]
+    new = [_track("trk_new", status=TrackStatus.QUEUED)]
+    with TestClient(_make_app(db)) as client, _patch_select_tracks(new):
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    assert [t["id"] for t in r.json()["tracks"]] == ["trk_new"]
+    assert db.rows["jobs"][0].status == JobStatus.RIPPING
+
+
 def test_rip_start_not_identified_409() -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]
@@ -724,6 +752,22 @@ def test_rip_start_not_identified_409() -> None:
         r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 409
     assert "not in identified state" in r.json()["detail"]
+
+
+def test_rip_start_unknown_status_409_not_500() -> None:
+    """A forward-incompatible status (loaded as a raw str by _StrEnumString) on the
+    no-existing-tracks branch must produce the intended 409, not an AttributeError
+    500 from f-string `.value` access. enum_value_str renders the raw string."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    job = _job(status=JobStatus.IDENTIFIED)
+    object.__setattr__(job, "status", "some_future_status")  # simulate post-load raw string
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = []
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 409
+    assert "some_future_status" in r.json()["detail"]
 
 
 def test_rip_start_missing_scan_result_409() -> None:

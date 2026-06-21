@@ -35,6 +35,7 @@ from arm_common import (
     User,
 )
 from arm_common.models import Track, TranscodeTask
+from arm_common.models._columns import enum_value_str
 from arm_common.schemas import (
     AbandonJobRequest,
     ApplySessionRequest,
@@ -286,7 +287,7 @@ async def rip_start_review(
     if job.status != JobStatus.AWAITING_REVIEW:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"rip-start-review only valid for awaiting_review, got {job.status.value}",
+            detail=f"rip-start-review only valid for awaiting_review, got {enum_value_str(job.status)}",
         )
     tracks = list((await db.execute(select(Track).where(col(Track.job_id) == job_id))).scalars().all())
     if tracks and all(t.excluded for t in tracks):
@@ -343,7 +344,7 @@ async def review_pause(
     if job.status != JobStatus.AWAITING_REVIEW:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"review-pause only valid for awaiting_review, got {job.status.value}",
+            detail=f"review-pause only valid for awaiting_review, got {enum_value_str(job.status)}",
         )
     job.manual_pause = paused
     if not paused:

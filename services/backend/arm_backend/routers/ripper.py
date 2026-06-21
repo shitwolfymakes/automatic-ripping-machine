@@ -35,6 +35,7 @@ from arm_common import (
     TrackStatus,
 )
 from arm_common.models import Track
+from arm_common.models._columns import enum_value_str
 from arm_common.schemas import (
     HeldJobView,
     IdentifyRequest,
@@ -106,8 +107,7 @@ async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -
         logger.warning("built-in rip preset %s not seeded; skipping review tracks", preset_id)
         return
     existing_refs = {
-        t.source_ref
-        for t in (await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
+        t.source_ref for t in (await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
     }
     for track in select_tracks_for_review(job.id, scan, preset):
         if track.source_ref in existing_refs:
@@ -351,9 +351,7 @@ async def identify(
     if job.status in (JobStatus.AWAITING_USER_ID, JobStatus.AWAITING_REVIEW):
         # awaiting_user_id -> needs identification; awaiting_review -> held for the
         # timed review gate. Distinct event types so the dashboard can label them.
-        event_type = (
-            "rip.needs_user_input" if job.status == JobStatus.AWAITING_USER_ID else "rip.awaiting_review"
-        )
+        event_type = "rip.needs_user_input" if job.status == JobStatus.AWAITING_USER_ID else "rip.awaiting_review"
         await hub.emit(
             topic="ripper.events",
             event_type=event_type,
@@ -416,10 +414,16 @@ async def rip_start(
             min_length_seconds=await _resolve_min_length_override(session, job),
         )
 
-    if job.status != JobStatus.IDENTIFIED:
+    # IDENTIFIED is the normal pre-rip state; AWAITING_REVIEW reaches here only
+    # when the timed review gate auto-started (countdown elapsed) a held disc
+    # whose scan yielded NO persistable titles — _persist_review_tracks then
+    # added nothing, so `existing` above was empty. Fall through and select
+    # tracks now, exactly as for a never-parked disc; without this the disc
+    # 409s and the ripper (4xx = non-retryable) abandons it permanently.
+    if job.status not in (JobStatus.IDENTIFIED, JobStatus.AWAITING_REVIEW):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"job not in identified state: status={job.status.value}",
+            detail=f"job not in identified state: status={enum_value_str(job.status)}",
         )
 
     scan_dict = (job.metadata_json or {}).get("scan_result")
@@ -640,7 +644,7 @@ async def recovery_abandon(
     if job.status != JobStatus.AWAITING_REVIEW:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"recovery-abandon only valid for awaiting_review, got {job.status.value}",
+            detail=f"recovery-abandon only valid for awaiting_review, got {enum_value_str(job.status)}",
         )
     job.status = JobStatus.ABANDONED
     session.add(job)

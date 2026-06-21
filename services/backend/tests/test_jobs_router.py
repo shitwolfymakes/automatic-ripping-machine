@@ -229,9 +229,7 @@ def test_rip_start_review_transitions_to_ripping_and_emits(signing_key: bytes) -
     db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW)]
     db.rows["tracks"] = [_track("trk_01JZXR7K3M5Q8N4VWA0000T01", status=TrackStatus.QUEUED)]
     with TestClient(app) as client:
-        r = client.post(
-            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token)
-        )
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token))
     assert r.status_code == 200
     assert r.json()["status"] == "ripping"
     types = {e["event_type"] for e in hub.events}
@@ -243,11 +241,23 @@ def test_rip_start_review_wrong_status_409(signing_key: bytes) -> None:
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [_job(status=JobStatus.IDENTIFIED)]
     with TestClient(app) as client:
-        r = client.post(
-            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token)
-        )
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token))
     assert r.status_code == 409
     assert "awaiting_review" in r.json()["detail"]
+
+
+def test_rip_start_review_unknown_status_409_not_500(signing_key: bytes) -> None:
+    """A forward-incompatible status (loaded as a raw str by _StrEnumString) must
+    return the intended 409, not an AttributeError 500 from f-string `.value`."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _job(status=JobStatus.IDENTIFIED)
+    object.__setattr__(job, "status", "some_future_status")
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token))
+    assert r.status_code == 409
+    assert "some_future_status" in r.json()["detail"]
 
 
 def test_rip_start_review_all_excluded_422(signing_key: bytes) -> None:
@@ -258,9 +268,7 @@ def test_rip_start_review_all_excluded_422(signing_key: bytes) -> None:
     excluded.excluded = True
     db.rows["tracks"] = [excluded]
     with TestClient(app) as client:
-        r = client.post(
-            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token)
-        )
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token))
     assert r.status_code == 422
     assert "at least one track" in r.json()["detail"]
 
@@ -269,9 +277,7 @@ def test_rip_start_review_404(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
-        r = client.post(
-            "/api/jobs/job_01JZXR7K3M5Q8N4VWA0000404X/rip-start-review", headers=_auth(token)
-        )
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA0000404X/rip-start-review", headers=_auth(token))
     assert r.status_code == 404
 
 
@@ -281,14 +287,19 @@ def test_rip_start_review_succeeds_while_globally_paused(signing_key: bytes) -> 
     from arm_common import Config, RetentionPolicy
 
     db = FakeSession()
-    db.rows["config"] = [Config(id=1, ripping_paused=True, hold_for_review=True, default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION)]
+    db.rows["config"] = [
+        Config(
+            id=1,
+            ripping_paused=True,
+            hold_for_review=True,
+            default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
+        )
+    ]
     db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW)]
     db.rows["tracks"] = [_track("trk_01JZXR7K3M5Q8N4VWA0000T03", status=TrackStatus.QUEUED)]
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
-        r = client.post(
-            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token)
-        )
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token))
     assert r.status_code == 200
     assert r.json()["status"] == "ripping"
 
@@ -302,9 +313,7 @@ def test_review_pause_sets_manual_pause(signing_key: bytes) -> None:
     app, token = _make_app(signing_key, db, hub)
     db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW)]
     with TestClient(app) as client:
-        r = client.post(
-            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/review-pause?paused=true", headers=_auth(token)
-        )
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/review-pause?paused=true", headers=_auth(token))
     assert r.status_code == 200
     assert db.rows["jobs"][0].manual_pause is True
     assert any(e["event_type"] == "review.pause" for e in hub.events)
@@ -318,9 +327,7 @@ def test_review_resume_clears_pause_and_resets_countdown(signing_key: bytes) -> 
     job.wait_start_time = datetime(2020, 1, 1, tzinfo=timezone.utc)  # long-expired
     db.rows["jobs"] = [job]
     with TestClient(app) as client:
-        r = client.post(
-            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/review-pause?paused=false", headers=_auth(token)
-        )
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/review-pause?paused=false", headers=_auth(token))
     assert r.status_code == 200
     assert db.rows["jobs"][0].manual_pause is False
     # resume restarts a FRESH countdown rather than honoring the expired one
@@ -332,11 +339,23 @@ def test_review_pause_wrong_status_409(signing_key: bytes) -> None:
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
     with TestClient(app) as client:
-        r = client.post(
-            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/review-pause", headers=_auth(token)
-        )
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/review-pause", headers=_auth(token))
     assert r.status_code == 409
     assert "awaiting_review" in r.json()["detail"]
+
+
+def test_review_pause_unknown_status_409_not_500(signing_key: bytes) -> None:
+    """A forward-incompatible status (raw str from _StrEnumString) must yield the
+    intended 409 here, not an AttributeError 500 from f-string `.value`."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _job(status=JobStatus.IDENTIFIED)
+    object.__setattr__(job, "status", "some_future_status")
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/review-pause", headers=_auth(token))
+    assert r.status_code == 409
+    assert "some_future_status" in r.json()["detail"]
 
 
 def test_review_pause_404(signing_key: bytes) -> None:
