@@ -1465,6 +1465,66 @@
         }
       }
     },
+    "/api/jobs/{job_id}/rip-start-review": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Rip Start Review",
+        "description": "Operator Start for a disc held in the timed review gate (spec \u00a75.2).\n\nTransitions AWAITING_REVIEW -> RIPPING here (the backend owns the transition;\nrip-start then tolerates already-RIPPING) and emits the `rip.start` WS command\nso the parked ripper unblocks. Operator-initiated, so JWT-authed on the jobs\nrouter \u2014 NOT the ripper's service-token rip-start path. Pre-flight: at least\none kept (non-excluded) track, else 422 (don't let it fail deep in the ripper).",
+        "operationId": "rip_start_review_api_jobs__job_id__rip_start_review_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/jobs/manual": {
       "post": {
         "tags": [
@@ -9045,6 +9105,18 @@
             "type": "boolean",
             "title": "Resumed From Crash"
           },
+          "wait_start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wait Start Time"
+          },
           "started_at": {
             "anyOf": [
               {
@@ -9105,6 +9177,7 @@
           "poster_url_manual",
           "status",
           "resumed_from_crash",
+          "wait_start_time",
           "started_at",
           "ripped_at",
           "created_at",
@@ -9332,6 +9405,18 @@
           "resumed_from_crash": {
             "type": "boolean",
             "title": "Resumed From Crash"
+          },
+          "wait_start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wait Start Time"
           },
           "rip_progress": {
             "anyOf": [
@@ -11392,6 +11477,16 @@
             "type": "boolean",
             "title": "Community Keydb Enabled",
             "default": true
+          },
+          "ripping_paused": {
+            "type": "boolean",
+            "title": "Ripping Paused",
+            "default": false
+          },
+          "manual_wait_seconds": {
+            "type": "integer",
+            "title": "Manual Wait Seconds",
+            "default": 60
           }
         },
         "type": "object",

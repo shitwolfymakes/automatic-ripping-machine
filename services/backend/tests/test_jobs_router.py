@@ -218,6 +218,62 @@ def test_abandon_success_emits_with_delete_raw(signing_key: bytes) -> None:
     assert all(e["payload"]["delete_raw"] is True for e in hub.events)
 
 
+# --- rip-start-review (timed review gate Start) -------------------------------
+
+
+def test_rip_start_review_transitions_to_ripping_and_emits(signing_key: bytes) -> None:
+    db = FakeSession()
+    hub = _Hub()
+    app, token = _make_app(signing_key, db, hub)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW)]
+    db.rows["tracks"] = [_track("trk_01JZXR7K3M5Q8N4VWA0000T01", status=TrackStatus.QUEUED)]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token)
+        )
+    assert r.status_code == 200
+    assert r.json()["status"] == "ripping"
+    types = {e["event_type"] for e in hub.events}
+    assert "rip.start" in types and "rip.started" in types
+
+
+def test_rip_start_review_wrong_status_409(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.IDENTIFIED)]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token)
+        )
+    assert r.status_code == 409
+    assert "awaiting_review" in r.json()["detail"]
+
+
+def test_rip_start_review_all_excluded_422(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW)]
+    excluded = _track("trk_01JZXR7K3M5Q8N4VWA0000T02", status=TrackStatus.QUEUED)
+    excluded.excluded = True
+    db.rows["tracks"] = [excluded]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token)
+        )
+    assert r.status_code == 422
+    assert "at least one track" in r.json()["detail"]
+
+
+def test_rip_start_review_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA0000404X/rip-start-review", headers=_auth(token)
+        )
+    assert r.status_code == 404
+
+
 # --- delete_job log-cleanup error branch -------------------------------------
 
 

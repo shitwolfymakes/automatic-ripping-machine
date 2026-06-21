@@ -265,6 +265,62 @@ async def abandon_job(
     return job
 
 
+@router.post("/{job_id}/rip-start-review", response_model=JobView)
+async def rip_start_review(
+    job_id: JobIdParam,
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
+) -> Job:
+    """Operator Start for a disc held in the timed review gate (spec §5.2).
+
+    Transitions AWAITING_REVIEW -> RIPPING here (the backend owns the transition;
+    rip-start then tolerates already-RIPPING) and emits the `rip.start` WS command
+    so the parked ripper unblocks. Operator-initiated, so JWT-authed on the jobs
+    router — NOT the ripper's service-token rip-start path. Pre-flight: at least
+    one kept (non-excluded) track, else 422 (don't let it fail deep in the ripper).
+    """
+    job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
+    if job.status != JobStatus.AWAITING_REVIEW:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"rip-start-review only valid for awaiting_review, got {job.status.value}",
+        )
+    tracks = list((await db.execute(select(Track).where(col(Track.job_id) == job_id))).scalars().all())
+    if tracks and all(t.excluded for t in tracks):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="at least one track must be kept (not excluded) to start the rip",
+        )
+
+    job.status = JobStatus.RIPPING
+    job.started_at = datetime.now(timezone.utc)
+    db.add(job)
+    await db.flush()
+
+    payload = {"job_id": job.id, "drive_id": job.drive_id}
+    await hub.emit(
+        topic=f"ripper.commands.{job.drive_id}",
+        event_type="rip.start",
+        payload=payload,
+        job_id=job.id,
+        session=db,
+    )
+    await hub.emit(
+        topic="ripper.events",
+        event_type="rip.started",
+        payload=payload,
+        job_id=job.id,
+        session=db,
+    )
+    await db.commit()
+    await db.refresh(job)
+    logger.info("rip-start-review job_id=%s -> ripping", job.id)
+    return job
+
+
 _TERMINAL_STATUSES: frozenset[JobStatus] = frozenset(
     {
         JobStatus.RIPPED,

@@ -1165,6 +1165,10 @@ export type Job = {
      */
     resumed_from_crash: boolean;
     /**
+     * Wait Start Time
+     */
+    wait_start_time: string | null;
+    /**
      * Started At
      */
     started_at: string | null;
@@ -1306,6 +1310,10 @@ export type JobView = {
      * Resumed From Crash
      */
     resumed_from_crash: boolean;
+    /**
+     * Wait Start Time
+     */
+    wait_start_time?: string | null;
     rip_progress?: RipProgressSummary | null;
 };
 
@@ -2465,6 +2473,14 @@ export type RipperConfigView = {
      * Community Keydb Enabled
      */
     community_keydb_enabled?: boolean;
+    /**
+     * Ripping Paused
+     */
+    ripping_paused?: boolean;
+    /**
+     * Manual Wait Seconds
+     */
+    manual_wait_seconds?: number;
 };
 
 /**
@@ -4087,6 +4103,42 @@ export type AbandonJobApiJobsJobIdAbandonPostResponses = {
 };
 
 export type AbandonJobApiJobsJobIdAbandonPostResponse = AbandonJobApiJobsJobIdAbandonPostResponses[keyof AbandonJobApiJobsJobIdAbandonPostResponses];
+
+export type RipStartReviewApiJobsJobIdRipStartReviewPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/jobs/{job_id}/rip-start-review';
+};
+
+export type RipStartReviewApiJobsJobIdRipStartReviewPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RipStartReviewApiJobsJobIdRipStartReviewPostError = RipStartReviewApiJobsJobIdRipStartReviewPostErrors[keyof RipStartReviewApiJobsJobIdRipStartReviewPostErrors];
+
+export type RipStartReviewApiJobsJobIdRipStartReviewPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: JobView;
+};
+
+export type RipStartReviewApiJobsJobIdRipStartReviewPostResponse = RipStartReviewApiJobsJobIdRipStartReviewPostResponses[keyof RipStartReviewApiJobsJobIdRipStartReviewPostResponses];
 
 export type ManualTriggerApiJobsManualPostData = {
     body: ManualTriggerRequest;

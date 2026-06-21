@@ -90,6 +90,9 @@ class JobView(BaseModel):
     poster_url_manual: str | None = None
     metadata_json: dict[str, Any]
     resumed_from_crash: bool
+    # Timed review gate: when the countdown started (AWAITING_REVIEW). Drives the
+    # ripper's remaining-delay calc + the UI's cosmetic countdown. Null otherwise.
+    wait_start_time: datetime | None = None
     # Populated only by the list endpoint for ripping jobs; None on
     # detail responses and on terminal/early-state jobs.
     rip_progress: RipProgressSummary | None = None

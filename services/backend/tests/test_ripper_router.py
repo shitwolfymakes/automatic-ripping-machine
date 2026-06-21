@@ -103,13 +103,22 @@ def _make_app(
     return app
 
 
-def _config(*, block_on_miss: bool = True, community_keydb_enabled: bool = True) -> Config:
+def _config(
+    *,
+    block_on_miss: bool = True,
+    community_keydb_enabled: bool = True,
+    hold_for_review: bool = False,
+    ripping_paused: bool = False,
+) -> Config:
     return Config(
         id=1,
         auto_transcode_on_idle=False,
         auto_rip_on_insert=True,
         block_on_miss=block_on_miss,
         community_keydb_enabled=community_keydb_enabled,
+        hold_for_review=hold_for_review,
+        ripping_paused=ripping_paused,
+        manual_wait_seconds=60,
         default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
     )
 
@@ -182,7 +191,13 @@ def test_get_config_returns_flag() -> None:
     with TestClient(_make_app(db)) as client:
         r = client.get("/api/ripper/config", headers=_SERVICE_AUTH)
     assert r.status_code == 200
-    assert r.json() == {"auto_rip_on_insert": True, "makemkv_key": None, "community_keydb_enabled": True}
+    assert r.json() == {
+        "auto_rip_on_insert": True,
+        "makemkv_key": None,
+        "community_keydb_enabled": True,
+        "ripping_paused": False,
+        "manual_wait_seconds": 60,
+    }
 
 
 def test_get_config_reflects_community_keydb_disabled() -> None:
@@ -292,6 +307,82 @@ def test_identify_success_sets_identified_and_poster() -> None:
     assert out["metadata_json"]["pending_session_id"] == "ses_1"
     fps = [r for r in db.added if type(r).__name__ == "DiscFingerprint"]
     assert {f.algo for f in fps} == {"crc64"}  # dedup + empty skipped
+
+
+def test_identify_with_hold_parks_review(signing_key: bytes) -> None:
+    """hold_for_review on + a genuine identify success -> AWAITING_REVIEW with a
+    countdown anchor, and a rip.awaiting_review event."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(hold_for_review=True)]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    hub = _Hub()
+    app = _make_app(db, dispatcher=_Dispatcher(result), hub=hub)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    out = r.json()
+    assert out["status"] == "awaiting_review"
+    assert out["title"] == "Iron Man"
+    assert out["wait_start_time"] is not None
+    assert any(e["event_type"] == "rip.awaiting_review" for e in hub.events)
+
+
+def test_identify_with_hold_parks_even_when_paused() -> None:
+    """When hold_for_review is on, a paused machine still scans + identifies +
+    parks (pause only suppresses auto-start at expiry) — it does NOT 409."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(hold_for_review=True, ripping_paused=True)]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    assert r.json()["status"] == "awaiting_review"
+
+
+def test_identify_paused_without_hold_still_409s() -> None:
+    """With hold_for_review off, pause keeps its original meaning: reject."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(hold_for_review=False, ripping_paused=True)]
+    app = _make_app(db, dispatcher=_Dispatcher(None))
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 409
+
+
+def test_identify_unidentified_with_hold_does_not_park(signing_key: bytes) -> None:
+    """hold_for_review on but identify MISSES (block_on_miss off) -> the synthetic
+    IDENTIFIED-unidentified must NOT park in review (audit H5: gate on genuine
+    success, not status==IDENTIFIED)."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(hold_for_review=True, block_on_miss=False)]
+    app = _make_app(db, dispatcher=_Dispatcher(None))
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    out = r.json()
+    assert out["status"] == "identified"  # not awaiting_review
+    assert out["metadata_json"].get("unidentified") is True
 
 
 def test_identify_miss_with_block_on_miss_awaits_user(signing_key: bytes) -> None:

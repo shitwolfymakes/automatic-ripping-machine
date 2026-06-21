@@ -113,6 +113,8 @@ async def get_ripper_config(session: AsyncSession = Depends(get_session)) -> Rip
         auto_rip_on_insert=cfg.auto_rip_on_insert,
         makemkv_key=cfg.makemkv_key,
         community_keydb_enabled=cfg.community_keydb_enabled,
+        ripping_paused=bool(cfg.ripping_paused),
+        manual_wait_seconds=int(cfg.manual_wait_seconds) if cfg.manual_wait_seconds is not None else 60,
     )
 
 
@@ -230,7 +232,11 @@ async def identify(
 
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
 
-    if cfg.ripping_paused:
+    # When the timed review gate is on, a paused machine still scans + identifies
+    # + PARKS the disc for review (pause only suppresses auto-start at expiry, see
+    # below); it does not reject the job. With the gate off, pause keeps its
+    # original meaning: reject new jobs outright. (timed-review-gate spec §3)
+    if cfg.ripping_paused and not cfg.hold_for_review:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="ripping is paused; no new jobs accepted",
@@ -275,7 +281,15 @@ async def identify(
         job.year = result.year
         job.poster_url = extract_poster_url(result)
         job.metadata_json = result.payload
-        job.status = JobStatus.IDENTIFIED
+        # Timed review gate: a GENUINELY identified disc (result is not None — not
+        # the block_on_miss=false synthetic "unidentified" IDENTIFIED below) parks
+        # for operator review when hold_for_review is on, stamping the countdown
+        # anchor. Otherwise it proceeds straight to rip as today. (spec §5.1)
+        if cfg.hold_for_review:
+            job.status = JobStatus.AWAITING_REVIEW
+            job.wait_start_time = datetime.now(timezone.utc)
+        else:
+            job.status = JobStatus.IDENTIFIED
     else:
         diagnostic: dict[str, object] = {}
         if timed_out:
@@ -304,10 +318,15 @@ async def identify(
     await session.refresh(job)
     logger.info("identify job_id=%s status=%s title=%s", job.id, job.status.value, job.title)
 
-    if job.status == JobStatus.AWAITING_USER_ID:
+    if job.status in (JobStatus.AWAITING_USER_ID, JobStatus.AWAITING_REVIEW):
+        # awaiting_user_id -> needs identification; awaiting_review -> held for the
+        # timed review gate. Distinct event types so the dashboard can label them.
+        event_type = (
+            "rip.needs_user_input" if job.status == JobStatus.AWAITING_USER_ID else "rip.awaiting_review"
+        )
         await hub.emit(
             topic="ripper.events",
-            event_type="rip.needs_user_input",
+            event_type=event_type,
             payload={
                 "job_id": job.id,
                 "drive_id": job.drive_id,
@@ -348,6 +367,18 @@ async def rip_start(
         .all()
     )
     if existing:
+        # Tracks already exist (crash-resume, or the timed review gate persisted
+        # them at identify and the operator's Start already moved the job to
+        # RIPPING). Ensure the RIPPING transition happened — previously this
+        # branch returned early WITHOUT setting RIPPING/started_at, so a
+        # pre-persisted-tracks job never transitioned and the rip never completed
+        # (audit B2). Tolerate already-RIPPING (Start did it); transition if not.
+        if job.status != JobStatus.RIPPING:
+            job.status = JobStatus.RIPPING
+            if job.started_at is None:
+                job.started_at = datetime.now(timezone.utc)
+            await session.commit()
+            await session.refresh(job)
         return RipStartResponse(
             job_id=job.id,
             rip_preset_id=preset_id,

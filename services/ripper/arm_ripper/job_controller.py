@@ -2,12 +2,13 @@ import asyncio
 import logging
 import shutil
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
 
 from arm_common import DiscType, Job, JobStatus, TrackStatus, with_log_context
-from arm_common.schemas import JobView, RipStartResponse, ScanResult, TrackView, WSEnvelope
+from arm_common.schemas import JobView, RipperConfigView, RipStartResponse, ScanResult, TrackView, WSEnvelope
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.community_keydb import refresh_community_keydb
 from arm_ripper.makemkv_key import refresh_makemkv_key
@@ -43,11 +44,17 @@ class _WaitSpec:
     job left the gate some other way (abandoned, failed, …) → give up. This lets
     one wait loop serve both the identify gate (park awaiting_user_id, succeed on
     identified) and the review gate (park awaiting_review, succeed on
-    identified/ripping)."""
+    identified/ripping).
+
+    `timed` enables the review-gate countdown: while parked, the loop computes a
+    deadline from `wait_start_time + manual_wait_seconds` and, on expiry while NOT
+    paused (global `ripping_paused` OR per-job pause), self-starts the rip. Pause
+    suspends the countdown; the deadline is only honoured while unpaused."""
 
     parked: JobStatus
     success: frozenset[JobStatus]
     label: str
+    timed: bool = False
 
 
 # Identify gate: disc couldn't auto-ID; wait for the operator to resolve identity.
@@ -57,11 +64,13 @@ _IDENTIFY_WAIT = _WaitSpec(
     label="awaiting_user_id",
 )
 # Review gate (timed): disc identified but held for review; wait for Start (which
-# transitions to ripping) or the auto-start path (identified). Either proceeds.
+# transitions to ripping), the auto-start countdown (ripper self-starts → ripping),
+# or the operator otherwise leaving the gate.
 _REVIEW_WAIT = _WaitSpec(
     parked=JobStatus.AWAITING_REVIEW,
     success=frozenset({JobStatus.IDENTIFIED, JobStatus.RIPPING}),
     label="awaiting_review",
+    timed=True,
 )
 # After makemkvcon exits, the kernel takes up to ~5s to release exclusive
 # access on the optical drive — `eject` then sees EBUSY on open(). The
@@ -254,7 +263,10 @@ class JobController:
                             return
                         job.status = resolved.status
 
-                    if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING):
+                    # Proceed for: identified (normal / operator Start landed),
+                    # ripping (operator Start already transitioned), or
+                    # awaiting_review (timed auto-start — rip-start transitions it).
+                    if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING, JobStatus.AWAITING_REVIEW):
                         logger.info("job %s in unexpected status %s; not ripping", job.id, job.status.value)
                         return
 
@@ -377,23 +389,54 @@ class JobController:
                 await asyncio.wait_for(event.wait(), timeout=POLL_MAX_SECONDS)
             except asyncio.TimeoutError:
                 woke_via_ws = False  # periodic sanity poll — handles torn WS connections
-            outcome, view = self._classify_wait(await self._safe_get_job(job_id), job_id, spec)
+            view = await self._safe_get_job(job_id)
+            outcome, proceed_view = self._classify_wait(view, job_id, spec)
             if outcome == "proceed":
-                return view
+                return proceed_view
             if outcome == "abandon":
                 return None
-            # Still parked. If a WS wake was spurious, clear+re-arm the Event.
+            # Still parked. Timed review gate: if the countdown has elapsed and the
+            # disc is not paused, auto-start — return the parked view so the
+            # pipeline proceeds to _run_rip (rip-start transitions the status).
+            if spec.timed and view is not None and await self._review_countdown_expired(view):
+                logger.info("job %s review countdown elapsed; auto-starting rip", job_id)
+                return view
+            # If a WS wake was spurious, clear+re-arm the Event.
             if woke_via_ws:
                 event.clear()
 
         logger.warning("job %s %s wait timed out after %.0fs", job_id, spec.label, RESOLUTION_WAIT_TIMEOUT_SECONDS)
         return None
 
+    async def _review_countdown_expired(self, view: JobView) -> bool:
+        """True when a held disc's auto-start countdown has elapsed AND it is not
+        paused. Paused (global `ripping_paused` — or, later, per-job pause) keeps
+        the countdown suspended, so it returns False and the wait continues. The
+        config is re-read each poll so a mid-wait pause / duration change applies.
+        """
+        cfg = await self._safe_get_ripper_config()
+        if cfg is None or cfg.ripping_paused:
+            return False
+        if view.wait_start_time is None:
+            return False
+        elapsed = (datetime.now(timezone.utc) - view.wait_start_time).total_seconds()
+        return elapsed >= cfg.manual_wait_seconds
+
     async def _safe_get_job(self, job_id: str) -> JobView | None:
         try:
             return await self._client.get_job(job_id)
         except httpx.HTTPError as e:
             logger.warning("get_job %s failed (%s); will retry on next signal", job_id, e)
+            return None
+
+    async def _safe_get_ripper_config(self) -> RipperConfigView | None:
+        """Ripper config (ripping_paused + manual_wait_seconds) for the review
+        countdown. None on transport error → the caller treats it as 'can't tell;
+        keep waiting' (fail-safe: never auto-rip on a config blip)."""
+        try:
+            return await self._client.get_ripper_config()
+        except httpx.HTTPError as e:
+            logger.warning("get_ripper_config failed (%s); keeping countdown suspended", e)
             return None
 
     async def _configured_makemkv_key(self) -> str | None:

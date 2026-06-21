@@ -44,6 +44,10 @@ class Job(SQLModel, table=True):
         sa_column=enum_column(JobStatus, "job_status", server_default=JobStatus.CREATED.value, index=True)
     )
     resumed_from_crash: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
+    # Timed review gate: when a disc is parked in AWAITING_REVIEW, this stamps
+    # when the review countdown started, so the ripper can compute the remaining
+    # auto-start delay (and the UI render a cosmetic countdown). Null otherwise.
+    wait_start_time: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
     started_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
     ripped_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
     created_at: datetime | None = Field(sa_column=created_at_column())
