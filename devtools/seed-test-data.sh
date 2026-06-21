@@ -271,10 +271,29 @@ INSERT INTO tracks (id, job_id, kind, index, source_ref, label, status, attempts
 INSERT INTO tracks (id, job_id, kind, index, source_ref, label, status, attempts, duration_seconds, expected_duration_seconds, expected_size_bytes, title) VALUES
  ('${T[5]}', '${J[0]}', 'video_title', 0, 'title00', 'Main Feature', 'in_progress', 1, NULL, 9840, 45000000000, 'Blade Runner 2049');
 
--- Audio tracks for Abbey Road (J6, ripped) so the CD has real track rows alongside metadata_json.
+-- Audio tracks for Abbey Road (J6, ripped) so the CD has real track rows alongside
+-- metadata_json. ALL 17 tracks: the disc track-count must match the album so the
+-- "match track count" search filter finds the real 17-track Abbey Road release (a
+-- 2-track stub matched 2-track singles instead). Durations mirror ABBEY_TRACKS.
+-- The 15 rows past T[6]/T[7] use their own deterministic ids (T[] holds only 8).
 INSERT INTO tracks (id, job_id, kind, index, source_ref, label, status, attempts, duration_seconds, expected_duration_seconds, output_path) VALUES
- ('${T[6]}', '${J[6]}', 'audio_track', 0, '1', 'Come Together', 'done', 1, 259, 259, '/media/music/The Beatles/Abbey Road/01 Come Together.flac'),
- ('${T[7]}', '${J[6]}', 'audio_track', 1, '2', 'Something',     'done', 1, 182, 182, '/media/music/The Beatles/Abbey Road/02 Something.flac');
+ ('${T[6]}', '${J[6]}', 'audio_track', 0,  '1',  'Come Together',                            'done', 1, 259, 259, '/media/music/The Beatles/Abbey Road/01 Come Together.flac'),
+ ('${T[7]}', '${J[6]}', 'audio_track', 1,  '2',  'Something',                                'done', 1, 182, 182, '/media/music/The Beatles/Abbey Road/02 Something.flac'),
+ ('trk_seedabbeyroad000000003', '${J[6]}', 'audio_track', 2,  '3',  'Maxwell s Silver Hammer',                  'done', 1, 208, 208, '/media/music/The Beatles/Abbey Road/03 Maxwell s Silver Hammer.flac'),
+ ('trk_seedabbeyroad000000004', '${J[6]}', 'audio_track', 3,  '4',  'Oh! Darling',                              'done', 1, 207, 207, '/media/music/The Beatles/Abbey Road/04 Oh! Darling.flac'),
+ ('trk_seedabbeyroad000000005', '${J[6]}', 'audio_track', 4,  '5',  'Octopus s Garden',                         'done', 1, 171, 171, '/media/music/The Beatles/Abbey Road/05 Octopus s Garden.flac'),
+ ('trk_seedabbeyroad000000006', '${J[6]}', 'audio_track', 5,  '6',  'I Want You (She s So Heavy)',              'done', 1, 467, 467, '/media/music/The Beatles/Abbey Road/06 I Want You.flac'),
+ ('trk_seedabbeyroad000000007', '${J[6]}', 'audio_track', 6,  '7',  'Here Comes the Sun',                       'done', 1, 186, 186, '/media/music/The Beatles/Abbey Road/07 Here Comes the Sun.flac'),
+ ('trk_seedabbeyroad000000008', '${J[6]}', 'audio_track', 7,  '8',  'Because',                                  'done', 1, 166, 166, '/media/music/The Beatles/Abbey Road/08 Because.flac'),
+ ('trk_seedabbeyroad000000009', '${J[6]}', 'audio_track', 8,  '9',  'You Never Give Me Your Money',             'done', 1, 242, 242, '/media/music/The Beatles/Abbey Road/09 You Never Give Me Your Money.flac'),
+ ('trk_seedabbeyroad000000010', '${J[6]}', 'audio_track', 9,  '10', 'Sun King',                                 'done', 1, 146, 146, '/media/music/The Beatles/Abbey Road/10 Sun King.flac'),
+ ('trk_seedabbeyroad000000011', '${J[6]}', 'audio_track', 10, '11', 'Mean Mr. Mustard',                         'done', 1, 66,  66,  '/media/music/The Beatles/Abbey Road/11 Mean Mr. Mustard.flac'),
+ ('trk_seedabbeyroad000000012', '${J[6]}', 'audio_track', 11, '12', 'Polythene Pam',                            'done', 1, 72,  72,  '/media/music/The Beatles/Abbey Road/12 Polythene Pam.flac'),
+ ('trk_seedabbeyroad000000013', '${J[6]}', 'audio_track', 12, '13', 'She Came In Through the Bathroom Window',   'done', 1, 117, 117, '/media/music/The Beatles/Abbey Road/13 She Came In Through the Bathroom Window.flac'),
+ ('trk_seedabbeyroad000000014', '${J[6]}', 'audio_track', 13, '14', 'Golden Slumbers',                          'done', 1, 91,  91,  '/media/music/The Beatles/Abbey Road/14 Golden Slumbers.flac'),
+ ('trk_seedabbeyroad000000015', '${J[6]}', 'audio_track', 14, '15', 'Carry That Weight',                        'done', 1, 96,  96,  '/media/music/The Beatles/Abbey Road/15 Carry That Weight.flac'),
+ ('trk_seedabbeyroad000000016', '${J[6]}', 'audio_track', 15, '16', 'The End',                                  'done', 1, 140, 140, '/media/music/The Beatles/Abbey Road/16 The End.flac'),
+ ('trk_seedabbeyroad000000017', '${J[6]}', 'audio_track', 16, '17', 'Her Majesty',                              'done', 1, 25,  25,  '/media/music/The Beatles/Abbey Road/17 Her Majesty.flac');
 
 -- Disc fingerprints (read-only fingerprints section): DVD crc64, Blu-ray aacs, CD musicbrainz.
 INSERT INTO disc_fingerprints (id, job_id, algo, value, created_at) VALUES
