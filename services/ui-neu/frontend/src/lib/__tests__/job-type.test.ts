@@ -67,8 +67,10 @@ describe('discTypeLabel', () => {
 		expect(discTypeLabel('dvd')).toBe('DVD');
 		expect(discTypeLabel('bluray')).toBe('Blu-ray');
 		expect(discTypeLabel('bluray4k')).toBe('4K UHD');
+		expect(discTypeLabel('cd')).toBe('CD');
 		expect(discTypeLabel('music')).toBe('Music CD');
 		expect(discTypeLabel('data')).toBe('Data');
+		expect(discTypeLabel('unknown')).toBe('Unknown');
 	});
 
 	it('is case-insensitive', () => {

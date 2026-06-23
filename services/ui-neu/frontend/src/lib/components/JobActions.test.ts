@@ -46,18 +46,13 @@ describe('JobActions', () => {
 			expect(screen.getByText('Delete')).toBeInTheDocument();
 		});
 
-		it('shows Fix Permissions button only for ripped status', () => {
-			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'ripped' }) }
-			});
-			expect(screen.getByText('Fix Permissions')).toBeInTheDocument();
-		});
-
-		it('does not show Fix Permissions for failed jobs', () => {
-			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'failed' }) }
-			});
-			expect(screen.queryByText('Fix Permissions')).not.toBeInTheDocument();
+		it('never shows a Fix Permissions control (removed)', () => {
+			const statuses = ['ripped', 'ripped_partial', 'failed', 'abandoned'] as const;
+			for (const status of statuses) {
+				cleanup();
+				renderComponent(JobActions, { props: { job: createJob({ status }) } });
+				expect(screen.queryByText('Fix Permissions')).not.toBeInTheDocument();
+			}
 		});
 
 		it('shows Abandon for in-flight jobs', () => {
@@ -103,14 +98,6 @@ describe('JobActions', () => {
 			});
 		});
 
-		it('renders Fix Permissions as a disabled ComingSoon control', () => {
-			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'ripped' }) }
-			});
-			const fixPermsBtn = screen.getByText('Fix Permissions');
-			expect(fixPermsBtn).toBeInTheDocument();
-			expect(fixPermsBtn).toBeDisabled();
-		});
 
 		it('shows success feedback after action', async () => {
 			renderComponent(JobActions, {

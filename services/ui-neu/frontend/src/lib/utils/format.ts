@@ -227,6 +227,10 @@ const STATUS_LABELS: Record<string, string> = {
 	transcoded: 'Transcoded',
 	info: 'Scanning',
 	cancelled: 'Cancelled',
+	// TrackStatus / TranscodeTaskStatus (per-track + per-task rows)
+	queued: 'Queued',
+	in_progress: 'In Progress',
+	done: 'Done',
 };
 
 export function statusLabel(status: string | null | undefined): string {

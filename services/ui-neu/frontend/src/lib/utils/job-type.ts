@@ -119,8 +119,10 @@ const DISC_TYPE_LABELS: Record<string, string> = {
 	dvd: 'DVD',
 	bluray: 'Blu-ray',
 	bluray4k: '4K UHD',
+	cd: 'CD',
 	music: 'Music CD',
 	data: 'Data',
+	unknown: 'Unknown',
 };
 
 export function discTypeLabel(disctype: string | null | undefined): string {

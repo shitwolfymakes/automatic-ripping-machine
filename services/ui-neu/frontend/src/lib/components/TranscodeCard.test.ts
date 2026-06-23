@@ -50,9 +50,10 @@ describe('TranscodeCard', () => {
 			expect(screen.getByText('Transcode #t-1')).toBeInTheDocument();
 		});
 
-		it('renders status badge', () => {
+		it('renders status badge with a humanized label', () => {
 			renderComponent(TranscodeCard, { props: { job: createTranscodeTask() } });
-			const matches = screen.getAllByText('in_progress');
+			// in_progress now renders as the parsed label "In Progress".
+			const matches = screen.getAllByText('In Progress');
 			expect(matches.length).toBeGreaterThanOrEqual(1);
 		});
 

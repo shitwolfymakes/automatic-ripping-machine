@@ -72,6 +72,10 @@ describe('statusLabel', () => {
 		['fail', 'Failed'],
 		['transcoding', 'Transcoding'],
 		['info', 'Scanning'],
+		// TrackStatus / TranscodeTaskStatus
+		['queued', 'Queued'],
+		['in_progress', 'In Progress'],
+		['done', 'Done'],
 		[null, 'Unknown'],
 	])('statusLabel(%s) = %s', (input, expected) => {
 		expect(statusLabel(input)).toBe(expected);

@@ -2,7 +2,6 @@
 	import type { JobView } from '$lib/types/api.gen';
 	import { abandonJob, deleteJob } from '$lib/api/jobs';
 	import { isJobActive } from '$lib/utils/job-type';
-	import ComingSoon from './ComingSoon.svelte';
 
 	interface Props {
 		job: JobView;
@@ -21,9 +20,6 @@
 	const TERMINAL = new Set(['ripped', 'ripped_partial', 'ripped_awaiting_identify', 'abandoned', 'failed']);
 	let canAbandon = $derived(active);
 	let canDelete = $derived(TERMINAL.has(job.status));
-	// Fix-permissions only ever applied to successfully-ripped jobs; map that to
-	// 'ripped'. Its v3 backend isn't built yet, so the control is a ComingSoon.
-	let canFixPerms = $derived(job.status === 'ripped');
 
 	function clearFeedback() {
 		setTimeout(() => (feedback = null), 3000);
@@ -76,7 +72,7 @@
 	);
 </script>
 
-{#if canAbandon || canDelete || canFixPerms}
+{#if canAbandon || canDelete}
 	<div class="flex flex-wrap items-center gap-1.5">
 		{#if canAbandon}
 			<button
@@ -86,9 +82,6 @@
 			>
 				{loading === 'abandon' ? 'Abandoning...' : 'Abandon'}
 			</button>
-		{/if}
-		{#if canFixPerms}
-			<ComingSoon label="Fix Permissions" feature="Fix permissions" />
 		{/if}
 		{#if canDelete}
 			<button
