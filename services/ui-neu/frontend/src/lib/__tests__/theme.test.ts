@@ -31,62 +31,34 @@ describe('theme store', () => {
 });
 
 describe('colorScheme - theme fetch dedup', () => {
-	it('concurrent loadThemeCss calls for the same id only fetch once', async () => {
-		// Simulate the real-world race: loadThemesFromApi() and the subscribe handler
-		// both call loadThemeCss(id) at nearly the same time. Without an in-flight guard
-		// both see cssCache.has(id) === false and issue separate network requests.
-		const mockFetch = vi.fn((url: string) => {
-			if (typeof url === 'string' && /\/api\/themes\/\w/.exec(url)) {
-				return Promise.resolve({
-					ok: true,
-					json: () =>
-						Promise.resolve({
-							id: 'blue',
-							label: 'Blue',
-							swatch: '#3b82f6',
-							tokens: {},
-							css: 'body{}'
-						})
-				});
-			}
-			return Promise.resolve({
-				ok: true,
-				json: () =>
-					Promise.resolve([{ id: 'blue', label: 'Blue', swatch: '#3b82f6', tokens: {} }])
-			});
-		});
+	it('concurrent loadThemeCss calls for a built-in id only fetch its static CSS once', async () => {
+		// Built-in themes load their CSS from the frontend's static assets
+		// (/themes/{id}.css). The in-flight guard must dedup concurrent calls
+		// (loadThemesFromApi + the subscribe handler racing on page load).
+		const mockFetch = vi.fn((url: string) =>
+			Promise.resolve({ ok: true, text: () => Promise.resolve('body{}') })
+		);
 		vi.stubGlobal('fetch', mockFetch);
 
 		try {
 			const { loadThemeCss } = await import('$lib/stores/colorScheme');
 
-			// Fire two concurrent calls for the same id - mirroring the subscribe race
 			await Promise.all([loadThemeCss('blue'), loadThemeCss('blue')]);
 
-			const themeFetchCalls = mockFetch.mock.calls.filter(
-				([url]) => typeof url === 'string' && /\/api\/themes\/\w/.test(url)
+			const cssCalls = mockFetch.mock.calls.filter(
+				([url]) => typeof url === 'string' && url === '/themes/blue.css'
 			);
-			expect(themeFetchCalls.length).toBe(1);
+			expect(cssCalls.length).toBe(1);
 		} finally {
 			vi.unstubAllGlobals();
 		}
 	});
 
-	it('writes fetched theme CSS to localStorage for later reuse', async () => {
+	it('writes fetched built-in CSS to localStorage for later reuse', async () => {
 		vi.resetModules();
 		const mockFetch = vi.fn((url: string) => {
-			if (typeof url === 'string' && /\/api\/themes\/\w/.exec(url)) {
-				return Promise.resolve({
-					ok: true,
-					json: () =>
-						Promise.resolve({
-							id: 'blue',
-							label: 'Blue',
-							swatch: '#3b82f6',
-							tokens: {},
-							css: 'body { background: blue; }'
-						})
-				});
+			if (url === '/themes/blue.css') {
+				return Promise.resolve({ ok: true, text: () => Promise.resolve('body { background: blue; }') });
 			}
 			return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
 		});
