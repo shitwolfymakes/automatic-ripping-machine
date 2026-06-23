@@ -48,6 +48,11 @@ services:
       MEDIA_ROOT: /media
       MAX_PARALLEL_TRANSCODES: ${MAX_PARALLEL_TRANSCODES:-1}
       ARM_TRANSCODE_IMAGE: ${ARM_TRANSCODE_IMAGE:-arm-transcode:latest}
+      ARM_TRANSCODE_STALE_THRESHOLD_SECONDS: ${ARM_TRANSCODE_STALE_THRESHOLD_SECONDS:-90}
+      ARM_TRANSCODE_MAX_ATTEMPTS: ${ARM_TRANSCODE_MAX_ATTEMPTS:-3}
+      ARM_TRANSCODE_DISPATCH_INTERVAL_SECONDS: ${ARM_TRANSCODE_DISPATCH_INTERVAL_SECONDS:-5}
+      ARM_NOTIFICATION_DISPATCH_INTERVAL_SECONDS: ${ARM_NOTIFICATION_DISPATCH_INTERVAL_SECONDS:-5}
+      ARM_NOTIFY_IMAGE_URL: ${ARM_NOTIFY_IMAGE_URL:-}
       # Default to the same host paths the bind mounts below resolve to —
       # `${PWD}` is the directory `docker compose` was invoked from, which
       # for this project is always the repo root. Override in `.env` only if
@@ -100,6 +105,21 @@ services:
       - arm-backend
     ports:
       - "8081:443"
+    volumes:
+      - ./arm/certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
+      - ./arm/certs/arm-ui.crt:/etc/ssl/arm/tls.crt:ro
+      - ./arm/certs/arm-ui.key:/etc/ssl/arm/tls.key:ro
+
+  arm-ui-neu:
+    build:
+      context: .
+      dockerfile: services/ui-neu/Dockerfile
+    container_name: armv3-ui-neu
+    restart: unless-stopped
+    depends_on:
+      - arm-backend
+    ports:
+      - "8082:443"
     volumes:
       - ./arm/certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
       - ./arm/certs/arm-ui.crt:/etc/ssl/arm/tls.crt:ro
