@@ -29,7 +29,6 @@ packages = ["arm_backend"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "arm_backend/py.typed" = "arm_backend/py.typed"
-"arm_backend/themes/builtin" = "arm_backend/themes/builtin"
 
 [tool.uv.sources]
 arm_common = { workspace = true }

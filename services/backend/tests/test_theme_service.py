@@ -1,4 +1,8 @@
-"""theme_service — built-in load, user merge/override, validate, save, delete, path-guard."""
+"""theme_service — user-theme load, validate, save, delete, path-guard.
+
+Built-in themes are a frontend concern (tokens compiled into the UI, CSS served
+as static assets); the backend stores only user-uploaded themes.
+"""
 
 from __future__ import annotations
 
@@ -18,24 +22,23 @@ def user_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
-def test_builtins_present_and_parse():
+def test_no_builtins_only_user_themes(user_dir):
+    # The backend no longer serves built-in themes — an empty user dir yields none.
+    assert theme_service.get_all_themes() == []
+
+
+def test_get_all_lists_user_themes_without_css(user_dir):
+    theme_service.save_user_theme({"id": "mine", "label": "Mine", "tokens": {"--x": "y"}}, css="x{}")
     themes = theme_service.get_all_themes()
     by_id = {t["id"]: t for t in themes}
-    assert len(themes) >= 30
-    assert by_id["blockbuster"]["builtin"] is True
-    assert "tokens" in by_id["blockbuster"]
+    assert by_id["mine"]["builtin"] is False
+    assert "tokens" in by_id["mine"]
     assert all("css" not in t for t in themes)
-
-
-def test_get_theme_returns_full_with_css(user_dir):
-    full = theme_service.get_theme("lcars")
-    assert full is not None
-    assert full["builtin"] is True
-    assert "css" in full
 
 
 def test_get_unknown_returns_none(user_dir):
     assert theme_service.get_theme("does-not-exist") is None
+    assert theme_service.get_theme("lcars") is None  # built-ins are not backend-served
 
 
 def test_save_user_theme_writes_json_and_css(user_dir):
@@ -63,10 +66,11 @@ def test_save_rejects_unsafe_id(user_dir):
         theme_service.save_user_theme({"id": "../evil", "label": "x", "tokens": {}}, css="")
 
 
-def test_user_overrides_builtin_by_id(user_dir):
-    theme_service.save_user_theme({"id": "blockbuster", "label": "Mine BB", "tokens": {"--x": "y"}}, css="")
-    full = theme_service.get_theme("blockbuster")
-    assert full["label"] == "Mine BB"
+def test_user_theme_with_builtin_id_is_served(user_dir):
+    # A user theme may reuse a built-in's id; the backend serves it as a user theme.
+    theme_service.save_user_theme({"id": "lcars", "label": "My LCARS", "tokens": {"--x": "y"}}, css="")
+    full = theme_service.get_theme("lcars")
+    assert full["label"] == "My LCARS"
     assert full["builtin"] is False
 
 
@@ -75,10 +79,6 @@ def test_delete_user_theme(user_dir):
     assert theme_service.delete_user_theme("mine") is True
     assert not (user_dir / "mine.json").exists()
     assert not (user_dir / "mine.css").exists()
-
-
-def test_delete_builtin_refused(user_dir):
-    assert theme_service.delete_user_theme("blockbuster") is False
 
 
 def test_delete_absent_returns_false(user_dir):
@@ -92,10 +92,11 @@ def test_delete_rejects_unsafe_id(user_dir):
 
 def test_load_skips_corrupt_json(user_dir):
     # a corrupt user theme file is silently skipped (not raised), leaving the list intact
+    theme_service.save_user_theme({"id": "good", "label": "Good", "tokens": {}}, css="")
     (user_dir / "broken.json").write_text("{not json")
     ids = {t["id"] for t in theme_service.get_all_themes()}
     assert "broken" not in ids
-    assert "blockbuster" in ids  # built-ins still load
+    assert "good" in ids  # the valid user theme still loads
 
 
 def test_save_whitespace_only_css_removes_sidecar(user_dir):

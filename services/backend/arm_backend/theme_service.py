@@ -1,8 +1,10 @@
 """Theme loading and management.
 
-Built-in themes ship read-only in the image (arm_backend/themes/builtin/).
-User themes live under settings.ARM_THEMES_PATH (the /data/themes mount).
-The merged view has user themes override built-ins of the same id.
+The backend owns only USER-uploaded themes (under settings.ARM_THEMES_PATH, the
+/data/themes mount). Built-in themes are a frontend concern — their tokens are
+compiled into the UI and their CSS ships as static assets
+(services/ui-neu/frontend/static/themes/), so the backend no longer stores or
+serves them.
 """
 
 from __future__ import annotations
@@ -16,9 +18,6 @@ from typing import Any
 from arm_backend.config import settings
 
 log = logging.getLogger(__name__)
-
-# Built-in themes ship with the package (baked read-only into the image).
-_BUILTIN_DIR = Path(__file__).parent / "themes" / "builtin"
 
 _SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 
@@ -72,14 +71,8 @@ def _user_dir() -> Path:
 
 
 def _load_all() -> dict[str, dict[str, Any]]:
-    """Load all themes; user themes override built-ins with the same id."""
+    """Load all user-uploaded themes. Built-ins live in the frontend, not here."""
     themes: dict[str, dict[str, Any]] = {}
-    if _BUILTIN_DIR.is_dir():
-        for f in sorted(_BUILTIN_DIR.glob("*.json")):
-            t = _load_theme_file(f)
-            if t:
-                t["builtin"] = True
-                themes[t["id"]] = t
     user_dir = Path(settings.ARM_THEMES_PATH)
     if user_dir.is_dir():
         for f in sorted(user_dir.glob("*.json")):
@@ -91,12 +84,12 @@ def _load_all() -> dict[str, dict[str, Any]]:
 
 
 def get_all_themes() -> list[dict[str, Any]]:
-    """Return metadata for all themes (no css)."""
+    """Return metadata for all user themes (no css)."""
     return [{k: v for k, v in t.items() if k != "css"} for t in _load_all().values()]
 
 
 def get_theme(theme_id: str) -> dict[str, Any] | None:
-    """Return full theme data including css, or None if unknown."""
+    """Return full user-theme data including css, or None if unknown."""
     return _load_all().get(theme_id)
 
 
@@ -127,10 +120,8 @@ def save_user_theme(data: dict[str, Any], css: str = "") -> dict[str, Any]:
 
 
 def delete_user_theme(theme_id: str) -> bool:
-    """Delete a user theme. False if it's a built-in or doesn't exist."""
+    """Delete a user theme. False if it doesn't exist."""
     theme_id = _safe_theme_id(theme_id)
-    if _safe_path(_BUILTIN_DIR, f"{theme_id}.json").exists():
-        return False
     user_dir = _user_dir()
     json_path = _safe_path(user_dir, f"{theme_id}.json")
     if not json_path.exists():

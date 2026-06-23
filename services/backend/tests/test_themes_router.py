@@ -38,59 +38,61 @@ def unauth_client(tmp_path, monkeypatch):
         yield c
 
 
+def _upload(client, theme_id, css="", label="X", tokens=None):
+    theme = {"id": theme_id, "label": label, "tokens": tokens or {"--x": "y"}}
+    files = {"theme_json": (f"{theme_id}.json", io.BytesIO(json.dumps(theme).encode()), "application/json")}
+    return client.post("/api/themes", files=files, data={"theme_css": css})
+
+
 def test_gated_routes_reject_without_jwt(unauth_client):
     # No bearer -> require_jwt rejects (401/403, NOT 200/404). These four are gated.
     assert unauth_client.get("/api/themes").status_code in (401, 403)
-    assert unauth_client.get("/api/themes/blockbuster").status_code in (401, 403)
+    assert unauth_client.get("/api/themes/mine").status_code in (401, 403)
     assert unauth_client.post("/api/themes").status_code in (401, 403)
-    assert unauth_client.delete("/api/themes/blockbuster").status_code in (401, 403)
+    assert unauth_client.delete("/api/themes/mine").status_code in (401, 403)
 
 
-def test_css_route_is_unauthenticated(unauth_client):
-    # /css must work with NO auth (UI fetches it bare). blockbuster ships a .css.
-    r = unauth_client.get("/api/themes/blockbuster/css")
+def test_css_route_is_unauthenticated(client, unauth_client):
+    # /css must work with NO auth (UI fetches it bare) for an uploaded user theme.
+    _upload(client, "mine", css="[data-scheme=mine]{}")
+    r = unauth_client.get("/api/themes/mine/css")
     assert r.status_code == 200
     assert "text/css" in r.headers["content-type"]
 
 
-def test_upload_can_override_builtin_id(client):
-    # Uploading a user theme with a built-in's id overrides it (builtin=False wins).
-    theme = {"id": "blockbuster", "label": "My BB", "tokens": {"--x": "y"}}
-    files = {"theme_json": ("bb.json", io.BytesIO(json.dumps(theme).encode()), "application/json")}
-    r = client.post("/api/themes", files=files, data={"theme_css": ""})
-    assert r.status_code == 201
-    got = client.get("/api/themes/blockbuster").json()
-    assert got["label"] == "My BB"
-    assert got["builtin"] is False
-
-
-def test_list_returns_builtins(client):
+def test_list_returns_only_user_themes(client):
+    # Empty user dir -> no themes (built-ins are not backend-served).
+    assert client.get("/api/themes").json() == []
+    _upload(client, "mine")
     r = client.get("/api/themes")
     assert r.status_code == 200
-    ids = {t["id"] for t in r.json()}
-    assert "blockbuster" in ids
-    assert len(ids) >= 30
-    assert all("css" not in t for t in r.json())
+    body = r.json()
+    ids = {t["id"] for t in body}
+    assert ids == {"mine"}
+    assert all("css" not in t for t in body)
 
 
-def test_get_builtin_full(client):
-    r = client.get("/api/themes/blockbuster")
+def test_get_user_theme_full(client):
+    _upload(client, "mine", css="x{}")
+    r = client.get("/api/themes/mine")
     assert r.status_code == 200
     body = r.json()
-    assert body["id"] == "blockbuster"
+    assert body["id"] == "mine"
+    assert body["builtin"] is False
     assert "css" in body
 
 
 def test_get_unknown_404(client):
-    r = client.get("/api/themes/nope")
-    assert r.status_code == 404
+    assert client.get("/api/themes/nope").status_code == 404
+    assert client.get("/api/themes/lcars").status_code == 404  # built-ins not backend-served
 
 
-def test_css_unauthenticated_and_served(client):
-    r = client.get("/api/themes/lcars/css")
+def test_css_served_for_user_theme(client):
+    _upload(client, "mine", css="[data-scheme=mine]{}")
+    r = client.get("/api/themes/mine/css")
     assert r.status_code == 200
     assert "text/css" in r.headers["content-type"]
-    assert r.text
+    assert r.text == "[data-scheme=mine]{}"
 
 
 def test_css_unknown_theme_404(client):
@@ -99,8 +101,9 @@ def test_css_unknown_theme_404(client):
 
 
 def test_css_no_sidecar_404(client):
-    # `blue` is a built-in token-only theme with no .css sidecar shipped in Task 1.
-    r = client.get("/api/themes/blue/css")
+    # A token-only user theme (no css uploaded) -> /css 404.
+    _upload(client, "tokenonly", css="")
+    r = client.get("/api/themes/tokenonly/css")
     assert r.status_code == 404
 
 
@@ -135,6 +138,7 @@ def test_delete_user_theme(client):
     assert "mine" not in {t["id"] for t in client.get("/api/themes").json()}
 
 
-def test_delete_builtin_400(client):
-    r = client.delete("/api/themes/blockbuster")
-    assert r.status_code == 400
+def test_delete_unknown_400(client):
+    # Deleting a non-existent theme (incl. a built-in id, which isn't backend-served).
+    assert client.delete("/api/themes/blockbuster").status_code == 400
+    assert client.delete("/api/themes/nope").status_code == 400

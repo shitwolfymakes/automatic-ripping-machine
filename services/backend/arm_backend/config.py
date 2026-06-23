@@ -37,9 +37,9 @@ class Settings(BaseSettings):
     # volume here in compose.
     ARM_IMAGE_CACHE_PATH: str = "/data/cache/images"
 
-    # User-uploaded themes live here; built-in themes ship read-only in the
-    # image (arm_backend/themes/builtin/). Bind-mounted via ./arm/themes:/data/themes
-    # (sub-plan A). The themes service merges both, user overriding built-in by id.
+    # User-uploaded themes live here (bind-mounted via ./arm/themes:/data/themes).
+    # Built-in themes are a frontend concern — tokens compiled into the UI, CSS
+    # served as static assets — so the backend stores only user themes.
     ARM_THEMES_PATH: str = "/data/themes"
 
     # Comma-separated list of `Origin` header values the WS endpoint accepts
