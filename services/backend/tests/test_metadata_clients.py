@@ -139,9 +139,9 @@ async def test_musicbrainz_extracts_artist_album_tracks(http_client):
     assert result.payload["artist"] == "Pink Floyd"
     assert result.payload["album"] == "Dark Side of the Moon"
     assert result.payload["tracks"] == [
-        {"title": "Speak to Me", "position": 1},
-        {"title": "Breathe", "position": 2},
-        {"title": "On the Run", "position": 3},
+        {"title": "Speak to Me", "position": 1, "length_ms": None, "disc_number": 1},
+        {"title": "Breathe", "position": 2, "length_ms": None, "disc_number": 1},
+        {"title": "On the Run", "position": 3, "length_ms": None, "disc_number": 1},
     ]
     # release["id"] is preserved by spread — extract_poster_url derives
     # the Cover Art Archive URL from it.
@@ -221,7 +221,7 @@ async def test_musicbrainz_single_disc_release_no_discs_array(http_client):
     )
     client = MusicBrainzClient("arm-test/0.0 (test@example.com)", http_client)
     result = await client.lookup_disc_id("xyz")
-    assert result.payload["tracks"] == [{"title": "Opener", "position": 1}]
+    assert result.payload["tracks"] == [{"title": "Opener", "position": 1, "length_ms": None, "disc_number": 1}]
 
 
 @respx.mock
@@ -366,9 +366,9 @@ async def test_musicbrainz_tracks_drop_entries_without_title(http_client):
     client = MusicBrainzClient("arm-test/0.0 (test@example.com)", http_client)
     result = await client.lookup_disc_id("q")
     assert result.payload["tracks"] == [
-        {"title": "Good Track", "position": 1},
-        {"title": "Mystery Position"},
-        {"title": "Int Position", "position": 4},
+        {"title": "Good Track", "position": 1, "length_ms": None, "disc_number": 1},
+        {"title": "Mystery Position", "length_ms": None, "disc_number": 1},
+        {"title": "Int Position", "position": 4, "length_ms": None, "disc_number": 1},
     ]
 
 
@@ -957,7 +957,7 @@ async def test_get_release_success(http_client):
     assert result.year == 1973
     assert result.kind == "music"
     assert result.payload["artist"] == "Pink Floyd"
-    assert result.payload["tracks"] == [{"title": "Speak to Me", "position": 1}]
+    assert result.payload["tracks"] == [{"title": "Speak to Me", "position": 1, "length_ms": None, "disc_number": 1}]
 
 
 @respx.mock
@@ -976,6 +976,79 @@ async def test_get_release_missing_title_raises(http_client):
     )
     with pytest.raises(LookupError, match="missing title"):
         await MusicBrainzClient("armv3", http_client).get_release("no-title")
+
+
+@respx.mock
+async def test_get_release_extracts_length_and_release_fields(http_client):
+    respx.get("https://musicbrainz.org/ws/2/release/mbid-2").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "mbid-2",
+                "title": "Abbey Road",
+                "date": "1969-09-26",
+                "artist-credit": [{"name": "The Beatles"}],
+                "country": "GB",
+                "barcode": "0094638246619",
+                "status": "Official",
+                "label-info": [{"catalog-number": "PCS 7088"}],
+                "media": [
+                    {
+                        "format": "CD",
+                        "tracks": [
+                            {"position": "1", "title": "Come Together", "length": 259000},
+                            {"position": "2", "title": "Something", "length": 182000},
+                        ],
+                    }
+                ],
+            },
+        )
+    )
+    result = await MusicBrainzClient("armv3", http_client).get_release("mbid-2")
+    p = result.payload
+    assert p["tracks"][0] == {"title": "Come Together", "position": 1, "length_ms": 259000, "disc_number": 1}
+    assert p["country"] == "GB"
+    assert p["barcode"] == "0094638246619"
+    assert p["status"] == "Official"
+    assert p["catalog_number"] == "PCS 7088"
+    assert p["format"] == "CD"
+    assert p["disc_count"] == 1
+    assert p["track_count"] == 2
+
+
+@respx.mock
+async def test_get_release_multi_disc_tags_disc_number(http_client):
+    respx.get("https://musicbrainz.org/ws/2/release/mbid-3").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "mbid-3",
+                "title": "The Wall",
+                "date": "1979",
+                "artist-credit": [{"name": "Pink Floyd"}],
+                "media": [
+                    {"format": "CD", "tracks": [{"position": "1", "title": "In the Flesh?", "length": 199000}]},
+                    {"format": "CD", "tracks": [{"position": "1", "title": "Hey You", "length": 280000}]},
+                ],
+            },
+        )
+    )
+    p = (await MusicBrainzClient("armv3", http_client).get_release("mbid-3")).payload
+    assert p["disc_count"] == 2
+    assert [t["disc_number"] for t in p["tracks"]] == [1, 2]
+    assert [t["title"] for t in p["tracks"]] == ["In the Flesh?", "Hey You"]
+
+
+@respx.mock
+async def test_search_releases_artist_and_track_count_in_query(http_client):
+    route = respx.get("https://musicbrainz.org/ws/2/release").mock(
+        return_value=httpx.Response(200, json={"releases": []})
+    )
+    await MusicBrainzClient("armv3", http_client).search_releases("Abbey Road", artist="The Beatles", track_count=17)
+    sent = route.calls.last.request.url.params["query"]
+    assert "Abbey Road" in sent
+    assert 'artist:"The Beatles"' in sent
+    assert "tracks:17" in sent
 
 
 # ---------------------------------------------------------------------------

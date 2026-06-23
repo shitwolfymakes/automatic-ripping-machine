@@ -311,6 +311,59 @@
         }
       }
     },
+    "/api/ripper/keydb-status": {
+      "post": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Keydb Status",
+        "description": "A ripper reports its community-keydb fetch outcome. Global fact \u2014\nwritten to the Config singleton (last writer wins across rippers, by\ndesign). /api/system/preflight reads it back. `age_days` is accepted for\nsymmetry with the ripper's status line but not persisted (no column for\nit); only state + vuk_count are durable.",
+        "operationId": "keydb_status_api_ripper_keydb_status_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeydbStatusReport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ripper/register": {
       "post": {
         "tags": [
@@ -1153,7 +1206,7 @@
           "jobs"
         ],
         "summary": "Update Job",
-        "description": "Edit user-controlled fields on a Job. Currently `poster_url_manual`\nonly \u2014 title/year are owned by the identify/resolve flow.",
+        "description": "Edit user-controlled fields on a Job + optional per-track operator edits.\nJob title/year stay behind identify/resolve; track `status` stays ripper-owned\n(not in TrackEditRequest).",
         "operationId": "update_job_api_jobs__job_id__patch",
         "parameters": [
           {
@@ -3477,9 +3530,15 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 1000,
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Limit"
             }
           },
@@ -3980,6 +4039,102 @@
             "schema": {
               "type": "string",
               "title": "Query"
+            }
+          },
+          {
+            "name": "artist",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Artist"
+            }
+          },
+          {
+            "name": "track_count",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Track Count"
+            }
+          },
+          {
+            "name": "release_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Type"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Format"
+            }
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Country"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
             }
           },
           {
@@ -4756,7 +4911,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/EventTypeInfo"
                   },
                   "title": "Response Event Types Api Notifications Event Types Get"
                 }
@@ -5423,8 +5578,15 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "integer",
-              "default": 1000,
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Limit"
             }
           },
@@ -5453,6 +5615,441 @@
                 "schema": {}
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/images/proxy": {
+      "get": {
+        "tags": [
+          "images"
+        ],
+        "summary": "Proxy Image",
+        "description": "Proxy and cache external images to avoid browser ORB/CORS issues.",
+        "operationId": "proxy_image_api_images_proxy_get",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Image URL to proxy",
+              "title": "Url"
+            },
+            "description": "Image URL to proxy"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/images/cache": {
+      "get": {
+        "tags": [
+          "images"
+        ],
+        "summary": "Image Cache Stats",
+        "description": "Image-cache statistics (count, size).",
+        "operationId": "image_cache_stats_api_images_cache_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Image Cache Stats Api Images Cache Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/images/cache/clear": {
+      "post": {
+        "tags": [
+          "images"
+        ],
+        "summary": "Image Cache Clear",
+        "description": "Clear the image cache. Returns {success, cleared, freed_bytes}.",
+        "operationId": "image_cache_clear_api_images_cache_clear_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Image Cache Clear Api Images Cache Clear Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/themes": {
+      "get": {
+        "tags": [
+          "themes"
+        ],
+        "summary": "List Themes",
+        "description": "List all themes (metadata only, no CSS).",
+        "operationId": "list_themes_api_themes_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response List Themes Api Themes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "themes"
+        ],
+        "summary": "Upload Theme",
+        "description": "Upload a user theme (JSON file + optional CSS).",
+        "operationId": "upload_theme_api_themes_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_theme_api_themes_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Upload Theme Api Themes Post"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/themes/{theme_id}": {
+      "get": {
+        "tags": [
+          "themes"
+        ],
+        "summary": "Get Theme",
+        "description": "Full theme data including CSS.",
+        "operationId": "get_theme_api_themes__theme_id__get",
+        "parameters": [
+          {
+            "name": "theme_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Theme Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Theme Api Themes  Theme Id  Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Theme not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "themes"
+        ],
+        "summary": "Delete Theme",
+        "description": "Delete a user theme. Built-ins cannot be deleted.",
+        "operationId": "delete_theme_api_themes__theme_id__delete",
+        "parameters": [
+          {
+            "name": "theme_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Theme Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Theme Api Themes  Theme Id  Delete"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/themes/{theme_id}/css": {
+      "get": {
+        "tags": [
+          "themes"
+        ],
+        "summary": "Get Theme Css",
+        "description": "Theme CSS as text/css. 404 if the theme is unknown or has no CSS.",
+        "operationId": "get_theme_css_api_themes__theme_id__css_get",
+        "parameters": [
+          {
+            "name": "theme_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Theme Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Theme not found"
           },
           "422": {
             "description": "Validation Error",
@@ -5765,6 +6362,434 @@
           }
         }
       }
+    },
+    "/api/files/roots": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Roots",
+        "operationId": "roots_api_files_roots_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileRoot"
+                  },
+                  "title": "Response Roots Api Files Roots Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/list": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "List Directory",
+        "operationId": "list_directory_api_files_list_get",
+        "parameters": [
+          {
+            "name": "root",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Root"
+            }
+          },
+          {
+            "name": "subpath",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Subpath"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryListing"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/mkdir": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Mkdir",
+        "operationId": "mkdir_api_files_mkdir_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MkdirRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilePathResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/rename": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Rename",
+        "operationId": "rename_api_files_rename_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilePathResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/move": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Move",
+        "operationId": "move_api_files_move_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilePathResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/fix-permissions": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Fix Permissions",
+        "operationId": "fix_permissions_api_files_fix_permissions_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FilePathRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixPermsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files": {
+      "delete": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Delete",
+        "operationId": "delete_api_files_delete",
+        "parameters": [
+          {
+            "name": "root",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Root"
+            }
+          },
+          {
+            "name": "subpath",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Subpath"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Delete Api Files Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5886,6 +6911,27 @@
         },
         "type": "object",
         "title": "AppriseChannelConfig"
+      },
+      "Body_upload_theme_api_themes_post": {
+        "properties": {
+          "theme_json": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Theme Json",
+            "description": "Theme JSON file"
+          },
+          "theme_css": {
+            "type": "string",
+            "title": "Theme Css",
+            "description": "Optional custom CSS",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "theme_json"
+        ],
+        "title": "Body_upload_theme_api_themes_post"
       },
       "BulkDeleteJobsResponse": {
         "properties": {
@@ -6317,6 +7363,17 @@
             ],
             "title": "Block On Miss"
           },
+          "community_keydb_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Keydb Enabled"
+          },
           "ripping_paused": {
             "anyOf": [
               {
@@ -6327,30 +7384,6 @@
               }
             ],
             "title": "Ripping Paused"
-          },
-          "default_retention_policy": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RetentionPolicy"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "notification_apprise_urls": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notification Apprise Urls"
           },
           "notifications_enabled": {
             "anyOf": [
@@ -6447,6 +7480,10 @@
             "type": "boolean",
             "title": "Block On Miss"
           },
+          "community_keydb_enabled": {
+            "type": "boolean",
+            "title": "Community Keydb Enabled"
+          },
           "ripping_paused": {
             "type": "boolean",
             "title": "Ripping Paused"
@@ -6537,6 +7574,7 @@
           "auto_transcode_on_idle",
           "auto_rip_on_insert",
           "block_on_miss",
+          "community_keydb_enabled",
           "ripping_paused",
           "default_retention_policy",
           "notification_apprise_urls",
@@ -6595,6 +7633,53 @@
           "log_level"
         ],
         "title": "DiagnosticsServiceView"
+      },
+      "DirectoryListing": {
+        "properties": {
+          "root": {
+            "type": "string",
+            "title": "Root"
+          },
+          "subpath": {
+            "type": "string",
+            "title": "Subpath"
+          },
+          "parent_subpath": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Subpath"
+          },
+          "readonly": {
+            "type": "boolean",
+            "title": "Readonly"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/FileEntry"
+            },
+            "type": "array",
+            "title": "Entries"
+          },
+          "unavailable": {
+            "type": "boolean",
+            "title": "Unavailable",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "root",
+          "subpath",
+          "readonly",
+          "entries"
+        ],
+        "title": "DirectoryListing"
       },
       "DiscFingerprintInput": {
         "properties": {
@@ -7307,6 +8392,42 @@
         ],
         "title": "DriveView"
       },
+      "EventTypeInfo": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "variables": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Variables"
+          },
+          "default_title": {
+            "type": "string",
+            "title": "Default Title"
+          },
+          "default_body": {
+            "type": "string",
+            "title": "Default Body"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "variables",
+          "default_title",
+          "default_body"
+        ],
+        "title": "EventTypeInfo"
+      },
       "FailTaskRequest": {
         "properties": {
           "last_error": {
@@ -7320,6 +8441,150 @@
           "last_error"
         ],
         "title": "FailTaskRequest"
+      },
+      "FileEntry": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "modified": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified"
+          },
+          "extension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extension"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "default": "other"
+          },
+          "permissions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permissions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "FileEntry"
+      },
+      "FilePathRequest": {
+        "properties": {
+          "root": {
+            "type": "string",
+            "title": "Root"
+          },
+          "subpath": {
+            "type": "string",
+            "title": "Subpath"
+          }
+        },
+        "type": "object",
+        "required": [
+          "root",
+          "subpath"
+        ],
+        "title": "FilePathRequest"
+      },
+      "FilePathResponse": {
+        "properties": {
+          "root": {
+            "type": "string",
+            "title": "Root"
+          },
+          "subpath": {
+            "type": "string",
+            "title": "Subpath"
+          }
+        },
+        "type": "object",
+        "required": [
+          "root",
+          "subpath"
+        ],
+        "title": "FilePathResponse"
+      },
+      "FileRoot": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "writable": {
+            "type": "boolean",
+            "title": "Writable"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "path",
+          "writable"
+        ],
+        "title": "FileRoot"
+      },
+      "FixPermsResponse": {
+        "properties": {
+          "fixed": {
+            "type": "integer",
+            "title": "Fixed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fixed"
+        ],
+        "title": "FixPermsResponse"
       },
       "HTTPValidationError": {
         "properties": {
@@ -7556,6 +8821,28 @@
             ],
             "title": "Year"
           },
+          "disc_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Number"
+          },
+          "disc_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Total"
+          },
           "poster_url": {
             "anyOf": [
               {
@@ -7644,6 +8931,8 @@
           "drive_id",
           "disc_type",
           "year",
+          "disc_number",
+          "disc_total",
           "poster_url",
           "poster_url_manual",
           "status",
@@ -7741,11 +9030,48 @@
               }
             ],
             "title": "Poster Url Manual"
+          },
+          "disc_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Number"
+          },
+          "disc_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Total"
+          },
+          "tracks": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TrackEditRequest"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracks"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "JobUpdateRequest",
-        "description": "PATCH /api/jobs/{id} body. Currently only the manual poster override\nis editable \u2014 title/year live behind the identify/resolve flow."
+        "description": "PATCH /api/jobs/{id} body. `poster_url_manual` + disc fields edit the job;\n`tracks` applies per-track operator edits in the same atomic save. The JOB's\ntitle/year still live behind identify/resolve."
       },
       "JobView": {
         "properties": {
@@ -7784,6 +9110,28 @@
               }
             ],
             "title": "Year"
+          },
+          "disc_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Number"
+          },
+          "disc_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Total"
           },
           "poster_url": {
             "anyOf": [
@@ -7839,6 +9187,54 @@
           "resumed_from_crash"
         ],
         "title": "JobView"
+      },
+      "KeydbState": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "disabled",
+          "fresh_kept",
+          "download_failed",
+          "empty",
+          "probe_failed"
+        ],
+        "title": "KeydbState",
+        "description": "Outcome of the ripper's community-keydb fetch (`update_keydb.sh`),\nstored on the Config singleton and surfaced by /api/system/preflight.\n\nOK              \u2014 downloaded, filtered, installed; vuk_count set.\nDISABLED        \u2014 community keydb gated off via config.\nFRESH_KEPT      \u2014 age-gated skip; existing keydb retained (age_days set).\nDOWNLOAD_FAILED \u2014 all download retries failed; existing keydb retained.\nEMPTY           \u2014 fetched file not a ZIP / no keydb.cfg / no VUK entries.\nPROBE_FAILED    \u2014 wrapper could not run or parse the script."
+      },
+      "KeydbStatusReport": {
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/KeydbState"
+          },
+          "vuk_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vuk Count"
+          },
+          "age_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "KeydbStatusReport",
+        "description": "Body of POST /api/ripper/keydb-status \u2014 the ripper's community-keydb\nfetch outcome. Global (not per-drive); the backend writes it to the Config\nsingleton. `vuk_count` / `age_days` are present on ok / fresh_kept.\nBoth fields are None on all other states."
       },
       "LoginRequest": {
         "properties": {
@@ -8021,6 +9417,61 @@
               }
             ],
             "title": "Provider Id"
+          },
+          "release_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Type"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "track_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Count"
           }
         },
         "type": "object",
@@ -8127,6 +9578,83 @@
             ],
             "title": "Poster Url"
           },
+          "catalog_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Number"
+          },
+          "barcode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "disc_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Count"
+          },
+          "track_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Count"
+          },
           "tracks": {
             "items": {
               "$ref": "#/components/schemas/MetadataReleaseTrack"
@@ -8158,6 +9686,28 @@
           "title": {
             "type": "string",
             "title": "Title"
+          },
+          "length_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Length Ms"
+          },
+          "disc_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Number"
           }
         },
         "type": "object",
@@ -8192,6 +9742,57 @@
           "candidates"
         ],
         "title": "MetadataSearchResponse"
+      },
+      "MkdirRequest": {
+        "properties": {
+          "root": {
+            "type": "string",
+            "title": "Root"
+          },
+          "subpath": {
+            "type": "string",
+            "title": "Subpath"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "root",
+          "subpath",
+          "name"
+        ],
+        "title": "MkdirRequest"
+      },
+      "MoveRequest": {
+        "properties": {
+          "root": {
+            "type": "string",
+            "title": "Root"
+          },
+          "subpath": {
+            "type": "string",
+            "title": "Subpath"
+          },
+          "dest_root": {
+            "type": "string",
+            "title": "Dest Root"
+          },
+          "dest_subpath": {
+            "type": "string",
+            "title": "Dest Subpath"
+          }
+        },
+        "type": "object",
+        "required": [
+          "root",
+          "subpath",
+          "dest_root",
+          "dest_subpath"
+        ],
+        "title": "MoveRequest"
       },
       "NamingPreviewItem": {
         "properties": {
@@ -9165,6 +10766,29 @@
         "title": "RegisterTranscoderResponse",
         "description": "Bootstrap bundle the transcoder needs before it can claim + run.\n\n`raw_input_path` is the absolute path the transcoder should read from\n(`/raw/<job>/title_tNN.mkv` for video, `/raw/<job>/track_NN.wav` for\naudio, `/raw/<job>/dump.iso` for data). `media_root` plus the task's\n`output_path` is where the final file lands."
       },
+      "RenameRequest": {
+        "properties": {
+          "root": {
+            "type": "string",
+            "title": "Root"
+          },
+          "subpath": {
+            "type": "string",
+            "title": "Subpath"
+          },
+          "new_name": {
+            "type": "string",
+            "title": "New Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "root",
+          "subpath",
+          "new_name"
+        ],
+        "title": "RenameRequest"
+      },
       "ResolveFanOutOutcomeView": {
         "properties": {
           "session_application_id": {
@@ -9236,6 +10860,28 @@
               }
             ],
             "title": "Year"
+          },
+          "disc_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Number"
+          },
+          "disc_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Total"
           },
           "metadata": {
             "additionalProperties": true,
@@ -9572,6 +11218,11 @@
               }
             ],
             "title": "Makemkv Key"
+          },
+          "community_keydb_enabled": {
+            "type": "boolean",
+            "title": "Community Keydb Enabled",
+            "default": true
           }
         },
         "type": "object",
@@ -10172,6 +11823,120 @@
         ],
         "title": "TemplatePreviewResponse"
       },
+      "TrackEditRequest": {
+        "properties": {
+          "track_id": {
+            "type": "string",
+            "title": "Track Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "imdb_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imdb Id"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "video_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Type"
+          },
+          "episode_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Number"
+          },
+          "episode_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Name"
+          },
+          "excluded": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded"
+          },
+          "custom_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Filename"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "track_id"
+        ],
+        "title": "TrackEditRequest",
+        "description": "One entry in JobUpdateRequest.tracks. `track_id` selects the row; every\nother field is an optional operator edit (omitted=untouched, null=clear)."
+      },
       "TrackKind": {
         "type": "string",
         "enum": [
@@ -10362,6 +12127,132 @@
               }
             ],
             "title": "Last Error"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "edition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edition"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "imdb_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imdb Id"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "video_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Type"
+          },
+          "episode_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Number"
+          },
+          "episode_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Name"
+          },
+          "excluded": {
+            "type": "boolean",
+            "title": "Excluded",
+            "default": false
+          },
+          "custom_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Filename"
           }
         },
         "type": "object",

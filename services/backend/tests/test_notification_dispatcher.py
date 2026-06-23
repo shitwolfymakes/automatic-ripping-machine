@@ -182,9 +182,9 @@ async def test_enabled_with_subscribed_channel_dispatches_event() -> None:
     assert len(notifier.calls) == 1
     urls, title, body = notifier.calls[0]
     assert urls == ("discord://AAA/BBB",)
-    assert title == "ARM: rip completed"
-    assert "Iron Man (2008)" in body
-    assert "drive=drv_x" in body
+    assert title == "ARM: rip completed — Iron Man"
+    assert "Iron Man" in body
+    assert "drv_x" in body
     assert event.notified_at is not None
     # a dispatch-log row records the successful send
     logs = db.rows.get("notification_dispatch_log", [])

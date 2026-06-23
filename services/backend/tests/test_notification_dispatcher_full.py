@@ -26,7 +26,8 @@ from tests._fakes import FakeSession  # noqa: E402
 
 
 class _FakeApprise:
-    def __init__(self) -> None:
+    def __init__(self, asset: Any = None) -> None:
+        self.asset = asset
         self.added: list[str] = []
         self.notified: list[dict[str, Any]] = []
 
@@ -39,12 +40,44 @@ class _FakeApprise:
         return True
 
 
-async def test_real_apprise_notifier(monkeypatch: pytest.MonkeyPatch) -> None:
-    fake = _FakeApprise()
-    monkeypatch.setattr(nd, "apprise", type("M", (), {"Apprise": lambda: fake}))
-    await _RealAppriseNotifier().notify(["json://localhost", "mailto://x"], "Title", "Body")
+def _patch_apprise(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """Patch nd.apprise so Apprise(asset=...) records the asset it was built
+    with. Returns a holder dict whose 'instance' is the _FakeApprise created."""
+    holder: dict[str, Any] = {}
+
+    def _make(asset: Any = None) -> _FakeApprise:
+        fake = _FakeApprise(asset=asset)
+        holder["instance"] = fake
+        return fake
+
+    # keep the real AppriseAsset so the notifier builds a genuine asset object
+    import apprise as _real_apprise
+
+    monkeypatch.setattr(nd, "apprise", type("M", (), {"Apprise": _make, "AppriseAsset": _real_apprise.AppriseAsset}))
+    return holder
+
+
+async def test_real_apprise_notifier_no_image(monkeypatch: pytest.MonkeyPatch) -> None:
+    holder = _patch_apprise(monkeypatch)
+    await _RealAppriseNotifier("").notify(["json://localhost", "mailto://x"], "Title", "Body")
+    fake = holder["instance"]
     assert fake.added == ["json://localhost", "mailto://x"]
     assert fake.notified == [{"title": "Title", "body": "Body"}]
+    # Even with no image URL the sender is branded "ARM".
+    assert fake.asset is not None
+    assert fake.asset.app_id == "ARM"
+    # No image override applied — mask stays apprise's default (not our URL).
+    assert "arm" not in (fake.asset.image_url_mask or "").lower()
+
+
+async def test_real_apprise_notifier_with_image(monkeypatch: pytest.MonkeyPatch) -> None:
+    holder = _patch_apprise(monkeypatch)
+    url = "https://example.com/arm-logo.png"
+    await _RealAppriseNotifier(url).notify(["json://localhost"], "T", "B")
+    fake = holder["instance"]
+    assert fake.asset.app_id == "ARM"
+    assert fake.asset.image_url_mask == url
+    assert fake.asset.image_url_logo == url
 
 
 async def test_load_job_none_returns_none() -> None:

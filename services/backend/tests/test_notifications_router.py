@@ -317,14 +317,20 @@ def test_compose_url(signing_key: bytes) -> None:
     assert r.json()["url"] == "discord://1/2?format=markdown"
 
 
-def test_event_types(signing_key: bytes) -> None:
+def test_event_types_returns_catalog(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.get("/api/notifications/event-types", headers=_auth(token))
     assert r.status_code == 200
-    assert "rip.completed" in r.json()
-    assert r.json() == sorted(r.json())
+    items = r.json()
+    keys = [i["key"] for i in items]
+    assert "rip.completed" in keys and "session.failed" in keys
+    assert keys == sorted(keys)
+    rc = next(i for i in items if i["key"] == "rip.completed")
+    assert rc["label"] == "Rip completed"
+    assert "job_title" in rc["variables"] and "tracks_total" in rc["variables"]
+    assert rc["default_title"] and rc["default_body"]
 
 
 def test_test_saved_channel_success(signing_key: bytes) -> None:
@@ -687,3 +693,298 @@ def test_create_channel_accepts_needs_user_input_event(signing_key: bytes) -> No
     with TestClient(app) as client:
         r = client.post("/api/notifications/channels", json=body, headers=_auth(token))
     assert r.status_code == 201, r.text
+
+
+def test_sample_context_covers_all_event_vars() -> None:
+    from arm_backend.notification_events import EVENT_VOCAB
+    from arm_backend.routers.notifications import _sample_context
+
+    for key, spec in EVENT_VOCAB.items():
+        ctx = _sample_context(key)
+        for var in spec.variables:
+            assert var in ctx, f"{key}: var {var!r} missing from sample context"
+
+
+def test_sample_values_cover_every_vocab_variable() -> None:
+    from arm_backend.routers import notifications as notif
+    from arm_backend.notification_events import EVENT_VOCAB
+
+    needed = {v for spec in EVENT_VOCAB.values() for v in spec.variables if v != "event_type"}
+    missing = needed - set(notif._SAMPLE_VALUES)
+    assert not missing, f"_SAMPLE_VALUES missing readable placeholders for: {sorted(missing)}"
+
+
+def test_test_channel_renders_template(signing_key: bytes) -> None:
+    # A channel with a {job_title} override should echo "Example Movie" in the log body.
+    db = FakeSession()
+    notifier = _FakeNotifier()
+    app, token = _make_app(signing_key, db, notifier)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(
+            id="ncl_1",
+            type="apprise",
+            name="D",
+            config={"type": "apprise", "url": "json://localhost/x"},
+            subscribed_events=["rip.completed"],
+            templates={"rip.completed": {"title": "Job: {job_title}", "body": "done"}},
+        )
+    )
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/notifications/channels/ncl_1/test",
+            json={"event_type": "rip.completed"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["ok"] is True
+    # dispatch log body should include rendered template (title has "Example Movie")
+    log_rows = db.rows.get("notification_dispatch_log", [])
+    assert any("Example Movie" in row.title for row in log_rows)
+
+
+def test_test_channel_bad_template_returns_ok_false(signing_key: bytes) -> None:
+    # A template with an undefined variable should return ok=False, not 500.
+    db = FakeSession()
+    notifier = _FakeNotifier()
+    app, token = _make_app(signing_key, db, notifier)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(
+            id="ncl_1",
+            type="apprise",
+            name="D",
+            config={"type": "apprise", "url": "json://localhost/x"},
+            subscribed_events=["rip.completed"],
+            templates={"rip.completed": {"title": "{no_such_var}", "body": "b"}},
+        )
+    )
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/notifications/channels/ncl_1/test",
+            json={"event_type": "rip.completed"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["ok"] is False
+    assert "template error" in data["error"]
+
+
+def test_test_adhoc_config_renders_template(signing_key: bytes) -> None:
+    # Ad-hoc test-send also renders with sample context (default templates).
+    db = FakeSession()
+    notifier = _FakeNotifier()
+    app, token = _make_app(signing_key, db, notifier)
+    body = {
+        "config": {"type": "apprise", "url": "json://localhost/x"},
+        "event_type": "rip.completed",
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/test", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["ok"] is True
+    # The dispatch log body must contain meaningful text (not just a label stub).
+    log_rows = db.rows.get("notification_dispatch_log", [])
+    assert log_rows
+    assert log_rows[0].body  # non-empty rendered body
+
+
+def test_test_inapp_channel_returns_result_no_500(signing_key: bytes) -> None:
+    # In-app channel (no url) test returns ok=False (no url), never 500.
+    db = FakeSession()
+    notifier = _FakeNotifier()
+    app, token = _make_app(signing_key, db, notifier)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(
+            id="ncl_inbox",
+            type="inapp",
+            name="bell",
+            enabled=True,
+            config={"type": "inapp"},
+            subscribed_events=["rip.completed"],
+        )
+    )
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/notifications/channels/ncl_inbox/test",
+            json={},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    # in-app has no url so the "no url" branch fires — ok=False
+    assert r.json()["ok"] is False
+
+
+# --- Inbox endpoint coverage ---
+
+
+def test_list_inbox_empty(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get("/api/notifications/inbox", headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_list_inbox_with_cleared_items(signing_key: bytes) -> None:
+    from arm_common import NotificationInbox
+
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_inbox", []).extend(
+        [
+            NotificationInbox(
+                id="nib_1",
+                event_type="rip.completed",
+                title="t",
+                message="m",
+                seen=False,
+                cleared=False,
+            ),
+            NotificationInbox(
+                id="nib_2",
+                event_type="rip.failed",
+                title="t2",
+                message="m2",
+                seen=True,
+                cleared=True,
+            ),
+        ]
+    )
+    with TestClient(app) as client:
+        r1 = client.get("/api/notifications/inbox", headers=_auth(token))
+        assert r1.status_code == 200
+        assert len(r1.json()) == 1  # cleared excluded by default
+        r2 = client.get("/api/notifications/inbox?include_cleared=true", headers=_auth(token))
+        assert len(r2.json()) == 2
+
+
+def test_inbox_count(signing_key: bytes) -> None:
+    from arm_common import NotificationInbox
+
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_inbox", []).extend(
+        [
+            NotificationInbox(
+                id="nib_1", event_type="rip.completed", title="t", message="m", seen=False, cleared=False
+            ),
+            NotificationInbox(id="nib_2", event_type="rip.completed", title="t", message="m", seen=True, cleared=False),
+            NotificationInbox(id="nib_3", event_type="rip.completed", title="t", message="m", seen=True, cleared=True),
+        ]
+    )
+    with TestClient(app) as client:
+        r = client.get("/api/notifications/inbox/count", headers=_auth(token))
+    assert r.status_code == 200
+    data = r.json()
+    assert data["unseen"] == 1
+    assert data["seen"] == 1
+    assert data["cleared"] == 1
+    assert data["total"] == 3
+
+
+def test_inbox_dismiss_all(signing_key: bytes) -> None:
+    from arm_common import NotificationInbox
+
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_inbox", []).extend(
+        [
+            NotificationInbox(
+                id="nib_1", event_type="rip.completed", title="t", message="m", seen=False, cleared=False
+            ),
+            NotificationInbox(id="nib_2", event_type="rip.completed", title="t", message="m", seen=True, cleared=False),
+        ]
+    )
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/inbox/dismiss-all", headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()["updated"] == 1  # only the unseen one gets marked
+
+
+def test_inbox_purge(signing_key: bytes) -> None:
+    from arm_common import NotificationInbox
+
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_inbox", []).extend(
+        [
+            NotificationInbox(id="nib_1", event_type="rip.completed", title="t", message="m", seen=True, cleared=True),
+            NotificationInbox(
+                id="nib_2", event_type="rip.completed", title="t", message="m", seen=False, cleared=False
+            ),
+        ]
+    )
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/inbox/purge", headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()["deleted"] == 1
+    assert len(db.rows["notification_inbox"]) == 1
+
+
+def test_patch_inbox(signing_key: bytes) -> None:
+    from arm_common import NotificationInbox
+
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_inbox", []).append(
+        NotificationInbox(id="nib_1", event_type="rip.completed", title="t", message="m", seen=False, cleared=False)
+    )
+    with TestClient(app) as client:
+        r = client.patch("/api/notifications/inbox/nib_1", json={"seen": True}, headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()["seen"] is True
+    assert r.json()["seen_at"] is not None
+
+
+def test_patch_inbox_unsee(signing_key: bytes) -> None:
+    from arm_common import NotificationInbox
+
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_inbox", []).append(
+        NotificationInbox(id="nib_1", event_type="rip.completed", title="t", message="m", seen=True, cleared=False)
+    )
+    with TestClient(app) as client:
+        r = client.patch("/api/notifications/inbox/nib_1", json={"seen": False}, headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()["seen"] is False
+    assert r.json()["seen_at"] is None
+
+
+def test_patch_inbox_clear(signing_key: bytes) -> None:
+    from arm_common import NotificationInbox
+
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_inbox", []).append(
+        NotificationInbox(id="nib_1", event_type="rip.completed", title="t", message="m", seen=False, cleared=False)
+    )
+    with TestClient(app) as client:
+        r = client.patch("/api/notifications/inbox/nib_1", json={"cleared": True}, headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()["cleared"] is True
+    assert r.json()["cleared_at"] is not None
+
+
+def test_patch_inbox_unclear(signing_key: bytes) -> None:
+    from arm_common import NotificationInbox
+
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_inbox", []).append(
+        NotificationInbox(id="nib_1", event_type="rip.completed", title="t", message="m", seen=True, cleared=True)
+    )
+    with TestClient(app) as client:
+        r = client.patch("/api/notifications/inbox/nib_1", json={"cleared": False}, headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()["cleared"] is False
+    assert r.json()["cleared_at"] is None
+
+
+def test_patch_inbox_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/notifications/inbox/nib_missing", json={"seen": True}, headers=_auth(token))
+    assert r.status_code == 404

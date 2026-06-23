@@ -63,6 +63,8 @@ class FakeClient:
         self.makemkv_key: str | None = None
         self.get_ripper_config_error: Exception | None = None
         self.get_ripper_config_calls: int = 0
+        self.community_keydb_enabled: bool = True
+        self.keydb_reports: list = []
 
     async def identify(
         self,
@@ -98,7 +100,14 @@ class FakeClient:
         self.get_ripper_config_calls += 1
         if self.get_ripper_config_error is not None:
             raise self.get_ripper_config_error
-        return RipperConfigView(auto_rip_on_insert=self.auto_rip_on_insert, makemkv_key=self.makemkv_key)
+        return RipperConfigView(
+            auto_rip_on_insert=self.auto_rip_on_insert,
+            makemkv_key=self.makemkv_key,
+            community_keydb_enabled=self.community_keydb_enabled,
+        )
+
+    async def report_keydb_status(self, *, state, vuk_count=None, age_days=None) -> None:
+        self.keydb_reports.append((state, vuk_count, age_days))
 
 
 @pytest.fixture(autouse=True)
@@ -237,8 +246,9 @@ async def test_manual_trigger_runs_even_when_auto_rip_disabled(stub_scan, stub_e
     await asyncio.wait_for(controller.handle_manual_trigger("sess_test"), timeout=2.0)
 
     # The manual path bypasses the auto_rip gate (user already opted in) but
-    # still does one config lookup inside the pipeline to fetch the MakeMKV key.
-    assert client.get_ripper_config_calls == 1
+    # still does config lookups inside the pipeline: one for the MakeMKV key
+    # and one for the community-keydb toggle.
+    assert client.get_ripper_config_calls == 2
     assert client.identify_pending_session_ids == ["sess_test"]
     assert client.rip_start_calls == ["job_test"]
     assert client.rip_complete_calls == ["job_test"]
@@ -284,6 +294,41 @@ async def test_makemkv_key_lookup_failure_falls_back_to_none(monkeypatch, stub_s
 
     assert keys == [None]
     assert client.rip_start_calls == ["job_test"]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_spawns_keydb_refresh_nonfatal(monkeypatch, stub_scan, stub_eject):
+    # The keydb refresh is fire-and-forget and must not abort the rip even if it raises.
+    calls = []
+
+    async def _boom(*, script_path="/usr/local/bin/update_keydb.sh", enabled=True):
+        calls.append(enabled)
+        raise RuntimeError("keydb boom")
+
+    monkeypatch.setattr(jc_module, "refresh_community_keydb", _boom)
+
+    client = FakeClient()
+    client.community_keydb_enabled = True
+    controller = JobController(client, "drv_test")
+    controller._spawn_keydb_refresh(enabled=True)
+    await controller._drain_keydb_tasks()
+    assert calls == [True]  # ran once; the RuntimeError was swallowed (this line proves no propagation)
+
+
+@pytest.mark.asyncio
+async def test_keydb_refresh_reports_result(monkeypatch):
+    from arm_common import KeydbState
+    from arm_ripper.community_keydb import KeydbResult
+
+    async def _ok(*, script_path="/usr/local/bin/update_keydb.sh", enabled=True):
+        return KeydbResult(state=KeydbState.OK, vuk_count=42, age_days=None)
+
+    monkeypatch.setattr(jc_module, "refresh_community_keydb", _ok)
+    client = FakeClient()
+    controller = JobController(client, "drv_test")
+    controller._spawn_keydb_refresh(enabled=True)
+    await controller._drain_keydb_tasks()
+    assert client.keydb_reports == [(KeydbState.OK, 42, None)]
 
 
 async def test_eject_runs_umount_then_eject_until_success(monkeypatch):
