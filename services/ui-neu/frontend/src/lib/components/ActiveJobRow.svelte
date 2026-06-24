@@ -9,6 +9,7 @@
 	import { jobPoster } from '$lib/utils/poster';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import { abandonJob } from '$lib/api/jobs';
+	import { formatEta } from '$lib/stores/rips.svelte';
 	import { slide } from 'svelte/transition';
 
 	interface Props {
@@ -17,9 +18,10 @@
 		progressStage?: string | null;
 		tracksRipped?: number | null;
 		tracksTotal?: number | null;
+		eta?: number | null;
 	}
 
-	let { job, progress = null, progressStage = null, tracksRipped = null, tracksTotal = null }: Props = $props();
+	let { job, progress = null, progressStage = null, tracksRipped = null, tracksTotal = null, eta = null }: Props = $props();
 
 	function formatStage(s: string): string {
 		if (s === 'scratch-to-media') return 'Copying to shared storage';
@@ -129,7 +131,12 @@
 				<!-- Render the bar even at 0%. The MakeMKV prelude (libredrive
 				     init, key ingest) can sit at 0 for several seconds and
 				     "ripping 0%" is more honest than an indeterminate spinner. -->
-				<ProgressBar value={progress} colorVar={accentVar} />
+				<div class="flex items-center gap-2">
+					<div class="flex-1"><ProgressBar value={progress} colorVar={accentVar} /></div>
+					{#if eta != null}
+						<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">{formatEta(eta)} left</span>
+					{/if}
+				</div>
 			{:else}
 				<div class="flex items-center gap-2">
 					<div class="h-2.5 flex-1 overflow-hidden rounded-full bg-primary/15">
