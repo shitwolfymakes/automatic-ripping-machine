@@ -47,6 +47,22 @@ describe('ActiveJobRow', () => {
 			});
 			expect(container.querySelector('.animate-indeterminate')).toBeInTheDocument();
 		});
+
+		it('renders a determinate progress bar when a live progress value is fed', () => {
+			const { container } = renderComponent(ActiveJobRow, {
+				props: { job: createJob({ status: 'ripping' }), progress: 42 }
+			});
+			// The indeterminate spinner is replaced by the real bar.
+			expect(container.querySelector('.animate-indeterminate')).not.toBeInTheDocument();
+			expect(screen.getByText('42%')).toBeInTheDocument();
+		});
+
+		it('shows the ETA label when an eta is provided alongside progress', () => {
+			renderComponent(ActiveJobRow, {
+				props: { job: createJob({ status: 'ripping' }), progress: 50, eta: 150 }
+			});
+			expect(screen.getByText('2m 30s left')).toBeInTheDocument();
+		});
 	});
 
 	describe('skeleton', () => {

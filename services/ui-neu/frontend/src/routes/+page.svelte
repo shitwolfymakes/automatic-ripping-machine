@@ -7,6 +7,7 @@
 	import DiscReviewWidget from '$lib/components/DiscReviewWidget.svelte';
 	import JobCard from '$lib/components/JobCard.svelte';
 	import ActiveJobRow from '$lib/components/ActiveJobRow.svelte';
+	import { ripProgress, startWS, stopWS, reconcileSubscriptions } from '$lib/stores/rips.svelte';
 	import JobRow from '$lib/components/JobRow.svelte';
 	import TranscodeCard from '$lib/components/TranscodeCard.svelte';
 	import SectionFrame from '$lib/components/SectionFrame.svelte';
@@ -197,8 +198,16 @@
 		{ key: 'disctype', label: 'Disc' }
 	];
 
+	// Live rip-progress: open the WS once, then keep the per-job
+	// `ripper.progress.{id}` subscriptions in sync with the set of jobs
+	// currently ripping. The $effect re-runs whenever that set changes.
+	$effect(() => {
+		reconcileSubscriptions(nonWaitingActiveJobs.map((j) => j.id));
+	});
+
 	onMount(() => {
 		let stopped = false;
+		startWS();
 
 		function poll(fn: () => Promise<void>, intervalMs: number) {
 			(async () => {
@@ -213,6 +222,7 @@
 		poll(loadJobs, 10000);
 		return () => {
 			stopped = true;
+			stopWS();
 		};
 	});
 </script>
@@ -281,7 +291,7 @@
 				<div class="space-y-2">
 					{#each nonWaitingActiveJobs as job (job.id)}
 						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
-							<ActiveJobRow {job} />
+							<ActiveJobRow {job} progress={ripProgress.value[job.id]?.progress_pct ?? null} eta={ripProgress.value[job.id]?.eta_seconds ?? null} />
 						</div>
 					{/each}
 				</div>
