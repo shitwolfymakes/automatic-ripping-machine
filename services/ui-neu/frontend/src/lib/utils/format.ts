@@ -107,6 +107,7 @@ export function statusAccentVar(status: string | null | undefined): string {
 		case 'completed':
 		case 'complete':
 		case 'transcoded':
+		case 'done': // TaskStatus — terminal transcode success
 		case 'ripped': // v3 JobStatus — terminal rip success
 			return 'var(--color-status-success)';
 		case 'fail':
@@ -171,6 +172,7 @@ export function statusColor(status: string | null | undefined): string {
 			return 'status-processing';
 		case 'success':
 		case 'completed': // TaskStatus (transcode task) terminal
+		case 'done': // TaskStatus (transcode task) terminal-success
 		case 'transcoded': // TrackStatus terminal (transcode-phase)
 		case 'ripped': // v3 JobStatus — rip complete (terminal)
 			return 'status-success';
