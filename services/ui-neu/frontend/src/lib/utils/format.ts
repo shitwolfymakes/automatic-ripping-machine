@@ -172,6 +172,7 @@ export function statusColor(status: string | null | undefined): string {
 			return 'status-processing';
 		case 'success':
 		case 'completed': // TaskStatus (transcode task) terminal
+		case 'complete': // effectiveJobStatus() rollup for a fully-transcoded job
 		case 'done': // TaskStatus (transcode task) terminal-success
 		case 'transcoded': // TrackStatus terminal (transcode-phase)
 		case 'ripped': // v3 JobStatus — rip complete (terminal)

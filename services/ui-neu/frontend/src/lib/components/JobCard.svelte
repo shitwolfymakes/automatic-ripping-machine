@@ -19,7 +19,12 @@
 	let { job, progress = null, progressStage = null }: Props = $props();
 
 	let typeConfig = $derived(getVideoTypeConfig(null, job?.disc_type ?? null));
-	let active = $derived(isJobActive(job?.status ?? null) || job?.transcode_progress != null);
+	// Use the EFFECTIVE status so the stepper shows while a job is genuinely
+	// in-flight (ripping OR transcoding) and hides once it is terminal. A
+	// transcoding job (raw `ripped` + transcode_progress.state 'transcoding')
+	// reads effective 'transcoding' (active); a finished one reads 'complete'
+	// (not active) so a done job shows no in-progress stepper.
+	let active = $derived(job ? isJobActive(effectiveJobStatus(job)) : false);
 </script>
 
 {#if !job}

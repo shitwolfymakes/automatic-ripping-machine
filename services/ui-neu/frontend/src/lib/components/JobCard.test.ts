@@ -112,5 +112,27 @@ describe('JobCard', () => {
 			});
 			expect(screen.queryByRole('img', { name: 'Job lifecycle' })).not.toBeInTheDocument();
 		});
+
+		it('does NOT render the lifecycle stepper for a done (fully transcoded) job', () => {
+			// Regression: a terminal `done` transcode_progress must not be treated
+			// as in-flight — the stepper (which reads as a progress bar) should be
+			// hidden once the job is complete.
+			renderComponent(JobCard, {
+				props: {
+					job: createJob({
+						status: 'ripped',
+						transcode_progress: {
+							state: 'done',
+							tasks_total: 2,
+							tasks_done: 2,
+							percent: 100
+						}
+					})
+				}
+			});
+			expect(screen.queryByRole('img', { name: 'Job lifecycle' })).not.toBeInTheDocument();
+			// It should still show the Complete badge.
+			expect(screen.getByText('Complete')).toBeInTheDocument();
+		});
 	});
 });

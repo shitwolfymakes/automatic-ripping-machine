@@ -36,7 +36,11 @@
 	let expanded = $state(false);
 
 	let typeConfig = $derived(getVideoTypeConfig(null, job?.disc_type ?? null));
-	let active = $derived(isJobActive(job?.status ?? null));
+	// Gate the progress row on the EFFECTIVE status so it shows while the job
+	// is genuinely in-flight (ripping OR transcoding) and disappears once it is
+	// terminal (complete/failed). A done job (raw `ripped` + transcode_progress
+	// 'done') reads effective 'complete' → not active → no progress bar.
+	let active = $derived(job ? isJobActive(effectiveJobStatus(job)) : false);
 	let accentVar = $derived(statusAccentVar(job?.status));
 
 	function toggle(e: MouseEvent) {
