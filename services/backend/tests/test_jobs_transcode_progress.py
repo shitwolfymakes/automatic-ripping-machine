@@ -70,6 +70,7 @@ def test_running_session_is_transcoding() -> None:
         _task("txt_2", "sap_1", TranscodeTaskStatus.IN_PROGRESS, 40),
     ]
     s = _summarize_transcode_progress([sa], tasks)
+    assert s is not None
     assert s.state == "transcoding"
     assert s.tasks_total == 2
     assert s.tasks_done == 1
@@ -83,6 +84,7 @@ def test_all_done_is_done() -> None:
         _task("txt_2", "sap_1", TranscodeTaskStatus.DONE, 100),
     ]
     s = _summarize_transcode_progress([sa], tasks)
+    assert s is not None
     assert s.state == "done"
     assert s.tasks_done == 2 and s.tasks_total == 2 and s.percent == 100.0
 
@@ -94,6 +96,7 @@ def test_done_partial_is_done_partial() -> None:
         _task("txt_2", "sap_1", TranscodeTaskStatus.FAILED, 0),
     ]
     s = _summarize_transcode_progress([sa], tasks)
+    assert s is not None
     assert s.state == "done_partial"
     assert s.tasks_done == 1 and s.tasks_total == 2
 
@@ -102,6 +105,7 @@ def test_all_failed_is_failed() -> None:
     sa = _sa("sap_1", SessionApplicationStatus.FAILED)
     tasks = [_task("txt_1", "sap_1", TranscodeTaskStatus.FAILED, 0)]
     s = _summarize_transcode_progress([sa], tasks)
+    assert s is not None
     assert s.state == "failed"
 
 
@@ -115,6 +119,7 @@ def test_multi_session_conflict_done_plus_queued_is_transcoding() -> None:
         _task("txt_q", "sap_q", TranscodeTaskStatus.QUEUED, 0),
     ]
     s = _summarize_transcode_progress([done_sa, queued_sa], tasks)
+    assert s is not None
     assert s.state == "transcoding"
 
 
@@ -123,6 +128,7 @@ def test_zero_task_queued_session_absorbed_as_done() -> None:
     # session subsystem; the read projection absorbs it as terminal/done.
     sa = _sa("sap_1", SessionApplicationStatus.QUEUED)
     s = _summarize_transcode_progress([sa], [])
+    assert s is not None
     assert s.state == "done"
     assert s.tasks_total == 0 and s.tasks_done == 0 and s.percent == 100.0
 
@@ -131,6 +137,7 @@ def test_waiting_identify_zero_task_is_not_terminal() -> None:
     # 0 tasks but genuinely waiting — must NOT be treated as done.
     sa = _sa("sap_1", SessionApplicationStatus.WAITING_IDENTIFY)
     s = _summarize_transcode_progress([sa], [])
+    assert s is not None
     assert s.state == "transcoding"
 
 
@@ -177,8 +184,14 @@ def _seed_admin(db: FakeSession) -> None:
 
 def _ripped_job(job_id: str) -> Job:
     return Job(
-        id=job_id, drive_id="drv_x", disc_type=DiscType.BLURAY, title="X", year=2000,
-        status=JobStatus.RIPPED, metadata_json={}, resumed_from_crash=False,
+        id=job_id,
+        drive_id="drv_x",
+        disc_type=DiscType.BLURAY,
+        title="X",
+        year=2000,
+        status=JobStatus.RIPPED,
+        metadata_json={},
+        resumed_from_crash=False,
     )
 
 
@@ -206,6 +219,30 @@ def test_list_job_without_session_has_null_transcode_progress() -> None:
         r = client.get("/api/jobs", headers=_auth(token))
     assert r.status_code == 200
     assert r.json()[0]["transcode_progress"] is None
+
+
+def test_list_empty_page_skips_session_lookup() -> None:
+    # No jobs in the page → the `if job_ids:` block is skipped entirely
+    # (the batched session_application lookup never runs).
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = []
+    app, token = _make_app(db)
+    with TestClient(app) as client:
+        r = client.get("/api/jobs", headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_detail_job_without_session_has_null_transcode_progress() -> None:
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [_ripped_job("job_01JZXR7K3M5Q8N4VWA00000021")]
+    app, token = _make_app(db)
+    with TestClient(app) as client:
+        r = client.get("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000021", headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()["job"]["transcode_progress"] is None
 
 
 def test_detail_surfaces_transcode_progress() -> None:
