@@ -1,0 +1,34 @@
+import type { JobView } from '$lib/types/api.gen';
+
+type JobLike = Pick<JobView, 'status' | 'transcode_progress'>;
+
+const POST_RIP = new Set(['ripped', 'ripped_partial']);
+
+/**
+ * Fold a job's raw status + its transcode_progress summary into a single
+ * display status. A post-rip job (`ripped`/`ripped_partial`) with an applied
+ * session reflects the session's rollup: transcoding while in-flight, then
+ * complete / failed. With no session applied it stays `ripped` (awaiting
+ * action). All other statuses pass through unchanged.
+ */
+export function effectiveJobStatus(job: JobLike): string {
+	const s = job.status?.toLowerCase() ?? '';
+	const tp = job.transcode_progress;
+	if (POST_RIP.has(s) && tp != null) {
+		switch (tp.state) {
+			case 'transcoding':
+				return 'transcoding';
+			case 'done':
+			case 'done_partial':
+				return 'complete';
+			case 'failed':
+				return 'failed';
+		}
+	}
+	return s;
+}
+
+/** True when the job finished transcoding but some titles failed. */
+export function isPartialComplete(job: JobLike): boolean {
+	return job.transcode_progress?.state === 'done_partial';
+}
