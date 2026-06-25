@@ -7,6 +7,7 @@ import os
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
+from arm_common import DiscType, JobStatus  # noqa: E402
 from arm_common.schemas.jobs import JobView, TranscodeProgressSummary  # noqa: E402
 
 
@@ -24,8 +25,8 @@ def test_jobview_transcode_progress_defaults_none() -> None:
     view = JobView(
         id="job_x",
         drive_id="drv_x",
-        disc_type="bluray",
-        status="ripped",
+        disc_type=DiscType.BLURAY,
+        status=JobStatus.RIPPED,
         title="X",
         year=2000,
         metadata_json={},
@@ -150,7 +151,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import jobs as jobs_router  # noqa: E402
-from arm_common import DiscType, Job, JobStatus, User  # noqa: E402
+from arm_common import Job, User  # noqa: E402
 from tests._fakes import FakeSession  # noqa: E402
 
 
