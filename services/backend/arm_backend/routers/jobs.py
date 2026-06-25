@@ -31,7 +31,10 @@ from arm_common import (
     Job,
     JobStatus,
     Session,
+    SessionApplication,
+    SessionApplicationStatus,
     TrackStatus,
+    TranscodeTaskStatus,
     User,
 )
 from arm_common.models import Track, TranscodeTask
@@ -53,6 +56,7 @@ from arm_common.schemas import (
     RipProgressSummary,
     SessionApplicationView,
     TrackView,
+    TranscodeProgressSummary,
     TranscodeTaskView,
 )
 from arm_common.ulid import is_valid_id
@@ -106,6 +110,71 @@ def _summarize_rip_progress(tracks: list[Track]) -> RipProgressSummary:
         tracks_failed=failed,
         current_track_id=current_track_id,
         current_track_index=current_track_index,
+    )
+
+
+# A session_application counts as "terminal" for the job-done rollup when its
+# own status is terminal, OR it fanned out 0 tasks and isn't genuinely waiting
+# to be identified (the rip-only / all-excluded 0-task QUEUED deadlock — see
+# the design doc; absorbed here in the read layer).
+_TERMINAL_SESSION_STATUSES: frozenset[SessionApplicationStatus] = frozenset(
+    {
+        SessionApplicationStatus.DONE,
+        SessionApplicationStatus.DONE_PARTIAL,
+        SessionApplicationStatus.FAILED,
+        SessionApplicationStatus.CANCELLED,
+    }
+)
+
+
+def _session_app_is_terminal(sa: SessionApplicationStatus, task_count: int) -> bool:
+    if sa in _TERMINAL_SESSION_STATUSES:
+        return True
+    return task_count == 0 and sa != SessionApplicationStatus.WAITING_IDENTIFY
+
+
+def _summarize_transcode_progress(
+    session_apps: list[SessionApplication],
+    tasks: list[TranscodeTask],
+) -> TranscodeProgressSummary | None:
+    """Roll a job's session_applications (+ their tasks) into one job-level
+    transcode state. Returns None when no session has been applied.
+
+    Aggregates ALL applications, not the latest: a job can hold a DONE app
+    plus a newer QUEUED app (non-colliding outputs), and is "transcoding"
+    until every application is terminal.
+    """
+    if not session_apps:
+        return None
+
+    tasks_by_app: dict[str, list[TranscodeTask]] = {}
+    for t in tasks:
+        tasks_by_app.setdefault(t.session_application_id, []).append(t)
+
+    all_terminal = all(
+        _session_app_is_terminal(sa.status, len(tasks_by_app.get(sa.id, []))) for sa in session_apps
+    )
+
+    tasks_total = len(tasks)
+    tasks_done = sum(1 for t in tasks if t.status == TranscodeTaskStatus.DONE)
+    tasks_failed = sum(1 for t in tasks if t.status == TranscodeTaskStatus.FAILED)
+    percent = (sum(t.progress_pct for t in tasks) / tasks_total) if tasks_total else 100.0
+
+    if not all_terminal:
+        state = "transcoding"
+    elif tasks_failed and tasks_done:
+        state = "done_partial"
+    elif tasks_failed and not tasks_done:
+        state = "failed"
+    else:
+        # all terminal, no failures (incl. the 0-task absorbed case)
+        state = "done"
+
+    return TranscodeProgressSummary(
+        state=state,
+        tasks_total=tasks_total,
+        tasks_done=tasks_done,
+        percent=round(percent, 1),
     )
 
 
