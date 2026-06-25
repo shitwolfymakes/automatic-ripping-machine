@@ -4,6 +4,7 @@
 	import ProgressBar from './ProgressBar.svelte';
 	import { statusAccentVar } from '$lib/utils/format';
 	import { getVideoTypeConfig, isJobActive, discTypeLabel } from '$lib/utils/job-type';
+	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import PosterImage from './PosterImage.svelte';
 	import { jobPoster } from '$lib/utils/poster';
@@ -73,8 +74,13 @@
 			{/if}
 
 			<!-- Status badge -->
-			<div class="shrink-0">
-				<StatusBadge status={job.status} />
+			<div class="shrink-0 flex items-center gap-1.5">
+				<StatusBadge status={effectiveJobStatus(job)} />
+				{#if isPartialComplete(job)}
+					<span class="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+						>Done {job.transcode_progress?.tasks_done}/{job.transcode_progress?.tasks_total}</span
+					>
+				{/if}
 			</div>
 
 			<!-- Type + disc badges -->
@@ -160,7 +166,7 @@
 								<td class="py-1 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap">Job ID</td>
 								<td class="py-1 text-gray-900 dark:text-white">{job.id}</td>
 								<td class="py-1 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap pl-6">Status</td>
-								<td class="py-1"><StatusBadge status={job.status} /></td>
+								<td class="py-1"><StatusBadge status={effectiveJobStatus(job)} /></td>
 							</tr>
 							<tr>
 								<td class="py-1 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap">Type</td>

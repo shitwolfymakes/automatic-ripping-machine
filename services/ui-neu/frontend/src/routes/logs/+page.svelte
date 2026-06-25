@@ -5,6 +5,7 @@
 	import JobFilterBar from '$lib/components/JobFilterBar.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
+	import { effectiveJobStatus } from '$lib/utils/job-status';
 
 	let jobs = $state<JobView[]>([]);
 	let loading = $state(true);
@@ -88,7 +89,7 @@
 										{job.title ?? job.id}
 									</a>
 								</td>
-								<td class="px-4 py-3"><StatusBadge status={job.status} /></td>
+								<td class="px-4 py-3"><StatusBadge status={effectiveJobStatus(job)} /></td>
 								<td class="px-4 py-3">{job.drive_id}</td>
 								<td class="px-4 py-3">{job.year ?? '-'}</td>
 							</tr>

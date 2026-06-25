@@ -23,4 +23,9 @@ describe('StatusBadge', () => {
 		expect(badge).toBeInTheDocument();
 		expect(badge).toHaveClass('status-unknown');
 	});
+
+	it('renders Complete for a done transcode job when given the effective status', () => {
+		renderComponent(StatusBadge, { props: { status: 'complete' } });
+		expect(screen.getByText('Complete')).toBeInTheDocument();
+	});
 });

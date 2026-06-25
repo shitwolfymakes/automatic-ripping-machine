@@ -228,7 +228,7 @@
 				{#if job.year}
 					<span class="text-base text-gray-400 dark:text-gray-500">({job.year})</span>
 				{/if}
-				<StatusBadge status={job.status} />
+				<StatusBadge status={effectiveJobStatus(job)} />
 
 				<!-- Action buttons pushed right -->
 				<div class="flex flex-wrap items-center gap-2 ml-auto">
