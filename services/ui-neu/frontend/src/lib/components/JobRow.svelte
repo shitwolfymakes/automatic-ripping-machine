@@ -3,6 +3,7 @@
 	import StatusBadge from './StatusBadge.svelte';
 	import Skeleton from './Skeleton.svelte';
 	import { getVideoTypeConfig, discTypeLabel } from '$lib/utils/job-type';
+	import { effectiveJobStatus } from '$lib/utils/job-status';
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import VideoTypeIcon from './VideoTypeIcon.svelte';
 
@@ -59,7 +60,7 @@
 	<!-- Status -->
 	<td class="px-4 py-3" data-label="Status">
 		<div>
-			<StatusBadge status={job.status} />
+			<StatusBadge status={effectiveJobStatus(job)} />
 		</div>
 	</td>
 

@@ -5,6 +5,7 @@
 	import ProgressBar from './ProgressBar.svelte';
 	import { jobPoster } from '$lib/utils/poster';
 	import { getVideoTypeConfig, isJobActive, discTypeLabel } from '$lib/utils/job-type';
+	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import JobLifecycle from './JobLifecycle.svelte';
@@ -36,7 +37,12 @@
 				<h3 class="truncate font-semibold text-gray-900 dark:text-white">
 					{job.title || 'Untitled'}
 				</h3>
-				<StatusBadge status={job.status} />
+				<StatusBadge status={effectiveJobStatus(job)} />
+				{#if isPartialComplete(job)}
+					<span class="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+						>Done {job.transcode_progress?.tasks_done}/{job.transcode_progress?.tasks_total}</span
+					>
+				{/if}
 			</div>
 
 			<!-- Row 2: Year -->
