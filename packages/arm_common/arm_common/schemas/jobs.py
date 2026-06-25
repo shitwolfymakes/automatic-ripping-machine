@@ -74,6 +74,23 @@ class RipProgressSummary(BaseModel):
     current_track_index: int | None
 
 
+class TranscodeProgressSummary(BaseModel):
+    """Per-job transcode-phase summary surfaced on `JobView`, derived by
+    aggregating ALL of a job's `SessionApplication` rows. `state` is the
+    job-level rollup (see `_summarize_transcode_progress`): `transcoding`
+    while any session is in-flight, `done`/`done_partial`/`failed` once all
+    are terminal. `None` on `JobView` means no session was applied (the job
+    is `ripped`/awaiting action). Live per-task percent flows on the
+    `transcode.progress.{task_id}` WS topic; `percent` here is a poll-time
+    mean of the job's task `progress_pct`.
+    """
+
+    state: Literal["transcoding", "done", "done_partial", "failed"]
+    tasks_total: int
+    tasks_done: int
+    percent: float
+
+
 class JobView(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -98,6 +115,9 @@ class JobView(BaseModel):
     # Populated only by the list endpoint for ripping jobs; None on
     # detail responses and on terminal/early-state jobs.
     rip_progress: RipProgressSummary | None = None
+    # Populated by the jobs list + detail endpoints by aggregating the job's
+    # session_applications. None when no session has been applied.
+    transcode_progress: TranscodeProgressSummary | None = None
 
 
 class HeldJobView(BaseModel):
