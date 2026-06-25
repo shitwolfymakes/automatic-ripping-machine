@@ -39,3 +39,18 @@ const RIPPING_STATUSES = new Set(['ripping', 'video_ripping', 'audio_ripping', '
 export function countRipping(jobs: JobLike[]): number {
 	return jobs.filter((j) => RIPPING_STATUSES.has(effectiveJobStatus(j))).length;
 }
+
+const FINISHING_RAW = new Set(['identified', 'ripped', 'ripped_partial']);
+
+/**
+ * A job belongs in the dashboard's FINISHING ("awaiting action") section when
+ * the rip is done/identified but NO transcode session is in flight or complete
+ * — i.e. it needs the operator to apply a session. A transcoding or completed
+ * job leaves FINISHING (it shows transcode state / drops to All Jobs).
+ */
+export function isAwaitingAction(job: JobLike): boolean {
+	const s = job.status?.toLowerCase() ?? '';
+	if (!FINISHING_RAW.has(s)) return false;
+	const eff = effectiveJobStatus(job);
+	return eff === 'ripped' || eff === 'ripped_partial' || eff === 'identified';
+}

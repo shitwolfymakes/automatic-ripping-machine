@@ -17,6 +17,7 @@
 	import EmptyDashboardPanel from '$lib/components/EmptyDashboardPanel.svelte';
 	import { fadeIn, fadeOut } from '$lib/transitions';
 	import { fade } from 'svelte/transition';
+	import { isAwaitingAction } from '$lib/utils/job-status';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { get } from 'svelte/store';
@@ -70,10 +71,7 @@
 	// A sticky review card that promoted to `identified` shows in Waiting, not
 	// also in Finishing — exclude anything currently rendered as a review card.
 	let finishingJobs = $derived(
-		activeJobs.filter((j: JobView) => {
-			const s = j.status?.toLowerCase();
-			return (s === 'identified' || s === 'ripped' || s === 'ripped_partial') && !waitingJobIds.has(j.id);
-		})
+		activeJobs.filter((j: JobView) => isAwaitingAction(j) && !waitingJobIds.has(j.id))
 	);
 
 	function dismissJob(jobId: string) {
