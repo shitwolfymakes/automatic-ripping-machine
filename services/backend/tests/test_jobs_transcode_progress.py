@@ -132,3 +132,77 @@ def test_waiting_identify_zero_task_is_not_terminal() -> None:
     sa = _sa("sap_1", SessionApplicationStatus.WAITING_IDENTIFY)
     s = _summarize_transcode_progress([sa], [])
     assert s.state == "transcoding"
+
+
+import secrets  # noqa: E402
+from typing import Any  # noqa: E402
+
+from fastapi import FastAPI  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from arm_backend.db import get_session  # noqa: E402
+from arm_backend.jwt_utils import issue_access_token  # noqa: E402
+from arm_backend.routers import jobs as jobs_router  # noqa: E402
+from arm_common import DiscType, Job, JobStatus, User  # noqa: E402
+from tests._fakes import FakeSession  # noqa: E402
+
+
+class _NoopHub:
+    async def emit(self, **_: Any) -> None:
+        return None
+
+
+def _make_app(db: FakeSession) -> tuple[FastAPI, str]:
+    key = secrets.token_bytes(32)
+    app = FastAPI()
+    app.state.signing_key = key
+    app.state.ws_hub = _NoopHub()
+    app.include_router(jobs_router.router)
+
+    async def _override() -> FakeSession:
+        return db
+
+    app.dependency_overrides[get_session] = _override
+    token, _ = issue_access_token("usr_admin", "admin", key)
+    return app, token
+
+
+def _auth(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _seed_admin(db: FakeSession) -> None:
+    db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
+
+
+def _ripped_job(job_id: str) -> Job:
+    return Job(
+        id=job_id, drive_id="drv_x", disc_type=DiscType.BLURAY, title="X", year=2000,
+        status=JobStatus.RIPPED, metadata_json={}, resumed_from_crash=False,
+    )
+
+
+def test_list_surfaces_transcode_progress_done() -> None:
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [_ripped_job("job_01JZXR7K3M5Q8N4VWA00000010")]
+    db.rows["session_applications"] = [_sa("sap_1", SessionApplicationStatus.DONE)]
+    db.rows["session_applications"][0].job_id = "job_01JZXR7K3M5Q8N4VWA00000010"
+    db.rows["transcode_tasks"] = [_task("txt_1", "sap_1", TranscodeTaskStatus.DONE, 100)]
+    app, token = _make_app(db)
+    with TestClient(app) as client:
+        r = client.get("/api/jobs", headers=_auth(token))
+    assert r.status_code == 200
+    tp = r.json()[0]["transcode_progress"]
+    assert tp["state"] == "done" and tp["tasks_done"] == 1
+
+
+def test_list_job_without_session_has_null_transcode_progress() -> None:
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [_ripped_job("job_01JZXR7K3M5Q8N4VWA00000011")]
+    app, token = _make_app(db)
+    with TestClient(app) as client:
+        r = client.get("/api/jobs", headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()[0]["transcode_progress"] is None
