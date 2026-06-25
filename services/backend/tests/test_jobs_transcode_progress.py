@@ -206,3 +206,23 @@ def test_list_job_without_session_has_null_transcode_progress() -> None:
         r = client.get("/api/jobs", headers=_auth(token))
     assert r.status_code == 200
     assert r.json()[0]["transcode_progress"] is None
+
+
+def test_detail_surfaces_transcode_progress() -> None:
+    db = FakeSession()
+    _seed_admin(db)
+    job = _ripped_job("job_01JZXR7K3M5Q8N4VWA00000020")
+    db.rows["jobs"] = [job]
+    sa = _sa("sap_1", SessionApplicationStatus.RUNNING)
+    sa.job_id = "job_01JZXR7K3M5Q8N4VWA00000020"
+    db.rows["session_applications"] = [sa]
+    db.rows["transcode_tasks"] = [
+        _task("txt_1", "sap_1", TranscodeTaskStatus.DONE, 100),
+        _task("txt_2", "sap_1", TranscodeTaskStatus.IN_PROGRESS, 50),
+    ]
+    app, token = _make_app(db)
+    with TestClient(app) as client:
+        r = client.get("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000020", headers=_auth(token))
+    assert r.status_code == 200
+    tp = r.json()["job"]["transcode_progress"]
+    assert tp["state"] == "transcoding" and tp["tasks_total"] == 2
