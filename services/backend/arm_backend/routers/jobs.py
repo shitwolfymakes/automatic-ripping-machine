@@ -283,8 +283,27 @@ async def get_job_detail(
         .scalars()
         .all()
     )
+    sas = (
+        (await session.execute(select(SessionApplication).where(col(SessionApplication.job_id) == job_id)))
+        .scalars()
+        .all()
+    )
+    sa_ids = [sa.id for sa in sas]
+    job_tasks: list[TranscodeTask] = []
+    if sa_ids:
+        job_tasks = list(
+            (
+                await session.execute(
+                    select(TranscodeTask).where(col(TranscodeTask.session_application_id).in_(sa_ids))
+                )
+            )
+            .scalars()
+            .all()
+        )
+    job_view = JobView.model_validate(job)
+    job_view.transcode_progress = _summarize_transcode_progress(list(sas), job_tasks)
     return JobDetailView(
-        job=JobView.model_validate(job),
+        job=job_view,
         tracks=[TrackView.model_validate(t) for t in tracks],
         fingerprints=[DiscFingerprintView.model_validate(fp) for fp in fingerprints],
     )
