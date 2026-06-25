@@ -17,6 +17,7 @@
 	import { logoutLocal, initAuth } from '$lib/stores/auth';
 	import { isScreenEnabled } from '$lib/features';
 	import { logout as apiLogout } from '$lib/api/auth';
+	import { countRipping } from '$lib/utils/job-status';
 	let { children } = $props();
 
 	let sidebarOpen = $state(false);
@@ -25,10 +26,7 @@
 	// multiple in-flight requests 401 at once. Reset once the user is back on a
 	// real (non-auth) page, so a future session expiry can redirect again.
 	let redirectingToLogin = false;
-	const rippingCount = $derived(($dashboard.active_jobs ?? []).filter(j => {
-		const s = j.status?.toLowerCase();
-		return s !== 'transcoding' && s !== 'waiting_transcode';
-	}).length);
+	const rippingCount = $derived(countRipping($dashboard.active_jobs ?? []));
 
 	function handleQuickAction(action: string) {
 		if (action === 'import-folder') {
