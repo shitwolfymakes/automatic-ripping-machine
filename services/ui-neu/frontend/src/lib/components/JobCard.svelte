@@ -37,12 +37,14 @@
 				<h3 class="truncate font-semibold text-gray-900 dark:text-white">
 					{job.title || 'Untitled'}
 				</h3>
-				<StatusBadge status={effectiveJobStatus(job)} />
-				{#if isPartialComplete(job)}
-					<span class="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-						>Done {job.transcode_progress?.tasks_done}/{job.transcode_progress?.tasks_total}</span
-					>
-				{/if}
+				<div class="flex shrink-0 items-center gap-1.5">
+					<StatusBadge status={effectiveJobStatus(job)} />
+					{#if isPartialComplete(job)}
+						<span class="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+							>Done {job.transcode_progress?.tasks_done}/{job.transcode_progress?.tasks_total}</span
+						>
+					{/if}
+				</div>
 			</div>
 
 			<!-- Row 2: Year -->
