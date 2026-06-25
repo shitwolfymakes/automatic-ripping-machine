@@ -42,6 +42,10 @@ describe('statusColor', () => {
 		['processing', 'status-processing'],
 		// TrackStatus (Track.status)
 		['transcoded', 'status-success'],
+		// effectiveJobStatus() rollup for a fully-transcoded job — must read as
+		// success (green), not gray. Was a deliberate `status-unknown` before the
+		// transcode_progress feature gave `complete` real meaning on the dashboard.
+		['complete', 'status-success'],
 		// Locally-generated literals
 		['importing', 'status-active'],
 		['skipped', 'status-unknown'],
@@ -50,7 +54,6 @@ describe('statusColor', () => {
 		[null, 'status-unknown'],
 		// Removed legacy synonyms - now fall through to status-unknown
 		['active', 'status-unknown'],
-		['complete', 'status-unknown'],
 		['error', 'status-unknown']
 	])('statusColor(%s) = %s', (input, expected) => {
 		expect(statusColor(input)).toBe(expected);
