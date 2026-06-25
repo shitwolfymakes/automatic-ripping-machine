@@ -14,6 +14,7 @@
 	import IdentifyDialog from '$lib/components/IdentifyDialog.svelte';
 	import ApplySessionDialog from '$lib/components/ApplySessionDialog.svelte';
 	import JobLifecycle from '$lib/components/JobLifecycle.svelte';
+	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
 	import { discTypeLabel, isJobActive } from '$lib/utils/job-type';
 	import { buildMetadataFields } from '$lib/utils/job-fields';
 	import { extractMusicTracks } from '$lib/utils/music-tracks';
@@ -311,7 +312,7 @@
 
 		<!-- Lifecycle widget: visual stage progression below header, above status bars -->
 		<div class="rounded-lg border border-primary/20 bg-surface px-4 py-3 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
-			<JobLifecycle status={job.status} sourceType={null} size="md" />
+			<JobLifecycle status={effectiveJobStatus(job)} sourceType={null} size="md" partial={isPartialComplete(job)} />
 		</div>
 
 		<!-- Tracks -->
