@@ -79,4 +79,38 @@ describe('JobCard', () => {
 			expect(skeletonShell).not.toBeNull();
 		});
 	});
+
+	describe('transcode progress stepper', () => {
+		it('renders the lifecycle stepper for a ripped+transcoding job', () => {
+			renderComponent(JobCard, {
+				props: {
+					job: createJob({
+						status: 'ripped',
+						transcode_progress: {
+							state: 'transcoding',
+							tasks_total: 3,
+							tasks_done: 1,
+							percent: 33
+						}
+					})
+				}
+			});
+			// sm stepper renders as role="img" aria-label="Job lifecycle"
+			expect(screen.getByRole('img', { name: 'Job lifecycle' })).toBeInTheDocument();
+			// StatusBadge should reflect the effective status (transcoding), not raw 'ripped'
+			expect(screen.getByText('Transcoding')).toBeInTheDocument();
+		});
+
+		it('does NOT render the lifecycle stepper for a ripped job with no transcode session', () => {
+			renderComponent(JobCard, {
+				props: {
+					job: createJob({
+						status: 'ripped',
+						transcode_progress: null
+					})
+				}
+			});
+			expect(screen.queryByRole('img', { name: 'Job lifecycle' })).not.toBeInTheDocument();
+		});
+	});
 });

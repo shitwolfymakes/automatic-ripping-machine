@@ -19,7 +19,7 @@
 	let { job, progress = null, progressStage = null }: Props = $props();
 
 	let typeConfig = $derived(getVideoTypeConfig(null, job?.disc_type ?? null));
-	let active = $derived(isJobActive(job?.status ?? null));
+	let active = $derived(isJobActive(job?.status ?? null) || job?.transcode_progress != null);
 </script>
 
 {#if !job}
@@ -57,7 +57,7 @@
 			<!-- Row 3: Active → lifecycle/track counts -->
 			<div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
 				{#if active}
-					<JobLifecycle status={job.status} sourceType={null} size="sm" />
+					<JobLifecycle status={effectiveJobStatus(job)} sourceType={null} size="sm" partial={isPartialComplete(job)} />
 					{#if job.rip_progress && job.rip_progress.tracks_total > 0}
 						<span>{job.rip_progress.tracks_done} / {job.rip_progress.tracks_total} titles</span>
 					{/if}
