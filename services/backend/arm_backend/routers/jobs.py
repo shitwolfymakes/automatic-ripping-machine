@@ -3,7 +3,7 @@ import os
 import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
@@ -151,15 +151,14 @@ def _summarize_transcode_progress(
     for t in tasks:
         tasks_by_app.setdefault(t.session_application_id, []).append(t)
 
-    all_terminal = all(
-        _session_app_is_terminal(sa.status, len(tasks_by_app.get(sa.id, []))) for sa in session_apps
-    )
+    all_terminal = all(_session_app_is_terminal(sa.status, len(tasks_by_app.get(sa.id, []))) for sa in session_apps)
 
     tasks_total = len(tasks)
     tasks_done = sum(1 for t in tasks if t.status == TranscodeTaskStatus.DONE)
     tasks_failed = sum(1 for t in tasks if t.status == TranscodeTaskStatus.FAILED)
     percent = (sum(t.progress_pct for t in tasks) / tasks_total) if tasks_total else 100.0
 
+    state: Literal["transcoding", "done", "done_partial", "failed"]
     if not all_terminal:
         state = "transcoding"
     elif tasks_failed and tasks_done:
@@ -244,9 +243,10 @@ async def list_jobs(
                 .all()
             )
             for t in task_rows:
-                owning_job = sa_id_to_job.get(t.session_application_id)
-                if owning_job is not None:
-                    transcode_tasks_by_job.setdefault(owning_job, []).append(t)
+                # The task query filters on sa_id_to_job's keys, so every
+                # returned task's session_application_id is in the map.
+                owning_job = sa_id_to_job[t.session_application_id]
+                transcode_tasks_by_job.setdefault(owning_job, []).append(t)
 
     views: list[JobView] = []
     for j in jobs:
@@ -292,11 +292,7 @@ async def get_job_detail(
     job_tasks: list[TranscodeTask] = []
     if sa_ids:
         job_tasks = list(
-            (
-                await session.execute(
-                    select(TranscodeTask).where(col(TranscodeTask.session_application_id).in_(sa_ids))
-                )
-            )
+            (await session.execute(select(TranscodeTask).where(col(TranscodeTask.session_application_id).in_(sa_ids))))
             .scalars()
             .all()
         )
