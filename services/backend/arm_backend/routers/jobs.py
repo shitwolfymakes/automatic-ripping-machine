@@ -216,11 +216,46 @@ async def list_jobs(
         for tr in track_rows:
             tracks_by_job.setdefault(tr.job_id, []).append(tr)
 
+    # Batched session_application + transcode_task lookup keyed on ALL job ids
+    # in the page (any job can have a session, not just ripping jobs).
+    job_ids = [j.id for j in jobs]
+    sas_by_job: dict[str, list[SessionApplication]] = {}
+    transcode_tasks_by_job: dict[str, list[TranscodeTask]] = {}
+    if job_ids:
+        sa_rows = (
+            (await session.execute(select(SessionApplication).where(col(SessionApplication.job_id).in_(job_ids))))
+            .scalars()
+            .all()
+        )
+        sa_id_to_job: dict[str, str] = {}
+        for sa in sa_rows:
+            sas_by_job.setdefault(sa.job_id, []).append(sa)
+            sa_id_to_job[sa.id] = sa.job_id
+        if sa_id_to_job:
+            task_rows = (
+                (
+                    await session.execute(
+                        select(TranscodeTask).where(
+                            col(TranscodeTask.session_application_id).in_(list(sa_id_to_job.keys()))
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for t in task_rows:
+                owning_job = sa_id_to_job.get(t.session_application_id)
+                if owning_job is not None:
+                    transcode_tasks_by_job.setdefault(owning_job, []).append(t)
+
     views: list[JobView] = []
     for j in jobs:
         view = JobView.model_validate(j)
         if j.status == JobStatus.RIPPING:
             view.rip_progress = _summarize_rip_progress(tracks_by_job.get(j.id, []))
+        view.transcode_progress = _summarize_transcode_progress(
+            sas_by_job.get(j.id, []), transcode_tasks_by_job.get(j.id, [])
+        )
         views.append(view)
     return views
 
