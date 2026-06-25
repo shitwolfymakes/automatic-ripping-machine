@@ -9507,6 +9507,16 @@
                 "type": "null"
               }
             ]
+          },
+          "transcode_progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscodeProgressSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -12918,6 +12928,41 @@
           "updated_at"
         ],
         "title": "TranscodePresetView"
+      },
+      "TranscodeProgressSummary": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "transcoding",
+              "done",
+              "done_partial",
+              "failed"
+            ],
+            "title": "State"
+          },
+          "tasks_total": {
+            "type": "integer",
+            "title": "Tasks Total"
+          },
+          "tasks_done": {
+            "type": "integer",
+            "title": "Tasks Done"
+          },
+          "percent": {
+            "type": "number",
+            "title": "Percent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state",
+          "tasks_total",
+          "tasks_done",
+          "percent"
+        ],
+        "title": "TranscodeProgressSummary",
+        "description": "Per-job transcode-phase summary surfaced on `JobView`, derived by\naggregating ALL of a job's `SessionApplication` rows. `state` is the\njob-level rollup (see `_summarize_transcode_progress`): `transcoding`\nwhile any session is in-flight, `done`/`done_partial`/`failed` once all\nare terminal. `None` on `JobView` means no session was applied (the job\nis `ripped`/awaiting action). Live per-task percent flows on the\n`transcode.progress.{task_id}` WS topic; `percent` here is a poll-time\nmean of the job's task `progress_pct`."
       },
       "TranscodeStatsView": {
         "properties": {
