@@ -6,9 +6,10 @@
 		status: string | null | undefined;
 		sourceType: string | null | undefined;
 		size?: 'sm' | 'md';
+		partial?: boolean;
 	}
 
-	let { status, sourceType, size = 'md' }: Props = $props();
+	let { status, sourceType, size = 'md', partial = false }: Props = $props();
 
 	let nodes = $derived(deriveLifecycle(status, sourceType));
 </script>
@@ -26,7 +27,7 @@
 		{#each nodes as node (node.id)}
 			<span
 				class="relative h-1.5 w-6 rounded-sm {node.state === 'active' ? 'lifecycle-pulse' : ''}"
-				style="background: {lifecycleColorVar(node.state)}; opacity: {node.state === 'pending' ? 0.35 : 1}"
+				style="background: {node.id === 'complete' && node.state === 'completed' && partial ? 'var(--color-status-waiting)' : lifecycleColorVar(node.state)}; opacity: {node.state === 'pending' ? 0.35 : 1}"
 			>
 				{#if node.state === 'paused'}
 					<Pause
@@ -61,7 +62,7 @@
 				</div>
 				<span
 					class="block h-2 w-full rounded-sm {node.state === 'active' ? 'lifecycle-pulse' : ''}"
-					style="background: {lifecycleColorVar(node.state)}; opacity: {node.state === 'pending' ? 0.35 : 1}"
+					style="background: {node.id === 'complete' && node.state === 'completed' && partial ? 'var(--color-status-waiting)' : lifecycleColorVar(node.state)}; opacity: {node.state === 'pending' ? 0.35 : 1}"
 					aria-hidden="true"
 				></span>
 			</li>
