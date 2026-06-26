@@ -335,4 +335,57 @@ describe('Job detail page (v3)', () => {
 		await waitFor(() => expect(screen.getByText('Tracks (1)')).toBeInTheDocument());
 		expect(screen.getByText("Director's Cut")).toBeInTheDocument();
 	});
+
+	it('renders IMDb, Multi-Title, and Source badges in the title bar when present', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({
+				id: 'job_42',
+				title: 'Test Movie',
+				status: 'ripped',
+				disc_type: 'bluray',
+				metadata_json: { imdb_id: 'tt7777777', multi_title: true, source_type: 'iso' }
+			}),
+			tracks: [],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByRole('heading', { name: 'Test Movie' })).toBeInTheDocument());
+		// IMDb appears both as a grid link and a header pill — at least one link to the title page.
+		const imdbLinks = screen.getAllByRole('link', { name: 'IMDb' });
+		expect(imdbLinks.some((a) => a.getAttribute('href') === 'https://www.imdb.com/title/tt7777777')).toBe(true);
+		expect(screen.getByText('Multi-Title')).toBeInTheDocument();
+		expect(screen.getByText('ISO')).toBeInTheDocument();
+	});
+
+	it('omits header badges when metadata_json lacks them', async () => {
+		// explicit empty metadata_json — no badge data present
+		mockFetchJob.mockResolvedValue({
+			job: createJob({ id: 'job_42', title: 'Test Movie', status: 'ripped', disc_type: 'bluray', metadata_json: {} }),
+			tracks: [],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByRole('heading', { name: 'Test Movie' })).toBeInTheDocument());
+		expect(screen.queryByText('Multi-Title')).not.toBeInTheDocument();
+		expect(screen.queryByText('ISO')).not.toBeInTheDocument();
+		expect(screen.queryByText('Folder')).not.toBeInTheDocument();
+	});
+
+	it('does not show the IMDb header pill for a music disc', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({
+				id: 'job_42',
+				title: 'Abbey Road',
+				status: 'ripped',
+				disc_type: 'cd',
+				metadata_json: { imdb_id: 'tt0000000' }
+			}),
+			tracks: [],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByRole('heading', { name: 'Abbey Road' })).toBeInTheDocument());
+		// No IMDb pill/link for music (grid also suppresses it via not-music gate in neu; here disc_type cd).
+		expect(screen.queryByRole('link', { name: 'IMDb' })).not.toBeInTheDocument();
+	});
 });

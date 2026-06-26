@@ -128,7 +128,7 @@ export function buildMetadataFields(job: JobView): MetadataField[] {
 	if (md.video_type) {
 		fields.push({ label: 'Type', value: videoTypeLabel(md.video_type) });
 	}
-	if (md.imdb_id) {
+	if (md.imdb_id && job.disc_type !== 'cd') {
 		fields.push({ label: 'IMDb', value: md.imdb_id, link: `https://www.imdb.com/title/${md.imdb_id}` });
 	}
 	if (md.tmdb_id) {

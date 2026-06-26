@@ -16,7 +16,7 @@
 	import JobLifecycle from '$lib/components/JobLifecycle.svelte';
 	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
 	import { discTypeLabel, isJobActive } from '$lib/utils/job-type';
-	import { buildMetadataFields, metadataEntries } from '$lib/utils/job-fields';
+	import { buildMetadataFields, metadataEntries, readJobMetadata } from '$lib/utils/job-fields';
 	import { extractMusicTracks } from '$lib/utils/music-tracks';
 	import { trackKindLabel, trackSizeLabel } from '$lib/utils/track-fields';
 	import LoadState from '$lib/components/LoadState.svelte';
@@ -94,6 +94,7 @@
 	let tracksAreSeries = $derived(
 		(detail?.tracks ?? []).some((t) => t.video_type === 'series' || t.episode_number != null)
 	);
+	let jobMeta = $derived(detail ? readJobMetadata(detail.job.metadata_json) : {});
 	let showRawMetadata = $state(false);
 	let rawMetadataEntries = $derived(detail ? metadataEntries(detail.job.metadata_json) : []);
 
@@ -234,6 +235,17 @@
 					<span class="text-base text-gray-400 dark:text-gray-500">({job.year})</span>
 				{/if}
 				<StatusBadge status={effectiveJobStatus(job)} />
+				{#if jobMeta.imdb_id && !isCdDisc}
+					<a href="https://www.imdb.com/title/{jobMeta.imdb_id}" target="_blank" rel="noopener noreferrer" class="rounded-full bg-yellow-400 px-2.5 py-0.5 text-[10px] font-bold text-black">IMDb</a>
+				{/if}
+				{#if jobMeta.multi_title}
+					<span class="rounded-full bg-purple-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">Multi-Title</span>
+				{/if}
+				{#if jobMeta.source_type === 'iso'}
+					<span class="rounded-sm bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">ISO</span>
+				{:else if jobMeta.source_type === 'folder'}
+					<span class="rounded-sm bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">Folder</span>
+				{/if}
 
 				<!-- Action buttons pushed right -->
 				<div class="flex flex-wrap items-center gap-2 ml-auto">
