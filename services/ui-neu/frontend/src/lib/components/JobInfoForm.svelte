@@ -79,7 +79,8 @@
 		</p>
 	{/if}
 
-	<!-- Identity row -->
+	<!-- Identity section -->
+	<p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Identity</p>
 	<div class="flex gap-3">
 		<div class="flex-1">
 			<label for="info-title-{job.id}" class="block text-xs font-medium text-gray-600 dark:text-gray-300">Title</label>
@@ -107,8 +108,9 @@
 		</div>
 	</div>
 
-	<!-- Disc row -->
-	<div class="mt-3 flex gap-3">
+	<!-- Disc section -->
+	<p class="mb-2 mt-4 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Disc</p>
+	<div class="flex gap-3">
 		<div class="w-28">
 			<label for="info-discno-{job.id}" class="block text-xs font-medium text-gray-600 dark:text-gray-300">Disc number</label>
 			<input
