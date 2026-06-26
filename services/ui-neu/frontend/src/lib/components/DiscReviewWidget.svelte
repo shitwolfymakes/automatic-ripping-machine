@@ -112,6 +112,20 @@
 		}
 	}
 
+	// Start handoff for the Info form. The form has already resolved (saved +
+	// identified) the job, which unblocks the parked ripper for an
+	// awaiting_user_id disc. For an awaiting_review disc the rip is still held by
+	// the countdown, so skip it via rip-start-review. Then dismiss the card —
+	// the disc is on its way.
+	async function handleInfoStart() {
+		if (!job) return;
+		if (isReviewGate) {
+			await startWaitingJob(job.id);
+		}
+		ondismiss?.();
+		onrefresh?.();
+	}
+
 	async function handlePauseToggle(paused: boolean) {
 		if (!job) return;
 		pauseBusy = true;
@@ -268,7 +282,7 @@
 	{/if}
 
 	{#if showInfo}
-		<JobInfoForm {job} onrefresh={() => { onrefresh?.(); loadDetail(); }} />
+		<JobInfoForm {job} onrefresh={() => { onrefresh?.(); loadDetail(); }} onstart={handleInfoStart} />
 	{/if}
 </div>
 

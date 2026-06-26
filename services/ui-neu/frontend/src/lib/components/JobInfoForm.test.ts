@@ -100,4 +100,47 @@ describe('JobInfoForm', () => {
 		await rerender({ job: job({ title: 'Polled Title' }) });
 		expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('My Edit');
 	});
+
+	it('Start rip is always shown when resolvable, even with no edits', () => {
+		renderComponent(JobInfoForm, { props: { job: job(), onstart: vi.fn() } });
+		// no edits → no Save button, but Start rip is present
+		expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+		expect(screen.getByRole('button', { name: 'Start rip' })).toBeInTheDocument();
+	});
+
+	it('Start saves (resolveJob) then calls onstart', async () => {
+		const onstart = vi.fn();
+		renderComponent(JobInfoForm, { props: { job: job(), onstart } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Start rip' }));
+		await waitFor(() => expect(mockResolve).toHaveBeenCalledWith('job_1', {
+			title: 'Star Knight',
+			year: 1985,
+			disc_number: null,
+			disc_total: null,
+			metadata: {}
+		}));
+		await waitFor(() => expect(onstart).toHaveBeenCalledTimes(1));
+		// resolve ran before onstart
+		expect(mockResolve.mock.invocationCallOrder[0]).toBeLessThan(onstart.mock.invocationCallOrder[0]);
+	});
+
+	it('with edits, the Start button reads "Save & Start rip"', async () => {
+		renderComponent(JobInfoForm, { props: { job: job(), onstart: vi.fn() } });
+		await fireEvent.input(screen.getByLabelText('Year'), { target: { value: '1986' } });
+		expect(screen.getByRole('button', { name: 'Save & Start rip' })).toBeInTheDocument();
+	});
+
+	it('a Start failure shows error feedback and does not call onstart', async () => {
+		mockResolve.mockRejectedValueOnce(new Error('resolve boom'));
+		const onstart = vi.fn();
+		renderComponent(JobInfoForm, { props: { job: job(), onstart } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Start rip' }));
+		await waitFor(() => expect(screen.getByText('resolve boom')).toBeInTheDocument());
+		expect(onstart).not.toHaveBeenCalled();
+	});
+
+	it('no Start button on a non-resolvable job', () => {
+		renderComponent(JobInfoForm, { props: { job: job({ status: 'ripping' }), onstart: vi.fn() } });
+		expect(screen.queryByRole('button', { name: /start rip/i })).not.toBeInTheDocument();
+	});
 });
