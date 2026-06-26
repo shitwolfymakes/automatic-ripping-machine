@@ -140,20 +140,6 @@
 		selected = null;
 	}
 
-	function setManually() {
-		const capturedTitle = query.trim();
-		detail = {
-			title: capturedTitle,
-			year: yearInput.trim() ? Number(yearInput.trim()) : null,
-			kind: 'movie',
-			poster_url: null,
-			provider_id: null
-		};
-		selected = detail;
-		searchError = null;
-		query = '';
-	}
-
 	function handleSearchKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter') handleSearch();
 	}
@@ -210,9 +196,6 @@
 		{:else}
 			<div class="flex items-center gap-3">
 				<p class="text-sm text-gray-500 dark:text-gray-400">{searchError}</p>
-				{#if query.trim()}
-					<button onclick={setManually} class="text-sm font-medium text-primary hover:underline">Set manually</button>
-				{/if}
 			</div>
 		{/if}
 	{/if}

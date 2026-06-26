@@ -239,25 +239,13 @@ describe('TitleSearch', () => {
 			expect(mockResolve).not.toHaveBeenCalled();
 		});
 
-		it('manual entry: "Set manually" synthesizes a candidate and applies via resolve', async () => {
-			mockSearchMetadata.mockResolvedValue({ candidates: [] });
-			// year: null so the synthesized candidate has no year (the prefilled year
-			// input mirrors job.year, which createJob defaults to 2024 unless overridden).
-			renderComponent(TitleSearch, {
-				props: { job: createJob({ id: 'job_7', status: 'awaiting_user_id', title: 'Obscure Film', year: null }) }
-			});
-			await fireEvent.click(screen.getByText('Search'));
-			await waitFor(() => expect(screen.getByText('Set manually')).toBeInTheDocument());
-			await fireEvent.click(screen.getByText('Set manually'));
-			await waitFor(() => expect(screen.getByDisplayValue('Obscure Film')).toBeInTheDocument());
-			await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
-			await waitFor(() => {
-				expect(mockResolve).toHaveBeenCalledWith('job_7', {
-					title: 'Obscure Film',
-					year: null,
-					metadata: { video_type: 'movie' }
-				});
-			});
+		it('shows the no-results message without a "Set manually" button', async () => {
+			mockSearchMetadata.mockResolvedValue({ candidates: [] } as any);
+			renderComponent(TitleSearch, { props: { job: createJob({ id: 'job_1', status: 'awaiting_user_id', title: '', year: null }) } });
+			await fireEvent.input(screen.getByPlaceholderText('Title...'), { target: { value: 'Nope' } });
+			await fireEvent.click(screen.getByRole('button', { name: /search/i }));
+			await waitFor(() => expect(screen.getByText(/No results found/i)).toBeInTheDocument());
+			expect(screen.queryByText('Set manually')).not.toBeInTheDocument();
 		});
 	});
 });
