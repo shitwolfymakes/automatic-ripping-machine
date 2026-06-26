@@ -68,14 +68,15 @@ describe('DiscReviewWidget', () => {
 	});
 
 	describe('sections', () => {
-		it('opens the disc-info section (Settings/Transcode removed)', async () => {
+		it('opens the Info section (replaces the removed Disc info panel)', async () => {
 			renderWidget();
-			await waitFor(() => expect(screen.getByText('Disc info')).toBeInTheDocument());
-			expect(screen.queryByText('Settings')).not.toBeInTheDocument();
-			expect(screen.queryByText('Transcode')).not.toBeInTheDocument();
-			await fireEvent.click(screen.getByText('Disc info'));
+			// Info is now the first action button; the old "Disc info" panel is gone
+			// (disc number/total moved into the Info form).
+			await waitFor(() => expect(screen.getByText('Info')).toBeInTheDocument());
+			expect(screen.queryByText('Disc info')).not.toBeInTheDocument();
+			await fireEvent.click(screen.getByText('Info'));
 			await waitFor(() => {
-				expect(screen.getByText('Disc set')).toBeInTheDocument();
+				expect(screen.getByLabelText('Title')).toBeInTheDocument();
 			});
 		});
 	});
