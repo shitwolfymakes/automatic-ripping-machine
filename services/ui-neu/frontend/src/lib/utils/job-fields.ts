@@ -111,6 +111,46 @@ export function buildMetadataFields(job: JobView): MetadataField[] {
 		fields.push({ label: 'State', value: 'Finished' });
 	}
 
+	// --- Promoted real JobView columns ---
+	if (job.disc_number != null) {
+		const discValue =
+			job.disc_total != null ? `${job.disc_number} of ${job.disc_total}` : String(job.disc_number);
+		fields.push({ label: 'Disc #', value: discValue });
+	}
+	if (job.poster_url_manual) {
+		fields.push({ label: 'Poster', value: 'Manual' });
+	} else if (job.poster_url) {
+		fields.push({ label: 'Poster', value: 'Auto' });
+	}
+
+	// --- Promoted metadata_json known scalars ---
+	const md = readJobMetadata(job.metadata_json);
+	if (md.video_type) {
+		fields.push({ label: 'Type', value: videoTypeLabel(md.video_type) });
+	}
+	if (md.imdb_id) {
+		fields.push({ label: 'IMDb', value: md.imdb_id, link: `https://www.imdb.com/title/${md.imdb_id}` });
+	}
+	if (md.tmdb_id) {
+		fields.push({ label: 'TMDB', value: md.tmdb_id, link: `https://www.themoviedb.org/movie/${md.tmdb_id}` });
+	}
+	if (md.tvdb_id) {
+		fields.push({ label: 'TVDB', value: md.tvdb_id, link: `https://www.thetvdb.com/dereferrer/series/${md.tvdb_id}` });
+	}
+	if (md.season) {
+		fields.push({ label: 'Season', value: md.season });
+	}
+	if (md.artist) {
+		fields.push({ label: 'Artist', value: md.artist });
+	}
+	if (md.album) {
+		fields.push({ label: 'Album', value: md.album });
+	}
+	// Scanned-title count: only when the base "Tracks" cell (rip_progress) is absent.
+	if (!job.rip_progress && md.titleCount != null) {
+		fields.push({ label: 'Titles', value: String(md.titleCount) });
+	}
+
 	// --- Pad to multiple of 4 ---
 	const remainder = fields.length % 4;
 	if (remainder !== 0) {
