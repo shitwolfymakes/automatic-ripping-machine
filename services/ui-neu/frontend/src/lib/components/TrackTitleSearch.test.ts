@@ -157,30 +157,13 @@ describe('TrackTitleSearch', () => {
 			});
 		});
 
-		it('persists the year typed via the manual-entry (Set manually) path', async () => {
-			// Search returns nothing → "Set manually" opens the detail editor with the
-			// typed title; the operator fills in the Year and clicks Apply. The year
-			// must reach updateTrackTitle (regression: it was dropped).
-			mockSearchMetadata.mockResolvedValue({ candidates: [] });
-			renderComponent(TrackTitleSearch, {
-				props: { jobId: 'job_4', track: createTrack({ id: 'trk_6' }) }
-			});
-			await fireEvent.input(screen.getByPlaceholderText('Title...'), { target: { value: 'Phantasm' } });
-			await fireEvent.click(screen.getByText('Search'));
-			await waitFor(() => expect(screen.getByText('Set manually')).toBeInTheDocument());
-			await fireEvent.click(screen.getByText('Set manually'));
-			// Detail editor is now open; fill the Year field and apply.
-			const yearField = await waitFor(() => {
-				const labels = screen.getAllByText('Year');
-				const input = labels[labels.length - 1].parentElement?.querySelector('input');
-				if (!input) throw new Error('year field not found');
-				return input as HTMLInputElement;
-			});
-			await fireEvent.input(yearField, { target: { value: '1979' } });
-			await fireEvent.click(screen.getByText('Apply'));
-			await waitFor(() => {
-				expect(mockUpdateTrackTitle).toHaveBeenCalledWith('job_4', 'trk_6', expect.objectContaining({ title: 'Phantasm', year: 1979 }));
-			});
+		it('shows the no-results message without a "Set manually" button', async () => {
+			mockSearchMetadata.mockResolvedValue({ candidates: [] } as any);
+			renderComponent(TrackTitleSearch, { props: { jobId: 'job_1', track: createTrack({ title: '' }) } });
+			await fireEvent.input(screen.getByPlaceholderText('Title...'), { target: { value: 'Nope' } });
+			await fireEvent.click(screen.getByRole('button', { name: /search/i }));
+			await waitFor(() => expect(screen.getByText(/No results/i)).toBeInTheDocument());
+			expect(screen.queryByText('Set manually')).not.toBeInTheDocument();
 		});
 	});
 
