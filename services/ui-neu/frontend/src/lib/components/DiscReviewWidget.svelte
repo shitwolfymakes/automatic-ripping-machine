@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { JobView, JobDetailView, TrackView } from '$lib/types/api.gen';
-	import { abandonJob, fetchJob, updateTrack, patchJob, startWaitingJob, pauseWaitingJob } from '$lib/api/jobs';
+	import { abandonJob, fetchJob, startWaitingJob, pauseWaitingJob } from '$lib/api/jobs';
 	import CountdownTimer from './CountdownTimer.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
 	import PosterImage from './PosterImage.svelte';
@@ -9,8 +9,9 @@
 	import MusicSearch from './MusicSearch.svelte';
 	import ApplySessionDialog from './ApplySessionDialog.svelte';
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
-	import TrackTitleSearch from './TrackTitleSearch.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
+	import JobInfoForm from './JobInfoForm.svelte';
+	import ReviewTracksTable from './ReviewTracksTable.svelte';
 
 	interface Props {
 		job?: JobView;
@@ -36,19 +37,12 @@
 
 	let data = $state<JobDetailView | null>(null);
 	let initialLoading = $state(true);
+	let showInfo = $state(false);
 	let showTitleSearch = $state(false);
 	let showMusicSearch = $state(false);
-	let showDiscInfo = $state(false);
 	let showApplySession = $state(false);
 	let cancelling = $state(false);
-	let openSearchTrackIds = $state<Set<string>>(new Set());
-	let savingTrackField = $state<string | null>(null);
 	let errorMessage = $state<string | null>(null);
-
-	// Disc-set info (multi-disc). Wired to PATCH /jobs/{id} (disc_number/disc_total).
-	let discNumberInput = $state('');
-	let discTotalInput = $state('');
-	let savingDiscInfo = $state(false);
 
 	let tracks = $derived<TrackView[]>(data?.tracks ?? []);
 
@@ -71,56 +65,11 @@
 		if (!job) return;
 		try {
 			data = await fetchJob(job.id);
-			// Seed disc-set inputs from the loaded job (empty = unset).
-			discNumberInput = data?.job.disc_number != null ? String(data.job.disc_number) : '';
-			discTotalInput = data?.job.disc_total != null ? String(data.job.disc_total) : '';
 		} catch {
 			data = null;
 		} finally {
 			initialLoading = false;
 		}
-	}
-
-	async function saveDiscInfo() {
-		if (!job) return;
-		savingDiscInfo = true;
-		errorMessage = null;
-		// bind:value on a number input can yield a number; coerce before trim.
-		const parse = (v: string | number) => {
-			const t = String(v ?? '').trim();
-			if (t === '') return null;
-			const n = Number(t);
-			return Number.isInteger(n) && n > 0 ? n : null;
-		};
-		try {
-			await patchJob(job.id, { disc_number: parse(discNumberInput), disc_total: parse(discTotalInput) });
-			onrefresh?.();
-			loadDetail();
-		} catch (e) {
-			errorMessage = `Failed to save disc info: ${e instanceof Error ? e.message : 'Unknown error'}`;
-		} finally {
-			savingDiscInfo = false;
-		}
-	}
-
-	async function handleTrackFieldUpdate(trackId: string, field: 'episode_number' | 'episode_name' | 'excluded', value: number | string | boolean | null) {
-		if (!job) return;
-		savingTrackField = `${trackId}-${field}`;
-		errorMessage = null;
-		try {
-			await updateTrack(job.id, trackId, { [field]: value });
-			loadDetail();
-		} catch (e) {
-			errorMessage = `Failed to update track: ${e instanceof Error ? e.message : 'Unknown error'}`;
-		} finally {
-			savingTrackField = null;
-		}
-	}
-
-	function handleEpisodeNumberInput(trackId: string, raw: string) {
-		const trimmed = raw.trim();
-		const n = trimmed === '' ? null : Number(trimmed);
-		handleTrackFieldUpdate(trackId, 'episode_number', Number.isFinite(n) ? n : null);
 	}
 
 	function handleTitleApply() {
@@ -177,41 +126,15 @@
 		}
 	}
 
-	function handleTrackTitleApply(trackId?: string) {
-		if (trackId != null) {
-			openSearchTrackIds = new Set([...openSearchTrackIds].filter((id) => id !== trackId));
-		} else {
-			openSearchTrackIds = new Set();
-		}
-		onrefresh?.();
-		loadDetail();
-	}
-
-	function toggleTrackSearch(trackId: string) {
-		const next = new Set(openSearchTrackIds);
-		if (next.has(trackId)) next.delete(trackId);
-		else next.add(trackId);
-		openSearchTrackIds = next;
-	}
-
-	function toggleSection(section: 'title' | 'music' | 'discinfo') {
-		const closeAll = () => { showTitleSearch = false; showMusicSearch = false; showDiscInfo = false; };
-		if (section === 'title') {
+	function toggleSection(section: 'info' | 'title' | 'music') {
+		const closeAll = () => { showInfo = false; showTitleSearch = false; showMusicSearch = false; };
+		if (section === 'info') {
+			const next = !showInfo; closeAll(); showInfo = next;
+		} else if (section === 'title') {
 			const next = !showTitleSearch; closeAll(); showTitleSearch = next;
-		} else if (section === 'music') {
-			const next = !showMusicSearch; closeAll(); showMusicSearch = next;
 		} else {
-			const next = !showDiscInfo; closeAll(); showDiscInfo = next;
+			const next = !showMusicSearch; closeAll(); showMusicSearch = next;
 		}
-	}
-
-	function formatLength(secs: number | null | undefined): string {
-		if (!secs) return '--';
-		const h = Math.floor(secs / 3600);
-		const m = Math.floor((secs % 3600) / 60);
-		const s = secs % 60;
-		if (h > 0) return `${h}h ${m}m ${s}s`;
-		return `${m}m ${s}s`;
 	}
 
 	onMount(() => {
@@ -283,34 +206,19 @@
 
 	<!-- Action buttons -->
 	<div class="flex items-center gap-1.5 border-t border-primary/20 bg-primary-light-bg/50 px-4 py-2 dark:border-primary/20 dark:bg-primary-light-bg-dark/10">
+		<button
+			onclick={() => toggleSection('info')}
+			class="{btnBase} {showInfo ? 'bg-primary text-on-primary' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}"
+		>
+			Info
+		</button>
 		{#if isVideo}
-			<button
-				onclick={() => toggleSection('title')}
-				class="{btnBase} {showTitleSearch ? 'bg-primary text-on-primary' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}"
-			>
-				Search
-			</button>
+			<button onclick={() => toggleSection('title')} class="{btnBase} {showTitleSearch ? 'bg-primary text-on-primary' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}">Search</button>
 		{/if}
 		{#if isMusic}
-			<button
-				onclick={() => toggleSection('music')}
-				class="{btnBase} {showMusicSearch ? 'bg-primary text-on-primary' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}"
-			>
-				Search
-			</button>
+			<button onclick={() => toggleSection('music')} class="{btnBase} {showMusicSearch ? 'bg-primary text-on-primary' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}">Search</button>
 		{/if}
-		<button
-			onclick={() => toggleSection('discinfo')}
-			class="{btnBase} {showDiscInfo ? 'bg-primary text-on-primary' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}"
-		>
-			Disc info
-		</button>
-		<button
-			onclick={() => (showApplySession = true)}
-			class="{btnBase} bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15"
-		>
-			Apply session
-		</button>
+		<button onclick={() => (showApplySession = true)} class="{btnBase} bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15">Apply session</button>
 		{#if isIdentified}
 			<button
 				onclick={() => ondismiss?.()}
@@ -338,85 +246,11 @@
 	</div>
 
 	<!-- Tracks table -->
-	<div class="border-t border-primary/20 p-4 dark:border-primary/20">
+	<div class="border-t border-primary/20 dark:border-primary/20">
 		{#if initialLoading}
-			<p class="text-sm text-gray-400">Loading...</p>
-		{:else if tracks.length > 0}
-			<div>
-				<h4 class="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Tracks ({tracks.length})</h4>
-				<div class="overflow-x-auto rounded-md border border-primary/15 dark:border-primary/20">
-					<table class="w-full text-left text-xs">
-						<thead class="bg-page text-gray-500 dark:bg-primary/5 dark:text-gray-400">
-							<tr>
-								<th class="px-3 py-1.5 font-medium">#</th>
-								<th class="px-3 py-1.5 font-medium">{isMusic ? 'Name' : 'Title'}</th>
-								{#if isVideo}<th class="px-2 py-1.5 font-medium text-center">Episode</th>{/if}
-								<th class="px-3 py-1.5 font-medium">Length</th>
-								<th class="px-3 py-1.5 font-medium">Source</th>
-								{#if isVideo}<th class="w-8"></th>{/if}
-							</tr>
-						</thead>
-						<tbody class="divide-y divide-gray-100 dark:divide-gray-700/50">
-							{#each tracks as track}
-								<tr class="{track.excluded ? 'opacity-40' : ''}">
-									<td class="px-3 py-1.5 font-mono text-gray-700 dark:text-gray-300">{track.index}</td>
-									<td
-										class="px-3 py-1.5 {isVideo ? 'cursor-pointer hover:bg-primary/5 dark:hover:bg-primary/10' : ''}"
-										onclick={() => { if (isVideo) toggleTrackSearch(track.id); }}
-									>
-										{#if track.title}
-											<div class="flex items-center gap-1.5">
-												<span class="font-medium text-gray-700 dark:text-gray-300">{track.title}</span>
-												{#if track.year}
-													<span class="text-gray-400">({track.year})</span>
-												{/if}
-											</div>
-										{:else}
-											<span class="text-gray-400">{job.title || 'Untitled'}{#if job.year} ({job.year}){/if}</span>
-										{/if}
-									</td>
-									{#if isVideo}
-										<td class="px-2 py-1.5 text-center">
-											<input
-												type="text"
-												value={track.episode_number ?? ''}
-												onchange={(e) => handleEpisodeNumberInput(track.id, e.currentTarget.value)}
-												placeholder="--"
-												disabled={track.excluded}
-												class="w-10 rounded-sm border border-primary/25 bg-primary/5 px-1 py-0.5 text-center text-xs text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary disabled:opacity-30 dark:border-primary/30 dark:bg-primary/10 dark:text-white"
-											/>
-										</td>
-									{/if}
-									<td class="px-3 py-1.5 text-gray-700 dark:text-gray-300">{formatLength(track.duration_seconds)}</td>
-									<td class="px-3 py-1.5 font-mono text-gray-500 dark:text-gray-400">{track.output_path || track.source_ref}</td>
-									{#if isVideo}
-										<td class="px-1 py-1.5">
-											<button
-												onclick={() => toggleTrackSearch(track.id)}
-												class="rounded p-1 transition-colors {openSearchTrackIds.has(track.id) ? 'text-primary' : 'text-gray-400 hover:text-primary dark:text-gray-500 dark:hover:text-primary'}"
-												title={openSearchTrackIds.has(track.id) ? 'Close search' : 'Search title'}
-											>
-												<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-													<circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-												</svg>
-											</button>
-										</td>
-									{/if}
-								</tr>
-								{#if isVideo && openSearchTrackIds.has(track.id)}
-									<tr>
-										<td colspan="99" class="px-3 py-2">
-											<TrackTitleSearch jobId={job.id} {track} onapply={() => handleTrackTitleApply(track.id)} onclear={() => { onrefresh?.(); loadDetail(); }} onclose={() => toggleTrackSearch(track.id)} />
-										</td>
-									</tr>
-								{/if}
-							{/each}
-						</tbody>
-					</table>
-				</div>
-			</div>
+			<p class="p-4 text-sm text-gray-400">Loading...</p>
 		{:else}
-			<p class="text-sm text-gray-400">No tracks yet.</p>
+			<ReviewTracksTable {job} {tracks} {isVideo} {isMusic} onrefresh={() => { onrefresh?.(); loadDetail(); }} />
 		{/if}
 	</div>
 
@@ -433,47 +267,8 @@
 		</div>
 	{/if}
 
-	{#if showDiscInfo}
-		<div class="border-t border-primary/20 p-4 dark:border-primary/20">
-			<h4 class="mb-1 text-sm font-semibold text-gray-700 dark:text-gray-300">Disc set</h4>
-			<p class="mb-3 text-xs text-gray-500 dark:text-gray-400">
-				For multi-disc sets (box sets, TV seasons), set this disc's position. Leave blank for a single disc.
-			</p>
-			<div class="flex flex-wrap items-end gap-3">
-				<div class="flex flex-col gap-1">
-					<label for="disc-number-{job.id}" class="text-xs font-medium text-gray-600 dark:text-gray-300">Disc number</label>
-					<input
-						id="disc-number-{job.id}"
-						type="number"
-						min="1"
-						bind:value={discNumberInput}
-						placeholder="—"
-						disabled={savingDiscInfo}
-						class="w-24 rounded-md border border-primary/25 bg-primary/5 px-2 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary disabled:opacity-50 dark:border-primary/30 dark:bg-primary/10 dark:text-white"
-					/>
-				</div>
-				<span class="pb-2 text-sm text-gray-400">of</span>
-				<div class="flex flex-col gap-1">
-					<label for="disc-total-{job.id}" class="text-xs font-medium text-gray-600 dark:text-gray-300">Disc total</label>
-					<input
-						id="disc-total-{job.id}"
-						type="number"
-						min="1"
-						bind:value={discTotalInput}
-						placeholder="—"
-						disabled={savingDiscInfo}
-						class="w-24 rounded-md border border-primary/25 bg-primary/5 px-2 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary disabled:opacity-50 dark:border-primary/30 dark:bg-primary/10 dark:text-white"
-					/>
-				</div>
-				<button
-					onclick={saveDiscInfo}
-					disabled={savingDiscInfo}
-					class="{btnBase} bg-primary text-on-primary hover:bg-primary-hover disabled:opacity-50"
-				>
-					{savingDiscInfo ? 'Saving…' : 'Save'}
-				</button>
-			</div>
-		</div>
+	{#if showInfo}
+		<JobInfoForm {job} onrefresh={() => { onrefresh?.(); loadDetail(); }} />
 	{/if}
 </div>
 
