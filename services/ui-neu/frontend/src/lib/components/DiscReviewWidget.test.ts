@@ -14,6 +14,7 @@ vi.mock('$lib/api/jobs', () => ({
 	abandonJob: vi.fn(() => Promise.resolve()),
 	startWaitingJob: vi.fn(() => Promise.resolve(createJob())),
 	pauseWaitingJob: vi.fn(() => Promise.resolve(createJob())),
+	resolveJob: vi.fn(() => Promise.resolve(createJob())),
 	updateTrack: vi.fn(() => Promise.resolve(createJob())),
 	patchJob: vi.fn(() => Promise.resolve(createJob())),
 	applySession: vi.fn(() => Promise.resolve({ created_task_ids: [], collisions: [] })),
@@ -85,8 +86,14 @@ describe('DiscReviewWidget', () => {
 			});
 		});
 
-		it('hides Start for non-review statuses (identify-only waiting)', async () => {
+		it('shows Start rip on an awaiting_user_id job (review-card start)', async () => {
 			renderWidget({ status: 'awaiting_user_id' });
+			await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
+			expect(screen.getByText('Start rip')).toBeInTheDocument();
+		});
+
+		it('hides Start once the job is already identified', async () => {
+			renderWidget({ status: 'identified' });
 			await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
 			expect(screen.queryByText('Start rip')).not.toBeInTheDocument();
 		});
@@ -147,6 +154,17 @@ describe('DiscReviewWidget', () => {
 			const btn = await screen.findByText('Start rip');
 			await fireEvent.click(btn);
 			await waitFor(() => expect(mockStart).toHaveBeenCalledWith('job_9'));
+		});
+
+		it('Start rip saves (resolveJob) before starting an awaiting_user_id job', async () => {
+			const { resolveJob } = await import('$lib/api/jobs');
+			const mockResolve = vi.mocked(resolveJob);
+			renderWidget({ id: 'job_u', status: 'awaiting_user_id' });
+			const btn = await screen.findByText('Start rip');
+			await fireEvent.click(btn);
+			// resolve (the save) fires; for awaiting_user_id no rip-start-review is needed
+			await waitFor(() => expect(mockResolve).toHaveBeenCalled());
+			expect(mockStart).not.toHaveBeenCalled();
 		});
 
 		it('the countdown pause control toggles per-job pause', async () => {

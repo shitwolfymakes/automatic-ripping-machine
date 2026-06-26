@@ -56,13 +56,13 @@ describe('DiscReviewWidget', () => {
 	});
 
 	describe('action buttons', () => {
-		it('renders Cancel before the (enabled) Start rip control for awaiting_review', async () => {
+		it('renders the (enabled) Start rip control before Cancel for awaiting_review', async () => {
 			renderWidget({ status: 'awaiting_review' });
 			await waitFor(() => expect(screen.getByText('Start rip')).toBeInTheDocument());
 			const cancelBtn = screen.getByText('Cancel');
 			const startBtn = screen.getByText('Start rip');
-			expect(cancelBtn.compareDocumentPosition(startBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-			// Start rip is a real action (v3 timed review gate) — enabled.
+			// Start rip sits to the LEFT of Cancel in the action row.
+			expect(startBtn.compareDocumentPosition(cancelBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 			expect(startBtn).not.toBeDisabled();
 		});
 	});

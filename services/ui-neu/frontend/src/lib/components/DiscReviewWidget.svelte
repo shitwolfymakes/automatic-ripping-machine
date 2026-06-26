@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { JobView, JobDetailView, TrackView } from '$lib/types/api.gen';
-	import { abandonJob, fetchJob, startWaitingJob, pauseWaitingJob } from '$lib/api/jobs';
+	import { abandonJob, fetchJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
 	import CountdownTimer from './CountdownTimer.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
 	import PosterImage from './PosterImage.svelte';
@@ -55,6 +55,15 @@
 	// "Done" to clear the card (the disc proceeds; Cancel still abandons).
 	let isIdentified = $derived((data?.job?.status ?? job?.status)?.toLowerCase() === 'identified');
 
+	// "Start rip" (save + start) is offered while the disc is still awaiting an
+	// operator decision — awaiting_user_id / awaiting_review / ripped_awaiting_identify.
+	// Not for already-identified or terminal jobs (Done/Apply session handle those).
+	let canStart = $derived(
+		['awaiting_user_id', 'awaiting_review', 'ripped_awaiting_identify'].includes(
+			(data?.job?.status ?? job?.status) ?? ''
+		)
+	);
+
 	// Prefer the reloaded detail (fresh after an apply/resolve) over the list-level
 	// `job` prop, so the poster/title update immediately without a full dashboard
 	// refresh. Falls back to the prop before the first detail load. Only read
@@ -97,12 +106,33 @@
 		}
 	}
 
-	async function handleStart() {
+
+	// Action-row "Start rip": save + start. Resolving the job's current identity
+	// (title/year/disc, preferring the freshly-loaded detail) is the save — it
+	// also unblocks the parked ripper for an awaiting_user_id disc. For an
+	// awaiting_review disc the rip is held by the countdown, so additionally skip
+	// it via rip-start-review. Then dismiss the card; the disc is on its way.
+	async function handleStartRip() {
 		if (!job) return;
+		const j = data?.job ?? job;
+		const startTitle = (j.title ?? '').trim();
+		if (!startTitle) {
+			errorMessage = 'A title is required to start — open Info or Search to set one.';
+			return;
+		}
 		starting = true;
 		errorMessage = null;
 		try {
-			await startWaitingJob(job.id);
+			await resolveJob(job.id, {
+				title: startTitle,
+				year: j.year ?? null,
+				disc_number: j.disc_number ?? null,
+				disc_total: j.disc_total ?? null,
+				metadata: {}
+			});
+			if (isReviewGate) {
+				await startWaitingJob(job.id);
+			}
 			ondismiss?.();
 			onrefresh?.();
 		} catch (e) {
@@ -110,20 +140,6 @@
 		} finally {
 			starting = false;
 		}
-	}
-
-	// Start handoff for the Info form. The form has already resolved (saved +
-	// identified) the job, which unblocks the parked ripper for an
-	// awaiting_user_id disc. For an awaiting_review disc the rip is still held by
-	// the countdown, so skip it via rip-start-review. Then dismiss the card —
-	// the disc is on its way.
-	async function handleInfoStart() {
-		if (!job) return;
-		if (isReviewGate) {
-			await startWaitingJob(job.id);
-		}
-		ondismiss?.();
-		onrefresh?.();
 	}
 
 	async function handlePauseToggle(paused: boolean) {
@@ -241,22 +257,23 @@
 				Done
 			</button>
 		{/if}
-		<button
-			onclick={handleCancel}
-			disabled={cancelling}
-			class="{btnBase} {isIdentified ? '' : 'ml-auto'} text-red-600 ring-1 ring-red-300 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:ring-red-700 dark:hover:bg-red-900/20"
-		>
-			{cancelling ? 'Cancelling...' : 'Cancel'}
-		</button>
-		{#if isReviewGate}
+		{#if canStart}
 			<button
-				onclick={handleStart}
+				onclick={handleStartRip}
 				disabled={starting}
-				class="{btnBase} bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 dark:bg-green-500 dark:hover:bg-green-600"
+				class="{btnBase} {isIdentified ? '' : 'ml-auto'} bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 dark:bg-green-500 dark:hover:bg-green-600"
+				title="Save the metadata and start ripping this disc"
 			>
 				{starting ? 'Starting...' : 'Start rip'}
 			</button>
 		{/if}
+		<button
+			onclick={handleCancel}
+			disabled={cancelling}
+			class="{btnBase} {isIdentified || canStart ? '' : 'ml-auto'} text-red-600 ring-1 ring-red-300 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:ring-red-700 dark:hover:bg-red-900/20"
+		>
+			{cancelling ? 'Cancelling...' : 'Cancel'}
+		</button>
 	</div>
 
 	<!-- Tracks table -->
@@ -282,7 +299,7 @@
 	{/if}
 
 	{#if showInfo}
-		<JobInfoForm {job} onrefresh={() => { onrefresh?.(); loadDetail(); }} onstart={handleInfoStart} />
+		<JobInfoForm {job} onrefresh={() => { onrefresh?.(); loadDetail(); }} />
 	{/if}
 </div>
 
