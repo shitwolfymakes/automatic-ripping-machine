@@ -56,13 +56,13 @@ describe('DiscReviewWidget', () => {
 	});
 
 	describe('action buttons', () => {
-		it('renders the (enabled) Start rip control before Cancel for awaiting_review', async () => {
+		it('renders Cancel before the (enabled) Start rip control for awaiting_review', async () => {
 			renderWidget({ status: 'awaiting_review' });
 			await waitFor(() => expect(screen.getByText('Start rip')).toBeInTheDocument());
 			const cancelBtn = screen.getByText('Cancel');
 			const startBtn = screen.getByText('Start rip');
-			// Start rip sits to the LEFT of Cancel in the action row.
-			expect(startBtn.compareDocumentPosition(cancelBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+			// Start rip is the rightmost action — Cancel comes before it.
+			expect(cancelBtn.compareDocumentPosition(startBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 			expect(startBtn).not.toBeDisabled();
 		});
 	});
