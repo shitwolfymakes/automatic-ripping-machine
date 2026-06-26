@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { JobView, JobDetailView, TrackView } from '$lib/types/api.gen';
+	import type { JobView, JobDetailView, TrackView, ScanResult } from '$lib/types/api.gen';
 	import { abandonJob, fetchJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
 	import CountdownTimer from './CountdownTimer.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
@@ -45,6 +45,9 @@
 	let errorMessage = $state<string | null>(null);
 
 	let tracks = $derived<TrackView[]>(data?.tracks ?? []);
+	let scanTitles = $derived(
+		((data?.job?.metadata_json?.scan_result as ScanResult | undefined)?.titles) ?? []
+	);
 
 	// v3 classifies disc kind via disc_type. cd → music, data → data, the rest
 	// are video.
@@ -275,7 +278,7 @@
 		{#if initialLoading}
 			<p class="p-4 text-sm text-gray-400">Loading...</p>
 		{:else}
-			<ReviewTracksTable {job} {tracks} {isVideo} {isMusic} onrefresh={() => { onrefresh?.(); loadDetail(); }} />
+			<ReviewTracksTable {job} {tracks} {scanTitles} {isVideo} {isMusic} onrefresh={() => { onrefresh?.(); loadDetail(); }} />
 		{/if}
 	</div>
 

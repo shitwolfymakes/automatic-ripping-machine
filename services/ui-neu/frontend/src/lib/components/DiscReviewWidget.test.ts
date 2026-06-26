@@ -250,4 +250,27 @@ describe('DiscReviewWidget', () => {
 		const { container } = renderComponent(DiscReviewWidget, { props: {} });
 		expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
 	});
+
+	it('renders scanned titles when the job has no materialized tracks yet', async () => {
+		const { fetchJob } = await import('$lib/api/jobs');
+		vi.mocked(fetchJob).mockResolvedValueOnce(
+			detail(
+				{
+					status: 'awaiting_user_id',
+					metadata_json: {
+						scan_result: {
+							disc_type: 'dvd',
+							titles: [
+								{ index: 0, duration_seconds: 3600, source_file: 'B1_t00.mkv' },
+								{ index: 1, duration_seconds: 1800, source_file: 'B1_t01.mkv' }
+							]
+						}
+					}
+				},
+				[]
+			)
+		);
+		renderWidget({ status: 'awaiting_user_id' });
+		await waitFor(() => expect(screen.getByText('Scanned titles (2)')).toBeInTheDocument());
+	});
 });
