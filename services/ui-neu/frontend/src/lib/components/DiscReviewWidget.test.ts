@@ -92,10 +92,18 @@ describe('DiscReviewWidget', () => {
 			expect(screen.getByText('Start rip')).toBeInTheDocument();
 		});
 
-		it('hides Start once the job is already identified', async () => {
+		it('keeps Start rip after the job is identified (saving must not flip it to Done)', async () => {
 			renderWidget({ status: 'identified' });
 			await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
-			expect(screen.queryByText('Start rip')).not.toBeInTheDocument();
+			expect(screen.getByText('Start rip')).toBeInTheDocument();
+			// The old "Done" button is gone — Start rip / Cancel are the actions.
+			expect(screen.queryByText('Done')).not.toBeInTheDocument();
+		});
+
+		it('renders a View details link to the job page', async () => {
+			renderWidget({ id: 'job_vd', status: 'awaiting_user_id' });
+			const link = await screen.findByText('View details');
+			expect(link.closest('a')?.getAttribute('href')).toBe('/jobs/job_vd');
 		});
 
 		it('renders disc type info', async () => {

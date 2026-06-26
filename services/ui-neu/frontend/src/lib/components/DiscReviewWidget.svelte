@@ -51,15 +51,11 @@
 	let isMusic = $derived(job?.disc_type === 'cd');
 	let isData = $derived(job?.disc_type === 'data');
 	let isVideo = $derived(!isMusic && !isData);
-	// Review has been applied once the job is identified — offer a non-destructive
-	// "Done" to clear the card (the disc proceeds; Cancel still abandons).
-	let isIdentified = $derived((data?.job?.status ?? job?.status)?.toLowerCase() === 'identified');
-
-	// "Start rip" (save + start) is offered while the disc is still awaiting an
-	// operator decision — awaiting_user_id / awaiting_review / ripped_awaiting_identify.
-	// Not for already-identified or terminal jobs (Done/Apply session handle those).
+	// "Start rip" (save + start) stays available through the whole review phase —
+	// including after a metadata Save has identified the disc — so saving never
+	// removes the way to start the rip. Cancel still abandons.
 	let canStart = $derived(
-		['awaiting_user_id', 'awaiting_review', 'ripped_awaiting_identify'].includes(
+		['awaiting_user_id', 'awaiting_review', 'ripped_awaiting_identify', 'identified'].includes(
 			(data?.job?.status ?? job?.status) ?? ''
 		)
 	);
@@ -249,31 +245,29 @@
 			<button onclick={() => toggleSection('music')} class="{btnBase} {showMusicSearch ? 'bg-primary text-on-primary' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}">Search</button>
 		{/if}
 		<button onclick={() => (showApplySession = true)} class="{btnBase} bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15">Apply session</button>
-		{#if isIdentified}
-			<button
-				onclick={() => ondismiss?.()}
-				class="{btnBase} ml-auto bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15"
-			>
-				Done
-			</button>
-		{/if}
+		<a
+			href="/jobs/{job.id}"
+			class="{btnBase} ml-auto bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15"
+		>
+			View details
+		</a>
+		<button
+			onclick={handleCancel}
+			disabled={cancelling}
+			class="{btnBase} text-red-600 ring-1 ring-red-300 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:ring-red-700 dark:hover:bg-red-900/20"
+		>
+			{cancelling ? 'Cancelling...' : 'Cancel'}
+		</button>
 		{#if canStart}
 			<button
 				onclick={handleStartRip}
 				disabled={starting}
-				class="{btnBase} {isIdentified ? '' : 'ml-auto'} bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 dark:bg-green-500 dark:hover:bg-green-600"
+				class="{btnBase} bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 dark:bg-green-500 dark:hover:bg-green-600"
 				title="Save the metadata and start ripping this disc"
 			>
 				{starting ? 'Starting...' : 'Start rip'}
 			</button>
 		{/if}
-		<button
-			onclick={handleCancel}
-			disabled={cancelling}
-			class="{btnBase} {isIdentified || canStart ? '' : 'ml-auto'} text-red-600 ring-1 ring-red-300 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:ring-red-700 dark:hover:bg-red-900/20"
-		>
-			{cancelling ? 'Cancelling...' : 'Cancel'}
-		</button>
 	</div>
 
 	<!-- Tracks table -->
