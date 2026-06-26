@@ -121,9 +121,16 @@ describe('DiscReviewWidget', () => {
 			expect(screen.queryByText('Settings')).not.toBeInTheDocument();
 		});
 
-		it('shows the Disc info button', async () => {
-			renderWidget({ disc_type: 'bluray' });
-			await waitFor(() => expect(screen.getByText('Disc info')).toBeInTheDocument());
+		it('Info is the first action button and toggles the Info form', async () => {
+			renderWidget({ status: 'awaiting_user_id', disc_type: 'dvd' });
+			expect(screen.getByRole('button', { name: 'Info' })).toBeInTheDocument();
+			await fireEvent.click(screen.getByRole('button', { name: 'Info' }));
+			await waitFor(() => expect(screen.getByLabelText('Title')).toBeInTheDocument());
+		});
+
+		it('no longer renders a standalone "Disc info" button', () => {
+			renderWidget({ status: 'awaiting_user_id', disc_type: 'dvd' });
+			expect(screen.queryByRole('button', { name: 'Disc info' })).not.toBeInTheDocument();
 		});
 
 		it('opens the Apply session dialog', async () => {
@@ -131,27 +138,6 @@ describe('DiscReviewWidget', () => {
 			await waitFor(() => expect(screen.getByText('Apply session')).toBeInTheDocument());
 			await fireEvent.click(screen.getByText('Apply session'));
 			await waitFor(() => expect(screen.getByRole('dialog', { name: /apply session/i })).toBeInTheDocument());
-		});
-	});
-
-	describe('disc info', () => {
-		it('saves disc_number / disc_total via patchJob', async () => {
-			const { patchJob } = await import('$lib/api/jobs');
-			const mockPatch = vi.mocked(patchJob);
-			mockFetchJob.mockResolvedValue(detail({ id: 'job_d', disc_type: 'bluray' }));
-			renderWidget({ id: 'job_d', disc_type: 'bluray' });
-			await waitFor(() => expect(screen.getByText('Disc info')).toBeInTheDocument());
-			await fireEvent.click(screen.getByText('Disc info'));
-
-			const numberInput = await screen.findByLabelText(/disc number/i);
-			const totalInput = screen.getByLabelText(/disc total/i);
-			await fireEvent.input(numberInput, { target: { value: '2' } });
-			await fireEvent.input(totalInput, { target: { value: '4' } });
-			await fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
-
-			await waitFor(() => {
-				expect(mockPatch).toHaveBeenCalledWith('job_d', { disc_number: 2, disc_total: 4 });
-			});
 		});
 	});
 
