@@ -271,4 +271,68 @@ describe('Job detail page (v3)', () => {
 		await waitFor(() => expect(screen.getByRole('heading', { name: 'Bare' })).toBeInTheDocument());
 		expect(screen.queryByRole('button', { name: 'Raw metadata' })).not.toBeInTheDocument();
 	});
+
+	it('renders a track poster thumbnail and IMDb link when present', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({ id: 'job_42', title: 'Test Movie', status: 'ripped' }),
+			tracks: [
+				createTrack({
+					id: 'trk_1',
+					status: 'done',
+					title: 'Feature',
+					imdb_id: 'tt5555555',
+					poster_url: 'https://example.test/p.jpg'
+				})
+			],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByText('Tracks (1)')).toBeInTheDocument());
+		const imdb = screen.getByRole('link', { name: 'IMDb' });
+		expect(imdb.getAttribute('href')).toBe('https://www.imdb.com/title/tt5555555');
+		expect(document.querySelector('img[src="/api/images/proxy?url=https%3A%2F%2Fexample.test%2Fp.jpg"]')).not.toBeNull();
+	});
+
+	it('renders an Episode column only when a track is a series', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({ id: 'job_42', title: 'Show', status: 'ripped' }),
+			tracks: [
+				createTrack({
+					id: 'trk_1',
+					status: 'done',
+					video_type: 'series',
+					episode_number: 3,
+					episode_name: 'The One With The Test'
+				})
+			],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByText('Tracks (1)')).toBeInTheDocument());
+		expect(screen.getByRole('columnheader', { name: 'Episode' })).toBeInTheDocument();
+		expect(screen.getByText('The One With The Test')).toBeInTheDocument();
+	});
+
+	it('omits the Episode column for non-series tracks', async () => {
+		// default mockFetchJob: one non-series track
+		mockFetchJob.mockResolvedValue({
+			job: createJob({ id: 'job_42', title: 'Test Movie', status: 'ripped' }),
+			tracks: [createTrack({ id: 'trk_1', status: 'done' })],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByText('Tracks (1)')).toBeInTheDocument());
+		expect(screen.queryByRole('columnheader', { name: 'Episode' })).not.toBeInTheDocument();
+	});
+
+	it('renders an edition badge when set', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({ id: 'job_42', title: 'Test Movie', status: 'ripped' }),
+			tracks: [createTrack({ id: 'trk_1', status: 'done', title: 'Feature', edition: "Director's Cut" })],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByText('Tracks (1)')).toBeInTheDocument());
+		expect(screen.getByText("Director's Cut")).toBeInTheDocument();
+	});
 });

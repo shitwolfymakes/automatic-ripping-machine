@@ -91,6 +91,9 @@
 
 	let metadataFields = $derived(detail ? buildMetadataFields(detail.job) : []);
 	let musicTracks = $derived(detail ? extractMusicTracks(detail.job.metadata_json) : []);
+	let tracksAreSeries = $derived(
+		(detail?.tracks ?? []).some((t) => t.video_type === 'series' || t.episode_number != null)
+	);
 	let showRawMetadata = $state(false);
 	let rawMetadataEntries = $derived(detail ? metadataEntries(detail.job.metadata_json) : []);
 
@@ -332,6 +335,9 @@
 								<th class="px-4 py-3 font-medium">#</th>
 								<th class="px-4 py-3 font-medium">Kind</th>
 								<th class="px-4 py-3 font-medium">Title</th>
+								{#if tracksAreSeries}
+									<th class="px-4 py-3 font-medium">Episode</th>
+								{/if}
 								<th class="px-4 py-3 font-medium">Filename</th>
 								<th class="px-4 py-3 font-medium">Length</th>
 								<th class="px-4 py-3 font-medium">Size</th>
@@ -360,12 +366,35 @@
 													{#if track.year}
 														<span class="text-gray-400"> ({track.year})</span>
 													{/if}
+													<div class="mt-0.5 flex flex-wrap items-center gap-1">
+														{#if track.imdb_id}
+															<a href="https://www.imdb.com/title/{track.imdb_id}" target="_blank" rel="noopener noreferrer" onclick={(e) => e.stopPropagation()} class="rounded-full bg-yellow-400 px-1.5 py-0.5 text-[9px] font-bold text-black">IMDb</a>
+														{/if}
+														{#if track.edition}
+															<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-gray-600 dark:bg-primary/15 dark:text-gray-300">{track.edition}</span>
+														{/if}
+														{#if track.role}
+															<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-gray-600 dark:bg-primary/15 dark:text-gray-300">{track.role}</span>
+														{/if}
+													</div>
 												</div>
 											</div>
 										{:else}
 											<span class="text-xs text-gray-400">{job.title || 'Untitled'}{#if job.year} ({job.year}){/if}</span>
 										{/if}
 									</td>
+									{#if tracksAreSeries}
+										<td class="px-4 py-3" data-label="Episode">
+											{#if track.episode_number != null}
+												<span class="font-medium text-gray-900 dark:text-white">{track.episode_number}</span>
+												{#if track.episode_name}
+													<span class="ml-1.5 text-xs text-gray-500 dark:text-gray-400">{track.episode_name}</span>
+												{/if}
+											{:else}
+												<span class="text-gray-400">—</span>
+											{/if}
+										</td>
+									{/if}
 									<td class="max-w-[260px] truncate px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300" data-label="Filename" title={preview?.output_name ?? ''}>
 										{#if preview?.output_name}
 											<span>{preview.output_name}</span>
