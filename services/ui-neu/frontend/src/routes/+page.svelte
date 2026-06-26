@@ -42,7 +42,15 @@
 
 	function isAwaiting(j: JobView): boolean {
 		const s = j.status?.toLowerCase();
-		return s === 'awaiting_user_id' || s === 'ripped_awaiting_identify' || s === 'awaiting_review';
+		// `identified` is pre-rip (disc identified, waiting to start) — it belongs
+		// on the review card (with Start rip), NOT in FINISHING. Keep it here so it
+		// shows the review widget even after a page reload, not only while sticky.
+		return (
+			s === 'awaiting_user_id' ||
+			s === 'ripped_awaiting_identify' ||
+			s === 'awaiting_review' ||
+			s === 'identified'
+		);
 	}
 
 	// Record jobs seen in review so they stick through a post-apply `identified`.
