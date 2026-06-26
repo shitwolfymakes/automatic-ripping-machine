@@ -16,7 +16,7 @@
 	import JobLifecycle from '$lib/components/JobLifecycle.svelte';
 	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
 	import { discTypeLabel, isJobActive } from '$lib/utils/job-type';
-	import { buildMetadataFields } from '$lib/utils/job-fields';
+	import { buildMetadataFields, metadataEntries } from '$lib/utils/job-fields';
 	import { extractMusicTracks } from '$lib/utils/music-tracks';
 	import { trackKindLabel, trackSizeLabel } from '$lib/utils/track-fields';
 	import LoadState from '$lib/components/LoadState.svelte';
@@ -91,6 +91,8 @@
 
 	let metadataFields = $derived(detail ? buildMetadataFields(detail.job) : []);
 	let musicTracks = $derived(detail ? extractMusicTracks(detail.job.metadata_json) : []);
+	let showRawMetadata = $state(false);
+	let rawMetadataEntries = $derived(detail ? metadataEntries(detail.job.metadata_json) : []);
 
 	const panelTabBase = 'flex-1 border-r border-primary/15 px-4 py-2.5 text-center text-sm font-medium transition-colors dark:border-primary/15';
 	const panelTabActive = 'text-primary border-b-2 border-b-primary bg-primary/5 dark:bg-primary/10';
@@ -474,6 +476,42 @@
 						</tbody>
 					</table>
 				</div>
+			</section>
+		{/if}
+
+		<!-- Raw metadata (collapsible): the full metadata_json, nothing hidden -->
+		{#if rawMetadataEntries.length > 0}
+			<section>
+				<button
+					type="button"
+					onclick={() => { showRawMetadata = !showRawMetadata; }}
+					class="flex w-full items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white"
+				>
+					<svg class="h-4 w-4 transition-transform {showRawMetadata ? 'rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+					</svg>
+					Raw metadata
+				</button>
+				{#if showRawMetadata}
+					<div class="mt-3 overflow-x-auto rounded-lg border border-primary/20 dark:border-primary/20">
+						<table class="w-full text-left text-sm">
+							<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+								{#each rawMetadataEntries as entry}
+									<tr class="align-top hover:bg-page dark:hover:bg-gray-800/50">
+										<td class="px-4 py-2 font-mono text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">{entry.key}</td>
+										<td class="px-4 py-2 text-gray-900 dark:text-white">
+											{#if entry.isJson}
+												<pre class="font-mono text-xs whitespace-pre-wrap">{entry.display}</pre>
+											{:else}
+												<span class="font-mono text-xs">{entry.display}</span>
+											{/if}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
 			</section>
 		{/if}
 	</div>

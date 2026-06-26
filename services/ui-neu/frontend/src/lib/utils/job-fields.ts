@@ -162,3 +162,27 @@ export function buildMetadataFields(job: JobView): MetadataField[] {
 
 	return fields;
 }
+
+export interface MetadataEntry {
+	key: string;
+	display: string;
+	isJson: boolean;
+}
+
+/**
+ * Flatten a job's `metadata_json` into one row per TOP-LEVEL key for the raw
+ * viewer. Scalars render inline; objects/arrays are pretty-printed JSON so
+ * structured values (scan_result, tracks, raw) are fully visible without
+ * being flattened into the grid. Returns [] for an empty/missing blob.
+ */
+export function metadataEntries(
+	metadata_json: Record<string, unknown> | null | undefined
+): MetadataEntry[] {
+	const md = (metadata_json ?? {}) as Record<string, unknown>;
+	return Object.entries(md).map(([key, value]) => {
+		if (value !== null && typeof value === 'object') {
+			return { key, display: JSON.stringify(value, null, 2), isJson: true };
+		}
+		return { key, display: value == null ? '' : String(value), isJson: false };
+	});
+}

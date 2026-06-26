@@ -237,4 +237,38 @@ describe('Job detail page (v3)', () => {
 		});
 		expect(screen.getByText('Opening')).toBeInTheDocument();
 	});
+
+	it('renders a collapsible Raw metadata section that reveals the blob', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({
+				id: 'job_42',
+				title: 'Test Movie',
+				status: 'ripped',
+				metadata_json: { imdb_id: 'tt9999999', scan_result: { titles: [{ index: 0 }] } }
+			}),
+			tracks: [],
+			fingerprints: []
+		});
+		renderComponent(Page);
+
+		const toggle = await screen.findByRole('button', { name: 'Raw metadata' });
+		// Collapsed initially: the raw key not yet shown.
+		expect(screen.queryByText('scan_result')).not.toBeInTheDocument();
+		await fireEvent.click(toggle);
+		await waitFor(() => {
+			expect(screen.getByText('scan_result')).toBeInTheDocument();
+			expect(screen.getByText('imdb_id')).toBeInTheDocument();
+		});
+	});
+
+	it('omits the Raw metadata section when metadata_json is empty', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({ id: 'job_42', title: 'Bare', status: 'ripped', metadata_json: {} }),
+			tracks: [],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByRole('heading', { name: 'Bare' })).toBeInTheDocument());
+		expect(screen.queryByRole('button', { name: 'Raw metadata' })).not.toBeInTheDocument();
+	});
 });
