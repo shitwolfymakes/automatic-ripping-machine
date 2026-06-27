@@ -33,6 +33,10 @@ vi.mock('$lib/api/settings', () => ({
 	fetchTranscoderPresets: vi.fn(() => Promise.resolve(null))
 }));
 
+vi.mock('$lib/api/sessions', () => ({
+	fetchSessions: vi.fn(() => Promise.resolve([]))
+}));
+
 function renderWidget(overrides = {}) {
 	return renderComponent(DiscReviewWidget, {
 		props: { job: createJob({ status: 'identified', ...overrides }), driveNames: {}, paused: false }

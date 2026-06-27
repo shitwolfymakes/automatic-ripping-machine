@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { JobView, JobDetailView, TrackView, ScanResult } from '$lib/types/api.gen';
+	import type { JobView, JobDetailView, TrackView, ScanResult, SessionView } from '$lib/types/api.gen';
 	import { abandonJob, fetchJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
+	import { fetchSessions } from '$lib/api/sessions';
+	import { readJobMetadata, videoTypeLabel } from '$lib/utils/job-fields';
 	import CountdownTimer from './CountdownTimer.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
 	import PosterImage from './PosterImage.svelte';
@@ -68,6 +70,20 @@
 	// refresh. Falls back to the prop before the first detail load. Only read
 	// inside the `{#if !job}{:else}` branch, where `job` is guaranteed defined.
 	let displayJob = $derived((data?.job ?? job) as JobView);
+
+	let sessions = $state<SessionView[]>([]);
+	let sessionNameById = $derived(new Map(sessions.map((s) => [s.id, s.name])));
+
+	let jobMeta = $derived(readJobMetadata(displayJob.metadata_json));
+
+	function shortId(id: string): string {
+		return id.length > 15 ? `${id.slice(0, 15)}…` : id;
+	}
+	let appliedSession = $derived(
+		jobMeta.pending_session_id
+			? (sessionNameById.get(jobMeta.pending_session_id) ?? shortId(jobMeta.pending_session_id))
+			: null
+	);
 
 	async function loadDetail() {
 		if (!job) return;
@@ -166,8 +182,17 @@
 		}
 	}
 
+	async function loadSessions() {
+		try {
+			sessions = await fetchSessions();
+		} catch {
+			sessions = [];
+		}
+	}
+
 	onMount(() => {
 		loadDetail();
+		loadSessions();
 	});
 
 	const btnBase = 'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors';
@@ -221,6 +246,30 @@
 					<DiscTypeIcon disctype={displayJob.disc_type} size="h-3.5 w-3.5" />
 					{discTypeLabel(displayJob.disc_type)}
 				</span>
+				{#if jobMeta.video_type}
+					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{videoTypeLabel(jobMeta.video_type)}</span>
+				{/if}
+				{#if displayJob.disc_number != null}
+					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">Disc {displayJob.disc_number}{#if displayJob.disc_total != null}/{displayJob.disc_total}{/if}</span>
+				{/if}
+				{#if jobMeta.titleCount != null}
+					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{jobMeta.titleCount} titles</span>
+				{/if}
+				{#if jobMeta.season}
+					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">S{jobMeta.season}</span>
+				{/if}
+				{#if jobMeta.imdb_id && !isMusic}
+					<a href="https://www.imdb.com/title/{jobMeta.imdb_id}" target="_blank" rel="noopener noreferrer" class="rounded-sm bg-yellow-400 px-1.5 py-0.5 font-semibold text-black">IMDb</a>
+				{/if}
+				{#if jobMeta.artist}
+					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{jobMeta.artist}</span>
+				{/if}
+				{#if jobMeta.album}
+					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{jobMeta.album}</span>
+				{/if}
+				{#if appliedSession}
+					<span class="rounded-sm bg-primary/15 px-1.5 py-0.5 font-medium text-primary-text dark:bg-primary/20 dark:text-primary-text-dark">Session: {appliedSession}</span>
+				{/if}
 			</div>
 		</div>
 	</div>
