@@ -20,6 +20,7 @@ export interface JobMetadata {
 	album?: string;
 	multi_title?: boolean;
 	source_type?: string;
+	pending_session_id?: string;
 	titleCount?: number;
 }
 
@@ -58,6 +59,8 @@ export function readJobMetadata(
 	if (typeof md.multi_title === 'boolean') out.multi_title = md.multi_title;
 	const source = asScalarString(md.source_type);
 	if (source !== undefined) out.source_type = source;
+	const pendingSession = asScalarString(md.pending_session_id);
+	if (pendingSession !== undefined) out.pending_session_id = pendingSession;
 
 	const scan = md.scan_result;
 	if (scan && typeof scan === 'object') {

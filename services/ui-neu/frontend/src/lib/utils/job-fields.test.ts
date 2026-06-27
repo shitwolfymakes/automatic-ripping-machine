@@ -59,6 +59,18 @@ describe('readJobMetadata', () => {
 	});
 });
 
+describe('readJobMetadata — pending_session_id', () => {
+	it('reads a string pending_session_id', () => {
+		expect(readJobMetadata({ pending_session_id: 'sess_01ABC' }).pending_session_id).toBe('sess_01ABC');
+	});
+	it('omits pending_session_id when absent', () => {
+		expect(readJobMetadata({}).pending_session_id).toBeUndefined();
+	});
+	it('ignores a non-string pending_session_id', () => {
+		expect(readJobMetadata({ pending_session_id: { x: 1 } }).pending_session_id).toBeUndefined();
+	});
+});
+
 describe('videoTypeLabel', () => {
 	it('maps known types', () => {
 		expect(videoTypeLabel('movie')).toBe('Movie');
