@@ -7,9 +7,24 @@ metadata:
 
 The v3 stack runs on **hifi-server** (host `quark`, `192.168.0.68`, user `upb`,
 key `~/.ssh/hifi`) at `~/src/automatic-ripping-machine-v3`, cloned from
-`origin` (`uprightbass360/arm-v3`, now public). Deployed branch:
-`spike/timed-review-gate` (pausing feature + LCARS theme + the WS rip-progress
-work, all rebased on top of Tier-12 `feat/ui-neu-combined`).
+`origin` (`uprightbass360/arm-v3`, now public). Deployed branch (as of
+2026-06-25): **`spike/transcode-progress`** @ 138fbab7 — spike/timed-review-gate
+(pausing + LCARS + WS rip-progress) PLUS the cherry-picked transcode_progress
+"job done" feature (backend `_summarize_transcode_progress` + ui-neu
+`job-status.ts` effective-status) PLUS the cherry-picked QSV fix
+(`libmfx-gen1.2`). Verified live: `/api/jobs` returns
+`transcode_progress {state,tasks_total,tasks_done,percent}` (a done job reads
+`state:'done'`). The local server-only QSV Dockerfile edit is now redundant
+(in the branch) and was `git stash`ed before the branch switch.
+
+ACTIVE OVERLAY = **local** (`docker-compose.hifi-local.yml`, `./arm/*` on local
+disk, PUID/PGID=1000, ARM_GPUS qsv h264-only). Compose SERVICE names (not
+container names): `arm-backend`, `arm-ui-neu`, `arm-transcode`, `arm-ripper-sr0`,
+`arm-db`, `arm-ui`. Container names are `armv3-*`. Redeploy a service:
+`docker compose -f docker-compose.yml -f docker-compose.hifi-local.yml build <svc>`
+then `... up -d --no-deps <svc>`.
+
+Earlier deployed branch `spike/timed-review-gate` is the pre-feature rollback point.
 
 Reached via reverse proxy at **`https://arm.murphbutt.xyz`** → `192.168.0.68:8888`
 (self-signed inside; proxy terminates public TLS). Admin login `admin` /
@@ -53,9 +68,20 @@ Reached via reverse proxy at **`https://arm.murphbutt.xyz`** → `192.168.0.68:8
 
 ## Deploy / redeploy
 
-Push to `origin spike/timed-review-gate`, then on hifi:
-`git fetch origin spike/... && git reset --hard origin/spike/...` (gitignored
-compose/.env/overlay survive the reset), then rebuild the changed service:
-`docker compose -f docker-compose.yml -f docker-compose.hifi.yml up -d --build <svc>`.
+Push to `origin spike/transcode-progress`, then on hifi:
+`git fetch origin spike/...:refs/remotes/origin/spike/... --force && git reset --hard origin/spike/...`
+(gitignored compose/.env/overlay survive the reset), then rebuild the changed service.
+
+**Fetch gotcha (hit 2026-06-26):** a bare `git fetch origin spike/<b>` only writes
+FETCH_HEAD, NOT the tracking ref `origin/spike/<b>` — so a following
+`git reset --hard origin/spike/<b>` lands on the STALE old tip. Use the explicit
+refspec form above (`origin spike/<b>:refs/remotes/origin/spike/<b> --force`), or
+reset to the literal commit SHA, or to `FETCH_HEAD`.
+
+ACTIVE overlay is **local** → rebuild = `docker compose -f docker-compose.yml -f
+docker-compose.hifi-local.yml build arm-ui-neu` then `... up -d --no-deps arm-ui-neu`.
+Compose service is `arm-ui-neu`; the running CONTAINER is `armv3-ui-neu` (NOT
+`armv3-arm-ui-neu` — a `docker ps --filter name=armv3-arm-ui-neu` matches nothing).
+(NFS-overlay variant uses `docker-compose.hifi.yml` + `up -d --build <svc>`.)
 Stop neu first if reusing its ports: `docker stop arm-ui arm-rippers` (neu is
 stopped not removed — rollback = `docker start`).
