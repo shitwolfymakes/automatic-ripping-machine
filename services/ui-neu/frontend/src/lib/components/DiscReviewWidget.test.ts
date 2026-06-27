@@ -226,6 +226,9 @@ describe('DiscReviewWidget', () => {
 				])
 			);
 			renderWidget({ disc_type: 'bluray' });
+			// The tracks table now lives at the bottom of the Info tab — open it first.
+			await waitFor(() => expect(screen.getByRole('button', { name: 'Info' })).toBeInTheDocument());
+			await fireEvent.click(screen.getByRole('button', { name: 'Info' }));
 			await waitFor(() => {
 				expect(screen.getByText('Demon in Lace')).toBeInTheDocument();
 				expect(screen.getByText('Kolchak_t00.mkv')).toBeInTheDocument();
@@ -237,6 +240,9 @@ describe('DiscReviewWidget', () => {
 				detail({ disc_type: 'bluray' }, [createTrack({ id: 'trk_1', index: 0, source_ref: 't00.mkv', title: 'Ep' })])
 			);
 			renderWidget({ id: 'job_3', disc_type: 'bluray' });
+			// The tracks table now lives at the bottom of the Info tab — open it first.
+			await waitFor(() => expect(screen.getByRole('button', { name: 'Info' })).toBeInTheDocument());
+			await fireEvent.click(screen.getByRole('button', { name: 'Info' }));
 			await waitFor(() => expect(screen.getByText('Ep')).toBeInTheDocument());
 			const epInput = screen.getByPlaceholderText('--');
 			await fireEvent.change(epInput, { target: { value: '7' } });
@@ -271,6 +277,9 @@ describe('DiscReviewWidget', () => {
 			)
 		);
 		renderWidget({ status: 'awaiting_user_id' });
+		// The tracks table now lives at the bottom of the Info tab — open it first.
+		await waitFor(() => expect(screen.getByRole('button', { name: 'Info' })).toBeInTheDocument());
+		await fireEvent.click(screen.getByRole('button', { name: 'Info' }));
 		await waitFor(() => expect(screen.getByText('Scanned titles (2)')).toBeInTheDocument());
 	});
 });

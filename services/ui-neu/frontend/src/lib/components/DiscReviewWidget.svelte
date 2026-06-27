@@ -273,15 +273,6 @@
 		{/if}
 	</div>
 
-	<!-- Tracks table -->
-	<div class="border-t border-primary/20 dark:border-primary/20">
-		{#if initialLoading}
-			<p class="p-4 text-sm text-gray-400">Loading...</p>
-		{:else}
-			<ReviewTracksTable {job} {tracks} {scanTitles} {isVideo} {isMusic} onrefresh={() => { onrefresh?.(); loadDetail(); }} />
-		{/if}
-	</div>
-
 	<!-- Expanded sections -->
 	{#if showTitleSearch && isVideo}
 		<div class="border-t border-primary/20 p-4 dark:border-primary/20">
@@ -297,6 +288,14 @@
 
 	{#if showInfo}
 		<JobInfoForm {job} onrefresh={() => { onrefresh?.(); loadDetail(); }} />
+		<!-- Scanned titles (pre-rip) / tracks (post-rip) live at the bottom of the Info tab -->
+		<div class="border-t border-primary/20 dark:border-primary/20">
+			{#if initialLoading}
+				<p class="p-4 text-sm text-gray-400">Loading...</p>
+			{:else}
+				<ReviewTracksTable {job} {tracks} {scanTitles} {isVideo} {isMusic} onrefresh={() => { onrefresh?.(); loadDetail(); }} />
+			{/if}
+		</div>
 	{/if}
 </div>
 
