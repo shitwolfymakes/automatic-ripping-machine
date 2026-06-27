@@ -238,7 +238,7 @@ describe('Job detail page (v3)', () => {
 		expect(screen.getByText('Opening')).toBeInTheDocument();
 	});
 
-	it('renders a collapsible Raw metadata section that reveals the blob', async () => {
+	it('renders the Raw metadata as a collapsible JSON tree', async () => {
 		mockFetchJob.mockResolvedValue({
 			job: createJob({
 				id: 'job_42',
@@ -252,12 +252,15 @@ describe('Job detail page (v3)', () => {
 		renderComponent(Page);
 
 		const toggle = await screen.findByRole('button', { name: 'Raw metadata' });
-		// Collapsed initially: the raw key not yet shown.
+		// Collapsed initially: the top-level keys are not yet shown.
 		expect(screen.queryByText('scan_result')).not.toBeInTheDocument();
 		await fireEvent.click(toggle);
 		await waitFor(() => {
-			expect(screen.getByText('scan_result')).toBeInTheDocument();
+			// Top-level keys render as tree node names.
 			expect(screen.getByText('imdb_id')).toBeInTheDocument();
+			expect(screen.getByText('scan_result')).toBeInTheDocument();
+			// scan_result is open one level (depth 1) → its child "titles" disclosure shows.
+			expect(screen.getByText('titles')).toBeInTheDocument();
 		});
 	});
 

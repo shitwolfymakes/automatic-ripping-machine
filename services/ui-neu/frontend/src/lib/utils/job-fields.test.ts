@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readJobMetadata, videoTypeLabel, buildMetadataFields, metadataEntries } from './job-fields';
+import { readJobMetadata, videoTypeLabel, buildMetadataFields } from './job-fields';
 import { createJob } from '$lib/components/__fixtures__/job';
 
 describe('readJobMetadata', () => {
@@ -152,30 +152,3 @@ describe('buildMetadataFields — promoted fields', () => {
 	});
 });
 
-describe('metadataEntries', () => {
-	it('returns [] for empty/missing blob', () => {
-		expect(metadataEntries({})).toEqual([]);
-		expect(metadataEntries(null)).toEqual([]);
-		expect(metadataEntries(undefined)).toEqual([]);
-	});
-
-	it('renders scalars inline (isJson false)', () => {
-		expect(metadataEntries({ imdb_id: 'tt1', multi_title: true, season: 2 })).toEqual([
-			{ key: 'imdb_id', display: 'tt1', isJson: false },
-			{ key: 'multi_title', display: 'true', isJson: false },
-			{ key: 'season', display: '2', isJson: false }
-		]);
-	});
-
-	it('pretty-prints objects/arrays (isJson true)', () => {
-		const entries = metadataEntries({ scan_result: { titles: [{ index: 0 }] } });
-		expect(entries).toHaveLength(1);
-		expect(entries[0].key).toBe('scan_result');
-		expect(entries[0].isJson).toBe(true);
-		expect(entries[0].display).toBe(JSON.stringify({ titles: [{ index: 0 }] }, null, 2));
-	});
-
-	it('renders null/undefined values as empty string scalars', () => {
-		expect(metadataEntries({ a: null })).toEqual([{ key: 'a', display: '', isJson: false }]);
-	});
-});
