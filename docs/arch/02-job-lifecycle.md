@@ -289,3 +289,105 @@ The raw-side cleanup rule from [§ `/raw` — intermediate storage](#raw--interm
 - **Ripped:** UI shows the job with available actions — queue session(s), edit metadata, delete raw.
 - **Session queued:** UI shows transcode progress per task.
 - **Resume after crash:** UI shows a "resumed from crash" banner on affected jobs/sessions.
+
+## As-built flow: review gate + auto-transcode
+
+The `## Job state machine` diagram above is the canonical state set. This section
+records the **as-built end-to-end flow** verified against the running v3 stack
+(2026-06-27), including two behaviours that postdate the original diagram: the
+**timed review gate** (`awaiting_review`) and **auto-transcode at rip-complete**
+via `pending_session_id`. Code citations are to the spike line.
+
+### Full lifecycle (branches at scan on the review gate)
+
+The flow branches after identify depending on whether the timed review gate
+(`Config.hold_for_review`) is on:
+
+```
+                          ┌─ scan finds titles
+   disc inserted          │
+        │                 ▼
+     CREATED ──► (ripper scans + calls identify)
+                          │
+        ┌─────────────────┴──────────────────┐
+   identify SUCCEEDS                    identify FAILS
+        │                                     │
+        ▼                                     ▼
+  ┌── gate ON? ──┐                     AWAITING_USER_ID
+  │              │                  ("couldn't ID — needs operator")
+ YES            NO                          │
+  │              │                  operator identifies (resolve)
+  ▼              ▼                          │
+AWAITING_REVIEW  IDENTIFIED ◄───────────────┘
+ (countdown +    │
+  Start/Cancel)  │
+  │              │
+  └──────┬───────┘
+         ▼
+      RIPPING ──────► Track rows MATERIALIZED here (rip-start)
+         │            (or earlier at AWAITING_REVIEW if gate on)
+         ▼
+   RIPPED / RIPPED_PARTIAL
+         │
+         ▼
+   session applied (auto via pending_session_id, OR manual "Apply session")
+         │
+         ▼
+       TRANSCODE ──► COMPLETE
+```
+
+So the order is **scan/identify → (review, if gate on) → rip → ripped →
+(apply session) → transcode → complete** — review happens *before* the rip, not
+after.
+
+**Two materialization points** (where `Track` rows are first created):
+- **Gate ON:** at identify → `AWAITING_REVIEW` (every scanned title persisted as
+  a Track; preset-rejected ones flagged `excluded`). `routers/ripper.py` →
+  `_persist_review_tracks` → `select_tracks_for_review`.
+- **Gate OFF:** at rip-start → `RIPPING` (only the preset's selected subset).
+  `routers/ripper.py` → `select_tracks`.
+
+### Auto-transcode chain at rip-complete (already wired)
+
+Once a rip finishes, the transcode can start automatically — no operator action —
+if a session is resolvable at rip-complete. This is the existing
+`maybe_auto_apply_session` hook, not a future feature:
+
+```
+operator clicks Start (resolve + rip-start)
+        │
+        ▼
+  ripper rips disc ──────────────────────► RIPPING
+        │
+        ▼
+  ripper POSTs /rip-complete
+        │   backend sets RIPPED / RIPPED_PARTIAL  (routers/ripper.py:766-787)
+        │
+        ▼
+  maybe_auto_apply_session  (ALWAYS called for RIPPED/RIPPED_PARTIAL,
+        │                    routers/ripper.py:804-805)
+        │
+        ├─ pending_session_id set?  ──YES──► apply that session ──► TRANSCODE ──► COMPLETE
+        │   (job.metadata_json,                (no operator action;
+        │    auto_session.py:604)               "always wins")
+        │
+        └─ NO ──► drive.default_session_id ──► (only if Config.auto_transcode_on_idle)
+                   │                            ──► TRANSCODE
+                   └─ else ──► stops at RIPPED (operator must "Apply session" manually)
+```
+
+- **`pending_session_id`** lives in `job.metadata_json` (DB-persisted on the Job
+  row → survives restarts). It is the per-disc transcode pin and **always wins**
+  over the per-drive default. Read once at rip-complete
+  (`auto_session.py:604`). Auto-apply is **idempotent** (`auto_session.py:132`):
+  a repeated rip-complete will not spawn duplicate applications.
+- **`drive.default_session_id`** is the standing per-drive fallback, honoured
+  only when `Config.auto_transcode_on_idle` is true.
+- With neither set, the rip stops at `RIPPED` and waits for a manual
+  **Apply session**.
+
+> Today `pending_session_id` is written only by the ripper at identify (from the
+> legacy `POST /api/jobs/manual` path). Surfacing a UI to pin it on the review
+> card is the "pin a transcode session pre-rip" feature
+> (`docs/superpowers/specs/2026-06-27-pin-session-prerip-design.md` in the
+> ai-context repo).
