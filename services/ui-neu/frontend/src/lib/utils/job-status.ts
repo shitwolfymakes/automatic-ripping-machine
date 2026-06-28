@@ -58,3 +58,30 @@ export function isAwaitingAction(job: JobLike): boolean {
 	const eff = effectiveJobStatus(job);
 	return eff === 'ripped' || eff === 'ripped_partial';
 }
+
+/** True when the job carries a non-empty, non-whitespace title. */
+export function hasTitleMatch(job: Pick<JobView, 'title'>): boolean {
+	return typeof job.title === 'string' && job.title.trim().length > 0;
+}
+
+type BadgeJob = Pick<JobView, 'status' | 'title' | 'transcode_progress'>;
+
+/**
+ * The header phase pill for any job rendered as a review card. Pre-rip statuses
+ * map to REVIEW / IDENTIFY / READY; a post-rip job awaiting a session reads
+ * RIPPED · NEEDS SESSION (or · NEEDS TITLE when a session is somehow present but
+ * the title is missing — session is the hard transcode blocker, so it wins when
+ * both are missing). Accent uses the same `var(--token, #hex)` fallback idiom as
+ * the dashboard section frames; `--color-violet-500` is undefined so its #hex is
+ * authoritative.
+ */
+export function reviewPhaseBadge(job: BadgeJob): { label: string; accent: string } {
+	const s = job.status?.toLowerCase() ?? '';
+	if (s === 'awaiting_review') return { label: 'REVIEW', accent: 'var(--color-amber-500, #f59e0b)' };
+	if (s === 'awaiting_user_id' || s === 'ripped_awaiting_identify')
+		return { label: 'IDENTIFY', accent: 'var(--color-cyan-500, #06b6d4)' };
+	if (s === 'identified') return { label: 'READY', accent: 'var(--color-primary)' };
+	if (s === 'ripped' || s === 'ripped_partial')
+		return { label: 'RIPPED · NEEDS SESSION', accent: 'var(--color-violet-500, #8b5cf6)' };
+	return { label: s.toUpperCase(), accent: 'var(--color-primary)' };
+}
