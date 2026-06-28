@@ -15,14 +15,19 @@ def test_get_disk_usage_cache_hit(monkeypatch):
     assert out == {"total": 100, "used": 40, "free": 60, "percent": 40.0}
 
 
-def test_get_disk_usage_miss_triggers_refresh(monkeypatch):
+def test_get_disk_usage_miss_returns_none(monkeypatch):
+    """On a cache miss, get_disk_usage must return None without calling refresh_path.
+
+    The DiskRefresher background task is the only thing that should populate
+    the cache; calling refresh_path from inside the async route handler would
+    block the event loop for up to SUBPROCESS_TIMEOUT seconds on NFS mounts.
+    """
     duc._cache.clear()
-    def fake_refresh(path):
-        with duc._cache_lock:
-            duc._cache[path] = {"total": 10, "used": 3, "free": 7, "percent": 30.0, "ts": 0.0}
-    monkeypatch.setattr(duc, "refresh_path", fake_refresh)
+    def boom(path):
+        raise AssertionError("get_disk_usage must not call refresh_path on a miss")
+    monkeypatch.setattr(duc, "refresh_path", boom)
     out = duc.get_disk_usage("/raw")
-    assert out == {"total": 10, "used": 3, "free": 7, "percent": 30.0}
+    assert out is None
 
 
 def test_refresh_path_timeout_leaves_no_entry(monkeypatch):

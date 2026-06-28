@@ -21,7 +21,6 @@ log = logging.getLogger("arm_backend")
 _cache: dict[str, dict] = {}
 _cache_lock = threading.Lock()
 
-CACHE_TTL = 30           # seconds a cached value is considered fresh
 SUBPROCESS_TIMEOUT = 5   # seconds before abandoning a stalled statvfs subprocess
 REFRESH_INTERVAL = 30    # seconds between background refreshes
 
@@ -61,12 +60,13 @@ def refresh_path(path: str) -> None:
 
 
 def get_disk_usage(path: str) -> dict | None:
-    """Return cached disk usage for *path*, or None. Never blocks on NFS."""
-    with _cache_lock:
-        entry = _cache.get(path)
-    if entry and "total" in entry:
-        return {k: entry[k] for k in ("total", "used", "free", "percent")}
-    refresh_path(path)
+    """Return cached disk usage for *path*, or None on a cache miss.
+
+    Never blocks on NFS — reads only the in-process cache and returns
+    immediately. The DiskRefresher background task is the sole writer;
+    callers must not assume a value is available before the first refresh
+    cycle completes.
+    """
     with _cache_lock:
         entry = _cache.get(path)
     if entry and "total" in entry:
