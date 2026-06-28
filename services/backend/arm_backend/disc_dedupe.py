@@ -17,6 +17,7 @@ import logging
 from collections.abc import Sequence
 from typing import Literal, NamedTuple
 
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_common.enums import NON_TERMINAL_JOB_STATUSES, PRE_RIP_JOB_STATUSES
@@ -32,7 +33,7 @@ class ReuseDecision(NamedTuple):
 
 
 async def find_reusable_job_for_disc(
-    session,
+    session: AsyncSession,
     *,
     drive_id: str,
     fingerprints: Sequence[tuple[str, str]],
@@ -52,7 +53,7 @@ async def find_reusable_job_for_disc(
         return None
 
     # Step 1: candidate jobs — drive_id match + non-terminal status.
-    candidates: list[Job] = (
+    candidates: Sequence[Job] = (
         (
             await session.execute(
                 select(Job)
@@ -68,12 +69,8 @@ async def find_reusable_job_for_disc(
     by_id = {j.id: j for j in candidates}
 
     # Step 2: fingerprints for those jobs.
-    fps: list[DiscFingerprint] = (
-        (
-            await session.execute(
-                select(DiscFingerprint).where(col(DiscFingerprint.job_id).in_(tuple(by_id.keys())))
-            )
-        )
+    fps: Sequence[DiscFingerprint] = (
+        (await session.execute(select(DiscFingerprint).where(col(DiscFingerprint.job_id).in_(tuple(by_id.keys())))))
         .scalars()
         .all()
     )
@@ -88,7 +85,5 @@ async def find_reusable_job_for_disc(
     if matched_job is None:
         return None
 
-    action: Literal["reuse", "in_flight"] = (
-        "reuse" if matched_job.status in PRE_RIP_JOB_STATUSES else "in_flight"
-    )
+    action: Literal["reuse", "in_flight"] = "reuse" if matched_job.status in PRE_RIP_JOB_STATUSES else "in_flight"
     return ReuseDecision(job=matched_job, action=action)

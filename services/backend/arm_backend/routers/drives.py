@@ -28,6 +28,7 @@ router = APIRouter(prefix="/api/drives", tags=["drives"])
 # operator-facing health view that shouldn't flap on a single missed heartbeat.
 _STALE_AFTER = timedelta(minutes=5)
 
+
 def _current_job(jobs_for_drive: list[Job]) -> DriveCurrentJobView | None:
     active = [j for j in jobs_for_drive if j.status not in TERMINAL_JOB_STATUSES]
     if not active:

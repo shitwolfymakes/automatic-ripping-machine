@@ -1,12 +1,13 @@
 import asyncio
 import logging
 import ssl
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import httpx
 
 from arm_common import DriveMediaStatus, JobStatus, configure_service_logging
-from arm_ripper.backend_client import BackendClient
+from arm_ripper.backend_client import BackendClient, JobView
 from arm_ripper.config import settings
 from arm_ripper.drive_poll import DriveState, InsertDetector, read_drive_status
 from arm_ripper.drive_status import probe_drive_media
@@ -56,7 +57,14 @@ async def register_with_retry(client: BackendClient, device_path: str) -> str:
 _RIP_READY = frozenset({JobStatus.IDENTIFIED, JobStatus.RIPPING, JobStatus.AWAITING_REVIEW})
 
 
-async def maybe_reacquire_current_job(controller, *, get_current_job, drive_id, device_path, seated):
+async def maybe_reacquire_current_job(
+    controller: JobController,
+    *,
+    get_current_job: Callable[[str], Awaitable[JobView | None]],
+    drive_id: str,
+    device_path: str,
+    seated: bool,
+) -> None:
     """Idle re-probe: if the ripper is idle with a disc seated, ask the backend
     for the drive's current non-terminal job. If it's rip-ready (operator
     resolved it after our in-memory wait timed out), pick it up. Pull-based, so

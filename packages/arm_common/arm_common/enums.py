@@ -58,20 +58,24 @@ class JobStatus(StrEnum):
 
 # Canonical JobStatus groupings. Single source of truth — routers/services must
 # import these rather than re-defining local copies.
-TERMINAL_JOB_STATUSES: frozenset[JobStatus] = frozenset({
-    JobStatus.RIPPED,
-    JobStatus.RIPPED_PARTIAL,
-    JobStatus.RIPPED_AWAITING_IDENTIFY,
-    JobStatus.ABANDONED,
-    JobStatus.FAILED,
-})
+TERMINAL_JOB_STATUSES: frozenset[JobStatus] = frozenset(
+    {
+        JobStatus.RIPPED,
+        JobStatus.RIPPED_PARTIAL,
+        JobStatus.RIPPED_AWAITING_IDENTIFY,
+        JobStatus.ABANDONED,
+        JobStatus.FAILED,
+    }
+)
 # Pre-rip = disc present, not yet committed to a rip (reusable on re-identify).
-PRE_RIP_JOB_STATUSES: frozenset[JobStatus] = frozenset({
-    JobStatus.CREATED,
-    JobStatus.AWAITING_USER_ID,
-    JobStatus.IDENTIFIED,
-    JobStatus.AWAITING_REVIEW,
-})
+PRE_RIP_JOB_STATUSES: frozenset[JobStatus] = frozenset(
+    {
+        JobStatus.CREATED,
+        JobStatus.AWAITING_USER_ID,
+        JobStatus.IDENTIFIED,
+        JobStatus.AWAITING_REVIEW,
+    }
+)
 NON_TERMINAL_JOB_STATUSES: frozenset[JobStatus] = PRE_RIP_JOB_STATUSES | frozenset({JobStatus.RIPPING})
 
 

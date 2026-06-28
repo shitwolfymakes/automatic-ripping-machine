@@ -308,8 +308,10 @@ async def identify(
     existing_algos: set[str] = set()
     if reuse_job is not None:
         existing_fp_rows = (
-            await session.execute(select(DiscFingerprint).where(col(DiscFingerprint.job_id) == job.id))
-        ).scalars().all()
+            (await session.execute(select(DiscFingerprint).where(col(DiscFingerprint.job_id) == job.id)))
+            .scalars()
+            .all()
+        )
         existing_algos = {r.algo for r in existing_fp_rows}
     seen_algos: set[str] = set()
     for fp in scan.fingerprints:
