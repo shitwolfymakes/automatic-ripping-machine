@@ -254,6 +254,7 @@ describe('DiscReviewWidget', () => {
 
 	describe('post-rip mode', () => {
 		it('post-rip job shows Apply session as primary and hides Start rip', async () => {
+			mockFetchJob.mockResolvedValue(detail({ status: 'ripped', title: 'Test Movie', disc_type: 'bluray' }));
 			renderWidget({ status: 'ripped' });
 			await waitFor(() => expect(screen.getByText('Apply session & transcode')).toBeInTheDocument());
 			expect(screen.queryByText('Start rip')).not.toBeInTheDocument();
@@ -267,10 +268,19 @@ describe('DiscReviewWidget', () => {
 
 	describe('phase badge + title fallback', () => {
 		it('renders a phase badge for a post-rip card', async () => {
+			mockFetchJob.mockResolvedValue(detail({ status: 'ripped', title: 'MysterySuspense', disc_type: 'dvd' }));
 			renderWidget({ id: 'job_z', status: 'ripped', title: 'MysterySuspense', disc_type: 'dvd' });
 			await waitFor(() => {
 				expect(screen.getByText('RIPPED · NEEDS SESSION')).toBeInTheDocument();
 			});
+		});
+
+		it('shows RIPPED · NEEDS TITLE when post-rip job has a pending session but no title', async () => {
+			mockFetchJob.mockResolvedValue(
+				detail({ status: 'ripped', title: null, metadata_json: { pending_session_id: 'sess_x' } })
+			);
+			renderWidget({ status: 'ripped', title: null, metadata_json: { pending_session_id: 'sess_x' } });
+			await waitFor(() => expect(screen.getByText('RIPPED · NEEDS TITLE')).toBeInTheDocument());
 		});
 
 		it('unidentified disc shows a clean fallback, not "Untitled"', async () => {
