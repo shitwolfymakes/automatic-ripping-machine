@@ -64,6 +64,10 @@
 			(data?.job?.status ?? job?.status) ?? ''
 		)
 	);
+	// Post-rip phase: the disc already ripped and is awaiting a transcode session.
+	// The card comes back so the operator can apply a session (which starts the
+	// transcode) and fix metadata. No countdown, and "Apply session" is primary.
+	let isPostRip = $derived(['ripped', 'ripped_partial'].includes((data?.job?.status ?? job?.status) ?? ''));
 
 	// Prefer the reloaded detail (fresh after an apply/resolve) over the list-level
 	// `job` prop, so the poster/title update immediately without a full dashboard
@@ -207,7 +211,7 @@
 		<div class="flex items-center gap-2">
 			<div class="h-2 w-2 animate-pulse rounded-full bg-white/80"></div>
 			<span class="text-sm font-semibold text-on-primary">
-				{isReviewGate ? 'Ready — Review & Start' : 'Awaiting Review'}
+				{isReviewGate ? 'Ready — Review & Start' : isPostRip ? 'Ripped — Apply Session' : 'Awaiting Review'}
 			</span>
 		</div>
 		<!-- Timed review gate: cosmetic countdown to auto-start (the ripper owns the
@@ -296,7 +300,7 @@
 		{#if isMusic}
 			<button onclick={() => toggleSection('music')} class="{btnBase} {showMusicSearch ? 'bg-primary text-on-primary' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}">Search</button>
 		{/if}
-		<button onclick={() => (showApplySession = true)} class="{btnBase} bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15">Apply session</button>
+		<button onclick={() => (showApplySession = true)} class="{btnBase} {isPostRip ? 'bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}">{isPostRip ? 'Apply session & transcode' : 'Apply session'}</button>
 		<a
 			href="/jobs/{job.id}"
 			class="{btnBase} bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15"

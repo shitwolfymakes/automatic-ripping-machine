@@ -252,6 +252,19 @@ describe('DiscReviewWidget', () => {
 		});
 	});
 
+	describe('post-rip mode', () => {
+		it('post-rip job shows Apply session as primary and hides Start rip', async () => {
+			renderWidget({ status: 'ripped' });
+			await waitFor(() => expect(screen.getByText('Apply session & transcode')).toBeInTheDocument());
+			expect(screen.queryByText('Start rip')).not.toBeInTheDocument();
+		});
+
+		it('pre-rip job still shows Start rip (regression)', async () => {
+			renderWidget({ status: 'awaiting_review' });
+			await waitFor(() => expect(screen.getByText('Start rip')).toBeInTheDocument());
+		});
+	});
+
 	it('renders skeleton when job prop is omitted', () => {
 		const { container } = renderComponent(DiscReviewWidget, { props: {} });
 		expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
