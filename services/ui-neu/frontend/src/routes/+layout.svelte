@@ -18,6 +18,8 @@
 	import { isScreenEnabled } from '$lib/features';
 	import { logout as apiLogout } from '$lib/api/auth';
 	import { countRipping } from '$lib/utils/job-status';
+	import BottomStatsBar from '$lib/components/BottomStatsBar.svelte';
+	import SidebarStats from '$lib/components/SidebarStats.svelte';
 	let { children } = $props();
 
 	let sidebarOpen = $state(false);
@@ -157,6 +159,7 @@
 					</a>
 				{/each}
 			</nav>
+			<SidebarStats />
 		</div>
 	</aside>
 
@@ -362,6 +365,7 @@
 	</div>
 </div>
 {/if}
+<BottomStatsBar />
 
 <!-- Folder import wizard (global, triggered from gear menu) -->
 <ImportWizard
