@@ -24,7 +24,7 @@ class DiskRefresher:
         self._stopped = True
 
     async def run(self) -> None:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         while not self._stopped:
             for path in self._paths:
                 if self._stopped:
