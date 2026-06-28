@@ -35,6 +35,7 @@ from arm_common import (
     Session,
     TrackStatus,
 )
+from arm_common.enums import NON_TERMINAL_JOB_STATUSES
 from arm_common.models import Track
 from arm_common.models._columns import enum_value_str
 from arm_common.schemas import (
@@ -611,6 +612,36 @@ async def get_in_flight_job(drive_id: str, session: AsyncSession = Depends(get_s
             len(rows),
             drive_id,
         )
+    return rows[0]
+
+
+@router.get(
+    "/drives/{drive_id}/current-job",
+    response_model=JobView,
+    dependencies=[Depends(require_service_token)],
+)
+async def get_current_job(drive_id: str, session: AsyncSession = Depends(get_session)) -> Job:
+    """The drive's single non-terminal job, if any (any pre-rip status OR
+    ripping). Lets an idle ripper re-acquire a disc whose resolution landed after
+    the in-memory wait timed out. 404 when the drive is unknown or no live job."""
+    drive = (await session.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
+    if drive is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {drive_id}")
+    rows = (
+        (
+            await session.execute(
+                select(Job)
+                .where(col(Job.drive_id) == drive_id)
+                .where(col(Job.status).in_(tuple(NON_TERMINAL_JOB_STATUSES)))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no current job on this drive")
+    if len(rows) > 1:
+        logger.error("data-model violation: %d non-terminal jobs on drive_id=%s; returning first", len(rows), drive_id)
     return rows[0]
 
 

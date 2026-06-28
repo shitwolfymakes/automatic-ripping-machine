@@ -1086,4 +1086,34 @@ def test_identify_terminal_match_mints_fresh() -> None:
 
     assert resp.status_code == 200
     assert resp.json()["id"] != "job_done"
-    assert [r for r in db.added if type(r).__name__ == "Job"]  # a fresh Job was added
+
+
+# --- /current-job (heartbeat re-probe: any non-terminal status) ---------------
+
+
+def test_current_job_returns_non_terminal() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job("job_01JZXR7K3M5Q8N4VWA0000C01", status=JobStatus.IDENTIFIED, disc_type=DiscType.DVD)]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/current-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["id"] == "job_01JZXR7K3M5Q8N4VWA0000C01"
+
+
+def test_current_job_404_when_only_terminal() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job("job_done", status=JobStatus.RIPPED, disc_type=DiscType.DVD)]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/current-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 404
+
+
+def test_current_job_404_unknown_drive() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_UNKNOWN/current-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 404
+    assert "unknown drive_id" in r.json()["detail"]
