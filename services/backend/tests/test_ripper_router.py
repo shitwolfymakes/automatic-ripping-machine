@@ -1056,12 +1056,12 @@ def test_identify_reuses_pre_rip_job_no_duplicate() -> None:
         )
 
     assert resp.status_code == 200
-    assert resp.json()["id"] == "job_exist"          # reused, not new
+    assert resp.json()["id"] == "job_exist"  # reused, not new
     assert resp.json()["title"] == "Operator Title"  # identity preserved
     new_jobs = [r for r in db.added if type(r).__name__ == "Job"]
-    assert new_jobs == []                              # no duplicate Job
+    assert new_jobs == []  # no duplicate Job
     new_fps = [r for r in db.added if type(r).__name__ == "DiscFingerprint"]
-    assert new_fps == []                              # no duplicate fingerprint rows
+    assert new_fps == []  # no duplicate fingerprint rows
 
 
 def test_identify_terminal_match_mints_fresh() -> None:

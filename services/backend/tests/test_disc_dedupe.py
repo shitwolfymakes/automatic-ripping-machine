@@ -4,7 +4,7 @@ import pytest
 from arm_common.enums import JobStatus
 from arm_common.models.disc_fingerprint import DiscFingerprint
 from arm_common.models.job import Job
-from arm_backend.disc_dedupe import ReuseDecision, find_reusable_job_for_disc
+from arm_backend.disc_dedupe import find_reusable_job_for_disc
 
 from tests._fakes import FakeSession
 
