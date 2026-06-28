@@ -17,6 +17,7 @@ dependencies = [
     "pyjwt>=2.9",
     "docker[ssh]>=7.1",
     "apprise>=1.9",
+    "psutil>=7.0",
     "arm_common",
 ]
 
