@@ -265,6 +265,22 @@ describe('DiscReviewWidget', () => {
 		});
 	});
 
+	describe('phase badge + title fallback', () => {
+		it('renders a phase badge for a post-rip card', async () => {
+			renderWidget({ id: 'job_z', status: 'ripped', title: 'MysterySuspense', disc_type: 'dvd' });
+			await waitFor(() => {
+				expect(screen.getByText('RIPPED · NEEDS SESSION')).toBeInTheDocument();
+			});
+		});
+
+		it('unidentified disc shows a clean fallback, not "Untitled"', async () => {
+			renderWidget({ id: 'job_u', status: 'awaiting_user_id', title: null, disc_type: 'unknown' as any });
+			await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
+			expect(screen.queryByText('Untitled')).toBeNull();
+			expect(screen.getByText(/Unidentified disc/)).toBeInTheDocument();
+		});
+	});
+
 	it('renders skeleton when job prop is omitted', () => {
 		const { container } = renderComponent(DiscReviewWidget, { props: {} });
 		expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
