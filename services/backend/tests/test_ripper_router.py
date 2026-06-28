@@ -1086,6 +1086,7 @@ def test_identify_terminal_match_mints_fresh() -> None:
 
     assert resp.status_code == 200
     assert resp.json()["id"] != "job_done"
+    assert [r for r in db.added if type(r).__name__ == "Job"]  # a fresh Job was persisted
 
 
 # --- /current-job (heartbeat re-probe: any non-terminal status) ---------------
