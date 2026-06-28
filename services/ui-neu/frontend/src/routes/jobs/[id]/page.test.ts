@@ -391,4 +391,31 @@ describe('Job detail page (v3)', () => {
 		// No IMDb pill/link for music (grid also suppresses it via not-music gate in neu; here disc_type cd).
 		expect(screen.queryByRole('link', { name: 'IMDb' })).not.toBeInTheDocument();
 	});
+
+	it('shows a Transcode badge when the track has a transcode_status', async () => {
+		mockFetchJob.mockResolvedValueOnce({
+			job: createJob({ id: 'job_42', status: 'ripped' }),
+			tracks: [createTrack({ id: 'trk_1', source_ref: 'title_01.mkv', status: 'done', transcode_status: 'failed' } as any)],
+			fingerprints: []
+		} as any);
+		renderComponent(Page);
+		// Captions disambiguate the two badges; "Transcode" appears only as a badge caption span.
+		await waitFor(() => expect(screen.getByText('Transcode')).toBeInTheDocument());
+		// "Rip" appears as both the column header <th> and the badge caption — at least two occurrences.
+		expect(screen.getAllByText('Rip').length).toBeGreaterThanOrEqual(2);
+		// The transcode badge renders the failed label.
+		expect(screen.getByText('Failed')).toBeInTheDocument();
+	});
+
+	it('shows only the rip badge when transcode_status is null', async () => {
+		mockFetchJob.mockResolvedValueOnce({
+			job: createJob({ id: 'job_42', status: 'ripped' }),
+			tracks: [createTrack({ id: 'trk_2', source_ref: 'title_02.mkv', status: 'done', transcode_status: null } as any)],
+			fingerprints: []
+		} as any);
+		renderComponent(Page);
+		// "Rip" appears (at least the column header); "Transcode" does not appear at all.
+		await waitFor(() => expect(screen.getAllByText('Rip').length).toBeGreaterThanOrEqual(1));
+		expect(screen.queryByText('Transcode')).not.toBeInTheDocument();
+	});
 });

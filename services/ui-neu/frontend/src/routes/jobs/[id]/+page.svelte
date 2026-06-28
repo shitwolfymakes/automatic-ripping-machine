@@ -438,10 +438,21 @@
 										/>
 									</td>
 									<td class="px-4 py-3" data-label="Status">
-										<StatusBadge status={track.status} />
-										{#if track.attempts > 1}
-											<span class="ml-1 text-[10px] text-gray-400" title="Rip attempts">×{track.attempts}</span>
-										{/if}
+										<div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+											<span class="flex items-center gap-1">
+												<span class="text-[10px] uppercase tracking-wide text-gray-400">Rip</span>
+												<StatusBadge status={track.status} />
+												{#if track.attempts > 1}
+													<span class="text-[10px] text-gray-400" title="Rip attempts">×{track.attempts}</span>
+												{/if}
+											</span>
+											{#if track.transcode_status}
+												<span class="flex items-center gap-1">
+													<span class="text-[10px] uppercase tracking-wide text-gray-400">Transcode</span>
+													<StatusBadge status={track.transcode_status} />
+												</span>
+											{/if}
+										</div>
 									</td>
 								</tr>
 								{#if track.status === 'failed' && track.last_error}
