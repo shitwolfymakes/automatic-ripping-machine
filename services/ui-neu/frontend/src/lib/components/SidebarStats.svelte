@@ -7,12 +7,7 @@
 	// BottomStatsBar mounted, resources will show the initial empty snapshot
 	// until BottomStatsBar mounts and starts the poll.
 	import { resources } from '$lib/stores/resources.svelte';
-
-	function barColor(pct: number, kind: 'cpu' | 'mem' | 'disk'): string {
-		if (pct >= 90) return 'bg-red-500';
-		if (pct >= 70) return 'bg-yellow-500';
-		return kind === 'cpu' ? 'bg-cyan-500' : kind === 'mem' ? 'bg-violet-500' : 'bg-emerald-500';
-	}
+	import { barColor, filesHref } from '$lib/utils/resource-bars';
 </script>
 
 <div data-sidebar-stats class="border-t border-primary/20 px-3 py-3 dark:border-primary/20">
@@ -57,7 +52,7 @@
 			<p class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Storage</p>
 			{#each $resources.storage as s (s.path)}
 				<a
-					href="/files"
+					href={filesHref(s.name)}
 					class="block rounded-sm transition-colors hover:bg-primary/5 dark:hover:bg-primary/10 -mx-1 px-1"
 				>
 					<div class="mb-0.5 flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">

@@ -1,12 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { resources, startResources, stopResources } from '$lib/stores/resources.svelte';
-
-	function barColor(pct: number, kind: 'cpu' | 'mem' | 'disk'): string {
-		if (pct >= 90) return 'bg-red-500';
-		if (pct >= 70) return 'bg-yellow-500';
-		return kind === 'cpu' ? 'bg-cyan-500' : kind === 'mem' ? 'bg-violet-500' : 'bg-emerald-500';
-	}
+	import { barColor, filesHref } from '$lib/utils/resource-bars';
 
 	onMount(() => {
 		startResources();
@@ -41,7 +36,7 @@
 		<div class="h-5 w-px shrink-0 bg-primary/15 dark:bg-primary/20"></div>
 		<div class="flex items-center gap-3 overflow-hidden text-[11px] text-gray-500 dark:text-gray-400">
 			{#each $resources.storage as s (s.path)}
-				<a href="/files" class="flex shrink-0 items-center gap-1.5 transition-colors hover:text-primary-text dark:hover:text-primary-text-dark">
+				<a href={filesHref(s.name)} class="flex shrink-0 items-center gap-1.5 transition-colors hover:text-primary-text dark:hover:text-primary-text-dark">
 					<span class="text-gray-400 dark:text-gray-500">{s.name}</span>
 					<div class="h-1 w-12 rounded-full bg-primary/15 dark:bg-primary/15">
 						<div class="h-1 rounded-full transition-all duration-500 {barColor(s.percent, 'disk')}" style="width: {Math.min(100, s.percent)}%"></div>
