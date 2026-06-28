@@ -6621,6 +6621,55 @@
         }
       }
     },
+    "/api/system/resources": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Resources",
+        "operationId": "resources_api_system_resources_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemResourcesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/system/version": {
       "get": {
         "tags": [
@@ -9778,6 +9827,34 @@
         ],
         "title": "MediaType"
       },
+      "MemoryInfo": {
+        "properties": {
+          "total_gb": {
+            "type": "number",
+            "title": "Total Gb"
+          },
+          "used_gb": {
+            "type": "number",
+            "title": "Used Gb"
+          },
+          "free_gb": {
+            "type": "number",
+            "title": "Free Gb"
+          },
+          "percent": {
+            "type": "number",
+            "title": "Percent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_gb",
+          "used_gb",
+          "free_gb",
+          "percent"
+        ],
+        "title": "MemoryInfo"
+      },
       "MetadataCandidate": {
         "properties": {
           "title": {
@@ -12186,6 +12263,74 @@
           "events_unsent"
         ],
         "title": "StatsResponse"
+      },
+      "StorageRoot": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "total_gb": {
+            "type": "number",
+            "title": "Total Gb"
+          },
+          "used_gb": {
+            "type": "number",
+            "title": "Used Gb"
+          },
+          "free_gb": {
+            "type": "number",
+            "title": "Free Gb"
+          },
+          "percent": {
+            "type": "number",
+            "title": "Percent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "path",
+          "total_gb",
+          "used_gb",
+          "free_gb",
+          "percent"
+        ],
+        "title": "StorageRoot"
+      },
+      "SystemResourcesResponse": {
+        "properties": {
+          "cpu_percent": {
+            "type": "number",
+            "title": "Cpu Percent"
+          },
+          "cpu_temp": {
+            "type": "number",
+            "title": "Cpu Temp"
+          },
+          "memory": {
+            "$ref": "#/components/schemas/MemoryInfo"
+          },
+          "storage": {
+            "items": {
+              "$ref": "#/components/schemas/StorageRoot"
+            },
+            "type": "array",
+            "title": "Storage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cpu_percent",
+          "cpu_temp",
+          "memory",
+          "storage"
+        ],
+        "title": "SystemResourcesResponse"
       },
       "SystemVersionResponse": {
         "properties": {
