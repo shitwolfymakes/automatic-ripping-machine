@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { JobView, JobDetailView, TrackView } from '$lib/types/api.gen';
+	import type { JobView, JobDetailView, TrackView, ScanResult, SessionView } from '$lib/types/api.gen';
 	import { abandonJob, fetchJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
+	import { fetchSessions } from '$lib/api/sessions';
+	import { readJobMetadata, videoTypeLabel } from '$lib/utils/job-fields';
 	import CountdownTimer from './CountdownTimer.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
 	import PosterImage from './PosterImage.svelte';
@@ -45,6 +47,9 @@
 	let errorMessage = $state<string | null>(null);
 
 	let tracks = $derived<TrackView[]>(data?.tracks ?? []);
+	let scanTitles = $derived(
+		((data?.job?.metadata_json?.scan_result as ScanResult | undefined)?.titles) ?? []
+	);
 
 	// v3 classifies disc kind via disc_type. cd → music, data → data, the rest
 	// are video.
@@ -65,6 +70,20 @@
 	// refresh. Falls back to the prop before the first detail load. Only read
 	// inside the `{#if !job}{:else}` branch, where `job` is guaranteed defined.
 	let displayJob = $derived((data?.job ?? job) as JobView);
+
+	let sessions = $state<SessionView[]>([]);
+	let sessionNameById = $derived(new Map(sessions.map((s) => [s.id, s.name])));
+
+	let jobMeta = $derived(readJobMetadata(displayJob.metadata_json));
+
+	function shortId(id: string): string {
+		return id.length > 15 ? `${id.slice(0, 15)}…` : id;
+	}
+	let appliedSession = $derived(
+		jobMeta.pending_session_id
+			? (sessionNameById.get(jobMeta.pending_session_id) ?? shortId(jobMeta.pending_session_id))
+			: null
+	);
 
 	async function loadDetail() {
 		if (!job) return;
@@ -163,8 +182,17 @@
 		}
 	}
 
+	async function loadSessions() {
+		try {
+			sessions = await fetchSessions();
+		} catch {
+			sessions = [];
+		}
+	}
+
 	onMount(() => {
 		loadDetail();
+		loadSessions();
 	});
 
 	const btnBase = 'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors';
@@ -218,6 +246,30 @@
 					<DiscTypeIcon disctype={displayJob.disc_type} size="h-3.5 w-3.5" />
 					{discTypeLabel(displayJob.disc_type)}
 				</span>
+				{#if jobMeta.video_type}
+					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{videoTypeLabel(jobMeta.video_type)}</span>
+				{/if}
+				{#if displayJob.disc_number != null}
+					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">Disc {displayJob.disc_number}{#if displayJob.disc_total != null}/{displayJob.disc_total}{/if}</span>
+				{/if}
+				{#if jobMeta.titleCount != null}
+					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{jobMeta.titleCount} titles</span>
+				{/if}
+				{#if jobMeta.season}
+					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">S{jobMeta.season}</span>
+				{/if}
+				{#if jobMeta.imdb_id && !isMusic}
+					<a href="https://www.imdb.com/title/{jobMeta.imdb_id}" target="_blank" rel="noopener noreferrer" class="rounded-sm bg-yellow-400 px-1.5 py-0.5 font-semibold text-black">IMDb</a>
+				{/if}
+				{#if jobMeta.artist}
+					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{jobMeta.artist}</span>
+				{/if}
+				{#if jobMeta.album}
+					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{jobMeta.album}</span>
+				{/if}
+				{#if appliedSession}
+					<span class="rounded-sm bg-primary/15 px-1.5 py-0.5 font-medium text-primary-text dark:bg-primary/20 dark:text-primary-text-dark">Session: {appliedSession}</span>
+				{/if}
 			</div>
 		</div>
 	</div>
@@ -247,14 +299,14 @@
 		<button onclick={() => (showApplySession = true)} class="{btnBase} bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15">Apply session</button>
 		<a
 			href="/jobs/{job.id}"
-			class="{btnBase} ml-auto bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15"
+			class="{btnBase} bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15"
 		>
 			View details
 		</a>
 		<button
 			onclick={handleCancel}
 			disabled={cancelling}
-			class="{btnBase} text-red-600 ring-1 ring-red-300 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:ring-red-700 dark:hover:bg-red-900/20"
+			class="{btnBase} ml-auto text-red-600 ring-1 ring-red-300 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:ring-red-700 dark:hover:bg-red-900/20"
 		>
 			{cancelling ? 'Cancelling...' : 'Cancel'}
 		</button>
@@ -267,15 +319,6 @@
 			>
 				{starting ? 'Starting...' : 'Start rip'}
 			</button>
-		{/if}
-	</div>
-
-	<!-- Tracks table -->
-	<div class="border-t border-primary/20 dark:border-primary/20">
-		{#if initialLoading}
-			<p class="p-4 text-sm text-gray-400">Loading...</p>
-		{:else}
-			<ReviewTracksTable {job} {tracks} {isVideo} {isMusic} onrefresh={() => { onrefresh?.(); loadDetail(); }} />
 		{/if}
 	</div>
 
@@ -294,6 +337,14 @@
 
 	{#if showInfo}
 		<JobInfoForm {job} onrefresh={() => { onrefresh?.(); loadDetail(); }} />
+		<!-- Scanned titles (pre-rip) / tracks (post-rip) live at the bottom of the Info tab -->
+		<div class="border-t border-primary/20 dark:border-primary/20">
+			{#if initialLoading}
+				<p class="p-4 text-sm text-gray-400">Loading...</p>
+			{:else}
+				<ReviewTracksTable {job} {tracks} {scanTitles} {isVideo} {isMusic} onrefresh={() => { onrefresh?.(); loadDetail(); }} />
+			{/if}
+		</div>
 	{/if}
 </div>
 

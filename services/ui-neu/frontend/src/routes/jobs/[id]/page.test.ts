@@ -237,4 +237,158 @@ describe('Job detail page (v3)', () => {
 		});
 		expect(screen.getByText('Opening')).toBeInTheDocument();
 	});
+
+	it('renders the Raw metadata as a collapsible JSON tree', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({
+				id: 'job_42',
+				title: 'Test Movie',
+				status: 'ripped',
+				metadata_json: { imdb_id: 'tt9999999', scan_result: { titles: [{ index: 0 }] } }
+			}),
+			tracks: [],
+			fingerprints: []
+		});
+		renderComponent(Page);
+
+		const toggle = await screen.findByRole('button', { name: 'Raw metadata' });
+		// Collapsed initially: the top-level keys are not yet shown.
+		expect(screen.queryByText('scan_result')).not.toBeInTheDocument();
+		await fireEvent.click(toggle);
+		await waitFor(() => {
+			// Top-level keys render as tree node names.
+			expect(screen.getByText('imdb_id')).toBeInTheDocument();
+			expect(screen.getByText('scan_result')).toBeInTheDocument();
+			// scan_result is open one level (depth 1) → its child "titles" disclosure shows.
+			expect(screen.getByText('titles')).toBeInTheDocument();
+		});
+	});
+
+	it('omits the Raw metadata section when metadata_json is empty', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({ id: 'job_42', title: 'Bare', status: 'ripped', metadata_json: {} }),
+			tracks: [],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByRole('heading', { name: 'Bare' })).toBeInTheDocument());
+		expect(screen.queryByRole('button', { name: 'Raw metadata' })).not.toBeInTheDocument();
+	});
+
+	it('renders a track poster thumbnail and IMDb link when present', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({ id: 'job_42', title: 'Test Movie', status: 'ripped' }),
+			tracks: [
+				createTrack({
+					id: 'trk_1',
+					status: 'done',
+					title: 'Feature',
+					imdb_id: 'tt5555555',
+					poster_url: 'https://example.test/p.jpg'
+				})
+			],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByText('Tracks (1)')).toBeInTheDocument());
+		const imdb = screen.getByRole('link', { name: 'IMDb' });
+		expect(imdb.getAttribute('href')).toBe('https://www.imdb.com/title/tt5555555');
+		expect(document.querySelector('img[src="/api/images/proxy?url=https%3A%2F%2Fexample.test%2Fp.jpg"]')).not.toBeNull();
+	});
+
+	it('renders an Episode column only when a track is a series', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({ id: 'job_42', title: 'Show', status: 'ripped' }),
+			tracks: [
+				createTrack({
+					id: 'trk_1',
+					status: 'done',
+					video_type: 'series',
+					episode_number: 3,
+					episode_name: 'The One With The Test'
+				})
+			],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByText('Tracks (1)')).toBeInTheDocument());
+		expect(screen.getByRole('columnheader', { name: 'Episode' })).toBeInTheDocument();
+		expect(screen.getByText('The One With The Test')).toBeInTheDocument();
+	});
+
+	it('omits the Episode column for non-series tracks', async () => {
+		// default mockFetchJob: one non-series track
+		mockFetchJob.mockResolvedValue({
+			job: createJob({ id: 'job_42', title: 'Test Movie', status: 'ripped' }),
+			tracks: [createTrack({ id: 'trk_1', status: 'done' })],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByText('Tracks (1)')).toBeInTheDocument());
+		expect(screen.queryByRole('columnheader', { name: 'Episode' })).not.toBeInTheDocument();
+	});
+
+	it('renders an edition badge when set', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({ id: 'job_42', title: 'Test Movie', status: 'ripped' }),
+			tracks: [createTrack({ id: 'trk_1', status: 'done', title: 'Feature', edition: "Director's Cut" })],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByText('Tracks (1)')).toBeInTheDocument());
+		expect(screen.getByText("Director's Cut")).toBeInTheDocument();
+	});
+
+	it('renders IMDb, Multi-Title, and Source badges in the title bar when present', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({
+				id: 'job_42',
+				title: 'Test Movie',
+				status: 'ripped',
+				disc_type: 'bluray',
+				metadata_json: { imdb_id: 'tt7777777', multi_title: true, source_type: 'iso' }
+			}),
+			tracks: [],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByRole('heading', { name: 'Test Movie' })).toBeInTheDocument());
+		// IMDb appears both as a grid link and a header pill — at least one link to the title page.
+		const imdbLinks = screen.getAllByRole('link', { name: 'IMDb' });
+		expect(imdbLinks.some((a) => a.getAttribute('href') === 'https://www.imdb.com/title/tt7777777')).toBe(true);
+		expect(screen.getByText('Multi-Title')).toBeInTheDocument();
+		expect(screen.getByText('ISO')).toBeInTheDocument();
+	});
+
+	it('omits header badges when metadata_json lacks them', async () => {
+		// explicit empty metadata_json — no badge data present
+		mockFetchJob.mockResolvedValue({
+			job: createJob({ id: 'job_42', title: 'Test Movie', status: 'ripped', disc_type: 'bluray', metadata_json: {} }),
+			tracks: [],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByRole('heading', { name: 'Test Movie' })).toBeInTheDocument());
+		expect(screen.queryByText('Multi-Title')).not.toBeInTheDocument();
+		expect(screen.queryByText('ISO')).not.toBeInTheDocument();
+		expect(screen.queryByText('Folder')).not.toBeInTheDocument();
+	});
+
+	it('does not show the IMDb header pill for a music disc', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({
+				id: 'job_42',
+				title: 'Abbey Road',
+				status: 'ripped',
+				disc_type: 'cd',
+				metadata_json: { imdb_id: 'tt0000000' }
+			}),
+			tracks: [],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByRole('heading', { name: 'Abbey Road' })).toBeInTheDocument());
+		// No IMDb pill/link for music (grid also suppresses it via not-music gate in neu; here disc_type cd).
+		expect(screen.queryByRole('link', { name: 'IMDb' })).not.toBeInTheDocument();
+	});
 });
