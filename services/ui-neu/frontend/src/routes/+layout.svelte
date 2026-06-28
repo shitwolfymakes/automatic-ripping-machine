@@ -159,7 +159,11 @@
 					</a>
 				{/each}
 			</nav>
-			<SidebarStats />
+			<!-- Sidebar stats only at 2xl+, where the bottom bar (lg:flex 2xl:hidden)
+			     is hidden — the two surfaces never show at the same viewport width. -->
+			<div class="hidden 2xl:block">
+				<SidebarStats />
+			</div>
 		</div>
 	</aside>
 
