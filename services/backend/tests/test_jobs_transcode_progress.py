@@ -264,3 +264,80 @@ def test_detail_surfaces_transcode_progress() -> None:
     assert r.status_code == 200
     tp = r.json()["job"]["transcode_progress"]
     assert tp["state"] == "transcoding" and tp["tasks_total"] == 2
+
+
+from arm_common import TrackKind, TrackStatus  # noqa: E402
+from arm_common.models import Track  # noqa: E402
+
+
+def _track(track_id: str, job_id: str, source_ref: str) -> Track:
+    return Track(
+        id=track_id,
+        job_id=job_id,
+        kind=TrackKind.VIDEO_TITLE,
+        index=0,
+        source_ref=source_ref,
+        status=TrackStatus.DONE,
+        attempts=0,
+        output_path=None,
+        size_bytes=None,
+        duration_seconds=None,
+    )
+
+
+def _task_for_track(task_id: str, sa_id: str, track_id: str, status: TranscodeTaskStatus) -> TranscodeTask:
+    return TranscodeTask(
+        id=task_id,
+        session_application_id=sa_id,
+        source_track_id=track_id,
+        status=status,
+        output_path="/media/x.mkv",
+        attempts=0,
+        progress_pct=0,
+    )
+
+
+def test_get_job_detail_populates_track_transcode_status() -> None:
+    """Most-recent task per track (ULID order) populates transcode_status on TrackView."""
+    db = FakeSession()
+    _seed_admin(db)
+
+    job_id = "job_01JZXR7K3M5Q8N4VWA00000030"
+    job = _ripped_job(job_id)
+    db.rows["jobs"] = [job]
+
+    # Two tracks: A has tasks, B has none.
+    track_a = _track("trk_01JZXR7K3M5Q8N4VWAAAAAAA0", job_id, "t:1")
+    track_b = _track("trk_01JZXR7K3M5Q8N4VWAAAAAB0", job_id, "t:2")
+    db.rows["tracks"] = [track_a, track_b]
+
+    sa = _sa("sap_30", SessionApplicationStatus.DONE)
+    sa.job_id = job_id
+    db.rows["session_applications"] = [sa]
+
+    # track_a: older task (smaller ULID id) status=done, newer task (greater ULID id) status=failed
+    # ULID ids are lexicographically ordered: '...AAA' < '...ZZZ'
+    task_old = _task_for_track(
+        "txt_01JZXR7K3M5Q8N4VWAAAAAAAA",
+        "sap_30",
+        track_a.id,
+        TranscodeTaskStatus.DONE,
+    )
+    task_new = _task_for_track(
+        "txt_01JZXR7K3M5Q8N4VWAAAAAZZZ",
+        "sap_30",
+        track_a.id,
+        TranscodeTaskStatus.FAILED,
+    )
+    db.rows["transcode_tasks"] = [task_old, task_new]
+
+    app, token = _make_app(db)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{job_id}", headers=_auth(token))
+
+    assert r.status_code == 200
+    tracks = {t["source_ref"]: t for t in r.json()["tracks"]}
+    # Most-recent task (greater ULID id) wins → failed
+    assert tracks["t:1"]["transcode_status"] == "failed"
+    # track_b has no task → None
+    assert tracks["t:2"]["transcode_status"] is None

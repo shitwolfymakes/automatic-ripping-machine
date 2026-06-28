@@ -2949,6 +2949,7 @@ export type TrackView = {
      */
     source_ref: string;
     status: TrackStatus;
+    transcode_status?: TranscodeTaskStatus | null;
     /**
      * Output Path
      */
