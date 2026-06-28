@@ -33,6 +33,10 @@ vi.mock('$lib/api/settings', () => ({
 	fetchTranscoderPresets: vi.fn(() => Promise.resolve(null))
 }));
 
+vi.mock('$lib/api/sessions', () => ({
+	fetchSessions: vi.fn(() => Promise.resolve([]))
+}));
+
 function renderWidget(overrides = {}) {
 	return renderComponent(DiscReviewWidget, {
 		props: { job: createJob({ status: 'identified', ...overrides }), driveNames: {}, paused: false }
@@ -48,6 +52,9 @@ describe('DiscReviewWidget', () => {
 	describe('tracks', () => {
 		it('renders the v3 tracks table from data.tracks', async () => {
 			renderWidget();
+			// The tracks table now lives at the bottom of the Info tab — open it first.
+			await waitFor(() => expect(screen.getByRole('button', { name: 'Info' })).toBeInTheDocument());
+			await fireEvent.click(screen.getByRole('button', { name: 'Info' }));
 			await waitFor(() => {
 				expect(screen.getByText('Main')).toBeInTheDocument();
 				expect(screen.getByText('t00.mkv')).toBeInTheDocument();

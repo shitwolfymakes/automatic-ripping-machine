@@ -16,11 +16,12 @@
 	import JobLifecycle from '$lib/components/JobLifecycle.svelte';
 	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
 	import { discTypeLabel, isJobActive } from '$lib/utils/job-type';
-	import { buildMetadataFields } from '$lib/utils/job-fields';
+	import { buildMetadataFields, readJobMetadata } from '$lib/utils/job-fields';
 	import { extractMusicTracks } from '$lib/utils/music-tracks';
 	import { trackKindLabel, trackSizeLabel } from '$lib/utils/track-fields';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
+	import JsonTree from '$lib/components/JsonTree.svelte';
 
 	let detail = $state<JobDetailView | null>(null);
 	let jobLoading = $state(true);
@@ -91,6 +92,14 @@
 
 	let metadataFields = $derived(detail ? buildMetadataFields(detail.job) : []);
 	let musicTracks = $derived(detail ? extractMusicTracks(detail.job.metadata_json) : []);
+	let tracksAreSeries = $derived(
+		(detail?.tracks ?? []).some((t) => t.video_type === 'series' || t.episode_number != null)
+	);
+	let jobMeta = $derived(detail ? readJobMetadata(detail.job.metadata_json) : {});
+	let showRawMetadata = $state(false);
+	let rawMetadataPairs = $derived(
+		detail ? Object.entries((detail.job.metadata_json ?? {}) as Record<string, unknown>) : []
+	);
 
 	const panelTabBase = 'flex-1 border-r border-primary/15 px-4 py-2.5 text-center text-sm font-medium transition-colors dark:border-primary/15';
 	const panelTabActive = 'text-primary border-b-2 border-b-primary bg-primary/5 dark:bg-primary/10';
@@ -229,6 +238,17 @@
 					<span class="text-base text-gray-400 dark:text-gray-500">({job.year})</span>
 				{/if}
 				<StatusBadge status={effectiveJobStatus(job)} />
+				{#if jobMeta.imdb_id && !isCdDisc}
+					<a href="https://www.imdb.com/title/{jobMeta.imdb_id}" target="_blank" rel="noopener noreferrer" class="rounded-full bg-yellow-400 px-2.5 py-0.5 text-[10px] font-bold text-black">IMDb</a>
+				{/if}
+				{#if jobMeta.multi_title}
+					<span class="rounded-full bg-purple-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">Multi-Title</span>
+				{/if}
+				{#if jobMeta.source_type === 'iso'}
+					<span class="rounded-sm bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">ISO</span>
+				{:else if jobMeta.source_type === 'folder'}
+					<span class="rounded-sm bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">Folder</span>
+				{/if}
 
 				<!-- Action buttons pushed right -->
 				<div class="flex flex-wrap items-center gap-2 ml-auto">
@@ -330,6 +350,9 @@
 								<th class="px-4 py-3 font-medium">#</th>
 								<th class="px-4 py-3 font-medium">Kind</th>
 								<th class="px-4 py-3 font-medium">Title</th>
+								{#if tracksAreSeries}
+									<th class="px-4 py-3 font-medium">Episode</th>
+								{/if}
 								<th class="px-4 py-3 font-medium">Filename</th>
 								<th class="px-4 py-3 font-medium">Length</th>
 								<th class="px-4 py-3 font-medium">Size</th>
@@ -358,12 +381,35 @@
 													{#if track.year}
 														<span class="text-gray-400"> ({track.year})</span>
 													{/if}
+													<div class="mt-0.5 flex flex-wrap items-center gap-1">
+														{#if track.imdb_id}
+															<a href="https://www.imdb.com/title/{track.imdb_id}" target="_blank" rel="noopener noreferrer" onclick={(e) => e.stopPropagation()} class="rounded-full bg-yellow-400 px-1.5 py-0.5 text-[9px] font-bold text-black">IMDb</a>
+														{/if}
+														{#if track.edition}
+															<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-gray-600 dark:bg-primary/15 dark:text-gray-300">{track.edition}</span>
+														{/if}
+														{#if track.role}
+															<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-gray-600 dark:bg-primary/15 dark:text-gray-300">{track.role}</span>
+														{/if}
+													</div>
 												</div>
 											</div>
 										{:else}
 											<span class="text-xs text-gray-400">{job.title || 'Untitled'}{#if job.year} ({job.year}){/if}</span>
 										{/if}
 									</td>
+									{#if tracksAreSeries}
+										<td class="px-4 py-3" data-label="Episode">
+											{#if track.episode_number != null}
+												<span class="font-medium text-gray-900 dark:text-white">{track.episode_number}</span>
+												{#if track.episode_name}
+													<span class="ml-1.5 text-xs text-gray-500 dark:text-gray-400">{track.episode_name}</span>
+												{/if}
+											{:else}
+												<span class="text-gray-400">—</span>
+											{/if}
+										</td>
+									{/if}
 									<td class="max-w-[260px] truncate px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300" data-label="Filename" title={preview?.output_name ?? ''}>
 										{#if preview?.output_name}
 											<span>{preview.output_name}</span>
@@ -474,6 +520,29 @@
 						</tbody>
 					</table>
 				</div>
+			</section>
+		{/if}
+
+		<!-- Raw metadata (collapsible): the full metadata_json as a JSON tree, nothing hidden -->
+		{#if rawMetadataPairs.length > 0}
+			<section>
+				<button
+					type="button"
+					onclick={() => { showRawMetadata = !showRawMetadata; }}
+					class="flex w-full items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white"
+				>
+					<svg class="h-4 w-4 transition-transform {showRawMetadata ? 'rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+					</svg>
+					Raw metadata
+				</button>
+				{#if showRawMetadata}
+					<div class="mt-3 overflow-x-auto rounded-lg border border-primary/20 p-3 dark:border-primary/20">
+						{#each rawMetadataPairs as [key, value]}
+							<JsonTree {value} name={key} depth={0} />
+						{/each}
+					</div>
+				{/if}
 			</section>
 		{/if}
 	</div>
