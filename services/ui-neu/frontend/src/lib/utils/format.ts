@@ -181,6 +181,7 @@ export function statusColor(status: string | null | undefined): string {
 			return 'status-warning';
 		case 'fail':
 		case 'failed': // TaskStatus (transcode task) terminal AND TrackStatus.failed (v2.0.0+)
+		case 'transcode_failed': // effectiveJobStatus() rollup — ripped OK but some/all tracks failed to transcode
 			return 'status-error';
 		case 'waiting':         // legacy pre-v2.0.0; in-flight jobs mid-deploy
 		case 'manual_paused':
@@ -223,6 +224,7 @@ const STATUS_LABELS: Record<string, string> = {
 	complete: 'Complete',
 	fail: 'Failed',
 	failed: 'Failed',
+	transcode_failed: 'Transcode failed',
 	error: 'Error',
 	waiting: 'Waiting',           // legacy pre-v2.0.0; in-flight jobs mid-deploy
 	manual_paused: 'Paused',
