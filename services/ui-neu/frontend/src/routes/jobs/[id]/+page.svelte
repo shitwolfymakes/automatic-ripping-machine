@@ -440,7 +440,6 @@
 									<td class="px-4 py-3" data-label="Status">
 										<div class="flex flex-wrap items-center gap-x-3 gap-y-1">
 											<span class="flex items-center gap-1">
-												<span class="text-[10px] uppercase tracking-wide text-gray-400">Rip</span>
 												<StatusBadge status={track.status} />
 												{#if track.attempts > 1}
 													<span class="text-[10px] text-gray-400" title="Rip attempts">×{track.attempts}</span>

@@ -399,10 +399,8 @@ describe('Job detail page (v3)', () => {
 			fingerprints: []
 		} as any);
 		renderComponent(Page);
-		// Captions disambiguate the two badges; "Transcode" appears only as a badge caption span.
+		// "Transcode" caption appears only as a badge caption span.
 		await waitFor(() => expect(screen.getByText('Transcode')).toBeInTheDocument());
-		// "Rip" appears as both the column header <th> and the badge caption — at least two occurrences.
-		expect(screen.getAllByText('Rip').length).toBeGreaterThanOrEqual(2);
 		// The transcode badge renders the failed label.
 		expect(screen.getByText('Failed')).toBeInTheDocument();
 	});
@@ -414,8 +412,8 @@ describe('Job detail page (v3)', () => {
 			fingerprints: []
 		} as any);
 		renderComponent(Page);
-		// "Rip" appears (at least the column header); "Transcode" does not appear at all.
-		await waitFor(() => expect(screen.getAllByText('Rip').length).toBeGreaterThanOrEqual(1));
+		// No "Transcode" caption when transcode_status is absent.
+		await waitFor(() => expect(screen.getByText('Done')).toBeInTheDocument());
 		expect(screen.queryByText('Transcode')).not.toBeInTheDocument();
 	});
 });
