@@ -28,6 +28,7 @@ from arm_backend.metadata.base import MetadataResult  # noqa: E402
 from arm_backend.routers import ripper as ripper_router  # noqa: E402
 from arm_common import (  # noqa: E402
     Config,
+    DiscFingerprint,
     DiscType,
     Drive,
     DriveStatus,
@@ -1024,3 +1025,65 @@ class _patch_select_tracks:
 
     def __exit__(self, *_exc: Any) -> None:
         ripper_router.select_tracks = self._orig  # type: ignore[assignment]
+
+
+# --- dedupe / reuse (Task 3: identify wires find_reusable_job_for_disc) ------
+
+
+def test_identify_reuses_pre_rip_job_no_duplicate() -> None:
+    """A re-scanned disc whose fingerprint matches an existing AWAITING_USER_ID job
+    must reuse that job (same id), preserve its title, and add neither a duplicate
+    Job row nor a duplicate DiscFingerprint row (the algo already exists)."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, hold_for_review=False)]
+    existing = _job("job_exist", status=JobStatus.AWAITING_USER_ID, disc_type="dvd")
+    existing.title = "Operator Title"  # a resolved identity to protect
+    db.rows["jobs"] = [existing]
+    db.rows["disc_fingerprints"] = [DiscFingerprint(job_id="job_exist", algo="crc64", value="abc")]
+
+    dispatcher = _Dispatcher(result=None)  # must NOT be consulted on reuse-of-identified
+    hub = _Hub()
+    app = _make_app(db, dispatcher=dispatcher, hub=hub)
+    scan = _scan_dict("dvd")
+    scan["fingerprints"] = [{"algo": "crc64", "value": "abc"}]
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan},
+            headers=_SERVICE_AUTH,
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["id"] == "job_exist"          # reused, not new
+    assert resp.json()["title"] == "Operator Title"  # identity preserved
+    new_jobs = [r for r in db.added if type(r).__name__ == "Job"]
+    assert new_jobs == []                              # no duplicate Job
+    new_fps = [r for r in db.added if type(r).__name__ == "DiscFingerprint"]
+    assert new_fps == []                              # no duplicate fingerprint rows
+
+
+def test_identify_terminal_match_mints_fresh() -> None:
+    """A fingerprint matching only a terminal (RIPPED) job must mint a brand-new
+    Job — terminal jobs are excluded from the reuse candidates."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, hold_for_review=False)]
+    db.rows["jobs"] = [_job("job_done", status=JobStatus.RIPPED, disc_type="dvd")]
+    db.rows["disc_fingerprints"] = [DiscFingerprint(job_id="job_done", algo="crc64", value="abc")]
+    dispatcher = _Dispatcher(result=None)
+    app = _make_app(db, dispatcher=dispatcher, hub=_Hub())
+    scan = _scan_dict("dvd")
+    scan["fingerprints"] = [{"algo": "crc64", "value": "abc"}]
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan},
+            headers=_SERVICE_AUTH,
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["id"] != "job_done"
+    assert [r for r in db.added if type(r).__name__ == "Job"]  # a fresh Job was added

@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
+from arm_backend.disc_dedupe import find_reusable_job_for_disc
 from arm_backend.auth import (
     require_drive_owner_by_job,
     require_drive_owner_by_track,
@@ -270,69 +271,103 @@ async def identify(
         )
 
     scan = req.scan_result
-    job = Job(
-        drive_id=req.drive_id,
-        disc_type=scan.disc_type,
-        status=JobStatus.CREATED,
-    )
-    session.add(job)
-    await session.flush()
+    fps = [(fp.algo.lower(), fp.value) for fp in scan.fingerprints if fp.algo and fp.value]
+    decision = await find_reusable_job_for_disc(session, drive_id=req.drive_id, fingerprints=fps)
+    if decision is not None and decision.action == "in_flight":
+        # Disc re-scanned while its rip is in flight (restart race) — return the
+        # live job; in-flight recovery owns it. No new job, no re-identify.
+        return decision.job
+    reuse_job = decision.job if decision is not None and decision.action == "reuse" else None
+
+    if reuse_job is not None:
+        job = reuse_job
+        # Guard 1 (no identity clobber): never re-run the dispatcher or overwrite
+        # title/year/poster/metadata on a reused job. The operator may have manually
+        # set or corrected the identity (e.g. AWAITING_USER_ID title); a re-scan
+        # must not clobber it. Only refresh scan_result in metadata_json (below).
+        already_identified = True
+        prior_status = job.status
+    else:
+        job = Job(
+            drive_id=req.drive_id,
+            disc_type=scan.disc_type,
+            status=JobStatus.CREATED,
+        )
+        session.add(job)
+        await session.flush()
+        already_identified = False
+        prior_status = None
 
     # Persist every fingerprint the ripper computed. The (job_id, algo)
     # unique constraint plus per-scan dedup means re-runs of identify on
     # the same disc are idempotent.
+    # Guard 2 (no fingerprint re-insert): on reuse, pre-load existing algos so we
+    # skip any (job_id, algo) pair already stored — avoids uq_disc_fingerprints_job_algo
+    # IntegrityError without switching to pg_insert.
+    existing_algos: set[str] = set()
+    if reuse_job is not None:
+        existing_fp_rows = (
+            await session.execute(select(DiscFingerprint).where(col(DiscFingerprint.job_id) == job.id))
+        ).scalars().all()
+        existing_algos = {r.algo for r in existing_fp_rows}
     seen_algos: set[str] = set()
     for fp in scan.fingerprints:
         if not fp.algo or not fp.value:
             continue
         algo = fp.algo.lower()
-        if algo in seen_algos:
+        if algo in seen_algos or algo in existing_algos:
             continue
         seen_algos.add(algo)
         session.add(DiscFingerprint(job_id=job.id, algo=algo, value=fp.value))
     await session.flush()
 
-    try:
-        result = await asyncio.wait_for(
-            dispatcher.identify(scan, cfg),
-            timeout=DISPATCH_TIMEOUT_SECONDS,
-        )
-        timed_out = False
-    except asyncio.TimeoutError:
-        logger.info("identify dispatch_timeout job_id=%s", job.id)
+    if already_identified:
+        # Guard 1: preserve existing identity — do not re-run the dispatcher or
+        # overwrite title/year/poster/metadata set by the previous identify run.
         result = None
-        timed_out = True
-
-    if result is not None:
-        job.title = result.title
-        job.year = result.year
-        job.poster_url = extract_poster_url(result)
-        job.metadata_json = result.payload
-        # Timed review gate: a GENUINELY identified disc (result is not None — not
-        # the block_on_miss=false synthetic "unidentified" IDENTIFIED below) parks
-        # for operator review when hold_for_review is on, stamping the countdown
-        # anchor and persisting the scan's titles as Track rows so the review UI
-        # shows the full title list. Otherwise it proceeds straight to rip as
-        # today (tracks created at rip-start). (spec §5.1, §4.3)
-        if cfg.hold_for_review:
-            job.status = JobStatus.AWAITING_REVIEW
-            job.wait_start_time = datetime.now(timezone.utc)
-            await _persist_review_tracks(session, job, scan)
-        else:
-            job.status = JobStatus.IDENTIFIED
+        timed_out = False
     else:
-        diagnostic: dict[str, object] = {}
-        if timed_out:
-            diagnostic["dispatch_timeout"] = True
-        if cfg.block_on_miss:
-            job.status = JobStatus.AWAITING_USER_ID
-            job.title = scan.volume_label
-            if diagnostic:
-                job.metadata_json = diagnostic
+        try:
+            result = await asyncio.wait_for(
+                dispatcher.identify(scan, cfg),
+                timeout=DISPATCH_TIMEOUT_SECONDS,
+            )
+            timed_out = False
+        except asyncio.TimeoutError:
+            logger.info("identify dispatch_timeout job_id=%s", job.id)
+            result = None
+            timed_out = True
+
+        if result is not None:
+            job.title = result.title
+            job.year = result.year
+            job.poster_url = extract_poster_url(result)
+            job.metadata_json = result.payload
+            # Timed review gate: a GENUINELY identified disc (result is not None — not
+            # the block_on_miss=false synthetic "unidentified" IDENTIFIED below) parks
+            # for operator review when hold_for_review is on, stamping the countdown
+            # anchor and persisting the scan's titles as Track rows so the review UI
+            # shows the full title list. Otherwise it proceeds straight to rip as
+            # today (tracks created at rip-start). (spec §5.1, §4.3)
+            if cfg.hold_for_review:
+                job.status = JobStatus.AWAITING_REVIEW
+                job.wait_start_time = datetime.now(timezone.utc)
+                await _persist_review_tracks(session, job, scan)
+            else:
+                job.status = JobStatus.IDENTIFIED
         else:
-            job.status = JobStatus.IDENTIFIED
-            job.title = scan.volume_label
-            job.metadata_json = {"unidentified": True, **diagnostic}
+            diagnostic: dict[str, object] = {}
+            if timed_out:
+                diagnostic["dispatch_timeout"] = True
+            if cfg.block_on_miss:
+                job.status = JobStatus.AWAITING_USER_ID
+                job.title = scan.volume_label
+                if diagnostic:
+                    job.metadata_json = diagnostic
+            else:
+                job.status = JobStatus.IDENTIFIED
+                job.title = scan.volume_label
+                job.metadata_json = {"unidentified": True, **diagnostic}
 
     job.metadata_json = {
         **(job.metadata_json or {}),
@@ -351,20 +386,23 @@ async def identify(
     if job.status in (JobStatus.AWAITING_USER_ID, JobStatus.AWAITING_REVIEW):
         # awaiting_user_id -> needs identification; awaiting_review -> held for the
         # timed review gate. Distinct event types so the dashboard can label them.
-        event_type = "rip.needs_user_input" if job.status == JobStatus.AWAITING_USER_ID else "rip.awaiting_review"
-        await hub.emit(
-            topic="ripper.events",
-            event_type=event_type,
-            payload={
-                "job_id": job.id,
-                "drive_id": job.drive_id,
-                "volume_label": scan.volume_label,
-                "disc_type": job.disc_type.value,
-            },
-            job_id=job.id,
-            session=session,
-        )
-        await session.commit()
+        # WS-transition guard: only emit if this is a real status transition — do
+        # not re-emit for a reused job already sitting in the target held status.
+        if reuse_job is None or prior_status != job.status:
+            event_type = "rip.needs_user_input" if job.status == JobStatus.AWAITING_USER_ID else "rip.awaiting_review"
+            await hub.emit(
+                topic="ripper.events",
+                event_type=event_type,
+                payload={
+                    "job_id": job.id,
+                    "drive_id": job.drive_id,
+                    "volume_label": scan.volume_label,
+                    "disc_type": job.disc_type.value,
+                },
+                job_id=job.id,
+                session=session,
+            )
+            await session.commit()
     return job
 
 
