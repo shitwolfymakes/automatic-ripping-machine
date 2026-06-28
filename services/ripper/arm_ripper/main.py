@@ -54,7 +54,13 @@ async def register_with_retry(client: BackendClient, device_path: str) -> str:
             delay = min(delay * 2, 30.0)
 
 
-_RIP_READY = frozenset({JobStatus.IDENTIFIED, JobStatus.RIPPING, JobStatus.AWAITING_REVIEW})
+# AWAITING_REVIEW is intentionally excluded: recovery for review-gated discs is
+# owned by the boot probe + the review-countdown auto-start path. Picking up an
+# AWAITING_REVIEW job here would call controller.pickup → _run_rip → rip_start,
+# which transitions straight to RIPPING and bypasses the countdown, manual_pause,
+# and global ripping_paused. Only re-acquire IDENTIFIED (the resolve-after-timeout
+# seated disc — Defect-1's target) and RIPPING (harmless restart race).
+_RIP_READY = frozenset({JobStatus.IDENTIFIED, JobStatus.RIPPING})
 
 
 async def maybe_reacquire_current_job(

@@ -1,7 +1,13 @@
+import os
+
+os.environ.setdefault("ARM_DRIVE_DEV", "/dev/sr0")
+os.environ.setdefault("ARM_BACKEND_URL", "https://backend")
+os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
+
 import pytest
 from arm_common.enums import JobStatus
-from arm_common.schemas.jobs import JobView  # adjust to the JobView import the ripper uses
-from arm_ripper.main import maybe_reacquire_current_job  # NEW helper (Step 3)
+from arm_common.schemas.jobs import JobView
+from arm_ripper.main import maybe_reacquire_current_job
 
 
 class _Ctrl:
@@ -110,8 +116,14 @@ async def test_reacquire_when_status_ripping():
 
 
 @pytest.mark.asyncio
-async def test_reacquire_when_status_awaiting_review():
-    """AWAITING_REVIEW status is in _RIP_READY so it should trigger pickup."""
+async def test_no_reacquire_when_status_awaiting_review():
+    """AWAITING_REVIEW must NOT trigger pickup via the heartbeat reprobe.
+
+    Review-gated discs go through _review_countdown_expired / _await_resolution,
+    which honour the countdown, manual_pause, and global ripping_paused.  Picking
+    up here would call controller.pickup → _run_rip → rip_start and bypass all
+    three guards — so AWAITING_REVIEW is excluded from _RIP_READY.
+    """
     ctrl = _Ctrl(idle=True)
 
     async def fake_get_current(drive_id):
@@ -120,7 +132,7 @@ async def test_reacquire_when_status_awaiting_review():
     await maybe_reacquire_current_job(
         ctrl, get_current_job=fake_get_current, drive_id="drv_1", device_path="/dev/sr0", seated=True
     )
-    assert ctrl.picked == "job_x"
+    assert ctrl.picked is None
 
 
 @pytest.mark.asyncio
