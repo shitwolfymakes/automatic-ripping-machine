@@ -137,7 +137,7 @@
 					</div>
 				{/if}
 
-				<!-- session_application_id == the owning job id, so link to the job. -->
+				<!-- Link to the owning job via job.job_id. -->
 				<div class="mt-3 flex flex-wrap items-center gap-2">
 					<a
 						href="/jobs/{job.job_id}"

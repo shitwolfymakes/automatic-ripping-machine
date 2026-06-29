@@ -201,7 +201,7 @@
 		}
 	}
 
-	// Sortable columns (v3 JobRow renders Title / Year / Status / Type / Disc).
+	// Sortable columns (v3 JobRow renders Title / Year / Rip / Transcode / Type / Disc).
 	const columns = [
 		{ key: 'title', label: 'Title' },
 		{ key: 'year', label: 'Year' },

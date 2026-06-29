@@ -4,6 +4,7 @@
 	import Skeleton from './Skeleton.svelte';
 	import { getVideoTypeConfig, discTypeLabel } from '$lib/utils/job-type';
 	import { transcodeColumnStatus } from '$lib/utils/job-status';
+	import { statusLabel } from '$lib/utils/format';
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import VideoTypeIcon from './VideoTypeIcon.svelte';
 
@@ -17,6 +18,11 @@
 
 	let typeConfig = $derived(getVideoTypeConfig(null, job?.disc_type ?? null));
 	let tc = $derived(job ? transcodeColumnStatus(job) : null);
+	// Only show the caption when it carries extra information (e.g. "Transcoding 2/4")
+	// that the StatusBadge label does not already show.  For plain terminal states
+	// ("Complete", "Transcode failed") tc.label === statusLabel(tc.badgeStatus), so
+	// the caption is suppressed to avoid showing the same text twice.
+	let tcDetail = $derived(tc && tc.label !== statusLabel(tc.badgeStatus) ? tc.label : null);
 </script>
 
 {#if !job}
@@ -68,7 +74,9 @@
 		{#if tc}
 			<span class="flex items-center gap-1.5">
 				<StatusBadge status={tc.badgeStatus} />
-				<span class="text-[11px] text-gray-500 dark:text-gray-400">{tc.label}</span>
+				{#if tcDetail}
+					<span class="text-[11px] text-gray-500 dark:text-gray-400">{tcDetail}</span>
+				{/if}
 			</span>
 		{:else}
 			<span class="text-gray-400 dark:text-gray-500">—</span>

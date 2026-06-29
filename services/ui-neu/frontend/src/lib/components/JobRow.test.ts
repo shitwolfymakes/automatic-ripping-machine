@@ -83,7 +83,8 @@ describe('JobRow', () => {
 			} as any;
 			const { getByText, getAllByText } = renderInTable({ job });
 			expect(getByText('Ripped')).toBeInTheDocument();                      // Rip column
-			expect(getAllByText('Transcode failed').length).toBeGreaterThan(0);   // Transcode column (red, not green)
+			// Only the StatusBadge renders "Transcode failed"; the redundant caption is suppressed.
+			expect(getAllByText('Transcode failed').length).toBe(1);             // Transcode column (red, not green)
 		});
 
 		it('shows an em-dash in Transcode when no session', async () => {
