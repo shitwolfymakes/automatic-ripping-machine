@@ -1038,12 +1038,16 @@ def test_sdf_status_persists_state() -> None:
     cfg = db.rows["config"][0]
     assert cfg.makemkv_sdf_state == "updated"
     assert cfg.makemkv_sdf_checked_at is not None
+
+
 def test_sdf_status_404_when_no_config() -> None:
     db = FakeSession()
     db.rows["config"] = []
     with TestClient(_make_app(db)) as client:
         r = client.post("/api/ripper/sdf-status", headers=_SERVICE_AUTH, json={"state": "updated"})
     assert r.status_code == 404
+
+
 def test_get_config_reflects_makemkv_sdf_enabled() -> None:
     db = FakeSession()
     db.rows["config"] = [_config(makemkv_sdf_enabled=False)]

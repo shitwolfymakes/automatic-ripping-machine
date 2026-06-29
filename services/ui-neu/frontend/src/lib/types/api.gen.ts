@@ -95,27 +95,6 @@ export type BodyUploadThemeApiThemesPost = {
 };
 
 /**
- * BulkDeleteJobsRequest
- *
- * DELETE /api/jobs body (optional). Filters which terminal jobs are
- * deleted:
- * - `job_ids` set  -> delete only those jobs (still terminal-guarded)
- * - `status` set   -> delete only terminal jobs in that JobStatus
- * - neither set    -> delete ALL terminal jobs (legacy behavior)
- * `job_ids` takes precedence over `status` if both are sent.
- */
-export type BulkDeleteJobsRequest = {
-    /**
-     * Job Ids
-     */
-    job_ids?: Array<string> | null;
-    /**
-     * Status
-     */
-    status?: string | null;
-};
-
-/**
  * BulkDeleteJobsResponse
  *
  * DELETE /api/jobs response. `deleted_ids` lists the jobs whose DB
@@ -3847,42 +3826,6 @@ export type GetInFlightJobApiRipperDrivesDriveIdInFlightJobGetResponses = {
 
 export type GetInFlightJobApiRipperDrivesDriveIdInFlightJobGetResponse = GetInFlightJobApiRipperDrivesDriveIdInFlightJobGetResponses[keyof GetInFlightJobApiRipperDrivesDriveIdInFlightJobGetResponses];
 
-export type GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetData = {
-    body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
-    path: {
-        /**
-         * Drive Id
-         */
-        drive_id: string;
-    };
-    query?: never;
-    url: '/api/ripper/drives/{drive_id}/current-job';
-};
-
-export type GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetError = GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetErrors[keyof GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetErrors];
-
-export type GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: JobView;
-};
-
-export type GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetResponse = GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetResponses[keyof GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetResponses];
-
 export type GetHeldJobApiRipperDrivesDriveIdHeldJobGetData = {
     body?: never;
     headers?: {
@@ -4036,10 +3979,7 @@ export type RipCompleteApiRipperJobsJobIdRipCompletePostResponses = {
 export type RipCompleteApiRipperJobsJobIdRipCompletePostResponse = RipCompleteApiRipperJobsJobIdRipCompletePostResponses[keyof RipCompleteApiRipperJobsJobIdRipCompletePostResponses];
 
 export type DeleteAllJobsApiJobsDeleteData = {
-    /**
-     * Req
-     */
-    body?: BulkDeleteJobsRequest | null;
+    body?: never;
     headers?: {
         /**
          * Authorization
