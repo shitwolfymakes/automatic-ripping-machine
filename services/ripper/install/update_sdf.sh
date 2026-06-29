@@ -44,7 +44,7 @@ fi
 if [[ "$FORCE" == false && -f "$SENTINEL" ]]; then
     file_age=$(( ( $(date +%s) - $(stat -c %Y "$SENTINEL") ) / 86400 ))
     if (( file_age < MAX_AGE_DAYS )); then
-        echo "sdf.bin sentinel is ${file_age}d old (< ${MAX_AGE_DAYS}d) — skipping"
+        echo "sdf.bin sentinel is ${file_age}d old (< ${MAX_AGE_DAYS}d) — skipping" >&2
         echo "sdf-status: fresh_kept age_days=${file_age}"
         exit 0
     fi
@@ -83,7 +83,7 @@ if [[ "$downloaded" == false ]]; then
     exit 0
 fi
 
-mv "$TMP" "$SDF_FILE"
+mv "$TMP" "$SDF_FILE" || { echo "sdf-status: download_failed"; exit 0; }
 trap - EXIT
 chown arm:arm "$SDF_FILE" 2>/dev/null || true
 touch "$SENTINEL"
