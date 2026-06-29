@@ -42,6 +42,12 @@ class Config(SQLModel, table=True):
     community_keydb_state: str | None = Field(sa_column=Column(String, nullable=True))
     community_keydb_vuk_count: int | None = Field(sa_column=Column(Integer, nullable=True))
     community_keydb_checked_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
+    # MakeMKV SDF (decryption data file) auto-fetch: operator toggle + ripper-
+    # reported status. The ripper downloads/installs ~/.MakeMKV/sdf.bin per rip
+    # (fire-and-forget) when enabled; see services/ripper/arm_ripper/makemkv_sdf.py.
+    makemkv_sdf_enabled: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
+    makemkv_sdf_state: str | None = Field(sa_column=Column(String, nullable=True))
+    makemkv_sdf_checked_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
     # See DEFAULT_MUSICBRAINZ_USER_AGENT above — a bare token 403s; operators are
     # still encouraged to override with their own contact info (UI placeholder hint).
     musicbrainz_user_agent: str | None = Field(default=DEFAULT_MUSICBRAINZ_USER_AGENT)

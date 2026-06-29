@@ -141,7 +141,8 @@ async def get_ripper_config(session: AsyncSession = Depends(get_session)) -> Rip
     return RipperConfigView(
         auto_rip_on_insert=cfg.auto_rip_on_insert,
         makemkv_key=cfg.makemkv_key,
-        community_keydb_enabled=cfg.community_keydb_enabled,
+        community_keydb_enabled=bool(cfg.community_keydb_enabled),
+        makemkv_sdf_enabled=bool(cfg.makemkv_sdf_enabled),
         ripping_paused=bool(cfg.ripping_paused),
         manual_wait_seconds=int(cfg.manual_wait_seconds) if cfg.manual_wait_seconds is not None else 60,
     )

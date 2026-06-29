@@ -109,6 +109,7 @@ def _config(
     *,
     block_on_miss: bool = True,
     community_keydb_enabled: bool = True,
+    makemkv_sdf_enabled: bool = True,
     hold_for_review: bool = False,
     ripping_paused: bool = False,
 ) -> Config:
@@ -118,6 +119,7 @@ def _config(
         auto_rip_on_insert=True,
         block_on_miss=block_on_miss,
         community_keydb_enabled=community_keydb_enabled,
+        makemkv_sdf_enabled=makemkv_sdf_enabled,
         hold_for_review=hold_for_review,
         ripping_paused=ripping_paused,
         manual_wait_seconds=60,
@@ -197,6 +199,7 @@ def test_get_config_returns_flag() -> None:
         "auto_rip_on_insert": True,
         "makemkv_key": None,
         "community_keydb_enabled": True,
+        "makemkv_sdf_enabled": True,
         "ripping_paused": False,
         "manual_wait_seconds": 60,
     }

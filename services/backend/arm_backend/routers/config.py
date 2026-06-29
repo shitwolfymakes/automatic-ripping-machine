@@ -54,6 +54,7 @@ def _to_view(cfg: Config) -> ConfigView:
         # for rows/fixtures predating them. The sibling bools above predate their
         # consumers' fixtures, so they don't need it.
         community_keydb_enabled=bool(cfg.community_keydb_enabled),
+        makemkv_sdf_enabled=bool(cfg.makemkv_sdf_enabled),
         ripping_paused=bool(cfg.ripping_paused),
         # bool()/int() coerce the None a bare in-memory Config carries (DB-level
         # server_default only) for rows/fixtures predating these columns.
