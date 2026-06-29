@@ -31,6 +31,7 @@ from arm_common.schemas.files import (
 from arm_common.schemas.iso import IsoScanRequest, IsoScanResponse
 from arm_common.schemas.jobs import (
     AbandonJobRequest,
+    BulkDeleteJobsRequest,
     BulkDeleteJobsResponse,
     DiscFingerprintView,
     HeldJobView,
@@ -172,6 +173,7 @@ __all__ = [
     "MetadataReleaseTrack",
     "MetadataSearchResponse",
     "ApplySessionRequest",
+    "BulkDeleteJobsRequest",
     "BulkDeleteJobsResponse",
     "DiscFingerprintInput",
     "DiscFingerprintView",

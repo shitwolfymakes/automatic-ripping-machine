@@ -38,6 +38,19 @@ class AbandonJobRequest(BaseModel):
     delete_raw: bool = False
 
 
+class BulkDeleteJobsRequest(BaseModel):
+    """DELETE /api/jobs body (optional). Filters which terminal jobs are
+    deleted:
+      - `job_ids` set  -> delete only those jobs (still terminal-guarded)
+      - `status` set   -> delete only terminal jobs in that JobStatus
+      - neither set    -> delete ALL terminal jobs (legacy behavior)
+    `job_ids` takes precedence over `status` if both are sent.
+    """
+
+    job_ids: list[str] | None = None
+    status: str | None = None
+
+
 class BulkDeleteJobsResponse(BaseModel):
     """DELETE /api/jobs response. `deleted_ids` lists the jobs whose DB
     rows were removed; `skipped_non_terminal` lists job IDs that were
