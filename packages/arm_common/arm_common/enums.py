@@ -194,3 +194,21 @@ class KeydbState(StrEnum):
     DOWNLOAD_FAILED = "download_failed"
     EMPTY = "empty"
     PROBE_FAILED = "probe_failed"
+
+
+class MakemkvSdfState(StrEnum):
+    """Outcome of the ripper's MakeMKV SDF fetch (`update_sdf.sh`), stored on
+    the Config singleton and surfaced by /api/system/preflight.
+
+    UPDATED         — downloaded (official or mirror) and installed.
+    FRESH_KEPT      — age-gated skip; existing SDF retained (age_days set).
+    DISABLED        — SDF refresh gated off via config.
+    DOWNLOAD_FAILED — all sources failed; baked/existing SDF retained.
+    PROBE_FAILED    — wrapper could not run or parse the script.
+    """
+
+    UPDATED = "updated"
+    FRESH_KEPT = "fresh_kept"
+    DISABLED = "disabled"
+    DOWNLOAD_FAILED = "download_failed"
+    PROBE_FAILED = "probe_failed"
