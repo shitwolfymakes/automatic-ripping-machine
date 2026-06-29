@@ -3,7 +3,7 @@
 	import StatusBadge from './StatusBadge.svelte';
 	import Skeleton from './Skeleton.svelte';
 	import { getVideoTypeConfig, discTypeLabel } from '$lib/utils/job-type';
-	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
+	import { transcodeColumnStatus } from '$lib/utils/job-status';
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import VideoTypeIcon from './VideoTypeIcon.svelte';
 
@@ -16,11 +16,12 @@
 	let { job, selected = false, onselect }: Props = $props();
 
 	let typeConfig = $derived(getVideoTypeConfig(null, job?.disc_type ?? null));
+	let tc = $derived(job ? transcodeColumnStatus(job) : null);
 </script>
 
 {#if !job}
 	<tr aria-busy="true">
-		{#each { length: 6 } as _}
+		{#each { length: 7 } as _}
 			<td class="p-2" data-label=""><Skeleton variant="line" width="80%" height="1rem" /></td>
 		{/each}
 	</tr>
@@ -57,16 +58,21 @@
 		</div>
 	</td>
 
-	<!-- Status -->
-	<td class="px-4 py-3" data-label="Status">
-		<div class="flex items-center gap-1.5">
-			<StatusBadge status={effectiveJobStatus(job)} />
-			{#if isPartialComplete(job)}
-				<span class="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-					>Done {job.transcode_progress?.tasks_done}/{job.transcode_progress?.tasks_total}</span
-				>
-			{/if}
-		</div>
+	<!-- Rip -->
+	<td class="px-4 py-3" data-label="Rip">
+		<StatusBadge status={job.status} />
+	</td>
+
+	<!-- Transcode -->
+	<td class="px-4 py-3" data-label="Transcode">
+		{#if tc}
+			<span class="flex items-center gap-1.5">
+				<StatusBadge status={tc.badgeStatus} />
+				<span class="text-[11px] text-gray-500 dark:text-gray-400">{tc.label}</span>
+			</span>
+		{:else}
+			<span class="text-gray-400 dark:text-gray-500">—</span>
+		{/if}
 	</td>
 
 	<!-- Type (colored badge) -->

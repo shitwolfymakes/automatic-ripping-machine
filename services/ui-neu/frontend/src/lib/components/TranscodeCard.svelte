@@ -104,7 +104,7 @@
 						<tr>
 							<td class="py-1 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap">Task ID</td>
 							<td class="py-1">
-								<a href="/jobs/{job.session_application_id}" class="text-primary hover:underline">#{job.id}</a>
+								<a href="/jobs/{job.job_id}" class="text-primary hover:underline">#{job.id}</a>
 							</td>
 							<td class="py-1 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap pl-6">Status</td>
 							<td class="py-1"><StatusBadge status={job.status} /></td>
@@ -140,7 +140,7 @@
 				<!-- session_application_id == the owning job id, so link to the job. -->
 				<div class="mt-3 flex flex-wrap items-center gap-2">
 					<a
-						href="/jobs/{job.session_application_id}"
+						href="/jobs/{job.job_id}"
 						class="rounded-md border border-primary/30 bg-primary/15 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/25"
 					>Open job</a>
 					<a
