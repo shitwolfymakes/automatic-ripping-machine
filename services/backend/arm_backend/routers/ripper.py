@@ -48,6 +48,7 @@ from arm_common.schemas import (
     RipperHeartbeatRequest,
     RipStartResponse,
     ScanResult,
+    SdfStatusReport,
     TrackUpdateRequest,
     TrackView,
 )
@@ -217,6 +218,28 @@ async def keydb_status(
     cfg.community_keydb_state = req.state.value
     cfg.community_keydb_vuk_count = req.vuk_count
     cfg.community_keydb_checked_at = datetime.now(timezone.utc)
+    session.add(cfg)
+    await session.commit()
+
+
+@router.post(
+    "/sdf-status",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_service_token)],
+)
+async def sdf_status(
+    req: SdfStatusReport,
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """A ripper reports its MakeMKV SDF fetch outcome. Global fact — written
+    to the Config singleton (last writer wins across rippers). preflight reads
+    it back. `age_days` is accepted for symmetry with the status line but not
+    persisted (no column)."""
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    if cfg is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="config singleton missing")
+    cfg.makemkv_sdf_state = req.state.value
+    cfg.makemkv_sdf_checked_at = datetime.now(timezone.utc)
     session.add(cfg)
     await session.commit()
 

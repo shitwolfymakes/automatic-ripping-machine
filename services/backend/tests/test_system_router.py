@@ -398,3 +398,49 @@ def test_preflight_overall_not_error_when_only_transcoder_warns(signing_key: byt
     transcoder = next(ch for ch in body["checks"] if ch["name"] == "transcoder")
     assert transcoder["status"] == "warning"
     assert body["status"] == "warning"
+
+
+def test_preflight_makemkv_sdf_ok_when_updated(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["config"][0].makemkv_sdf_state = "updated"
+    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/preflight", headers=_auth(token))
+    checks = {ch["name"]: ch for ch in r.json()["checks"]}
+    assert checks["makemkv_sdf"]["status"] == "ok"
+
+
+def test_preflight_makemkv_sdf_warning_when_download_failed(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["config"][0].makemkv_sdf_state = "download_failed"
+    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/preflight", headers=_auth(token))
+    checks = {ch["name"]: ch for ch in r.json()["checks"]}
+    assert checks["makemkv_sdf"]["status"] == "warning"
+
+
+def test_preflight_makemkv_sdf_ok_when_disabled(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["config"][0].makemkv_sdf_state = "disabled"
+    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/preflight", headers=_auth(token))
+    checks = {ch["name"]: ch for ch in r.json()["checks"]}
+    assert checks["makemkv_sdf"]["status"] == "ok"
+    assert "disabled" in checks["makemkv_sdf"]["detail"]
+
+
+def test_preflight_makemkv_sdf_warning_when_not_yet_checked(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    # makemkv_sdf_state defaults to None on a fresh Config
+    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/preflight", headers=_auth(token))
+    checks = {ch["name"]: ch for ch in r.json()["checks"]}
+    assert checks["makemkv_sdf"]["status"] == "warning"
+    assert "not yet checked" in checks["makemkv_sdf"]["detail"]

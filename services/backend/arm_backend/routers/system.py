@@ -14,7 +14,7 @@ from arm_backend.config import settings
 from arm_backend.db import get_session
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
-from arm_common import Config, Drive, DriveStatus, Event, Job, KeydbState, User
+from arm_common import Config, Drive, DriveStatus, Event, Job, KeydbState, MakemkvSdfState, User
 from arm_common.schemas import (
     PathsResponse,
     PathStatus,
@@ -111,6 +111,17 @@ async def preflight(
     else:  # None — never reported by a ripper yet
         kdb_status, kdb_detail = "warning", "community keydb not yet checked by a ripper"
     checks.append(PreflightCheck(name="community_keydb", status=kdb_status, detail=kdb_detail))
+
+    sdf_state = cfg.makemkv_sdf_state if cfg is not None else None
+    if sdf_state in (MakemkvSdfState.UPDATED, MakemkvSdfState.FRESH_KEPT):
+        sdf_status_v, sdf_detail = "ok", "SDF present"
+    elif sdf_state == MakemkvSdfState.DISABLED:
+        sdf_status_v, sdf_detail = "ok", "SDF refresh disabled (baked SDF in use)"
+    elif sdf_state in (MakemkvSdfState.DOWNLOAD_FAILED, MakemkvSdfState.PROBE_FAILED):
+        sdf_status_v, sdf_detail = "warning", "SDF refresh failed; using baked/last SDF"
+    else:  # None — never reported by a ripper yet
+        sdf_status_v, sdf_detail = "warning", "SDF not yet checked by a ripper"
+    checks.append(PreflightCheck(name="makemkv_sdf", status=sdf_status_v, detail=sdf_detail))
 
     dispatcher = getattr(request.app.state, "transcode_dispatcher", None)
     if dispatcher is None:
