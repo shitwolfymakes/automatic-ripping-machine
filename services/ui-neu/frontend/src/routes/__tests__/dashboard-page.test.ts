@@ -155,7 +155,7 @@ describe('Dashboard Page', () => {
 			expect(screen.getByText('Table')).toBeInTheDocument();
 		});
 
-		it.each(['Title', 'Year', 'Status', 'Type', 'Disc'])(
+		it.each(['Title', 'Year', 'Rip', 'Transcode', 'Type', 'Disc'])(
 			'table view shows %s column header',
 			async (header) => {
 				await renderDashboardTable();
