@@ -11,6 +11,7 @@ from arm_common import DiscType, Job, JobStatus, TrackStatus, with_log_context
 from arm_common.schemas import JobView, RipperConfigView, RipStartResponse, ScanResult, TrackView, WSEnvelope
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.community_keydb import refresh_community_keydb
+from arm_ripper.makemkv_sdf import refresh_makemkv_sdf
 from arm_ripper.makemkv_key import refresh_makemkv_key
 from arm_ripper.rip import RipResult, rip_all
 from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS
@@ -95,6 +96,7 @@ class JobController:
     ) -> None:
         self._client = client
         self._keydb_tasks: set[asyncio.Task[None]] = set()
+        self._sdf_tasks: set[asyncio.Task[None]] = set()
         self._drive_id = drive_id
         self._ws = ws
         # Each ripper container owns exactly one optical drive; storing the
@@ -261,6 +263,7 @@ class JobController:
                 # protected discs with a stale key.
                 await refresh_makemkv_key(key=await self._configured_makemkv_key())
                 self._spawn_keydb_refresh(enabled=await self._community_keydb_enabled())
+                self._spawn_sdf_refresh(enabled=await self._makemkv_sdf_enabled())
                 try:
                     scan_result = await scan_disc(device_path)
                 except ScanError as e:
@@ -529,6 +532,37 @@ class JobController:
         if self._keydb_tasks:
             await asyncio.gather(*self._keydb_tasks, return_exceptions=True)
 
+    async def _makemkv_sdf_enabled(self) -> bool:
+        """Whether the operator has the MakeMKV SDF auto-refresh enabled.
+        Fail-open to True so a flapping backend doesn't silently disable it."""
+        try:
+            cfg = await self._client.get_ripper_config()
+        except httpx.HTTPError as e:
+            logger.warning("makemkv sdf toggle lookup failed (%s); defaulting enabled", e)
+            return True
+        return cfg.makemkv_sdf_enabled
+
+    def _spawn_sdf_refresh(self, *, enabled: bool) -> None:
+        """Fire-and-forget MakeMKV SDF refresh. The rip proceeds immediately
+        with the on-disk SDF; a fresh SDF benefits the next rip. Errors are
+        swallowed — an SDF hiccup must never abort a rip."""
+        task = asyncio.create_task(self._sdf_refresh_and_report(enabled=enabled))
+        self._sdf_tasks.add(task)
+        task.add_done_callback(self._sdf_tasks.discard)
+
+    async def _sdf_refresh_and_report(self, *, enabled: bool) -> None:
+        try:
+            result = await refresh_makemkv_sdf(enabled=enabled)
+            if result is not None:
+                await self._client.report_sdf_status(state=result.state, age_days=result.age_days)
+        except Exception as exc:  # noqa: BLE001 — fire-and-forget, never propagate
+            logger.warning("makemkv sdf refresh failed (non-fatal): %s", exc)
+
+    async def _drain_sdf_tasks(self) -> None:
+        """Await any outstanding SDF refreshes. Test-only synchronisation."""
+        while self._sdf_tasks:
+            await asyncio.gather(*list(self._sdf_tasks), return_exceptions=True)
+
     async def _run_rip(self, job: Job | JobView, device_path: str) -> None:
         rip_start = await self._rip_start_with_retry(job.id)
         logger.info(
@@ -582,6 +616,7 @@ class JobController:
             # a rip resumed days after a crash must not run on a stale key.
             await refresh_makemkv_key(key=await self._configured_makemkv_key())
             self._spawn_keydb_refresh(enabled=await self._community_keydb_enabled())
+            self._spawn_sdf_refresh(enabled=await self._makemkv_sdf_enabled())
             rip_start = await self._client.resume(job.id)
             logger.info("rip-resume job_id=%s tracks=%d", job.id, len(rip_start.tracks))
             await self._execute_rip(

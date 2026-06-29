@@ -75,6 +75,8 @@ class FakeClient:
         self.ripping_paused: bool = False
         self.manual_wait_seconds: int = 60
         self.keydb_reports: list = []
+        self.sdf_reports: list = []
+        self.makemkv_sdf_enabled: bool = True
 
     async def identify(
         self,
@@ -116,10 +118,14 @@ class FakeClient:
             community_keydb_enabled=self.community_keydb_enabled,
             ripping_paused=self.ripping_paused,
             manual_wait_seconds=self.manual_wait_seconds,
+            makemkv_sdf_enabled=self.makemkv_sdf_enabled,
         )
 
     async def report_keydb_status(self, *, state, vuk_count=None, age_days=None) -> None:
         self.keydb_reports.append((state, vuk_count, age_days))
+
+    async def report_sdf_status(self, *, state, age_days=None) -> None:
+        self.sdf_reports.append((state, age_days))
 
 
 @pytest.fixture(autouse=True)
@@ -389,9 +395,9 @@ async def test_manual_trigger_runs_even_when_auto_rip_disabled(stub_scan, stub_e
     await asyncio.wait_for(controller.handle_manual_trigger("sess_test"), timeout=2.0)
 
     # The manual path bypasses the auto_rip gate (user already opted in) but
-    # still does config lookups inside the pipeline: one for the MakeMKV key
-    # and one for the community-keydb toggle.
-    assert client.get_ripper_config_calls == 2
+    # still does config lookups inside the pipeline: one for the MakeMKV key,
+    # one for the community-keydb toggle, and one for the SDF toggle.
+    assert client.get_ripper_config_calls == 3
     assert client.identify_pending_session_ids == ["sess_test"]
     assert client.rip_start_calls == ["job_test"]
     assert client.rip_complete_calls == ["job_test"]
@@ -571,3 +577,38 @@ async def test_rip_start_5xx_keeps_retrying(monkeypatch, stub_scan, stub_eject):
 
     assert call_count == 3
     assert client.rip_complete_calls == ["job_test"]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_spawns_sdf_refresh_nonfatal(monkeypatch, stub_scan, stub_eject):
+    # Fire-and-forget: an SDF refresh that raises must not abort the rip.
+    calls = []
+
+    async def _boom(*, script_path="/usr/local/bin/update_sdf.sh", enabled=True):
+        calls.append(enabled)
+        raise RuntimeError("sdf boom")
+
+    monkeypatch.setattr(jc_module, "refresh_makemkv_sdf", _boom)
+
+    client = FakeClient()
+    client.makemkv_sdf_enabled = True
+    controller = JobController(client, "drv_test")
+    controller._spawn_sdf_refresh(enabled=True)
+    await controller._drain_sdf_tasks()
+    assert calls == [True]  # ran once; RuntimeError swallowed (no propagation)
+
+
+@pytest.mark.asyncio
+async def test_sdf_refresh_reports_result(monkeypatch):
+    from arm_common import MakemkvSdfState
+    from arm_ripper.makemkv_sdf import SdfResult
+
+    async def _ok(*, script_path="/usr/local/bin/update_sdf.sh", enabled=True):
+        return SdfResult(state=MakemkvSdfState.UPDATED, age_days=None)
+
+    monkeypatch.setattr(jc_module, "refresh_makemkv_sdf", _ok)
+    client = FakeClient()
+    controller = JobController(client, "drv_test")
+    controller._spawn_sdf_refresh(enabled=True)
+    await controller._drain_sdf_tasks()
+    assert client.sdf_reports == [(MakemkvSdfState.UPDATED, None)]
