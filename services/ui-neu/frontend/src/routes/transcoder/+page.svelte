@@ -10,6 +10,7 @@
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import { fadeIn, fadeOut } from '$lib/transitions';
 	import { transcoderStats, transcoderWorkers, getJobsCache, setJobsCache } from '$lib/stores/transcoder';
+	import { sortTranscodeTasks } from '$lib/utils/transcode-sort';
 
 	const emptyJobs: TranscodeTaskView[] = [];
 
@@ -23,6 +24,7 @@
 	// Seed jobs from the per-tab cache so a revisit paints the last cards
 	// immediately instead of dropping to a skeleton.
 	let jobs = $state<TranscodeTaskView[]>(getJobsCache('all') ?? emptyJobs);
+	let sortedJobs = $derived([...jobs].sort(sortTranscodeTasks));
 	let loadingJobs = $state(getJobsCache('all') == null);
 	let jobsError = $state<Error | null>(null);
 
@@ -263,7 +265,7 @@
 
 		<!-- Jobs list -->
 		<LoadState
-			data={jobs}
+			data={sortedJobs}
 			loading={loadingJobs}
 			error={jobsError}
 			isEmpty={(d) => d.length === 0}
