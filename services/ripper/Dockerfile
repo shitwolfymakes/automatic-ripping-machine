@@ -116,6 +116,7 @@ RUN chmod +x /usr/local/bin/update_sdf.sh
 # first-boot SDF download (the runtime update_sdf.sh keeps it current).
 RUN ( curl -fsSL --connect-timeout 15 --max-time 120 -o /home/arm/.MakeMKV/sdf.bin https://www.makemkv.com/svq/sdf.bin \
       || curl -fsSL --connect-timeout 15 --max-time 120 -o /home/arm/.MakeMKV/sdf.bin https://www.makemkv.info/svq/sdf.bin ) \
+    && test "$(stat -c %s /home/arm/.MakeMKV/sdf.bin)" -ge 262144 \
     && touch /home/arm/.MakeMKV/.sdf_refreshed \
     && chown -R 1000:1000 /home/arm/.MakeMKV
 
