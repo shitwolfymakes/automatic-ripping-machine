@@ -109,6 +109,16 @@ RUN chmod +x /usr/local/bin/update_key.sh
 COPY services/ripper/install/update_keydb.sh /usr/local/bin/update_keydb.sh
 RUN chmod +x /usr/local/bin/update_keydb.sh
 
+COPY services/ripper/install/update_sdf.sh /usr/local/bin/update_sdf.sh
+RUN chmod +x /usr/local/bin/update_sdf.sh
+
+# Bake a baseline MakeMKV SDF so protected-disc scans never hang on the
+# first-boot SDF download (the runtime update_sdf.sh keeps it current).
+RUN ( curl -fsSL --connect-timeout 15 --max-time 120 -o /home/arm/.MakeMKV/sdf.bin https://www.makemkv.com/svq/sdf.bin \
+      || curl -fsSL --connect-timeout 15 --max-time 120 -o /home/arm/.MakeMKV/sdf.bin https://www.makemkv.info/svq/sdf.bin ) \
+    && touch /home/arm/.MakeMKV/.sdf_refreshed \
+    && chown -R 1000:1000 /home/arm/.MakeMKV
+
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/
 
 WORKDIR /app
