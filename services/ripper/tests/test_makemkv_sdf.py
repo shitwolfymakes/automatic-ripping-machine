@@ -55,7 +55,7 @@ async def test_sdf_wrapper_non_executable_returns_none(tmp_path):
 
 
 async def test_sdf_wrapper_nonzero_exit_is_probe_failed(tmp_path):
-    script = _write_fake_script(tmp_path, 'echo boom >&2; exit 3')
+    script = _write_fake_script(tmp_path, "echo boom >&2; exit 3")
     result = await refresh_makemkv_sdf(script_path=script, enabled=True)
     assert result.state is MakemkvSdfState.PROBE_FAILED
 
