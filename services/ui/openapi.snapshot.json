@@ -364,6 +364,59 @@
         }
       }
     },
+    "/api/ripper/sdf-status": {
+      "post": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Sdf Status",
+        "description": "A ripper reports its MakeMKV SDF fetch outcome. Global fact \u2014 written\nto the Config singleton (last writer wins across rippers). preflight reads\nit back. `age_days` is accepted for symmetry with the status line but not\npersisted (no column).",
+        "operationId": "sdf_status_api_ripper_sdf_status_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SdfStatusReport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ripper/register": {
       "post": {
         "tags": [
@@ -7730,6 +7783,17 @@
             ],
             "title": "Community Keydb Enabled"
           },
+          "makemkv_sdf_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Makemkv Sdf Enabled"
+          },
           "ripping_paused": {
             "anyOf": [
               {
@@ -7862,6 +7926,10 @@
             "type": "boolean",
             "title": "Community Keydb Enabled"
           },
+          "makemkv_sdf_enabled": {
+            "type": "boolean",
+            "title": "Makemkv Sdf Enabled"
+          },
           "ripping_paused": {
             "type": "boolean",
             "title": "Ripping Paused"
@@ -7961,6 +8029,7 @@
           "auto_rip_on_insert",
           "block_on_miss",
           "community_keydb_enabled",
+          "makemkv_sdf_enabled",
           "ripping_paused",
           "hold_for_review",
           "manual_wait_seconds",
@@ -9765,6 +9834,18 @@
         ],
         "title": "MakemkvKeyStatusReport",
         "description": "Body of POST /api/ripper/makemkv-key-status \u2014 the ripper's disc-free\n`makemkvcon` probe outcome. Global (not per-drive); the backend writes it\nto the Config singleton. `detail` is a human-readable reason string."
+      },
+      "MakemkvSdfState": {
+        "type": "string",
+        "enum": [
+          "updated",
+          "fresh_kept",
+          "disabled",
+          "download_failed",
+          "probe_failed"
+        ],
+        "title": "MakemkvSdfState",
+        "description": "Outcome of the ripper's MakeMKV SDF fetch (`update_sdf.sh`), stored on\nthe Config singleton and surfaced by /api/system/preflight.\n\nUPDATED         \u2014 downloaded (official or mirror) and installed.\nFRESH_KEPT      \u2014 age-gated skip; existing SDF retained (age_days set).\nDISABLED        \u2014 SDF refresh gated off via config.\nDOWNLOAD_FAILED \u2014 all sources failed; baked/existing SDF retained.\nPROBE_FAILED    \u2014 wrapper could not run or parse the script."
       },
       "ManualTriggerRequest": {
         "properties": {
@@ -11704,6 +11785,11 @@
             "title": "Community Keydb Enabled",
             "default": true
           },
+          "makemkv_sdf_enabled": {
+            "type": "boolean",
+            "title": "Makemkv Sdf Enabled",
+            "default": true
+          },
           "ripping_paused": {
             "type": "boolean",
             "title": "Ripping Paused",
@@ -11843,6 +11929,30 @@
           "duration_seconds"
         ],
         "title": "ScanTitle"
+      },
+      "SdfStatusReport": {
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/MakemkvSdfState"
+          },
+          "age_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "SdfStatusReport",
+        "description": "Body of POST /api/ripper/sdf-status \u2014 the ripper's MakeMKV SDF fetch\noutcome. Global (not per-drive); the backend writes it to the Config\nsingleton. `age_days` is present on fresh_kept; None on all other states."
       },
       "ServiceCatalog": {
         "properties": {
