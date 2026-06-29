@@ -13018,6 +13018,10 @@
             "type": "integer",
             "title": "Tasks Done"
           },
+          "tasks_failed": {
+            "type": "integer",
+            "title": "Tasks Failed"
+          },
           "percent": {
             "type": "number",
             "title": "Percent"
@@ -13028,6 +13032,7 @@
           "state",
           "tasks_total",
           "tasks_done",
+          "tasks_failed",
           "percent"
         ],
         "title": "TranscodeProgressSummary",
@@ -13088,6 +13093,17 @@
           "session_application_id": {
             "type": "string",
             "title": "Session Application Id"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
           },
           "source_track_id": {
             "type": "string",

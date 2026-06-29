@@ -459,3 +459,41 @@ def test_log_zip_requires_jwt(signing_key: bytes, tmp_path: Path, monkeypatch: p
     with TestClient(app) as c:
         r = c.get("/api/transcodes/txt_x/log.zip")
     assert r.status_code == 401
+
+
+def test_list_transcodes_populates_job_id(signing_key: bytes) -> None:
+    """GET /api/transcodes resolves job_id via the task's SessionApplication."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["transcode_tasks"] = [
+        _task("txt_j1", status=TranscodeTaskStatus.QUEUED, session_application_id="sap_j1"),
+    ]
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_j1",
+            session_id="ses_1",
+            job_id="job_01JZXR7K3M5Q8N4VWA0000000J",
+            status=SessionApplicationStatus.QUEUED,
+        )
+    ]
+    with TestClient(app) as client:
+        r = client.get("/api/transcodes", headers=_auth(token))
+    assert r.status_code == 200
+    tasks = r.json()
+    assert tasks, "expected at least one task"
+    assert tasks[0]["job_id"] == "job_01JZXR7K3M5Q8N4VWA0000000J"
+
+
+def test_list_transcodes_job_id_none_when_no_application(signing_key: bytes) -> None:
+    """job_id is None when the task's SessionApplication is not found."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["transcode_tasks"] = [
+        _task("txt_orphan2", status=TranscodeTaskStatus.QUEUED, session_application_id="sap_missing"),
+    ]
+    db.rows["session_applications"] = []
+    with TestClient(app) as client:
+        r = client.get("/api/transcodes", headers=_auth(token))
+    assert r.status_code == 200
+    tasks = r.json()
+    assert tasks[0]["job_id"] is None

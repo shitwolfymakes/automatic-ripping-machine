@@ -52,14 +52,32 @@ async def list_transcodes(
     session_application_id: str | None = Query(default=None),
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
-) -> list[TranscodeTask]:
+) -> list[TranscodeTaskView]:
     stmt = select(TranscodeTask).order_by(col(TranscodeTask.created_at).desc())
     if status_filter is not None:
         stmt = stmt.where(col(TranscodeTask.status) == status_filter)
     if session_application_id is not None:
         stmt = stmt.where(col(TranscodeTask.session_application_id) == session_application_id)
-    result = await db.execute(stmt)
-    return list(result.scalars().all())
+    tasks = list((await db.execute(stmt)).scalars().all())
+
+    # Resolve each task's job_id via its SessionApplication (single-table select,
+    # FakeSession-safe — no JOIN).
+    sa_ids = {t.session_application_id for t in tasks}
+    job_by_sa: dict[str, str] = {}
+    if sa_ids:
+        sas = list(
+            (await db.execute(select(SessionApplication).where(col(SessionApplication.id).in_(tuple(sa_ids)))))
+            .scalars()
+            .all()
+        )
+        job_by_sa = {sa.id: sa.job_id for sa in sas}
+
+    def _view(t: TranscodeTask) -> TranscodeTaskView:
+        tv = TranscodeTaskView.model_validate(t)
+        tv.job_id = job_by_sa.get(t.session_application_id)
+        return tv
+
+    return [_view(t) for t in tasks]
 
 
 @router.get("/stats", response_model=TranscodeStatsView)

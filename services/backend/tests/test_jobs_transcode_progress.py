@@ -12,11 +12,12 @@ from arm_common.schemas.jobs import JobView, TranscodeProgressSummary  # noqa: E
 
 
 def test_transcode_progress_summary_shape() -> None:
-    s = TranscodeProgressSummary(state="done", tasks_total=2, tasks_done=2, percent=100.0)
+    s = TranscodeProgressSummary(state="done", tasks_total=2, tasks_done=2, tasks_failed=0, percent=100.0)
     assert s.model_dump() == {
         "state": "done",
         "tasks_total": 2,
         "tasks_done": 2,
+        "tasks_failed": 0,
         "percent": 100.0,
     }
 
@@ -341,3 +342,30 @@ def test_get_job_detail_populates_track_transcode_status() -> None:
     assert tracks["t:1"]["transcode_status"] == "failed"
     # track_b has no task → None
     assert tracks["t:2"]["transcode_status"] is None
+
+
+def test_summarize_includes_tasks_failed() -> None:
+    """TranscodeProgressSummary.tasks_failed is populated and surfaced via the detail endpoint."""
+    db = FakeSession()
+    _seed_admin(db)
+
+    job_id = "job_01JZXR7K3M5Q8N4VWA00000040"
+    db.rows["jobs"] = [_ripped_job(job_id)]
+
+    sa = _sa("sap_40", SessionApplicationStatus.DONE_PARTIAL)
+    sa.job_id = job_id
+    db.rows["session_applications"] = [sa]
+
+    db.rows["transcode_tasks"] = [
+        _task("txt_40a", "sap_40", TranscodeTaskStatus.DONE, 100),
+        _task("txt_40b", "sap_40", TranscodeTaskStatus.FAILED, 0),
+    ]
+
+    app, token = _make_app(db)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{job_id}", headers=_auth(token))
+
+    assert r.status_code == 200
+    tp = r.json()["job"]["transcode_progress"]
+    assert tp["tasks_failed"] == 1
+    assert tp["state"] == "done_partial"

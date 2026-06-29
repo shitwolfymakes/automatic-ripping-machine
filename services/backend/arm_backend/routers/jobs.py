@@ -174,6 +174,7 @@ def _summarize_transcode_progress(
         state=state,
         tasks_total=tasks_total,
         tasks_done=tasks_done,
+        tasks_failed=tasks_failed,
         percent=round(percent, 1),
     )
 
