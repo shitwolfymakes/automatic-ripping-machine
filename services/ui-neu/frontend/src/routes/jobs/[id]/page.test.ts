@@ -399,9 +399,9 @@ describe('Job detail page (v3)', () => {
 			fingerprints: []
 		} as any);
 		renderComponent(Page);
-		// "Transcode" caption appears only as a badge caption span.
+		// "Transcode" is the column header; the track's Transcode cell renders the
+		// failed badge.
 		await waitFor(() => expect(screen.getByText('Transcode')).toBeInTheDocument());
-		// The transcode badge renders the failed label.
 		expect(screen.getByText('Failed')).toBeInTheDocument();
 	});
 
@@ -412,8 +412,11 @@ describe('Job detail page (v3)', () => {
 			fingerprints: []
 		} as any);
 		renderComponent(Page);
-		// No "Transcode" caption when transcode_status is absent.
+		// The track's Transcode cell shows an em-dash (no transcode task yet).
+		// Scope to the Transcode <td> (data-label="Transcode") — other cells also
+		// render "—", so a global getByText('—') is ambiguous.
 		await waitFor(() => expect(screen.getByText('Done')).toBeInTheDocument());
-		expect(screen.queryByText('Transcode')).not.toBeInTheDocument();
+		const transcodeCell = document.querySelector('td[data-label="Transcode"]');
+		expect(transcodeCell?.textContent?.trim()).toBe('—');
 	});
 });
