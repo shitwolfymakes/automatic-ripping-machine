@@ -48,6 +48,7 @@ class ConfigView(BaseModel):
     auto_rip_on_insert: bool
     block_on_miss: bool
     community_keydb_enabled: bool
+    makemkv_sdf_enabled: bool
     ripping_paused: bool
     hold_for_review: bool
     manual_wait_seconds: int
@@ -72,6 +73,7 @@ class ConfigUpdateRequest(BaseModel):
     auto_rip_on_insert: bool | None = None
     block_on_miss: bool | None = None
     community_keydb_enabled: bool | None = None
+    makemkv_sdf_enabled: bool | None = None
     ripping_paused: bool | None = None
     hold_for_review: bool | None = None
     manual_wait_seconds: int | None = None

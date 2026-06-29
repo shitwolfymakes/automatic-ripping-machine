@@ -105,6 +105,17 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         editable=True,
     ),
     ConfigFieldMeta(
+        key="makemkv_sdf_enabled",
+        group="Ripping",
+        tier="operator",
+        label="MakeMKV SDF refresh",
+        help="Auto-download MakeMKV's SDF decryption data file so protected "
+        "discs scan instead of timing out. A baseline SDF ships in the image; "
+        "this keeps it current.",
+        type="bool",
+        editable=True,
+    ),
+    ConfigFieldMeta(
         key="ripping_paused",
         group="Ripping",
         tier="operator",
