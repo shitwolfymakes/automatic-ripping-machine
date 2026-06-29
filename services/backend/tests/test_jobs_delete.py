@@ -446,3 +446,172 @@ def test_prune_empty_dirs_refuses_path_outside_root(tmp_path: Path) -> None:
     pruned = jobs_router._prune_empty_dirs(outside, media_root)
     assert pruned == 0
     assert outside.exists()
+
+
+# ---- bulk-delete filter regression tests ------------------------------------
+
+
+def test_bulk_delete_status_filter_spares_finished_jobs(signing_key: bytes) -> None:
+    """Regression: {status:'failed'} deletes only failed jobs; a finished
+    (ripped) job is NOT touched. This is the reported data-loss bug."""
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [
+        _make_job("job_01JZXR7K3M5Q8N4VWA0000000G", status=JobStatus.FAILED),
+        _make_job("job_01JZXR7K3M5Q8N4VWA00000007", status=JobStatus.RIPPED),
+    ]
+    hub = _CapturingHub()
+    app, token = _make_app(signing_key, db, hub)
+    with TestClient(app) as client:
+        r = client.request("DELETE", "/api/jobs", headers=_auth(token), json={"status": "failed"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["deleted_ids"] == ["job_01JZXR7K3M5Q8N4VWA0000000G"]
+    assert body["skipped_non_terminal"] == []
+    surviving = [j.id for j in db.rows["jobs"]]
+    assert surviving == ["job_01JZXR7K3M5Q8N4VWA00000007"]
+
+
+def test_bulk_delete_status_ripped_spares_failed(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [
+        _make_job("job_01JZXR7K3M5Q8N4VWA0000000G", status=JobStatus.FAILED),
+        _make_job("job_01JZXR7K3M5Q8N4VWA00000007", status=JobStatus.RIPPED),
+    ]
+    hub = _CapturingHub()
+    app, token = _make_app(signing_key, db, hub)
+    with TestClient(app) as client:
+        r = client.request("DELETE", "/api/jobs", headers=_auth(token), json={"status": "ripped"})
+    assert r.status_code == 200
+    assert r.json()["deleted_ids"] == ["job_01JZXR7K3M5Q8N4VWA00000007"]
+    assert [j.id for j in db.rows["jobs"]] == ["job_01JZXR7K3M5Q8N4VWA0000000G"]
+
+
+def test_bulk_delete_job_ids_filter_deletes_only_named(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [
+        _make_job("job_01JZXR7K3M5Q8N4VWA00000007", status=JobStatus.RIPPED),
+        _make_job("job_01JZXR7K3M5Q8N4VWA0000000G", status=JobStatus.FAILED),
+        _make_job("job_01JZXR7K3M5Q8N4VWA0000000H", status=JobStatus.ABANDONED),
+    ]
+    hub = _CapturingHub()
+    app, token = _make_app(signing_key, db, hub)
+    with TestClient(app) as client:
+        r = client.request(
+            "DELETE",
+            "/api/jobs",
+            headers=_auth(token),
+            json={"job_ids": ["job_01JZXR7K3M5Q8N4VWA00000007", "job_01JZXR7K3M5Q8N4VWA0000000G"]},
+        )
+    assert r.status_code == 200
+    assert sorted(r.json()["deleted_ids"]) == sorted(
+        ["job_01JZXR7K3M5Q8N4VWA00000007", "job_01JZXR7K3M5Q8N4VWA0000000G"]
+    )
+    assert [j.id for j in db.rows["jobs"]] == ["job_01JZXR7K3M5Q8N4VWA0000000H"]
+
+
+def test_bulk_delete_job_ids_skips_non_terminal(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [
+        _make_job("job_01JZXR7K3M5Q8N4VWA00000009", status=JobStatus.RIPPING),
+        _make_job("job_01JZXR7K3M5Q8N4VWA00000007", status=JobStatus.RIPPED),
+    ]
+    hub = _CapturingHub()
+    app, token = _make_app(signing_key, db, hub)
+    with TestClient(app) as client:
+        r = client.request(
+            "DELETE",
+            "/api/jobs",
+            headers=_auth(token),
+            json={"job_ids": ["job_01JZXR7K3M5Q8N4VWA00000009", "job_01JZXR7K3M5Q8N4VWA00000007"]},
+        )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["deleted_ids"] == ["job_01JZXR7K3M5Q8N4VWA00000007"]
+    assert body["skipped_non_terminal"] == ["job_01JZXR7K3M5Q8N4VWA00000009"]
+    assert [j.id for j in db.rows["jobs"]] == ["job_01JZXR7K3M5Q8N4VWA00000009"]
+
+
+def test_bulk_delete_invalid_status_returns_400(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [_make_job("job_01JZXR7K3M5Q8N4VWA00000007", status=JobStatus.RIPPED)]
+    hub = _CapturingHub()
+    app, token = _make_app(signing_key, db, hub)
+    with TestClient(app) as client:
+        r = client.request("DELETE", "/api/jobs", headers=_auth(token), json={"status": "not_a_status"})
+    assert r.status_code == 400
+    assert "invalid status" in r.json()["detail"]
+    # Nothing deleted.
+    assert [j.id for j in db.rows["jobs"]] == ["job_01JZXR7K3M5Q8N4VWA00000007"]
+
+
+# ---- _delete_job_files OSError exception paths -----------------------------
+
+
+def test_delete_job_files_logs_rmtree_oserror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """When shutil.rmtree raises OSError (e.g. permission denied), the
+    exception is caught, logged, and the function returns with raw_dir_removed=0.
+    Lines 342-343 in the router."""
+    raw_root = tmp_path / "raw"
+    media_root = tmp_path / "media"
+    raw_root.mkdir()
+    media_root.mkdir()
+    raw_dir = raw_root / "job_01JZXR7K3M5Q8N4VWA00000002"
+    raw_dir.mkdir()
+
+    def _boom(path: Any) -> None:
+        raise OSError("permission denied")
+
+    monkeypatch.setattr("shutil.rmtree", _boom)
+
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [], raw_root=raw_root, media_root=media_root
+    )
+    assert counters["raw_dir_removed"] == 0
+    # Dir still exists because rmtree was blocked.
+    assert raw_dir.exists()
+
+
+def test_delete_job_files_logs_unlink_oserror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """When path.unlink() raises OSError, the exception is caught and logged,
+    the file is counted as not removed, and processing continues.
+    Lines 354-355 in the router."""
+    raw_root = tmp_path / "raw"
+    media_root = tmp_path / "media"
+    raw_root.mkdir()
+    title_dir = media_root / "X (2000)"
+    title_dir.mkdir(parents=True)
+    output_file = title_dir / "X (2000) - Track 01.mkv"
+    output_file.write_bytes(b"y")
+
+    def _boom(self: Any, missing_ok: bool = False) -> None:
+        raise OSError("read-only filesystem")
+
+    monkeypatch.setattr(Path, "unlink", _boom)
+
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [output_file], raw_root=raw_root, media_root=media_root
+    )
+    assert counters["media_files_removed"] == 0
+    # File survived because unlink was blocked.
+    assert output_file.exists()
+
+
+# ---- _resolve_media_outputs direct coverage --------------------------------
+
+
+async def test_resolve_media_outputs_returns_empty_when_no_tasks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_resolve_media_outputs with no transcode_task rows returns an empty list.
+    Exercises lines 278-287 of the router (the real impl, not the monkeypatched fake)."""
+    monkeypatch.setattr(jobs_router.settings, "MEDIA_ROOT", str(tmp_path / "media"))
+    db = FakeSession()
+    db.rows["transcode_tasks"] = []
+
+    result = await jobs_router._resolve_media_outputs(db, "job_01JZXR7K3M5Q8N4VWA00000002")
+    assert result == []
