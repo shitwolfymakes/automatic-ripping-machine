@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -43,6 +43,7 @@ from arm_common.schemas import (
     AbandonJobRequest,
     ApplySessionRequest,
     ApplySessionResponse,
+    BulkDeleteJobsRequest,
     BulkDeleteJobsResponse,
     DiscFingerprintView,
     JobDetailView,
@@ -653,25 +654,44 @@ async def delete_job(
 @router.delete("", response_model=BulkDeleteJobsResponse)
 async def delete_all_jobs(
     delete_raw: bool = Query(default=False),
+    req: BulkDeleteJobsRequest | None = Body(default=None),
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
 ) -> BulkDeleteJobsResponse:
-    """Hard-delete every job in a terminal status. Non-terminal jobs are
-    skipped and reported in `skipped_non_terminal` so the caller can
-    abandon-then-retry them.
+    """Hard-delete terminal jobs. An optional body filters the set:
+    `job_ids` (only those), `status` (only that JobStatus), or neither
+    (all terminal jobs — legacy). `job_ids` wins over `status`. Non-terminal
+    jobs are always skipped and reported in `skipped_non_terminal`.
 
     `delete_raw=true` runs the filesystem cleanup (raw rmtree + media file
     unlink + empty-parent prune) for each deleted job. Cleanups are
     independent — a failure on one job is logged and the next continues.
     """
+    req = req or BulkDeleteJobsRequest()
+
+    target_status: JobStatus | None = None
+    if req.status:
+        try:
+            target_status = JobStatus(req.status)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"invalid status: {req.status}") from exc
+
     rows = (await db.execute(select(Job))).scalars().all()
+
+    if req.job_ids:
+        wanted = set(req.job_ids)
+        candidates = [j for j in rows if j.id in wanted]
+    elif target_status is not None:
+        candidates = [j for j in rows if j.status == target_status]
+    else:
+        candidates = list(rows)
 
     raw_root = Path(settings.RAW_ROOT)
     media_root = Path(settings.MEDIA_ROOT)
     deleted_ids: list[str] = []
     skipped: list[str] = []
     totals = {"raw_dir_removed": 0, "media_files_removed": 0, "media_dirs_pruned": 0}
-    for job in rows:
+    for job in candidates:
         if job.status not in TERMINAL_JOB_STATUSES:
             skipped.append(job.id)
             continue
