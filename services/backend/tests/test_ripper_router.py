@@ -1121,3 +1121,26 @@ def test_current_job_404_unknown_drive() -> None:
         r = client.get("/api/ripper/drives/drv_UNKNOWN/current-job", headers=_SERVICE_AUTH)
     assert r.status_code == 404
     assert "unknown drive_id" in r.json()["detail"]
+
+def test_sdf_status_persists_state() -> None:
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/sdf-status", headers=_SERVICE_AUTH, json={"state": "updated"})
+    assert r.status_code == 204
+    cfg = db.rows["config"][0]
+    assert cfg.makemkv_sdf_state == "updated"
+    assert cfg.makemkv_sdf_checked_at is not None
+def test_sdf_status_404_when_no_config() -> None:
+    db = FakeSession()
+    db.rows["config"] = []
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/sdf-status", headers=_SERVICE_AUTH, json={"state": "updated"})
+    assert r.status_code == 404
+def test_get_config_reflects_makemkv_sdf_enabled() -> None:
+    db = FakeSession()
+    db.rows["config"] = [_config(makemkv_sdf_enabled=False)]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/config", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["makemkv_sdf_enabled"] is False
