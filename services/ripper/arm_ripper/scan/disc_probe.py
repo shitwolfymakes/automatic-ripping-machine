@@ -45,14 +45,18 @@ async def await_device_ready(device_path: str) -> bool:
     Returns True once DISC_OK (probe is safe). Returns False on a genuine
     no-medium reading (NO_DISC / TRAY_OPEN) or if the readiness budget expires
     while the device stays NOT_READY / NO_INFO. ISO sources are always ready.
-    Never raises — read_drive_status already degrades ioctl errors to NO_INFO.
+    Never raises — read_drive_status's OSError (e.g. ENOMEDIUM on the re-settling
+    device) is caught here and treated as not-ready.
     """
     if is_iso_source(device_path):
         return True
     interval = settings.POLL_INTERVAL_SECONDS
     polls = max(1, int(DEVICE_READY_TIMEOUT_SECONDS / interval))
     for attempt in range(polls):
-        state = read_drive_status(device_path)
+        try:
+            state = read_drive_status(device_path)
+        except OSError:
+            state = DriveState.NO_INFO
         if state == DriveState.DISC_OK:
             return True
         if state in (DriveState.NO_DISC, DriveState.TRAY_OPEN):

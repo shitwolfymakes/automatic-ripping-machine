@@ -98,7 +98,7 @@ async def test_await_device_ready_true_after_settle(monkeypatch: pytest.MonkeyPa
 
     monkeypatch.setattr(disc_probe.asyncio, "sleep", _fake_sleep)
     assert await disc_probe.await_device_ready("/dev/sr0") is True
-    assert len(sleeps) == 2  # slept before each re-poll, not after success
+    assert len(sleeps) == 2  # slept after each non-terminal poll, not after the DISC_OK
 
 
 @pytest.mark.asyncio
@@ -176,3 +176,39 @@ async def test_probe_disc_computes_when_ready(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(disc_probe, "_compute_crc", lambda _dev: "79df7b128b27d001")
     probe = await disc_probe.probe_disc("/dev/sr0")
     assert probe.crc64 == "79df7b128b27d001"
+
+
+@pytest.mark.asyncio
+async def test_await_device_ready_false_on_oserror(monkeypatch: pytest.MonkeyPatch) -> None:
+    # read_drive_status raising OSError (e.g. ENOMEDIUM mid-resettle) must be
+    # caught and treated as not-ready — never propagate. Budget then expires → False.
+    monkeypatch.setattr(disc_probe, "is_iso_source", lambda _p: False)
+
+    def _raise(_dev: str) -> object:
+        raise OSError(123, "No medium found")
+
+    monkeypatch.setattr(disc_probe, "read_drive_status", _raise)
+
+    async def _fake_sleep(_s: float) -> None:
+        pass
+
+    monkeypatch.setattr(disc_probe.asyncio, "sleep", _fake_sleep)
+    assert await disc_probe.await_device_ready("/dev/sr0") is False
+
+
+@pytest.mark.asyncio
+async def test_probe_disc_none_when_read_status_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    # End-to-end: read_drive_status raising OSError must NOT propagate out of probe_disc.
+    monkeypatch.setattr(disc_probe, "is_iso_source", lambda _p: False)
+
+    def _raise(_dev: str) -> object:
+        raise OSError(123, "No medium found")
+
+    monkeypatch.setattr(disc_probe, "read_drive_status", _raise)
+
+    async def _fake_sleep(_s: float) -> None:
+        pass
+
+    monkeypatch.setattr(disc_probe.asyncio, "sleep", _fake_sleep)
+    probe = await disc_probe.probe_disc("/dev/sr0")
+    assert probe.crc64 is None
