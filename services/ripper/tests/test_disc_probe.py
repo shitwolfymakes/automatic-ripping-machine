@@ -78,3 +78,69 @@ def test_compute_crc_none_on_pydvdid_error(monkeypatch: pytest.MonkeyPatch) -> N
 
     _install_fake_pydvdid(monkeypatch, _DvdId)
     assert disc_probe._compute_crc("/dev/sr0") is None
+
+
+@pytest.mark.asyncio
+async def test_await_device_ready_true_after_settle(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Device is NOT_READY for two polls, then DISC_OK — the helper must wait and proceed.
+    from arm_ripper.drive_poll import DriveState
+
+    states = iter([DriveState.NOT_READY, DriveState.NOT_READY, DriveState.DISC_OK])
+    monkeypatch.setattr(disc_probe, "read_drive_status", lambda _dev: next(states))
+    sleeps: list[float] = []
+
+    async def _fake_sleep(s: float) -> None:
+        sleeps.append(s)
+
+    monkeypatch.setattr(disc_probe.asyncio, "sleep", _fake_sleep)
+    assert await disc_probe.await_device_ready("/dev/sr0") is True
+    assert len(sleeps) == 2  # slept before each re-poll, not after success
+
+
+@pytest.mark.asyncio
+async def test_await_device_ready_iso_skips_ioctl(monkeypatch: pytest.MonkeyPatch) -> None:
+    # ISO source → always ready, read_drive_status must NOT be called.
+    monkeypatch.setattr(disc_probe, "is_iso_source", lambda _p: True)
+
+    def _boom(_dev: str) -> object:
+        raise AssertionError("read_drive_status must not be called for an ISO source")
+
+    monkeypatch.setattr(disc_probe, "read_drive_status", _boom)
+    assert await disc_probe.await_device_ready("iso:/img.iso") is True
+
+
+@pytest.mark.asyncio
+async def test_await_device_ready_false_on_no_disc(monkeypatch: pytest.MonkeyPatch) -> None:
+    from arm_ripper.drive_poll import DriveState
+
+    monkeypatch.setattr(disc_probe, "is_iso_source", lambda _p: False)
+    monkeypatch.setattr(disc_probe, "read_drive_status", lambda _dev: DriveState.NO_DISC)
+    assert await disc_probe.await_device_ready("/dev/sr0") is False
+
+
+@pytest.mark.asyncio
+async def test_await_device_ready_false_on_tray_open(monkeypatch: pytest.MonkeyPatch) -> None:
+    from arm_ripper.drive_poll import DriveState
+
+    monkeypatch.setattr(disc_probe, "is_iso_source", lambda _p: False)
+    monkeypatch.setattr(disc_probe, "read_drive_status", lambda _dev: DriveState.TRAY_OPEN)
+    assert await disc_probe.await_device_ready("/dev/sr0") is False
+
+
+@pytest.mark.asyncio
+async def test_await_device_ready_false_on_budget_exhausted(monkeypatch: pytest.MonkeyPatch) -> None:
+    from arm_ripper.drive_poll import DriveState
+
+    monkeypatch.setattr(disc_probe, "is_iso_source", lambda _p: False)
+    monkeypatch.setattr(disc_probe, "read_drive_status", lambda _dev: DriveState.NOT_READY)
+    monkeypatch.setattr(disc_probe, "DEVICE_READY_TIMEOUT_SECONDS", 6.0)
+    monkeypatch.setattr(disc_probe.settings, "POLL_INTERVAL_SECONDS", 2.0)
+    sleeps: list[float] = []
+
+    async def _fake_sleep(s: float) -> None:
+        sleeps.append(s)
+
+    monkeypatch.setattr(disc_probe.asyncio, "sleep", _fake_sleep)
+    assert await disc_probe.await_device_ready("/dev/sr0") is False
+    # 6.0s budget / 2.0s interval = 3 polls → 2 sleeps between them.
+    assert len(sleeps) == 2

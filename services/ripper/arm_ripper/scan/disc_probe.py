@@ -17,12 +17,51 @@ import asyncio
 import logging
 from dataclasses import dataclass
 
+from arm_ripper.config import settings
+from arm_ripper.drive_poll import DriveState, read_drive_status
+from arm_ripper.source import is_iso_source
+
 logger = logging.getLogger("arm_ripper.scan.disc_probe")
+
+# Bounds the wait for the optical device to re-settle after makemkvcon info
+# released it. Polled on settings.POLL_INTERVAL_SECONDS granularity; the
+# normal re-settle clears in one or two polls.
+DEVICE_READY_TIMEOUT_SECONDS = 6.0
 
 
 @dataclass(frozen=True)
 class DiscProbe:
     crc64: str | None
+
+
+async def await_device_ready(device_path: str) -> bool:
+    """Wait until the optical device reports DISC_OK before fingerprinting.
+
+    `makemkvcon info` opens and releases the device just before the probe runs;
+    the kernel reports "no medium" during the brief re-settle, so pydvdid would
+    race (ENOMEDIUM) and yield an empty fingerprint. Poll the same readiness
+    ioctl `poll_loop` trusts (`read_drive_status`) until the medium is ready.
+
+    Returns True once DISC_OK (probe is safe). Returns False on a genuine
+    no-medium reading (NO_DISC / TRAY_OPEN) or if the readiness budget expires
+    while the device stays NOT_READY / NO_INFO. ISO sources are always ready.
+    Never raises — read_drive_status already degrades ioctl errors to NO_INFO.
+    """
+    if is_iso_source(device_path):
+        return True
+    interval = settings.POLL_INTERVAL_SECONDS
+    polls = max(1, int(DEVICE_READY_TIMEOUT_SECONDS / interval))
+    for attempt in range(polls):
+        state = read_drive_status(device_path)
+        if state == DriveState.DISC_OK:
+            return True
+        if state in (DriveState.NO_DISC, DriveState.TRAY_OPEN):
+            logger.info("disc probe: no medium (%s) device=%s", state.name, device_path)
+            return False
+        if attempt < polls - 1:
+            await asyncio.sleep(interval)
+    logger.info("disc probe: device not ready after %.0fs device=%s", DEVICE_READY_TIMEOUT_SECONDS, device_path)
+    return False
 
 
 async def probe_disc(device_path: str) -> DiscProbe:
