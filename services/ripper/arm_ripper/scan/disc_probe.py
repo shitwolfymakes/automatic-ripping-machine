@@ -17,7 +17,6 @@ import asyncio
 import logging
 from dataclasses import dataclass
 
-from arm_ripper.config import settings
 from arm_ripper.drive_poll import DriveState, read_drive_status
 from arm_ripper.source import is_iso_source
 
@@ -50,6 +49,8 @@ async def await_device_ready(device_path: str) -> bool:
     """
     if is_iso_source(device_path):
         return True
+    from arm_ripper.config import settings  # lazy: avoid import-time Settings() construction
+
     interval = settings.POLL_INTERVAL_SECONDS
     polls = max(1, int(DEVICE_READY_TIMEOUT_SECONDS / interval))
     for attempt in range(polls):

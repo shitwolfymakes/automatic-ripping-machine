@@ -138,7 +138,7 @@ async def test_await_device_ready_false_on_budget_exhausted(monkeypatch: pytest.
     monkeypatch.setattr(disc_probe, "is_iso_source", lambda _p: False)
     monkeypatch.setattr(disc_probe, "read_drive_status", lambda _dev: DriveState.NOT_READY)
     monkeypatch.setattr(disc_probe, "DEVICE_READY_TIMEOUT_SECONDS", 6.0)
-    monkeypatch.setattr(disc_probe.settings, "POLL_INTERVAL_SECONDS", 2.0)
+    monkeypatch.setattr("arm_ripper.config.settings.POLL_INTERVAL_SECONDS", 2.0)
     sleeps: list[float] = []
 
     async def _fake_sleep(s: float) -> None:
