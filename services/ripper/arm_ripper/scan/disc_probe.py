@@ -73,8 +73,11 @@ async def probe_disc(device_path: str) -> DiscProbe:
     drops root. pydvdid returns None for anything without a /VIDEO_TS tree
     (Blu-ray / CD), so this is a cheap no-op there.
 
-    Never raises — failures are logged and degrade to crc64=None.
+    Probes only when the device reports ready (see await_device_ready); an
+    unready device degrades to crc64=None without racing pydvdid. Never raises.
     """
+    if not await await_device_ready(device_path):
+        return DiscProbe(crc64=None)
     crc64 = await asyncio.to_thread(_compute_crc, device_path)
     if crc64:
         logger.info("dvd crc64 device=%s value=%s", device_path, crc64)

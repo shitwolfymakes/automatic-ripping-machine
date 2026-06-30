@@ -56,7 +56,11 @@ async def test_probe_disc_returns_pipe_free_crc(monkeypatch: pytest.MonkeyPatch)
         def __init__(self, device_path: str) -> None:
             self.checksum = _PipedChecksum()
 
+    async def _ready(_dev: str) -> bool:
+        return True
+
     _install_fake_pydvdid(monkeypatch, _DvdId)
+    monkeypatch.setattr(disc_probe, "await_device_ready", _ready)
     probe = await disc_probe.probe_disc("/dev/sr0")
     assert probe.crc64 == "79df7b128b27d001"
     assert "|" not in probe.crc64
@@ -144,3 +148,31 @@ async def test_await_device_ready_false_on_budget_exhausted(monkeypatch: pytest.
     assert await disc_probe.await_device_ready("/dev/sr0") is False
     # 6.0s budget / 2.0s interval = 3 polls → 2 sleeps between them.
     assert len(sleeps) == 2
+
+
+@pytest.mark.asyncio
+async def test_probe_disc_skips_compute_when_not_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Device not ready → probe_disc must NOT call _compute_crc (the race can't be reached).
+    async def _not_ready(_dev: str) -> bool:
+        return False
+
+    monkeypatch.setattr(disc_probe, "await_device_ready", _not_ready)
+
+    def _boom(_dev: str) -> str | None:
+        raise AssertionError("_compute_crc must not run on a not-ready device")
+
+    monkeypatch.setattr(disc_probe, "_compute_crc", _boom)
+    probe = await disc_probe.probe_disc("/dev/sr0")
+    assert probe.crc64 is None
+
+
+@pytest.mark.asyncio
+async def test_probe_disc_computes_when_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Device ready → probe_disc runs _compute_crc and returns its value.
+    async def _ready(_dev: str) -> bool:
+        return True
+
+    monkeypatch.setattr(disc_probe, "await_device_ready", _ready)
+    monkeypatch.setattr(disc_probe, "_compute_crc", lambda _dev: "79df7b128b27d001")
+    probe = await disc_probe.probe_disc("/dev/sr0")
+    assert probe.crc64 == "79df7b128b27d001"
