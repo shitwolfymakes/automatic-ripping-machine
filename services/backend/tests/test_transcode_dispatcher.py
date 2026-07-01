@@ -8,6 +8,7 @@ matters; otherwise we just test the awaited awaitable directly.
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -151,6 +152,32 @@ async def test_spawn_remote_uses_routable_url_and_no_network() -> None:
     kwargs = docker.containers.run.call_args.kwargs
     assert kwargs["environment"]["ARM_BACKEND_URL"] == "https://192.168.0.68:8080"
     assert kwargs["network"] is None
+
+
+async def test_spawn_remote_without_backend_url_warns_and_falls_back(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # A remote docker host with no routable backend URL is a misconfig: the
+    # spawned container falls back to the in-network arm-backend:8443 which it
+    # cannot resolve. We keep the fallback (spec-compliant) but warn loudly.
+    db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
+    db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
+    docker = MagicMock()
+    disp = TranscodeDispatcher(
+        _settings(ARM_TRANSCODE_DOCKER_HOST="ssh://sam@transcoder-server"),
+        _db_factory(db),
+        docker,
+        WSHub(),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="arm_backend.transcode_dispatcher"):
+        spawned = await disp.spawn_pending(db)
+    assert spawned == 1
+
+    kwargs = docker.containers.run.call_args.kwargs
+    assert kwargs["environment"]["ARM_BACKEND_URL"] == "https://arm-backend:8443"
+    assert kwargs["network"] is None
+    assert any("ARM_TRANSCODE_BACKEND_URL empty" in r.message for r in caplog.records)
 
 
 async def test_spawn_caps_at_max_parallel() -> None:

@@ -363,6 +363,12 @@ class TranscodeDispatcher:
 
     def _spawn_container(self, task: TranscodeTask, *, assignment: GpuAssignment | None = None) -> Any:
         remote = bool(self._settings.ARM_TRANSCODE_DOCKER_HOST)
+        if remote and not self._settings.ARM_TRANSCODE_BACKEND_URL:
+            logger.warning(
+                "ARM_TRANSCODE_DOCKER_HOST set but ARM_TRANSCODE_BACKEND_URL empty — "
+                "remote transcoder will use the unroutable in-network https://arm-backend:8443; "
+                "set ARM_TRANSCODE_BACKEND_URL to a host-routable backend URL"
+            )
         backend_url = (
             self._settings.ARM_TRANSCODE_BACKEND_URL
             if remote and self._settings.ARM_TRANSCODE_BACKEND_URL
