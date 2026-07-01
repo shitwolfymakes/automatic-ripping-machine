@@ -116,6 +116,15 @@ class Settings(BaseSettings):
     ARM_TRANSCODE_DOCKER_HOST: str = ""
     ARM_TRANSCODE_BACKEND_URL: str = ""
 
+    # PUID/PGID the spawned transcoder drops to (the entrypoint reads these;
+    # empty = its own default, current behavior unchanged). Set these when the
+    # transcoder writes to shared storage owned by a uid/gid that differs from
+    # the backend's PUID — e.g. a remote NFS export whose media dir is owned by
+    # a specific NAS user. Without this the entrypoint chowns /media to its
+    # default uid every run, which can revert externally-set ownership.
+    ARM_TRANSCODE_PUID: str = ""
+    ARM_TRANSCODE_PGID: str = ""
+
     # --- Phase 7b: GPU inventory --------------------------------------------
     # JSON array of GPUs detected host-side at install time (install.sh /
     # setup-dev.sh enumerate /dev/dri + nvidia-smi and write this). The backend

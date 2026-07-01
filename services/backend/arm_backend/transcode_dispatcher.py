@@ -383,6 +383,13 @@ class TranscodeDispatcher:
             # clobber a shared `/logs/arm-transcode.log` rotation.
             "ARM_SERVICE_NAME": f"arm-transcode-{task.id[-12:]}",
         }
+        # Override the drop uid/gid so the transcoder writes /media as the
+        # owner of the (possibly remote) media export, instead of the
+        # entrypoint's default uid. Empty settings leave the default in place.
+        if self._settings.ARM_TRANSCODE_PUID:
+            env["PUID"] = self._settings.ARM_TRANSCODE_PUID
+        if self._settings.ARM_TRANSCODE_PGID:
+            env["PGID"] = self._settings.ARM_TRANSCODE_PGID
         certs_root = Path(self._settings.ARM_HOST_CERTS_PATH)
         volumes = {
             self._settings.ARM_HOST_RAW_PATH: {"bind": "/raw", "mode": "ro"},
