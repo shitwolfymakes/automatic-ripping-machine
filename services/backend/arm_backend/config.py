@@ -106,6 +106,16 @@ class Settings(BaseSettings):
     # `<project>_default`.
     ARM_DOCKER_NETWORK: str = "armv3_default"
 
+    # Remote transcode offload. When ARM_TRANSCODE_DOCKER_HOST is set (e.g.
+    # "ssh://sam@transcoder-server"), the transcode dispatcher's docker client
+    # targets that daemon so containers spawn on a remote GPU host; empty =
+    # local socket (docker.from_env), unchanged. ARM_TRANSCODE_BACKEND_URL is
+    # the routable ARM_BACKEND_URL injected into a remote-spawned transcoder
+    # (the docker-DNS "arm-backend" name won't resolve off the backend host);
+    # empty = keep the local "https://arm-backend:8443".
+    ARM_TRANSCODE_DOCKER_HOST: str = ""
+    ARM_TRANSCODE_BACKEND_URL: str = ""
+
     # --- Phase 7b: GPU inventory --------------------------------------------
     # JSON array of GPUs detected host-side at install time (install.sh /
     # setup-dev.sh enumerate /dev/dri + nvidia-smi and write this). The backend
