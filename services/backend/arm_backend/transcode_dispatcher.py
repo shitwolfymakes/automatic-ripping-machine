@@ -362,9 +362,15 @@ class TranscodeDispatcher:
         )
 
     def _spawn_container(self, task: TranscodeTask, *, assignment: GpuAssignment | None = None) -> Any:
+        remote = bool(self._settings.ARM_TRANSCODE_DOCKER_HOST)
+        backend_url = (
+            self._settings.ARM_TRANSCODE_BACKEND_URL
+            if remote and self._settings.ARM_TRANSCODE_BACKEND_URL
+            else "https://arm-backend:8443"
+        )
         env = {
             "ARM_TRANSCODE_TASK_ID": task.id,
-            "ARM_BACKEND_URL": "https://arm-backend:8443",
+            "ARM_BACKEND_URL": backend_url,
             "ARM_SERVICE_TOKEN": self._settings.ARM_SERVICE_TOKEN,
             "ARM_LOG_LEVEL": self._settings.ARM_LOG_LEVEL,
             # Phase 12 — per-task log filename so parallel transcoders don't
@@ -402,7 +408,7 @@ class TranscodeDispatcher:
             labels={_DOCKER_LABEL_KEY: task.id},
             environment=env,
             volumes=volumes,
-            network=self._settings.ARM_DOCKER_NETWORK,
+            network=(None if remote else self._settings.ARM_DOCKER_NETWORK),
             detach=True,
             auto_remove=True,
             **extra_run_kwargs,

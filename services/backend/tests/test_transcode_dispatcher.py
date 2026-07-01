@@ -117,6 +117,42 @@ async def test_spawn_pending_calls_docker_run_with_correct_volumes_and_env() -> 
     assert kwargs["detach"] is True
 
 
+async def test_spawn_local_keeps_docker_dns_url_and_network() -> None:
+    db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
+    db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+
+    spawned = await disp.spawn_pending(db)
+    assert spawned == 1
+
+    kwargs = docker.containers.run.call_args.kwargs
+    assert kwargs["environment"]["ARM_BACKEND_URL"] == "https://arm-backend:8443"
+    assert kwargs["network"] == "armv3_default"
+
+
+async def test_spawn_remote_uses_routable_url_and_no_network() -> None:
+    db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
+    db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
+    docker = MagicMock()
+    disp = TranscodeDispatcher(
+        _settings(
+            ARM_TRANSCODE_DOCKER_HOST="ssh://sam@transcoder-server",
+            ARM_TRANSCODE_BACKEND_URL="https://192.168.0.68:8080",
+        ),
+        _db_factory(db),
+        docker,
+        WSHub(),
+    )
+
+    spawned = await disp.spawn_pending(db)
+    assert spawned == 1
+
+    kwargs = docker.containers.run.call_args.kwargs
+    assert kwargs["environment"]["ARM_BACKEND_URL"] == "https://192.168.0.68:8080"
+    assert kwargs["network"] is None
+
+
 async def test_spawn_caps_at_max_parallel() -> None:
     db = FakeSession()
     db.rows["session_applications"] = [
