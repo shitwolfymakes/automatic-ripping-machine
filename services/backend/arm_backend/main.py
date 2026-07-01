@@ -108,13 +108,17 @@ async def _refresh_gpu_inventory(hub: WSHub) -> None:
         await session.commit()
 
 
-def _build_docker_client() -> object | None:
-    """Construct a docker-py client. Returns None if the socket isn't reachable
-    (dev environments without `/var/run/docker.sock` mounted)."""
+def _build_docker_client(docker_host: str = "") -> object | None:
+    """Construct a docker-py client. When `docker_host` is set (e.g.
+    "ssh://sam@transcoder-server"), target that remote daemon so transcode
+    containers spawn on a remote GPU host; otherwise use the local socket.
+    Returns None if the client can't be built (dev without the socket, or an
+    unreachable/misconfigured remote host) so the dispatcher stays disabled
+    rather than crashing the backend."""
     try:
         import docker  # type: ignore[import-untyped]
 
-        client: object = docker.from_env()
+        client: object = docker.DockerClient(base_url=docker_host) if docker_host else docker.from_env()
         return client
     except Exception as exc:
         logger.warning("docker-py client unavailable: %s — transcode dispatcher disabled", exc)
@@ -152,7 +156,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception as exc:  # pragma: no cover — startup-degradation guard; sweep failing is real-DB-only
         logger.exception("startup crash-recovery sweep failed: %s", exc)
 
-    docker_client = _build_docker_client()
+    docker_client = _build_docker_client(settings.ARM_TRANSCODE_DOCKER_HOST)
     transcode_dispatcher: TranscodeDispatcher | None = None
     dispatcher_task: asyncio.Task[None] | None = None
     if docker_client is not None:  # pragma: no cover — needs a real docker socket; integration tier, not the SQLite e2e
