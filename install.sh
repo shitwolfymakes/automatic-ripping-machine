@@ -454,12 +454,10 @@ remote_detect_gpus() {
 # the REMOTE_* globals the rest of install.sh consumes. On no/non-interactive,
 # leaves REMOTE_OFFLOAD empty => byte-for-byte local behavior downstream.
 setup_remote_offload() {
-    # shellcheck disable=SC2034 # consumed by main()/generate_compose() in Task 5/8, not this function
     REMOTE_OFFLOAD=0
     # Non-interactive (no tty) => never prompt; stay local.
     [[ -t 0 ]] || return 0
     confirm "Enable remote transcode offload (spawn transcodes on a GPU host over ssh)?" || return 0
-    # shellcheck disable=SC2034 # consumed by main()/generate_compose() in Task 5/8, not this function
     REMOTE_OFFLOAD=1
 
     read -rp "  Remote docker endpoint (ssh://user@host): " REMOTE_DOCKER_HOST
@@ -471,7 +469,6 @@ setup_remote_offload() {
     uidgid="${uidgid:-${def_puid}:${def_pgid}}"
     REMOTE_TRANSCODE_PUID="${uidgid%%:*}"
     REMOTE_TRANSCODE_PGID="${uidgid##*:}"
-    # shellcheck disable=SC2034 # consumed by make_leaf() in Task 6, not this function
     REMOTE_BACKEND_SAN="$(url_host "$REMOTE_BACKEND_URL")"
 
     # Dedicated ed25519 key for backend -> remote docker daemon.
@@ -900,6 +897,11 @@ main() {
     check_prereqs
     ensure_prefix
 
+    local REMOTE_OFFLOAD=0 REMOTE_DOCKER_HOST="" REMOTE_BACKEND_URL="" \
+          REMOTE_TRANSCODE_PUID="" REMOTE_TRANSCODE_PGID="" REMOTE_BACKEND_SAN="" \
+          REMOTE_GPUS="" REMOTE_RENDER_GID=""
+    setup_remote_offload
+
     if [[ $ROTATE_CA -eq 1 ]]; then
         log "ROTATE_CA: this regenerates the CA + every leaf"
         if ! confirm "WARNING: every LAN client must re-import arm-ca.crt. Continue?"; then
@@ -909,7 +911,11 @@ main() {
     fi
 
     make_ca
-    make_leaf arm-backend
+    if [[ "$REMOTE_OFFLOAD" == "1" && -n "$REMOTE_BACKEND_SAN" ]]; then
+        make_leaf arm-backend "$REMOTE_BACKEND_SAN"
+    else
+        make_leaf arm-backend
+    fi
     make_leaf arm-db
     make_leaf arm-ui localhost "$(hostname -f 2>/dev/null || hostname || echo localhost)"
 
