@@ -449,6 +449,78 @@ remote_detect_gpus() {
     printf '%s\n' "$out"
 }
 
+# Interactive: offer remote transcode offload. On yes, provision a dedicated
+# ssh key, print the authorize line, detect the REMOTE GPU inventory, and set
+# the REMOTE_* globals the rest of install.sh consumes. On no/non-interactive,
+# leaves REMOTE_OFFLOAD empty => byte-for-byte local behavior downstream.
+setup_remote_offload() {
+    # shellcheck disable=SC2034 # consumed by main()/generate_compose() in Task 5/8, not this function
+    REMOTE_OFFLOAD=0
+    # Non-interactive (no tty) => never prompt; stay local.
+    [[ -t 0 ]] || return 0
+    confirm "Enable remote transcode offload (spawn transcodes on a GPU host over ssh)?" || return 0
+    # shellcheck disable=SC2034 # consumed by main()/generate_compose() in Task 5/8, not this function
+    REMOTE_OFFLOAD=1
+
+    read -rp "  Remote docker endpoint (ssh://user@host): " REMOTE_DOCKER_HOST
+    read -rp "  Routable backend URL the transcoder calls back (https://host:port): " REMOTE_BACKEND_URL
+    local def_puid def_pgid
+    def_puid="$(id -u)"; def_pgid="$(id -g)"
+    local uidgid
+    read -rp "  Transcoder write UID:GID for shared media [${def_puid}:${def_pgid}]: " uidgid
+    uidgid="${uidgid:-${def_puid}:${def_pgid}}"
+    REMOTE_TRANSCODE_PUID="${uidgid%%:*}"
+    REMOTE_TRANSCODE_PGID="${uidgid##*:}"
+    # shellcheck disable=SC2034 # consumed by make_leaf() in Task 6, not this function
+    REMOTE_BACKEND_SAN="$(url_host "$REMOTE_BACKEND_URL")"
+
+    # Dedicated ed25519 key for backend -> remote docker daemon.
+    local sshdir="$PREFIX/ssh" key="$PREFIX/ssh/id_ed25519"
+    local sshdest="${REMOTE_DOCKER_HOST#ssh://}"
+    local remote_host="${sshdest##*@}"
+    mkdir -p "$sshdir"
+    if [[ ! -f "$key" ]]; then
+        ssh-keygen -t ed25519 -N "" -C "armv3-backend@${remote_host}" -f "$key" >/dev/null
+        log "generated dedicated ssh key: $key"
+    fi
+    ssh-keyscan -t ed25519 "$remote_host" > "$sshdir/known_hosts" 2>/dev/null || \
+        warn "ssh-keyscan of $remote_host failed; known_hosts is empty (detection may prompt)"
+    cat > "$sshdir/config" <<EOF
+Host ${remote_host}
+  User ${sshdest%@*}
+  IdentityFile /home/arm/.ssh/id_ed25519
+  UserKnownHostsFile /home/arm/.ssh/known_hosts
+  StrictHostKeyChecking yes
+EOF
+    chmod 700 "$sshdir"; chmod 600 "$key" "$sshdir/known_hosts" "$sshdir/config"
+    chown -R "${REMOTE_TRANSCODE_PUID}:${REMOTE_TRANSCODE_PGID}" "$sshdir" 2>/dev/null || true
+
+    echo
+    log "Authorize this key on ${remote_host} — append the line below to ~/.ssh/authorized_keys there:"
+    echo
+    cat "$key.pub"
+    echo
+    read -rp "  Press Enter once the key is authorized on ${remote_host}... " _
+
+    # Remote GPU detection doubles as the connectivity test (uses the dedicated key).
+    REMOTE_GPUS=""; REMOTE_RENDER_GID=""
+    while true; do
+        local detect
+        if detect="$(remote_detect_gpus "$REMOTE_DOCKER_HOST" "$key")"; then
+            REMOTE_GPUS="$(printf '%s' "$detect" | sed -n '1p')"
+            REMOTE_RENDER_GID="$(printf '%s' "$detect" | sed -n '2p')"
+            log "remote GPUs: ${REMOTE_GPUS:-[]}  render_gid=${REMOTE_RENDER_GID:-(none)}"
+            break
+        fi
+        warn "remote GPU detection failed (ssh to ${remote_host} — key authorized? host reachable?)"
+        if ! confirm "  Re-check now? (No = skip; transcodes run CPU-only until fixed)"; then
+            warn "skipping remote GPU detection; seeding ARM_GPUS=[] (CPU-only on the box)"
+            REMOTE_GPUS="[]"; REMOTE_RENDER_GID=""
+            break
+        fi
+    done
+}
+
 seed_env() {
     local env_file="$PREFIX/.env"
 
