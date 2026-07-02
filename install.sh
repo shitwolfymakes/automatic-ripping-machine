@@ -530,6 +530,13 @@ seed_env() {
     arm_gpus="$(detect_gpus)"
     render_gid="$(detect_render_gid || true)"
 
+    # When offloading, the transcode host is remote: use the REMOTE inventory
+    # (detected over ssh) so QSV/VAAPI get the remote render node + GID.
+    if [[ "${REMOTE_OFFLOAD:-0}" == "1" && -n "${REMOTE_GPUS}" ]]; then
+        arm_gpus="${REMOTE_GPUS}"
+        render_gid="${REMOTE_RENDER_GID}"
+    fi
+
     if [[ -f "$env_file" ]]; then
         log ".env exists; preserving secrets, re-deriving PUID/PGID/CDROM_GID/ARM_GPUS/ARM_RENDER_GID"
         sed -i \
@@ -612,6 +619,21 @@ ARM_GPUS=${arm_gpus}
 # Empty => not added (CPU / NVENC-only host).
 ARM_RENDER_GID=${render_gid}
 EOF
+
+    if [[ "${REMOTE_OFFLOAD:-0}" == "1" ]]; then
+        cat >> "$env_file" <<EOF
+
+# Remote transcode offload (install.sh --). The dispatcher targets a remote
+# docker daemon over ssh and spawns transcodes there; the container writes back
+# to shared storage as PUID:PGID and calls the routable backend URL.
+ARM_TRANSCODE_DOCKER_HOST=${REMOTE_DOCKER_HOST}
+ARM_TRANSCODE_BACKEND_URL=${REMOTE_BACKEND_URL}
+ARM_TRANSCODE_PUID=${REMOTE_TRANSCODE_PUID}
+ARM_TRANSCODE_PGID=${REMOTE_TRANSCODE_PGID}
+ARM_TRANSCODE_SSH_DIR=./ssh
+EOF
+    fi
+
     chmod 600 "$env_file"
 }
 
