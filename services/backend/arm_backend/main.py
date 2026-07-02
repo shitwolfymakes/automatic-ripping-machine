@@ -152,6 +152,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 logger.info("backend startup: swept %d .arm-inprogress orphans", swept)
         except Exception as exc:
             logger.exception("startup .arm-inprogress sweep failed: %s", exc)
+        # One-shot reconcile of crash-orphaned session_applications (no live task).
+        try:
+            async with SessionLocal() as db:
+                orphaned = await transcode_dispatcher.sweep_orphaned_applications(db)
+                await db.commit()
+            if orphaned:
+                logger.info("backend startup: reconciled %d orphaned session_application(s)", orphaned)
+        except Exception as exc:
+            logger.exception("startup orphaned-application sweep failed: %s", exc)
         dispatcher_task = asyncio.create_task(transcode_dispatcher.run())
     app.state.transcode_dispatcher = transcode_dispatcher
 
