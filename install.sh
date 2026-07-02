@@ -784,6 +784,10 @@ services:
       ARM_DOCKER_NETWORK: \${ARM_DOCKER_NETWORK:-armv3_default}
       ARM_GPUS: \${ARM_GPUS:-[]}
       ARM_RENDER_GID: \${ARM_RENDER_GID:-}
+      ARM_TRANSCODE_DOCKER_HOST: \${ARM_TRANSCODE_DOCKER_HOST:-}
+      ARM_TRANSCODE_BACKEND_URL: \${ARM_TRANSCODE_BACKEND_URL:-}
+      ARM_TRANSCODE_PUID: \${ARM_TRANSCODE_PUID:-}
+      ARM_TRANSCODE_PGID: \${ARM_TRANSCODE_PGID:-}
     volumes:
       - ./raw:/raw
       - ./media:/media
@@ -805,6 +809,23 @@ services:
       - ./certs/arm-ui.crt:/etc/ssl/arm/tls.crt:ro
       - ./certs/arm-ui.key:/etc/ssl/arm/tls.key:ro
 EOF
+
+    # Offload: give arm-backend the ssh key it uses to reach the remote docker
+    # daemon. Injected only when enabled so a local install's compose has no
+    # ssh mount at all.
+    if [[ "${REMOTE_OFFLOAD:-0}" == "1" ]]; then
+        # Insert the ssh mount right after the backend's docker.sock volume line.
+        # The socket mount appears exactly ONCE in the file (only arm-backend
+        # mounts it), so a plain awk one-pass insert is unambiguous — no need for
+        # first-match sed addressing.
+        local tmp="$out.tmp"
+        awk '
+            { print }
+            $0 == "      - /var/run/docker.sock:/var/run/docker.sock" {
+                print "      - ./ssh:/home/arm/.ssh:ro"
+            }
+        ' "$out" > "$tmp" && mv "$tmp" "$out"
+    fi
 
     # One ripper service block per detected drive.
     local i
