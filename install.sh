@@ -490,7 +490,13 @@ Host ${remote_host}
   StrictHostKeyChecking yes
 EOF
     chmod 700 "$sshdir"; chmod 600 "$key" "$sshdir/known_hosts" "$sshdir/config"
-    chown -R "${REMOTE_TRANSCODE_PUID}:${REMOTE_TRANSCODE_PGID}" "$sshdir" 2>/dev/null || true
+    # Own the ssh bundle as the BACKEND's runtime uid (this installer's own
+    # id -u:id -g, i.e. top-level PUID/PGID — the entrypoint's gosu target),
+    # NOT REMOTE_TRANSCODE_PUID/PGID: that's a different uid by design — the
+    # one the *transcoder* drops to for writing the shared media export. The
+    # backend is what mounts this dir :ro and reads the 600 key/config, so it
+    # must be the owner or ssh transport fails silently.
+    chown -R "${def_puid}:${def_pgid}" "$sshdir" 2>/dev/null || true
 
     echo
     log "Authorize this key on ${remote_host} — append the line below to ~/.ssh/authorized_keys there:"

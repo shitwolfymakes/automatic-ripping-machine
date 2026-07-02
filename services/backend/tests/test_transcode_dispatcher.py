@@ -180,6 +180,43 @@ async def test_spawn_remote_without_backend_url_warns_and_falls_back(
     assert any("ARM_TRANSCODE_BACKEND_URL empty" in r.message for r in caplog.records)
 
 
+async def test_spawn_injects_transcode_puid_pgid_when_configured() -> None:
+    # ARM_TRANSCODE_PUID/PGID override the drop uid/gid so the (possibly
+    # remote) transcoder writes /media as the owner of the shared export.
+    db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
+    db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
+    docker = MagicMock()
+    disp = TranscodeDispatcher(
+        _settings(ARM_TRANSCODE_PUID="1001", ARM_TRANSCODE_PGID="1000"),
+        _db_factory(db),
+        docker,
+        WSHub(),
+    )
+
+    spawned = await disp.spawn_pending(db)
+    assert spawned == 1
+
+    kwargs = docker.containers.run.call_args.kwargs
+    assert kwargs["environment"]["PUID"] == "1001"
+    assert kwargs["environment"]["PGID"] == "1000"
+
+
+async def test_spawn_omits_puid_pgid_when_not_configured() -> None:
+    # Default (empty) ARM_TRANSCODE_PUID/PGID must NOT inject PUID/PGID —
+    # the spawned container keeps the image's default drop uid/gid.
+    db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
+    db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+
+    spawned = await disp.spawn_pending(db)
+    assert spawned == 1
+
+    kwargs = docker.containers.run.call_args.kwargs
+    assert "PUID" not in kwargs["environment"]
+    assert "PGID" not in kwargs["environment"]
+
+
 async def test_spawn_caps_at_max_parallel() -> None:
     db = FakeSession()
     db.rows["session_applications"] = [
