@@ -118,6 +118,18 @@ confirm() {
     [[ "$reply" =~ ^[yY]([eE][sS])?$ ]]
 }
 
+# Extract the bare host from a URL: strip scheme://, any user@, :port, and /path.
+# https://192.168.0.68:8080/api -> 192.168.0.68 ; https://h.example -> h.example
+url_host() {
+    local url="$1" hostport
+    url="${url#*://}"      # drop scheme://
+    url="${url%%/*}"       # drop /path
+    url="${url##*@}"       # drop user@ (if present)
+    hostport="$url"
+    url="${hostport%%:*}"  # drop :port
+    printf '%s' "$url"
+}
+
 # Resolve the image tag that pins ALL service images (backend/ripper/ui +
 # the transcode image the dispatcher spawns). Reuse an existing pin from the
 # prefix's .env so re-runs don't silently upgrade and work offline; otherwise
