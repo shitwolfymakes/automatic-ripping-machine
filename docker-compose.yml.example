@@ -67,6 +67,10 @@ services:
       # injects device access into each ephemeral transcoder. [] => CPU-only.
       ARM_GPUS: ${ARM_GPUS:-[]}
       ARM_RENDER_GID: ${ARM_RENDER_GID:-}
+      ARM_TRANSCODE_DOCKER_HOST: ${ARM_TRANSCODE_DOCKER_HOST:-}
+      ARM_TRANSCODE_BACKEND_URL: ${ARM_TRANSCODE_BACKEND_URL:-}
+      ARM_TRANSCODE_PUID: ${ARM_TRANSCODE_PUID:-}
+      ARM_TRANSCODE_PGID: ${ARM_TRANSCODE_PGID:-}
     volumes:
       - ./arm/logs:/logs
       - ./arm/media:/media
