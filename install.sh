@@ -427,6 +427,28 @@ detect_render_gid() {
     done
 }
 
+# Run GPU detection ON the remote host over ssh, using the dedicated key.
+# Prints two lines: <ARM_GPUS json> then <render_gid>. Non-zero on ssh failure.
+# Ships the three detection function bodies to the remote `bash -s`; the remote
+# does not have install.sh, so we send the functions inline.
+remote_detect_gpus() {
+    local target="$1" key="$2" out
+    # target is ssh://user@host — strip the scheme for the ssh CLI.
+    local sshdest="${target#ssh://}"
+    # shellcheck disable=SC2029 # intentional: function bodies are expanded client-side and shipped as source to the remote bash -s
+    out="$(
+        {
+            declare -f nvenc_driver_ok detect_gpus detect_render_gid
+            # shellcheck disable=SC2016 # single quotes are intentional: $(...) must expand on the remote, not here
+            printf 'printf "%%s\\n" "$(detect_gpus)"\n'
+            # shellcheck disable=SC2016 # single quotes are intentional: $(...) must expand on the remote, not here
+            printf 'printf "%%s\\n" "$(detect_render_gid || true)"\n'
+        } | ssh -i "$key" -o BatchMode=yes -o ConnectTimeout=10 \
+                -o StrictHostKeyChecking=accept-new "$sshdest" bash -s 2>/dev/null
+    )" || return 1
+    printf '%s\n' "$out"
+}
+
 seed_env() {
     local env_file="$PREFIX/.env"
 
