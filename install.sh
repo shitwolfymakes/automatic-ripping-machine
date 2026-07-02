@@ -555,6 +555,29 @@ seed_env() {
             printf 'ARM_RENDER_GID=%s\n' "$render_gid" >> "$env_file"
         fi
         log "detected GPU(s): ${arm_gpus}  render_gid=${render_gid:-(none)}"
+
+        # Offload keys: only touch them when offload is enabled, so declining
+        # offload on an existing .env leaves it byte-for-byte untouched.
+        if [[ "${REMOTE_OFFLOAD:-0}" == "1" ]]; then
+            local kv key value
+            for kv in \
+                "ARM_TRANSCODE_DOCKER_HOST=${REMOTE_DOCKER_HOST}" \
+                "ARM_TRANSCODE_BACKEND_URL=${REMOTE_BACKEND_URL}" \
+                "ARM_TRANSCODE_PUID=${REMOTE_TRANSCODE_PUID}" \
+                "ARM_TRANSCODE_PGID=${REMOTE_TRANSCODE_PGID}" \
+                "ARM_TRANSCODE_SSH_DIR=./ssh"
+            do
+                key="${kv%%=*}"
+                value="${kv#*=}"
+                if grep -q "^${key}=" "$env_file"; then
+                    sed -i "s|^${key}=.*|${key}=${value}|" "$env_file"
+                else
+                    printf '%s=%s\n' "$key" "$value" >> "$env_file"
+                fi
+            done
+            log "seeded offload keys (ARM_TRANSCODE_DOCKER_HOST=${REMOTE_DOCKER_HOST})"
+        fi
+
         return 0
     fi
 
@@ -822,7 +845,7 @@ EOF
         awk '
             { print }
             $0 == "      - /var/run/docker.sock:/var/run/docker.sock" {
-                print "      - ./ssh:/home/arm/.ssh:ro"
+                print "      - ${ARM_TRANSCODE_SSH_DIR:-./ssh}:/home/arm/.ssh:ro"
             }
         ' "$out" > "$tmp" && mv "$tmp" "$out"
     fi
