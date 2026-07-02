@@ -261,7 +261,13 @@ make_leaf() {
     local s
     for s in "${extra_sans[@]:-}"; do
         [[ -z "$s" ]] && continue
-        san+=",DNS:${s}"
+        # IPv4 literal → IP: SAN (a remote transcoder may connect by IP);
+        # anything else is a hostname → DNS:. IPv6 is out of scope.
+        if [[ "$s" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+            san+=",IP:${s}"
+        else
+            san+=",DNS:${s}"
+        fi
     done
 
     cat > "$ext" <<EOF
