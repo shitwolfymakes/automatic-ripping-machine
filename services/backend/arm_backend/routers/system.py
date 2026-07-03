@@ -5,7 +5,7 @@ import importlib.metadata
 import os
 from datetime import datetime, timezone
 
-import psutil
+import psutil  # type: ignore[import-untyped]
 
 from arm_backend.disk_usage_cache import get_disk_usage
 

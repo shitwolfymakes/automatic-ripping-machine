@@ -18,7 +18,7 @@ import time
 log = logging.getLogger("arm_backend")
 
 # path -> {"total","used","free","percent","ts"}
-_cache: dict[str, dict] = {}
+_cache: dict[str, dict[str, float]] = {}
 _cache_lock = threading.Lock()
 
 SUBPROCESS_TIMEOUT = 5  # seconds before abandoning a stalled statvfs subprocess
@@ -59,7 +59,7 @@ def refresh_path(path: str) -> None:
         _cache[path] = data
 
 
-def get_disk_usage(path: str) -> dict | None:
+def get_disk_usage(path: str) -> dict[str, float] | None:
     """Return cached disk usage for *path*, or None on a cache miss.
 
     Never blocks on NFS — reads only the in-process cache and returns
