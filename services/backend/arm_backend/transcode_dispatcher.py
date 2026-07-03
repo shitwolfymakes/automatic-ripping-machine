@@ -278,7 +278,8 @@ class TranscodeDispatcher:
                 else:
                     # True husk: no tasks at all. Mark failed; reason lives in the
                     # log line + WS event (no error column on the model).
-                    age_s = int((datetime.now(UTC) - application.created_at).total_seconds())
+                    created_at = application.created_at or datetime.now(UTC)
+                    age_s = int((datetime.now(UTC) - created_at).total_seconds())
                     application.status = SessionApplicationStatus.FAILED
                     application.completed_at = datetime.now(UTC)
                     logger.warning(
