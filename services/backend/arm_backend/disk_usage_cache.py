@@ -21,8 +21,8 @@ log = logging.getLogger("arm_backend")
 _cache: dict[str, dict] = {}
 _cache_lock = threading.Lock()
 
-SUBPROCESS_TIMEOUT = 5   # seconds before abandoning a stalled statvfs subprocess
-REFRESH_INTERVAL = 30    # seconds between background refreshes
+SUBPROCESS_TIMEOUT = 5  # seconds before abandoning a stalled statvfs subprocess
+REFRESH_INTERVAL = 30  # seconds between background refreshes
 
 _PROBE_SCRIPT = (
     "import os, json, sys\n"
@@ -52,7 +52,7 @@ def refresh_path(path: str) -> None:
         return
     try:
         data = json.loads(result.stdout)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return
     data["ts"] = time.time()
     with _cache_lock:

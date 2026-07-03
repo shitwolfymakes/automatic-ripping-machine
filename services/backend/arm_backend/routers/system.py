@@ -180,7 +180,7 @@ _CPU_TEMP_KEYS = ("coretemp", "cpu_thermal", "k10temp")
 def _cpu_temp() -> float:
     try:
         temps = psutil.sensors_temperatures()
-    except (AttributeError, OSError):
+    except AttributeError, OSError:
         return 0.0
     for key in _CPU_TEMP_KEYS:
         readings = temps.get(key)

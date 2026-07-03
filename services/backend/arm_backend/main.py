@@ -211,7 +211,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         disk_refresher.stop()
         try:
             await asyncio.wait_for(disk_refresher_task, timeout=10.0)
-        except (TimeoutError, asyncio.CancelledError):
+        except TimeoutError, asyncio.CancelledError:
             disk_refresher_task.cancel()
         log_tailer.stop()
         try:
