@@ -22,6 +22,7 @@
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import JsonTree from '$lib/components/JsonTree.svelte';
+	import { startRipperEvents, onRipperEvent } from '$lib/stores/ripperEvents.svelte';
 
 	let detail = $state<JobDetailView | null>(null);
 	let jobLoading = $state(true);
@@ -176,6 +177,14 @@
 
 	onMount(() => {
 		let stopped = false;
+		// Instant status for the job being viewed: refresh only when an event
+		// names this job — other jobs' events don't disturb the page. The 5s
+		// poll below stays as reconciliation.
+		startRipperEvents();
+		const offRipperEvents = onRipperEvent((jobIds) => {
+			const id = $page.params.id ?? '';
+			if (id !== '' && jobIds.has(id)) loadJob();
+		});
 		async function poll() {
 			while (!stopped) {
 				await new Promise((r) => setTimeout(r, 5000));
@@ -189,6 +198,7 @@
 		loadJob().then(() => poll());
 		return () => {
 			stopped = true;
+			offRipperEvents();
 		};
 	});
 </script>
