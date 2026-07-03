@@ -14,6 +14,11 @@ ENTRYPOINT="${HERE}/docker-entrypoint.sh"
 # script, so the linter cannot see their use across the source boundary.
 # shellcheck disable=SC2034  # used by the sourced entrypoint
 WRITE_TEST=(test -w)          # declare -p guard in the entrypoint respects this
+# The temp dirs below are not real mountpoints, so stub MOUNT_TEST to treat
+# every present dir as a mount (`true`); case 5 overrides it to exercise the
+# not-a-mountpoint skip explicitly.
+# shellcheck disable=SC2034  # used by the sourced entrypoint
+MOUNT_TEST=(true)
 # shellcheck disable=SC2034  # used by the sourced entrypoint
 WRITE_CHECK_ATTEMPTS=2        # small so retry-then-fail is fast
 # shellcheck disable=SC2034  # used by the sourced entrypoint
@@ -68,6 +73,20 @@ else
     echo "FAIL - expected >=1 retry wait line, got ${waits}" >&2; fail=1
 fi
 chmod 755 "${ud2}"; rmdir "${ud2}"
+
+# 5. Present but NOT a mountpoint -> skip (rc 0), no stderr, even when unwritable.
+#    Guards the ripper's incidental root-owned /media (never mounted) from
+#    tripping the gate. Override MOUNT_TEST to report "not a mount" (rc 1).
+nm="$(mktemp -d)"; chmod 000 "${nm}"
+rc=0
+err="$(
+    # shellcheck disable=SC2034  # consumed by require_writable in the sourced entrypoint
+    MOUNT_TEST=(false)
+    require_writable "${nm}" 2>&1 1>/dev/null
+)" || rc=$?
+check "non-mountpoint dir returns 0 (skip)" 0 "${rc}"
+[[ -z "${err}" ]] || { echo "FAIL - non-mountpoint dir emitted stderr: ${err}" >&2; fail=1; }
+chmod 755 "${nm}"; rmdir "${nm}"
 
 if [[ "${fail}" -eq 0 ]]; then
     echo "PASS - all require_writable guard cases"

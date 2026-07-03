@@ -14,6 +14,14 @@ if ! declare -p WRITE_TEST >/dev/null 2>&1; then
     WRITE_TEST=(gosu arm test -w)
 fi
 
+# MOUNT_TEST answers "is $d an actual mounted volume?" (vs an incidental
+# root-owned dir baked into the base image, e.g. the ripper's /media, which
+# this service never mounts and must not be gated). Array + declare-p seam so
+# the guard test can substitute a stub; production uses `mountpoint -q`.
+if ! declare -p MOUNT_TEST >/dev/null 2>&1; then
+    MOUNT_TEST=(mountpoint -q)
+fi
+
 # Bounded retry so a TRANSIENT mount-not-ready (NFS server slow, net settling)
 # does not trip the hard exit — which, under `restart: unless-stopped`, would
 # become a crash-loop. A PERSISTENT misconfig still fails fast (~ATTEMPTS*DELAY).
@@ -27,7 +35,13 @@ WRITE_CHECK_DELAY="${WRITE_CHECK_DELAY:-2}"
 # NFSv4-ACL exports for every uid) or dying later with an opaque [Errno 13].
 require_writable() {
     local d="$1"
-    [[ -d "$d" ]] || return 0                    # not mounted for this service -> skip
+    # Only gate dirs that are actually mounted volumes for THIS service. A bare
+    # `-d` test is not enough: some base images ship an incidental root-owned
+    # /media (or similar) that this service never mounts — gating it would fail
+    # fast on a dir the service doesn't use. A mounted data volume is always a
+    # mountpoint; an incidental image dir is not.
+    [[ -d "$d" ]] || return 0                    # absent -> not mounted here -> skip
+    "${MOUNT_TEST[@]}" "$d" || return 0          # present but not a mount -> incidental image dir -> skip
     local attempt=1
     while (( attempt <= WRITE_CHECK_ATTEMPTS )); do
         if "${WRITE_TEST[@]}" "$d"; then
