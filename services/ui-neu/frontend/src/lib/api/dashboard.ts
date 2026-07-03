@@ -139,11 +139,15 @@ export async function checkMakemkvKey(): Promise<{
 	notAvailable('MakeMKV key check');
 }
 
-// v3 sets the global ripping pause via PATCH /api/config { ripping_paused }.
-// The BFF's POST /api/system/ripping-enabled is gone.
+// The Pause toggle means "hold discs for review": pausing lets discs scan +
+// identify and then parks each in AWAITING_REVIEW indefinitely. The backend
+// only PARKS (rather than rejecting with 409) when BOTH ripping_paused AND
+// hold_for_review are set — see ripper.py identify(). Un-pausing clears both
+// and resumes straight-through ripping; config.py gives held discs a fresh
+// countdown on the ripping_paused ON->OFF transition so they don't stampede.
 export function setRippingEnabled(enabled: boolean): Promise<ConfigView> {
 	return apiFetch<ConfigView>('/api/config', {
 		method: 'PATCH',
-		body: JSON.stringify({ ripping_paused: !enabled })
+		body: JSON.stringify({ ripping_paused: !enabled, hold_for_review: !enabled })
 	});
 }
