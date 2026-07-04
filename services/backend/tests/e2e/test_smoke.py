@@ -77,3 +77,27 @@ def test_transcodes_list_empty(app_client: object, admin_token: str) -> None:
     )
     assert resp.status_code == 200, resp.text
     assert resp.json() == []
+
+
+def test_lifespan_self_registers_backend_host(app_client: object) -> None:
+    """The real lifespan (booted by the `app_client` fixture) must set
+    `app.state.host_snapshots` / `app.state.hostname` and UPSERT a `hosts`
+    row with role="backend" — this is the only tier that exercises the real
+    lifespan end to end (see conftest.py's harness docstring)."""
+    import arm_backend.main as main_mod
+    from arm_backend.host_snapshots import HostSnapshotStore
+
+    app = main_mod.app
+    assert isinstance(app.state.host_snapshots, HostSnapshotStore)
+    assert app.state.hostname
+
+    from sqlmodel import select
+
+    from arm_common import Host
+
+    async def _fetch_hosts() -> list[Host]:
+        async with main_mod.SessionLocal() as session:
+            return list((await session.execute(select(Host))).scalars().all())
+
+    hosts = app_client.portal.call(_fetch_hosts)  # type: ignore[attr-defined]
+    assert any(h.role == "backend" and h.hostname == app.state.hostname for h in hosts)
