@@ -3,6 +3,7 @@ from arm_common.models.disc_fingerprint import DiscFingerprint
 from arm_common.models.drive import Drive
 from arm_common.models.event import Event
 from arm_common.models.gpu import Gpu
+from arm_common.models.host import Host
 from arm_common.models.job import Job
 from arm_common.models.notification_channel import NotificationChannel
 from arm_common.models.notification_dispatch_log import NotificationDispatchLog
@@ -22,6 +23,7 @@ __all__ = [
     "Drive",
     "Event",
     "Gpu",
+    "Host",
     "Job",
     "NotificationChannel",
     "NotificationDispatchLog",
