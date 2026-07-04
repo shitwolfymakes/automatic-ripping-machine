@@ -167,7 +167,11 @@ def test_resources_returns_list_with_backend_host(signing_key: bytes, monkeypatc
     assert r.status_code == 200
     body = r.json()
     assert isinstance(body, list)
-    assert any(v["role"] == "backend" and v["hostname"] == "backend-1" for v in body)
+    backend = next(v for v in body if v["role"] == "backend" and v["hostname"] == "backend-1")
+    # Refresh-on-read: the endpoint must overwrite the stale pre-seeded snapshot
+    # (cpu_percent=999.0) with a freshly probed one (probe stub returns 3.0),
+    # not trust whatever was already in the store.
+    assert backend["snapshot"]["cpu_percent"] == 3.0
 
 
 def test_resources_omits_stale_host(signing_key: bytes) -> None:
