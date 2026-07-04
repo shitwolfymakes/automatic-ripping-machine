@@ -14,6 +14,7 @@ from arm_ripper.drive_status import probe_drive_media
 from arm_ripper.job_controller import JobController
 from arm_ripper.makemkv_key import refresh_makemkv_key
 from arm_ripper.recovery import boot_probe
+from arm_ripper.resources import gather_resources
 from arm_ripper.scan.makemkv import probe_makemkv_key
 from arm_ripper.source import is_iso_source
 from arm_ripper.ws_client import WSClient
@@ -29,6 +30,9 @@ RIPPER_VERSION = "0.0.0-skeleton"
 # freshness window) falls back to "unknown" and the request is
 # allowed through to identify (which will fail visibly).
 HEARTBEAT_INTERVAL_SECONDS = 30.0
+
+# The ripper's local mounted volumes, surfaced in its host-resource snapshot.
+_RIPPER_ROOTS = {"RAW_ROOT": "/raw", "LOG_DIR": "/logs"}
 
 # Each ripper container owns one optical drive — name the log file by the
 # device basename so multiple ripper containers (sr0, sr1, ...) don't
@@ -109,7 +113,17 @@ async def heartbeat_loop(client: BackendClient, drive_id: str, device_path: str,
                 status = DriveMediaStatus.LOADED
             else:
                 status, _ = probe_drive_media(device_path)
-            await client.heartbeat(drive_id=drive_id, media_status=status)
+            try:
+                snapshot = gather_resources(_RIPPER_ROOTS)
+            except Exception as exc:  # best-effort: never let a probe failure skip liveness
+                logger.warning("resource probe failed: %s", exc)
+                snapshot = None
+            await client.heartbeat(
+                drive_id=drive_id,
+                media_status=status,
+                hostname=settings.HOSTNAME,
+                resources=snapshot,
+            )
             await maybe_reacquire_current_job(
                 controller,
                 get_current_job=client.get_current_job,

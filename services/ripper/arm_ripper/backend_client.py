@@ -5,6 +5,7 @@ import httpx
 from arm_common import Drive, DriveMediaStatus, Job, KeydbState, MakemkvKeyState, MakemkvSdfState
 from arm_common.schemas import (
     HeldJobView,
+    HostResourcesSnapshot,
     IdentifyRequest,
     JobCompleteRequest,
     JobView,
@@ -48,8 +49,20 @@ class BackendClient:
         r.raise_for_status()
         return Drive.model_validate(r.json())
 
-    async def heartbeat(self, *, drive_id: str, media_status: DriveMediaStatus) -> None:
-        req = RipperHeartbeatRequest(drive_id=drive_id, media_status=media_status)
+    async def heartbeat(
+        self,
+        *,
+        drive_id: str,
+        media_status: DriveMediaStatus,
+        hostname: str,
+        resources: HostResourcesSnapshot | None = None,
+    ) -> None:
+        req = RipperHeartbeatRequest(
+            drive_id=drive_id,
+            media_status=media_status,
+            hostname=hostname,
+            resources=resources,
+        )
         r = await self._client.post("/api/ripper/heartbeat", json=req.model_dump(mode="json"))
         r.raise_for_status()
 
