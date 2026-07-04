@@ -3,6 +3,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from arm_common.enums import DiscType, DriveMediaStatus, KeydbState, MakemkvKeyState, MakemkvSdfState, TrackStatus
+from arm_common.schemas.system import HostResourcesSnapshot
 
 
 class MakemkvKeyStatusReport(BaseModel):
@@ -53,6 +54,11 @@ class RipperHeartbeatRequest(BaseModel):
 
     drive_id: str
     media_status: DriveMediaStatus
+    # The ripper's own HOSTNAME env — keys the backend `host` manifest UPSERT.
+    hostname: str
+    # Optional live host telemetry (CPU/mem/disk). None when a probe failed;
+    # liveness still updates. Backend stores the latest per hostname in-memory.
+    resources: HostResourcesSnapshot | None = None
 
 
 class ScanTitle(BaseModel):
