@@ -474,21 +474,36 @@ setup_remote_offload() {
     # Dedicated ed25519 key for backend -> remote docker daemon.
     local sshdir="$PREFIX/ssh" key="$PREFIX/ssh/id_ed25519"
     local sshdest="${REMOTE_DOCKER_HOST#ssh://}"
-    local remote_host="${sshdest##*@}"
+    # sshdest may be user@host, user@host:port, host, or host:port. Split the
+    # host from an optional :port and an optional user@ SEPARATELY: ssh-keyscan
+    # takes `-p PORT HOST`, not `HOST:PORT`, so a `host:2222` endpoint would
+    # otherwise keyscan-fail -> empty known_hosts -> offload silently dead.
+    local hostport="${sshdest##*@}"          # strip user@ -> host[:port]
+    local remote_host="${hostport%%:*}"      # bare host for keyscan + ssh config Host
+    local remote_port=""
+    [[ "$hostport" == *:* ]] && remote_port="${hostport##*:}"
+    local remote_user=""
+    [[ "$sshdest" == *@* ]] && remote_user="${sshdest%@*}"
     mkdir -p "$sshdir"
     if [[ ! -f "$key" ]]; then
         ssh-keygen -t ed25519 -N "" -C "armv3-backend@${remote_host}" -f "$key" >/dev/null
         log "generated dedicated ssh key: $key"
     fi
-    ssh-keyscan -t ed25519 "$remote_host" > "$sshdir/known_hosts" 2>/dev/null || \
-        warn "ssh-keyscan of $remote_host failed; known_hosts is empty (detection may prompt)"
-    cat > "$sshdir/config" <<EOF
-Host ${remote_host}
-  User ${sshdest%@*}
-  IdentityFile /home/arm/.ssh/id_ed25519
-  UserKnownHostsFile /home/arm/.ssh/known_hosts
-  StrictHostKeyChecking yes
-EOF
+    # Pre-populate known_hosts (best-effort). StrictHostKeyChecking below is
+    # accept-new (NOT yes) — matching remote_detect_gpus's detection path — so a
+    # keyscan miss self-heals on the first real connection instead of permanently
+    # disabling offload with an unusable strict-yes + empty known_hosts.
+    ssh-keyscan -t ed25519 ${remote_port:+-p "$remote_port"} "$remote_host" \
+        > "$sshdir/known_hosts" 2>/dev/null || \
+        warn "ssh-keyscan of ${remote_host}${remote_port:+:$remote_port} failed; known_hosts seeded empty (first connect will accept-new)"
+    {
+        printf 'Host %s\n' "$remote_host"
+        [[ -n "$remote_user" ]] && printf '  User %s\n' "$remote_user"
+        [[ -n "$remote_port" ]] && printf '  Port %s\n' "$remote_port"
+        printf '  IdentityFile /home/arm/.ssh/id_ed25519\n'
+        printf '  UserKnownHostsFile /home/arm/.ssh/known_hosts\n'
+        printf '  StrictHostKeyChecking accept-new\n'
+    } > "$sshdir/config"
     chmod 700 "$sshdir"; chmod 600 "$key" "$sshdir/known_hosts" "$sshdir/config"
     # Own the ssh bundle as the BACKEND's runtime uid (this installer's own
     # id -u:id -g, i.e. top-level PUID/PGID — the entrypoint's gosu target),
@@ -575,11 +590,14 @@ seed_env() {
             do
                 key="${kv%%=*}"
                 value="${kv#*=}"
+                # Delete-then-append rather than `sed s|...|value|`: value is
+                # free-text user input (REMOTE_DOCKER_HOST/REMOTE_BACKEND_URL), and
+                # a `&` (URL query) or `|` (sed delimiter) in it would corrupt the
+                # replacement. Rewriting the whole line sidesteps sed metachar hazards.
                 if grep -q "^${key}=" "$env_file"; then
-                    sed -i "s|^${key}=.*|${key}=${value}|" "$env_file"
-                else
-                    printf '%s=%s\n' "$key" "$value" >> "$env_file"
+                    grep -v "^${key}=" "$env_file" > "$env_file.tmp" && mv "$env_file.tmp" "$env_file"
                 fi
+                printf '%s=%s\n' "$key" "$value" >> "$env_file"
             done
             log "seeded offload keys (ARM_TRANSCODE_DOCKER_HOST=${REMOTE_DOCKER_HOST})"
         fi
