@@ -1058,6 +1058,44 @@ export type HeldJobView = {
 };
 
 /**
+ * HostResourcesSnapshot
+ */
+export type HostResourcesSnapshot = {
+    /**
+     * Cpu Percent
+     */
+    cpu_percent: number;
+    /**
+     * Cpu Temp
+     */
+    cpu_temp: number;
+    memory: MemoryInfo;
+    /**
+     * Storage
+     */
+    storage: Array<StorageRoot>;
+};
+
+/**
+ * HostResourcesView
+ */
+export type HostResourcesView = {
+    /**
+     * Role
+     */
+    role: string;
+    /**
+     * Hostname
+     */
+    hostname: string;
+    /**
+     * Version
+     */
+    version: string;
+    snapshot: HostResourcesSnapshot;
+};
+
+/**
  * HwPreference
  */
 export type HwPreference = 'cpu_only' | 'any';
@@ -2557,6 +2595,11 @@ export type RipperHeartbeatRequest = {
      */
     drive_id: string;
     media_status: DriveMediaStatus;
+    /**
+     * Hostname
+     */
+    hostname: string;
+    resources?: HostResourcesSnapshot | null;
 };
 
 /**
@@ -2887,25 +2930,6 @@ export type StorageRoot = {
      * Percent
      */
     percent: number;
-};
-
-/**
- * SystemResourcesResponse
- */
-export type SystemResourcesResponse = {
-    /**
-     * Cpu Percent
-     */
-    cpu_percent: number;
-    /**
-     * Cpu Temp
-     */
-    cpu_temp: number;
-    memory: MemoryInfo;
-    /**
-     * Storage
-     */
-    storage: Array<StorageRoot>;
 };
 
 /**
@@ -7298,9 +7322,11 @@ export type ResourcesApiSystemResourcesGetError = ResourcesApiSystemResourcesGet
 
 export type ResourcesApiSystemResourcesGetResponses = {
     /**
+     * Response Resources Api System Resources Get
+     *
      * Successful Response
      */
-    200: SystemResourcesResponse;
+    200: Array<HostResourcesView>;
 };
 
 export type ResourcesApiSystemResourcesGetResponse = ResourcesApiSystemResourcesGetResponses[keyof ResourcesApiSystemResourcesGetResponses];

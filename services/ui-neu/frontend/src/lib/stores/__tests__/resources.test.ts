@@ -1,28 +1,48 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('$lib/api/resources', () => ({ fetchResources: vi.fn() }));
+vi.mock('$lib/api/resources', () => ({
+	fetchResources: vi.fn()
+}));
+
 import { fetchResources } from '$lib/api/resources';
 import { fetchResourcesSticky } from '$lib/stores/resources.svelte';
 
-const sample = {
-	cpu_percent: 10,
-	cpu_temp: 0,
-	memory: { total_gb: 16, used_gb: 2, free_gb: 13, percent: 12 },
-	storage: [{ name: 'Raw', path: '/raw', total_gb: 100, used_gb: 40, free_gb: 60, percent: 40 }]
-};
+const view = (hostname: string, cpu: number) => ({
+	role: 'ripper',
+	hostname,
+	version: '1',
+	snapshot: {
+		cpu_percent: cpu,
+		cpu_temp: 0,
+		memory: { total_gb: 8, used_gb: 1, free_gb: 7, percent: 12.5 },
+		storage: []
+	}
+});
 
 describe('fetchResourcesSticky', () => {
-	beforeEach(() => vi.mocked(fetchResources).mockReset());
+	beforeEach(() => vi.clearAllMocks());
 
-	it('returns fresh data on success', async () => {
-		vi.mocked(fetchResources).mockResolvedValueOnce(sample as any);
-		expect(await fetchResourcesSticky()).toEqual(sample);
+	it('returns the fetched list', async () => {
+		(fetchResources as any).mockResolvedValueOnce([view('h1', 5)]);
+		const out = await fetchResourcesSticky();
+		expect(out).toHaveLength(1);
+		expect(out[0].hostname).toBe('h1');
 	});
 
-	it('returns last-good on a failed poll', async () => {
-		vi.mocked(fetchResources).mockResolvedValueOnce(sample as any);
+	it('keeps last-good on failure', async () => {
+		(fetchResources as any).mockResolvedValueOnce([view('h1', 5)]);
 		await fetchResourcesSticky();
-		vi.mocked(fetchResources).mockRejectedValueOnce(new Error('timeout'));
-		expect(await fetchResourcesSticky()).toEqual(sample);
+		(fetchResources as any).mockRejectedValueOnce(new Error('boom'));
+		const out = await fetchResourcesSticky();
+		expect(out).toHaveLength(1);
+		expect(out[0].hostname).toBe('h1');
+	});
+
+	it('does not overwrite last-good with an empty list on failure', async () => {
+		(fetchResources as any).mockResolvedValueOnce([view('h1', 5)]);
+		await fetchResourcesSticky();
+		(fetchResources as any).mockRejectedValueOnce(new Error('boom'));
+		const out = await fetchResourcesSticky();
+		expect(out.length).toBeGreaterThan(0);
 	});
 });
