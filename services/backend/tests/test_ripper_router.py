@@ -1149,3 +1149,59 @@ def test_get_config_reflects_makemkv_sdf_enabled() -> None:
         r = client.get("/api/ripper/config", headers=_SERVICE_AUTH)
     assert r.status_code == 200
     assert r.json()["makemkv_sdf_enabled"] is False
+
+
+# --- /heartbeat host UPSERT + snapshot store (Task 8) ------------------------
+
+
+def test_heartbeat_upserts_host_and_snapshot() -> None:
+    from arm_backend.host_snapshots import HostSnapshotStore
+    from arm_common.schemas import HostResourcesSnapshot, MemoryInfo
+
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    app = _make_app(db)
+    app.state.host_snapshots = HostSnapshotStore()
+
+    snap = HostResourcesSnapshot(
+        cpu_percent=5.0,
+        cpu_temp=0.0,
+        memory=MemoryInfo(total_gb=8.0, used_gb=1.0, free_gb=7.0, percent=12.5),
+        storage=[],
+    )
+    body = {
+        "drive_id": "drv_x",
+        "media_status": "loaded",
+        "hostname": _HOSTNAME,
+        "resources": snap.model_dump(),
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/heartbeat", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 204
+
+    hosts = [row for row in db.rows.get("hosts", []) if row.hostname == _HOSTNAME]
+    assert len(hosts) == 1
+    assert hosts[0].role == "ripper"
+
+    got = app.state.host_snapshots.get(_HOSTNAME)
+    assert got is not None
+    assert got[0].cpu_percent == 5.0
+
+
+def test_heartbeat_without_resources_still_upserts_host_no_snapshot() -> None:
+    from arm_backend.host_snapshots import HostSnapshotStore
+
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    app = _make_app(db)
+    app.state.host_snapshots = HostSnapshotStore()
+
+    body = {"drive_id": "drv_x", "media_status": "no_disc", "hostname": _HOSTNAME}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/heartbeat", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 204
+
+    hosts = [row for row in db.rows.get("hosts", []) if row.hostname == _HOSTNAME]
+    assert len(hosts) == 1
+    assert hosts[0].role == "ripper"
+    assert app.state.host_snapshots.get(_HOSTNAME) is None
