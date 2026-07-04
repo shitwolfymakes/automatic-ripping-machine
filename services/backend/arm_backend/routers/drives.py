@@ -1,6 +1,6 @@
 """Drive listing + PATCH for `default_session_id` / `display_name` (Phase 8)."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +8,7 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
+from arm_backend.liveness import STALE_AFTER
 from arm_common import Drive, DriveStatus, Job, JobStatus, Session, User
 from arm_common.enums import TERMINAL_JOB_STATUSES
 from arm_common.schemas import (
@@ -20,13 +21,6 @@ from arm_common.schemas import (
 )
 
 router = APIRouter(prefix="/api/drives", tags=["drives"])
-
-# A drive whose last media-status update is older than this is considered
-# stale (its ripper likely stopped heart-beating). Deliberately looser than the
-# 90s manual-trigger pre-check window (jobs.py `_MEDIA_STATUS_FRESHNESS`): that
-# gate fast-fails a rip on a momentarily-quiet drive, whereas this is an
-# operator-facing health view that shouldn't flap on a single missed heartbeat.
-_STALE_AFTER = timedelta(minutes=5)
 
 
 def _current_job(jobs_for_drive: list[Job]) -> DriveCurrentJobView | None:
@@ -72,7 +66,7 @@ async def drive_diagnostic(
         if d.media_status_at is None:
             healthy = False
             notes.append("no media-status heartbeat recorded")
-        elif now - d.media_status_at > _STALE_AFTER:
+        elif now - d.media_status_at > STALE_AFTER:
             healthy = False
             notes.append("media-status heartbeat is stale")
         if d.status != DriveStatus.ONLINE:
@@ -107,7 +101,7 @@ async def rescan_drives(
     online = 0
     stale = 0
     for d in drives:
-        fresh = d.media_status_at is not None and (now - d.media_status_at) <= _STALE_AFTER
+        fresh = d.media_status_at is not None and (now - d.media_status_at) <= STALE_AFTER
         if fresh and d.status == DriveStatus.ONLINE:
             online += 1
         else:

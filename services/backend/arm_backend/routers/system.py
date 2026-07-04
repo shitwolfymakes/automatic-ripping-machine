@@ -5,8 +5,6 @@ import importlib.metadata
 import os
 from datetime import datetime, timezone
 
-import psutil  # type: ignore[import-untyped]
-
 from arm_backend.disk_usage_cache import get_disk_usage
 
 from fastapi import APIRouter, Depends, Request
@@ -16,20 +14,22 @@ from sqlmodel import col, select
 from arm_backend.auth import require_jwt
 from arm_backend.config import settings
 from arm_backend.db import get_session
+from arm_backend.liveness import STALE_AFTER
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
-from arm_common import Config, Drive, DriveStatus, Event, Job, KeydbState, MakemkvSdfState, User
+from arm_common import Config, Drive, DriveStatus, Event, Host, Job, KeydbState, MakemkvSdfState, User
 from arm_common.schemas import (
-    MemoryInfo,
+    HostResourcesSnapshot,
+    HostResourcesView,
     PathsResponse,
     PathStatus,
     PreflightCheck,
     PreflightResponse,
     StatsResponse,
     StorageRoot,
-    SystemResourcesResponse,
     SystemVersionResponse,
 )
+from arm_common.utils.resource_probing import probe_cpu_percent, probe_cpu_temp, probe_memory
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -185,34 +185,12 @@ async def stats(
 
 
 _GiB = 1073741824
-_CPU_TEMP_KEYS = ("coretemp", "cpu_thermal", "k10temp")
 
 
-def _cpu_temp() -> float:
-    try:
-        temps = psutil.sensors_temperatures()
-    except AttributeError, OSError:
-        return 0.0
-    for key in _CPU_TEMP_KEYS:
-        readings = temps.get(key)
-        if readings:
-            return float(readings[0].current)
-    return 0.0
-
-
-@router.get("/resources", response_model=SystemResourcesResponse)
-async def resources(
-    request: Request,
-    _: User = Depends(require_jwt),
-) -> SystemResourcesResponse:
-    cpu_percent = psutil.cpu_percent(interval=None)
-    mem = psutil.virtual_memory()
-    memory = MemoryInfo(
-        total_gb=round(mem.total / _GiB, 1),
-        used_gb=round(mem.used / _GiB, 1),
-        free_gb=round(mem.available / _GiB, 1),
-        percent=mem.percent,
-    )
+def _backend_snapshot(request: Request) -> HostResourcesSnapshot:
+    """The backend's own live snapshot: cpu/mem via the shared probe, storage
+    via the NFS-safe disk cache (backend-local)."""
+    memory = probe_memory()
     storage: list[StorageRoot] = []
     for name, path in _roots(request).items():
         usage = get_disk_usage(path)
@@ -228,12 +206,38 @@ async def resources(
                 percent=usage["percent"],
             )
         )
-    return SystemResourcesResponse(
-        cpu_percent=cpu_percent,
-        cpu_temp=_cpu_temp(),
+    return HostResourcesSnapshot(
+        cpu_percent=probe_cpu_percent(),
+        cpu_temp=probe_cpu_temp(),
         memory=memory,
         storage=storage,
     )
+
+
+@router.get("/resources", response_model=list[HostResourcesView])
+async def resources(
+    request: Request,
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> list[HostResourcesView]:
+    store = getattr(request.app.state, "host_snapshots", None)
+    now = datetime.now(timezone.utc)
+    # Refresh the backend's own snapshot on every read (it's cheap + cache-backed).
+    backend_hostname = getattr(request.app.state, "hostname", None)
+    if store is not None and backend_hostname is not None:
+        store.put(backend_hostname, _backend_snapshot(request), now)
+
+    hosts = list((await db.execute(select(Host))).scalars().all())
+    views: list[HostResourcesView] = []
+    for h in hosts:
+        if now - h.last_seen > STALE_AFTER:
+            continue  # stale -> tab disappears
+        entry = store.get(h.hostname) if store is not None else None
+        if entry is None:
+            continue  # no snapshot yet -> omit
+        snapshot, _ts = entry
+        views.append(HostResourcesView(role=h.role, hostname=h.hostname, version=h.version, snapshot=snapshot))
+    return views
 
 
 def _app_version() -> str:

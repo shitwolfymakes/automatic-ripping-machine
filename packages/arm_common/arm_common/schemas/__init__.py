@@ -112,6 +112,8 @@ from arm_common.schemas.transcoder import (
     TranscodeWorkerView,
 )
 from arm_common.schemas.system import (
+    HostResourcesSnapshot,
+    HostResourcesView,
     MemoryInfo,
     PathStatus,
     PathsResponse,
@@ -119,7 +121,6 @@ from arm_common.schemas.system import (
     PreflightResponse,
     StatsResponse,
     StorageRoot,
-    SystemResourcesResponse,
     SystemVersionResponse,
 )
 from arm_common.schemas.settings import (
@@ -204,6 +205,8 @@ __all__ = [
     "HardwareCaps",
     "HealthResponse",
     "HeartbeatRequest",
+    "HostResourcesSnapshot",
+    "HostResourcesView",
     "IdentifyRequest",
     "InAppChannelConfig",
     "IsoScanRequest",
@@ -271,7 +274,6 @@ __all__ = [
     "SettingsSchemaResponse",
     "StatsResponse",
     "StorageRoot",
-    "SystemResourcesResponse",
     "SystemVersionResponse",
     "TemplatePreviewRequest",
     "TemplatePreviewResponse",

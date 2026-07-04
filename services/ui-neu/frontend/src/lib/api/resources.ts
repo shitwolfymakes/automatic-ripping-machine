@@ -1,6 +1,6 @@
 import { apiFetch } from '$lib/api/client';
-import type { SystemResourcesResponse } from '$lib/types/api.gen';
+import type { HostResourcesView } from '$lib/types/api.gen';
 
-export function fetchResources(): Promise<SystemResourcesResponse> {
-	return apiFetch<SystemResourcesResponse>('/api/system/resources');
+export function fetchResources(): Promise<HostResourcesView[]> {
+	return apiFetch<HostResourcesView[]>('/api/system/resources');
 }

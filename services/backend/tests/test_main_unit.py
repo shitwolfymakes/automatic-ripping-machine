@@ -131,3 +131,62 @@ async def test_refresh_gpu_inventory_empty_emits_unavailable(monkeypatch: pytest
     hub = _Hub()
     await main_mod._refresh_gpu_inventory(hub)
     assert hub.events == ["transcode.hw_unavailable"]
+
+
+# --- _register_backend_host (backend self-registration, Tier 3.3) -----------
+
+
+async def test_register_backend_host_inserts_new_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    from arm_common import Host
+
+    from tests._fakes import FakeSession
+
+    db = FakeSession()
+    monkeypatch.setattr(main_mod, "SessionLocal", lambda: _SessionCtx(db))
+    monkeypatch.setattr(main_mod, "_app_version", lambda: "1.2.3")
+
+    await main_mod._register_backend_host("test-backend-host")
+
+    hosts = [r for r in db.added if type(r).__name__ == "Host"]
+    assert len(hosts) == 1
+    host = hosts[0]
+    assert isinstance(host, Host)
+    assert host.hostname == "test-backend-host"
+    assert host.role == "backend"
+    assert host.version == "1.2.3"
+    assert host.first_seen == host.last_seen
+    assert db.committed == 1
+
+
+async def test_register_backend_host_updates_existing_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from arm_common import Host
+
+    from tests._fakes import FakeSession
+
+    db = FakeSession()
+    stale = datetime.now(UTC) - timedelta(days=1)
+    existing = Host(hostname="test-backend-host", role="backend", version="0.0.1", first_seen=stale, last_seen=stale)
+    db.rows["hosts"] = [existing]
+    monkeypatch.setattr(main_mod, "SessionLocal", lambda: _SessionCtx(db))
+    monkeypatch.setattr(main_mod, "_app_version", lambda: "1.2.3")
+
+    await main_mod._register_backend_host("test-backend-host")
+
+    # FakeSession.add() re-appends on re-add (no upsert-by-identity), so
+    # assert on the shared `existing` object's mutated state rather than the
+    # rows list length.
+    assert existing.role == "backend"
+    assert existing.version == "1.2.3"
+    assert existing.last_seen > stale
+    assert existing.first_seen == stale  # untouched on update
+    assert db.committed == 1
+
+
+def test_register_backend_host_default_hostname_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`app.state.hostname` falls back to "backend" when HOSTNAME is unset —
+    the same convention the ripper uses for its own hostname (main.py wires
+    this alongside `app.state.host_snapshots` in the lifespan)."""
+    monkeypatch.delenv("HOSTNAME", raising=False)
+    assert os.environ.get("HOSTNAME", "backend") == "backend"

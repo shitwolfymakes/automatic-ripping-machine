@@ -50,8 +50,15 @@ class StorageRoot(BaseModel):
     percent: float
 
 
-class SystemResourcesResponse(BaseModel):
+class HostResourcesSnapshot(BaseModel):
     cpu_percent: float
     cpu_temp: float
     memory: MemoryInfo
     storage: list[StorageRoot]
+
+
+class HostResourcesView(BaseModel):
+    role: str  # "backend" | "ripper"
+    hostname: str
+    version: str
+    snapshot: HostResourcesSnapshot

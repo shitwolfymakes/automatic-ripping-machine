@@ -1,27 +1,23 @@
 import { createPollingStore } from './polling';
 import { fetchResources } from '$lib/api/resources';
-import type { SystemResourcesResponse } from '$lib/types/api.gen';
+import type { HostResourcesView } from '$lib/types/api.gen';
 
-const empty: SystemResourcesResponse = {
-	cpu_percent: 0,
-	cpu_temp: 0,
-	memory: { total_gb: 0, used_gb: 0, free_gb: 0, percent: 0 },
-	storage: []
-};
+const empty: HostResourcesView[] = [];
 
-// Hold the last successful payload so a single failed poll doesn't blank the
-// bars (mirrors dashboard.ts's sticky behavior).
-let lastGood: SystemResourcesResponse = empty;
+// Hold the last non-empty payload so a single failed/empty poll doesn't blank
+// the tabs (mirrors dashboard.ts's sticky behavior).
+let lastGood: HostResourcesView[] = empty;
 
-export async function fetchResourcesSticky(): Promise<SystemResourcesResponse> {
+export async function fetchResourcesSticky(): Promise<HostResourcesView[]> {
 	try {
-		lastGood = await fetchResources();
+		const next = await fetchResources();
+		if (next.length > 0) lastGood = next;
 	} catch {
 		// keep lastGood
 	}
 	return lastGood;
 }
 
-export const resources = createPollingStore<SystemResourcesResponse>(fetchResourcesSticky, empty, 5000);
+export const resources = createPollingStore<HostResourcesView[]>(fetchResourcesSticky, empty, 5000);
 export const startResources = () => resources.start();
 export const stopResources = () => resources.stop();

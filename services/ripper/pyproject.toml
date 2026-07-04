@@ -9,6 +9,7 @@ dependencies = [
     "discid>=1.2",
     "pydvdid-m>=1.1",
     "websockets>=12",
+    "psutil>=5.9",
     "arm_common",
 ]
 

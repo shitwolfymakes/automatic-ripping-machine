@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import subprocess
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -18,6 +19,7 @@ from arm_backend.db import SessionLocal
 from arm_backend.gpu_probe import load_configured_gpus
 from arm_backend import image_cache
 from arm_backend.disk_refresh import DiskRefresher
+from arm_backend.host_snapshots import HostSnapshotStore
 from arm_backend.log_tailer import LogTailer
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.notification_dispatcher import (
@@ -50,11 +52,12 @@ from arm_backend.routers import (
     transcoder,
     transcodes,
 )
+from arm_backend.routers.system import _app_version
 from arm_backend.seeders import CONFIG_SINGLETON_ID, run_seeders
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
 from arm_backend.ws import WSHub
 from arm_backend.ws.router import router as ws_router
-from arm_common import Config, Gpu, GpuStatus, configure_service_logging
+from arm_common import Config, Gpu, GpuStatus, Host, configure_service_logging
 
 configure_service_logging("arm-backend", level=settings.ARM_LOG_LEVEL)
 logger = logging.getLogger("arm_backend")
@@ -109,6 +112,27 @@ async def _refresh_gpu_inventory(hub: WSHub) -> None:
         await session.commit()
 
 
+async def _register_backend_host(hostname: str) -> None:
+    """UPSERT the backend's own `hosts` manifest row (role="backend").
+
+    Mirrors the ripper heartbeat's UPSERT (routers/ripper.py) so both host
+    kinds share the same identity/liveness shape; only the version differs
+    (the backend reports its installed package version).
+    """
+    now = datetime.now(UTC)
+    version = _app_version()
+    async with SessionLocal() as session:
+        host = (await session.execute(select(Host).where(col(Host.hostname) == hostname))).scalar_one_or_none()
+        if host is None:
+            session.add(Host(hostname=hostname, role="backend", version=version, first_seen=now, last_seen=now))
+        else:
+            host.role = "backend"
+            host.version = version
+            host.last_seen = now
+            session.add(host)
+        await session.commit()
+
+
 def _build_docker_client(docker_host: str = "") -> object | None:
     """Construct a docker-py client. When `docker_host` is set (e.g.
     "ssh://sam@transcoder-server"), target that remote daemon so transcode
@@ -143,6 +167,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.started_at = datetime.now(UTC)
     app.state.dispatcher = MetadataDispatcher(http)
     app.state.ws_hub = WSHub()
+
+    # Per-container-stats — the backend self-registers as a `Host` (role
+    # "backend") so /api/system/resources can list it alongside rippers, and
+    # gets its own in-memory snapshot store for the resources heartbeat.
+    app.state.host_snapshots = HostSnapshotStore()
+    app.state.hostname = os.environ.get("HOSTNAME", "backend")
+    await _register_backend_host(app.state.hostname)
 
     # GPU probe — truncate-and-fill the gpus table so the dispatcher's first
     # tick sees a consistent inventory. Runs before the dispatcher starts.

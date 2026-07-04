@@ -211,7 +211,7 @@
           "ripper"
         ],
         "summary": "Heartbeat",
-        "description": "Each ripper posts here every HEARTBEAT_INTERVAL_SECONDS with the\ncurrent CDROM_DRIVE_STATUS reading. The manual-trigger endpoint\nreads `media_status` + `media_status_at` to refuse clicks made\nagainst an empty / open tray, instead of letting identify land an\nempty scan_result.\n\n`last_seen_at` is bumped on every call so the drive's online state\nis implicitly refreshed too \u2014 no separate liveness ping needed.",
+        "description": "Each ripper posts here every HEARTBEAT_INTERVAL_SECONDS with the current\nCDROM_DRIVE_STATUS reading plus (optionally) a host-resource snapshot.\n\nThree effects:\n  * bump the drive's media_status + last_seen_at (manual-trigger pre-check);\n  * UPSERT the `hosts` manifest row (identity + liveness, role=\"ripper\");\n  * if a resources block is present, store it in the in-memory snapshot map.",
         "operationId": "heartbeat_api_ripper_heartbeat_post",
         "parameters": [
           {
@@ -6722,7 +6722,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SystemResourcesResponse"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HostResourcesView"
+                  },
+                  "title": "Response Resources Api System Resources Get"
                 }
               }
             }
@@ -9203,6 +9207,63 @@
         ],
         "title": "HeldJobView",
         "description": "Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).\n\n`paused` is true when the held disc should survive a ripper reboot as a hold\n(global `ripping_paused` on \u2014 or, once it lands, a per-job pause). The ripper\nuses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)\non restart. See the timed-review-gate spec \u00a76.3."
+      },
+      "HostResourcesSnapshot": {
+        "properties": {
+          "cpu_percent": {
+            "type": "number",
+            "title": "Cpu Percent"
+          },
+          "cpu_temp": {
+            "type": "number",
+            "title": "Cpu Temp"
+          },
+          "memory": {
+            "$ref": "#/components/schemas/MemoryInfo"
+          },
+          "storage": {
+            "items": {
+              "$ref": "#/components/schemas/StorageRoot"
+            },
+            "type": "array",
+            "title": "Storage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cpu_percent",
+          "cpu_temp",
+          "memory",
+          "storage"
+        ],
+        "title": "HostResourcesSnapshot"
+      },
+      "HostResourcesView": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "hostname": {
+            "type": "string",
+            "title": "Hostname"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/HostResourcesSnapshot"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "hostname",
+          "version",
+          "snapshot"
+        ],
+        "title": "HostResourcesView"
       },
       "HwPreference": {
         "type": "string",
@@ -11865,12 +11926,27 @@
           },
           "media_status": {
             "$ref": "#/components/schemas/DriveMediaStatus"
+          },
+          "hostname": {
+            "type": "string",
+            "title": "Hostname"
+          },
+          "resources": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HostResourcesSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
         "required": [
           "drive_id",
-          "media_status"
+          "media_status",
+          "hostname"
         ],
         "title": "RipperHeartbeatRequest",
         "description": "POST /api/ripper/heartbeat body. Each ripper sends one of these\nevery HEARTBEAT_INTERVAL_SECONDS so the backend can refuse manual-\ntrigger requests against drives whose tray is open / empty without\nwaiting for a doomed identify.\n\nNamed distinctly from the transcoder HeartbeatRequest because the\ntwo services post completely different payloads to different paths."
@@ -12460,36 +12536,6 @@
           "percent"
         ],
         "title": "StorageRoot"
-      },
-      "SystemResourcesResponse": {
-        "properties": {
-          "cpu_percent": {
-            "type": "number",
-            "title": "Cpu Percent"
-          },
-          "cpu_temp": {
-            "type": "number",
-            "title": "Cpu Temp"
-          },
-          "memory": {
-            "$ref": "#/components/schemas/MemoryInfo"
-          },
-          "storage": {
-            "items": {
-              "$ref": "#/components/schemas/StorageRoot"
-            },
-            "type": "array",
-            "title": "Storage"
-          }
-        },
-        "type": "object",
-        "required": [
-          "cpu_percent",
-          "cpu_temp",
-          "memory",
-          "storage"
-        ],
-        "title": "SystemResourcesResponse"
       },
       "SystemVersionResponse": {
         "properties": {

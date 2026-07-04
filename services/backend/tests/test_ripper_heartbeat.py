@@ -62,7 +62,7 @@ def test_heartbeat_persists_media_status() -> None:
     with TestClient(app) as client:
         r = client.post(
             "/api/ripper/heartbeat",
-            json={"drive_id": "drv_x", "media_status": "loaded"},
+            json={"drive_id": "drv_x", "media_status": "loaded", "hostname": "ripper-host"},
             headers=_service_auth(),
         )
     assert r.status_code == 204, r.text
@@ -79,7 +79,7 @@ def test_heartbeat_unknown_drive_returns_404() -> None:
     with TestClient(app) as client:
         r = client.post(
             "/api/ripper/heartbeat",
-            json={"drive_id": "drv_missing", "media_status": "loaded"},
+            json={"drive_id": "drv_missing", "media_status": "loaded", "hostname": "ripper-host"},
             headers=_service_auth(),
         )
     assert r.status_code == 404
@@ -92,6 +92,6 @@ def test_heartbeat_requires_service_token() -> None:
     with TestClient(app) as client:
         r = client.post(
             "/api/ripper/heartbeat",
-            json={"drive_id": "drv_x", "media_status": "loaded"},
+            json={"drive_id": "drv_x", "media_status": "loaded", "hostname": "ripper-host"},
         )
     assert r.status_code in (401, 403)

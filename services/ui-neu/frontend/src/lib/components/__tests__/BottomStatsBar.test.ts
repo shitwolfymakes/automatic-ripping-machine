@@ -6,12 +6,19 @@ import { renderComponent, screen, cleanup } from '$lib/test-utils';
 vi.mock('$lib/stores/resources.svelte', async () => {
 	const { readable } = await import('svelte/store');
 	return {
-		resources: readable({
-			cpu_percent: 95,
-			cpu_temp: 0,
-			memory: { total_gb: 16, used_gb: 8, free_gb: 8, percent: 50 },
-			storage: [{ name: 'Raw', path: '/raw', total_gb: 100, used_gb: 95, free_gb: 5, percent: 95 }]
-		}),
+		resources: readable([
+			{
+				role: 'backend',
+				hostname: 'backend-1',
+				version: '1',
+				snapshot: {
+					cpu_percent: 95,
+					cpu_temp: 0,
+					memory: { total_gb: 16, used_gb: 8, free_gb: 8, percent: 50 },
+					storage: [{ name: 'Raw', path: '/raw', total_gb: 100, used_gb: 95, free_gb: 5, percent: 95 }]
+				}
+			}
+		]),
 		startResources: vi.fn(),
 		stopResources: vi.fn()
 	};

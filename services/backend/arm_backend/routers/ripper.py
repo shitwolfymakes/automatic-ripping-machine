@@ -28,6 +28,7 @@ from arm_common import (
     DiscType,
     Drive,
     DriveStatus,
+    Host,
     Job,
     JobStatus,
     MakemkvKeyState,
@@ -150,15 +151,19 @@ async def get_ripper_config(session: AsyncSession = Depends(get_session)) -> Rip
 
 
 @router.post("/heartbeat", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_service_token)])
-async def heartbeat(req: RipperHeartbeatRequest, session: AsyncSession = Depends(get_session)) -> None:
-    """Each ripper posts here every HEARTBEAT_INTERVAL_SECONDS with the
-    current CDROM_DRIVE_STATUS reading. The manual-trigger endpoint
-    reads `media_status` + `media_status_at` to refuse clicks made
-    against an empty / open tray, instead of letting identify land an
-    empty scan_result.
+async def heartbeat(
+    req: RipperHeartbeatRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Each ripper posts here every HEARTBEAT_INTERVAL_SECONDS with the current
+    CDROM_DRIVE_STATUS reading plus (optionally) a host-resource snapshot.
 
-    `last_seen_at` is bumped on every call so the drive's online state
-    is implicitly refreshed too — no separate liveness ping needed."""
+    Three effects:
+      * bump the drive's media_status + last_seen_at (manual-trigger pre-check);
+      * UPSERT the `hosts` manifest row (identity + liveness, role="ripper");
+      * if a resources block is present, store it in the in-memory snapshot map.
+    """
     drive = (await session.execute(select(Drive).where(col(Drive.id) == req.drive_id))).scalar_one_or_none()
     if drive is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
@@ -167,7 +172,20 @@ async def heartbeat(req: RipperHeartbeatRequest, session: AsyncSession = Depends
     drive.media_status_at = now
     drive.last_seen_at = now
     session.add(drive)
+
+    host = (await session.execute(select(Host).where(col(Host.hostname) == req.hostname))).scalar_one_or_none()
+    if host is None:
+        session.add(Host(hostname=req.hostname, role="ripper", version="", first_seen=now, last_seen=now))
+    else:
+        host.role = "ripper"
+        host.last_seen = now
+        session.add(host)
+
     await session.commit()
+
+    store = getattr(request.app.state, "host_snapshots", None)
+    if req.resources is not None and store is not None:
+        store.put(req.hostname, req.resources, now)
 
 
 def _valid_from_state(state: MakemkvKeyState) -> bool | None:
