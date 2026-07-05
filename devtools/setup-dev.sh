@@ -82,7 +82,17 @@ nvenc_driver_ok() {
 probe_encoder_caps() {
     local image="${ARM_TRANSCODE_IMAGE:-arm-transcode:latest}"
     local devflags=()
-    [[ -d /dev/dri ]] && devflags+=(--device /dev/dri)
+    if [[ -d /dev/dri ]]; then
+        devflags+=(--device /dev/dri)
+        # gosu (entrypoint) RESETS supplementary groups, so a docker --group-add
+        # render_gid would not survive into the `arm` process → HandBrake could
+        # not open the render node → QSV/VAAPI init fails → probe falsely reports
+        # {}. Pass RENDER_GID env instead: the entrypoint adds `arm` to it BEFORE
+        # the gosu drop (same as the transcode dispatcher). Mirrors install.sh.
+        local render_gid
+        render_gid="$(detect_render_gid || true)"
+        [[ -n "${render_gid}" ]] && devflags+=(-e "RENDER_GID=${render_gid}")
+    fi
     command -v nvidia-smi >/dev/null 2>&1 && devflags+=(--gpus all)
     # Print the probe's JSON on stdout and RETURN ITS EXIT STATUS (no `|| true`).
     # The caller treats exit 0 as authoritative — even a `{}` result means
