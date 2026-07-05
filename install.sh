@@ -408,8 +408,14 @@ probe_encoder_caps() {
     local devflags=()
     [[ -d /dev/dri ]] && devflags+=(--device /dev/dri)
     command -v nvidia-smi >/dev/null 2>&1 && devflags+=(--gpus all)
+    # Print the probe's JSON on stdout and RETURN ITS EXIT STATUS (no `|| true`).
+    # The caller treats exit 0 as authoritative — even a `{}` result means
+    # "checked, this device has no working HW encoder" and MUST NOT be overridden
+    # with the h264+h265 default (that's the QSV-h265 over-claim / rc=3 bug). Only
+    # a non-zero exit (image missing, timeout, docker error) is a genuine probe
+    # failure that the caller falls back on.
     timeout 60 docker run --rm "${devflags[@]}" "$image" \
-        python -m arm_transcode.main --probe-encoders 2>/dev/null || true
+        python -m arm_transcode.main --probe-encoders 2>/dev/null
 }
 
 # Phase 7b: enumerate GPUs host-side so the GPU-free backend can fill the `gpus`
@@ -417,18 +423,30 @@ probe_encoder_caps() {
 # stdout (empty `[]` if none). Mirrors services/backend/arm_backend/gpu_probe.py.
 detect_gpus() {
     local entries=() node vendor_file vid vendor idx
-    local caps_json
-    caps_json="$(probe_encoder_caps)"
-    # kinds_for <vendor> -> JSON array string, e.g. ["h264","h265"] or ["h264"].
-    # Falls back to h264+h265 if the probe failed, was empty, or lacked the vendor.
+    local caps_json probe_ok
+    # Capture BOTH the probe output and whether it ran authoritatively. `&& ... ||`
+    # keeps the non-zero exit from aborting under `set -e`. probe_ok=1 means the
+    # probe ran and its JSON is the truth (even `{}`); probe_ok=0 means it failed
+    # (image missing/timeout/docker error) and we fall back to the safe default.
+    caps_json="$(probe_encoder_caps)" && probe_ok=1 || probe_ok=0
+    # kinds_for <vendor> -> JSON array string, e.g. ["h264","h265"], ["h264"], or [].
+    # When the probe RAN (probe_ok=1), its answer is authoritative: a vendor absent
+    # from the JSON (or present as []) means "no working HW encoder" -> [] (do NOT
+    # over-claim). Only a probe FAILURE falls back to h264+h265.
     kinds_for() {
-        local vendor="$1" kinds
+        local vendor="$1" kinds=""
         if [[ -n "$caps_json" ]] && command -v jq >/dev/null 2>&1; then
             kinds="$(printf '%s' "$caps_json" | jq -c --arg v "$vendor" '.[$v] // empty' 2>/dev/null)"
         elif [[ -n "$caps_json" ]]; then
             kinds="$(printf '%s' "$caps_json" | grep -oE "\"$vendor\":\[[^]]*\]" | sed -E "s/\"$vendor\"://")"
         fi
-        [[ -n "$kinds" ]] && printf '%s' "$kinds" || printf '["h264","h265"]'
+        if [[ -n "$kinds" ]]; then
+            printf '%s' "$kinds"          # probe reported real codecs for this vendor
+        elif [[ "$probe_ok" == "1" ]]; then
+            printf '[]'                   # probe ran, vendor has no HW encoder -> honest empty
+        else
+            printf '["h264","h265"]'      # probe failed -> safe (pre-probe) default
+        fi
     }
     # Intel (QSV, 0x8086) / AMD (VAAPI, 0x1002) via DRM render nodes.
     if [[ -d /dev/dri ]]; then
