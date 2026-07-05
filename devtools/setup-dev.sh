@@ -69,12 +69,44 @@ nvenc_driver_ok() {
     echo 0
 }
 
+# Probe the transcode image for the HW encoders HandBrake can actually run.
+# Prints the raw JSON ({"qsv":["h264"],...}) on success, nothing on failure.
+# Best-effort only: on a fresh install this runs before images are pulled, so
+# a missing image is expected and the caller treats empty output as "fall back
+# to h264+h265" — never blocks install. Mirrors install.sh.
+#
+# The `arm-transcode:latest` default is correct HERE (unlike install.sh, which
+# must qualify it as ${ARM_IMAGE_PREFIX}/arm-transcode:${ARM_IMAGE_TAG}): the dev
+# docker-compose.yml.example BUILDS + tags the transcode image as exactly
+# `arm-transcode:latest`, so that unqualified name is the real local image.
+probe_encoder_caps() {
+    local image="${ARM_TRANSCODE_IMAGE:-arm-transcode:latest}"
+    local devflags=()
+    [[ -d /dev/dri ]] && devflags+=(--device /dev/dri)
+    command -v nvidia-smi >/dev/null 2>&1 && devflags+=(--gpus all)
+    timeout 60 docker run --rm "${devflags[@]}" "${image}" \
+        python -m arm_transcode.main --probe-encoders 2>/dev/null || true
+}
+
 # Phase 7b: enumerate GPUs host-side so the GPU-free backend can fill the `gpus`
 # table from ARM_GPUS instead of probing hardware. Prints a compact JSON array
 # (empty `[]` if none). Mirrors services/backend/arm_backend/gpu_probe.py and the
 # detect_gpus in install.sh.
 detect_gpus() {
     local entries=() node vendor_file vid vendor idx
+    local caps_json
+    caps_json="$(probe_encoder_caps)"
+    # kinds_for <vendor> -> JSON array string, e.g. ["h264","h265"] or ["h264"].
+    # Falls back to h264+h265 if the probe failed, was empty, or lacked the vendor.
+    kinds_for() {
+        local vendor="$1" kinds
+        if [[ -n "${caps_json}" ]] && command -v jq >/dev/null 2>&1; then
+            kinds="$(printf '%s' "${caps_json}" | jq -c --arg v "${vendor}" '.[$v] // empty' 2>/dev/null)"
+        elif [[ -n "${caps_json}" ]]; then
+            kinds="$(printf '%s' "${caps_json}" | grep -oE "\"${vendor}\":\[[^]]*\]" | sed -E "s/\"${vendor}\"://")"
+        fi
+        [[ -n "${kinds}" ]] && printf '%s' "${kinds}" || printf '["h264","h265"]'
+    }
     if [[ -d /dev/dri ]]; then
         for node in /dev/dri/renderD*; do
             [[ -e "${node}" ]] || continue
@@ -86,13 +118,13 @@ detect_gpus() {
                 0x1002) vendor=vaapi ;;
                 *)      continue ;;
             esac
-            entries+=("{\"vendor\":\"${vendor}\",\"device_path\":\"${node}\",\"encoder_kinds\":[\"h264\",\"h265\"]}")
+            entries+=("{\"vendor\":\"${vendor}\",\"device_path\":\"${node}\",\"encoder_kinds\":$(kinds_for "${vendor}")}")
         done
     fi
     if command -v nvidia-smi >/dev/null 2>&1 && [[ "$(nvenc_driver_ok)" == 0 ]]; then
         while IFS= read -r idx; do
             [[ -n "${idx}" ]] || continue
-            entries+=("{\"vendor\":\"nvenc\",\"device_path\":\"nvidia://${idx}\",\"encoder_kinds\":[\"h264\",\"h265\"]}")
+            entries+=("{\"vendor\":\"nvenc\",\"device_path\":\"nvidia://${idx}\",\"encoder_kinds\":$(kinds_for nvenc)}")
         done < <(nvidia-smi -L 2>/dev/null | sed -nE 's/^GPU ([0-9]+):.*/\1/p')
     fi
     local IFS=,
