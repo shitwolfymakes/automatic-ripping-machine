@@ -508,6 +508,10 @@ remote_detect_gpus() {
 # leaves REMOTE_OFFLOAD empty => byte-for-byte local behavior downstream.
 setup_remote_offload() {
     REMOTE_OFFLOAD=0
+    # certs-only mode does no env/compose work, so offload has nothing to seed;
+    # skip the questionnaire entirely (setup-dev.sh calls us --certs-only and a
+    # dev at a tty would otherwise be prompted mid cert-bootstrap).
+    [[ $CERTS_ONLY -eq 1 ]] && return 0
     # Non-interactive (no tty) => never prompt; stay local.
     [[ -t 0 ]] || return 0
     confirm "Enable remote transcode offload (spawn transcodes on a GPU host over ssh)?" || return 0
@@ -916,7 +920,21 @@ EOF
     # Offload: give arm-backend the ssh key it uses to reach the remote docker
     # daemon. Injected only when enabled so a local install's compose has no
     # ssh mount at all.
-    if [[ "${REMOTE_OFFLOAD:-0}" == "1" ]]; then
+    #
+    # Base the decision on EITHER this run's prompt OR a persisted offload config
+    # in .env: generate_compose regenerates the whole file from scratch every run,
+    # so gating purely on this run's REMOTE_OFFLOAD would silently strip the ssh
+    # mount from an already-offloaded deployment on any re-run that doesn't re-
+    # answer "yes" (a non-interactive re-run, or one where the operator declines
+    # the re-prompt) — leaving .env pointing at a remote host with no ssh material
+    # mounted. Reading .env keeps compose and .env in lockstep.
+    local offload_active=0
+    [[ "${REMOTE_OFFLOAD:-0}" == "1" ]] && offload_active=1
+    if [[ $offload_active -eq 0 && -f "$PREFIX/.env" ]] \
+       && grep -q '^ARM_TRANSCODE_DOCKER_HOST=.\+' "$PREFIX/.env"; then
+        offload_active=1
+    fi
+    if [[ $offload_active -eq 1 ]]; then
         # Insert the ssh mount right after the backend's docker.sock volume line.
         # The socket mount appears exactly ONCE in the file (only arm-backend
         # mounts it), so a plain awk one-pass insert is unambiguous — no need for
@@ -1057,8 +1075,19 @@ main() {
     fi
 
     make_ca
-    if [[ "$REMOTE_OFFLOAD" == "1" && -n "$REMOTE_BACKEND_SAN" ]]; then
-        make_leaf arm-backend "$REMOTE_BACKEND_SAN"
+    # Backend leaf needs the remote-routable SAN when offloading, so the remote
+    # transcoder can TLS-verify its callback. If this run didn't re-prompt (non-
+    # interactive re-run, or declined) but .env already has an offload backend
+    # URL, re-derive the SAN from it — otherwise a re-run would silently reissue
+    # the backend cert WITHOUT the remote SAN and break the callback's TLS verify.
+    local backend_san="$REMOTE_BACKEND_SAN"
+    if [[ -z "$backend_san" && -f "$PREFIX/.env" ]]; then
+        local persisted_url
+        persisted_url="$(sed -nE 's/^ARM_TRANSCODE_BACKEND_URL=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+        [[ -n "$persisted_url" ]] && backend_san="$(url_host "$persisted_url")"
+    fi
+    if [[ -n "$backend_san" ]]; then
+        make_leaf arm-backend "$backend_san"
     else
         make_leaf arm-backend
     fi
