@@ -8,8 +8,23 @@ metadata:
 The v3 stack runs on **hifi-server** (host `quark`, `192.168.0.68`, user `upb`,
 key `~/.ssh/hifi`) at `~/src/automatic-ripping-machine-v3`, cloned from
 `origin` (`uprightbass360/arm-v3`, now public). Deployed branch:
-`spike/timed-review-gate` (pausing feature + LCARS theme + the WS rip-progress
-work, all rebased on top of Tier-12 `feat/ui-neu-combined`).
+`deploy/hifi-20260705` (tip `31d88ef1` as of 2026-07-05 redeploy — carries the
+GEP encoder-probe + installer fixes F-A/F-F/F-G; rebuilt+recreated
+arm-backend/arm-ui-neu/arm-transcode:latest under all 3 overlays, offload
+verified writing NFS as 1001:1000 via remote `transcoder`) — the disconnected-PR deploy branch
+`deploy/hifi-20260704` (bulk-delete filter + orphaned-session reconciler + QSV
+libmfx fix) with **tier33 per-container-stats** merged on top (backend+ripper
+host resource tabs; migration `0027` hosts table). Rebuilt+recreated
+arm-backend/arm-ripper-sr0/arm-ui-neu on 2026-07-04; migration 0027 auto-applied
+by the backend lifespan (`main.py` `_run_migrations()` → `alembic upgrade head`
+on startup — no manual step). Verified: /api/system/resources 200 to the
+authed proxy, hosts manifest populating (backend self-register + arm-ripper-sr0
+heartbeat ~30s), public UI 200. NOTE: each backend restart leaves an orphan
+`backend`-role hosts row keyed by the random Docker container ID; only the live
+one refreshes, stale ones drop from tabs after the 5-min STALE_AFTER (harmless).
+
+Prior deployed branch was `spike/timed-review-gate` (pausing feature + LCARS
+theme + WS rip-progress).
 
 Reached via reverse proxy at **`https://arm.murphbutt.xyz`** → `192.168.0.68:8888`
 (self-signed inside; proxy terminates public TLS). Admin login `admin` /
@@ -17,7 +32,14 @@ Reached via reverse proxy at **`https://arm.murphbutt.xyz`** → `192.168.0.68:8
 
 ## Compose
 
-`docker compose -f docker-compose.yml -f docker-compose.hifi.yml ...`
+**Use ALL THREE overlays — omitting the ssh one silently breaks remote offload:**
+```
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.hifi.yml \
+  -f docker-compose.transcoder-ssh.yml \
+  up -d --force-recreate --no-deps <svc>
+```
 - `docker-compose.yml` is **gitignored** (generated per-host from
   `docker-compose.yml.example`; on hifi it's just the template copied, plus a
   hand-spliced `arm-ripper-sr0` service in the `>>>/<<< arm-ripper services`
@@ -27,6 +49,13 @@ Reached via reverse proxy at **`https://arm.murphbutt.xyz`** → `192.168.0.68:8
   publishes ui-neu on **8888** and backend on **8080**, and adds an
   `arm-nfs-check` busybox gate that blocks the backend until the NFS heartbeat
   sentinel exists.
+- `docker-compose.transcoder-ssh.yml` is the **OFFLOAD overlay** (scp'd, not
+  committed): passes the 4 `ARM_TRANSCODE_*` env keys through from `.env` and
+  mounts the ssh bundle `/home/upb/arm-ssh/container-ssh:/home/arm/.ssh:ro`.
+  **GOTCHA (hit 2026-07-05):** recreating arm-backend with only the first two
+  `-f` files DROPS the offload env + ssh mount → backend's docker client falls
+  back to the LOCAL daemon (`quark`) instead of the remote `transcoder`, silently
+  disabling offload. Always include this third `-f` when recreating arm-backend.
 
 ## Host-specific facts that live ONLY on the server (lost on a clean rebuild)
 

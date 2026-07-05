@@ -1,5 +1,6 @@
 # Memory
 
+- [Session wind-down state 2026-07-05](project_session_state_2026-07-05.md) — READ FIRST on pickup: branch/deploy/PR state (deploy/hifi-20260705 @ 31d88ef1 on origin+wolfy; PR #41 @ 04077f0b), GPU encoder-probe feature COMPLETE + verified, remote NVENC offload live, and the open items (task #7 close-out, paused Settings brainstorm, dispatcher reconnect).
 - [Memory for this repo lives in source control](feedback_memory_in_source_control.md) — memory is committed under `.claude/memory/`; CLAUDE.md instructs Claude to read MEMORY.md at session start. Don't write to the per-user `~/.claude/projects/<slug>/memory/` path.
 - [DB enums stored as VARCHAR](feedback_db_enums_as_varchar.md) — never use Postgres CREATE TYPE enums; validate enums in the app layer at write time.
 - [Ripper: one makemkvcon per disc, never per title](feedback_ripper_no_per_title.md) — `rip_disc` shells `makemkvcon mkv ... all` once; per-title invocations cause USB-BD drive autosuspend / SCSI NOT_READY failures between titles.
@@ -16,3 +17,4 @@
 - [hifi-server v3 deploy (host-specific)](project_hifi_v3_deploy.md) — how the v3 stack runs on hifi (arm.murphbutt.xyz→8888): PUID 1001/1000 for NFS, cert keys chmod 440, hand-spliced ripper, ARM_ALLOWED_ORIGINS must include the proxy domain, QSV gid 993; facts that live only on the host.
 - [Entrypoint writability guard gates mountpoints only](feedback_entrypoint_guard_mountpoints.md) — the _common guard `require_writable()` must skip present-but-unmounted dirs (e.g. the ripper's incidental root-owned /media) via `mountpoint -q`, not just `-d`; MOUNT_TEST array seam mirrors WRITE_TEST for the test.
 - [Entrypoint HOME/gosu/paramiko gotcha](project_entrypoint_home_gosu_paramiko.md) — remote transcode needs HOME=/home/arm before gosu; docker exec probes lie
+- [qsv-render-gid gosu probe blocker](project_qsv_render_gid_gosu_probe.md) — QSV/VAAPI + the encoder probe need RENDER_GID as an env var (gosu strips docker --group-add); N97 genuinely does h264+h265, no driver update needed
