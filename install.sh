@@ -406,7 +406,19 @@ probe_encoder_caps() {
         image="arm-transcode:latest"
     fi
     local devflags=()
-    [[ -d /dev/dri ]] && devflags+=(--device /dev/dri)
+    if [[ -d /dev/dri ]]; then
+        devflags+=(--device /dev/dri)
+        # The entrypoint drops to `arm` via gosu, which RESETS supplementary
+        # groups — so a docker `--group-add <render_gid>` would NOT survive into
+        # the process and HandBrake could not open the render node (QSV/VAAPI
+        # would silently fail to init and the probe would falsely report {}).
+        # Pass the render GID as RENDER_GID env instead: the entrypoint adds `arm`
+        # to it in /etc/group BEFORE the gosu drop, exactly as the transcode
+        # dispatcher does for real HW-encode containers.
+        local render_gid
+        render_gid="$(detect_render_gid || true)"
+        [[ -n "$render_gid" ]] && devflags+=(-e "RENDER_GID=$render_gid")
+    fi
     command -v nvidia-smi >/dev/null 2>&1 && devflags+=(--gpus all)
     # Print the probe's JSON on stdout and RETURN ITS EXIT STATUS (no `|| true`).
     # The caller treats exit 0 as authoritative — even a `{}` result means
