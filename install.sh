@@ -383,11 +383,53 @@ nvenc_driver_ok() {
     echo 0
 }
 
+# Probe the transcode image for the HW encoders HandBrake can actually run.
+# Prints the raw JSON ({"qsv":["h264"],...}) on success, nothing on failure.
+# Best-effort only: on a fresh install this runs before images are pulled, so
+# a missing image is expected and the caller treats empty output as "fall back
+# to h264+h265" — never blocks install.
+probe_encoder_caps() {
+    # Image ref must match what compose ACTUALLY runs, i.e. the pinned
+    # ${ARM_IMAGE_PREFIX}/arm-transcode:${ARM_IMAGE_TAG}. install.sh never sets
+    # ARM_TRANSCODE_IMAGE as a shell var (it's a compose-only knob), so an
+    # unqualified `arm-transcode:latest` default would resolve to
+    # docker.io/library/arm-transcode:latest — a non-existent public image — and
+    # fail on EVERY real install, making the whole probe a silent no-op. Prefer an
+    # explicit override, then the resolved pin, then the dev-built local tag.
+    local image
+    if [[ -n "${ARM_TRANSCODE_IMAGE:-}" ]]; then
+        image="${ARM_TRANSCODE_IMAGE}"
+    elif [[ -n "${ARM_IMAGE_TAG_DEFAULT:-}" ]]; then
+        image="${ARM_IMAGE_PREFIX_DEFAULT}/arm-transcode:${ARM_IMAGE_TAG_DEFAULT}"
+    else
+        # Unresolved tag (e.g. --certs-only, or setup-dev.sh's locally-built image).
+        image="arm-transcode:latest"
+    fi
+    local devflags=()
+    [[ -d /dev/dri ]] && devflags+=(--device /dev/dri)
+    command -v nvidia-smi >/dev/null 2>&1 && devflags+=(--gpus all)
+    timeout 60 docker run --rm "${devflags[@]}" "$image" \
+        python -m arm_transcode.main --probe-encoders 2>/dev/null || true
+}
+
 # Phase 7b: enumerate GPUs host-side so the GPU-free backend can fill the `gpus`
 # table from ARM_GPUS instead of probing hardware. Prints a compact JSON array on
 # stdout (empty `[]` if none). Mirrors services/backend/arm_backend/gpu_probe.py.
 detect_gpus() {
     local entries=() node vendor_file vid vendor idx
+    local caps_json
+    caps_json="$(probe_encoder_caps)"
+    # kinds_for <vendor> -> JSON array string, e.g. ["h264","h265"] or ["h264"].
+    # Falls back to h264+h265 if the probe failed, was empty, or lacked the vendor.
+    kinds_for() {
+        local vendor="$1" kinds
+        if [[ -n "$caps_json" ]] && command -v jq >/dev/null 2>&1; then
+            kinds="$(printf '%s' "$caps_json" | jq -c --arg v "$vendor" '.[$v] // empty' 2>/dev/null)"
+        elif [[ -n "$caps_json" ]]; then
+            kinds="$(printf '%s' "$caps_json" | grep -oE "\"$vendor\":\[[^]]*\]" | sed -E "s/\"$vendor\"://")"
+        fi
+        [[ -n "$kinds" ]] && printf '%s' "$kinds" || printf '["h264","h265"]'
+    }
     # Intel (QSV, 0x8086) / AMD (VAAPI, 0x1002) via DRM render nodes.
     if [[ -d /dev/dri ]]; then
         for node in /dev/dri/renderD*; do
@@ -400,7 +442,7 @@ detect_gpus() {
                 0x1002) vendor=vaapi ;;
                 *)      continue ;;
             esac
-            entries+=("{\"vendor\":\"${vendor}\",\"device_path\":\"${node}\",\"encoder_kinds\":[\"h264\",\"h265\"]}")
+            entries+=("{\"vendor\":\"${vendor}\",\"device_path\":\"${node}\",\"encoder_kinds\":$(kinds_for "$vendor")}")
         done
     fi
     # NVIDIA (NVENC) via nvidia-smi — one entry per listed GPU index. Gated on a
@@ -408,7 +450,7 @@ detect_gpus() {
     if command -v nvidia-smi >/dev/null 2>&1 && [[ "$(nvenc_driver_ok)" == 0 ]]; then
         while IFS= read -r idx; do
             [[ -n "$idx" ]] || continue
-            entries+=("{\"vendor\":\"nvenc\",\"device_path\":\"nvidia://${idx}\",\"encoder_kinds\":[\"h264\",\"h265\"]}")
+            entries+=("{\"vendor\":\"nvenc\",\"device_path\":\"nvidia://${idx}\",\"encoder_kinds\":$(kinds_for nvenc)}")
         done < <(nvidia-smi -L 2>/dev/null | sed -nE 's/^GPU ([0-9]+):.*/\1/p')
     fi
     local IFS=,
@@ -429,16 +471,27 @@ detect_render_gid() {
 
 # Run GPU detection ON the remote host over ssh, using the dedicated key.
 # Prints two lines: <ARM_GPUS json> then <render_gid>. Non-zero on ssh failure.
-# Ships the three detection function bodies to the remote `bash -s`; the remote
-# does not have install.sh, so we send the functions inline.
+# Ships the detection function bodies to the remote `bash -s`; the remote does
+# not have install.sh, so we send the functions inline. probe_encoder_caps is
+# best-effort and will typically come back empty on a remote host that hasn't
+# pulled the transcode image yet — detect_gpus' kinds_for (nested, shipped
+# automatically with its enclosing function body) falls back to h264+h265.
 remote_detect_gpus() {
     local target="$1" key="$2" out
     # target is ssh://user@host — strip the scheme for the ssh CLI.
     local sshdest="${target#ssh://}"
+    # The remote shell has no .env / ARM_IMAGE_* context, so ship the resolved
+    # transcode image ref explicitly — otherwise the shipped probe_encoder_caps
+    # falls back to the non-existent `arm-transcode:latest` and the probe is a
+    # no-op. Empty when the tag isn't resolved yet (probe stays best-effort).
+    local remote_image=""
+    [[ -n "${ARM_IMAGE_TAG_DEFAULT:-}" ]] && \
+        remote_image="${ARM_IMAGE_PREFIX_DEFAULT}/arm-transcode:${ARM_IMAGE_TAG_DEFAULT}"
     # shellcheck disable=SC2029 # intentional: function bodies are expanded client-side and shipped as source to the remote bash -s
     out="$(
         {
-            declare -f nvenc_driver_ok detect_gpus detect_render_gid
+            [[ -n "$remote_image" ]] && printf 'ARM_TRANSCODE_IMAGE=%q\n' "$remote_image"
+            declare -f nvenc_driver_ok probe_encoder_caps detect_gpus detect_render_gid
             # shellcheck disable=SC2016 # single quotes are intentional: $(...) must expand on the remote, not here
             printf 'printf "%%s\\n" "$(detect_gpus)"\n'
             # shellcheck disable=SC2016 # single quotes are intentional: $(...) must expand on the remote, not here
@@ -548,14 +601,17 @@ seed_env() {
     cdrom_gid="$(stat -c '%g' /dev/sr0 2>/dev/null || echo 44)"
 
     local arm_gpus render_gid
-    arm_gpus="$(detect_gpus)"
-    render_gid="$(detect_render_gid || true)"
-
     # When offloading, the transcode host is remote: use the REMOTE inventory
-    # (detected over ssh) so QSV/VAAPI get the remote render node + GID.
+    # (detected over ssh) so QSV/VAAPI get the remote render node + GID. Skip the
+    # LOCAL detect_gpus entirely in that case — its probe_encoder_caps runs a
+    # `timeout 60 docker run` whose result we'd immediately discard, wasting a
+    # network round-trip (and up to 60s) on a host that isn't even transcoding.
     if [[ "${REMOTE_OFFLOAD:-0}" == "1" && -n "${REMOTE_GPUS}" ]]; then
         arm_gpus="${REMOTE_GPUS}"
         render_gid="${REMOTE_RENDER_GID}"
+    else
+        arm_gpus="$(detect_gpus)"
+        render_gid="$(detect_render_gid || true)"
     fi
 
     if [[ -f "$env_file" ]]; then
