@@ -266,7 +266,7 @@ curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic
 
 (Or `bash -c "$(curl -fsSL ...)"` for users who want a TTY; `install.sh --prefix /srv/arm` to override the default path.)
 
-**Run it as your regular user, never via `sudo`/root.** Containers drop privileges to the invoking user's uid:gid (`PUID`/`PGID`), and a root run would seed the unusable `0:0` (the entrypoint's `groupadd --gid 0` collides with the root group) plus root-own everything under a `/root/arm` prefix. The installer refuses to run as root; docker access should come from `docker` group membership (`sudo usermod -aG docker $USER && newgrp docker`). Unattended installs on root-only hosts can pass explicit non-root `PUID=`/`PGID=` env vars to bypass the guard.
+**Run it as your regular user, never via `sudo`/root.** Containers drop privileges to the invoking user's uid:gid (`PUID`/`PGID`), and a root run would seed the unusable `0:0` (the entrypoint's `groupadd --gid 0` collides with the root group) plus root-own everything under a `/root/arm` prefix. The installer refuses to run as root; docker access should come from `docker` group membership (`sudo usermod -aG docker $USER && newgrp docker`). Unattended installs on root-only hosts can pass explicit non-root `PUID=`/`PGID=` env vars to bypass the guard — the installer then chowns everything it generated (certs, `.env`, compose, data dirs; `db/` excluded) to that uid:gid so the PUID-dropped containers can actually use it.
 
 **What the installer does, in order:**
 
