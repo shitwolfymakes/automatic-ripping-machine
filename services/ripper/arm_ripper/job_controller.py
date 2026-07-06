@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import shutil
 from dataclasses import dataclass
@@ -81,6 +82,15 @@ _REVIEW_WAIT = _WaitSpec(
 EJECT_RETRY_DELAYS = (0.0, 2.0, 5.0, 10.0)
 EJECT_PROCESS_TIMEOUT = 15.0
 RAW_ROOT = Path("/raw")
+# A freshly-settled disc can report DISC_OK via the CDROM_DRIVE_STATUS ioctl
+# before the medium is *data*-readable, so makemkvcon enumerates zero titles.
+# The disc IS present (per ioctl), so a zero-title scan there means "not ready
+# yet," not "genuinely empty" — retry, letting the drive finish spinning up /
+# the TOC become readable. Generous budget (a quick 1-2s retry would miss a slow
+# settle — the field report saw 4/4 discs fail); bounded so a genuinely
+# unreadable disc resolves to a clear give-up in ~26s.
+SCAN_NOT_READY_MAX_ATTEMPTS = 5
+SCAN_NOT_READY_BACKOFFS = (2.0, 4.0, 8.0, 12.0)  # between attempts 1→2, 2→3, 3→4, 4→5
 
 
 class JobController:
@@ -304,7 +314,7 @@ class JobController:
                 self._spawn_keydb_refresh(enabled=await self._community_keydb_enabled())
                 self._spawn_sdf_refresh(enabled=await self._makemkv_sdf_enabled())
                 try:
-                    scan_result = await scan_disc(device_path)
+                    scan_result = await self._scan_with_ready_retry(device_path)
                 except ScanError as e:
                     logger.error("scan failed device=%s err=%s", device_path, e)
                     return
@@ -371,6 +381,69 @@ class JobController:
             finally:
                 self._active_task = None
                 self._active_job_id = None
+
+    async def _scan_with_ready_retry(self, device_path: str) -> ScanResult:
+        """Scan the disc, retrying when a DISC_OK drive yields zero titles.
+
+        A `DISC_OK` drive that scans to zero titles is almost certainly not
+        data-ready yet (the medium reports present via ioctl before the first
+        SCSI read succeeds). Retry with backoff to wait out the settle. If the
+        drive leaves DISC_OK (tray opened / disc pulled), stop. On exhaustion,
+        return the last (empty) result — the caller handles the give-up.
+
+        Note: `read_drive_status` (os.open + ioctl) may raise OSError if the
+        device node vanishes mid-retry (USB autosuspend / passthrough teardown);
+        that propagates to the pipeline task boundary by design — the task ends
+        and the drive poller re-arms on the next disc-insert event.
+        """
+        last: ScanResult | None = None
+        for attempt in range(1, SCAN_NOT_READY_MAX_ATTEMPTS + 1):
+            result = await scan_disc(device_path)
+            last = result
+            if result.titles:
+                return result
+
+            state = read_drive_status(device_path)
+            if state != DriveState.DISC_OK:
+                logger.info(
+                    "scan: 0 titles and drive no longer DISC_OK (state=%s) device=%s — stopping",
+                    state.name,
+                    device_path,
+                )
+                return result
+
+            if attempt < SCAN_NOT_READY_MAX_ATTEMPTS:
+                backoff = SCAN_NOT_READY_BACKOFFS[attempt - 1]
+                logger.warning(
+                    "scan returned 0 titles while drive=DISC_OK (data not ready?) "
+                    "device=%s titles=0 retry=%d/%d backoff=%.0fs",
+                    device_path,
+                    attempt,
+                    SCAN_NOT_READY_MAX_ATTEMPTS,
+                    backoff,
+                )
+                await asyncio.sleep(backoff)
+                # Re-check status after the sleep — disc may have been pulled
+                # while we were waiting; stop before wasting another scan probe.
+                post_sleep_state = read_drive_status(device_path)
+                if post_sleep_state != DriveState.DISC_OK:
+                    logger.info(
+                        "scan: drive left DISC_OK during backoff (state=%s) device=%s — stopping",
+                        post_sleep_state.name,
+                        device_path,
+                    )
+                    assert last is not None
+                    return result
+
+        logger.error(
+            "DISC_UNREADABLE_AFTER_RETRIES device=%s drive_state=DISC_OK attempts=%d — "
+            "disc present per ioctl but no readable titles after retries; check disc/drive "
+            "readiness (dirty/damaged disc, drive spin-up, or container device passthrough)",
+            device_path,
+            SCAN_NOT_READY_MAX_ATTEMPTS,
+        )
+        assert last is not None
+        return last
 
     async def _identify_with_retry(
         self,
@@ -802,7 +875,8 @@ class JobController:
         try:
             _, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=EJECT_PROCESS_TIMEOUT)
         except asyncio.TimeoutError:
-            proc.kill()
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
             await proc.wait()
             if log_failure:
                 logger.warning("%s timed out", argv[0])
