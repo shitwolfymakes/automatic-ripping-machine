@@ -44,7 +44,7 @@ Four long-lived entities drive the lifecycle, plus one reusable template:
                     (downstream session applications may queue)
 ```
 
-Terminal states for a `Job`: `ripped`, `ripped_partial`, `abandoned` (user gave up in UI), `failed` (identification failed catastrophically).
+Terminal states for a `Job`: `ripped`, `ripped_partial`, `abandoned` (user gave up in UI), `failed` (identification failed catastrophically). Abandoning also ejects the disc: the ripper's `job.abandoned` WS handler pops the tray when the abandoned job owns the drive's pipeline (ripping or parked) or when the drive sits idle with the disc still seated — a stale abandon while a different job's rip owns the drive never touches the tray.
 
 ## Track state machine
 
