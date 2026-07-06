@@ -484,7 +484,7 @@ seed_env() {
         elif [[ -n "${cur_puid}${cur_pgid}" ]]; then
             warn "healing unusable PUID/PGID '${cur_puid}:${cur_pgid}' in .env -> ${puid}:${pgid} (0 is never a valid container uid/gid)"
         fi
-        log ".env exists; preserving secrets + PUID/PGID, re-deriving CDROM_GID/ARM_GPUS/ARM_RENDER_GID"
+        log ".env exists; preserving secrets + PUID/PGID ${puid}:${pgid}, re-deriving CDROM_GID/ARM_GPUS/ARM_RENDER_GID"
         sed -i \
             -e "s|^PUID=.*|PUID=${puid}|" \
             -e "s|^PGID=.*|PGID=${pgid}|" \
@@ -506,7 +506,7 @@ seed_env() {
         return 0
     fi
 
-    log "generating .env with random secrets"
+    log "generating .env with random secrets (containers run as PUID:PGID ${puid}:${pgid})"
     local pg_pass arm_tok
     pg_pass="$(openssl rand -hex 24)"
     arm_tok="$(openssl rand -hex 32)"
