@@ -10,11 +10,14 @@ are" snapshot. Supersedes `project_session_state_2026-06-29` (deleted).
 
 ## Branch / deploy / PR state (all pushed, in sync)
 
-- **Working + deploy branch:** `deploy/hifi-20260705`, tip **`31d88ef1`**.
-  Pushed to BOTH `origin` (`uprightbass360/arm-v3`) and `wolfy`
-  (`shitwolfymakes/automatic-ripping-machine`) as a branch. All three (local,
-  origin, wolfy) at `31d88ef1`.
-- **wolfy PR #41** = `feat/tier25-remote-transcode-offload`, tip **`04077f0b`**.
+- **Working + deploy branch:** `deploy/hifi-20260705`, tip **`7d54e923`**
+  (2026-07-05 late: installer root-refusal + PUID/PGID preserve-on-rerun fix,
+  from deploy-tester feedback). Pushed to BOTH `origin` (`uprightbass360/arm-v3`)
+  and `wolfy` (`shitwolfymakes/automatic-ripping-machine`) as a branch. All
+  three (local, origin, wolfy) at `7d54e923`.
+- **wolfy PR #41** = `feat/tier25-remote-transcode-offload`, tip **`f97b8fb5`**
+  (= `04077f0b` + the installer fix cherry-picked; patch-id identical to
+  `7d54e923`).
   Carries the SAME 7 encoder-probe+fix commits as the deploy branch, but under
   cherry-picked SHAs (patch-id identical; verified via `git cherry`). PR #41 is
   the upstream-PR line; the deploy branch is the fork-local deploy line.
@@ -66,8 +69,16 @@ Five findings surfaced+fixed, all live-verified on hifi's N97:
   resumed. Still open.
 - **Deferred transcoder items:** dispatcher client reconnect/retry (no recovery
   from a failed remote-docker connection); UI/API surfacing of offload health.
-- **F-8** (install.sh PUID/PGID/CDROM_GID re-derive lacks append-guard) — pre-existing,
-  out of scope, documented in the review docs.
+- **F-8** (install.sh PUID/PGID/CDROM_GID re-derive lacks append-guard) — MOSTLY
+  CLOSED by `7d54e923`/`f97b8fb5`: PUID/PGID get append-guards + preserve-on-rerun
+  + root refusal (`require_unprivileged`/`resolve_puid_pgid`, tested by
+  devtools/test-install-env.sh). Remaining sliver: CDROM_GID still sed-only (no
+  append if the line is missing) — cosmetic, .env always seeds it.
+- **Deploy-tester feedback still open** (2026-07-05): metadata misses are silent
+  (no TMDB key ⇒ AWAITING_USER_ID with zero hint in UI); CD lookup silently
+  disabled when config's musicbrainz_user_agent is NULL/blank (seeder only
+  back-fills session_signing_key); consider maintainer contact email in the
+  default MB user-agent (wolfy's call).
 
 ## Wolfy PR workflow reminders
 
