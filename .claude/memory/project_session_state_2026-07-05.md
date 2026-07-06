@@ -20,9 +20,14 @@ are" snapshot. Supersedes `project_session_state_2026-06-29` (deleted).
   only at the successful-rip tail; `_handle_abandon` now spawns a deduped
   eject when the abandoned job owns the pipeline or the idle drive still
   seats the disc). Pushed to BOTH `origin` and `wolfy`.
-- **wolfy PR #41** = `feat/tier25-remote-transcode-offload`, tip **`802719f0`**
-  (= `04077f0b` + the four fix commits cherry-picked; the abandon-eject
-  pick needed an import-conflict resolve — that branch has no makemkv_sdf).
+- **wolfy PR #41** = `feat/tier25-remote-transcode-offload`, tip **`04077f0b`**
+  — RESTORED to pure remote-offload scope 2026-07-06 (the four fix commits
+  were briefly stacked on it; user flagged the tangle, force-pushed back).
+- **wolfy PR #48** = `fix/installer-puid-abandon-eject`, tip **`802719f0`**
+  (= `04077f0b` + the four fix commits; the abandon-eject pick needed an
+  import-conflict resolve — that branch has no makemkv_sdf). STACKED on
+  #41's branch because the installer fixes patch its install.sh code;
+  **retarget #48 to `main` after #41 merges.**
   Carries the SAME 7 encoder-probe+fix commits as the deploy branch, but under
   cherry-picked SHAs (patch-id identical; verified via `git cherry`). PR #41 is
   the upstream-PR line; the deploy branch is the fork-local deploy line.
