@@ -7,6 +7,11 @@
 # (on desktop hosts) installs a host-side udev rule disabling auto-mount
 # for ARM-managed drives.
 #
+# Run as your regular user, never via sudo/root: containers gosu-drop to the
+# invoking uid:gid (PUID/PGID), and a root run would seed the unusable 0:0
+# and root-own the prefix. The installer refuses to run as root (unattended
+# root installs: pass explicit non-root PUID=/PGID= env vars).
+#
 # Usage:
 #   curl -fsSL .../install.sh | bash
 #   bash install.sh                       # local checkout, default prefix
@@ -118,6 +123,46 @@ confirm() {
     [[ "$reply" =~ ^[yY]([eE][sS])?$ ]]
 }
 
+# ------------------------------------------------ runtime uid/gid resolution
+
+# PUID/PGID are the uid:gid every container drops to via gosu, and the owner
+# the entrypoints expect on the media mounts. 0 is never valid: the shared
+# entrypoint runs `groupadd --gid "${PGID}" arm`, and gid 0 collides with the
+# image's root group — every service crash-loops.
+is_ugid() { [[ "${1:-}" =~ ^[0-9]+$ ]] && (( $1 != 0 )); }
+
+# Refuse root runs. Under sudo the whole install is poisoned, not just the
+# uid derivation: HOME=/root moves the default prefix to /root/arm, and every
+# generated file (certs, .env, compose, media dirs) ends up root-owned, which
+# the PUID-dropped container processes then fail their writability guard on.
+# Escape hatch for unattended installs on root-only hosts: pass explicit
+# non-root PUID/PGID env vars (and own the prefix accordingly).
+require_unprivileged() {
+    local euid="${INSTALL_EUID:-$EUID}"   # test seam (devtools/test-install-env.sh)
+    (( euid == 0 )) || return 0
+    if is_ugid "${PUID:-}" && is_ugid "${PGID:-}"; then
+        warn "running as root with explicit PUID=${PUID} PGID=${PGID}. Files generated under $PREFIX will be root-owned; chown the prefix to ${PUID}:${PGID} if containers fail their writability check."
+        return 0
+    fi
+    err "do not run install.sh as root/sudo. Containers drop privileges to your uid:gid (PUID/PGID), and a root run seeds the unusable 0:0 — services then crash-loop in the entrypoint's groupadd. Re-run as the regular user that owns the media; if docker requires sudo, join the docker group first: sudo usermod -aG docker \$USER && newgrp docker. (Unattended root installs: pass explicit non-root PUID= and PGID= env vars.)"
+}
+
+# Resolve the PUID/PGID this run seeds: explicit env override > invoking user.
+# Sets ARM_PUID/ARM_PGID plus ARM_UGID_EXPLICIT=1 when the operator passed an
+# override — an explicit override is the one thing that outranks values already
+# persisted in .env (see seed_env's preserve-on-rerun rule).
+resolve_puid_pgid() {
+    ARM_UGID_EXPLICIT=0
+    if [[ -n "${PUID:-}" || -n "${PGID:-}" ]]; then
+        if ! is_ugid "${PUID:-}" || ! is_ugid "${PGID:-}"; then
+            err "invalid PUID/PGID override '${PUID:-}:${PGID:-}' — both must be numeric and non-zero."
+        fi
+        ARM_PUID="$PUID"; ARM_PGID="$PGID"; ARM_UGID_EXPLICIT=1
+        return 0
+    fi
+    ARM_PUID="$(id -u)"; ARM_PGID="$(id -g)"
+}
+
 # Resolve the image tag that pins ALL service images (backend/ripper/ui +
 # the transcode image the dispatcher spawns). Reuse an existing pin from the
 # prefix's .env so re-runs don't silently upgrade and work offline; otherwise
@@ -158,6 +203,8 @@ resolve_image_tag() {
 
 check_prereqs() {
     log "checking prereqs"
+
+    require_unprivileged
 
     require docker  "install: https://docs.docker.com/engine/install/"
     require openssl "openssl should be present on any modern Linux system"
@@ -412,9 +459,7 @@ detect_render_gid() {
 seed_env() {
     local env_file="$PREFIX/.env"
 
-    local puid pgid cdrom_gid
-    puid="$(id -u)"
-    pgid="$(id -g)"
+    local puid="$ARM_PUID" pgid="$ARM_PGID" cdrom_gid
     cdrom_gid="$(stat -c '%g' /dev/sr0 2>/dev/null || echo 44)"
 
     local arm_gpus render_gid
@@ -422,12 +467,31 @@ seed_env() {
     render_gid="$(detect_render_gid || true)"
 
     if [[ -f "$env_file" ]]; then
-        log ".env exists; preserving secrets, re-deriving PUID/PGID/CDROM_GID/ARM_GPUS/ARM_RENDER_GID"
+        # PUID/PGID are operator policy (e.g. NFS uid mappings hand-tuned after
+        # install), not re-derivable host facts — never clobber a usable existing
+        # value on re-run. Precedence: explicit PUID/PGID env override > existing
+        # non-zero .env value > this run's derivation (which heals the 0:0 a
+        # pre-guard sudo run seeded).
+        local cur_puid cur_pgid
+        cur_puid="$(sed -nE 's/^PUID=(.*)$/\1/p' "$env_file" | head -n1)"
+        cur_pgid="$(sed -nE 's/^PGID=(.*)$/\1/p' "$env_file" | head -n1)"
+        if (( ARM_UGID_EXPLICIT )); then
+            if [[ "${cur_puid}:${cur_pgid}" != "${puid}:${pgid}" ]]; then
+                log "explicit override: PUID/PGID ${cur_puid:-unset}:${cur_pgid:-unset} -> ${puid}:${pgid}"
+            fi
+        elif is_ugid "$cur_puid" && is_ugid "$cur_pgid"; then
+            puid="$cur_puid"; pgid="$cur_pgid"
+        elif [[ -n "${cur_puid}${cur_pgid}" ]]; then
+            warn "healing unusable PUID/PGID '${cur_puid}:${cur_pgid}' in .env -> ${puid}:${pgid} (0 is never a valid container uid/gid)"
+        fi
+        log ".env exists; preserving secrets + PUID/PGID, re-deriving CDROM_GID/ARM_GPUS/ARM_RENDER_GID"
         sed -i \
             -e "s|^PUID=.*|PUID=${puid}|" \
             -e "s|^PGID=.*|PGID=${pgid}|" \
             -e "s|^CDROM_GID=.*|CDROM_GID=${cdrom_gid}|" \
             "$env_file"
+        grep -q '^PUID=' "$env_file" || printf 'PUID=%s\n' "$puid" >> "$env_file"
+        grep -q '^PGID=' "$env_file" || printf 'PGID=%s\n' "$pgid" >> "$env_file"
         if grep -q '^ARM_GPUS=' "$env_file"; then
             sed -i "s|^ARM_GPUS=.*|ARM_GPUS=${arm_gpus}|" "$env_file"
         else
@@ -786,10 +850,16 @@ to set up nvidia-container-toolkit above.)
 EOF
 }
 
+# Test seam: lets devtools/test-install-env.sh source the functions above
+# without executing the install (mirrors ARM_ENTRYPOINT_SOURCE_ONLY in
+# services/_common/docker-entrypoint.sh). No-op in production.
+[[ -n "${ARM_INSTALL_SOURCE_ONLY:-}" ]] && return 0
+
 # ----------------------------------------------------------------- main
 
 main() {
     check_prereqs
+    resolve_puid_pgid
     ensure_prefix
 
     if [[ $ROTATE_CA -eq 1 ]]; then
