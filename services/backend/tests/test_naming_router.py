@@ -550,6 +550,8 @@ def test_naming_preview_requires_auth() -> None:
     with TestClient(app) as client:
         r = client.post("/api/naming/preview", json={"template": "x", "media_type": "movie"})
     assert r.status_code == 401
+
+
 def test_preview_falls_back_to_drive_default_session(signing_key: bytes) -> None:
     """No pending_session_id: the preview must resolve the drive's default
     session when Config.auto_transcode_on_idle is on — the same resolution
