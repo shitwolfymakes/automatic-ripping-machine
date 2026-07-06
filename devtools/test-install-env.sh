@@ -91,7 +91,9 @@ check "resolve rejects PGID=0" 1 "$rc"
 PREFIX="$TMP/fresh"
 mkdir -p "$PREFIX"
 PUID="" PGID="" resolve_puid_pgid
-seed_env >/dev/null
+log_out="$(seed_env)"
+check "fresh seed log states PUID:PGID" "yes" \
+    "$( [[ "$log_out" == *"PUID:PGID ${MY_UID}:${MY_GID}"* ]] && echo yes || echo no )"
 check "fresh seed PUID" "$MY_UID" "$(env_get "$PREFIX/.env" PUID)"
 check "fresh seed PGID" "$MY_GID" "$(env_get "$PREFIX/.env" PGID)"
 check "fresh seed has secrets" "yes" "$( [[ -n "$(env_get "$PREFIX/.env" ARM_SERVICE_TOKEN)" ]] && echo yes || echo no )"
@@ -110,7 +112,9 @@ ARM_GPUS=[]
 ARM_RENDER_GID=
 EOF
 PUID="" PGID="" resolve_puid_pgid
-seed_env >/dev/null
+log_out="$(seed_env)"
+check "rerun log states the preserved values" "yes" \
+    "$( [[ "$log_out" == *"preserving secrets + PUID/PGID 1001:1000"* ]] && echo yes || echo no )"
 check "rerun preserves hand-set PUID" "1001" "$(env_get "$PREFIX/.env" PUID)"
 check "rerun preserves hand-set PGID" "1000" "$(env_get "$PREFIX/.env" PGID)"
 check "rerun preserves secrets" "keepme" "$(env_get "$PREFIX/.env" POSTGRES_PASSWORD)"
