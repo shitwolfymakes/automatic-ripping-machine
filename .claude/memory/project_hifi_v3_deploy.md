@@ -8,7 +8,17 @@ metadata:
 The v3 stack runs on **hifi-server** (host `quark`, `192.168.0.68`, user `upb`,
 key `~/.ssh/hifi`) at `~/src/automatic-ripping-machine-v3`, cloned from
 `origin` (`uprightbass360/arm-v3`, now public). Deployed branch:
-`deploy/hifi-20260705` (tip `31d88ef1` as of 2026-07-05 redeploy — carries the
+`deploy/hifi-20260705`; checkout at **`69366c9d`** since 2026-07-06:
+**arm-ripper-sr0 rebuilt** there (carries the abandon-now-ejects fix
+`c247c9bd` + entrypoint gid-adopt; verified `_spawn_eject` present in the
+running container). Backend/ui/transcode images still from the `31d88ef1`
+build — no functional delta for them in the 2026-07-06 commits.
+**Deploy gotcha (hit 2026-07-06): hifi's remote-tracking ref
+`origin/deploy/hifi-20260705` goes stale** (a single-branch `git fetch origin
+<branch>` there did NOT update it, and `reset --hard origin/<branch>` silently
+landed on months-old `25679964`). Always `git fetch origin && git reset --hard
+<explicit SHA>` (or FETCH_HEAD) on hifi and verify with `git log --oneline -1`.
+Previous state (tip `31d88ef1` as of 2026-07-05 redeploy — carries the
 GEP encoder-probe + installer fixes F-A/F-F/F-G; rebuilt+recreated
 arm-backend/arm-ui-neu/arm-transcode:latest under all 3 overlays, offload
 verified writing NFS as 1001:1000 via remote `transcoder`) — the disconnected-PR deploy branch
