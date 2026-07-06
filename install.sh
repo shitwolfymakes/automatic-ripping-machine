@@ -126,10 +126,11 @@ confirm() {
 # ------------------------------------------------ runtime uid/gid resolution
 
 # PUID/PGID are the uid:gid every container drops to via gosu, and the owner
-# the entrypoints expect on the media mounts. 0 is never valid: the shared
-# entrypoint runs `groupadd --gid "${PGID}" arm`, and gid 0 collides with the
-# image's root group — every service crash-loops.
-is_ugid() { [[ "${1:-}" =~ ^[0-9]+$ ]] && (( $1 != 0 )); }
+# the entrypoints expect on the media mounts. 0 is never valid (uid/gid 0 is
+# root in the image; the entrypoint refuses it), leading zeros would be
+# re-parsed as a different id by useradd/groupadd, and anything past the
+# 32-bit id space is rejected by useradd anyway.
+is_ugid() { [[ "${1:-}" =~ ^[1-9][0-9]{0,9}$ ]] && (( $1 <= 4294967294 )); }
 
 # Refuse root runs. Under sudo the whole install is poisoned, not just the
 # uid derivation: HOME=/root moves the default prefix to /root/arm, and every
@@ -138,10 +139,13 @@ is_ugid() { [[ "${1:-}" =~ ^[0-9]+$ ]] && (( $1 != 0 )); }
 # Escape hatch for unattended installs on root-only hosts: pass explicit
 # non-root PUID/PGID env vars (and own the prefix accordingly).
 require_unprivileged() {
-    local euid="${INSTALL_EUID:-$EUID}"   # test seam (devtools/test-install-env.sh)
+    local euid="$EUID"
+    # Test seam — honored ONLY under the source-only test mode, so a stray
+    # ARM_INSTALL_EUID in a real environment can't bypass the root guard.
+    [[ -n "${ARM_INSTALL_SOURCE_ONLY:-}" ]] && euid="${ARM_INSTALL_EUID:-$EUID}"
     (( euid == 0 )) || return 0
     if is_ugid "${PUID:-}" && is_ugid "${PGID:-}"; then
-        warn "running as root with explicit PUID=${PUID} PGID=${PGID}. Files generated under $PREFIX will be root-owned; chown the prefix to ${PUID}:${PGID} if containers fail their writability check."
+        warn "running as root with explicit PUID=${PUID} PGID=${PGID}; generated files under $PREFIX will be chowned to ${PUID}:${PGID} at the end of the run."
         return 0
     fi
     err "do not run install.sh as root/sudo. Containers drop privileges to your uid:gid (PUID/PGID), and a root run seeds the unusable 0:0 — services then crash-loop in the entrypoint's groupadd. Re-run as the regular user that owns the media; if docker requires sudo, join the docker group first: sudo usermod -aG docker \$USER && newgrp docker. (Unattended root installs: pass explicit non-root PUID= and PGID= env vars.)"
@@ -161,6 +165,11 @@ resolve_puid_pgid() {
         return 0
     fi
     ARM_PUID="$(id -u)"; ARM_PGID="$(id -g)"
+    # A non-root user can still carry primary gid 0 (wheel-ish setups on some
+    # NAS/admin accounts) — that seeds a PGID the entrypoint's groupadd rejects.
+    if ! is_ugid "$ARM_PUID" || ! is_ugid "$ARM_PGID"; then
+        err "your uid:gid resolves to ${ARM_PUID}:${ARM_PGID}, which containers cannot run as (uid/gid 0 collides with root in the image). Pass explicit non-root PUID= and PGID= env vars — e.g. the owner of your media directory."
+    fi
 }
 
 # Extract the bare host from a URL: strip scheme://, any user@, :port, and /path.
@@ -273,6 +282,27 @@ ensure_prefix() {
     # 2775 = setgid + group-writable. Per docs/arch/06-deployment.md: lets
     # ARM-created subdirs inherit the parent group automatically.
     chmod 2775 "$PREFIX/raw" "$PREFIX/media" "$PREFIX/logs"
+}
+
+# Root escape-hatch runs (EUID 0 + explicit PUID/PGID) generate root-owned
+# files the gosu-dropped containers can't use: 0400 cert keys become
+# unreadable and the data dirs fail the entrypoint's writability guard.
+# Hand everything this run generated to the target uid:gid. db/ is
+# deliberately excluded — the Postgres image manages its data dir's
+# ownership itself, and chowning a live cluster would break it.
+fix_prefix_ownership() {
+    (( EUID == 0 )) || return 0
+    (( ${ARM_UGID_EXPLICIT:-0} )) || return 0
+    log "root install: chowning generated files under $PREFIX to ${ARM_PUID}:${ARM_PGID} (db/ untouched)"
+    chown "${ARM_PUID}:${ARM_PGID}" "$PREFIX"
+    local p
+    for p in certs raw media logs ssh; do
+        [[ -d "$PREFIX/$p" ]] && chown -R "${ARM_PUID}:${ARM_PGID}" "$PREFIX/$p"
+    done
+    for p in .env docker-compose.yml; do
+        [[ -f "$PREFIX/$p" ]] && chown "${ARM_PUID}:${ARM_PGID}" "$PREFIX/$p"
+    done
+    return 0
 }
 
 # ---------------------------------------------------------- cert generation
@@ -699,16 +729,28 @@ seed_env() {
         # non-zero .env value > this run's derivation (which heals the 0:0 a
         # pre-guard sudo run seeded).
         local cur_puid cur_pgid
-        cur_puid="$(sed -nE 's/^PUID=(.*)$/\1/p' "$env_file" | head -n1)"
-        cur_pgid="$(sed -nE 's/^PGID=(.*)$/\1/p' "$env_file" | head -n1)"
+        # tr strips CR/whitespace so a CRLF-edited .env (Windows editor, WSL)
+        # doesn't read as garbage and get its valid value clobbered.
+        cur_puid="$(sed -nE 's/^PUID=(.*)$/\1/p' "$env_file" | head -n1 | tr -d '[:space:]')"
+        cur_pgid="$(sed -nE 's/^PGID=(.*)$/\1/p' "$env_file" | head -n1 | tr -d '[:space:]')"
         if (( ARM_UGID_EXPLICIT )); then
             if [[ "${cur_puid}:${cur_pgid}" != "${puid}:${pgid}" ]]; then
                 log "explicit override: PUID/PGID ${cur_puid:-unset}:${cur_pgid:-unset} -> ${puid}:${pgid}"
             fi
-        elif is_ugid "$cur_puid" && is_ugid "$cur_pgid"; then
-            puid="$cur_puid"; pgid="$cur_pgid"
-        elif [[ -n "${cur_puid}${cur_pgid}" ]]; then
-            warn "healing unusable PUID/PGID '${cur_puid}:${cur_pgid}' in .env -> ${puid}:${pgid} (0 is never a valid container uid/gid)"
+        else
+            # Preserve each value independently: a half-edited .env (one key
+            # valid, the other missing/0) keeps its good half and heals only
+            # the broken one.
+            if is_ugid "$cur_puid"; then
+                puid="$cur_puid"
+            elif [[ -n "$cur_puid" ]]; then
+                warn "healing unusable PUID '${cur_puid}' in .env -> ${puid} (must be a non-zero numeric uid)"
+            fi
+            if is_ugid "$cur_pgid"; then
+                pgid="$cur_pgid"
+            elif [[ -n "$cur_pgid" ]]; then
+                warn "healing unusable PGID '${cur_pgid}' in .env -> ${pgid} (must be a non-zero numeric gid)"
+            fi
         fi
         log ".env exists; preserving secrets + PUID/PGID ${puid}:${pgid}, re-deriving CDROM_GID/ARM_GPUS/ARM_RENDER_GID"
         sed -i \
@@ -718,6 +760,7 @@ seed_env() {
             "$env_file"
         grep -q '^PUID=' "$env_file" || printf 'PUID=%s\n' "$puid" >> "$env_file"
         grep -q '^PGID=' "$env_file" || printf 'PGID=%s\n' "$pgid" >> "$env_file"
+        grep -q '^CDROM_GID=' "$env_file" || printf 'CDROM_GID=%s\n' "$cdrom_gid" >> "$env_file"
         if grep -q '^ARM_GPUS=' "$env_file"; then
             sed -i "s|^ARM_GPUS=.*|ARM_GPUS=${arm_gpus}|" "$env_file"
         else
@@ -1202,6 +1245,7 @@ main() {
 
     if [[ $CERTS_ONLY -eq 1 ]]; then
         log "certs-only mode; skipping env/compose/udev"
+        fix_prefix_ownership
         return 0
     fi
 
@@ -1216,6 +1260,7 @@ main() {
     [[ $NO_COMPOSE -eq 0 ]] && generate_compose
     [[ $NO_UDEV -eq 0 ]]    && ensure_udev_rule
 
+    fix_prefix_ownership
     print_next_steps
 
     if [[ $START -eq 1 ]]; then

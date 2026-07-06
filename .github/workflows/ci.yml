@@ -87,6 +87,18 @@ jobs:
           fi
           shellcheck "${files[@]}"
 
+  test-shell:
+    name: test (shell — plain-bash suites)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      # Zero-infra unit tests that source the production scripts via their
+      # *_SOURCE_ONLY seams — no docker, no root, <1s each. Un-run tests rot.
+      - name: Entrypoint writability-guard suite
+        run: bash services/_common/test-entrypoint-guard.sh
+      - name: Installer PUID/PGID suite
+        run: bash devtools/test-install-env.sh
+
   test-python:
     name: test (python — pytest)
     runs-on: ubuntu-latest
