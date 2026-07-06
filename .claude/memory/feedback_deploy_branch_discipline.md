@@ -40,3 +40,15 @@ of deploy, so their eventual landing on main merges as a no-op.
 7. Watch for auto-merge near-misses: the a5102e1a merge auto-resolved a
    duplicated `drive_poll` import without flagging a conflict — eyeball
    imports and run the suite after every reconciliation merge.
+8. **Batch memory commits.** One `docs(memory)` commit per session wind-down
+   (or per major milestone), not one per action — 7 of 20 commits at the
+   2026-07-06 tip were memory noise interleaved with product code.
+9. **History legibility notes:** the four 2026-07-05/06 fix subjects appear
+   3x in deploy history (original + #48-line variant + #49-backport variant,
+   three distinct patch-ids) — the one-time cost of converting cherry-pick
+   twins into merge ancestry. Tag `deploy-reconciled-20260706` (origin only;
+   never push tags to wolfy — release.yml consumes its tag namespace) marks
+   the reconciliation point. When redeploying hifi next, cut
+   `deploy/hifi-<date>` from the current tip per convention; don't rename
+   mid-deploy. Dead PR branches get deleted on wolfy once superseded
+   (#48's branch removed 2026-07-06; restorable from the PR page).
