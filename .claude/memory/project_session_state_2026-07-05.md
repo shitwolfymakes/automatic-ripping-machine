@@ -23,11 +23,19 @@ are" snapshot. Supersedes `project_session_state_2026-06-29` (deleted).
 - **wolfy PR #41** = `feat/tier25-remote-transcode-offload`, tip **`04077f0b`**
   — RESTORED to pure remote-offload scope 2026-07-06 (the four fix commits
   were briefly stacked on it; user flagged the tangle, force-pushed back).
-- **wolfy PR #48** = `fix/installer-puid-abandon-eject`, tip **`802719f0`**
-  (= `04077f0b` + the four fix commits; the abandon-eject pick needed an
-  import-conflict resolve — that branch has no makemkv_sdf). STACKED on
-  #41's branch because the installer fixes patch its install.sh code;
-  **retarget #48 to `main` after #41 merges.**
+- **wolfy PR #49** = `fix/main-installer-puid-abandon-eject` — the four fixes
+  BACKPORTED onto wolfy `main` (all four bugs verified present on main; fix
+  PRs target main per repo convention). Backport dropped tier-26-only hunks
+  (url_host, offload prompt), the deploy-only entrypoint-guard CI step, and
+  the review-gate tests; 901-test main suite green. **PR #48 CLOSED as
+  superseded.** The backport branch is merged into deploy (`d003a543`,
+  content-identical ancestry merge) so the stack's eventual landing is a
+  no-op here. When #41 reaches main it reconciles against these fixes —
+  small, known (one import-position resolve).
+- **Open-PR titles renumbered 2026-07-06** so tier number = merge order
+  (#42→T27 … #46→T31; #47 stays T32) and ALL open-PR titles de-em-dashed
+  (user preference: hyphens, never em dashes, in PR names). Branch names
+  keep their original tier numbers — only titles moved.
   Carries the SAME 7 encoder-probe+fix commits as the deploy branch, but under
   cherry-picked SHAs (patch-id identical; verified via `git cherry`). PR #41 is
   the upstream-PR line; the deploy branch is the fork-local deploy line.
