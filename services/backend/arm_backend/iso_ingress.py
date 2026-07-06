@@ -48,6 +48,8 @@ def parse_iso_filename(name: str) -> tuple[str, int | None]:
     m = _YEAR_RE.search(stem)
     if m:
         year = int(m.group(1))
-        stem = stem[: m.start()]
+        # Text before the year is the usual title position; fall back to the
+        # text after it so "(2008) Iron Man.iso" keeps its title.
+        stem = stem[: m.start()].strip() or stem[m.end() :]
     title = re.sub(r"[._]+", " ", stem).strip()
     return title, year
