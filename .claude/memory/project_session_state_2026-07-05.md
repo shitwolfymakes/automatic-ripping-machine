@@ -10,17 +10,19 @@ are" snapshot. Supersedes `project_session_state_2026-06-29` (deleted).
 
 ## Branch / deploy / PR state (all pushed, in sync)
 
-- **Working + deploy branch:** `deploy/hifi-20260705`, tip **`4d330378`** (+
-  memory commit on top) — 2026-07-05 late: installer root-refusal +
-  PUID/PGID preserve-on-rerun fix from deploy-tester feedback (`7d54e923`),
-  log clarity (`7a404e45`), then a full adversarial review pass (`4d330378`:
+- **Working + deploy branch:** `deploy/hifi-20260705`, tip **`c247c9bd`** (+
+  memory commit on top) — 2026-07-05 late, from deploy-tester feedback:
+  installer root-refusal + PUID/PGID preserve-on-rerun (`7d54e923`), log
+  clarity (`7a404e45`), full adversarial review pass (`4d330378`:
   derived-gid-0 validation, per-field heal, root-install chown, CRLF-safe
   .env reads, entrypoint adopts existing PGID group e.g. gid 100 `users`,
-  CI test-shell job, 29-check suite). Pushed to BOTH `origin`
-  (`uprightbass360/arm-v3`) and `wolfy`.
-- **wolfy PR #41** = `feat/tier25-remote-transcode-offload`, tip **`69257015`**
-  (= `04077f0b` + the three installer commits cherry-picked; patch-id
-  identical to the deploy-branch versions).
+  CI test-shell job), and ripper abandon-now-ejects (`c247c9bd`: eject ran
+  only at the successful-rip tail; `_handle_abandon` now spawns a deduped
+  eject when the abandoned job owns the pipeline or the idle drive still
+  seats the disc). Pushed to BOTH `origin` and `wolfy`.
+- **wolfy PR #41** = `feat/tier25-remote-transcode-offload`, tip **`802719f0`**
+  (= `04077f0b` + the four fix commits cherry-picked; the abandon-eject
+  pick needed an import-conflict resolve — that branch has no makemkv_sdf).
   Carries the SAME 7 encoder-probe+fix commits as the deploy branch, but under
   cherry-picked SHAs (patch-id identical; verified via `git cherry`). PR #41 is
   the upstream-PR line; the deploy branch is the fork-local deploy line.
