@@ -57,3 +57,10 @@ def test_parse_filename_title_only() -> None:
     title, year = parse_iso_filename("Some_Disc.iso")
     assert title == "Some Disc"
     assert year is None
+
+
+def test_parse_filename_year_before_title() -> None:
+    """A leading (YYYY) must not swallow the title that follows it."""
+    title, year = parse_iso_filename("(2008) Iron Man.iso")
+    assert title == "Iron Man"
+    assert year == 2008
