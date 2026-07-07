@@ -1,7 +1,9 @@
 """System preflight / paths / stats. Read-only operator diagnostics.
 Ports neu's system/preflight + system/paths + system/stats, adapted to v3."""
 
+import functools
 import importlib.metadata
+from pathlib import Path
 import os
 from datetime import datetime, timezone
 
@@ -130,7 +132,28 @@ async def stats(
     )
 
 
+# The canonical release version lives in the repo-root VERSION file, baked
+# into the image at /app/VERSION; the workspace member's pyproject pins a
+# static 0.0.0, so importlib.metadata is only a last resort. Resolution:
+# ARM_VERSION env > VERSION file > package metadata > sentinel.
+_VERSION_FILE_CANDIDATES: tuple[Path, ...] = (
+    Path("/app/VERSION"),
+    Path(__file__).resolve().parents[4] / "VERSION",  # repo root (dev checkout)
+)
+
+
+@functools.cache
 def _app_version() -> str:
+    env = os.environ.get("ARM_VERSION")
+    if env:
+        return env.strip()
+    for candidate in _VERSION_FILE_CANDIDATES:
+        try:
+            text = candidate.read_text().strip()
+        except OSError:
+            continue
+        if text:
+            return text
     try:
         return importlib.metadata.version("arm_backend")
     except importlib.metadata.PackageNotFoundError:
