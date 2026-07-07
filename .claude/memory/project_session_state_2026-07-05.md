@@ -123,7 +123,21 @@ wolfy reviews. Per-PR outcomes:
   retention (needs fake IS NULL support or e2e coverage), last_error may
   embed credentialed URLs, fire-and-record duplication, event-type
   vocabulary in 5 places, config PATCH accepts dead apprise-urls field.
-- Tiers 4+ not yet swept. Stack-top survivor batch still pending
+- **PR #9 (Tier-4, quickwins)**: fixes COMMITTED on `feat/tier4-quickwins`
+  (`dcf0fd7d..d41de94a`): {disc} token now plumbed from the matched MB
+  medium's position (was validate-ok/apply-fail everywhere); version
+  endpoint reads ARM_VERSION env > VERSION file (Dockerfile bakes
+  /app/VERSION) > pkg metadata, functools.cache'd (was 0.0.0 forever);
+  NamingValidateRequest mirrors preview/save (min_length=1, preset
+  default True); minors (existence-check guard, fake _Scalars.first(),
+  test import hygiene). Deploy merged (`94aac7f6`, 1406 green — deploy's
+  system.py resources block + new version chain coexist).
+  **OPEN DECISION on #9 (comment 4899913780): DELETE /api/drives/{id}**
+  — FK RESTRICT means 500 for any drive with job history; the fake-based
+  test asserts the impossible 204; options (block-any-jobs 409 / SET NULL
+  migration / tombstone) put to wolfy; also lifecycle gap (live ripper
+  heartbeats 404 after delete, row resurrects on restart).
+- Tiers 5+ not yet swept. Stack-top survivor batch still pending
   (Tier-2 survivors + config.py apprise-urls deprecation).
 
 ## Open / not done (for a future pickup)
