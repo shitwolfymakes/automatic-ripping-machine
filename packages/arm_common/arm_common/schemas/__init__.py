@@ -15,7 +15,6 @@ from arm_common.schemas.drives import (
     DriveRescanResponse,
     DriveUpdateRequest,
 )
-from arm_common.schemas.iso import IsoScanRequest, IsoScanResponse
 from arm_common.schemas.jobs import (
     AbandonJobRequest,
     BulkDeleteJobsResponse,
@@ -160,8 +159,6 @@ __all__ = [
     "HeartbeatRequest",
     "IdentifyRequest",
     "InAppChannelConfig",
-    "IsoScanRequest",
-    "IsoScanResponse",
     "JobCompleteRequest",
     "JobDetailView",
     "JobUpdateRequest",
