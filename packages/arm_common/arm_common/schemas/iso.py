@@ -9,4 +9,3 @@ class IsoScanResponse(BaseModel):
     path: str
     suggested_title: str
     suggested_year: int | None
-    exists: bool
