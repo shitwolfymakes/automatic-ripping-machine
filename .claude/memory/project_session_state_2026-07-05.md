@@ -105,7 +105,26 @@ wolfy reviews. Per-PR outcomes:
   400; `_escape_lucene` covers only AND-filters); pause-gate duplicated
   with fail-open vs 500 semantics (jobs.py:745); plain-pause (hold_for_review
   off) still strands seated discs after unpause even at deploy tip.
-- Tiers 3+ not yet swept.
+- **PR #8 (Tier-3, notifications)**: 8-finder pass + 5 verifiers; unlike
+  Tier-2, findings survive the whole stack (notifications extended, not
+  redesigned upstack) → fixes COMMITTED on `feat/notification-channels`
+  (`d5779994..1abd3881`, 4 commits): notifier raises AppriseDeliveryError
+  (apprise signals failure by return value — success was unfalsifiable);
+  global toggle now gates apprise only via Message.apprise_enabled (bell
+  works out of the box; needs_user_input no longer consumed unseen);
+  per-event watermark commit (no batch re-sends); catalog-ordered URL
+  composition + merge keeps stored url; config.url redacted scheme://****
+  on read w/ PATCH echo-guard; migration 0015 imports channels enabled.
+  Stack-coherence merges done first (neu-ports→tier2-ports→notification-
+  channels, all clean; tier2's test_key rewrite intentionally supersedes
+  the #6 omdb guard). Deploy merged (`1ff74f32`; deploy's notifier had
+  evolved — asset branding — merge combined cleanly, tests adapted).
+  DEFERRED (PR comment 4899705091): tick full-scan/inbox O(n)/no
+  retention (needs fake IS NULL support or e2e coverage), last_error may
+  embed credentialed URLs, fire-and-record duplication, event-type
+  vocabulary in 5 places, config PATCH accepts dead apprise-urls field.
+- Tiers 4+ not yet swept. Stack-top survivor batch still pending
+  (Tier-2 survivors + config.py apprise-urls deprecation).
 
 ## Open / not done (for a future pickup)
 
