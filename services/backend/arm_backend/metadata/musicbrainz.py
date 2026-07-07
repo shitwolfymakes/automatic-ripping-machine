@@ -101,6 +101,12 @@ class MusicBrainzClient:
             "tracks": tracks,
             **top,
         }
+        # The matched medium's position IS this disc's number — plumb it so
+        # the {disc} naming token resolves at apply time (transcode_apply
+        # reads metadata_json["disc"]; without this the token validates at
+        # save yet fails every real music apply).
+        if medium is not None and medium.get("position"):
+            payload["disc"] = medium["position"]
 
         return MetadataResult(title=title_val, year=year_val, kind="music", payload=payload)
 
