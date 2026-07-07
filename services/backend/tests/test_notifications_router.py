@@ -108,7 +108,7 @@ def test_create_channel_with_raw_url(signing_key: bytes) -> None:
     with TestClient(app) as client:
         r = client.post("/api/notifications/channels", json=body, headers=_auth(token))
     assert r.status_code == 201, r.text
-    assert r.json()["config"]["url"] == "json://localhost/x"
+    assert r.json()["config"]["url"] == "json://****"
     assert r.json()["id"].startswith("ncl_")
 
 
@@ -125,7 +125,7 @@ def test_create_channel_composes_from_fields(signing_key: bytes) -> None:
         r = client.post("/api/notifications/channels", json=body, headers=_auth(token))
     assert r.status_code == 201, r.text
     cfg = r.json()["config"]
-    assert cfg["url"] == "discord://1/2"
+    assert cfg["url"] == "discord://****"  # redacted on read; stored cleartext
     # private fields masked on the way out
     assert cfg["fields"]["webhook_id"] == "<hidden>"
 
@@ -147,8 +147,10 @@ def test_create_apprise_channel_with_typed_fields(signing_key: bytes) -> None:
         r = client.post("/api/notifications/channels", json=body, headers=_auth(token))
     assert r.status_code == 201, r.text
     cfg = r.json()["config"]
-    # bool field composed into the apprise url (tts=yes), proving non-str values round-trip
-    assert "tts=yes" in cfg["url"]
+    assert cfg["url"] == "discord://****"  # redacted on read
+    # bool field composed into the STORED apprise url (tts=yes), proving
+    # non-str values round-trip (response url is redacted, so check the row)
+    assert "tts=yes" in db.rows["notification_channels"][-1].config["url"]
     # non-private bool field passes through the masked view unchanged
     assert cfg["fields"]["tts"] is True
 
@@ -188,7 +190,7 @@ def test_patch_channel_name_only(signing_key: bytes) -> None:
         r = client.patch("/api/notifications/channels/ncl_1", json={"name": "New"}, headers=_auth(token))
     assert r.status_code == 200, r.text
     assert r.json()["name"] == "New"
-    assert r.json()["config"]["url"] == "json://localhost/x"  # untouched
+    assert r.json()["config"]["url"] == "json://****"  # stored untouched, redacted on read
 
 
 def test_patch_channel_merges_hidden_secret(signing_key: bytes) -> None:
@@ -523,3 +525,30 @@ def test_app_registers_notifications_router() -> None:
     from arm_backend.main import app
     paths = {r.path for r in app.routes}
     assert "/api/notifications/channels" in paths
+
+
+def test_patch_channel_redacted_url_echo_keeps_stored(signing_key: bytes) -> None:
+    """GET returns the url redacted (scheme://****); a client that round-trips
+    it in a PATCH must not overwrite the stored url with the mask."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    ch = NotificationChannel(
+        id="ncl_1",
+        type="apprise",
+        name="RawUrl",
+        config={"type": "apprise", "url": "json://host/secret"},
+        subscribed_events=["rip.completed"],
+    )
+    db.rows.setdefault("notification_channels", []).append(ch)
+    with TestClient(app) as client:
+        got = client.get("/api/notifications/channels/ncl_1", headers=_auth(token))
+        assert got.status_code == 200, got.text
+        masked_url = got.json()["config"]["url"]
+        assert masked_url == "json://****"
+        r = client.patch(
+            "/api/notifications/channels/ncl_1",
+            json={"config": {"type": "apprise", "url": masked_url}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert ch.config["url"] == "json://host/secret"
