@@ -10546,6 +10546,7 @@
         "properties": {
           "template": {
             "type": "string",
+            "minLength": 1,
             "title": "Template"
           },
           "media_type": {
@@ -10554,7 +10555,7 @@
           "has_transcode_preset": {
             "type": "boolean",
             "title": "Has Transcode Preset",
-            "default": false
+            "default": true
           }
         },
         "type": "object",

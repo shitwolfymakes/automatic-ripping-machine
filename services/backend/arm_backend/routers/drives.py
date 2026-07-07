@@ -154,11 +154,15 @@ async def delete_drive(
     # the ripper boot-probe uses. A live ripper re-registers the row on its next
     # startup (hostname upsert), so this only guards the active-rip case.
     active = (
-        (await db.execute(select(Job).where(col(Job.drive_id) == drive_id).where(col(Job.status) == JobStatus.RIPPING)))
+        (
+            await db.execute(
+                select(Job).where(col(Job.drive_id) == drive_id).where(col(Job.status) == JobStatus.RIPPING).limit(1)
+            )
+        )
         .scalars()
-        .all()
+        .first()
     )
-    if active:
+    if active is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="cannot delete a drive with an in-flight job",
