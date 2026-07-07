@@ -6497,18 +6497,13 @@
               }
             ],
             "title": "Suggested Year"
-          },
-          "exists": {
-            "type": "boolean",
-            "title": "Exists"
           }
         },
         "type": "object",
         "required": [
           "path",
           "suggested_title",
-          "suggested_year",
-          "exists"
+          "suggested_year"
         ],
         "title": "IsoScanResponse"
       },

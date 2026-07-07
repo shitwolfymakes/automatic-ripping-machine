@@ -258,3 +258,19 @@ def test_omdb_5xx_returns_200_invalid(signing_key: bytes) -> None:
     assert r.status_code == 200, r.text
     assert r.json()["valid"] is False
     assert "503" in r.json()["detail"]
+
+
+@respx.mock
+def test_omdb_non_json_200_returns_invalid(signing_key: bytes) -> None:
+    """A proxy/outage page (HTTP 200 with an HTML body) must yield valid=False,
+    not an unhandled JSONDecodeError → 500."""
+    respx.get("https://www.omdbapi.com/").mock(
+        return_value=httpx.Response(200, text="<html>gateway maintenance</html>")
+    )
+    db = FakeSession()
+    _seed(db, omdb_api_key="good-omdb-key")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get("/api/metadata/test-key", params={"provider": "omdb"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["valid"] is False

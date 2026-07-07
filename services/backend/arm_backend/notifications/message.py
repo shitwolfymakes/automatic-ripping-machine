@@ -25,6 +25,10 @@ class Message:
     # The loaded Job (or None) so listeners can resolve per-channel
     # template overrides and the inbox can deep-link.
     job: Job | None
+    # Global Config.notifications_enabled at dispatch time. Gates EXTERNAL
+    # delivery only (AppriseListener no-ops when False); the in-app inbox
+    # always delivers so the bell works out of the box.
+    apprise_enabled: bool = True
 
 
 class NotificationListener(Protocol):

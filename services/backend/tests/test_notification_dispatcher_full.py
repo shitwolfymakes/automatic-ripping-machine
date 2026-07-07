@@ -72,3 +72,28 @@ async def test_run_loop_swallows_tick_error_then_stops(monkeypatch: pytest.Monke
     d.stop()
     await asyncio.wait_for(task, timeout=2.0)
     assert calls >= 1  # loop ran, exception was swallowed, loop exited on stop
+
+
+async def test_real_notifier_raises_when_async_notify_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """apprise signals failure by RETURN VALUE (False/None), never raising —
+    the notifier must convert that into an exception or failures are
+    unrecordable (last_success_at/dispatch_log lie)."""
+    fake = _FakeApprise()
+
+    async def _failing_notify(*, title: str, body: str) -> bool:
+        return False
+
+    fake.async_notify = _failing_notify  # type: ignore[method-assign]
+    monkeypatch.setattr(nd, "apprise", type("M", (), {"Apprise": lambda: fake}))
+    with pytest.raises(nd.AppriseDeliveryError):
+        await _RealAppriseNotifier().notify(["json://localhost"], "T", "B")
+
+
+async def test_real_notifier_raises_on_invalid_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ap.add() returns False for a URL apprise can't parse; an empty bag
+    makes async_notify return None. Both must surface as failures."""
+    fake = _FakeApprise()
+    fake.add = lambda url: False  # type: ignore[method-assign]
+    monkeypatch.setattr(nd, "apprise", type("M", (), {"Apprise": lambda: fake}))
+    with pytest.raises(nd.AppriseDeliveryError):
+        await _RealAppriseNotifier().notify(["garbage"], "T", "B")

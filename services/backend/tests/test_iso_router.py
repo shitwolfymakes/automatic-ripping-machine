@@ -58,7 +58,7 @@ def test_scan_returns_suggestions(signing_key: bytes, tmp_path) -> None:
     body = r.json()
     assert body["suggested_title"] == "Iron Man"
     assert body["suggested_year"] == 2008
-    assert body["exists"] is True
+    assert "exists" not in body
 
 
 def test_scan_traversal_rejected_400(signing_key: bytes, tmp_path) -> None:
