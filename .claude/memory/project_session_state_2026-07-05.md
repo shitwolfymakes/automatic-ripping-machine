@@ -76,6 +76,37 @@ Five findings surfaced+fixed, all live-verified on hifi's N97:
 - Task 1 (HW AV1 map entries) DROPPED: real image has only software `svt_av1`.
 - Full review doc: `../arm-ai/arm-v3/docs/reviews/2026-07-05-install-sh-composed-review.md`.
 
+## PR-stack pre-review sweep (2026-07-06, tiers 1-2 done)
+
+8-finder + adversarial-verify pass over the bottom of the wolfy stack before
+wolfy reviews. Per-PR outcomes:
+
+- **PR #6 (Tier-1)**: 5 fixes COMMITTED on `feat/neu-ports` (`2b098a08`
+  naming-preview session fallback via new shared
+  `auto_session.resolve_effective_session_id` + track sort; `8d6074a9` omdb
+  r.json() guard; `a125908a` iso year-first title + drop dead `exists` field
+  + snapshot regen), merged into deploy (`d64e9e90`). PR comment maps the
+  two superseded findings (makemkv regex → #11; omdb env-override → #12)
+  and the open rescan-contract question (no-op POST /rescan + dead
+  DriveStatus checks — wolfy decides WS-command vs GET demotion).
+- **PR #7 (Tier-2)**: annotated only (comment 4899487061) — its files are
+  rewritten by mid-stack tiers, so fixes at the bottom would cascade-
+  conflict. Superseded-by refs: tmdb lookup dead-end + crc64 imdb_id → #10
+  (`37443ae7`); pause invisible to ripper pre-scan → #27 (`54a74e07`);
+  multi-disc get_release → music-matching work. Cross-ref comments posted
+  on #10 and #27. REFUTED (don't relitigate): identify 4xx-non-retriable
+  classifier is correct and required.
+- **SURVIVORS past Tier-32 (verified at deploy tip; fix ONCE at stack top
+  in a future batch)**: omdb `type=tv` (should be `series`); `events_unsent`
+  lacks NOTIFIABLE filter (grows forever); `stats()` full-table scans
+  Jobs+Events per poll; preflight `writable` false-green (backend-local
+  W_OK, blocking on loop); music 404/502 by substring "not found"
+  (metadata.py:265); MusicBrainz free-text Lucene term unescaped (AC/DC →
+  400; `_escape_lucene` covers only AND-filters); pause-gate duplicated
+  with fail-open vs 500 semantics (jobs.py:745); plain-pause (hold_for_review
+  off) still strands seated discs after unpause even at deploy tip.
+- Tiers 3+ not yet swept.
+
 ## Open / not done (for a future pickup)
 
 - **task #7** (ARM_GPUS h265 over-claim → QSV rc=3): root-caused + fixed (F-G) and
