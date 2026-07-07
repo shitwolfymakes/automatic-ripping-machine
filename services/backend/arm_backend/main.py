@@ -30,7 +30,6 @@ from arm_backend.routers import (
     diagnostics,
     drives,
     health,
-    iso as iso_router,
     jobs,
     logs as logs_router,
     metadata as metadata_router,
@@ -221,7 +220,6 @@ app.include_router(diagnostics.router)
 app.include_router(metadata_router.router)
 app.include_router(naming_router.router)
 app.include_router(notifications_router.router)
-app.include_router(iso_router.router)
 app.include_router(logs_router.router)
 app.include_router(system_router.router)
 app.include_router(ws_router)
