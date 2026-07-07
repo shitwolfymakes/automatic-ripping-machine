@@ -36,7 +36,6 @@ def _roots(request: Request) -> dict[str, str]:
     return {
         "MEDIA_ROOT": settings.MEDIA_ROOT,
         "RAW_ROOT": settings.RAW_ROOT,
-        "ISO_INGRESS_ROOT": settings.ISO_INGRESS_ROOT,
         "LOG_DIR": "/logs",
     }
 
