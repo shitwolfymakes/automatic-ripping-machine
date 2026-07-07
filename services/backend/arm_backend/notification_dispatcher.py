@@ -38,9 +38,10 @@ import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Protocol
-from urllib.parse import urlparse
 
 import apprise
+
+from arm_backend.notifications.url_composer import redact_apprise_url as _redact_apprise_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
 
@@ -85,19 +86,7 @@ DEFAULT_INBOX_EVENT_TYPES: frozenset[str] = frozenset(
 NOTABLE_EVENT_TYPES: frozenset[str] = NOTIFIABLE_EVENT_TYPES | DEFAULT_INBOX_EVENT_TYPES
 
 
-def redact_apprise_url(url: str) -> str:
-    """Return a log-safe form of an Apprise URL.
-
-    Returns `"<scheme>://****"`. Apprise places credentials in netloc,
-    path, or query depending on the provider — surgical masking is
-    fragile, so we keep only the scheme. The user already knows which
-    providers they configured; the scheme alone is enough to correlate
-    a log line back to a bad URL without leaking the credential.
-    """
-    parsed = urlparse(url)
-    if not parsed.scheme:
-        return "****"
-    return f"{parsed.scheme}://****"
+redact_apprise_url = _redact_apprise_url  # re-export; canonical impl lives in url_composer
 
 
 def _first_invalid_apprise_url(urls: list[str]) -> str | None:
@@ -118,16 +107,27 @@ class AppriseNotifier(Protocol):
     async def notify(self, urls: Sequence[str], title: str, body: str) -> None: ...
 
 
+class AppriseDeliveryError(RuntimeError):
+    """Apprise reported failure. apprise signals by RETURN VALUE (False on
+    delivery failure, None on an empty/unparseable URL bag) and swallows
+    exceptions internally — this converts that into the exception the
+    listeners' ok/last_error bookkeeping expects; without it a failed send
+    is indistinguishable from success."""
+
+
 class _RealAppriseNotifier:
     """Production notifier. Wraps `apprise.Apprise().async_notify`."""
 
     async def notify(self, urls: Sequence[str], title: str, body: str) -> None:
         ap = apprise.Apprise()
         for url in urls:
-            ap.add(url)
+            if not ap.add(url):
+                raise AppriseDeliveryError(f"apprise rejected url {_redact_apprise_url(url)}")
         # apprise's async_notify fans out URLs internally; one call covers
         # every configured destination for this event.
-        await ap.async_notify(title=title, body=body)
+        result = await ap.async_notify(title=title, body=body)
+        if result is not True:
+            raise AppriseDeliveryError(f"apprise delivery failed (result={result!r})")
 
 
 class MessageDispatcher:
@@ -177,15 +177,11 @@ class MessageDispatcher:
                 return
 
             cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+            # The global toggle gates EXTERNAL (apprise) delivery only — the
+            # in-app inbox must keep working out of the box, and inbox-only
+            # events (rip.needs_user_input) must never be consumed unseen.
+            # Listeners receive the flag on the message and decide themselves.
             enabled = cfg is not None and cfg.notifications_enabled
-
-            now = datetime.now(UTC)
-            if not enabled:
-                for event in unsent:
-                    event.notified_at = now
-                await db.commit()
-                logger.info("message dispatch: %d event(s) skipped (notifications disabled)", len(unsent))
-                return
 
             for event in unsent:
                 with with_log_context(
@@ -201,6 +197,7 @@ class MessageDispatcher:
                         default_title=default_title,
                         default_body=default_body,
                         job=job,
+                        apprise_enabled=enabled,
                     )
                     for listener in self._listeners:
                         try:
@@ -213,7 +210,12 @@ class MessageDispatcher:
                                 exc,
                             )
                     event.notified_at = datetime.now(UTC)
-            await db.commit()
+                    # Commit per event: apprise sends are external side effects
+                    # that already happened — a batch-wide commit would re-send
+                    # the ENTIRE batch if a later event's bookkeeping fails
+                    # (e.g. a channel deleted mid-tick) or shutdown lands
+                    # between send and commit.
+                    await db.commit()
 
     async def _load_job(self, db: AsyncSession, job_id: str | None) -> Job | None:
         if job_id is None:
