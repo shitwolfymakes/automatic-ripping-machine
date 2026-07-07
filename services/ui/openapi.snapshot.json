@@ -3531,65 +3531,6 @@
         }
       }
     },
-    "/api/jobs/iso/scan": {
-      "post": {
-        "tags": [
-          "iso"
-        ],
-        "summary": "Scan Iso",
-        "operationId": "scan_iso_api_jobs_iso_scan_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/IsoScanRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/IsoScanResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/logs/{job_id}.zip": {
       "get": {
         "tags": [
@@ -4676,50 +4617,6 @@
           "scan_result"
         ],
         "title": "IdentifyRequest"
-      },
-      "IsoScanRequest": {
-        "properties": {
-          "path": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Path"
-          }
-        },
-        "type": "object",
-        "required": [
-          "path"
-        ],
-        "title": "IsoScanRequest"
-      },
-      "IsoScanResponse": {
-        "properties": {
-          "path": {
-            "type": "string",
-            "title": "Path"
-          },
-          "suggested_title": {
-            "type": "string",
-            "title": "Suggested Title"
-          },
-          "suggested_year": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Suggested Year"
-          }
-        },
-        "type": "object",
-        "required": [
-          "path",
-          "suggested_title",
-          "suggested_year"
-        ],
-        "title": "IsoScanResponse"
       },
       "Job": {
         "properties": {
