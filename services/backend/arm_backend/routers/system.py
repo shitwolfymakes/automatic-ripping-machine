@@ -16,9 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt
-from arm_backend.config import settings
 from arm_backend.db import get_session
 from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.utils import default_roots
 from arm_common import Config, Drive, DriveStatus, User
 from arm_common.schemas import (
     SystemDiagnosticCheck,
@@ -34,33 +34,11 @@ _WORST = {"ok": 0, "warning": 1, "error": 2}
 _REQUIRED_ROOTS = {"MEDIA_ROOT", "RAW_ROOT", "LOG_DIR"}
 
 
-def default_roots() -> dict[str, str]:
-    # LOG_DIR is the fixed `/logs` mount throughout v3 (see logs.py /
-    # log_tailer.py) — convention-over-config, not a Settings field.
-    return {
-        "MEDIA_ROOT": settings.MEDIA_ROOT,
-        "RAW_ROOT": settings.RAW_ROOT,
-        "LOG_DIR": "/logs",
-    }
-
-
 def _roots(request: Request) -> dict[str, str]:
     injected: dict[str, str] | None = getattr(request.app.state, "system_paths", None)
     if injected is not None:
         return injected
     return default_roots()
-
-
-def ensure_roots(roots: dict[str, str]) -> None:
-    """Silently create any missing root dir. Never raises: a broken mount
-    must not crash-loop the API (the container entrypoint's writability
-    guard owns the fatal cases); the failure stays visible as
-    exists=False in the diagnostics report."""
-    for name, path in roots.items():
-        try:
-            os.makedirs(path, exist_ok=True)
-        except OSError as exc:
-            logger.warning("cannot create %s (%s): %s", name, path, exc)
 
 
 def _path_status(name: str, path: str) -> PathStatus:
@@ -79,7 +57,7 @@ async def diagnostics(
     # Heal-on-read: the report never shows a problem the backend could
     # have fixed itself.
     # ensure_roots(roots)
-    # DO NOT heal-on-read. These should be guaranteed at launch so if any are missing 
+    # DO NOT heal-on-read. These should be guaranteed at launch so if any are missing
     # then that is an error we want to surface when this endpoint is hit.
     # TODO: implement a check for missing roots (low priority, most processes will
     # surface this error)
