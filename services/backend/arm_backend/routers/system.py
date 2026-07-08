@@ -1,11 +1,18 @@
-"""System preflight / paths / stats. Read-only operator diagnostics.
-Ports neu's system/preflight + system/paths + system/stats, adapted to v3."""
+"""System diagnostics. Read-only operator health report.
+
+Everything the backend can fix silently, it fixes (missing root dirs are
+created at startup and re-ensured before every read — see `ensure_roots`);
+this endpoint reports only what cannot be healed from inside a container:
+a mount that is read-only or wrong-owner (v3 never chowns user mounts —
+docs/arch/06-deployment.md), no rippers registered yet, a missing config
+row. The ported UI's settings System-Health panel and first-run wizard
+render it (Tier-12)."""
 
 import functools
 import importlib.metadata
+import logging
 from pathlib import Path
 import os
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,15 +22,15 @@ from arm_backend.auth import require_jwt
 from arm_backend.config import settings
 from arm_backend.db import get_session
 from arm_backend.seeders import CONFIG_SINGLETON_ID
-from arm_common import Config, Drive, DriveStatus, Event, Job, User
+from arm_common import Config, Drive, DriveStatus, User
 from arm_common.schemas import (
-    PathsResponse,
+    SystemDiagnosticCheck,
+    SystemDiagnosticsResponse,
     PathStatus,
-    PreflightCheck,
-    PreflightResponse,
-    StatsResponse,
     SystemVersionResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -31,10 +38,7 @@ _WORST = {"ok": 0, "warning": 1, "error": 2}
 _REQUIRED_ROOTS = {"MEDIA_ROOT", "RAW_ROOT", "LOG_DIR"}
 
 
-def _roots(request: Request) -> dict[str, str]:
-    injected: dict[str, str] | None = getattr(request.app.state, "system_paths", None)
-    if injected is not None:
-        return injected
+def default_roots() -> dict[str, str]:
     # LOG_DIR is the fixed `/logs` mount throughout v3 (see logs.py /
     # log_tailer.py) — convention-over-config, not a Settings field.
     return {
@@ -44,42 +48,70 @@ def _roots(request: Request) -> dict[str, str]:
     }
 
 
+def _roots(request: Request) -> dict[str, str]:
+    injected: dict[str, str] | None = getattr(request.app.state, "system_paths", None)
+    if injected is not None:
+        return injected
+    return default_roots()
+
+
+def ensure_roots(roots: dict[str, str]) -> None:
+    """Silently create any missing root dir. Never raises: a broken mount
+    must not crash-loop the API (the container entrypoint's writability
+    guard owns the fatal cases); the failure stays visible as
+    exists=False in the diagnostics report."""
+    for name, path in roots.items():
+        try:
+            os.makedirs(path, exist_ok=True)
+        except OSError as exc:
+            logger.warning("cannot create %s (%s): %s", name, path, exc)
+
+
 def _path_status(name: str, path: str) -> PathStatus:
     exists = os.path.isdir(path)
     writable = exists and os.access(path, os.W_OK)
     return PathStatus(name=name, path=path, exists=exists, writable=writable)
 
 
-@router.get("/preflight", response_model=PreflightResponse)
-async def preflight(
+@router.get("/diagnostics", response_model=SystemDiagnosticsResponse)
+async def diagnostics(
     request: Request,
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
-) -> PreflightResponse:
-    checks: list[PreflightCheck] = []
+) -> SystemDiagnosticsResponse:
+    roots = _roots(request)
+    # Heal-on-read: the report never shows a problem the backend could
+    # have fixed itself.
+    ensure_roots(roots)
+
+    checks: list[SystemDiagnosticCheck] = []
 
     cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     checks.append(
-        PreflightCheck(
+        SystemDiagnosticCheck(
             name="config",
             status="ok" if cfg is not None else "error",
             detail=None if cfg is not None else "config singleton missing",
         )
     )
 
-    for name, path in _roots(request).items():
+    paths: list[PathStatus] = []
+    for name, path in roots.items():
         ps = _path_status(name, path)
+        paths.append(ps)
         if ps.exists and ps.writable:
-            checks.append(PreflightCheck(name=name, status="ok"))
+            checks.append(SystemDiagnosticCheck(name=name, status="ok"))
         else:
             sev = "error" if name in _REQUIRED_ROOTS else "warning"
             checks.append(
-                PreflightCheck(name=name, status=sev, detail=f"{path}: exists={ps.exists} writable={ps.writable}")
+                SystemDiagnosticCheck(
+                    name=name, status=sev, detail=f"{path}: exists={ps.exists} writable={ps.writable}"
+                )
             )
 
     drives = list((await db.execute(select(Drive).where(col(Drive.status) == DriveStatus.ONLINE))).scalars().all())
     checks.append(
-        PreflightCheck(
+        SystemDiagnosticCheck(
             name="drives",
             status="ok" if drives else "warning",
             detail=None if drives else "no online drives registered",
@@ -90,45 +122,7 @@ async def preflight(
     for ch in checks:
         if _WORST[ch.status] > _WORST[overall]:
             overall = ch.status
-    return PreflightResponse(status=overall, checks=checks)
-
-
-@router.get("/paths", response_model=PathsResponse)
-async def paths(request: Request, _: User = Depends(require_jwt)) -> PathsResponse:
-    return PathsResponse(paths=[_path_status(name, path) for name, path in _roots(request).items()])
-
-
-@router.get("/stats", response_model=StatsResponse)
-async def stats(
-    request: Request,
-    _: User = Depends(require_jwt),
-    db: AsyncSession = Depends(get_session),
-) -> StatsResponse:
-    started_at = getattr(request.app.state, "started_at", None)
-    uptime = int((datetime.now(timezone.utc) - started_at).total_seconds()) if started_at is not None else 0
-
-    jobs = list((await db.execute(select(Job))).scalars().all())
-    by_status: dict[str, int] = {}
-    for j in jobs:
-        key = j.status.value if hasattr(j.status, "value") else str(j.status)
-        by_status[key] = by_status.get(key, 0) + 1
-
-    drives_online = len(
-        list((await db.execute(select(Drive).where(col(Drive.status) == DriveStatus.ONLINE))).scalars().all())
-    )
-
-    # Fetch all events and filter in Python — mirrors the notification_dispatcher
-    # pattern to stay compatible with the in-memory FakeSession (which cannot
-    # evaluate .is_(None) clauses).
-    all_events = list((await db.execute(select(Event))).scalars().all())
-    events_unsent = len([e for e in all_events if e.notified_at is None])
-
-    return StatsResponse(
-        uptime_seconds=uptime,
-        jobs_by_status=by_status,
-        drives_online=drives_online,
-        events_unsent=events_unsent,
-    )
+    return SystemDiagnosticsResponse(status=overall, checks=checks, paths=paths)
 
 
 # The canonical release version lives in the repo-root VERSION file, baked
