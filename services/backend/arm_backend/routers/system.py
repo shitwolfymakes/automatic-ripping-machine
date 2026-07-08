@@ -78,7 +78,11 @@ async def diagnostics(
     roots = _roots(request)
     # Heal-on-read: the report never shows a problem the backend could
     # have fixed itself.
-    ensure_roots(roots)
+    # ensure_roots(roots)
+    # DO NOT heal-on-read. These should be guaranteed at launch so if any are missing 
+    # then that is an error we want to surface when this endpoint is hit.
+    # TODO: implement a check for missing roots (low priority, most processes will
+    # surface this error)
 
     checks: list[SystemDiagnosticCheck] = []
 
