@@ -165,7 +165,46 @@ wolfy reviews. Per-PR outcomes:
   -s ours history link done IMMEDIATELY (discipline rule 10).
   Lower-stack review chain now: #6 → #51 (2.1) → #52 (2.2) → #7 (2.3)
   → #8 (3.1) → #53 (3.2) → #9 (T4).
-- Tiers 5+ not yet swept. Stack-top survivor batch still pending
+- **2026-07-07 late-session state (SAVED PRE-COMPRESSION):**
+  - Tier-4 (#9): no split needed (+541, 4 features); body reconciled with
+    the fixes (version chain, {disc} plumb, validate contract) and the
+    drive-delete FK open decision is now a warning block IN the body.
+  - CI format incident: 3.1 lacked the style commits that rode with 3.2;
+    fixed with pinned ruff 0.15.11 (`74b0e705`), absorbed into 3.2
+    (still byte-identical), #8 + #53 CI 10/10 green. Rule 11 recorded.
+  - All PR descriptions ported post-splits: #51/#52/#7 carry the original
+    Tier-2 per-feature sections; #8/#53 carry the split Tier-3 sections
+    WITH stale claims fixed (url now redacted; failure detection real);
+    #6 lost its stale ISO bullet (+#50 note); all 8 stack PRs share the
+    same 8-entry stack map blockquote.
+  - SPLIT ANALYSIS of the remaining stack (sizes from gh, 2026-07-07):
+    * #28 T11.5 (+8,540, ~1 monolithic commit) = TOP candidate; seams:
+      11.5a file_browser (~800), 11.5b image proxy/cache (~750),
+      11.5c themes (~400), 11.5d BFF/view enrichments (residual).
+      KEY: origin still holds the pre-squash decomposed branches
+      (feat/ui-neu-image-proxy, -bff-prune, -migration, -operator-verbs,
+      -rip-presets, -identify-apply, -fe-*, feat/track-operator-editing)
+      with focused commits → cherry-pick reconstruction, not surgery.
+    * #36 T21-23 (+1,095) = split only if commits group per tier.
+    * #26 T12 ui-neu (+50,475; 35k src/lib, 6.2k routes, 6.3k lockfile/
+      generated; 4 commits) = DO NOT stack-split; write reviewer's-map
+      comment + review-by-running.
+    * #27 (+2,255) cohesive gate — keep. #41/#15 two-surface — map
+      comments suffice. Rest ≤1.1k single-feature — right-sized.
+  - QUEUED ANALYSIS (user request): given the full tier list and how the
+    stack composes to its completed state, can PRs be RE-ORIENTED to
+    avoid PR churn — i.e. mid-stack tiers whose code is rewritten by
+    later tiers (known cases from the sweeps: test_key rewritten by #11
+    then #12; metadata.py evolves through #10-#12; musicbrainz through
+    #28-era; pause semantics reworked by #27; RipperConfigView gains
+    fields in #27; url_composer reshaped later; system router extended by
+    #45) mean wolfy reviews code that later PRs replace. Candidate moves
+    to evaluate: fold small fix-tiers into the tier they rewrite
+    (e.g. #11+#12 test_key redesign vs Tier-1's regex), reorder
+    independent tiers, squash supersession chains, or annotate
+    review-skippable hunks. Use `git diff tierN...tierN+1 -- <files>`
+    churn measurement per file across the chain.
+- Tiers 5+ not yet swept (review passes; tier 5 = #10 next). Stack-top survivor batch still pending
   (Tier-2 survivors + config.py apprise-urls deprecation).
 
 ## Open / not done (for a future pickup)
