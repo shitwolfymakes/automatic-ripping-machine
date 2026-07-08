@@ -155,6 +155,16 @@ wolfy reviews. Per-PR outcomes:
   (verified empty diff), force-pushed; #8 needed the -s ours history
   link (see [[deploy-branch-discipline]] rule 10). Merge order:
   #51 → #52 → #7 → #8.
+- **Tier-3 SPLIT (2026-07-07)**: former #8 (+6,413) is now **#8**
+  Tier-3.1 message bus + apprise channels (+5,123; 28 picks + apprise-
+  only wiring commit; the toggle fix 77915092 belongs here — its
+  dispatcher half was mis-batched into d5779994 originally) and **#53**
+  Tier-3.2 in-app inbox (+1,452; model, migration 0016, InboxListener,
+  seeder, guards, endpoints). tier3.2 tip byte-identical to pre-split
+  (empty diff, 936 green). #9 retargeted to feat/tier3.2-inbox with the
+  -s ours history link done IMMEDIATELY (discipline rule 10).
+  Lower-stack review chain now: #6 → #51 (2.1) → #52 (2.2) → #7 (2.3)
+  → #8 (3.1) → #53 (3.2) → #9 (T4).
 - Tiers 5+ not yet swept. Stack-top survivor batch still pending
   (Tier-2 survivors + config.py apprise-urls deprecation).
 
