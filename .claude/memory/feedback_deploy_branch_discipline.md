@@ -61,3 +61,10 @@ of deploy, so their eventual landing on main merges as a no-op.
     child branch to link ancestry (zero content change; verify with
     `git diff HEAD~1 --stat` = empty), then the child's diff recomputes
     correctly. Done 2026-07-07 for the Tier-2 split (#51/#52/#7).
+
+11. **After branch surgery, lint with CI's PINNED tool versions**, not the
+    venv's: `uvx --from "ruff==<RUFF_VERSION from ci.yml>" ruff format
+    --check .` — the venv may not even have ruff on PATH (`uv run ruff`
+    can fail silently inside a `grep -c` pipeline and report a false 0).
+    Bit the tier-3 split 2026-07-07: 3.1 lacked the style commits that
+    rode with the 3.2 slice; CI's pinned ruff caught it, local didn't.
