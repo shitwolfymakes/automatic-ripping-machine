@@ -25,28 +25,15 @@ class TMDBClient:
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._api_key}", "Accept": "application/json"}
 
-    async def search_movie(self, title: str, year: int | None = None) -> MetadataResult:
-        params: dict[str, Any] = {"query": title}
-        if year is not None:
-            params["year"] = year
-        return await self._search("movie", params, kind="movie")
+    async def _get_results(self, endpoint: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+        """GET /search/{endpoint} and return the raw `results` list.
 
-    async def search_tv(self, title: str) -> MetadataResult:
-        return await self._search("tv", {"query": title}, kind="tv")
-
-    async def _search(
-        self,
-        endpoint: str,
-        params: dict[str, Any],
-        *,
-        kind: Literal["movie", "tv"],
-    ) -> MetadataResult:
+        Centralizes the transport + HTTP-status handling shared by the top-hit
+        and multi-candidate search paths: TimeoutException -> LookupTimeout,
+        other transport errors and 401/5xx/non-200 -> LookupError.
+        """
         try:
-            r = await self._http.get(
-                f"{_BASE_URL}/search/{endpoint}",
-                params=params,
-                headers=self._headers,
-            )
+            r = await self._http.get(f"{_BASE_URL}/search/{endpoint}", params=params, headers=self._headers)
         except httpx.TimeoutException as e:
             raise LookupTimeout(f"tmdb {endpoint} timeout") from e
         except httpx.HTTPError as e:
@@ -60,22 +47,71 @@ class TMDBClient:
         if r.status_code != 200:
             raise LookupError(f"tmdb {endpoint} status={r.status_code}")
 
-        body = r.json()
-        results = body.get("results") or []
-        if not results:
-            raise LookupError(f"tmdb {endpoint} no results")
+        results: list[dict[str, Any]] = r.json().get("results") or []
+        return results
 
-        top = results[0]
-        if endpoint == "movie":
+    @staticmethod
+    def _parse_one(top: dict[str, Any], kind: Literal["movie", "tv"]) -> MetadataResult | None:
+        """Map one TMDB result dict to a MetadataResult, or None if it has no
+        usable title. Movie/TV differ only in the title/date field names."""
+        if kind == "movie":
             release = top.get("release_date") or ""
-            year_val = int(release[:4]) if release[:4].isdigit() else None
             title_val = top.get("title") or top.get("original_title") or ""
         else:
             release = top.get("first_air_date") or ""
-            year_val = int(release[:4]) if release[:4].isdigit() else None
             title_val = top.get("name") or top.get("original_name") or ""
-
         if not title_val:
-            raise LookupError(f"tmdb {endpoint} top result missing title")
-
+            return None
+        year_val = int(release[:4]) if release[:4].isdigit() else None
         return MetadataResult(title=title_val, year=year_val, kind=kind, payload=top)
+
+    async def search_movie(self, title: str, year: int | None = None) -> MetadataResult:
+        params: dict[str, Any] = {"query": title}
+        if year is not None:
+            params["year"] = year
+        return await self._search("movie", params, kind="movie")
+
+    async def search_tv(self, title: str) -> MetadataResult:
+        return await self._search("tv", {"query": title}, kind="tv")
+
+    async def search_movie_candidates(
+        self, title: str, year: int | None = None, limit: int = 10
+    ) -> list[MetadataResult]:
+        params: dict[str, Any] = {"query": title}
+        if year is not None:
+            params["year"] = year
+        return await self._search_candidates("movie", params, kind="movie", limit=limit)
+
+    async def search_tv_candidates(self, title: str, limit: int = 10) -> list[MetadataResult]:
+        return await self._search_candidates("tv", {"query": title}, kind="tv", limit=limit)
+
+    async def _search_candidates(
+        self,
+        endpoint: str,
+        params: dict[str, Any],
+        *,
+        kind: Literal["movie", "tv"],
+        limit: int,
+    ) -> list[MetadataResult]:
+        results = await self._get_results(endpoint, params)
+        out: list[MetadataResult] = []
+        for top in results[:limit]:
+            parsed = self._parse_one(top, kind)
+            if parsed is not None:
+                out.append(parsed)
+        return out
+
+    async def _search(
+        self,
+        endpoint: str,
+        params: dict[str, Any],
+        *,
+        kind: Literal["movie", "tv"],
+    ) -> MetadataResult:
+        results = await self._get_results(endpoint, params)
+        if not results:
+            raise LookupError(f"tmdb {endpoint} no results")
+        parsed = self._parse_one(results[0], kind)
+        if parsed is None:
+            raise LookupError(f"tmdb {endpoint} top result missing title")
+        return parsed

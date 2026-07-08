@@ -30,7 +30,14 @@ from arm_common.schemas.jobs import (
     RipStartResponse,
     TrackView,
 )
-from arm_common.schemas.metadata import MetadataKeyTestResponse, MetadataProvider
+from arm_common.schemas.metadata import (
+    MetadataCandidate,
+    MetadataKeyTestResponse,
+    MetadataProvider,
+    MetadataReleaseDetail,
+    MetadataReleaseTrack,
+    MetadataSearchResponse,
+)
 from arm_common.schemas.naming import (
     JobNamingPreviewResponse,
     NamingPreviewItem,
@@ -90,8 +97,12 @@ from arm_common.schemas.ws import (
 
 __all__ = [
     "AbandonJobRequest",
+    "MetadataCandidate",
     "MetadataKeyTestResponse",
     "MetadataProvider",
+    "MetadataReleaseDetail",
+    "MetadataReleaseTrack",
+    "MetadataSearchResponse",
     "ApplySessionRequest",
     "BulkDeleteJobsResponse",
     "DiscFingerprintInput",
