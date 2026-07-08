@@ -164,3 +164,12 @@ class ResolveResponse(BaseModel):
 
     job: JobView
     fan_out: list[ResolveFanOutOutcomeView]
+
+
+class JobStatsResponse(BaseModel):
+    """Dashboard aggregates. `by_type` counts `Job.disc_type` (the only type
+    fact on the Job row itself; media_type lives on the applied Session)."""
+
+    total: int
+    by_status: dict[str, int]
+    by_type: dict[str, int]

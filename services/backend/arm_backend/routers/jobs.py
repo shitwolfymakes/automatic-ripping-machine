@@ -40,6 +40,7 @@ from arm_common.schemas import (
     BulkDeleteJobsResponse,
     DiscFingerprintView,
     JobDetailView,
+    JobStatsResponse,
     JobUpdateRequest,
     JobView,
     ManualTriggerRequest,
@@ -151,6 +152,25 @@ async def list_jobs(
             view.rip_progress = _summarize_rip_progress(tracks_by_job.get(j.id, []))
         views.append(view)
     return views
+
+
+@router.get("/stats", response_model=JobStatsResponse)
+async def job_stats(
+    _: User = Depends(require_jwt),
+    session: AsyncSession = Depends(get_session),
+) -> JobStatsResponse:
+    """Dashboard aggregates. Full-scan + count in Python (mirrors the
+    dispatcher pattern) so the in-memory FakeSession stays sufficient;
+    job counts are small at the hobbyist scale this serves."""
+    jobs = list((await session.execute(select(Job))).scalars().all())
+    by_status: dict[str, int] = {}
+    by_type: dict[str, int] = {}
+    for j in jobs:
+        skey = j.status.value if hasattr(j.status, "value") else str(j.status)
+        by_status[skey] = by_status.get(skey, 0) + 1
+        tkey = j.disc_type.value if hasattr(j.disc_type, "value") else str(j.disc_type)
+        by_type[tkey] = by_type.get(tkey, 0) + 1
+    return JobStatsResponse(total=len(jobs), by_status=by_status, by_type=by_type)
 
 
 @router.get("/{job_id}", response_model=JobDetailView)
