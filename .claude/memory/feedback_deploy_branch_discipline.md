@@ -52,3 +52,12 @@ of deploy, so their eventual landing on main merges as a no-op.
    `deploy/hifi-<date>` from the current tip per convention; don't rename
    mid-deploy. Dead PR branches get deleted on wolfy once superseded
    (#48's branch removed 2026-07-06; restorable from the PR page).
+
+10. **Rebuilding a published stack branch (splits, history surgery): tree
+    identity is NOT enough.** GitHub's PR diffs/mergeability use the
+    merge-base, which moves when history is rewritten even if the tip tree
+    is byte-identical — the direct child PR goes CONFLICTING with an
+    inflated diff. Immediately `git merge -s ours <rebuilt-base>` on the
+    child branch to link ancestry (zero content change; verify with
+    `git diff HEAD~1 --stat` = empty), then the child's diff recomputes
+    correctly. Done 2026-07-07 for the Tier-2 split (#51/#52/#7).

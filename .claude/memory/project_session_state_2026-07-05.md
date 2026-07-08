@@ -137,6 +137,24 @@ wolfy reviews. Per-PR outcomes:
   test asserts the impossible 204; options (block-any-jobs 409 / SET NULL
   migration / tombstone) put to wolfy; also lifecycle gap (live ripper
   heartbeats 404 after delete, row resurrects on restart).
+- **2026-07-07 review-response arc**: wolfy CHANGES_REQUESTED on #6 =
+  cut the ISO-ingress feature (9 inline comments). Cut authored as
+  `fix/tier1-cut-iso-ingress`, PR **#50** (opened per user's
+  PR-against-PR preference after force-resetting feat/neu-ports to the
+  reviewed tip) — wolfy merged it same day; all 9 threads replied
+  "Cut in #50"; #6 re-review requested. Tier-2 companion: system paths
+  drop ISO_INGRESS_ROOT. **DEPLOY DIVERGENCE: deploy keeps the ISO scan
+  endpoint** (ui-neu import-jobs.ts consumes it) until the ephemeral-
+  worker ISO design (docs/arch/10) replaces it — resolve future base
+  absorptions by keeping deploy's iso files.
+- **Tier-2 SPLIT (2026-07-07, user-requested)**: former #7 (+2,965) is
+  now three single-feature PRs — **#51** Tier-2.1 metadata (+1,819),
+  **#52** Tier-2.2 system (+659, incl. ISO companion), **#7** Tier-2.3
+  pause gate (+482, retargeted to feat/tier2.2-system). feat/tier2-ports
+  rebuilt = 2.2 + pause picks, tip byte-identical to pre-split
+  (verified empty diff), force-pushed; #8 needed the -s ours history
+  link (see [[deploy-branch-discipline]] rule 10). Merge order:
+  #51 → #52 → #7 → #8.
 - Tiers 5+ not yet swept. Stack-top survivor batch still pending
   (Tier-2 survivors + config.py apprise-urls deprecation).
 
