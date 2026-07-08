@@ -15,6 +15,7 @@ def test_message_is_frozen_dataclass() -> None:
     assert m.default_title == "ARM: rip completed"
     # frozen
     import dataclasses
+
     try:
         m.event_id = "x"  # type: ignore[misc]
         raised = False
