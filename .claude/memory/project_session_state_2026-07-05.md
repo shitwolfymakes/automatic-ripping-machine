@@ -215,7 +215,10 @@ wolfy reviews. Per-PR outcomes:
   absorbed through #7/#8/#53/#9 (#9 resolved the version-endpoint
   conflict; 955 green at tier4). Spec: ../arm-ai/arm-v3/docs/
   superpowers/specs/2026-07-08-system-surface-reorg-design.md.
-  Wolfy replied on #52; body+title updated.
+  Wolfy replied on #52; body+title updated. **#51 MERGED by wolfy
+  2026-07-08 (true merge commit 9607bd73) — #52 retargeted to
+  feat/neu-ports (+712, clean), tier2.1-metadata branch deleted, stack
+  maps refreshed in all 7 open-PR bodies.**
   **UI-NEU PORT ITEM (for #26-era + deploy line)**: rewrite
   lib/api/system.ts → GET diagnostics + GET /api/jobs/stats; re-point
   SystemHealth.svelte + JobStatsCard; DELETE ReadinessCheckStep (user
