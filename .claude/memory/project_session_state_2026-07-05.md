@@ -204,6 +204,28 @@ wolfy reviews. Per-PR outcomes:
     independent tiers, squash supersession chains, or annotate
     review-skippable hunks. Use `git diff tierN...tierN+1 -- <files>`
     churn measurement per file across the chain.
+- **System-surface reorg (2026-07-08, wolfy feedback on #52)**: preflight/
+  paths/stats FOLDED into read-only `GET /api/system/diagnostics`
+  ({status, checks[], paths[]}) + silent healing (`ensure_roots`:
+  startup + heal-on-read makedirs, never chown, never raise); job
+  counters moved to `GET /api/jobs/stats` {total, by_status,
+  by_type=disc_type}; uptime/events_unsent dropped. Schema names
+  `SystemDiagnostics*` (bare `DiagnosticsResponse` taken by the
+  log-levels /api/diagnostics). Commit `93286047` on #52; cascade
+  absorbed through #7/#8/#53/#9 (#9 resolved the version-endpoint
+  conflict; 955 green at tier4). Spec: ../arm-ai/arm-v3/docs/
+  superpowers/specs/2026-07-08-system-surface-reorg-design.md.
+  Wolfy replied on #52; body+title updated.
+  **UI-NEU PORT ITEM (for #26-era + deploy line)**: rewrite
+  lib/api/system.ts → GET diagnostics + GET /api/jobs/stats; re-point
+  SystemHealth.svelte + JobStatsCard; DELETE ReadinessCheckStep (user
+  decision 2026-07-08: initial-setup checks UX is being dropped) and
+  fixPreflight/restartArm/restartTranscoder + buttons (restart dropped
+  by design). ui-neu's system page is currently broken against v3
+  (speaks neu POST contract) so no regression until the port.
+  Upper-stack absorption note: #11/#45/#47 touch routers/system.py
+  (key/resources/sdf checks) — their absorptions re-home appends into
+  `diagnostics()`; resolve then.
 - Tiers 5+ not yet swept (review passes; tier 5 = #10 next). Stack-top survivor batch still pending
   (Tier-2 survivors + config.py apprise-urls deprecation).
 
