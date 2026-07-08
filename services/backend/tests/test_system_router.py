@@ -1,10 +1,9 @@
-"""GET /api/system/preflight, /paths, /stats."""
+"""GET /api/system/diagnostics — heal-on-read + report."""
 
 from __future__ import annotations
 
 import os
 import secrets
-from datetime import datetime, timedelta, timezone
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
@@ -16,9 +15,11 @@ from fastapi.testclient import TestClient  # noqa: E402
 from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import system as system_router  # noqa: E402
-from arm_common import Config, DiscType, Drive, DriveStatus, Event, Job, JobStatus, User  # noqa: E402
+from arm_common import Config, Drive, DriveStatus, User  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
+
+not_root = pytest.mark.skipif(os.geteuid() == 0, reason="chmod-based unwritable dirs don't bind as root")
 
 
 @pytest.fixture
@@ -33,30 +34,11 @@ def _seed(db: FakeSession) -> None:
         Drive(id="drv_on0000000000000000000001", hostname="h1", device_path="/dev/sr0", status=DriveStatus.ONLINE),
         Drive(id="drv_off000000000000000000002", hostname="h2", device_path="/dev/sr1", status=DriveStatus.OFFLINE),
     ]
-    db.rows["jobs"] = [
-        Job(
-            id="job_0000000000000000000000001",
-            drive_id="drv_on0000000000000000000001",
-            disc_type=DiscType.DVD,
-            status=JobStatus.RIPPING,
-        ),
-        Job(
-            id="job_0000000000000000000000002",
-            drive_id="drv_on0000000000000000000001",
-            disc_type=DiscType.DVD,
-            status=JobStatus.RIPPED,
-        ),
-    ]
-    db.rows["events"] = [
-        Event(id="evt_0000000000000000000000001", event_type="rip.completed", notified_at=None),
-        Event(id="evt_0000000000000000000000002", event_type="rip.completed", notified_at=datetime.now(timezone.utc)),
-    ]
 
 
 def _make_app(signing_key: bytes, db: FakeSession, *, tmp) -> tuple[FastAPI, str]:
     app = FastAPI()
     app.state.signing_key = signing_key
-    app.state.started_at = datetime.now(timezone.utc) - timedelta(seconds=42)
     media = tmp / "media"
     media.mkdir()
     raw = tmp / "raw"
@@ -82,119 +64,118 @@ def _auth(t: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {t}"}
 
 
-def test_preflight_ok(signing_key: bytes, tmp_path) -> None:
+def _get(app: FastAPI, token: str):
+    with TestClient(app) as c:
+        return c.get("/api/system/diagnostics", headers=_auth(token))
+
+
+def test_diagnostics_ok(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
     app, token = _make_app(signing_key, db, tmp=tmp_path)
-    with TestClient(app) as c:
-        r = c.get("/api/system/preflight", headers=_auth(token))
+    r = _get(app, token)
     assert r.status_code == 200, r.text
-    assert r.json()["status"] in {"ok", "warning"}
-    names = {ch["name"] for ch in r.json()["checks"]}
-    assert "MEDIA_ROOT" in names
+    body = r.json()
+    assert body["status"] == "ok"
+    names = {ch["name"] for ch in body["checks"]}
+    assert {"config", "MEDIA_ROOT", "RAW_ROOT", "LOG_DIR", "drives"} <= names
+    media = next(p for p in body["paths"] if p["name"] == "MEDIA_ROOT")
+    assert media["exists"] is True and media["writable"] is True
 
 
-def test_preflight_missing_optional_root_is_warning(signing_key: bytes, tmp_path) -> None:
-    """Roots outside _REQUIRED_ROOTS degrade to a warning, not an error."""
+def test_diagnostics_heals_missing_root_on_read(signing_key: bytes, tmp_path) -> None:
+    """A missing-but-creatable root is silently created, then reports ok —
+    the report never shows a problem the backend could fix itself."""
     db = FakeSession()
     _seed(db)
     app, token = _make_app(signing_key, db, tmp=tmp_path)
-    app.state.system_paths = {**app.state.system_paths, "EXTRA_ROOT": str(tmp_path / "missing")}
-    with TestClient(app) as c:
-        r = c.get("/api/system/preflight", headers=_auth(token))
+    missing = tmp_path / "not-yet" / "media"
+    app.state.system_paths["MEDIA_ROOT"] = str(missing)
+    r = _get(app, token)
     assert r.status_code == 200, r.text
-    extra = next(ch for ch in r.json()["checks"] if ch["name"] == "EXTRA_ROOT")
-    assert extra["status"] == "warning"
+    assert missing.is_dir()
+    media = next(ch for ch in r.json()["checks"] if ch["name"] == "MEDIA_ROOT")
+    assert media["status"] == "ok"
+    assert r.json()["status"] == "ok"
 
 
-def test_preflight_missing_required_root_is_error(signing_key: bytes, tmp_path) -> None:
+@not_root
+def test_diagnostics_uncreatable_required_root_is_error(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
     app, token = _make_app(signing_key, db, tmp=tmp_path)
-    # Point MEDIA_ROOT at a non-existent dir.
-    app.state.system_paths["MEDIA_ROOT"] = str(tmp_path / "does-not-exist")
-    with TestClient(app) as c:
-        r = c.get("/api/system/preflight", headers=_auth(token))
+    fence = tmp_path / "fence"
+    fence.mkdir()
+    fence.chmod(0o555)
+    app.state.system_paths["MEDIA_ROOT"] = str(fence / "sub")
+    try:
+        r = _get(app, token)
+    finally:
+        fence.chmod(0o755)
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "error"
     media = next(ch for ch in r.json()["checks"] if ch["name"] == "MEDIA_ROOT")
     assert media["status"] == "error"
+    assert "exists=False" in media["detail"]
 
 
-def test_paths_shape(signing_key: bytes, tmp_path) -> None:
+@not_root
+def test_diagnostics_uncreatable_optional_root_is_warning(signing_key: bytes, tmp_path) -> None:
+    """Roots outside _REQUIRED_ROOTS degrade to a warning, not an error."""
     db = FakeSession()
     _seed(db)
     app, token = _make_app(signing_key, db, tmp=tmp_path)
-    with TestClient(app) as c:
-        r = c.get("/api/system/paths", headers=_auth(token))
+    fence = tmp_path / "fence"
+    fence.mkdir()
+    fence.chmod(0o555)
+    app.state.system_paths = {**app.state.system_paths, "EXTRA_ROOT": str(fence / "extra")}
+    try:
+        r = _get(app, token)
+    finally:
+        fence.chmod(0o755)
     assert r.status_code == 200, r.text
-    media = next(p for p in r.json()["paths"] if p["name"] == "MEDIA_ROOT")
-    assert media["exists"] is True and media["writable"] is True
+    extra = next(ch for ch in r.json()["checks"] if ch["name"] == "EXTRA_ROOT")
+    assert extra["status"] == "warning"
+    assert r.json()["status"] == "warning"
 
 
-def test_stats_counts(signing_key: bytes, tmp_path) -> None:
-    db = FakeSession()
-    _seed(db)
-    app, token = _make_app(signing_key, db, tmp=tmp_path)
-    with TestClient(app) as c:
-        r = c.get("/api/system/stats", headers=_auth(token))
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["uptime_seconds"] >= 40
-    assert body["drives_online"] == 1
-    assert body["events_unsent"] == 1
-    assert body["jobs_by_status"].get("ripping") == 1
-
-
-def test_preflight_no_drives_is_warning(signing_key: bytes, tmp_path) -> None:
+def test_diagnostics_no_drives_is_warning(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
     db.rows["drives"] = []
     app, token = _make_app(signing_key, db, tmp=tmp_path)
-    with TestClient(app) as c:
-        r = c.get("/api/system/preflight", headers=_auth(token))
+    r = _get(app, token)
     assert r.status_code == 200, r.text
     drives = next(ch for ch in r.json()["checks"] if ch["name"] == "drives")
     assert drives["status"] == "warning"
 
 
-def test_preflight_unauthenticated_401(signing_key: bytes, tmp_path) -> None:
-    db = FakeSession()
-    _seed(db)
-    app, _ = _make_app(signing_key, db, tmp=tmp_path)
-    with TestClient(app) as c:
-        r = c.get("/api/system/preflight")
-    assert r.status_code == 401
-
-
-def test_preflight_config_missing_is_error(signing_key: bytes, tmp_path) -> None:
-    """If the config singleton is absent, the config check should be 'error'."""
+def test_diagnostics_config_missing_is_error(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
     db.rows["config"] = []
     app, token = _make_app(signing_key, db, tmp=tmp_path)
-    with TestClient(app) as c:
-        r = c.get("/api/system/preflight", headers=_auth(token))
+    r = _get(app, token)
     assert r.status_code == 200, r.text
     cfg_check = next(ch for ch in r.json()["checks"] if ch["name"] == "config")
     assert cfg_check["status"] == "error"
     assert r.json()["status"] == "error"
 
 
-def test_stats_no_started_at(signing_key: bytes, tmp_path) -> None:
-    """When started_at is not set on app.state, uptime_seconds should be 0."""
+def test_diagnostics_unauthenticated_401(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
-    app, token = _make_app(signing_key, db, tmp=tmp_path)
-    del app.state.started_at
+    app, _ = _make_app(signing_key, db, tmp=tmp_path)
     with TestClient(app) as c:
-        r = c.get("/api/system/stats", headers=_auth(token))
-    assert r.status_code == 200, r.text
-    assert r.json()["uptime_seconds"] == 0
+        r = c.get("/api/system/diagnostics")
+    assert r.status_code == 401
 
 
-def test_paths_uses_settings_fallback(signing_key: bytes) -> None:
-    """When system_paths is absent from app.state, _roots falls back to settings."""
+def test_diagnostics_uses_settings_fallback(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    """When system_paths is absent from app.state, _roots falls back to
+    settings-derived defaults."""
+    monkeypatch.setattr(system_router.settings, "MEDIA_ROOT", str(tmp_path / "m"))
+    monkeypatch.setattr(system_router.settings, "RAW_ROOT", str(tmp_path / "r"))
     db = FakeSession()
     _seed(db)
     app = FastAPI()
@@ -207,9 +188,24 @@ def test_paths_uses_settings_fallback(signing_key: bytes) -> None:
     app.dependency_overrides[get_session] = _override
     token, _ = issue_access_token("usr_admin", "admin", signing_key)
 
-    with TestClient(app) as c:
-        r = c.get("/api/system/paths", headers=_auth(token))
+    r = _get(app, token)
     assert r.status_code == 200, r.text
     names = {p["name"] for p in r.json()["paths"]}
-    # settings defaults include MEDIA_ROOT, RAW_ROOT, LOG_DIR
-    assert "MEDIA_ROOT" in names
+    assert {"MEDIA_ROOT", "RAW_ROOT", "LOG_DIR"} <= names
+    # the settings-pointed roots were healed into existence
+    assert (tmp_path / "m").is_dir() and (tmp_path / "r").is_dir()
+
+
+@not_root
+def test_ensure_roots_swallows_oserror(tmp_path, caplog) -> None:
+    """A broken mount must never crash the caller — warn and move on."""
+    fence = tmp_path / "fence"
+    fence.mkdir()
+    fence.chmod(0o555)
+    try:
+        with caplog.at_level("WARNING"):
+            system_router.ensure_roots({"BAD": str(fence / "sub"), "GOOD": str(tmp_path / "good")})
+    finally:
+        fence.chmod(0o755)
+    assert (tmp_path / "good").is_dir()
+    assert any("cannot create BAD" in rec.getMessage() for rec in caplog.records)

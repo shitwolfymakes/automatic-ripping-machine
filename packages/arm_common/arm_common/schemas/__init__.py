@@ -19,6 +19,7 @@ from arm_common.schemas.jobs import (
     AbandonJobRequest,
     BulkDeleteJobsResponse,
     DiscFingerprintView,
+    JobStatsResponse,
     JobUpdateRequest,
     JobView,
     ManualTriggerRequest,
@@ -86,10 +87,8 @@ from arm_common.schemas.transcoder import (
 )
 from arm_common.schemas.system import (
     PathStatus,
-    PathsResponse,
-    PreflightCheck,
-    PreflightResponse,
-    StatsResponse,
+    SystemDiagnosticCheck,
+    SystemDiagnosticsResponse,
 )
 from arm_common.schemas.notifications import (
     AppriseChannelConfig,
@@ -161,6 +160,7 @@ __all__ = [
     "InAppChannelConfig",
     "JobCompleteRequest",
     "JobDetailView",
+    "JobStatsResponse",
     "JobUpdateRequest",
     "JobView",
     "LoginRequest",
@@ -183,9 +183,8 @@ __all__ = [
     "NamingVariablesResponse",
     "PasswordChangeRequest",
     "PathStatus",
-    "PathsResponse",
-    "PreflightCheck",
-    "PreflightResponse",
+    "SystemDiagnosticCheck",
+    "SystemDiagnosticsResponse",
     "RegisterRequest",
     "RegisterTranscoderRequest",
     "RegisterTranscoderResponse",
@@ -203,7 +202,6 @@ __all__ = [
     "ScanTitle",
     "ServiceCatalog",
     "SessionApplicationView",
-    "StatsResponse",
     "SessionCloneRequest",
     "SessionCreateRequest",
     "SessionUpdateRequest",
