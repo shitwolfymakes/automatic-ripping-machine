@@ -4368,6 +4368,17 @@
             ],
             "title": "Block On Miss"
           },
+          "ripping_paused": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ripping Paused"
+          },
           "default_retention_policy": {
             "anyOf": [
               {
@@ -4476,6 +4487,10 @@
             "type": "boolean",
             "title": "Block On Miss"
           },
+          "ripping_paused": {
+            "type": "boolean",
+            "title": "Ripping Paused"
+          },
           "default_retention_policy": {
             "$ref": "#/components/schemas/RetentionPolicy"
           },
@@ -4524,6 +4539,7 @@
           "auto_transcode_on_idle",
           "auto_rip_on_insert",
           "block_on_miss",
+          "ripping_paused",
           "default_retention_policy",
           "notification_apprise_urls",
           "notifications_enabled",
