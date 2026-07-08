@@ -34,33 +34,39 @@ def _seed(db: FakeSession) -> None:
         Drive(id="drv_off000000000000000000002", hostname="h2", device_path="/dev/sr1", status=DriveStatus.OFFLINE),
     ]
     db.rows["jobs"] = [
-        Job(id="job_0000000000000000000000001", drive_id="drv_on0000000000000000000001",
-            disc_type=DiscType.DVD, status=JobStatus.RIPPING),
-        Job(id="job_0000000000000000000000002", drive_id="drv_on0000000000000000000001",
-            disc_type=DiscType.DVD, status=JobStatus.RIPPED),
+        Job(
+            id="job_0000000000000000000000001",
+            drive_id="drv_on0000000000000000000001",
+            disc_type=DiscType.DVD,
+            status=JobStatus.RIPPING,
+        ),
+        Job(
+            id="job_0000000000000000000000002",
+            drive_id="drv_on0000000000000000000001",
+            disc_type=DiscType.DVD,
+            status=JobStatus.RIPPED,
+        ),
     ]
     db.rows["events"] = [
         Event(id="evt_0000000000000000000000001", event_type="rip.completed", notified_at=None),
-        Event(id="evt_0000000000000000000000002", event_type="rip.completed",
-              notified_at=datetime.now(timezone.utc)),
+        Event(id="evt_0000000000000000000000002", event_type="rip.completed", notified_at=datetime.now(timezone.utc)),
     ]
 
 
-def _make_app(signing_key: bytes, db: FakeSession, *, ingress_ok: bool, tmp) -> tuple[FastAPI, str]:
+def _make_app(signing_key: bytes, db: FakeSession, *, tmp) -> tuple[FastAPI, str]:
     app = FastAPI()
     app.state.signing_key = signing_key
     app.state.started_at = datetime.now(timezone.utc) - timedelta(seconds=42)
-    media = tmp / "media"; media.mkdir()
-    raw = tmp / "raw"; raw.mkdir()
-    logs = tmp / "logs"; logs.mkdir()
-    ingress = tmp / "ingress"
-    if ingress_ok:
-        ingress.mkdir()
+    media = tmp / "media"
+    media.mkdir()
+    raw = tmp / "raw"
+    raw.mkdir()
+    logs = tmp / "logs"
+    logs.mkdir()
     app.state.system_paths = {
         "MEDIA_ROOT": str(media),
         "RAW_ROOT": str(raw),
         "LOG_DIR": str(logs),
-        "ISO_INGRESS_ROOT": str(ingress),
     }
     app.include_router(system_router.router)
 
@@ -79,7 +85,7 @@ def _auth(t: str) -> dict[str, str]:
 def test_preflight_ok(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
     with TestClient(app) as c:
         r = c.get("/api/system/preflight", headers=_auth(token))
     assert r.status_code == 200, r.text
@@ -88,21 +94,23 @@ def test_preflight_ok(signing_key: bytes, tmp_path) -> None:
     assert "MEDIA_ROOT" in names
 
 
-def test_preflight_missing_ingress_is_warning(signing_key: bytes, tmp_path) -> None:
+def test_preflight_missing_optional_root_is_warning(signing_key: bytes, tmp_path) -> None:
+    """Roots outside _REQUIRED_ROOTS degrade to a warning, not an error."""
     db = FakeSession()
     _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=False, tmp=tmp_path)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.system_paths = {**app.state.system_paths, "EXTRA_ROOT": str(tmp_path / "missing")}
     with TestClient(app) as c:
         r = c.get("/api/system/preflight", headers=_auth(token))
     assert r.status_code == 200, r.text
-    ingress = next(ch for ch in r.json()["checks"] if ch["name"] == "ISO_INGRESS_ROOT")
-    assert ingress["status"] == "warning"
+    extra = next(ch for ch in r.json()["checks"] if ch["name"] == "EXTRA_ROOT")
+    assert extra["status"] == "warning"
 
 
 def test_preflight_missing_required_root_is_error(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
     # Point MEDIA_ROOT at a non-existent dir.
     app.state.system_paths["MEDIA_ROOT"] = str(tmp_path / "does-not-exist")
     with TestClient(app) as c:
@@ -116,7 +124,7 @@ def test_preflight_missing_required_root_is_error(signing_key: bytes, tmp_path) 
 def test_paths_shape(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
     with TestClient(app) as c:
         r = c.get("/api/system/paths", headers=_auth(token))
     assert r.status_code == 200, r.text
@@ -127,7 +135,7 @@ def test_paths_shape(signing_key: bytes, tmp_path) -> None:
 def test_stats_counts(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
     with TestClient(app) as c:
         r = c.get("/api/system/stats", headers=_auth(token))
     assert r.status_code == 200, r.text
@@ -142,7 +150,7 @@ def test_preflight_no_drives_is_warning(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
     db.rows["drives"] = []
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
     with TestClient(app) as c:
         r = c.get("/api/system/preflight", headers=_auth(token))
     assert r.status_code == 200, r.text
@@ -153,7 +161,7 @@ def test_preflight_no_drives_is_warning(signing_key: bytes, tmp_path) -> None:
 def test_preflight_unauthenticated_401(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
-    app, _ = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app, _ = _make_app(signing_key, db, tmp=tmp_path)
     with TestClient(app) as c:
         r = c.get("/api/system/preflight")
     assert r.status_code == 401
@@ -164,7 +172,7 @@ def test_preflight_config_missing_is_error(signing_key: bytes, tmp_path) -> None
     db = FakeSession()
     _seed(db)
     db.rows["config"] = []
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
     with TestClient(app) as c:
         r = c.get("/api/system/preflight", headers=_auth(token))
     assert r.status_code == 200, r.text
@@ -177,7 +185,7 @@ def test_stats_no_started_at(signing_key: bytes, tmp_path) -> None:
     """When started_at is not set on app.state, uptime_seconds should be 0."""
     db = FakeSession()
     _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
     del app.state.started_at
     with TestClient(app) as c:
         r = c.get("/api/system/stats", headers=_auth(token))
@@ -203,5 +211,5 @@ def test_paths_uses_settings_fallback(signing_key: bytes) -> None:
         r = c.get("/api/system/paths", headers=_auth(token))
     assert r.status_code == 200, r.text
     names = {p["name"] for p in r.json()["paths"]}
-    # settings defaults include MEDIA_ROOT, RAW_ROOT, ISO_INGRESS_ROOT, LOG_DIR
+    # settings defaults include MEDIA_ROOT, RAW_ROOT, LOG_DIR
     assert "MEDIA_ROOT" in names
