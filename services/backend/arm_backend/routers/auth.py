@@ -43,6 +43,8 @@ async def login(
         _hasher.verify(user.password_hash, req.password)
     except VerifyMismatchError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials") from exc
+    if user.disabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="account disabled")
 
     if _hasher.check_needs_rehash(user.password_hash):
         user.password_hash = _hasher.hash(req.password)
@@ -58,6 +60,7 @@ async def login(
         access_token=token,
         expires_at=expires_at,
         password_must_change=user.password_must_change,
+        role=user.role,
     )
 
 

@@ -23,6 +23,7 @@ class LoginResponse(BaseModel):
     access_token: str
     expires_at: datetime
     password_must_change: bool
+    role: str
 
 
 class PasswordChangeRequest(BaseModel):

@@ -9894,13 +9894,18 @@
           "password_must_change": {
             "type": "boolean",
             "title": "Password Must Change"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
           }
         },
         "type": "object",
         "required": [
           "access_token",
           "expires_at",
-          "password_must_change"
+          "password_must_change",
+          "role"
         ],
         "title": "LoginResponse"
       },
