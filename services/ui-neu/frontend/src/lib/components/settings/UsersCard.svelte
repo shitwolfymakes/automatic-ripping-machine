@@ -4,7 +4,7 @@
 	import TimeAgo from '$lib/components/TimeAgo.svelte';
 	import Toggle from '$lib/components/notifications/Toggle.svelte';
 	import ChangePasswordForm from '$lib/components/settings/ChangePasswordForm.svelte';
-	import { fetchUsers, setUserDisabled, setUserPassword } from '$lib/api/users';
+	import { fetchUsers, setUserDisabled } from '$lib/api/users';
 	import type { UserView } from '$lib/types/api.gen';
 
 	let users = $state<UserView[]>([]);
@@ -14,9 +14,10 @@
 	const admin = $derived(users.find((u) => u.role === 'admin') ?? null);
 	const guest = $derived(users.find((u) => u.role === 'guest') ?? null);
 
-	// Which slide-over is open: 'admin-password' (change own password) or
-	// 'guest-password' (enable flow / set-password button).
-	let panel = $state<'admin-password' | 'guest-password' | null>(null);
+	// Which slide-over is open: 'admin-password' (change own password). Guest
+	// sessions are passwordless (spec 2026-07-12-guest-autologin); the backend
+	// password endpoint remains but is not surfaced here.
+	let panel = $state<'admin-password' | null>(null);
 
 	async function load() {
 		loading = true;
@@ -49,56 +50,16 @@
 		showFeedback('success', 'Admin password changed');
 	}
 
-	// Guest toggle: ON always opens the set-password slide-over (guest cannot be
-	// enabled without a password); OFF PATCHes disabled=true directly.
+	// Guest toggle: PATCHes disabled directly both ways — no password step,
+	// since guest sessions are auto-acquired and passwordless.
 	async function handleGuestToggle(next: boolean) {
 		if (!guest) return;
-		if (next) {
-			panel = 'guest-password';
-			return;
-		}
 		try {
-			await setUserDisabled(guest.id, true);
+			await setUserDisabled(guest.id, !next);
 			await load();
-			showFeedback('success', 'Guest access disabled');
+			showFeedback('success', next ? 'Guest access enabled' : 'Guest access disabled');
 		} catch (e) {
-			showFeedback('error', e instanceof Error ? e.message : 'Failed to disable guest');
-		}
-	}
-
-	function openGuestPassword() {
-		panel = 'guest-password';
-	}
-
-	// Guest set-password slide-over state
-	let guestPassword = $state('');
-	let guestPasswordError = $state('');
-	let guestPasswordSubmitting = $state(false);
-
-	async function handleGuestPasswordSubmit(e: Event) {
-		e.preventDefault();
-		if (!guest || guestPasswordSubmitting) return;
-		guestPasswordError = '';
-		if (guestPassword.length < 8) {
-			guestPasswordError = 'Password must be at least 8 characters';
-			return;
-		}
-		guestPasswordSubmitting = true;
-		try {
-			await setUserPassword(guest.id, guestPassword);
-			// Enable-flow: only flip disabled=false if the guest isn't already enabled
-			// (the plain "Set password" button on an already-enabled guest just sets it).
-			if (guest.disabled) {
-				await setUserDisabled(guest.id, false);
-			}
-			await load();
-			guestPassword = '';
-			closePanel();
-			showFeedback('success', 'Guest password set');
-		} catch (e) {
-			guestPasswordError = e instanceof Error ? e.message : 'Failed to set guest password';
-		} finally {
-			guestPasswordSubmitting = false;
+			showFeedback('error', e instanceof Error ? e.message : 'Failed to update guest access');
 		}
 	}
 
@@ -164,13 +125,6 @@
 						</span>
 					</div>
 					<div class="flex shrink-0 items-center gap-2">
-						<button
-							type="button"
-							onclick={openGuestPassword}
-							class="rounded-md border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/20"
-						>
-							Set password
-						</button>
 						<Toggle checked={!guest.disabled} label="guest" onchange={handleGuestToggle} />
 					</div>
 				</div>
@@ -201,43 +155,6 @@
 		</div>
 		<div class="flex-1 overflow-y-auto p-6">
 			<ChangePasswordForm onsuccess={handleAdminPasswordSuccess} />
-		</div>
-	</div>
-{/if}
-
-<!-- ── Guest set-password slide-over ── -->
-{#if panel === 'guest-password'}
-	<div role="presentation" class="fixed inset-0 z-60 bg-black/50" onclick={closePanel}></div>
-	<div
-		role="dialog"
-		aria-modal="true"
-		aria-label="Set guest password"
-		class="fixed inset-y-0 right-0 z-70 flex w-full max-w-lg flex-col overflow-y-auto bg-white shadow-xl dark:bg-gray-900"
-	>
-		<div class="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
-			<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Set guest password</h2>
-			<button
-				type="button"
-				aria-label="Close"
-				onclick={closePanel}
-				class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-			>
-				✕
-			</button>
-		</div>
-		<div class="flex-1 overflow-y-auto p-6">
-			<form onsubmit={handleGuestPasswordSubmit} class="w-full max-w-sm space-y-4 rounded-lg border border-primary/20 bg-surface p-6 dark:bg-surface-dark">
-				{#if guestPasswordError}
-					<p in:reveal class="rounded bg-red-100 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">{guestPasswordError}</p>
-				{/if}
-				<label class="block text-sm">
-					<span class="mb-1 block">New password</span>
-					<input bind:value={guestPassword} type="password" required autocomplete="new-password" class="w-full rounded border border-primary/20 px-3 py-2 dark:bg-surface-dark" />
-				</label>
-				<button type="submit" disabled={guestPasswordSubmitting} class="w-full rounded bg-primary px-4 py-2 font-medium text-white disabled:opacity-60">
-					{guestPasswordSubmitting ? 'Saving...' : 'Set password'}
-				</button>
-			</form>
 		</div>
 	</div>
 {/if}

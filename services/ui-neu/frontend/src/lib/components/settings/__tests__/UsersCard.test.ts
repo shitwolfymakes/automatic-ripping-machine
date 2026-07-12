@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import type { UserView } from '$lib/types/api.gen';
 
 const fetchUsers = vi.fn();
@@ -56,29 +56,20 @@ describe('UsersCard', () => {
 		expect(await screen.findByLabelText(/current password/i)).toBeInTheDocument();
 	});
 
-	it('guest enable flow: toggle-on opens set-password panel and submits password-then-enable', async () => {
+	it('guest toggle-ON PATCHes disabled=false directly (no password panel)', async () => {
 		fetchUsers.mockResolvedValue([admin, guest]);
-		setUserPassword.mockResolvedValue({});
 		setUserDisabled.mockResolvedValue({ ...guest, disabled: false });
 		renderComponent(UsersCard, { props: {} });
 
 		await screen.findAllByText('guest');
 		await fireEvent.click(screen.getByRole('switch', { name: /guest/i }));
 
-		const pwInput = await screen.findByLabelText(/new password/i);
-		await fireEvent.input(pwInput, { target: { value: 'longenough1' } });
-		const dialog = screen.getByRole('dialog', { name: /set guest password/i });
-		await fireEvent.click(within(dialog).getByRole('button', { name: /set password/i }));
-
-		await waitFor(() => expect(setUserPassword).toHaveBeenCalledWith('guest-1', 'longenough1'));
 		await waitFor(() => expect(setUserDisabled).toHaveBeenCalledWith('guest-1', false));
-
-		const pwOrder = setUserPassword.mock.invocationCallOrder[0];
-		const disabledOrder = setUserDisabled.mock.invocationCallOrder[0];
-		expect(pwOrder).toBeLessThan(disabledOrder);
+		expect(setUserPassword).not.toHaveBeenCalled();
+		expect(screen.queryByRole('dialog', { name: /set guest password/i })).not.toBeInTheDocument();
 	});
 
-	it('guest toggle-off PATCHes disabled=true directly', async () => {
+	it('guest toggle-OFF PATCHes disabled=true directly', async () => {
 		const enabledGuest = { ...guest, disabled: false };
 		fetchUsers.mockResolvedValue([admin, enabledGuest]);
 		setUserDisabled.mockResolvedValue({ ...enabledGuest, disabled: true });
@@ -89,5 +80,13 @@ describe('UsersCard', () => {
 
 		await waitFor(() => expect(setUserDisabled).toHaveBeenCalledWith('guest-1', true));
 		expect(setUserPassword).not.toHaveBeenCalled();
+	});
+
+	it('guest row has no Set password button', async () => {
+		fetchUsers.mockResolvedValue([admin, guest]);
+		renderComponent(UsersCard, { props: {} });
+
+		await screen.findAllByText('guest');
+		expect(screen.queryByRole('button', { name: /set password/i })).not.toBeInTheDocument();
 	});
 });
