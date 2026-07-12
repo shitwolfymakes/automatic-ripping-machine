@@ -144,6 +144,26 @@ describe("Layout guest gating", () => {
     expect(screen.getByTitle("Quick actions")).toBeInTheDocument();
     expect(screen.queryByText("GUEST")).not.toBeInTheDocument();
   });
+
+  it("guest sees a Login button instead of the sign-out icon", async () => {
+    const auth = (await import("$lib/stores/auth")) as unknown as {
+      __setRole: (r: string | null) => void;
+    };
+    auth.__setRole("guest");
+    renderComponent(Layout, { props: { children: childSnippet() } });
+    expect(screen.getByText("Login")).toBeInTheDocument();
+    expect(screen.queryByTitle("Sign out")).not.toBeInTheDocument();
+  });
+
+  it("admin keeps the sign-out icon", async () => {
+    const auth = (await import("$lib/stores/auth")) as unknown as {
+      __setRole: (r: string | null) => void;
+    };
+    auth.__setRole("admin");
+    renderComponent(Layout, { props: { children: childSnippet() } });
+    expect(screen.getByTitle("Sign out")).toBeInTheDocument();
+    expect(screen.queryByText("Login")).not.toBeInTheDocument();
+  });
 });
 
 describe("Layout guest auto-acquire", () => {

@@ -336,16 +336,26 @@
 					{/snippet}
 				</Flyout>
 				{/if}
-				<button
-					onclick={handleSignOut}
-					class="rounded-lg p-2 text-gray-500 hover:bg-primary/10 dark:text-gray-300 dark:hover:bg-primary/15"
-					title="Sign out"
-					aria-label="Sign out"
-				>
-					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-					</svg>
-				</button>
+				{#if $isGuest}
+					<button
+						onclick={() => goto('/login')}
+						class="rounded-lg px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 dark:hover:bg-primary/15"
+						title="Log in"
+					>
+						Login
+					</button>
+				{:else}
+					<button
+						onclick={handleSignOut}
+						class="rounded-lg p-2 text-gray-500 hover:bg-primary/10 dark:text-gray-300 dark:hover:bg-primary/15"
+						title="Sign out"
+						aria-label="Sign out"
+					>
+						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+						</svg>
+					</button>
+				{/if}
 				<!-- Dark mode toggle (hidden when theme locks the mode) -->
 				{#if !$schemeLocksMode}
 					<button

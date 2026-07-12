@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { panel, reveal } from '$lib/transitions';
 	import { login } from '$lib/api/auth';
-	import { applyLogin } from '$lib/stores/auth';
+	import { applyLogin, isGuest } from '$lib/stores/auth';
 
 	let username = $state('');
 	let password = $state('');
@@ -43,5 +43,10 @@
 		<button type="submit" disabled={submitting} class="w-full rounded bg-primary px-4 py-2 font-medium text-white disabled:opacity-60">
 			{submitting ? 'Signing in...' : 'Sign in'}
 		</button>
+		{#if $isGuest}
+			<button type="button" onclick={() => goto('/')} class="w-full text-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+				← Continue browsing as guest
+			</button>
+		{/if}
 	</form>
 </div>
