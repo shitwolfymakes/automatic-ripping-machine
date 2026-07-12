@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { panel } from '$lib/transitions';
 	import { fetchJobs } from '$lib/api/jobs';
 	import type { JobView } from '$lib/types/api.gen';
 	import JobFilterBar from '$lib/components/JobFilterBar.svelte';
@@ -40,7 +41,7 @@
 	<title>ARM - Logs</title>
 </svelte:head>
 
-<div class="space-y-4">
+<div in:panel class="space-y-4">
 	<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Logs</h1>
 	<p class="text-sm text-gray-600 dark:text-gray-400">
 		Browse a job's aggregated log. Select a job to view, filter, and download its log.

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { panel } from '$lib/transitions';
 	import { fetchRoots, fetchDirectory, renameFile, moveFile, deleteFile, createDirectory, fixPermissions } from '$lib/api/files';
 	import type { FileRoot, DirectoryListing } from '$lib/api/files';
 	import { formatBytes, formatDateTime } from '$lib/utils/format';
@@ -446,7 +447,7 @@
 	<title>ARM - Files</title>
 </svelte:head>
 
-<div class="space-y-4">
+<div in:panel class="space-y-4">
 	<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Files</h1>
 
 	<!-- Warning banner -->

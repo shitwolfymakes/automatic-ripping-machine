@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { fade } from 'svelte/transition';
-	import { fadeIn } from '$lib/transitions';
+	import { panel } from '$lib/transitions';
 	import { changePassword } from '$lib/api/auth';
 	import { clearPasswordMustChange } from '$lib/stores/auth';
 
@@ -40,7 +39,7 @@
 	}
 </script>
 
-<div in:fade={fadeIn} class="flex min-h-screen items-center justify-center p-4">
+<div in:panel class="flex min-h-screen items-center justify-center p-4">
 	<form onsubmit={onSubmit} class="w-full max-w-sm space-y-4 rounded-lg border border-primary/20 bg-surface p-6 dark:bg-surface-dark">
 		<h1 class="text-lg font-semibold">Change your password</h1>
 		<p class="text-sm text-gray-600 dark:text-gray-300">You must set a new password before continuing.</p>

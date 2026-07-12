@@ -22,9 +22,6 @@ export const [send, receive] = crossfade({
 	}
 });
 
-export const fadeIn = { duration: reducedMotion ? 0 : 150, easing: cubicOut };
-export const fadeOut = { duration: reducedMotion ? 0 : 150, easing: cubicOut };
-
 // Enter/leave for block-level panels (dashboard sections, banners, cards,
 // list rows): a plain fade. Panels never slide — sliding is reserved for
 // user-toggled expandable content (see expand below). Centralized here so

@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { fade } from 'svelte/transition';
-	import { fadeIn } from '$lib/transitions';
+	import { panel } from '$lib/transitions';
 	import { fetchJobLog, jobLogDownloadUrl, type LogEntry } from '$lib/api/logs';
 
 	const DEFAULT_LIMIT = 1000;
@@ -65,7 +64,7 @@
 	});
 </script>
 
-<div in:fade={fadeIn} class="space-y-4">
+<div in:panel class="space-y-4">
 	<div>
 		<a href="/logs" class="text-sm text-primary-text hover:underline dark:text-primary-text-dark">&lt;- All logs</a>
 		<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Job log</h1>

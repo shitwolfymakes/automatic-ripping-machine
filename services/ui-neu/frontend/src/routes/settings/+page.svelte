@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { expand } from '$lib/transitions';
+	import { expand, panel } from '$lib/transitions';
 	import { onMount } from 'svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
@@ -355,7 +355,7 @@
 	<title>ARM - Settings</title>
 </svelte:head>
 
-<div class="space-y-6 pb-20">
+<div in:panel class="space-y-6 pb-20">
 	<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
 
 	<LoadState

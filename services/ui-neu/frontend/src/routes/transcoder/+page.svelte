@@ -141,7 +141,7 @@
 	<title>ARM - Transcoder</title>
 </svelte:head>
 
-<div class="space-y-6">
+<div in:panel class="space-y-6">
 	<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Transcoder</h1>
 
 	<!-- API error -->
