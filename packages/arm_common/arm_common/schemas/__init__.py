@@ -7,6 +7,9 @@ from arm_common.schemas.auth import (
     LoginRequest,
     LoginResponse,
     PasswordChangeRequest,
+    UserDisabledRequest,
+    UserPasswordSetRequest,
+    UserView,
 )
 from arm_common.schemas.common import ErrorResponse, HealthResponse
 from arm_common.schemas.drives import (
@@ -288,6 +291,9 @@ __all__ = [
     "TranscodeStatsView",
     "TranscodeTaskView",
     "TranscodeWorkerView",
+    "UserDisabledRequest",
+    "UserPasswordSetRequest",
+    "UserView",
     "WSAck",
     "WSAuthRequest",
     "WSEnvelope",

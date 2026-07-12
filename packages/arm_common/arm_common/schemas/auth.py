@@ -89,3 +89,19 @@ class DiagnosticsServiceView(BaseModel):
 
 class DiagnosticsResponse(BaseModel):
     services: list[DiagnosticsServiceView]
+
+
+class UserView(BaseModel):
+    id: str
+    username: str
+    role: str
+    disabled: bool
+    last_login_at: datetime | None = None
+
+
+class UserDisabledRequest(BaseModel):
+    disabled: bool
+
+
+class UserPasswordSetRequest(BaseModel):
+    new_password: str = Field(min_length=8)

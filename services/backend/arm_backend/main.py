@@ -51,6 +51,7 @@ from arm_backend.routers import (
     transcode_presets,
     transcoder,
     transcodes,
+    users as users_router,
 )
 from arm_backend.routers.system import _app_version
 from arm_backend.seeders import CONFIG_SINGLETON_ID, run_seeders
@@ -296,6 +297,7 @@ app.include_router(themes_router.router)
 app.include_router(settings_router.router)
 app.include_router(system_router.router)
 app.include_router(files_router.router)
+app.include_router(users_router.router)
 app.include_router(ws_router)
 
 
