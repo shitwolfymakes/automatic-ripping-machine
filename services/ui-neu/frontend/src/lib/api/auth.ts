@@ -11,6 +11,10 @@ export function login(username: string, password: string): Promise<LoginResult> 
 	return post<LoginResult>('/api/auth/login', { username, password });
 }
 
+export function guestLogin(): Promise<LoginResult> {
+	return post<LoginResult>('/api/auth/guest');
+}
+
 export function logout(): Promise<unknown> {
 	return post('/api/auth/logout');
 }

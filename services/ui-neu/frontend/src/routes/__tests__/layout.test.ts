@@ -11,10 +11,21 @@ vi.mock("$app/stores", async () => {
 // Capture the unauthorized handler the layout registers, so the test can fire
 // a simulated session-expiry 401 and assert the layout's response.
 let capturedOn401: (() => void) | null = null;
+const getTokenMock = vi.fn(() => "admin-token" as string | null);
 vi.mock("$lib/api/client", () => ({
   setUnauthorizedHandler: (fn: () => void) => {
     capturedOn401 = fn;
   },
+  getToken: () => getTokenMock(),
+}));
+
+// These tests exercise the 401/session-expiry path, not guest acquisition —
+// guest login always rejects here so the layout falls through to /login,
+// matching this suite's pre-guest-autologin expectations.
+const guestLoginMock = vi.fn(() => Promise.reject(new Error("guest disabled")));
+vi.mock("$lib/api/auth", () => ({
+  guestLogin: () => guestLoginMock(),
+  logout: vi.fn(() => Promise.resolve()),
 }));
 
 const gotoMock = vi.fn();
@@ -29,6 +40,7 @@ vi.mock("$lib/stores/auth", async () => {
   return {
     initAuth: vi.fn(),
     logoutLocal: () => logoutLocalMock(),
+    applyLogin: vi.fn(),
     role: { subscribe: _role.subscribe },
     isAdmin: derived(_role, (r) => r === "admin"),
     isGuest: derived(_role, (r) => r === "guest"),
@@ -89,6 +101,9 @@ describe("Layout", () => {
     capturedOn401 = null;
     gotoMock.mockClear();
     logoutLocalMock.mockClear();
+    getTokenMock.mockReset();
+    getTokenMock.mockReturnValue("admin-token");
+    guestLoginMock.mockClear();
   });
 
   describe("session expiry (401 handler)", () => {
@@ -100,18 +115,18 @@ describe("Layout", () => {
 
       // Simulate a poll request 401ing after the session expired.
       capturedOn401!();
+      await vi.waitFor(() => expect(gotoMock).toHaveBeenCalledWith("/login"));
 
       // The poll loop MUST be stopped so it can't keep 401-storming.
       expect(dashboard.stop).toHaveBeenCalled();
       expect(logoutLocalMock).toHaveBeenCalled();
-      expect(gotoMock).toHaveBeenCalledWith("/login");
     });
 
     it("does not re-navigate on repeated 401s once already on /login", async () => {
       renderComponent(Layout, { props: { children: childSnippet() } });
-      // First 401 redirects to /login.
+      // First 401 falls through the (rejected) guest acquire to /login.
       capturedOn401!();
-      expect(gotoMock).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(gotoMock).toHaveBeenCalledTimes(1));
       gotoMock.mockClear();
 
       // The dashboard's allSettled fan-out fires on401 once per failed
@@ -119,6 +134,7 @@ describe("Layout", () => {
       // redundant goto('/login') calls (which deselect login inputs).
       capturedOn401!();
       capturedOn401!();
+      await Promise.resolve();
       expect(gotoMock).not.toHaveBeenCalled();
     });
   });

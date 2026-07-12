@@ -14,10 +14,10 @@
 	import FlyoutItem from '$lib/components/FlyoutItem.svelte';
 	import FlyoutDivider from '$lib/components/FlyoutDivider.svelte';
 	import { onMount } from 'svelte';
-	import { setUnauthorizedHandler } from '$lib/api/client';
-	import { logoutLocal, initAuth, isGuest } from '$lib/stores/auth';
+	import { setUnauthorizedHandler, getToken } from '$lib/api/client';
+	import { logoutLocal, initAuth, isGuest, applyLogin } from '$lib/stores/auth';
 	import { isScreenEnabled } from '$lib/features';
-	import { logout as apiLogout } from '$lib/api/auth';
+	import { logout as apiLogout, guestLogin } from '$lib/api/auth';
 	import { countRipping } from '$lib/utils/job-status';
 	import BottomStatsBar from '$lib/components/BottomStatsBar.svelte';
 	import SidebarStats from '$lib/components/SidebarStats.svelte';
@@ -29,6 +29,31 @@
 	// multiple in-flight requests 401 at once. Reset once the user is back on a
 	// real (non-auth) page, so a future session expiry can redirect again.
 	let redirectingToLogin = false;
+
+	// One guest-acquisition attempt per page load: if it fails (guest access
+	// disabled / backend down) we fall through to /login and do NOT retry —
+	// prevents a 401→acquire→401 loop. Reset only by a full reload (or a
+	// deliberate logout, which re-arms it for one fresh attempt).
+	let guestAutoAttempted = false;
+
+	async function acquireGuestOrLogin(): Promise<void> {
+		if (!guestAutoAttempted) {
+			guestAutoAttempted = true;
+			try {
+				const result = await guestLogin();
+				applyLogin(result);
+				dashboard.start();
+				return;
+			} catch {
+				/* fall through to login */
+			}
+		}
+		if (!redirectingToLogin) {
+			redirectingToLogin = true;
+			goto('/login');
+		}
+	}
+
 	const rippingCount = $derived(countRipping($dashboard.active_jobs ?? []));
 
 	function handleQuickAction(action: string) {
@@ -57,6 +82,25 @@
 		}
 	});
 
+	// Deliberate sign-out: best-effort server-side logout, drop the local
+	// session, then take one fresh guest-acquisition attempt (a deliberate
+	// logout re-arms `guestAutoAttempted` regardless of the page-load attempt
+	// already having run/failed). Success drops into a guest session on the
+	// dashboard; failure falls through to /login (acquireGuestOrLogin handles
+	// that redirect itself).
+	async function handleSignOut(): Promise<void> {
+		try {
+			await apiLogout();
+		} catch {
+			/* ignore */
+		}
+		logoutLocal();
+		guestAutoAttempted = false;
+		await acquireGuestOrLogin();
+		if (!$isGuest) return;
+		goto('/');
+	}
+
 	async function toggleRipping() {
 		if (togglingPause) return;
 		togglingPause = true;
@@ -76,7 +120,8 @@
 		initAuth();
 		// Register the 401 handler ONCE here. It MUST route through logoutLocal
 		// (not client.clearToken directly) so the in-memory auth store and the
-		// persisted token clear together, then redirect to /login.
+		// persisted token clear together, then attempt a guest re-acquire (or
+		// redirect to /login if that fails).
 		//
 		// The dashboard poll (a 6-endpoint allSettled fan-out every 5s) survives
 		// `goto('/login')` because the root layout persists across navigations —
@@ -88,19 +133,25 @@
 		setUnauthorizedHandler(() => {
 			dashboard.stop();
 			logoutLocal();
-			if (!redirectingToLogin) {
-				redirectingToLogin = true;
-				goto('/login');
-			}
+			void acquireGuestOrLogin();
 		});
 		// Auth pages (/login, /change-password) render bare and must NOT poll the
 		// dashboard — the user has no usable session there, so the poll would 401
-		// (login) or 403 (change-password) on a loop.
+		// (login) or 403 (change-password) on a loop. They also must NOT
+		// auto-acquire a guest session: a visitor going straight to /login must
+		// still see the login form.
 		if ($page.url.pathname.startsWith('/login') || $page.url.pathname.startsWith('/change-password')) {
 			return;
 		}
 		// Load themes from API (falls back to built-in if backend unreachable)
 		loadThemesFromApi();
+		if (!getToken()) {
+			// No persisted session: try a guest auto-acquire before polling.
+			// acquireGuestOrLogin() starts the dashboard poll itself on success
+			// (or redirects to /login on failure) — don't start it here too.
+			void acquireGuestOrLogin();
+			return;
+		}
 		// Start dashboard polling (provides sidebar stats on all pages)
 		dashboard.start();
 		return () => dashboard.stop();
@@ -286,7 +337,7 @@
 				</Flyout>
 				{/if}
 				<button
-					onclick={async () => { try { await apiLogout(); } catch { /* ignore */ } logoutLocal(); goto('/login'); }}
+					onclick={handleSignOut}
 					class="rounded-lg p-2 text-gray-500 hover:bg-primary/10 dark:text-gray-300 dark:hover:bg-primary/15"
 					title="Sign out"
 					aria-label="Sign out"
