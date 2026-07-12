@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { fade } from 'svelte/transition';
+	import { fadeIn } from '$lib/transitions';
 	import type { SetupStatus } from '$lib/api/setup';
 	import SetupWizard from '$lib/components/setup/SetupWizard.svelte';
 
@@ -9,7 +11,7 @@
 	<title>ARM - Setup</title>
 </svelte:head>
 
-<div class="min-h-screen bg-page dark:bg-page-dark">
+<div in:fade={fadeIn} class="min-h-screen bg-page dark:bg-page-dark">
 	{#if data.status}
 		<SetupWizard status={data.status} />
 	{:else}

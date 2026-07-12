@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { fade } from 'svelte/transition';
+	import { fadeIn } from '$lib/transitions';
 	import { login } from '$lib/api/auth';
 	import { applyLogin } from '$lib/stores/auth';
 
@@ -25,7 +27,7 @@
 	}
 </script>
 
-<div class="flex min-h-screen items-center justify-center p-4">
+<div in:fade={fadeIn} class="flex min-h-screen items-center justify-center p-4">
 	<form onsubmit={onSubmit} class="w-full max-w-sm space-y-4 rounded-lg border border-primary/20 bg-surface p-6 dark:bg-surface-dark">
 		<h1 class="text-lg font-semibold">Sign in to ARM</h1>
 		{#if error}
