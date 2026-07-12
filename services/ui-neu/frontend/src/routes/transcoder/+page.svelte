@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { fade } from 'svelte/transition';
 	import { fetchTranscoderJobs, retryTranscoderJob, deleteTranscoderJob } from '$lib/api/transcoder';
 	import type { TranscodeTaskView } from '$lib/types/api.gen';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -8,7 +7,7 @@
 	import TimeAgo from '$lib/components/TimeAgo.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
-	import { fadeIn, fadeOut } from '$lib/transitions';
+	import { panel } from '$lib/transitions';
 	import { transcoderStats, transcoderWorkers, getJobsCache, setJobsCache } from '$lib/stores/transcoder';
 	import { sortTranscodeTasks } from '$lib/utils/transcode-sort';
 
@@ -147,7 +146,7 @@
 
 	<!-- API error -->
 	{#if $statsError}
-		<div in:fade={fadeIn} out:fade={fadeOut} class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+		<div transition:panel class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
 			Failed to reach transcoder: {$statsError}
 		</div>
 	{/if}
@@ -172,7 +171,7 @@
 		</div>
 	{:else if $statsError}
 		<!-- Offline banner -->
-		<div in:fade={fadeIn} out:fade={fadeOut} class="flex items-center gap-3 rounded-lg border border-primary/25 bg-page p-4 dark:border-primary/25 dark:bg-page-dark">
+		<div transition:panel class="flex items-center gap-3 rounded-lg border border-primary/25 bg-page p-4 dark:border-primary/25 dark:bg-page-dark">
 			<div class="h-3 w-3 shrink-0 rounded-full bg-gray-400"></div>
 			<div>
 				<p class="font-medium text-gray-700 dark:text-gray-300">Transcoder Offline</p>
@@ -182,7 +181,7 @@
 	{:else}
 		<!-- Worker pool + Stats cards -->
 		{@const w = $workers}
-		<div in:fade={fadeIn} out:fade={fadeOut} class="space-y-4">
+		<div transition:panel class="space-y-4">
 		<!-- Worker pool status -->
 		<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
 			<div class="mb-3 flex items-center justify-between">
@@ -293,7 +292,7 @@
 			<div class="space-y-3">
 				{#each jobList as job (job.id)}
 					{@const sourceFile = sourceBasename(job.output_path)}
-					<div in:fade={fadeIn} out:fade={fadeOut} class="rounded-lg border border-primary/20 border-l-4 border-l-primary bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
+					<div transition:panel|local class="rounded-lg border border-primary/20 border-l-4 border-l-primary bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
 						<div class="min-w-0 flex-1">
 							<!-- Row 1: Title + Status + Actions -->
 							<div class="flex items-start justify-between gap-2">
