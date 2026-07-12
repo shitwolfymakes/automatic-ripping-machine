@@ -259,8 +259,15 @@
 		<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
 	</div>
 
+	<!-- Single coordinated wave: everything below the h1 waits for BOTH the
+	     dashboard poll and the jobs fetch (pageReady), then fades in as one
+	     block — banners, sections, and the All Jobs table appear together at
+	     their final positions instead of trickling in per data source. -->
+	{#if pageReady}
+	<div in:panel class="space-y-6">
+
 	<!-- Global pause banner -->
-	{#if !dashLoading && !dash.ripping_enabled}
+	{#if !dash.ripping_enabled}
 		<div transition:panel class="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-900/20">
 			<div class="h-3 w-3 shrink-0 rounded-full bg-amber-500"></div>
 			<div>
@@ -353,7 +360,7 @@
 	{/if}
 
 	<!-- Idle state -->
-	{#if pageReady && scanningJobs.length === 0 && waitingJobs.length === 0 && nonWaitingActiveJobs.length === 0 && finishingJobs.length === 0 && dash.active_transcodes.length === 0}
+	{#if scanningJobs.length === 0 && waitingJobs.length === 0 && nonWaitingActiveJobs.length === 0 && finishingJobs.length === 0 && dash.active_transcodes.length === 0}
 		<div transition:panel>
 			<EmptyDashboardPanel
 				drivesOnline={dash.drives_online}
@@ -363,7 +370,7 @@
 		</div>
 	{/if}
 
-	<!-- All Jobs -->
+	<!-- All Jobs (inside the pageReady wave — appears with the sections) -->
 	<section id="all-jobs" class="space-y-4">
 			<!-- Controls panel -->
 			<div class="rounded-lg border border-primary/20 bg-surface shadow-xs dark:border-primary/20 dark:bg-surface-dark">
@@ -486,4 +493,7 @@
 			</LoadState>
 			</div>
 	</section>
+
+	</div>
+	{/if}
 </div>

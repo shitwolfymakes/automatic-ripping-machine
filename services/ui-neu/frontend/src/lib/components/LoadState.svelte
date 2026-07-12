@@ -1,6 +1,5 @@
 <script lang="ts" generics="T">
     import type { Snippet } from 'svelte';
-    import { send, receive } from '$lib/transitions';
 
     interface Props {
         data: T | null | undefined;
@@ -66,16 +65,24 @@
     });
 </script>
 
+<!-- Phase swaps are INSTANT — deliberately no transitions here. The previous
+     send/receive crossfade kept the outgoing phase (e.g. the skeleton) in
+     layout for its 200ms outro while the incoming content mounted, so the
+     document was momentarily double-height: everything below slid down, then
+     snapped back when the outro finished. An instant swap of the skeleton
+     filling in with real content is the smoothest handoff (same rule as the
+     transcoder stats block); page-entry softness comes from the route roots'
+     in:panel, not from here. -->
 {#if phase === 'waiting'}
     <!-- Pre-minDelay window: reserve the skeleton's space invisibly instead of
-         rendering nothing. A fast load then fades content into already-reserved
-         layout (no jump); a slow one fades the skeleton in at minDelay as
-         before. visibility:hidden keeps geometry without a skeleton flash. -->
+         rendering nothing. A fast load then fills already-reserved layout (no
+         jump); a slow one shows the skeleton at minDelay as before.
+         visibility:hidden keeps geometry without a skeleton flash. -->
     <div class="invisible" aria-hidden="true">
         {@render loadingSlot()}
     </div>
 {:else if phase === 'error'}
-    <div in:receive={{ key: transitionKey }} out:send={{ key: transitionKey }}>
+    <div>
         {#if errorSlot}
             {@render errorSlot(error!)}
         {:else}
@@ -83,11 +90,11 @@
         {/if}
     </div>
 {:else if phase === 'loading'}
-    <div in:receive={{ key: transitionKey }} out:send={{ key: transitionKey }}>
+    <div>
         {@render loadingSlot()}
     </div>
 {:else if phase === 'empty'}
-    <div in:receive={{ key: transitionKey }} out:send={{ key: transitionKey }}>
+    <div>
         {#if empty}
             {@render empty()}
         {:else}
@@ -95,7 +102,7 @@
         {/if}
     </div>
 {:else if phase === 'ready'}
-    <div in:receive={{ key: transitionKey }} out:send={{ key: transitionKey }}>
+    <div>
         {@render ready(data!)}
     </div>
 {/if}

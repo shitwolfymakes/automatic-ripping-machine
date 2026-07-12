@@ -50,10 +50,12 @@ vi.mock('$lib/api/logs', () => ({
 	fetchStructuredLogContent: vi.fn(() => Promise.resolve({ entries: [] }))
 }));
 
-/** Render dashboard and wait for initial data to load */
+/** Render dashboard and wait for initial data to load. The All Jobs section
+ * is gated on the dashboard poll (anti-jank), so wait for its controls too. */
 async function renderDashboard() {
 	renderComponent(DashboardPage);
 	await waitFor(() => expect(screen.getByText('Dashboard')).toBeInTheDocument());
+	await waitFor(() => expect(screen.getByText('Cards')).toBeInTheDocument());
 }
 
 /** Render dashboard, wait for jobs, then switch to table view */

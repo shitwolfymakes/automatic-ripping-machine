@@ -7,8 +7,8 @@
 	import TimeAgo from '$lib/components/TimeAgo.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
-	import { panel, reveal, send, receive } from '$lib/transitions';
-	import { transcoderStats, transcoderWorkers, getJobsCache, setJobsCache } from '$lib/stores/transcoder';
+	import { panel, reveal } from '$lib/transitions';
+	import { transcoderStats, transcoderWorkers, getJobsCache, setJobsCache, getLastJobsCount } from '$lib/stores/transcoder';
 	import { sortTranscodeTasks } from '$lib/utils/transcode-sort';
 
 	const emptyJobs: TranscodeTaskView[] = [];
@@ -118,12 +118,19 @@
 		}
 	});
 
+	// Same min-delay idea as LoadState: the stats skeleton reserves its space
+	// from the first frame but stays invisible for 150ms, so a fast load fills
+	// in with no placeholder flash and only a genuinely slow load shows the
+	// pulse blocks.
+	let skeletonVisible = $state(false);
+
 	onMount(() => {
 		stats.start();
 		workers.start();
 		// Skeleton only when we have nothing cached for the current tab.
 		loadJobs(getJobsCache(activeTab) == null);
-		return () => { stats.stop(); workers.stop(); stopJobsPolling(); };
+		const skeletonTimer = setTimeout(() => (skeletonVisible = true), 150);
+		return () => { clearTimeout(skeletonTimer); stats.stop(); workers.stop(); stopJobsPolling(); };
 	});
 
 	const tabs = ['all', 'queued', 'in_progress', 'done', 'failed'];
@@ -154,12 +161,13 @@
 	<!-- Stats / worker pool. On the very first load (nothing cached yet) show a
 	     skeleton sized to match the real cards so it fills in place without a
 	     layout shift; only show the "offline" banner once a poll has actually
-	     confirmed the service is down, never while still loading. The three
-	     phases swap via send/receive crossfade (same idiom as LoadState) so the
-	     skeleton morphs into the content instead of the content restarting from
-	     opacity 0 — an unmatched fade reads as a flicker on fast loads. -->
+	     confirmed the service is down, never while still loading. The skeleton
+	     is geometry-matched to the real cards, so the swap is INSTANT — no
+	     transition. A fade restarts the block at opacity 0 (flicker) and a
+	     crossfade scales between mismatched heights (jump); a matched skeleton
+	     filling in with real content is the smoothest possible handoff. -->
 	{#if !$statsInitialized && !$statsError}
-		<div in:receive={{ key: 'tc-stats' }} out:send={{ key: 'tc-stats' }} class="space-y-4">
+		<div class="space-y-4" class:invisible={!skeletonVisible} aria-hidden="true">
 			<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
 				<div class="h-5 w-56 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
 			</div>
@@ -173,8 +181,8 @@
 			</div>
 		</div>
 	{:else if $statsError}
-		<!-- Offline banner -->
-		<div in:receive={{ key: 'tc-stats' }} out:send={{ key: 'tc-stats' }} class="flex items-center gap-3 rounded-lg border border-primary/25 bg-page p-4 dark:border-primary/25 dark:bg-page-dark">
+		<!-- Offline banner: appears mid-session when polls start failing -->
+		<div in:reveal class="flex items-center gap-3 rounded-lg border border-primary/25 bg-page p-4 dark:border-primary/25 dark:bg-page-dark">
 			<div class="h-3 w-3 shrink-0 rounded-full bg-gray-400"></div>
 			<div>
 				<p class="font-medium text-gray-700 dark:text-gray-300">Transcoder Offline</p>
@@ -182,9 +190,9 @@
 			</div>
 		</div>
 	{:else}
-		<!-- Worker pool + Stats cards -->
+		<!-- Worker pool + Stats cards: fills the skeleton in place, no transition -->
 		{@const w = $workers}
-		<div in:receive={{ key: 'tc-stats' }} out:send={{ key: 'tc-stats' }} class="space-y-4">
+		<div class="space-y-4">
 		<!-- Worker pool status -->
 		<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
 			<div class="mb-3 flex items-center justify-between">
@@ -282,10 +290,12 @@
 			transitionKey="transcoder-jobs"
 		>
 			{#snippet loadingSlot()}
+				<!-- Sized to the last-known card count (persisted) so the reserved
+				     space matches what's about to render — no reflow on fill-in. -->
 				<div class="space-y-3">
-					<SkeletonCard lines={4} />
-					<SkeletonCard lines={4} />
-					<SkeletonCard lines={4} />
+					{#each Array(getLastJobsCount(activeTab)) as _unused}
+						<SkeletonCard lines={4} />
+					{/each}
 				</div>
 			{/snippet}
 			{#snippet empty()}
