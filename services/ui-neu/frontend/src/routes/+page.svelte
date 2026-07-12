@@ -21,6 +21,7 @@
 	import { dashboard } from '$lib/stores/dashboard';
 	import { get } from 'svelte/store';
 	import { startRipperEvents, onRipperEvent } from '$lib/stores/ripperEvents.svelte';
+	import { isAdmin } from '$lib/stores/auth';
 
 	// --- Dashboard state ---
 	// Seed from the persistent singleton store the layout already polls, so
@@ -388,13 +389,15 @@
 								class="rounded-md px-3 py-1.5 text-xs font-medium {viewMode === 'table' ? 'bg-primary text-on-primary' : 'bg-primary/10 text-gray-600 hover:bg-primary/15 dark:bg-primary/15 dark:text-gray-300'}"
 							>Table</button>
 						</div>
-						<div class="h-5 w-px bg-primary/20 dark:bg-primary/20"></div>
-						<BulkActionsMenu
-							{selectedJobs}
-							jobsStats={null}
-							{bulkBusy}
-							onaction={handleBulkAction}
-						/>
+						{#if $isAdmin}
+							<div class="h-5 w-px bg-primary/20 dark:bg-primary/20"></div>
+							<BulkActionsMenu
+								{selectedJobs}
+								jobsStats={null}
+								{bulkBusy}
+								onaction={handleBulkAction}
+							/>
+						{/if}
 					</div>
 				</div>
 
@@ -456,12 +459,14 @@
 								<thead class="bg-page text-gray-600 dark:bg-primary/5 dark:text-gray-400">
 									<tr>
 										<th class="px-4 py-3 w-8">
-											<input
-												type="checkbox"
-												checked={allVisibleSelected}
-												onchange={toggleSelectAll}
-												class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary dark:border-gray-600 dark:bg-gray-700"
-											/>
+											{#if $isAdmin}
+												<input
+													type="checkbox"
+													checked={allVisibleSelected}
+													onchange={toggleSelectAll}
+													class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary dark:border-gray-600 dark:bg-gray-700"
+												/>
+											{/if}
 										</th>
 										{#each columns as col}
 											<th class="px-4 py-3 font-medium">{col.label}</th>
@@ -474,6 +479,7 @@
 											{job}
 											selected={selectedJobs.has(job.id)}
 											onselect={toggleSelect}
+											showSelect={$isAdmin}
 										/>
 									{/each}
 								</tbody>

@@ -10,6 +10,7 @@
 	import { panel, reveal } from '$lib/transitions';
 	import { transcoderStats, transcoderWorkers, getJobsCache, setJobsCache, getLastJobsCount } from '$lib/stores/transcoder';
 	import { sortTranscodeTasks } from '$lib/utils/transcode-sort';
+	import { isAdmin } from '$lib/stores/auth';
 
 	const emptyJobs: TranscodeTaskView[] = [];
 
@@ -315,18 +316,20 @@
 									</h3>
 									<StatusBadge status={job.status} />
 								</div>
-								<div class="flex shrink-0 gap-2">
-									{#if job.status === 'failed'}
+								{#if $isAdmin}
+									<div class="flex shrink-0 gap-2">
+										{#if job.status === 'failed'}
+											<button
+												onclick={() => handleRetry(job.id)}
+												class="rounded-sm bg-primary px-2.5 py-1 text-xs font-medium text-on-primary hover:bg-primary-hover"
+											>Retry</button>
+										{/if}
 										<button
-											onclick={() => handleRetry(job.id)}
-											class="rounded-sm bg-primary px-2.5 py-1 text-xs font-medium text-on-primary hover:bg-primary-hover"
-										>Retry</button>
-									{/if}
-									<button
-										onclick={() => handleDelete(job.id)}
-										class="rounded-sm bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700"
-									>Delete</button>
-								</div>
+											onclick={() => handleDelete(job.id)}
+											class="rounded-sm bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700"
+										>Delete</button>
+									</div>
+								{/if}
 							</div>
 
 							<!-- Row 2: ARM job link, attempts -->

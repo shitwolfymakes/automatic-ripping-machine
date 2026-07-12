@@ -3,6 +3,18 @@ import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-
 import DiscReviewWidget from '../DiscReviewWidget.svelte';
 import { createJob, createJobDetail, createTrack } from '../__fixtures__/job';
 
+vi.mock('$lib/stores/auth', async () => {
+	const { derived, writable } = await import('svelte/store');
+	const _role = writable<string | null>('admin');
+	return {
+		role: { subscribe: _role.subscribe },
+		isAdmin: derived(_role, (r) => r === 'admin'),
+		isGuest: derived(_role, (r) => r === 'guest'),
+		// Test-only helper — not part of the real module's public API.
+		__setRole: (r: string | null) => _role.set(r)
+	};
+});
+
 vi.mock('$lib/api/jobs', () => ({
 	fetchJob: vi.fn(() =>
 		Promise.resolve({
@@ -85,6 +97,35 @@ describe('DiscReviewWidget', () => {
 			await waitFor(() => {
 				expect(screen.getByLabelText('Title')).toBeInTheDocument();
 			});
+		});
+	});
+
+	describe('guest write-control gating', () => {
+		afterEach(async () => {
+			const auth = (await import('$lib/stores/auth')) as unknown as {
+				__setRole: (r: string | null) => void;
+			};
+			auth.__setRole('admin');
+		});
+
+		it('hides Start rip, Apply session, Cancel for guests but keeps Info and View details', async () => {
+			const auth = (await import('$lib/stores/auth')) as unknown as {
+				__setRole: (r: string | null) => void;
+			};
+			auth.__setRole('guest');
+			renderWidget({ status: 'awaiting_review' });
+			await waitFor(() => expect(screen.getByText('Info')).toBeInTheDocument());
+			expect(screen.queryByText('Start rip')).not.toBeInTheDocument();
+			expect(screen.queryByText(/Apply session/)).not.toBeInTheDocument();
+			expect(screen.queryByText('Cancel')).not.toBeInTheDocument();
+			expect(screen.getByText('View details')).toBeInTheDocument();
+		});
+
+		it('shows Start rip, Apply session, Cancel for admins', async () => {
+			renderWidget({ status: 'awaiting_review' });
+			await waitFor(() => expect(screen.getByText('Start rip')).toBeInTheDocument());
+			expect(screen.getByText(/Apply session/)).toBeInTheDocument();
+			expect(screen.getByText('Cancel')).toBeInTheDocument();
 		});
 	});
 });
