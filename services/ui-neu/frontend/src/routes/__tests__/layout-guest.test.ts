@@ -22,6 +22,19 @@ vi.mock("$lib/api/client", () => ({
   getToken: () => getTokenMock(),
 }));
 
+// Deferred-promise helper for tests that need to control exactly when a
+// mocked async call resolves, so they can assert on in-between (pending)
+// state — e.g. a second caller racing a still-in-flight first attempt.
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 const guestLoginMock = vi.fn();
 const apiLogoutMock = vi.fn(() => Promise.resolve());
 vi.mock("$lib/api/auth", () => ({
@@ -234,5 +247,51 @@ describe("Layout guest auto-acquire", () => {
 
     await waitFor(() => expect(gotoMock).toHaveBeenCalledWith("/login"));
     expect(apiLogoutMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("a concurrent 401 racing the initial mount's still-pending guest acquisition does not bounce to /login", async () => {
+    getTokenMock.mockReturnValue(null);
+    const { promise: guestLoginPromise, resolve: resolveGuestLogin } =
+      deferred<{
+        access_token: string;
+        expires_at: string;
+        password_must_change: boolean;
+        role: string;
+      }>();
+    guestLoginMock.mockReturnValue(guestLoginPromise);
+
+    const { applyLogin } = (await import("$lib/stores/auth")) as unknown as {
+      applyLogin: ReturnType<typeof vi.fn>;
+    };
+    const { dashboard } = (await import("$lib/stores/dashboard")) as unknown as {
+      dashboard: { start: ReturnType<typeof vi.fn> };
+    };
+    applyLogin.mockClear();
+    dashboard.start.mockClear();
+
+    renderComponent(Layout, { props: { children: childSnippet() } });
+
+    // onMount's no-token branch has kicked off acquireGuestOrLogin(), whose
+    // guestLogin() call is still pending. Before it resolves, fire the 401
+    // handler (loadThemesFromApi's unauthenticated request failing) — this
+    // is the second, concurrent caller from the defect report.
+    await waitFor(() => expect(guestLoginMock).toHaveBeenCalledTimes(1));
+    unauthorizedHandler();
+
+    // Now let the first (and only) acquisition succeed.
+    resolveGuestLogin({
+      access_token: "guest-token",
+      expires_at: "2099-01-01T00:00:00Z",
+      password_must_change: false,
+      role: "guest",
+    });
+
+    await waitFor(() => expect(applyLogin).toHaveBeenCalledTimes(1));
+
+    // Single-flight: only ONE guestLogin() call total, no /login navigation,
+    // and the success side-effects ran exactly once.
+    expect(guestLoginMock).toHaveBeenCalledTimes(1);
+    expect(gotoMock).not.toHaveBeenCalledWith("/login");
+    expect(dashboard.start).toHaveBeenCalledTimes(1);
   });
 });

@@ -30,25 +30,27 @@
 	// real (non-auth) page, so a future session expiry can redirect again.
 	let redirectingToLogin = false;
 
-	// One guest-acquisition attempt per page load: if it fails (guest access
-	// disabled / backend down) we fall through to /login and do NOT retry —
-	// prevents a 401→acquire→401 loop. Reset only by a full reload (or a
-	// deliberate logout, which re-arms it for one fresh attempt).
-	let guestAutoAttempted = false;
+	// Single-flight guest acquisition: all concurrent callers (initial mount +
+	// any 401s racing it) await the SAME attempt and only redirect to /login
+	// if that attempt actually failed. Reset only by deliberate logout (fresh
+	// chance) — never on failure, so a dead guest endpoint can't loop.
+	let guestAcquire: Promise<boolean> | null = null;
 
 	async function acquireGuestOrLogin(): Promise<void> {
-		if (!guestAutoAttempted) {
-			guestAutoAttempted = true;
-			try {
-				const result = await guestLogin();
-				applyLogin(result);
-				dashboard.start();
-				return;
-			} catch {
-				/* fall through to login */
-			}
+		if (!guestAcquire) {
+			guestAcquire = (async () => {
+				try {
+					const result = await guestLogin();
+					applyLogin(result);
+					dashboard.start();
+					return true;
+				} catch {
+					return false;
+				}
+			})();
 		}
-		if (!redirectingToLogin) {
+		const ok = await guestAcquire;
+		if (!ok && !redirectingToLogin) {
 			redirectingToLogin = true;
 			goto('/login');
 		}
@@ -84,7 +86,7 @@
 
 	// Deliberate sign-out: best-effort server-side logout, drop the local
 	// session, then take one fresh guest-acquisition attempt (a deliberate
-	// logout re-arms `guestAutoAttempted` regardless of the page-load attempt
+	// logout resets `guestAcquire` regardless of the page-load attempt
 	// already having run/failed). Success drops into a guest session on the
 	// dashboard; failure falls through to /login (acquireGuestOrLogin handles
 	// that redirect itself).
@@ -95,7 +97,7 @@
 			/* ignore */
 		}
 		logoutLocal();
-		guestAutoAttempted = false;
+		guestAcquire = null;
 		await acquireGuestOrLogin();
 		if (!$isGuest) return;
 		goto('/');
