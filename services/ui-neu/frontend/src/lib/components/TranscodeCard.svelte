@@ -5,7 +5,7 @@
 	import { elapsedTime, etaTime, statusAccentVar } from '$lib/utils/format';
 	import TimeAgo from './TimeAgo.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
-	import { slide } from 'svelte/transition';
+	import { expand } from '$lib/transitions';
 
 	interface Props {
 		job?: TranscodeTaskView;
@@ -93,7 +93,7 @@
 
 	<!-- Expanded detail -->
 	{#if expanded}
-		<div transition:slide={{ duration: 200 }} class="border-t border-primary/10 px-4 py-3 dark:border-primary/15">
+		<div transition:expand class="border-t border-primary/10 px-4 py-3 dark:border-primary/15">
 			<div class="min-w-0 flex-1">
 				<div class="mb-2">
 					<span class="text-sm font-semibold text-gray-900 dark:text-white">{displayTitle}</span>
