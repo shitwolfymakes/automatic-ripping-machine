@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { portal } from '$lib/actions/portal';
+	import { reveal } from '$lib/transitions';
 
 	interface Props {
 		/** Whether the panel is shown. Bindable so callers can also close it. */
@@ -45,7 +46,7 @@
 {#if open}
 	<!-- Portaled to <body> so the fixed panel escapes any ancestor that creates
 	     a containing block (transform/filter/backdrop-filter/will-change). -->
-	<div use:portal>
+	<div use:portal in:reveal>
 		<!-- Backdrop -->
 		<div role="presentation" class="fixed inset-0 z-40 bg-black/40" onclick={close}></div>
 

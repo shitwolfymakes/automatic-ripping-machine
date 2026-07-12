@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { panel, reveal } from '$lib/transitions';
 	import { fetchNotifications, dismissNotification } from '$lib/api/notifications';
 	import { purgeNotifications } from '$lib/api/maintenance';
 	import type { NotificationInboxView } from '$lib/types/api.gen';
@@ -84,9 +85,9 @@
 	<title>ARM - Notifications</title>
 </svelte:head>
 
-<div class="space-y-6">
+<div in:panel class="space-y-6">
 	{#if feedback}
-		<div class="rounded-lg px-4 py-2.5 text-sm {feedback.type === 'success'
+		<div in:reveal class="rounded-lg px-4 py-2.5 text-sm {feedback.type === 'success'
 			? 'bg-green-500/10 text-green-700 dark:text-green-400'
 			: 'bg-red-500/10 text-red-700 dark:text-red-400'}">
 			{feedback.message}
@@ -112,6 +113,7 @@
 			</label>
 			{#if clearedCount > 0}
 				<button
+					in:reveal
 					type="button"
 					onclick={() => (purgeConfirmOpen = true)}
 					disabled={purging}

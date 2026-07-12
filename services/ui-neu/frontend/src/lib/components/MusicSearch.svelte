@@ -2,6 +2,7 @@
 	import type { JobView, TrackView, MetadataCandidate, MetadataReleaseDetail } from '$lib/types/api.gen';
 	import { searchMusicMetadata, fetchMusicDetail, resolveJob, patchJob } from '$lib/api/jobs';
 	import { matchIndicator } from '$lib/utils/track-match';
+	import { reveal } from '$lib/transitions';
 	import PosterImage from './PosterImage.svelte';
 
 	interface Props {
@@ -354,7 +355,7 @@
 	</div>
 
 	{#if searchError}
-		<p class="text-xs text-gray-500 dark:text-gray-400">{searchError}</p>
+		<p in:reveal class="text-xs text-gray-500 dark:text-gray-400">{searchError}</p>
 	{/if}
 
 	<!-- Results grid -->

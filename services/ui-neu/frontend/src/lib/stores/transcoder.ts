@@ -36,4 +36,24 @@ export function getJobsCache(tab: string): TranscodeTaskView[] | null {
 
 export function setJobsCache(tab: string, data: TranscodeTaskView[]): void {
 	jobsCache = { tab, data };
+	try {
+		localStorage.setItem(`arm:tc-jobs-count:${tab}`, String(data.length));
+	} catch {
+		// storage unavailable (private mode, SSR) — skeleton falls back to default
+	}
+}
+
+// Last-known card count per tab, persisted across full page reloads. Sizes the
+// loading skeleton to match what's about to render so the fill-in doesn't
+// reflow the page. Clamped so a huge history can't paint a wall of skeletons.
+export function getLastJobsCount(tab: string, fallback = 3): number {
+	try {
+		const raw = localStorage.getItem(`arm:tc-jobs-count:${tab}`);
+		if (raw == null) return fallback;
+		const n = parseInt(raw, 10);
+		if (isNaN(n)) return fallback;
+		return Math.min(8, Math.max(1, n));
+	} catch {
+		return fallback;
+	}
 }

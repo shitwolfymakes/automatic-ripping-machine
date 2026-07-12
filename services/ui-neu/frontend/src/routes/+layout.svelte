@@ -10,6 +10,7 @@
 	import { showImportWizard } from '$lib/stores/importWizard';
 	import ImportWizard from '$lib/components/ImportWizard.svelte';
 	import Flyout from '$lib/components/Flyout.svelte';
+	import { reveal } from '$lib/transitions';
 	import FlyoutItem from '$lib/components/FlyoutItem.svelte';
 	import FlyoutDivider from '$lib/components/FlyoutDivider.svelte';
 	import { onMount } from 'svelte';
@@ -154,7 +155,7 @@
 						</svg>
 						{item.label}
 						{#if item.href === '/notifications' && ($dashboard.notification_count ?? 0) > 0}
-							<span class="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-xs font-medium text-white">{$dashboard.notification_count}</span>
+							<span in:reveal class="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-xs font-medium text-white">{$dashboard.notification_count}</span>
 						{/if}
 					</a>
 				{/each}
@@ -209,16 +210,16 @@
 				<div class="flex items-center gap-3 text-xs">
 					<a href="/settings#drives" class="text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary transition-colors">{$dashboard.db_available ? $dashboard.drives_online : '--'} drive{$dashboard.drives_online !== 1 ? 's' : ''}</a>
 					{#if rippingCount > 0}
-						<span class="font-semibold text-blue-600 dark:text-blue-400">{rippingCount} ripping</span>
+						<span in:reveal class="font-semibold text-blue-600 dark:text-blue-400">{rippingCount} ripping</span>
 					{/if}
 					{#if $dashboard.active_transcodes.length > 0}
-						<span class="font-semibold text-indigo-600 dark:text-indigo-400">{$dashboard.active_transcodes.length} transcoding</span>
+						<span in:reveal class="font-semibold text-indigo-600 dark:text-indigo-400">{$dashboard.active_transcodes.length} transcoding</span>
 					{/if}
 					{#if $dashboard.transcoder_online && (Number($dashboard.transcoder_stats?.pending) || 0) > 0}
 						<span class="font-semibold text-yellow-600 dark:text-yellow-400">{$dashboard.transcoder_stats?.pending} queued</span>
 					{/if}
 					{#if ($dashboard.notification_count ?? 0) > 0}
-						<a href="/notifications" class="font-semibold text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300">{$dashboard.notification_count} notification{$dashboard.notification_count !== 1 ? 's' : ''}</a>
+						<a in:reveal href="/notifications" class="font-semibold text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300">{$dashboard.notification_count} notification{$dashboard.notification_count !== 1 ? 's' : ''}</a>
 					{/if}
 				</div>
 			</div>

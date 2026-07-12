@@ -3,6 +3,7 @@
 	import type { IsoScanResult, FolderScanResult, FolderCreateRequest } from '$lib/api/import-jobs';
 	import { searchMetadata, fetchMediaDetail } from '$lib/api/jobs';
 	import IngressBrowser from '$lib/components/IngressBrowser.svelte';
+	import { reveal } from '$lib/transitions';
 
 	// Local metadata shapes the (dormant) wizard reads. v3's metadata search
 	// returns a candidate envelope; this screen is feature-flagged OFF, so the
@@ -262,7 +263,7 @@
 </script>
 
 {#if open}
-	<div class="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center">
+	<div in:reveal class="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center">
 		<!-- Backdrop -->
 		<button
 			type="button"

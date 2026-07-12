@@ -209,9 +209,9 @@ describe('RipPresetForm', () => {
 			// TrackFiltersEditor hidden for built-in even though track_selection is custom
 			expect(screen.queryByTestId('tf-min-duration')).not.toBeInTheDocument();
 
-			// No Save button at all; heading reads View.
+			// No Save button at all. (The View/Edit/New title moved up to the
+			// SessionsArea slide-over panel header — not rendered by the form.)
 			expect(screen.queryByTestId('preset-submit')).not.toBeInTheDocument();
-			expect(screen.getByRole('heading', { name: /view rip preset/i })).toBeInTheDocument();
 			expect(updateRipPresetMock).not.toHaveBeenCalled();
 		});
 	});

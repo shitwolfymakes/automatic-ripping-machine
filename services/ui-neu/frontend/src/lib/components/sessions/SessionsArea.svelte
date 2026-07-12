@@ -30,6 +30,14 @@
 		{ key: 'transcode', label: 'Transcode presets' },
 	];
 
+	// One-line description per sub-panel, shown under the header title.
+	const DESCRIPTIONS: Record<'sessions' | 'rip' | 'transcode', string> = {
+		sessions: 'Sessions bundle a rip preset, a transcode preset, and an output path into a reusable recipe.',
+		rip: 'Rip presets define how discs are ripped — reusable building blocks shared by sessions.',
+		transcode: 'Transcode presets define how ripped files are encoded — optional, shared by sessions.',
+	};
+	const activeTab = $derived(TABS.find((t) => t.key === view) ?? TABS[0]);
+
 	// Builder slide-over
 	let builderOpen = $state(false);
 	let editing = $state<JoinedSession | null>(null);
@@ -213,22 +221,20 @@
 	}
 
 	// Inline dialog label for ARIA
-	let inlineDialogLabel = $derived(
-		inlineKind === 'rip'
-			? (inlinePreset ? 'Edit rip preset' : 'New rip preset')
-			: (inlinePreset ? 'Edit transcode preset' : 'New transcode preset')
-	);
+	let inlineDialogLabel = $derived.by(() => {
+		const noun = inlineKind === 'rip' ? 'rip preset' : 'transcode preset';
+		if ((inlinePreset as { is_builtin?: boolean } | null)?.is_builtin) return `View ${noun}`;
+		return inlinePreset ? `Edit ${noun}` : `New ${noun}`;
+	});
 </script>
 
-<div class="flex flex-col gap-6">
-	<!-- Header -->
+<div class="flex flex-col gap-6 pt-2">
+	<!-- Header (pt-2 above: breathing room between the sub-tab bar and the
+	     top of the settings panel) -->
 	<div class="flex flex-wrap items-start justify-between gap-4">
-		<div>
-			<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Sessions</h2>
-			<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-				Sessions bundle a rip preset, an optional transcode preset, and an output-path template
-				into a reusable recipe. Choose a session when inserting a disc.
-			</p>
+		<div class="min-w-0">
+			<h2 class="text-lg font-semibold text-gray-900 dark:text-white">{activeTab.label}</h2>
+			<p class="mt-1 truncate text-sm text-gray-500 dark:text-gray-400">{DESCRIPTIONS[view]}</p>
 		</div>
 
 		<!-- Sub-tab bar: Sessions / Rip presets / Transcode presets -->
@@ -329,7 +335,8 @@
 	</div>
 {/if}
 
-<!-- ── Inline-create / inline-edit stacked dialog ────────────────────── -->
+<!-- ── Inline-create / inline-edit preset slide-over (same subpanel style as
+     the session builder; stacked at higher z so it can layer over it) ──── -->
 {#if inlineKind !== null}
 	<!-- Stacked backdrop (higher z than the builder) -->
 	<div
@@ -338,27 +345,40 @@
 		onclick={closeInline}
 	></div>
 
-	<!-- Dialog -->
+	<!-- Panel -->
 	<div
 		role="dialog"
 		aria-modal="true"
 		aria-label={inlineDialogLabel}
-		class="fixed left-1/2 top-1/2 z-70 w-full max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg bg-white p-6 shadow-2xl dark:bg-gray-900"
-		style="max-height: 90vh;"
+		class="fixed inset-y-0 right-0 z-70 flex w-full max-w-lg flex-col overflow-y-auto bg-white shadow-xl dark:bg-gray-900"
 	>
-		{#if inlineKind === 'rip'}
-			<RipPresetForm
-				preset={inlinePreset as RipPresetView | null}
-				onsaved={handleRipPresetSaved}
-				oncancel={closeInline}
-			/>
-		{:else}
-			<TranscodePresetForm
-				preset={inlinePreset as TranscodePresetView | null}
-				onsaved={handleTranscodePresetSaved}
-				oncancel={closeInline}
-			/>
-		{/if}
+		<div class="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
+			<h2 class="text-lg font-semibold text-gray-900 dark:text-white">{inlineDialogLabel}</h2>
+			<button
+				type="button"
+				aria-label="Close"
+				onclick={closeInline}
+				class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+			>
+				✕
+			</button>
+		</div>
+
+		<div class="flex-1 overflow-y-auto p-6">
+			{#if inlineKind === 'rip'}
+				<RipPresetForm
+					preset={inlinePreset as RipPresetView | null}
+					onsaved={handleRipPresetSaved}
+					oncancel={closeInline}
+				/>
+			{:else}
+				<TranscodePresetForm
+					preset={inlinePreset as TranscodePresetView | null}
+					onsaved={handleTranscodePresetSaved}
+					oncancel={closeInline}
+				/>
+			{/if}
+		</div>
 	</div>
 {/if}
 

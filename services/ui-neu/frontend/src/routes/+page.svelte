@@ -14,8 +14,7 @@
 	import BulkActionsMenu from '$lib/components/BulkActionsMenu.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import EmptyDashboardPanel from '$lib/components/EmptyDashboardPanel.svelte';
-	import { fadeIn, fadeOut } from '$lib/transitions';
-	import { fade } from 'svelte/transition';
+	import { panel, reveal } from '$lib/transitions';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { get } from 'svelte/store';
@@ -220,14 +219,21 @@
 	<title>ARM - Dashboard</title>
 </svelte:head>
 
-<div class="space-y-6">
+<div in:panel class="space-y-6">
 	<div class="flex items-center justify-between">
 		<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
 	</div>
 
+	<!-- Single coordinated wave: everything below the h1 waits for BOTH the
+	     dashboard poll and the jobs fetch (pageReady), then fades in as one
+	     block — banners, sections, and the All Jobs table appear together at
+	     their final positions instead of trickling in per data source. -->
+	{#if pageReady}
+	<div in:panel class="space-y-6">
+
 	<!-- Global pause banner -->
-	{#if !dashLoading && !dash.ripping_enabled}
-		<div class="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-900/20">
+	{#if !dash.ripping_enabled}
+		<div transition:panel class="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-900/20">
 			<div class="h-3 w-3 shrink-0 rounded-full bg-amber-500"></div>
 			<div>
 				<p class="font-medium text-amber-800 dark:text-amber-300">Ripping Paused</p>
@@ -238,18 +244,18 @@
 
 	<!-- API error (backend unreachable) -->
 	{#if dashError}
-		<div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+		<div transition:panel class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
 			Failed to reach backend: {dashError.message}
 		</div>
 	{/if}
 
 	<!-- Disc review (waiting jobs) -->
 	{#if waitingJobs.length > 0}
-		<section in:fade={fadeIn} out:fade={fadeOut}>
+		<section transition:panel>
 			<SectionFrame variant="full" accent="var(--color-primary)" label="WAITING FOR REVIEW - {waitingJobs.length} DISC{waitingJobs.length > 1 ? 'S' : ''}">
 				<div class="grid gap-4">
 					{#each waitingJobs as job (job.id)}
-						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
+						<div transition:panel|local>
 							<DiscReviewWidget {job} driveNames={dash.drive_names} paused={!dash.ripping_enabled} onrefresh={refreshDashboard} ondismiss={() => dismissJob(job.id)} />
 						</div>
 					{/each}
@@ -260,11 +266,11 @@
 
 	<!-- Scanning -->
 	{#if scanningJobs.length > 0}
-		<section in:fade={fadeIn} out:fade={fadeOut}>
+		<section transition:panel>
 			<SectionFrame variant="full" accent="var(--color-cyan-500, #06b6d4)" label="SCANNING - {scanningJobs.length} {scanningJobs.length === 1 ? 'DISC' : 'DISCS'}">
 				<div class="space-y-2">
 					{#each scanningJobs as job (job.id)}
-						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
+						<div transition:panel|local>
 							<ActiveJobRow {job} />
 						</div>
 					{/each}
@@ -275,11 +281,11 @@
 
 	<!-- Active rips -->
 	{#if nonWaitingActiveJobs.length > 0}
-		<section in:fade={fadeIn} out:fade={fadeOut}>
+		<section transition:panel>
 			<SectionFrame variant="full" accent="var(--color-primary)" label="ACTIVE RIPS - {nonWaitingActiveJobs.length} IN PROGRESS">
 				<div class="space-y-2">
 					{#each nonWaitingActiveJobs as job (job.id)}
-						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
+						<div transition:panel|local>
 							<ActiveJobRow {job} />
 						</div>
 					{/each}
@@ -290,11 +296,11 @@
 
 	<!-- Finishing (identified / ripped / ripped_partial) -->
 	{#if finishingJobs.length > 0}
-		<section in:fade={fadeIn} out:fade={fadeOut}>
+		<section transition:panel>
 			<SectionFrame variant="full" accent="var(--color-amber-500, #f59e0b)" label="FINISHING - {finishingJobs.length} {finishingJobs.length === 1 ? 'JOB' : 'JOBS'}">
 				<div class="space-y-2">
 					{#each finishingJobs as job (job.id)}
-						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
+						<div transition:panel|local>
 							<ActiveJobRow {job} />
 						</div>
 					{/each}
@@ -305,11 +311,11 @@
 
 	<!-- Active transcodes -->
 	{#if $transcoderEnabled && dash.active_transcodes.length > 0}
-		<section in:fade={fadeIn} out:fade={fadeOut}>
+		<section transition:panel>
 			<SectionFrame variant="full" accent="var(--color-primary)" label="TRANSCODING - {dash.active_transcodes.length} ACTIVE">
 				<div class="space-y-2">
 					{#each dash.active_transcodes as tc (tc.id)}
-						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
+						<div transition:panel|local>
 							<TranscodeCard job={tc} />
 						</div>
 					{/each}
@@ -319,8 +325,8 @@
 	{/if}
 
 	<!-- Idle state -->
-	{#if pageReady && scanningJobs.length === 0 && waitingJobs.length === 0 && nonWaitingActiveJobs.length === 0 && finishingJobs.length === 0 && dash.active_transcodes.length === 0}
-		<div in:fade={fadeIn}>
+	{#if scanningJobs.length === 0 && waitingJobs.length === 0 && nonWaitingActiveJobs.length === 0 && finishingJobs.length === 0 && dash.active_transcodes.length === 0}
+		<div transition:panel>
 			<EmptyDashboardPanel
 				drivesOnline={dash.drives_online}
 				armOnline={dash.arm_online}
@@ -329,7 +335,7 @@
 		</div>
 	{/if}
 
-	<!-- All Jobs -->
+	<!-- All Jobs (inside the pageReady wave — appears with the sections) -->
 	<section id="all-jobs" class="space-y-4">
 			<!-- Controls panel -->
 			<div class="rounded-lg border border-primary/20 bg-surface shadow-xs dark:border-primary/20 dark:bg-surface-dark">
@@ -367,7 +373,7 @@
 
 				<!-- Bulk feedback banner -->
 				{#if bulkFeedback}
-					<div class="border-t border-primary/15 px-4 py-3 text-sm dark:border-primary/15 {bulkFeedback.type === 'success' ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}">
+					<div in:reveal class="border-t border-primary/15 px-4 py-3 text-sm dark:border-primary/15 {bulkFeedback.type === 'success' ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}">
 						{bulkFeedback.message}
 						<button onclick={() => (bulkFeedback = null)} class="ml-2 font-bold opacity-60 hover:opacity-100">&times;</button>
 					</div>
@@ -452,4 +458,7 @@
 			</LoadState>
 			</div>
 	</section>
+
+	</div>
+	{/if}
 </div>

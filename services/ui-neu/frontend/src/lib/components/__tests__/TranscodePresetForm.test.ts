@@ -190,9 +190,9 @@ describe('TranscodePresetForm', () => {
 				screen.getByText(/built-in preset and can't be edited/i)
 			).toBeInTheDocument();
 
-			// No Save button at all; heading reads View.
+			// No Save button at all. (The View/Edit/New title moved up to the
+			// SessionsArea slide-over panel header — not rendered by the form.)
 			expect(screen.queryByTestId('tp-submit')).not.toBeInTheDocument();
-			expect(screen.getByRole('heading', { name: /view transcode preset/i })).toBeInTheDocument();
 			expect(updateMock).not.toHaveBeenCalled();
 		});
 	});

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { panel, reveal } from '$lib/transitions';
 	import { fetchRoots, fetchDirectory, renameFile, moveFile, deleteFile, createDirectory, fixPermissions } from '$lib/api/files';
 	import type { FileRoot, DirectoryListing } from '$lib/api/files';
 	import { formatBytes, formatDateTime } from '$lib/utils/format';
@@ -446,7 +447,7 @@
 	<title>ARM - Files</title>
 </svelte:head>
 
-<div class="space-y-4">
+<div in:panel class="space-y-4">
 	<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Files</h1>
 
 	<!-- Warning banner -->
@@ -474,7 +475,7 @@
 
 	<!-- Root tabs -->
 	{#if roots.length > 0}
-		<div class="border-b border-primary/20 dark:border-primary/20">
+		<div in:reveal class="border-b border-primary/20 dark:border-primary/20">
 			<nav class="-mb-px flex gap-4" aria-label="File root tabs">
 				{#each roots as root}
 					<button
@@ -504,7 +505,7 @@
 
 	<!-- Breadcrumb + toolbar row -->
 	{#if current.root && roots.length > 0}
-		<div class="flex items-center justify-between gap-3">
+		<div in:reveal class="flex items-center justify-between gap-3">
 			<BreadcrumbNav root={current.root} subpath={current.subpath} {roots} onnavigate={navigate} />
 			<div class="flex shrink-0 items-center gap-1">
 				<!-- Bulk move (visible when items selected) -->

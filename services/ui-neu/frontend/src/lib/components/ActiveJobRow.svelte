@@ -9,7 +9,7 @@
 	import { jobPoster } from '$lib/utils/poster';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import { abandonJob } from '$lib/api/jobs';
-	import { slide } from 'svelte/transition';
+	import { expand, reveal } from '$lib/transitions';
 
 	interface Props {
 		job?: JobView;
@@ -96,7 +96,7 @@
 			<div class="hidden sm:flex shrink-0 items-center gap-1.5">
 				<span class="rounded-sm px-1.5 py-0.5 text-xs font-medium {typeConfig.badgeClasses}">{typeConfig.label}</span>
 				{#if job.disc_type}
-					<span class="inline-flex items-center gap-0.5 rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs dark:bg-primary/15">
+					<span in:reveal class="inline-flex items-center gap-0.5 rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs dark:bg-primary/15">
 						<DiscTypeIcon disctype={job.disc_type} size="h-3 w-3" />
 						{discTypeLabel(job.disc_type)}
 					</span>
@@ -124,7 +124,7 @@
 
 	<!-- Progress row: own line below a divider, indented under content -->
 	{#if active}
-		<div class="mt-2 border-t border-primary/10 dark:border-primary/15 px-4 pl-[64px] pr-4 py-2.5">
+		<div in:reveal class="mt-2 border-t border-primary/10 dark:border-primary/15 px-4 pl-[64px] pr-4 py-2.5">
 			{#if progress != null}
 				<!-- Render the bar even at 0%. The MakeMKV prelude (libredrive
 				     init, key ingest) can sit at 0 for several seconds and
@@ -146,7 +146,7 @@
 
 	<!-- Expanded detail -->
 	{#if expanded}
-		<div transition:slide={{ duration: 200 }} class="border-t border-primary/10 px-4 py-3 dark:border-primary/15">
+		<div transition:expand class="border-t border-primary/10 px-4 py-3 dark:border-primary/15">
 			<div class="flex gap-4">
 				<!-- Poster (larger) -->
 				<PosterImage url={jobPoster(job)} alt={job.title ?? 'Poster'} class="h-32 {job.disc_type === 'cd' ? 'w-32' : 'w-22'} shrink-0 rounded-sm object-cover" />

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { reveal } from '$lib/transitions';
+
 	interface Props {
 		open: boolean;
 		title: string;
@@ -38,7 +40,7 @@
 </script>
 
 {#if open}
-	<div class="fixed inset-0 z-50 flex items-center justify-center">
+	<div in:reveal class="fixed inset-0 z-50 flex items-center justify-center">
 		<!-- Backdrop -->
 		<button
 			type="button"

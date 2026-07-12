@@ -11,6 +11,7 @@
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import TrackTitleSearch from './TrackTitleSearch.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
+	import { expand, reveal } from '$lib/transitions';
 
 	interface Props {
 		job?: JobView;
@@ -218,7 +219,7 @@
 
 	<!-- Error banner -->
 	{#if errorMessage}
-		<div class="flex items-center gap-2 border-t border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+		<div in:reveal class="flex items-center gap-2 border-t border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
 			<span class="flex-1">{errorMessage}</span>
 			<button onclick={() => (errorMessage = null)} class="shrink-0 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">&times;</button>
 		</div>
@@ -357,19 +358,19 @@
 
 	<!-- Expanded sections -->
 	{#if showTitleSearch && isVideo}
-		<div class="border-t border-primary/20 p-4 dark:border-primary/20">
+		<div transition:expand class="border-t border-primary/20 p-4 dark:border-primary/20">
 			<TitleSearch {job} onapply={handleTitleApply} />
 		</div>
 	{/if}
 
 	{#if showMusicSearch && isMusic}
-		<div class="border-t border-primary/20 p-4 dark:border-primary/20">
+		<div transition:expand class="border-t border-primary/20 p-4 dark:border-primary/20">
 			<MusicSearch {job} discTracks={tracks} onapply={handleTitleApply} />
 		</div>
 	{/if}
 
 	{#if showDiscInfo}
-		<div class="border-t border-primary/20 p-4 dark:border-primary/20">
+		<div transition:expand class="border-t border-primary/20 p-4 dark:border-primary/20">
 			<h4 class="mb-1 text-sm font-semibold text-gray-700 dark:text-gray-300">Disc set</h4>
 			<p class="mb-3 text-xs text-gray-500 dark:text-gray-400">
 				For multi-disc sets (box sets, TV seasons), set this disc's position. Leave blank for a single disc.
@@ -413,6 +414,8 @@
 </div>
 
 {#if showApplySession}
-	<ApplySessionDialog {job} onclose={() => (showApplySession = false)} onapplied={handleSessionApplied} />
+	<div in:reveal>
+		<ApplySessionDialog {job} onclose={() => (showApplySession = false)} onapplied={handleSessionApplied} />
+	</div>
 {/if}
 {/if}

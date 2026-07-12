@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { panel, reveal } from '$lib/transitions';
 	import { changePassword } from '$lib/api/auth';
 	import { clearPasswordMustChange } from '$lib/stores/auth';
 
@@ -38,12 +39,12 @@
 	}
 </script>
 
-<div class="flex min-h-screen items-center justify-center p-4">
+<div in:panel class="flex min-h-screen items-center justify-center p-4">
 	<form onsubmit={onSubmit} class="w-full max-w-sm space-y-4 rounded-lg border border-primary/20 bg-surface p-6 dark:bg-surface-dark">
 		<h1 class="text-lg font-semibold">Change your password</h1>
 		<p class="text-sm text-gray-600 dark:text-gray-300">You must set a new password before continuing.</p>
 		{#if error}
-			<p class="rounded bg-red-100 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">{error}</p>
+			<p in:reveal class="rounded bg-red-100 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">{error}</p>
 		{/if}
 		<label class="block text-sm">
 			<span class="mb-1 block">Current password</span>

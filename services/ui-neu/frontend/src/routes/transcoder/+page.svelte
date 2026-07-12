@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { fade } from 'svelte/transition';
 	import { fetchTranscoderJobs, retryTranscoderJob, deleteTranscoderJob } from '$lib/api/transcoder';
 	import type { TranscodeTaskView } from '$lib/types/api.gen';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -8,8 +7,8 @@
 	import TimeAgo from '$lib/components/TimeAgo.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
-	import { fadeIn, fadeOut } from '$lib/transitions';
-	import { transcoderStats, transcoderWorkers, getJobsCache, setJobsCache } from '$lib/stores/transcoder';
+	import { panel, reveal } from '$lib/transitions';
+	import { transcoderStats, transcoderWorkers, getJobsCache, setJobsCache, getLastJobsCount } from '$lib/stores/transcoder';
 
 	const emptyJobs: TranscodeTaskView[] = [];
 
@@ -117,12 +116,19 @@
 		}
 	});
 
+	// Same min-delay idea as LoadState: the stats skeleton reserves its space
+	// from the first frame but stays invisible for 150ms, so a fast load fills
+	// in with no placeholder flash and only a genuinely slow load shows the
+	// pulse blocks.
+	let skeletonVisible = $state(false);
+
 	onMount(() => {
 		stats.start();
 		workers.start();
 		// Skeleton only when we have nothing cached for the current tab.
 		loadJobs(getJobsCache(activeTab) == null);
-		return () => { stats.stop(); workers.stop(); stopJobsPolling(); };
+		const skeletonTimer = setTimeout(() => (skeletonVisible = true), 150);
+		return () => { clearTimeout(skeletonTimer); stats.stop(); workers.stop(); stopJobsPolling(); };
 	});
 
 	const tabs = ['all', 'queued', 'in_progress', 'done', 'failed'];
@@ -132,12 +138,12 @@
 	<title>ARM - Transcoder</title>
 </svelte:head>
 
-<div class="space-y-6">
+<div in:panel class="space-y-6">
 	<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Transcoder</h1>
 
 	<!-- API error -->
 	{#if $statsError}
-		<div in:fade={fadeIn} out:fade={fadeOut} class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+		<div transition:panel class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
 			Failed to reach transcoder: {$statsError}
 		</div>
 	{/if}
@@ -145,9 +151,13 @@
 	<!-- Stats / worker pool. On the very first load (nothing cached yet) show a
 	     skeleton sized to match the real cards so it fills in place without a
 	     layout shift; only show the "offline" banner once a poll has actually
-	     confirmed the service is down, never while still loading. -->
+	     confirmed the service is down, never while still loading. The skeleton
+	     is geometry-matched to the real cards, so the swap is INSTANT — no
+	     transition. A fade restarts the block at opacity 0 (flicker) and a
+	     crossfade scales between mismatched heights (jump); a matched skeleton
+	     filling in with real content is the smoothest possible handoff. -->
 	{#if !$statsInitialized && !$statsError}
-		<div class="space-y-4">
+		<div class="space-y-4" class:invisible={!skeletonVisible} aria-hidden="true">
 			<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
 				<div class="h-5 w-56 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
 			</div>
@@ -161,8 +171,8 @@
 			</div>
 		</div>
 	{:else if $statsError}
-		<!-- Offline banner -->
-		<div in:fade={fadeIn} out:fade={fadeOut} class="flex items-center gap-3 rounded-lg border border-primary/25 bg-page p-4 dark:border-primary/25 dark:bg-page-dark">
+		<!-- Offline banner: appears mid-session when polls start failing -->
+		<div in:reveal class="flex items-center gap-3 rounded-lg border border-primary/25 bg-page p-4 dark:border-primary/25 dark:bg-page-dark">
 			<div class="h-3 w-3 shrink-0 rounded-full bg-gray-400"></div>
 			<div>
 				<p class="font-medium text-gray-700 dark:text-gray-300">Transcoder Offline</p>
@@ -170,9 +180,9 @@
 			</div>
 		</div>
 	{:else}
-		<!-- Worker pool + Stats cards -->
+		<!-- Worker pool + Stats cards: fills the skeleton in place, no transition -->
 		{@const w = $workers}
-		<div in:fade={fadeIn} out:fade={fadeOut} class="space-y-4">
+		<div class="space-y-4">
 		<!-- Worker pool status -->
 		<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
 			<div class="mb-3 flex items-center justify-between">
@@ -187,7 +197,7 @@
 				</span>
 			</div>
 			{#if w.length > 0}
-				<div class="grid gap-2 {s.max_parallel > 1 ? 'sm:grid-cols-2 lg:grid-cols-3' : ''}">
+				<div in:reveal class="grid gap-2 {s.max_parallel > 1 ? 'sm:grid-cols-2 lg:grid-cols-3' : ''}">
 					{#each w as worker (worker.task_id)}
 						<div class="flex items-center gap-3 rounded-md border border-indigo-200 bg-indigo-50/50 px-3 py-2 dark:border-indigo-800 dark:bg-indigo-900/20">
 							<div class="h-2 w-2 rounded-full bg-indigo-500 animate-pulse"></div>
@@ -240,7 +250,7 @@
 		<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Transcode Jobs</h2>
 
 		{#if actionFeedback}
-			<div class="rounded-lg border px-4 py-3 text-sm {actionFeedback.type === 'success' ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400' : 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400'}">
+			<div in:reveal class="rounded-lg border px-4 py-3 text-sm {actionFeedback.type === 'success' ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400' : 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400'}">
 				{actionFeedback.message}
 				<button onclick={() => (actionFeedback = null)} class="ml-2 font-medium hover:opacity-75">Dismiss</button>
 			</div>
@@ -270,10 +280,12 @@
 			transitionKey="transcoder-jobs"
 		>
 			{#snippet loadingSlot()}
+				<!-- Sized to the last-known card count (persisted) so the reserved
+				     space matches what's about to render — no reflow on fill-in. -->
 				<div class="space-y-3">
-					<SkeletonCard lines={4} />
-					<SkeletonCard lines={4} />
-					<SkeletonCard lines={4} />
+					{#each Array(getLastJobsCount(activeTab)) as _unused}
+						<SkeletonCard lines={4} />
+					{/each}
 				</div>
 			{/snippet}
 			{#snippet empty()}
@@ -283,7 +295,7 @@
 			<div class="space-y-3">
 				{#each jobList as job (job.id)}
 					{@const sourceFile = sourceBasename(job.output_path)}
-					<div in:fade={fadeIn} out:fade={fadeOut} class="rounded-lg border border-primary/20 border-l-4 border-l-primary bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
+					<div transition:panel|local class="rounded-lg border border-primary/20 border-l-4 border-l-primary bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
 						<div class="min-w-0 flex-1">
 							<!-- Row 1: Title + Status + Actions -->
 							<div class="flex items-start justify-between gap-2">
@@ -323,7 +335,7 @@
 
 							<!-- Error message for failed tasks -->
 							{#if job.status === 'failed' && job.last_error}
-								<p class="mt-2 rounded-sm bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
+								<p in:reveal class="mt-2 rounded-sm bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
 									{job.last_error}
 								</p>
 							{/if}

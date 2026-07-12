@@ -8,6 +8,7 @@
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import JobLifecycle from './JobLifecycle.svelte';
+	import { reveal } from '$lib/transitions';
 
 	interface Props {
 		job?: JobView;
@@ -60,7 +61,7 @@
 			<div class="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
 				<span class="rounded-sm px-1.5 py-0.5 font-medium {typeConfig.badgeClasses}">{typeConfig.label}</span>
 				{#if job.disc_type}
-					<span class="inline-flex items-center gap-1 rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">
+					<span in:reveal class="inline-flex items-center gap-1 rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">
 						<DiscTypeIcon disctype={job.disc_type} size="h-3.5 w-3.5" />
 						{discTypeLabel(job.disc_type)}
 					</span>
@@ -69,7 +70,7 @@
 		</div>
 	</div>
 	{#if active}
-		<div class="mt-3">
+		<div in:reveal class="mt-3">
 			{#if progress != null && progress > 0}
 				<ProgressBar value={progress} color="bg-primary" />
 				{#if progressStage}

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { toasts, dismissToast, type ToastTone } from '$lib/stores/toast.svelte';
+	import { reveal } from '$lib/transitions';
 
 	function toneClass(tone: ToastTone): string {
 		if (tone === 'success') return 'border-status-success/40 text-status-success';
@@ -11,6 +12,7 @@
 <div class="pointer-events-none fixed bottom-6 right-6 z-50 flex flex-col gap-2">
 	{#each toasts.value as t (t.id)}
 		<div
+			in:reveal
 			class="pointer-events-auto flex min-w-[280px] max-w-[420px] items-start gap-3 rounded-lg border bg-surface px-4 py-3 shadow-xl dark:bg-surface-dark {toneClass(t.tone)}"
 			role="status"
 		>
