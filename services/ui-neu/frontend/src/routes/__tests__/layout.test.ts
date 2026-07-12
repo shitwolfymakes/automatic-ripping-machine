@@ -23,10 +23,17 @@ vi.mock("$app/navigation", () => ({
 }));
 
 const logoutLocalMock = vi.fn();
-vi.mock("$lib/stores/auth", () => ({
-  initAuth: vi.fn(),
-  logoutLocal: () => logoutLocalMock(),
-}));
+vi.mock("$lib/stores/auth", async () => {
+  const { derived, writable } = await import("svelte/store");
+  const _role = writable<string | null>("admin");
+  return {
+    initAuth: vi.fn(),
+    logoutLocal: () => logoutLocalMock(),
+    role: { subscribe: _role.subscribe },
+    isAdmin: derived(_role, (r) => r === "admin"),
+    isGuest: derived(_role, (r) => r === "guest"),
+  };
+});
 
 vi.mock("$lib/stores/theme", async () => {
   const { writable } = await import("svelte/store");

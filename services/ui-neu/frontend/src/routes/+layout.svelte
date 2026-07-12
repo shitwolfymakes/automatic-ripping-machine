@@ -15,7 +15,7 @@
 	import FlyoutDivider from '$lib/components/FlyoutDivider.svelte';
 	import { onMount } from 'svelte';
 	import { setUnauthorizedHandler } from '$lib/api/client';
-	import { logoutLocal, initAuth } from '$lib/stores/auth';
+	import { logoutLocal, initAuth, isGuest } from '$lib/stores/auth';
 	import { isScreenEnabled } from '$lib/features';
 	import { logout as apiLogout } from '$lib/api/auth';
 	import { countRipping } from '$lib/utils/job-status';
@@ -34,14 +34,6 @@
 	function handleQuickAction(action: string) {
 		if (action === 'import-folder') {
 			showImportWizard.set(true);
-		} else if (action === 'restart-arm') {
-			if (confirm('Restart the ARM ripping service? Active rips will be interrupted.')) {
-				fetch('/api/system/restart', { method: 'POST' });
-			}
-		} else if (action === 'restart-transcoder') {
-			if (confirm('Restart the transcoder service? Active transcodes will be interrupted.')) {
-				fetch('/api/system/restart-transcoder', { method: 'POST' });
-			}
 		} else if (action === 'settings') {
 			goto('/settings');
 		}
@@ -55,6 +47,14 @@
 	// redirect guard so a later session expiry can route to /login afresh.
 	$effect(() => {
 		if (!isAuthPage) redirectingToLogin = false;
+	});
+
+	// Guests have no access to /settings (server also enforces this) — bounce
+	// them to the dashboard if they land there via a stale link or back-nav.
+	$effect(() => {
+		if ($isGuest && $page.url.pathname.startsWith('/settings')) {
+			goto('/');
+		}
 	});
 
 	async function toggleRipping() {
@@ -118,6 +118,7 @@
 		allNavItems
 			.filter(i => isScreenEnabled(i.href))
 			.filter(i => i.href !== '/transcoder' || $transcoderEnabled)
+			.filter(i => i.href !== '/settings' || !$isGuest)
 	);
 
 	function isActive(href: string, pathname: string): boolean {
@@ -226,12 +227,15 @@
 					{#if ($dashboard.notification_count ?? 0) > 0}
 						<a in:reveal href="/notifications" class="font-semibold text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300">{$dashboard.notification_count} notification{$dashboard.notification_count !== 1 ? 's' : ''}</a>
 					{/if}
+					{#if $isGuest}
+						<span class="rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">GUEST</span>
+					{/if}
 				</div>
 			</div>
 
 			<div class="flex items-center gap-4 ml-auto">
 				<!-- Auto-Start toggle -->
-				{#if $dashboard.db_available}
+				{#if !$isGuest && $dashboard.db_available}
 					<button
 						onclick={toggleRipping}
 						disabled={togglingPause}
@@ -246,6 +250,7 @@
 					</button>
 				{/if}
 				<!-- Quick actions menu -->
+				{#if !$isGuest}
 				<Flyout align="right" width="w-52" label="Quick actions">
 					{#snippet trigger({ toggle })}
 						<button
@@ -269,25 +274,6 @@
 							Import
 						</FlyoutItem>
 						<FlyoutDivider />
-						<FlyoutItem onclick={() => { handleQuickAction('restart-arm'); close(); }}>
-							{#snippet icon()}
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-								</svg>
-							{/snippet}
-							Restart ARM
-						</FlyoutItem>
-						{#if $transcoderEnabled}
-							<FlyoutItem onclick={() => { handleQuickAction('restart-transcoder'); close(); }}>
-								{#snippet icon()}
-									<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-									</svg>
-								{/snippet}
-								Restart Transcoder
-							</FlyoutItem>
-						{/if}
-						<FlyoutDivider />
 						<FlyoutItem onclick={() => { handleQuickAction('settings'); close(); }}>
 							{#snippet icon()}
 								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -298,6 +284,7 @@
 						</FlyoutItem>
 					{/snippet}
 				</Flyout>
+				{/if}
 				<button
 					onclick={async () => { try { await apiLogout(); } catch { /* ignore */ } logoutLocal(); goto('/login'); }}
 					class="rounded-lg p-2 text-gray-500 hover:bg-primary/10 dark:text-gray-300 dark:hover:bg-primary/15"
