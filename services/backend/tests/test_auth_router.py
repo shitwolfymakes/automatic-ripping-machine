@@ -248,3 +248,79 @@ def test_login_response_includes_role(signing_key: bytes, admin_user: User) -> N
         r = client.post("/api/auth/login", json={"username": "admin", "password": "hunter2-correct"})
     assert r.status_code == 200
     assert r.json()["role"] == "admin"
+
+
+def _guest_user(disabled: bool = False) -> User:
+    return User(
+        id="usr_guest",
+        username="guest",
+        password_hash=_hasher.hash("irrelevant"),
+        password_must_change=False,
+        role=GUEST_ROLE,
+        disabled=disabled,
+    )
+
+
+def test_guest_login_returns_guest_token(signing_key: bytes) -> None:
+    guest_user = _guest_user()
+    sess = _FakeSession(guest_user)
+    app = _make_app(signing_key, sess)
+    with TestClient(app) as client:
+        r = client.post("/api/auth/guest")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["access_token"].count(".") == 2
+    assert body["role"] == GUEST_ROLE
+    assert body["password_must_change"] is False
+    assert guest_user.last_login_at is not None
+
+
+def test_guest_login_disabled_403(signing_key: bytes) -> None:
+    guest_user = _guest_user(disabled=True)
+    sess = _FakeSession(guest_user)
+    app = _make_app(signing_key, sess)
+    with TestClient(app) as client:
+        r = client.post("/api/auth/guest")
+    assert r.status_code == 403
+    assert r.json()["detail"] == "guest access disabled"
+
+
+def test_guest_login_missing_row_500(signing_key: bytes) -> None:
+    sess = _FakeSession(user=None)
+    app = _make_app(signing_key, sess)
+    with TestClient(app) as client:
+        r = client.post("/api/auth/guest")
+    assert r.status_code == 500
+    assert r.json()["detail"] == "guest account missing"
+
+
+def test_guest_token_reads_ok_writes_403(signing_key: bytes) -> None:
+    from arm_backend.auth import require_jwt
+    from arm_backend.jwt_utils import issue_access_token
+
+    guest_user = _guest_user()
+    sess = _FakeSession(guest_user)
+    app = FastAPI()
+    app.state.signing_key = signing_key
+    app.include_router(auth_router.router)
+
+    @app.get("/probe-read")
+    async def _probe_read(user: User = Depends(require_jwt)) -> dict[str, str]:
+        return {"id": user.id}
+
+    @app.get("/probe-write")
+    async def _probe_write(user: User = Depends(require_writer)) -> dict[str, str]:
+        return {"id": user.id}
+
+    async def _override_session() -> _FakeSession:
+        return sess
+
+    app.dependency_overrides[get_session] = _override_session
+    token, _ = issue_access_token(guest_user.id, guest_user.username, signing_key)
+
+    with TestClient(app) as client:
+        r_read = client.get("/probe-read", headers={"Authorization": f"Bearer {token}"})
+        r_write = client.get("/probe-write", headers={"Authorization": f"Bearer {token}"})
+    assert r_read.status_code == 200
+    assert r_write.status_code == 403
+    assert r_write.json()["detail"] == "read-only role: write access required"

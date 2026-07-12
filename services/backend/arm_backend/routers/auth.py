@@ -19,6 +19,7 @@ from sqlmodel import col, select
 from arm_backend.auth import require_writer
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
+from arm_backend.seeders import GUEST_USERNAME
 from arm_common import User
 from arm_common.schemas import LoginRequest, LoginResponse, PasswordChangeRequest
 
@@ -56,6 +57,35 @@ async def login(
     signing_key: bytes = request.app.state.signing_key
     token, expires_at = issue_access_token(user.id, user.username, signing_key)
     logger.info("login user_id=%s username=%s", user.id, user.username)
+    return LoginResponse(
+        access_token=token,
+        expires_at=expires_at,
+        password_must_change=user.password_must_change,
+        role=user.role,
+    )
+
+
+@router.post("/guest", response_model=LoginResponse)
+async def guest_login(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> LoginResponse:
+    """Passwordless guest session. When guest access is enabled, anyone who
+    can reach the server may browse read-only — the disabled toggle is the
+    only lock (spec 2026-07-12-guest-autologin-design)."""
+    user = (await session.execute(select(User).where(col(User.username) == GUEST_USERNAME))).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="guest account missing")
+    if user.disabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="guest access disabled")
+
+    user.last_login_at = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(user)
+
+    signing_key: bytes = request.app.state.signing_key
+    token, expires_at = issue_access_token(user.id, user.username, signing_key)
+    logger.info("guest login user_id=%s", user.id)
     return LoginResponse(
         access_token=token,
         expires_at=expires_at,
