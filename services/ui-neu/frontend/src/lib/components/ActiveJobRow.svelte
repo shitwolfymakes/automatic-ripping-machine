@@ -10,8 +10,7 @@
 	import { jobPoster } from '$lib/utils/poster';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import { formatEta } from '$lib/stores/rips.svelte';
-	import { fade } from 'svelte/transition';
-	import { fadeIn, fadeOut } from '$lib/transitions';
+	import { slide } from 'svelte/transition';
 
 	interface Props {
 		job?: JobView;
@@ -153,7 +152,7 @@
 
 	<!-- Expanded detail -->
 	{#if expanded}
-		<div in:fade={fadeIn} out:fade={fadeOut} class="border-t border-primary/10 px-4 py-3 dark:border-primary/15">
+		<div transition:slide={{ duration: 200 }} class="border-t border-primary/10 px-4 py-3 dark:border-primary/15">
 			<div class="flex gap-4">
 				<!-- Poster (larger) -->
 				<PosterImage url={jobPoster(job)} alt={job.title ?? 'Poster'} class="h-32 {job.disc_type === 'cd' ? 'w-32' : 'w-22'} shrink-0 rounded-sm object-cover" />
