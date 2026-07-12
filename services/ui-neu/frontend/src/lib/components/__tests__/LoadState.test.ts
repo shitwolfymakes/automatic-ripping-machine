@@ -27,9 +27,11 @@ describe('LoadState', () => {
                 transitionKey: 'test-1'
             }
         });
-        expect(screen.queryByText('LOADING')).toBeNull();
+        // Pre-minDelay: the skeleton is rendered but INVISIBLE (space reserved,
+        // no skeleton flash) — wrapped in the aria-hidden .invisible placeholder.
+        expect(screen.getByText('LOADING').closest('.invisible')).not.toBeNull();
         await vi.advanceTimersByTimeAsync(200);
-        expect(screen.getByText('LOADING')).toBeInTheDocument();
+        expect(screen.getByText('LOADING').closest('.invisible')).toBeNull();
         vi.useRealTimers();
     });
 
@@ -119,9 +121,10 @@ describe('LoadState', () => {
             }
         });
         await vi.advanceTimersByTimeAsync(300);
-        expect(screen.queryByText('LOADING')).toBeNull();
+        // Still inside the custom minDelay: skeleton present but invisible.
+        expect(screen.getByText('LOADING').closest('.invisible')).not.toBeNull();
         await vi.advanceTimersByTimeAsync(300);
-        expect(screen.getByText('LOADING')).toBeInTheDocument();
+        expect(screen.getByText('LOADING').closest('.invisible')).toBeNull();
         vi.useRealTimers();
     });
 

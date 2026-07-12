@@ -7,7 +7,7 @@
 	import TimeAgo from '$lib/components/TimeAgo.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
-	import { panel, reveal } from '$lib/transitions';
+	import { panel, reveal, send, receive } from '$lib/transitions';
 	import { transcoderStats, transcoderWorkers, getJobsCache, setJobsCache } from '$lib/stores/transcoder';
 	import { sortTranscodeTasks } from '$lib/utils/transcode-sort';
 
@@ -154,9 +154,12 @@
 	<!-- Stats / worker pool. On the very first load (nothing cached yet) show a
 	     skeleton sized to match the real cards so it fills in place without a
 	     layout shift; only show the "offline" banner once a poll has actually
-	     confirmed the service is down, never while still loading. -->
+	     confirmed the service is down, never while still loading. The three
+	     phases swap via send/receive crossfade (same idiom as LoadState) so the
+	     skeleton morphs into the content instead of the content restarting from
+	     opacity 0 — an unmatched fade reads as a flicker on fast loads. -->
 	{#if !$statsInitialized && !$statsError}
-		<div class="space-y-4">
+		<div in:receive={{ key: 'tc-stats' }} out:send={{ key: 'tc-stats' }} class="space-y-4">
 			<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
 				<div class="h-5 w-56 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
 			</div>
@@ -171,7 +174,7 @@
 		</div>
 	{:else if $statsError}
 		<!-- Offline banner -->
-		<div transition:panel class="flex items-center gap-3 rounded-lg border border-primary/25 bg-page p-4 dark:border-primary/25 dark:bg-page-dark">
+		<div in:receive={{ key: 'tc-stats' }} out:send={{ key: 'tc-stats' }} class="flex items-center gap-3 rounded-lg border border-primary/25 bg-page p-4 dark:border-primary/25 dark:bg-page-dark">
 			<div class="h-3 w-3 shrink-0 rounded-full bg-gray-400"></div>
 			<div>
 				<p class="font-medium text-gray-700 dark:text-gray-300">Transcoder Offline</p>
@@ -181,7 +184,7 @@
 	{:else}
 		<!-- Worker pool + Stats cards -->
 		{@const w = $workers}
-		<div transition:panel class="space-y-4">
+		<div in:receive={{ key: 'tc-stats' }} out:send={{ key: 'tc-stats' }} class="space-y-4">
 		<!-- Worker pool status -->
 		<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
 			<div class="mb-3 flex items-center justify-between">

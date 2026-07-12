@@ -66,7 +66,15 @@
     });
 </script>
 
-{#if phase === 'error'}
+{#if phase === 'waiting'}
+    <!-- Pre-minDelay window: reserve the skeleton's space invisibly instead of
+         rendering nothing. A fast load then fades content into already-reserved
+         layout (no jump); a slow one fades the skeleton in at minDelay as
+         before. visibility:hidden keeps geometry without a skeleton flash. -->
+    <div class="invisible" aria-hidden="true">
+        {@render loadingSlot()}
+    </div>
+{:else if phase === 'error'}
     <div in:receive={{ key: transitionKey }} out:send={{ key: transitionKey }}>
         {#if errorSlot}
             {@render errorSlot(error!)}
