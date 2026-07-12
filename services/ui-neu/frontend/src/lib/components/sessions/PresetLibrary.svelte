@@ -76,28 +76,42 @@
 </script>
 
 <div class="flex flex-col gap-6">
-	<!-- Reusable note -->
-	<p class="text-sm text-gray-500 dark:text-gray-400">
-		Presets are reusable building blocks — each preset can be used by multiple sessions.
-		Changing a preset affects every session that references it.
-	</p>
-
-	<!-- Media-type chip row (counts presets, not sessions) -->
-	<div class="flex flex-wrap gap-2">
-		{#each MEDIA_TYPES as chip}
-			{@const count = presetTypeCounts[chip.key] ?? 0}
-			<button
-				type="button"
-				aria-pressed={typeFilter === chip.key}
-				class="rounded-full border px-3 py-0.5 text-xs font-medium transition-colors
-					{typeFilter === chip.key
-						? 'border-primary bg-primary text-white'
-						: 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}"
-				onclick={() => { typeFilter = chip.key; }}
-			>
-				{chip.label} {count}
-			</button>
-		{/each}
+	<!-- Filter bar: same top-bar card styling as the Sessions hub, with the
+	     New-preset action pinned right like the hub's New session button -->
+	<div class="rounded-lg border border-primary/20 bg-surface px-4 py-3 shadow-xs dark:bg-surface-dark">
+		<div class="flex flex-wrap items-center gap-3">
+			<span class="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Refine</span>
+			<!-- Media-type chip row (counts presets, not sessions) -->
+			<div class="flex flex-wrap gap-2">
+				{#each MEDIA_TYPES as chip}
+					{@const count = presetTypeCounts[chip.key] ?? 0}
+					<button
+						type="button"
+						aria-pressed={typeFilter === chip.key}
+						class="rounded-full border px-3 py-0.5 text-xs font-medium transition-colors
+							{typeFilter === chip.key
+								? 'border-primary bg-primary text-white'
+								: 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}"
+						onclick={() => { typeFilter = chip.key; }}
+					>
+						{chip.label} {count}
+					</button>
+				{/each}
+			</div>
+			{#if kind === 'rip'}
+				<button
+					type="button"
+					onclick={onnewrip}
+					class="ml-auto shrink-0 rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-white hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+				>+ New rip preset</button>
+			{:else}
+				<button
+					type="button"
+					onclick={onnewtranscode}
+					class="ml-auto shrink-0 rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-white hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+				>+ New transcode preset</button>
+			{/if}
+		</div>
 	</div>
 
 	{#if loading}
@@ -113,18 +127,6 @@
 	{:else if kind === 'rip'}
 		<!-- ── Rip presets section ─────────────────────────────────────────── -->
 		<section>
-			<div class="mb-3 flex items-center justify-between">
-				<div>
-					<h3 class="text-sm font-semibold text-gray-900 dark:text-white">Rip presets</h3>
-					<p class="text-xs text-gray-500 dark:text-gray-400">how to rip</p>
-				</div>
-				<button
-					type="button"
-					onclick={onnewrip}
-					class="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-				>+ New rip preset</button>
-			</div>
-
 			{#if visibleRip.length === 0}
 				<p class="py-4 text-center text-sm text-gray-400 dark:text-gray-500">
 					No rip presets match the selected filter.
@@ -148,18 +150,6 @@
 	{:else}
 		<!-- ── Transcode presets section ──────────────────────────────────── -->
 		<section>
-			<div class="mb-3 flex items-center justify-between">
-				<div>
-					<h3 class="text-sm font-semibold text-gray-900 dark:text-white">Transcode presets</h3>
-					<p class="text-xs text-gray-500 dark:text-gray-400">how to transcode · optional</p>
-				</div>
-				<button
-					type="button"
-					onclick={onnewtranscode}
-					class="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-				>+ New transcode preset</button>
-			</div>
-
 			{#if visibleTranscode.length === 0}
 				<p class="py-4 text-center text-sm text-gray-400 dark:text-gray-500">
 					No transcode presets match the selected filter.

@@ -56,16 +56,19 @@ const defaultProps = (over = {}) => ({
 
 afterEach(cleanup);
 
+// The section headings moved up to the SessionsArea header (panel title +
+// one-line description); kind-scoping is asserted via the kind-specific
+// New-preset action instead.
 it('rip kind renders only the Rip presets section', () => {
 	renderComponent(PresetLibrary, defaultProps({ kind: 'rip' }));
-	expect(screen.getByRole('heading', { name: /rip presets/i })).toBeInTheDocument();
-	expect(screen.queryByRole('heading', { name: /transcode presets/i })).not.toBeInTheDocument();
+	expect(screen.getByRole('button', { name: /new rip preset/i })).toBeInTheDocument();
+	expect(screen.queryByRole('button', { name: /new transcode preset/i })).not.toBeInTheDocument();
 });
 
 it('transcode kind renders only the Transcode presets section', () => {
 	renderComponent(PresetLibrary, defaultProps({ kind: 'transcode' }));
-	expect(screen.getByRole('heading', { name: /transcode presets/i })).toBeInTheDocument();
-	expect(screen.queryByRole('heading', { name: /^rip presets/i })).not.toBeInTheDocument();
+	expect(screen.getByRole('button', { name: /new transcode preset/i })).toBeInTheDocument();
+	expect(screen.queryByRole('button', { name: /new rip preset/i })).not.toBeInTheDocument();
 });
 
 it('shows all rip preset rows (rip kind)', () => {
@@ -131,7 +134,10 @@ it('derives chip counts from the active kind only', () => {
 	expect(screen.getByRole('button', { name: /movie.*1/i })).toBeInTheDocument();
 });
 
-it('includes the reusable-note text', () => {
+it('renders the Refine filter bar with the New-preset action (hub top-bar parity)', () => {
 	renderComponent(PresetLibrary, defaultProps({ kind: 'rip' }));
-	expect(screen.getByText(/reusable|preset.*reused|used by multiple/i)).toBeInTheDocument();
+	// The reusable-note moved up to the SessionsArea header one-liner; the
+	// library now carries the hub-styled filter card instead.
+	expect(screen.getByText(/refine/i)).toBeInTheDocument();
+	expect(screen.getByRole('button', { name: /new rip preset/i })).toBeInTheDocument();
 });
