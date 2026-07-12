@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from arm_backend import theme_service  # noqa: E402
 from arm_backend.auth import require_jwt  # noqa: E402
 from arm_backend.routers import themes as themes_router  # noqa: E402
+from arm_common import User  # noqa: E402
 
 
 @pytest.fixture
@@ -23,7 +24,11 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(theme_service.settings, "ARM_THEMES_PATH", str(tmp_path))
     app = FastAPI()
     app.include_router(themes_router.router)
-    app.dependency_overrides[require_jwt] = lambda: object()
+    # POST "" / DELETE /{id} are require_writer-gated (composes require_jwt),
+    # so the override must satisfy both: an admin-role User, not a bare object.
+    app.dependency_overrides[require_jwt] = lambda: User(
+        id="usr_test", username="test", password_hash="x", password_must_change=False, role="admin"
+    )
     with TestClient(app) as c:
         yield c
 
@@ -136,6 +141,24 @@ def test_delete_user_theme(client):
     r = client.delete("/api/themes/mine")
     assert r.status_code == 200
     assert "mine" not in {t["id"] for t in client.get("/api/themes").json()}
+
+
+def test_upload_oserror_503(client, monkeypatch):
+    def _boom(*_args, **_kwargs):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(theme_service.Path, "write_text", _boom)
+    theme = {"id": "mine", "label": "Mine", "tokens": {}}
+    files = {"theme_json": ("mine.json", io.BytesIO(json.dumps(theme).encode()), "application/json")}
+    r = client.post("/api/themes", files=files, data={"theme_css": ""})
+    assert r.status_code == 503
+    assert "No space left on device" in r.json()["detail"]
+
+
+def test_delete_invalid_theme_id_400(client):
+    # _safe_theme_id rejects an id that doesn't match _SAFE_ID with ValueError.
+    r = client.delete("/api/themes/UPPERCASE")
+    assert r.status_code == 400
 
 
 def test_delete_unknown_400(client):

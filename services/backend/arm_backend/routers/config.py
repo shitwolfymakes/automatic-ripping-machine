@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.auth import require_jwt
+from arm_backend.auth import require_jwt, require_writer
 from arm_backend.db import get_session
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_common import Config, Job, JobStatus, User
@@ -91,7 +91,7 @@ async def get_config(
 async def update_config(
     req: ConfigUpdateRequest,
     request: Request,
-    user: User = Depends(require_jwt),
+    user: User = Depends(require_writer),
     session: AsyncSession = Depends(get_session),
 ) -> ConfigView:
     # FastAPI has already validated the body into `req` (a ConfigUpdateRequest),

@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import PlainTextResponse
 
 from arm_backend import theme_service
-from arm_backend.auth import require_jwt
+from arm_backend.auth import require_jwt, require_writer
 from arm_common import User
 
 router = APIRouter(prefix="/api/themes", tags=["themes"])
@@ -56,12 +56,12 @@ async def get_theme_css(theme_id: str) -> PlainTextResponse:
 async def upload_theme(
     theme_json: Annotated[UploadFile, File(description="Theme JSON file")],
     theme_css: Annotated[str, Form(description="Optional custom CSS")] = "",
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
 ) -> dict[str, Any]:
     """Upload a user theme (JSON file + optional CSS)."""
     try:
         data = json.loads(await theme_json.read())
-    except json.JSONDecodeError, UnicodeDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
         raise HTTPException(status_code=400, detail="Invalid JSON file") from None
     try:
         return theme_service.save_user_theme(data, css=theme_css)
@@ -72,7 +72,7 @@ async def upload_theme(
 
 
 @router.delete("/{theme_id}", responses=_400)
-async def delete_theme(theme_id: str, _: User = Depends(require_jwt)) -> dict[str, Any]:
+async def delete_theme(theme_id: str, _: User = Depends(require_writer)) -> dict[str, Any]:
     """Delete a user theme. Built-ins cannot be deleted."""
     try:
         deleted = theme_service.delete_user_theme(theme_id)

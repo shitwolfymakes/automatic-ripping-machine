@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.auth import require_jwt
+from arm_backend.auth import require_jwt, require_writer
 from arm_backend.db import get_session
 from arm_backend.notification_dispatcher import (
     NOTABLE_EVENT_TYPES,
@@ -153,7 +153,7 @@ async def get_channel(
 @router.post("/channels", response_model=NotificationChannelView, status_code=status.HTTP_201_CREATED)
 async def create_channel(
     req: NotificationChannelCreateRequest,
-    user: User = Depends(require_jwt),
+    user: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     if req.type == "inapp":
@@ -183,7 +183,7 @@ async def create_channel(
 async def patch_channel(
     channel_id: str,
     req: NotificationChannelUpdateRequest,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     ch = (
@@ -236,7 +236,7 @@ async def patch_channel(
 @router.delete("/channels/{channel_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_channel(
     channel_id: str,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> None:
     ch = (
@@ -373,7 +373,7 @@ async def _send_and_log(
 async def test_channel(
     channel_id: str,
     req: NotificationChannelTestRequest,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
     notifier: AppriseNotifier = Depends(get_notifier),
 ) -> NotificationTestResult:
@@ -406,7 +406,7 @@ async def test_channel(
 @router.post("/test", response_model=NotificationTestResult)
 async def test_config(
     req: NotificationTestRequest,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
     notifier: AppriseNotifier = Depends(get_notifier),
 ) -> NotificationTestResult:
@@ -466,7 +466,7 @@ async def inbox_count(
 
 @router.post("/inbox/dismiss-all")
 async def inbox_dismiss_all(
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> dict[str, int]:
     rows = list((await db.execute(select(NotificationInbox))).scalars().all())
@@ -483,7 +483,7 @@ async def inbox_dismiss_all(
 
 @router.post("/inbox/purge")
 async def inbox_purge(
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> dict[str, int]:
     rows = list((await db.execute(select(NotificationInbox))).scalars().all())
@@ -500,7 +500,7 @@ async def inbox_purge(
 async def patch_inbox(
     inbox_id: str,
     req: NotificationInboxUpdateRequest,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> NotificationInbox:
     row = (

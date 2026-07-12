@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.auth import require_jwt
+from arm_backend.auth import require_writer
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
 from arm_common import User
@@ -73,7 +73,7 @@ async def logout() -> dict[str, bool]:
 @router.post("/password")
 async def change_password(
     req: PasswordChangeRequest,
-    user: User = Depends(require_jwt),
+    user: User = Depends(require_writer),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, bool]:
     try:

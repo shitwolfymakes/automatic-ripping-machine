@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from arm_backend import image_cache  # noqa: E402
 from arm_backend.auth import require_jwt  # noqa: E402
 from arm_backend.routers import images as images_router  # noqa: E402
+from arm_common import User  # noqa: E402
 
 
 @pytest.fixture
@@ -22,7 +23,11 @@ def client(tmp_path, monkeypatch):
     image_cache.reset()
     app = FastAPI()
     app.include_router(images_router.router)
-    app.dependency_overrides[require_jwt] = lambda: object()
+    # POST /images/cache/clear is require_writer-gated (composes require_jwt),
+    # so the override must satisfy both: an admin-role User, not a bare object.
+    app.dependency_overrides[require_jwt] = lambda: User(
+        id="usr_test", username="test", password_hash="x", password_must_change=False, role="admin"
+    )
     with TestClient(app) as c:
         yield c
     image_cache.reset()
