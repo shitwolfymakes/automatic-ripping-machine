@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { expand, panel } from '$lib/transitions';
+	import { expand, panel, reveal } from '$lib/transitions';
 	import { onMount } from 'svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
@@ -435,7 +435,7 @@
 
 		<!-- System Info Tab -->
 		{#if activeTab === 'system'}
-			<div class="space-y-6">
+			<div in:reveal class="space-y-6">
 				<h2 class="text-lg font-semibold text-gray-900 dark:text-white">System</h2>
 
 				<!-- Health check (API keys + path permissions) -->
@@ -443,7 +443,7 @@
 
 				<!-- Read-only infra configuration (schema-driven) -->
 				{#if systemGroup}
-					<section class="space-y-4">
+					<section in:reveal class="space-y-4">
 						<h3 class="text-lg font-semibold text-gray-900 dark:text-white">Configuration (read-only)</h3>
 						<div class="space-y-4 rounded-lg border border-primary/20 bg-surface p-4 dark:border-primary/20 dark:bg-surface-dark">
 							{#each systemGroup.fields as f (f.key)}
@@ -454,7 +454,7 @@
 				{/if}
 			</div>
 			<!-- Service Control -->
-			<section class="mt-6">
+			<section in:reveal class="mt-6">
 				<h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Service Control</h2>
 				<div class="space-y-3">
 					<!-- ARM Restart -->
@@ -464,7 +464,7 @@
 								<p class="text-sm font-medium text-gray-900 dark:text-white">Restart ARM Service</p>
 								<p class="text-xs text-gray-500 dark:text-gray-400">Restarts the ARM ripping service. Active rips will be interrupted.</p>
 								{#if armRestartFeedback}
-									<p class="mt-1 text-xs {armRestartFeedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{armRestartFeedback.message}</p>
+									<p in:reveal class="mt-1 text-xs {armRestartFeedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{armRestartFeedback.message}</p>
 								{/if}
 							</div>
 							<button
@@ -485,7 +485,7 @@
 								<p class="text-sm font-medium text-gray-900 dark:text-white">Restart Transcoder Service</p>
 								<p class="text-xs text-gray-500 dark:text-gray-400">Restarts the transcoder service. Active transcodes will be interrupted.</p>
 								{#if tcRestartFeedback}
-									<p class="mt-1 text-xs {tcRestartFeedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{tcRestartFeedback.message}</p>
+									<p in:reveal class="mt-1 text-xs {tcRestartFeedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{tcRestartFeedback.message}</p>
 								{/if}
 							</div>
 							<button

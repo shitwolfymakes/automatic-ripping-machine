@@ -13,6 +13,7 @@
 	import MusicSearch from '$lib/components/MusicSearch.svelte';
 	import IdentifyDialog from '$lib/components/IdentifyDialog.svelte';
 	import ApplySessionDialog from '$lib/components/ApplySessionDialog.svelte';
+	import { reveal } from '$lib/transitions';
 	import JobLifecycle from '$lib/components/JobLifecycle.svelte';
 	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
 	import { discTypeLabel, isJobActive } from '$lib/utils/job-type';
@@ -318,7 +319,7 @@
 			<!-- Panel toggle bar: poster override (manual poster_url_manual quick-edit).
 			     Disc identity now commits through the IdentifyDialog (resolve), not here. -->
 			{#if isVideoDisc}
-				<div class="flex border-t border-primary/15 bg-surface/50 dark:border-primary/15 dark:bg-surface-dark/50">
+				<div in:reveal class="flex border-t border-primary/15 bg-surface/50 dark:border-primary/15 dark:bg-surface-dark/50">
 					<button onclick={() => (activePanel = activePanel === 'title' ? null : 'title')} class={panelTabClass('title', true)}>Poster &amp; metadata search</button>
 				</div>
 			{:else if isCdDisc}
@@ -329,12 +330,12 @@
 
 			<!-- Active panel content -->
 			{#if activePanel === 'title'}
-				<div class="border-t border-primary/15 p-5 dark:border-primary/15">
+				<div in:reveal class="border-t border-primary/15 p-5 dark:border-primary/15">
 					<TitleSearch {job} onapply={handleTitleApply} />
 				</div>
 			{/if}
 			{#if activePanel === 'music'}
-				<div class="border-t border-primary/15 p-5 dark:border-primary/15">
+				<div in:reveal class="border-t border-primary/15 p-5 dark:border-primary/15">
 					<MusicSearch {job} discTracks={tracks} onapply={handleMusicApply} />
 				</div>
 			{/if}

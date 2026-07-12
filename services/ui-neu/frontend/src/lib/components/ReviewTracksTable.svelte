@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { JobView, TrackView, ScanTitle } from '$lib/types/api.gen';
 	import { updateTrack } from '$lib/api/jobs';
+	import { reveal } from '$lib/transitions';
 	import { trackToRow, scanTitleToRow } from '$lib/utils/review-rows';
 	import TrackTitleSearch from './TrackTitleSearch.svelte';
 
@@ -72,7 +73,7 @@
 
 <div class="border-t border-primary/20 p-4 dark:border-primary/20">
 	{#if errorMessage}
-		<p class="mb-2 text-xs text-red-600 dark:text-red-400">{errorMessage}</p>
+		<p in:reveal class="mb-2 text-xs text-red-600 dark:text-red-400">{errorMessage}</p>
 	{/if}
 	{#if rows.length > 0}
 		<div>

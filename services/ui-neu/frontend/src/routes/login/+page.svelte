@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { panel } from '$lib/transitions';
+	import { panel, reveal } from '$lib/transitions';
 	import { login } from '$lib/api/auth';
 	import { applyLogin } from '$lib/stores/auth';
 
@@ -30,7 +30,7 @@
 	<form onsubmit={onSubmit} class="w-full max-w-sm space-y-4 rounded-lg border border-primary/20 bg-surface p-6 dark:bg-surface-dark">
 		<h1 class="text-lg font-semibold">Sign in to ARM</h1>
 		{#if error}
-			<p class="rounded bg-red-100 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">{error}</p>
+			<p in:reveal class="rounded bg-red-100 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">{error}</p>
 		{/if}
 		<label class="block text-sm">
 			<span class="mb-1 block">Username</span>

@@ -15,7 +15,7 @@
 	import BulkActionsMenu from '$lib/components/BulkActionsMenu.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import EmptyDashboardPanel from '$lib/components/EmptyDashboardPanel.svelte';
-	import { panel } from '$lib/transitions';
+	import { panel, reveal } from '$lib/transitions';
 	import { isAwaitingAction } from '$lib/utils/job-status';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { dashboard } from '$lib/stores/dashboard';
@@ -401,7 +401,7 @@
 
 				<!-- Bulk feedback banner -->
 				{#if bulkFeedback}
-					<div class="border-t border-primary/15 px-4 py-3 text-sm dark:border-primary/15 {bulkFeedback.type === 'success' ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}">
+					<div in:reveal class="border-t border-primary/15 px-4 py-3 text-sm dark:border-primary/15 {bulkFeedback.type === 'success' ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}">
 						{bulkFeedback.message}
 						<button onclick={() => (bulkFeedback = null)} class="ml-2 font-bold opacity-60 hover:opacity-100">&times;</button>
 					</div>

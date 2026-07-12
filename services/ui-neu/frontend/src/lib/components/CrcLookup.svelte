@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { JobView } from '$lib/types/api.gen';
 	import { updateJobTitle } from '$lib/api/jobs';
+	import { reveal } from '$lib/transitions';
 	import ComingSoon from './ComingSoon.svelte';
 
 	// ---------------------------------------------------------------------------
@@ -79,7 +80,7 @@
 				{applying ? 'Applying...' : 'Apply to Job'}
 			</button>
 			{#if applyFeedback}
-				<span class="text-xs {applyFeedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+				<span in:reveal class="text-xs {applyFeedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
 					{applyFeedback.message}
 				</span>
 			{/if}

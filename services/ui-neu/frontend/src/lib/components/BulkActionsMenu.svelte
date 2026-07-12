@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { JobStats } from './JobStatsPanel.svelte';
+	import { reveal } from '$lib/transitions';
 	import Flyout from './Flyout.svelte';
 	import FlyoutItem from './FlyoutItem.svelte';
 	import FlyoutDivider from './FlyoutDivider.svelte';
@@ -42,7 +43,7 @@
 
 <!-- Selection count -->
 {#if selectedJobs.size > 0}
-	<span class="text-sm font-medium text-gray-600 dark:text-gray-300">{selectedJobs.size} selected</span>
+	<span in:reveal class="text-sm font-medium text-gray-600 dark:text-gray-300">{selectedJobs.size} selected</span>
 {/if}
 
 <!-- Gear menu -->
@@ -54,7 +55,7 @@
 			class="{pillBase} inline-flex items-center gap-1 bg-primary/10 text-gray-700 hover:bg-primary/20 dark:bg-primary/15 dark:text-gray-300 dark:hover:bg-primary/25 disabled:opacity-50"
 		>
 			{#if bulkBusy}
-				<span class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+				<span in:reveal class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
 			{:else}
 				&#9881;
 			{/if}

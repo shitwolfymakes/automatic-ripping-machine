@@ -2,6 +2,7 @@
 	import type { JobView, MetadataCandidate } from '$lib/types/api.gen';
 	import { searchMetadata, fetchMediaDetail, updateJobTitle, resolveJob } from '$lib/api/jobs';
 	import PosterImage from './PosterImage.svelte';
+	import { reveal } from '$lib/transitions';
 
 	interface Props {
 		job: JobView;
@@ -299,6 +300,7 @@
 					</button>
 					{#if feedback}
 						<span
+							in:reveal
 							class="text-xs {feedback.type === 'success'
 								? 'text-green-600 dark:text-green-400'
 								: 'text-red-600 dark:text-red-400'}"

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { JobDetailView, TrackView } from '$lib/types/api.gen';
 	import { tvdbMatch, fetchTvdbEpisodes, updateTrack, fetchNamingPreview } from '$lib/api/jobs';
+	import { reveal } from '$lib/transitions';
 
 	// ---------------------------------------------------------------------------
 	// MISSING in v3 — TVDB episode matching / listing have no v3 endpoint
@@ -354,14 +355,14 @@
 
 	<!-- Error -->
 	{#if error}
-		<div class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
+		<div in:reveal class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
 			{error}
 		</div>
 	{/if}
 
 	<!-- Match table -->
 	{#if matches.length > 0 || Object.keys(assignments).length > 0}
-		<div class="overflow-x-auto">
+		<div in:reveal class="overflow-x-auto">
 			<table class="w-full table-fixed text-sm">
 				<colgroup>
 					<col class="w-[25%]" />

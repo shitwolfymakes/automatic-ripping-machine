@@ -7,7 +7,7 @@
 	import TimeAgo from '$lib/components/TimeAgo.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
-	import { panel } from '$lib/transitions';
+	import { panel, reveal } from '$lib/transitions';
 	import { transcoderStats, transcoderWorkers, getJobsCache, setJobsCache } from '$lib/stores/transcoder';
 	import { sortTranscodeTasks } from '$lib/utils/transcode-sort';
 
@@ -196,7 +196,7 @@
 				</span>
 			</div>
 			{#if w.length > 0}
-				<div class="grid gap-2 {s.max_parallel > 1 ? 'sm:grid-cols-2 lg:grid-cols-3' : ''}">
+				<div in:reveal class="grid gap-2 {s.max_parallel > 1 ? 'sm:grid-cols-2 lg:grid-cols-3' : ''}">
 					{#each w as worker (worker.task_id)}
 						<div class="flex items-center gap-3 rounded-md border border-indigo-200 bg-indigo-50/50 px-3 py-2 dark:border-indigo-800 dark:bg-indigo-900/20">
 							<div class="h-2 w-2 rounded-full bg-indigo-500 animate-pulse"></div>
@@ -249,7 +249,7 @@
 		<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Transcode Jobs</h2>
 
 		{#if actionFeedback}
-			<div class="rounded-lg border px-4 py-3 text-sm {actionFeedback.type === 'success' ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400' : 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400'}">
+			<div in:reveal class="rounded-lg border px-4 py-3 text-sm {actionFeedback.type === 'success' ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400' : 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400'}">
 				{actionFeedback.message}
 				<button onclick={() => (actionFeedback = null)} class="ml-2 font-medium hover:opacity-75">Dismiss</button>
 			</div>
@@ -332,7 +332,7 @@
 
 							<!-- Error message for failed tasks -->
 							{#if job.status === 'failed' && job.last_error}
-								<p class="mt-2 rounded-sm bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
+								<p in:reveal class="mt-2 rounded-sm bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
 									{job.last_error}
 								</p>
 							{/if}

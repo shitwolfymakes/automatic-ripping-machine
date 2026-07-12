@@ -6,6 +6,7 @@
 	import { applySession } from '$lib/api/jobs';
 	import { ApiError } from '$lib/api/client';
 	import { resolveSample } from '$lib/components/sessions/sampleTokens';
+	import { reveal } from '$lib/transitions';
 	import type {
 		ApplySessionResponse,
 		CollisionInfo,
@@ -139,13 +140,13 @@
 		</h3>
 
 		{#if error}
-			<p class="mt-2 text-sm text-red-600 dark:text-red-400" data-testid="apply-session-error">
+			<p in:reveal class="mt-2 text-sm text-red-600 dark:text-red-400" data-testid="apply-session-error">
 				{error}
 			</p>
 		{/if}
 
 		{#if collisions.length === 0}
-			<div class="mt-4">
+			<div in:reveal class="mt-4">
 				<label
 					for="apply-session-select"
 					class="block text-sm font-medium text-gray-700 dark:text-gray-300"
@@ -232,7 +233,7 @@
 			</ul>
 
 			{#if hasDuplicateInRequest}
-				<p class="mt-3 text-sm text-gray-500 dark:text-gray-400">
+				<p in:reveal class="mt-3 text-sm text-gray-500 dark:text-gray-400">
 					Two or more tracks resolve to the same output path - the session's template doesn't
 					differentiate per track. Pick a session whose template includes <code>{'{track}'}</code>
 					(e.g. <em>Movie -> Archive MKV</em>), or rip with a single-track preset.

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { panel } from '$lib/transitions';
+	import { panel, reveal } from '$lib/transitions';
 	import { fetchJobs } from '$lib/api/jobs';
 	import type { JobView } from '$lib/types/api.gen';
 	import JobFilterBar from '$lib/components/JobFilterBar.svelte';
@@ -71,7 +71,7 @@
 		{#snippet ready(_jobs: JobView[])}
 			<!-- data arg is the full list; we render the client-filtered `filtered` derived -->
 			{#if filtered.length === 0}
-				<p class="text-sm text-gray-500">No jobs match.</p>
+				<p in:reveal class="text-sm text-gray-500">No jobs match.</p>
 			{:else}
 				<table class="responsive-table w-full text-left text-sm">
 					<thead>

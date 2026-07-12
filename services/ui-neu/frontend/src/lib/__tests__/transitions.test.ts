@@ -46,4 +46,20 @@ describe('transitions', () => {
 		const mod = await import('../transitions');
 		expect(mod.expand(fakeNode(), {}).duration).toBe(0);
 	});
+
+	it('reveal fades: duration 150 and opacity-only css when reduced-motion is not set', async () => {
+		vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
+		const mod = await import('../transitions');
+		const cfg = mod.reveal(fakeNode(), {});
+		expect(cfg.duration).toBe(150);
+		const css = cfg.css!(0.5, 0.5);
+		expect(css).toContain('opacity');
+		expect(css).not.toContain('height');
+	});
+
+	it('reveal has duration 0 when reduced-motion is preferred', async () => {
+		vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }));
+		const mod = await import('../transitions');
+		expect(mod.reveal(fakeNode(), {}).duration).toBe(0);
+	});
 });

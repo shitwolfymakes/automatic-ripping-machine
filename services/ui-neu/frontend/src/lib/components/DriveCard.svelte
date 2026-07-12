@@ -2,6 +2,7 @@
 	import type { DriveView as Drive, SessionView } from '$lib/types/api.gen';
 	import { updateDrive, deleteDrive } from '$lib/api/drives';
 	import { triggerManual } from '$lib/api/jobs';
+	import { reveal } from '$lib/transitions';
 	import StatusBadge from './StatusBadge.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import SlideOver from './SlideOver.svelte';
@@ -235,7 +236,7 @@
 				{drive.display_name || drive.device_path || `Drive ${drive.id}`}
 			</h3>
 			{#if isStale}
-				<span class="flex-shrink-0 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">Stale</span>
+				<span in:reveal class="flex-shrink-0 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">Stale</span>
 			{:else if !editing}
 				<button
 					onclick={startEdit}
@@ -252,7 +253,7 @@
 
 	<!-- Name editing -->
 	{#if editing}
-		<div class="mb-2 flex items-center gap-2">
+		<div in:reveal class="mb-2 flex items-center gap-2">
 			<input
 				type="text"
 				bind:value={editName}
@@ -283,14 +284,14 @@
 		{/if}
 		<br/>
 		{#if drive.rip_speed != null}
-			<span class="ml-1 inline-flex items-center gap-0.5 rounded-sm bg-blue-500/15 px-1.5 py-0.5 text-[9px] font-medium text-blue-400">
+			<span in:reveal class="ml-1 inline-flex items-center gap-0.5 rounded-sm bg-blue-500/15 px-1.5 py-0.5 text-[9px] font-medium text-blue-400">
 				<svg class="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
 				{drive.rip_speed}x speed
 			</span>
 		{/if}
 		{#if [drive.prescan_cache_mb, drive.prescan_timeout, drive.prescan_retries, drive.disc_enum_timeout].some(v => v != null)}
 			{@const prescanOverrideCount = [drive.prescan_cache_mb, drive.prescan_timeout, drive.prescan_retries, drive.disc_enum_timeout].filter(v => v != null).length}
-			<span class="ml-1 inline-flex items-center gap-0.5 rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-medium text-amber-600 dark:text-amber-400">
+			<span in:reveal class="ml-1 inline-flex items-center gap-0.5 rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-medium text-amber-600 dark:text-amber-400">
 				{prescanOverrideCount} custom
 			</span>
 		{/if}
@@ -299,7 +300,7 @@
 	<!-- Media status + 4K -->
 	<div class="mb-2 flex flex-wrap items-center gap-1">
 		{#if drive.media_status}
-			<span class="inline-flex items-center gap-1 rounded-sm bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary-text dark:text-primary-text-dark">
+			<span in:reveal class="inline-flex items-center gap-1 rounded-sm bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary-text dark:text-primary-text-dark">
 				{drive.media_status.replace('_', ' ')}
 			</span>
 		{/if}
@@ -376,6 +377,7 @@
 
 		{#if isStale && !drive.current_job}
 			<button
+				in:reveal
 				onclick={handleRemove}
 				disabled={removing}
 				class="rounded-md bg-red-500/15 px-2 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-500/25 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-500/30"
@@ -386,7 +388,7 @@
 	</div>
 
 	{#if manualError}
-		<p class="mt-1 text-[11px] text-red-600 dark:text-red-400" data-testid="drive-manual-error">{manualError}</p>
+		<p in:reveal class="mt-1 text-[11px] text-red-600 dark:text-red-400" data-testid="drive-manual-error">{manualError}</p>
 	{/if}
 
 	<!-- Current rip -->
@@ -419,7 +421,7 @@
 				</select>
 				<p class="mt-1 text-xs leading-snug text-gray-400 dark:text-gray-500">Auto-applied to auto-mode rips on this drive.</p>
 				{#if defaultSessionError}
-					<p class="mt-1 text-xs text-red-600 dark:text-red-400" data-testid="drive-default-session-error">{defaultSessionError}</p>
+					<p in:reveal class="mt-1 text-xs text-red-600 dark:text-red-400" data-testid="drive-default-session-error">{defaultSessionError}</p>
 				{/if}
 			</div>
 

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { JobView } from '$lib/types/api.gen';
 	import { resolveJob } from '$lib/api/jobs';
+	import { reveal } from '$lib/transitions';
 
 	interface Props {
 		job: JobView;
@@ -160,7 +161,7 @@
 				Reset
 			</button>
 			{#if feedback}
-				<span class="ml-auto text-xs {feedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{feedback.message}</span>
+				<span in:reveal class="ml-auto text-xs {feedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{feedback.message}</span>
 			{/if}
 		</div>
 	{:else if feedback}

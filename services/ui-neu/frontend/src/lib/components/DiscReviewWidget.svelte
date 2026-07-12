@@ -15,6 +15,7 @@
 	import SkeletonCard from './SkeletonCard.svelte';
 	import JobInfoForm from './JobInfoForm.svelte';
 	import ReviewTracksTable from './ReviewTracksTable.svelte';
+	import { expand, reveal } from '$lib/transitions';
 
 	interface Props {
 		job?: JobView;
@@ -269,25 +270,25 @@
 					{discTypeLabel(displayJob.disc_type)}
 				</span>
 				{#if jobMeta.video_type}
-					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{videoTypeLabel(jobMeta.video_type)}</span>
+					<span in:reveal class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{videoTypeLabel(jobMeta.video_type)}</span>
 				{/if}
 				{#if displayJob.disc_number != null}
 					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">Disc {displayJob.disc_number}{#if displayJob.disc_total != null}/{displayJob.disc_total}{/if}</span>
 				{/if}
 				{#if jobMeta.titleCount != null && jobMeta.titleCount > 0}
-					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{jobMeta.titleCount} titles</span>
+					<span in:reveal class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{jobMeta.titleCount} titles</span>
 				{/if}
 				{#if jobMeta.season}
-					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">S{jobMeta.season}</span>
+					<span in:reveal class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">S{jobMeta.season}</span>
 				{/if}
 				{#if jobMeta.imdb_id && !isMusic}
 					<a href="https://www.imdb.com/title/{jobMeta.imdb_id}" target="_blank" rel="noopener noreferrer" class="rounded-sm bg-yellow-400 px-1.5 py-0.5 font-semibold text-black">IMDb</a>
 				{/if}
 				{#if jobMeta.artist}
-					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{jobMeta.artist}</span>
+					<span in:reveal class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{jobMeta.artist}</span>
 				{/if}
 				{#if jobMeta.album}
-					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{jobMeta.album}</span>
+					<span in:reveal class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{jobMeta.album}</span>
 				{/if}
 				{#if appliedSession}
 					<span class="rounded-sm bg-primary/15 px-1.5 py-0.5 font-medium text-primary-text dark:bg-primary/20 dark:text-primary-text-dark">Session: {appliedSession}</span>
@@ -298,7 +299,7 @@
 
 	<!-- Error banner -->
 	{#if errorMessage}
-		<div class="flex items-center gap-2 border-t border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+		<div in:reveal class="flex items-center gap-2 border-t border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
 			<span class="flex-1">{errorMessage}</span>
 			<button onclick={() => (errorMessage = null)} class="shrink-0 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">&times;</button>
 		</div>
@@ -346,31 +347,35 @@
 
 	<!-- Expanded sections -->
 	{#if showTitleSearch && isVideo}
-		<div class="border-t border-primary/20 p-4 dark:border-primary/20">
+		<div transition:expand class="border-t border-primary/20 p-4 dark:border-primary/20">
 			<TitleSearch {job} onapply={handleTitleApply} />
 		</div>
 	{/if}
 
 	{#if showMusicSearch && isMusic}
-		<div class="border-t border-primary/20 p-4 dark:border-primary/20">
+		<div transition:expand class="border-t border-primary/20 p-4 dark:border-primary/20">
 			<MusicSearch {job} discTracks={tracks} onapply={handleTitleApply} />
 		</div>
 	{/if}
 
 	{#if showInfo}
-		<JobInfoForm {job} onrefresh={() => { onrefresh?.(); loadDetail(); }} />
-		<!-- Scanned titles (pre-rip) / tracks (post-rip) live at the bottom of the Info tab -->
-		<div class="border-t border-primary/20 dark:border-primary/20">
-			{#if initialLoading}
-				<p class="p-4 text-sm text-gray-400">Loading...</p>
-			{:else}
-				<ReviewTracksTable {job} {tracks} {scanTitles} {isVideo} {isMusic} onrefresh={() => { onrefresh?.(); loadDetail(); }} />
-			{/if}
+		<div transition:expand>
+			<JobInfoForm {job} onrefresh={() => { onrefresh?.(); loadDetail(); }} />
+			<!-- Scanned titles (pre-rip) / tracks (post-rip) live at the bottom of the Info tab -->
+			<div class="border-t border-primary/20 dark:border-primary/20">
+				{#if initialLoading}
+					<p class="p-4 text-sm text-gray-400">Loading...</p>
+				{:else}
+					<ReviewTracksTable {job} {tracks} {scanTitles} {isVideo} {isMusic} onrefresh={() => { onrefresh?.(); loadDetail(); }} />
+				{/if}
+			</div>
 		</div>
 	{/if}
 </div>
 
 {#if showApplySession}
-	<ApplySessionDialog {job} onclose={() => (showApplySession = false)} onapplied={handleSessionApplied} />
+	<div in:reveal>
+		<ApplySessionDialog {job} onclose={() => (showApplySession = false)} onapplied={handleSessionApplied} />
+	</div>
 {/if}
 {/if}

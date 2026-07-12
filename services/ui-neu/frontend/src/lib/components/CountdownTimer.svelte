@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { reveal } from '$lib/transitions';
 
 	interface Props {
 		startTime: string;
@@ -65,7 +66,7 @@
 	</button>
 
 	{#if paused}
-		<span class="text-sm font-medium {inverted ? 'text-on-primary/90' : 'text-primary-text dark:text-primary-text-dark'}">Paused</span>
+		<span in:reveal class="text-sm font-medium {inverted ? 'text-on-primary/90' : 'text-primary-text dark:text-primary-text-dark'}">Paused</span>
 	{:else if expired}
 		<span class="text-sm font-medium {inverted ? 'text-on-primary/90' : 'text-primary-text dark:text-primary-text-dark'}">Auto-proceeding...</span>
 	{:else}

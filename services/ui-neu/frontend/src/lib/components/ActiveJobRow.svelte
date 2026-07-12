@@ -10,7 +10,7 @@
 	import { jobPoster } from '$lib/utils/poster';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import { formatEta } from '$lib/stores/rips.svelte';
-	import { expand } from '$lib/transitions';
+	import { expand, reveal } from '$lib/transitions';
 
 	interface Props {
 		job?: JobView;
@@ -81,7 +81,7 @@
 			<div class="shrink-0 flex items-center gap-1.5">
 				<StatusBadge status={effectiveJobStatus(job)} />
 				{#if isPartialComplete(job)}
-					<span class="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+					<span in:reveal class="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
 						>Done {job.transcode_progress?.tasks_done}/{job.transcode_progress?.tasks_total}</span
 					>
 				{/if}
@@ -91,7 +91,7 @@
 			<div class="hidden sm:flex shrink-0 items-center gap-1.5">
 				<span class="rounded-sm px-1.5 py-0.5 text-xs font-medium {typeConfig.badgeClasses}">{typeConfig.label}</span>
 				{#if job.disc_type}
-					<span class="inline-flex items-center gap-0.5 rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs dark:bg-primary/15">
+					<span in:reveal class="inline-flex items-center gap-0.5 rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs dark:bg-primary/15">
 						<DiscTypeIcon disctype={job.disc_type} size="h-3 w-3" />
 						{discTypeLabel(job.disc_type)}
 					</span>
@@ -125,7 +125,7 @@
 
 	<!-- Progress row: own line below a divider, indented under content -->
 	{#if active}
-		<div class="mt-2 border-t border-primary/10 dark:border-primary/15 px-4 pl-[64px] pr-4 py-2.5">
+		<div in:reveal class="mt-2 border-t border-primary/10 dark:border-primary/15 px-4 pl-[64px] pr-4 py-2.5">
 			{#if progress != null}
 				<!-- Render the bar even at 0%. The MakeMKV prelude (libredrive
 				     init, key ingest) can sit at 0 for several seconds and
@@ -133,7 +133,7 @@
 				<div class="flex items-center gap-2">
 					<div class="flex-1"><ProgressBar value={progress} colorVar={accentVar} /></div>
 					{#if eta != null}
-						<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">{formatEta(eta)} left</span>
+						<span in:reveal class="shrink-0 text-xs text-gray-500 dark:text-gray-400">{formatEta(eta)} left</span>
 					{/if}
 				</div>
 			{:else}

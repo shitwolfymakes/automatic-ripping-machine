@@ -41,3 +41,15 @@ export function panel(node: Element, { duration = 200 }: { duration?: number } =
 export function expand(node: Element, { duration = 200 }: { duration?: number } = {}): TransitionConfig {
 	return slide(node, { duration: reducedMotion ? 0 : duration, easing: cubicOut });
 }
+
+// Small conditionally-rendered elements (feedback messages, badges, inline
+// warnings, revealed rows): quick fade-in on appear. Use as `in:reveal` ONLY —
+// no out: — so {#if}/{:else} swaps never double-render during an outro.
+export function reveal(node: Element, { duration = 150 }: { duration?: number } = {}): TransitionConfig {
+	const opacity = +getComputedStyle(node).opacity;
+	return {
+		duration: reducedMotion ? 0 : duration,
+		easing: cubicOut,
+		css: (t) => `opacity: ${t * opacity}`
+	};
+}

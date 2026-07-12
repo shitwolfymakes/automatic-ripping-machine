@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { tick } from 'svelte';
+	import { reveal } from '$lib/transitions';
 
 	interface Props {
 		/** Trigger content. Receives `toggle` (flip open/closed) and the current `open` state. */
@@ -107,6 +108,7 @@
 {#if open && pos}
 	<div
 		bind:this={panel}
+		in:reveal
 		role="menu"
 		aria-label={label}
 		style="position: fixed; top: {pos.top}px; {pos.right !== undefined ? `right: ${pos.right}px;` : `left: ${pos.left}px;`} max-height: {pos.maxHeight}px;"

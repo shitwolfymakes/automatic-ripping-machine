@@ -2,6 +2,7 @@
 	import { resources } from '$lib/stores/resources.svelte';
 	import { resolveActiveHost, setActiveHost } from '$lib/stores/active-host.svelte';
 	import { barColor, filesHref } from '$lib/utils/resource-bars';
+	import { reveal } from '$lib/transitions';
 
 	// Backend-first ordering, then rippers by hostname.
 	const ordered = $derived(
@@ -29,7 +30,7 @@
 
 <div data-sidebar-stats class="border-t border-primary/20 px-3 py-3 dark:border-primary/20">
 	{#if ordered.length > 1}
-		<div class="mb-2 flex gap-1 overflow-x-auto">
+		<div in:reveal class="mb-2 flex gap-1 overflow-x-auto">
 			{#each ordered as v (v.hostname)}
 				<button
 					type="button"
@@ -47,7 +48,7 @@
 
 	{#if current}
 		{@const snap = current.snapshot}
-		<div class="space-y-2">
+		<div in:reveal class="space-y-2">
 			<!-- CPU -->
 			<div>
 				<div class="mb-0.5 flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
@@ -84,7 +85,7 @@
 
 		<!-- Storage -->
 		{#if snap.storage.length}
-			<div class="mt-3 space-y-2">
+			<div in:reveal class="mt-3 space-y-2">
 				<p class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Storage</p>
 				{#each snap.storage as s (s.path)}
 					<a

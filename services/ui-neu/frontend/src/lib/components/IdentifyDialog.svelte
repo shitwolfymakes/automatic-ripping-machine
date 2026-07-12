@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolveJob } from '$lib/api/jobs';
+	import { reveal } from '$lib/transitions';
 	import type { JobView, ResolveResponse } from '$lib/types/api.gen';
 
 	let {
@@ -107,7 +108,7 @@
 		</h3>
 
 		{#if error}
-			<p class="mt-2 text-sm text-red-600 dark:text-red-400" data-testid="identify-error">
+			<p in:reveal class="mt-2 text-sm text-red-600 dark:text-red-400" data-testid="identify-error">
 				{error}
 			</p>
 		{/if}
@@ -128,7 +129,7 @@
 
 		<form class="mt-4" onsubmit={submit}>
 			{#if isCd}
-				<div class="mb-3 flex gap-3">
+				<div in:reveal class="mb-3 flex gap-3">
 					<label class="flex-[2] text-sm font-medium text-gray-700 dark:text-gray-300">
 						Album
 						<input

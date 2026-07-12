@@ -3,6 +3,7 @@
 	import { resources, startResources, stopResources } from '$lib/stores/resources.svelte';
 	import { resolveActiveHost, setActiveHost } from '$lib/stores/active-host.svelte';
 	import { barColor, filesHref } from '$lib/utils/resource-bars';
+	import { reveal } from '$lib/transitions';
 
 	onMount(() => {
 		startResources();
@@ -37,7 +38,7 @@
 	class="fixed bottom-0 left-0 right-0 z-30 hidden h-10 items-center gap-3 border-t border-primary/20 bg-surface px-4 lg:flex 2xl:hidden dark:border-primary/20 dark:bg-surface-dark"
 >
 	{#if ordered.length > 1}
-		<div class="flex shrink-0 gap-1">
+		<div in:reveal class="flex shrink-0 gap-1">
 			{#each ordered as v (v.hostname)}
 				<button
 					type="button"
@@ -57,7 +58,7 @@
 	{#if current}
 		{@const snap = current.snapshot}
 		<!-- CPU -->
-		<div class="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+		<div in:reveal class="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
 			<span class="shrink-0">CPU</span>
 			<div class="h-1 w-16 rounded-full bg-primary/15 dark:bg-primary/15">
 				<div
@@ -71,7 +72,7 @@
 		<div class="h-5 w-px shrink-0 bg-primary/15 dark:bg-primary/20"></div>
 
 		<!-- Memory -->
-		<div class="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+		<div in:reveal class="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
 			<span class="shrink-0">Mem</span>
 			<div class="h-1 w-16 rounded-full bg-primary/15 dark:bg-primary/15">
 				<div
@@ -85,7 +86,7 @@
 		<!-- Storage per root -->
 		{#if snap.storage.length}
 			<div class="h-5 w-px shrink-0 bg-primary/15 dark:bg-primary/20"></div>
-			<div class="flex items-center gap-3 overflow-hidden text-[11px] text-gray-500 dark:text-gray-400">
+			<div in:reveal class="flex items-center gap-3 overflow-hidden text-[11px] text-gray-500 dark:text-gray-400">
 				{#each snap.storage as s (s.path)}
 					<a
 						href={filesHref(s.name)}

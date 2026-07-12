@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { fetchJobStats, type JobStats } from '$lib/api/system';
 	import SectionFrame from './SectionFrame.svelte';
+	import { reveal } from '$lib/transitions';
 
 	let stats = $state<JobStats | null>(null);
 	let error = $state<string | null>(null);
@@ -37,7 +38,7 @@
 		</div>
 	</div>
 	{#if stats && Object.keys(stats.by_type).length > 0}
-		<div class="mt-3 flex flex-wrap gap-3 border-t border-primary/15 pt-3 dark:border-primary/20">
+		<div in:reveal class="mt-3 flex flex-wrap gap-3 border-t border-primary/15 pt-3 dark:border-primary/20">
 			{#each Object.entries(stats.by_type) as [type, count]}
 				<div class="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400">
 					<span class="font-medium capitalize">{type}</span>

@@ -4,6 +4,7 @@
 	import { fetchIngressRoot, fetchIngressDirectory } from '$lib/api/import-jobs';
 	import { showImportWizard } from '$lib/stores/importWizard';
 	import type { FileEntry } from '$lib/api/files';
+	import { reveal } from '$lib/transitions';
 	import { Folder, FolderArchive, Disc, File as FileIcon } from 'lucide-svelte';
 
 	// NOTE: kind/importable are computed client-side until the BFF (arm-neu PR #333)
@@ -193,7 +194,7 @@
 
 <div class="flex min-h-0 flex-1 flex-col">
 	{#if needsConfig}
-		<div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400">
+		<div in:reveal class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400">
 			<p class="font-medium">Folder Import Path is not configured</p>
 			<p class="mt-1">Set the <strong>Folder Import Path</strong> in
 				<button
@@ -239,14 +240,14 @@
 
 			<!-- Disc detected banner -->
 			{#if currentIsDisc}
-				<div class="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400">
+				<div in:reveal class="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400">
 					Disc folder detected - this folder is ready to import.
 				</div>
 			{/if}
 		</div>
 
 		<!-- Directory table (scrollable) -->
-		<div bind:this={scrollContainer} class="min-h-0 flex-1 overflow-y-auto transition-opacity {loading ? 'pointer-events-none opacity-50' : ''}">
+		<div bind:this={scrollContainer} in:reveal class="min-h-0 flex-1 overflow-y-auto transition-opacity {loading ? 'pointer-events-none opacity-50' : ''}">
 			<div class="rounded-lg border border-primary/20 dark:border-primary/20">
 				<table class="w-full table-fixed text-left text-sm">
 					<colgroup>
