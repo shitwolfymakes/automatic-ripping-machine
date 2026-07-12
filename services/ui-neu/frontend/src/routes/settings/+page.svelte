@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { slide } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
+	import { fadeIn, fadeOut } from '$lib/transitions';
 	import { onMount } from 'svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
@@ -781,7 +782,7 @@
 					</button>
 
 					{#if diagOpen}
-						<div class="mt-2.5 rounded-lg border border-primary/10 bg-white/[0.02] p-3 dark:border-primary/10" transition:slide={{ duration: 200 }}>
+						<div class="mt-2.5 rounded-lg border border-primary/10 bg-white/[0.02] p-3 dark:border-primary/10" in:fade={fadeIn} out:fade={fadeOut}>
 							<div class="mb-2.5 flex items-center justify-between">
 								<button
 									onclick={runDiagnostic}
