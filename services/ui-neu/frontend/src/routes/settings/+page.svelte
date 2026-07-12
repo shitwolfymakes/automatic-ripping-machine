@@ -25,6 +25,7 @@
 	import ToastHost from '$lib/components/ToastHost.svelte';
 	import DiagnosticsSection from '$lib/components/DiagnosticsSection.svelte';
 	import SessionsArea from '$lib/components/sessions/SessionsArea.svelte';
+	import UsersCard from '$lib/components/settings/UsersCard.svelte';
 
 	let settings = $state<SettingsData | null>(null);
 	let settingsLoading = $state(true);
@@ -453,6 +454,12 @@
 					</section>
 				{/if}
 			</div>
+
+			<!-- Users -->
+			<section in:reveal class="mt-6">
+				<UsersCard />
+			</section>
+
 			<!-- Service Control -->
 			<section in:reveal class="mt-6">
 				<h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Service Control</h2>
