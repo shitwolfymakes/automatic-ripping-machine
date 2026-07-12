@@ -431,6 +431,10 @@ describe("Files Page", () => {
       expect(screen.queryByTitle("Rename")).not.toBeInTheDocument();
       expect(screen.queryByTitle("Delete")).not.toBeInTheDocument();
       expect(screen.queryByTitle("Fix permissions")).not.toBeInTheDocument();
+      expect(screen.queryByTitle("Orphan folders")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTitle("Clean up transcoder jobs"),
+      ).not.toBeInTheDocument();
     });
 
     it("shows New folder button and per-row rename/delete/fix-permissions for admins", async () => {
@@ -442,6 +446,10 @@ describe("Files Page", () => {
       expect(screen.getAllByTitle("Rename").length).toBeGreaterThan(0);
       expect(screen.getAllByTitle("Delete").length).toBeGreaterThan(0);
       expect(screen.getAllByTitle("Fix permissions").length).toBeGreaterThan(0);
+      expect(screen.getByTitle("Orphan folders")).toBeInTheDocument();
+      expect(
+        screen.getByTitle("Clean up transcoder jobs"),
+      ).toBeInTheDocument();
     });
   });
 

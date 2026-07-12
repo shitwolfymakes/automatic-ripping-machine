@@ -4,6 +4,7 @@
 	import { matchIndicator } from '$lib/utils/track-match';
 	import { reveal } from '$lib/transitions';
 	import PosterImage from './PosterImage.svelte';
+	import { isAdmin } from '$lib/stores/auth';
 
 	interface Props {
 		job: JobView;
@@ -574,9 +575,11 @@
 			{/if}
 
 			<div class="flex items-center gap-2">
-				<button onclick={applyRelease} disabled={applying || !editAlbum.trim()} class="{btnBase} bg-green-600 text-white hover:bg-green-700 dark:bg-green-500">
-					{applying ? 'Applying...' : 'Apply'}
-				</button>
+				{#if $isAdmin}
+					<button onclick={applyRelease} disabled={applying || !editAlbum.trim()} class="{btnBase} bg-green-600 text-white hover:bg-green-700 dark:bg-green-500">
+						{applying ? 'Applying...' : 'Apply'}
+					</button>
+				{/if}
 				{#if feedback}
 					<span class="text-xs {feedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{feedback.message}</span>
 				{/if}
