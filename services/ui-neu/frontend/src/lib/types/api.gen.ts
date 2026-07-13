@@ -3573,22 +3573,6 @@ export type LoginApiAuthLoginPostResponses = {
 
 export type LoginApiAuthLoginPostResponse = LoginApiAuthLoginPostResponses[keyof LoginApiAuthLoginPostResponses];
 
-export type GuestLoginApiAuthGuestPostData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/auth/guest';
-};
-
-export type GuestLoginApiAuthGuestPostResponses = {
-    /**
-     * Successful Response
-     */
-    200: LoginResponse;
-};
-
-export type GuestLoginApiAuthGuestPostResponse = GuestLoginApiAuthGuestPostResponses[keyof GuestLoginApiAuthGuestPostResponses];
-
 export type LogoutApiAuthLogoutPostData = {
     body?: never;
     path?: never;

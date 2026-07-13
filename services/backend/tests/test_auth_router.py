@@ -261,45 +261,9 @@ def _guest_user(disabled: bool = False) -> User:
     )
 
 
-def test_guest_login_returns_guest_token(signing_key: bytes) -> None:
-    guest_user = _guest_user()
-    sess = _FakeSession(guest_user)
-    app = _make_app(signing_key, sess)
-    with TestClient(app) as client:
-        r = client.post("/api/auth/guest")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["access_token"].count(".") == 2
-    assert body["role"] == GUEST_ROLE
-    assert body["password_must_change"] is False
-    assert guest_user.last_login_at is not None
-
-
-def test_guest_login_disabled_403(signing_key: bytes) -> None:
-    guest_user = _guest_user(disabled=True)
-    sess = _FakeSession(guest_user)
-    app = _make_app(signing_key, sess)
-    with TestClient(app) as client:
-        r = client.post("/api/auth/guest")
-    assert r.status_code == 403
-    assert r.json()["detail"] == "guest access disabled"
-
-
-def test_guest_login_missing_row_500(signing_key: bytes) -> None:
-    sess = _FakeSession(user=None)
-    app = _make_app(signing_key, sess)
-    with TestClient(app) as client:
-        r = client.post("/api/auth/guest")
-    assert r.status_code == 500
-    assert r.json()["detail"] == "guest account missing"
-
-
-def test_guest_token_reads_ok_writes_403(signing_key: bytes) -> None:
+def _make_probe_app(signing_key: bytes, sess: _FakeSession) -> FastAPI:
     from arm_backend.auth import require_jwt
-    from arm_backend.jwt_utils import issue_access_token
 
-    guest_user = _guest_user()
-    sess = _FakeSession(guest_user)
     app = FastAPI()
     app.state.signing_key = signing_key
     app.include_router(auth_router.router)
@@ -316,11 +280,52 @@ def test_guest_token_reads_ok_writes_403(signing_key: bytes) -> None:
         return sess
 
     app.dependency_overrides[get_session] = _override_session
-    token, _ = issue_access_token(guest_user.id, guest_user.username, signing_key)
+    return app
 
+
+def test_anonymous_read_acts_as_guest(signing_key: bytes) -> None:
+    guest_user = _guest_user()
+    sess = _FakeSession(guest_user)
+    app = _make_probe_app(signing_key, sess)
     with TestClient(app) as client:
-        r_read = client.get("/probe-read", headers={"Authorization": f"Bearer {token}"})
-        r_write = client.get("/probe-write", headers={"Authorization": f"Bearer {token}"})
-    assert r_read.status_code == 200
-    assert r_write.status_code == 403
-    assert r_write.json()["detail"] == "read-only role: write access required"
+        r = client.get("/probe-read")
+    assert r.status_code == 200
+    assert r.json()["id"] == guest_user.id
+
+
+def test_anonymous_write_403_role_denied(signing_key: bytes) -> None:
+    guest_user = _guest_user()
+    sess = _FakeSession(guest_user)
+    app = _make_probe_app(signing_key, sess)
+    with TestClient(app) as client:
+        r = client.get("/probe-write")
+    assert r.status_code == 403
+    assert r.json()["detail"] == "read-only role: write access required"
+
+
+def test_anonymous_guest_disabled_401(signing_key: bytes) -> None:
+    guest_user = _guest_user(disabled=True)
+    sess = _FakeSession(guest_user)
+    app = _make_probe_app(signing_key, sess)
+    with TestClient(app) as client:
+        r = client.get("/probe-read")
+    assert r.status_code == 401
+    assert r.json()["detail"] == "authentication required"
+
+
+def test_anonymous_guest_row_missing_500(signing_key: bytes) -> None:
+    sess = _FakeSession(user=None)
+    app = _make_probe_app(signing_key, sess)
+    with TestClient(app) as client:
+        r = client.get("/probe-read")
+    assert r.status_code == 500
+    assert r.json()["detail"] == "guest account missing"
+
+
+def test_present_invalid_token_still_401(signing_key: bytes) -> None:
+    guest_user = _guest_user()
+    sess = _FakeSession(guest_user)
+    app = _make_probe_app(signing_key, sess)
+    with TestClient(app) as client:
+        r = client.get("/probe-read", headers={"Authorization": "Bearer garbage"})
+    assert r.status_code == 401

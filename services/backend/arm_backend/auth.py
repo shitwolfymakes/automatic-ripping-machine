@@ -23,6 +23,7 @@ from sqlmodel import col, select
 from arm_backend.config import settings
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import verify_access_token
+from arm_backend.seeders import GUEST_USERNAME
 from arm_common import Drive, Job, User
 from arm_common.models import Track
 from arm_common.models.user import ADMIN_ROLE
@@ -70,6 +71,17 @@ async def require_jwt(
     authorization: str | None = Header(default=None),
     session: AsyncSession = Depends(get_session),
 ) -> User:
+    if authorization is None:
+        # Anonymous request → act as the guest account when guest access is
+        # enabled (spec 2026-07-12-anonymous-guest). A present-but-bad token
+        # never falls back — only a fully absent header.
+        guest = (await session.execute(select(User).where(col(User.username) == GUEST_USERNAME))).scalar_one_or_none()
+        if guest is None:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="guest account missing")
+        if guest.disabled:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+        return guest
+
     token = _extract_bearer(authorization)
     if not looks_like_jwt(token):
         # Service-token presented to a UI endpoint.

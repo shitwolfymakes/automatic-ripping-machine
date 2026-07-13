@@ -22,6 +22,7 @@ from arm_backend.metadata import omdb as omdb_mod  # noqa: E402
 from arm_backend.metadata.base import LookupError as MetaLookupError  # noqa: E402
 from arm_backend.routers import metadata as metadata_router  # noqa: E402
 from arm_common import Config, User  # noqa: E402
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -162,12 +163,26 @@ def test_music_search(signing_key: bytes) -> None:
 
 
 def test_search_unauthenticated_401(signing_key: bytes) -> None:
+    """No Authorization header falls back to the guest account; with guest
+    access disabled (the seeded default), the request still 401s before the
+    route body (and its outbound metadata-provider call) ever runs."""
     db = FakeSession()
     _seed(db, tmdb_api_key="k")
+    db.rows["users"].append(
+        User(
+            id="usr_guest",
+            username="guest",
+            password_hash="x",
+            password_must_change=False,
+            role=GUEST_ROLE,
+            disabled=True,
+        )
+    )
     app, _ = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/search", params={"title": "x", "type": "movie"})
     assert r.status_code == 401
+    assert r.json()["detail"] == "authentication required"
 
 
 # ---------------------------------------------------------------------------

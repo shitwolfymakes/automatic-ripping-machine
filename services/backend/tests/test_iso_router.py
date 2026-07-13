@@ -16,6 +16,7 @@ from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import iso as iso_router  # noqa: E402
 from arm_common import User  # noqa: E402
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -26,7 +27,17 @@ def signing_key() -> bytes:
 
 
 def _seed(db: FakeSession) -> None:
-    db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
+    db.rows["users"] = [
+        User(id="usr_admin", username="admin", password_hash="x", password_must_change=False),
+        User(
+            id="usr_guest",
+            username="guest",
+            password_hash="x",
+            password_must_change=False,
+            role=GUEST_ROLE,
+            disabled=False,
+        ),
+    ]
 
 
 def _make_app(signing_key: bytes, db: FakeSession, ingress: str) -> tuple[FastAPI, str]:
@@ -98,10 +109,13 @@ def test_scan_non_iso_rejected_400(signing_key: bytes, tmp_path) -> None:
     assert r.status_code == 400
 
 
-def test_scan_unauthenticated_401(signing_key: bytes, tmp_path) -> None:
+def test_scan_unauthenticated_reads_as_guest(signing_key: bytes, tmp_path) -> None:
+    """No Authorization header falls back to the guest account (read-only
+    route, and /api/jobs/iso/scan is intentionally open to guests). The scan
+    still 400s because x.iso doesn't exist — same as an authenticated call."""
     db = FakeSession()
     _seed(db)
     app, _ = _make_app(signing_key, db, str(tmp_path))
     with TestClient(app) as client:
         r = client.post("/api/jobs/iso/scan", json={"path": "x.iso"})
-    assert r.status_code == 401
+    assert r.status_code == 400

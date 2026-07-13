@@ -19,6 +19,7 @@ from arm_backend.host_snapshots import HostSnapshotStore  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import system as system_router  # noqa: E402
 from arm_common import Host, User  # noqa: E402
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 from arm_common.schemas import HostResourcesSnapshot, MemoryInfo  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
@@ -30,7 +31,17 @@ def signing_key() -> bytes:
 
 
 def _seed(db: FakeSession) -> None:
-    db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
+    db.rows["users"] = [
+        User(id="usr_admin", username="admin", password_hash="x", password_must_change=False),
+        User(
+            id="usr_guest",
+            username="guest",
+            password_hash="x",
+            password_must_change=False,
+            role=GUEST_ROLE,
+            disabled=False,
+        ),
+    ]
     db.rows.setdefault("hosts", [])
 
 
@@ -57,10 +68,11 @@ def _auth(t: str) -> dict[str, str]:
 
 
 def test_resources_requires_jwt(signing_key: bytes) -> None:
+    """No Authorization header falls back to the guest account (read-only route)."""
     app, _ = _make_app(signing_key)
     with TestClient(app) as c:
         resp = c.get("/api/system/resources")
-    assert resp.status_code == 401
+    assert resp.status_code == 200
 
 
 def test_resources_shape(signing_key: bytes, monkeypatch) -> None:
