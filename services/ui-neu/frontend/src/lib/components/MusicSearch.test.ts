@@ -3,6 +3,18 @@ import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-
 import MusicSearch from './MusicSearch.svelte';
 import { createJob, createTrack } from './__fixtures__/job';
 
+vi.mock('$lib/stores/auth', async () => {
+	const { derived, writable } = await import('svelte/store');
+	const _role = writable<string | null>('admin');
+	return {
+		role: { subscribe: _role.subscribe },
+		isAdmin: derived(_role, (r) => r === 'admin'),
+		isGuest: derived(_role, (r) => r === 'guest'),
+		// Test-only helper — not part of the real module's public API.
+		__setRole: (r: string | null) => _role.set(r)
+	};
+});
+
 vi.mock('$lib/api/jobs', () => ({
 	searchMusicMetadata: vi.fn(),
 	fetchMusicDetail: vi.fn(),
@@ -371,5 +383,58 @@ it('loads detail and applies the chosen release via resolveJob', async () => {
 			metadata: expect.objectContaining({ artist: 'The Beatles', album: 'Abbey Road' })
 		}));
 		expect(onapply).toHaveBeenCalled();
+	});
+});
+
+describe('guest write-control gating', () => {
+	afterEach(async () => {
+		cleanup();
+		vi.clearAllMocks();
+		const auth = (await import('$lib/stores/auth')) as unknown as {
+			__setRole: (r: string | null) => void;
+		};
+		auth.__setRole('admin');
+	});
+
+	it('hides the Apply button for guests', async () => {
+		const auth = (await import('$lib/stores/auth')) as unknown as {
+			__setRole: (r: string | null) => void;
+		};
+		auth.__setRole('guest');
+		mockSearch.mockResolvedValue({
+			candidates: [{ title: 'Abbey Road', year: 1969, kind: 'music', poster_url: null, provider_id: 'rel-1' }]
+		});
+		mockDetail.mockResolvedValue({
+			release_id: 'rel-1', title: 'Abbey Road', artist: 'The Beatles', year: 1969,
+			poster_url: null, disc_count: 1, track_count: 1,
+			tracks: [{ position: 1, title: 'Come Together', length_ms: 259000, disc_number: 1 }]
+		});
+		renderComponent(MusicSearch, {
+			props: { job: createJob({ id: 'job_9', disc_type: 'cd', title: 'Abbey Road' }), discTracks: [] }
+		});
+		await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+		await waitFor(() => screen.getByText('Abbey Road'));
+		await fireEvent.click(screen.getByText('Abbey Road'));
+		await waitFor(() => screen.getByText('Come Together'));
+		expect(screen.queryByRole('button', { name: 'Apply' })).not.toBeInTheDocument();
+	});
+
+	it('shows the Apply button for admins', async () => {
+		mockSearch.mockResolvedValue({
+			candidates: [{ title: 'Abbey Road', year: 1969, kind: 'music', poster_url: null, provider_id: 'rel-1' }]
+		});
+		mockDetail.mockResolvedValue({
+			release_id: 'rel-1', title: 'Abbey Road', artist: 'The Beatles', year: 1969,
+			poster_url: null, disc_count: 1, track_count: 1,
+			tracks: [{ position: 1, title: 'Come Together', length_ms: 259000, disc_number: 1 }]
+		});
+		renderComponent(MusicSearch, {
+			props: { job: createJob({ id: 'job_9', disc_type: 'cd', title: 'Abbey Road' }), discTracks: [] }
+		});
+		await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+		await waitFor(() => screen.getByText('Abbey Road'));
+		await fireEvent.click(screen.getByText('Abbey Road'));
+		await waitFor(() => screen.getByText('Come Together'));
+		expect(screen.getByRole('button', { name: 'Apply' })).toBeInTheDocument();
 	});
 });

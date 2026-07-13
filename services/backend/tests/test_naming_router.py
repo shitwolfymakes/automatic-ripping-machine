@@ -27,6 +27,7 @@ from arm_common import (  # noqa: E402
     User,
 )
 from arm_common.enums import DiscType, JobStatus, TrackKind  # noqa: E402
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -51,8 +52,22 @@ def signing_key() -> bytes:
     return secrets.token_bytes(32)
 
 
+def _guest_user() -> User:
+    return User(
+        id="usr_guest",
+        username="guest",
+        password_hash="x",
+        password_must_change=False,
+        role=GUEST_ROLE,
+        disabled=False,
+    )
+
+
 def _seed(db: FakeSession) -> None:
-    db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
+    db.rows["users"] = [
+        User(id="usr_admin", username="admin", password_hash="x", password_must_change=False),
+        _guest_user(),
+    ]
 
 
 def _make_app(signing_key: bytes, db: FakeSession) -> tuple[FastAPI, str]:
@@ -95,13 +110,14 @@ def test_variables_filter_by_media_type(signing_key: bytes) -> None:
     assert set(r.json()["variables"].keys()) == {"music"}
 
 
-def test_variables_unauthenticated_401(signing_key: bytes) -> None:
+def test_variables_unauthenticated_reads_as_guest(signing_key: bytes) -> None:
+    """No Authorization header falls back to the guest account (read-only route)."""
     db = FakeSession()
     _seed(db)
     app, _ = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.get("/api/naming/variables")
-    assert r.status_code == 401
+    assert r.status_code == 200
 
 
 def _seed_job(db: FakeSession) -> None:
@@ -165,13 +181,16 @@ def test_job_naming_preview_unknown_job_404(signing_key: bytes) -> None:
     assert r.status_code == 404
 
 
-def test_job_naming_preview_unauthenticated_401(signing_key: bytes) -> None:
+def test_job_naming_preview_unauthenticated_reads_as_guest(signing_key: bytes) -> None:
+    """No Authorization header falls back to the guest account (read-only
+    route). No job row seeded, so it 404s same as it would for an authenticated
+    caller — the point is it's not a 401."""
     db = FakeSession()
     _seed(db)
     app, _ = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.get(f"/api/jobs/{_JOB_ID_1}/naming-preview")
-    assert r.status_code == 401
+    assert r.status_code == 404
 
 
 def test_job_naming_preview_no_session_409(signing_key: bytes) -> None:
@@ -449,12 +468,15 @@ def test_naming_validate_rejects_unknown_token(signing_key: bytes) -> None:
 
 
 def test_naming_validate_requires_auth() -> None:
-    import secrets as _secrets
-
-    app, _ = _make_app(_secrets.token_bytes(32), FakeSession())
+    """No Authorization header falls back to the guest account (read-only
+    route, and /api/naming/validate is intentionally open to guests) — the
+    request reaches route logic instead of 401'ing."""
+    db = FakeSession()
+    db.rows["users"] = [_guest_user()]
+    app, _ = _make_app(secrets.token_bytes(32), db)
     with TestClient(app) as client:
         r = client.post("/api/naming/validate", json={"template": "x", "media_type": "movie"})
-    assert r.status_code == 401
+    assert r.status_code == 200
 
 
 def test_naming_preview_uses_caller_variables(signing_key: bytes) -> None:
@@ -542,9 +564,12 @@ def test_naming_preview_ignores_unreferenced_variable(signing_key: bytes) -> Non
 
 
 def test_naming_preview_requires_auth() -> None:
-    import secrets as _secrets
-
-    app, _ = _make_app(_secrets.token_bytes(32), FakeSession())
+    """No Authorization header falls back to the guest account (read-only
+    route, and /api/naming/preview is intentionally open to guests) — the
+    request reaches route logic instead of 401'ing."""
+    db = FakeSession()
+    db.rows["users"] = [_guest_user()]
+    app, _ = _make_app(secrets.token_bytes(32), db)
     with TestClient(app) as client:
         r = client.post("/api/naming/preview", json={"template": "x", "media_type": "movie"})
-    assert r.status_code == 401
+    assert r.status_code == 200

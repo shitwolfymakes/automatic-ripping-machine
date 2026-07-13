@@ -13,14 +13,16 @@ from arm_common.models.session_application import SessionApplication
 from arm_common.models.track import Track
 from arm_common.models.transcode_preset import TranscodePreset
 from arm_common.models.transcode_task import TranscodeTask
-from arm_common.models.user import User
+from arm_common.models.user import ADMIN_ROLE, GUEST_ROLE, USER_ROLES, User
 
 __all__ = [
+    "ADMIN_ROLE",
     "DEFAULT_MUSICBRAINZ_USER_AGENT",
     "Config",
     "DiscFingerprint",
     "Drive",
     "Event",
+    "GUEST_ROLE",
     "Gpu",
     "Job",
     "NotificationChannel",
@@ -32,5 +34,6 @@ __all__ = [
     "Track",
     "TranscodePreset",
     "TranscodeTask",
+    "USER_ROLES",
     "User",
 ]

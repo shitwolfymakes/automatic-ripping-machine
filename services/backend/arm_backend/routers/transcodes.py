@@ -20,7 +20,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.auth import require_jwt
+from arm_backend.auth import require_jwt, require_writer
 from arm_backend.config import settings
 from arm_backend.db import get_session
 from arm_backend.routers.logs import LOG_DIR
@@ -130,7 +130,7 @@ async def transcode_workers(
 @router.post("/{task_id}/retry", response_model=TranscodeTaskView)
 async def retry_transcode(
     task_id: str,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> TranscodeTask:
     row = await _require_task(db, task_id)
@@ -212,7 +212,7 @@ async def stream_transcode_log(
 async def delete_transcode(
     task_id: str,
     request: Request,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> None:
     row = (await db.execute(select(TranscodeTask).where(col(TranscodeTask.id) == task_id))).scalar_one_or_none()

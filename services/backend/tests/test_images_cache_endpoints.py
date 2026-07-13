@@ -13,7 +13,12 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from arm_backend import image_cache  # noqa: E402
 from arm_backend.auth import require_jwt  # noqa: E402
+from arm_backend.db import get_session  # noqa: E402
 from arm_backend.routers import images as images_router  # noqa: E402
+from arm_common import User  # noqa: E402
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
+
+from tests._fakes import FakeSession  # noqa: E402
 
 
 @pytest.fixture
@@ -22,7 +27,11 @@ def client(tmp_path, monkeypatch):
     image_cache.reset()
     app = FastAPI()
     app.include_router(images_router.router)
-    app.dependency_overrides[require_jwt] = lambda: object()
+    # POST /images/cache/clear is require_writer-gated (composes require_jwt),
+    # so the override must satisfy both: an admin-role User, not a bare object.
+    app.dependency_overrides[require_jwt] = lambda: User(
+        id="usr_test", username="test", password_hash="x", password_must_change=False, role="admin"
+    )
     with TestClient(app) as c:
         yield c
     image_cache.reset()
@@ -53,8 +62,26 @@ def test_cache_clear(client):
 
 
 def test_cache_stats_requires_jwt():
-    # no dep override → require_jwt rejects without a bearer
+    # no require_jwt override → exercises the real auth gate. No bearer now
+    # falls back to the guest account, so get_session still needs a fake DB
+    # to resolve that lookup; the route itself is read-only so guest succeeds.
     app = FastAPI()
     app.include_router(images_router.router)
+    db = FakeSession()
+    db.rows["users"] = [
+        User(
+            id="usr_guest",
+            username="guest",
+            password_hash="x",
+            password_must_change=False,
+            role=GUEST_ROLE,
+            disabled=False,
+        )
+    ]
+
+    async def _override_session() -> FakeSession:
+        return db
+
+    app.dependency_overrides[get_session] = _override_session
     with TestClient(app) as c:
-        assert c.get("/api/images/cache").status_code in (401, 403)
+        assert c.get("/api/images/cache").status_code == 200

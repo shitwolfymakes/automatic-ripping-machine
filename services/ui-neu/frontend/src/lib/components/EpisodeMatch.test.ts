@@ -4,6 +4,18 @@ import EpisodeMatch from './EpisodeMatch.svelte';
 import { createJobDetail, createTrack } from './__fixtures__/job';
 import type { JobDetailView } from '$lib/types/api.gen';
 
+vi.mock('$lib/stores/auth', async () => {
+	const { derived, writable } = await import('svelte/store');
+	const _role = writable<string | null>('admin');
+	return {
+		role: { subscribe: _role.subscribe },
+		isAdmin: derived(_role, (r) => r === 'admin'),
+		isGuest: derived(_role, (r) => r === 'guest'),
+		// Test-only helper — not part of the real module's public API.
+		__setRole: (r: string | null) => _role.set(r)
+	};
+});
+
 vi.mock('$lib/api/jobs', () => ({
 	tvdbMatch: vi.fn(() => Promise.resolve({
 		success: true,
@@ -227,6 +239,60 @@ describe('EpisodeMatch', () => {
 			const select = container.querySelector('select')!;
 			const options = Array.from(select.options).filter((o) => o.value !== '');
 			expect(options).toHaveLength(2);
+		});
+	});
+
+	describe('guest write-control gating', () => {
+		afterEach(async () => {
+			const auth = (await import('$lib/stores/auth')) as unknown as {
+				__setRole: (r: string | null) => void;
+			};
+			auth.__setRole('admin');
+		});
+
+		async function renderWithMatch(role: string) {
+			const auth = (await import('$lib/stores/auth')) as unknown as {
+				__setRole: (r: string | null) => void;
+			};
+			auth.__setRole(role);
+			const { tvdbMatch, fetchTvdbEpisodes } = await import('$lib/api/jobs');
+			vi.mocked(tvdbMatch).mockResolvedValueOnce({
+				success: true,
+				matcher: 'runtime',
+				season: 1,
+				matches: [
+					{ track_number: '0', episode_number: 1, episode_name: 'Pilot', episode_runtime: 2700 }
+				],
+				match_count: 1,
+				score: 100,
+				alternatives: []
+			} as never);
+			vi.mocked(fetchTvdbEpisodes).mockResolvedValueOnce({
+				episodes: [{ number: 1, name: 'Pilot', runtime: 2700, aired: '2024-01-01' }],
+				tvdb_id: 12345,
+				season: 1
+			} as never);
+			return renderComponent(EpisodeMatch, {
+				props: { job: seriesJob({ tracks: [createTrack()] }), ...seriesProps }
+			});
+		}
+
+		it('hides Apply Matches and Clear All for guests', async () => {
+			const { container } = await renderWithMatch('guest');
+			await vi.waitFor(() => {
+				expect(container.querySelectorAll('select').length).toBeGreaterThan(0);
+			});
+			expect(screen.queryByRole('button', { name: 'Apply Matches' })).not.toBeInTheDocument();
+			expect(screen.queryByRole('button', { name: 'Clear All' })).not.toBeInTheDocument();
+		});
+
+		it('shows Apply Matches and Clear All for admins', async () => {
+			const { container } = await renderWithMatch('admin');
+			await vi.waitFor(() => {
+				expect(container.querySelectorAll('select').length).toBeGreaterThan(0);
+			});
+			expect(screen.getByRole('button', { name: 'Apply Matches' })).toBeInTheDocument();
+			expect(screen.getByRole('button', { name: 'Clear All' })).toBeInTheDocument();
 		});
 	});
 });

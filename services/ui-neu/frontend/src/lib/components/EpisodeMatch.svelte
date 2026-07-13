@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { JobDetailView, TrackView } from '$lib/types/api.gen';
 	import { tvdbMatch, fetchTvdbEpisodes, updateTrack, fetchNamingPreview } from '$lib/api/jobs';
+	import { reveal } from '$lib/transitions';
+	import { isAdmin } from '$lib/stores/auth';
 
 	// ---------------------------------------------------------------------------
 	// MISSING in v3 — TVDB episode matching / listing have no v3 endpoint
@@ -430,19 +432,23 @@
 
 		<!-- Actions -->
 		<div class="flex items-center gap-2">
-			<button
-				onclick={applyMatches}
-				disabled={applying || matchCount === 0}
-				class="rounded-md bg-green-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50 dark:bg-green-700 dark:hover:bg-green-600"
-			>
-				{applying ? 'Applying...' : 'Apply Matches'}
-			</button>
-			<button
-				onclick={clearAll}
-				class="rounded-md px-4 py-1.5 text-sm text-gray-500 ring-1 ring-gray-300 transition-colors hover:bg-gray-50 dark:text-gray-400 dark:ring-gray-600 dark:hover:bg-gray-800"
-			>
-				Clear All
-			</button>
+			{#if $isAdmin}
+				<button
+					in:reveal
+					onclick={applyMatches}
+					disabled={applying || matchCount === 0}
+					class="rounded-md bg-green-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50 dark:bg-green-700 dark:hover:bg-green-600"
+				>
+					{applying ? 'Applying...' : 'Apply Matches'}
+				</button>
+				<button
+					in:reveal
+					onclick={clearAll}
+					class="rounded-md px-4 py-1.5 text-sm text-gray-500 ring-1 ring-gray-300 transition-colors hover:bg-gray-50 dark:text-gray-400 dark:ring-gray-600 dark:hover:bg-gray-800"
+				>
+					Clear All
+				</button>
+			{/if}
 			<span class="ml-auto text-[11px] text-gray-400 dark:text-gray-500">
 				Change season/disc and re-match to try different assignments.
 			</span>

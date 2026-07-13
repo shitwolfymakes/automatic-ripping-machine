@@ -14,6 +14,7 @@ from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import settings as settings_router  # noqa: E402
 from arm_common import User  # noqa: E402
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -21,7 +22,17 @@ from tests._fakes import FakeSession  # noqa: E402
 def _app() -> tuple[FastAPI, str]:
     key = secrets.token_bytes(32)
     db = FakeSession()
-    db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
+    db.rows["users"] = [
+        User(id="usr_admin", username="admin", password_hash="x", password_must_change=False),
+        User(
+            id="usr_guest",
+            username="guest",
+            password_hash="x",
+            password_must_change=False,
+            role=GUEST_ROLE,
+            disabled=False,
+        ),
+    ]
 
     app = FastAPI()
     app.state.signing_key = key
@@ -54,10 +65,11 @@ def test_schema_returns_grouped_fields():
 
 
 def test_schema_requires_jwt():
+    """No Authorization header falls back to the guest account (read-only route)."""
     app, _ = _app()
     with TestClient(app) as c:
         r = c.get("/api/settings/schema")
-    assert r.status_code == 401
+    assert r.status_code == 200
 
 
 def test_infra_returns_whitelisted_values_only():
@@ -74,7 +86,8 @@ def test_infra_returns_whitelisted_values_only():
 
 
 def test_infra_requires_jwt():
+    """No Authorization header falls back to the guest account (read-only route)."""
     app, _ = _app()
     with TestClient(app) as c:
         r = c.get("/api/settings/infra")
-    assert r.status_code == 401
+    assert r.status_code == 200

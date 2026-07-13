@@ -2,6 +2,8 @@
 	import type { JobView, MetadataCandidate } from '$lib/types/api.gen';
 	import { searchMetadata, fetchMediaDetail, updateJobTitle, resolveJob } from '$lib/api/jobs';
 	import PosterImage from './PosterImage.svelte';
+	import { reveal } from '$lib/transitions';
+	import { isAdmin } from '$lib/stores/auth';
 
 	interface Props {
 		job: JobView;
@@ -290,15 +292,18 @@
 					</label>
 				</div>
 				<div class="flex items-center gap-2">
-					<button
-						onclick={applyResult}
-						disabled={applying}
-						class="{btnBase} bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
-					>
-						{applying ? 'Applying...' : canResolve ? 'Apply' : 'Apply Poster'}
-					</button>
+					{#if $isAdmin}
+						<button
+							onclick={applyResult}
+							disabled={applying}
+							class="{btnBase} bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
+						>
+							{applying ? 'Applying...' : canResolve ? 'Apply' : 'Apply Poster'}
+						</button>
+					{/if}
 					{#if feedback}
 						<span
+							in:reveal
 							class="text-xs {feedback.type === 'success'
 								? 'text-green-600 dark:text-green-400'
 								: 'text-red-600 dark:text-red-400'}"

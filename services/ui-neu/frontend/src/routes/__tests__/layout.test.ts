@@ -11,10 +11,19 @@ vi.mock("$app/stores", async () => {
 // Capture the unauthorized handler the layout registers, so the test can fire
 // a simulated session-expiry 401 and assert the layout's response.
 let capturedOn401: (() => void) | null = null;
+const getTokenMock = vi.fn(() => "admin-token" as string | null);
 vi.mock("$lib/api/client", () => ({
   setUnauthorizedHandler: (fn: () => void) => {
     capturedOn401 = fn;
   },
+  getToken: () => getTokenMock(),
+}));
+
+// These tests exercise the 401/session-expiry path. Tokenless browsing is a
+// valid state now — a 401 just routes straight to /login, no guest attempt.
+const apiLogoutMock = vi.fn(() => Promise.resolve());
+vi.mock("$lib/api/auth", () => ({
+  logout: () => apiLogoutMock(),
 }));
 
 const gotoMock = vi.fn();
@@ -23,10 +32,18 @@ vi.mock("$app/navigation", () => ({
 }));
 
 const logoutLocalMock = vi.fn();
-vi.mock("$lib/stores/auth", () => ({
-  initAuth: vi.fn(),
-  logoutLocal: () => logoutLocalMock(),
-}));
+vi.mock("$lib/stores/auth", async () => {
+  const { derived, writable } = await import("svelte/store");
+  const _role = writable<string | null>("admin");
+  return {
+    initAuth: vi.fn(),
+    logoutLocal: () => logoutLocalMock(),
+    applyLogin: vi.fn(),
+    role: { subscribe: _role.subscribe },
+    isAdmin: derived(_role, (r) => r === "admin"),
+    isGuest: derived(_role, (r) => r === "guest"),
+  };
+});
 
 vi.mock("$lib/stores/theme", async () => {
   const { writable } = await import("svelte/store");
@@ -82,6 +99,10 @@ describe("Layout", () => {
     capturedOn401 = null;
     gotoMock.mockClear();
     logoutLocalMock.mockClear();
+    getTokenMock.mockReset();
+    getTokenMock.mockReturnValue("admin-token");
+    apiLogoutMock.mockClear();
+    apiLogoutMock.mockResolvedValue(undefined);
   });
 
   describe("session expiry (401 handler)", () => {
@@ -93,18 +114,18 @@ describe("Layout", () => {
 
       // Simulate a poll request 401ing after the session expired.
       capturedOn401!();
+      await vi.waitFor(() => expect(gotoMock).toHaveBeenCalledWith("/login"));
 
       // The poll loop MUST be stopped so it can't keep 401-storming.
       expect(dashboard.stop).toHaveBeenCalled();
       expect(logoutLocalMock).toHaveBeenCalled();
-      expect(gotoMock).toHaveBeenCalledWith("/login");
     });
 
     it("does not re-navigate on repeated 401s once already on /login", async () => {
       renderComponent(Layout, { props: { children: childSnippet() } });
-      // First 401 redirects to /login.
+      // First 401 routes straight to /login.
       capturedOn401!();
-      expect(gotoMock).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(gotoMock).toHaveBeenCalledTimes(1));
       gotoMock.mockClear();
 
       // The dashboard's allSettled fan-out fires on401 once per failed
@@ -112,6 +133,7 @@ describe("Layout", () => {
       // redundant goto('/login') calls (which deselect login inputs).
       capturedOn401!();
       capturedOn401!();
+      await Promise.resolve();
       expect(gotoMock).not.toHaveBeenCalled();
     });
   });

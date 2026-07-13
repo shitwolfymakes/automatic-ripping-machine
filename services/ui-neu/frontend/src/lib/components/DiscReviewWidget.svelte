@@ -15,6 +15,7 @@
 	import SkeletonCard from './SkeletonCard.svelte';
 	import JobInfoForm from './JobInfoForm.svelte';
 	import ReviewTracksTable from './ReviewTracksTable.svelte';
+	import { isAdmin } from '$lib/stores/auth';
 
 	interface Props {
 		job?: JobView;
@@ -242,8 +243,8 @@
 				waitSeconds={manualWaitSeconds}
 				paused={countdownPaused}
 				inverted
-				onpause={paused || pauseBusy ? undefined : () => handlePauseToggle(true)}
-				onresume={paused || pauseBusy ? undefined : () => handlePauseToggle(false)}
+				onpause={!$isAdmin || paused || pauseBusy ? undefined : () => handlePauseToggle(true)}
+				onresume={!$isAdmin || paused || pauseBusy ? undefined : () => handlePauseToggle(false)}
 			/>
 		{/if}
 	</div>
@@ -318,21 +319,25 @@
 		{#if isMusic}
 			<button onclick={() => toggleSection('music')} class="{btnBase} {showMusicSearch ? 'bg-primary text-on-primary' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}">Search</button>
 		{/if}
-		<button onclick={() => (showApplySession = true)} class="{btnBase} {isPostRip ? 'bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}">{isPostRip ? 'Apply session & transcode' : 'Apply session'}</button>
+		{#if $isAdmin}
+			<button onclick={() => (showApplySession = true)} class="{btnBase} {isPostRip ? 'bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}">{isPostRip ? 'Apply session & transcode' : 'Apply session'}</button>
+		{/if}
 		<a
 			href="/jobs/{job.id}"
 			class="{btnBase} bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15"
 		>
 			View details
 		</a>
-		<button
-			onclick={handleCancel}
-			disabled={cancelling}
-			class="{btnBase} ml-auto text-red-600 ring-1 ring-red-300 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:ring-red-700 dark:hover:bg-red-900/20"
-		>
-			{cancelling ? 'Cancelling...' : 'Cancel'}
-		</button>
-		{#if canStart}
+		{#if $isAdmin}
+			<button
+				onclick={handleCancel}
+				disabled={cancelling}
+				class="{btnBase} ml-auto text-red-600 ring-1 ring-red-300 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:ring-red-700 dark:hover:bg-red-900/20"
+			>
+				{cancelling ? 'Cancelling...' : 'Cancel'}
+			</button>
+		{/if}
+		{#if canStart && $isAdmin}
 			<button
 				onclick={handleStartRip}
 				disabled={starting}

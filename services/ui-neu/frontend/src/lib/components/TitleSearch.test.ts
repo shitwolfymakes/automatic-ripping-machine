@@ -4,6 +4,18 @@ import TitleSearch from './TitleSearch.svelte';
 import { createJob } from './__fixtures__/job';
 import type { MetadataCandidate } from '$lib/types/api.gen';
 
+vi.mock('$lib/stores/auth', async () => {
+	const { derived, writable } = await import('svelte/store');
+	const _role = writable<string | null>('admin');
+	return {
+		role: { subscribe: _role.subscribe },
+		isAdmin: derived(_role, (r) => r === 'admin'),
+		isGuest: derived(_role, (r) => r === 'guest'),
+		// Test-only helper — not part of the real module's public API.
+		__setRole: (r: string | null) => _role.set(r)
+	};
+});
+
 vi.mock('$lib/api/jobs', () => ({
 	searchMetadata: vi.fn(),
 	fetchMediaDetail: vi.fn(),
@@ -246,6 +258,46 @@ describe('TitleSearch', () => {
 			await fireEvent.click(screen.getByRole('button', { name: /search/i }));
 			await waitFor(() => expect(screen.getByText(/No results found/i)).toBeInTheDocument());
 			expect(screen.queryByText('Set manually')).not.toBeInTheDocument();
+		});
+	});
+
+	describe('guest write-control gating', () => {
+		afterEach(async () => {
+			const auth = (await import('$lib/stores/auth')) as unknown as {
+				__setRole: (r: string | null) => void;
+			};
+			auth.__setRole('admin');
+		});
+
+		it('hides the Apply button for guests', async () => {
+			const auth = (await import('$lib/stores/auth')) as unknown as {
+				__setRole: (r: string | null) => void;
+			};
+			auth.__setRole('guest');
+			mockSearchMetadata.mockResolvedValue({
+				candidates: [createCandidate({ title: 'The Matrix', year: 1999 })]
+			});
+			renderComponent(TitleSearch, {
+				props: { job: createJob({ id: 'job_7', status: 'awaiting_user_id', title: 'matrix' }) }
+			});
+			await fireEvent.click(screen.getByText('Search'));
+			await waitFor(() => expect(screen.getByText('The Matrix')).toBeInTheDocument());
+			await fireEvent.click(screen.getByText('The Matrix'));
+			expect(screen.queryByRole('button', { name: 'Apply' })).not.toBeInTheDocument();
+			expect(screen.queryByRole('button', { name: 'Apply Poster' })).not.toBeInTheDocument();
+		});
+
+		it('shows the Apply button for admins', async () => {
+			mockSearchMetadata.mockResolvedValue({
+				candidates: [createCandidate({ title: 'The Matrix', year: 1999 })]
+			});
+			renderComponent(TitleSearch, {
+				props: { job: createJob({ id: 'job_7', status: 'awaiting_user_id', title: 'matrix' }) }
+			});
+			await fireEvent.click(screen.getByText('Search'));
+			await waitFor(() => expect(screen.getByText('The Matrix')).toBeInTheDocument());
+			await fireEvent.click(screen.getByText('The Matrix'));
+			expect(screen.getByRole('button', { name: 'Apply' })).toBeInTheDocument();
 		});
 	});
 });

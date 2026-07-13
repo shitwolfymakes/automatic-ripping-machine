@@ -7,6 +7,7 @@
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
+	import { isAdmin } from '$lib/stores/auth';
 
 	let notifications = $state<NotificationInboxView[]>([]);
 	let notifsLoading = $state(true);
@@ -110,7 +111,7 @@
 				/>
 				Show dismissed
 			</label>
-			{#if clearedCount > 0}
+			{#if clearedCount > 0 && $isAdmin}
 				<button
 					type="button"
 					onclick={() => (purgeConfirmOpen = true)}
@@ -120,7 +121,7 @@
 					{purging ? 'Purging...' : 'Purge Cleared'}
 				</button>
 			{/if}
-			{#if unseenCount > 0}
+			{#if unseenCount > 0 && $isAdmin}
 				<button
 					onclick={dismissAll}
 					class="rounded-lg px-3 py-1.5 text-sm font-medium bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15 transition-colors"
@@ -176,7 +177,7 @@
 										</p>
 									{/if}
 								</div>
-								{#if !notif.seen}
+								{#if !notif.seen && $isAdmin}
 									<button
 										onclick={() => dismiss(notif.id)}
 										disabled={dismissing.has(notif.id)}

@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
 
 from arm_backend import image_cache
-from arm_backend.auth import require_jwt
+from arm_backend.auth import require_jwt, require_writer
 from arm_backend.config import settings
 from arm_backend.metadata.base import COVERART_GROUP_FRONT_URL_TEMPLATE
 from arm_common import User
@@ -211,6 +211,6 @@ async def image_cache_stats(_: User = Depends(require_jwt)) -> dict[str, object]
 
 
 @router.post("/images/cache/clear")
-async def image_cache_clear(_: User = Depends(require_jwt)) -> dict[str, object]:
+async def image_cache_clear(_: User = Depends(require_writer)) -> dict[str, object]:
     """Clear the image cache. Returns {success, cleared, freed_bytes}."""
     return image_cache.clear()
