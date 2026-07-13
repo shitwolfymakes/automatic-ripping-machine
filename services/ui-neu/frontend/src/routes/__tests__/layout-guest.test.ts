@@ -119,15 +119,6 @@ describe("Layout guest gating", () => {
     expect(screen.queryByTitle("Quick actions")).not.toBeInTheDocument();
   });
 
-  it("shows a GUEST badge for guests", async () => {
-    const auth = (await import("$lib/stores/auth")) as unknown as {
-      __setRole: (r: string | null) => void;
-    };
-    auth.__setRole("guest");
-    renderComponent(Layout, { props: { children: childSnippet() } });
-    expect(screen.getByText("GUEST")).toBeInTheDocument();
-  });
-
   it("renders Settings link + flyout for admin", async () => {
     const auth = (await import("$lib/stores/auth")) as unknown as {
       __setRole: (r: string | null) => void;
@@ -136,7 +127,6 @@ describe("Layout guest gating", () => {
     renderComponent(Layout, { props: { children: childSnippet() } });
     expect(screen.getByText("Settings")).toBeInTheDocument();
     expect(screen.getByTitle("Quick actions")).toBeInTheDocument();
-    expect(screen.queryByText("GUEST")).not.toBeInTheDocument();
   });
 
   it("guest sees a Login button instead of the sign-out icon", async () => {
@@ -174,7 +164,7 @@ describe("Layout tokenless browsing", () => {
     auth.__setRole("admin");
   });
 
-  it("renders as guest (GUEST badge + Login button) with no token and no acquisition attempt", async () => {
+  it("renders as guest (Login button) with no token and no acquisition attempt", async () => {
     getTokenMock.mockReturnValue(null);
     const auth = (await import("$lib/stores/auth")) as unknown as {
       __setRole: (r: string | null) => void;
@@ -183,7 +173,6 @@ describe("Layout tokenless browsing", () => {
 
     renderComponent(Layout, { props: { children: childSnippet() } });
 
-    expect(screen.getByText("GUEST")).toBeInTheDocument();
     expect(screen.getByText("Login")).toBeInTheDocument();
     expect(gotoMock).not.toHaveBeenCalled();
   });
