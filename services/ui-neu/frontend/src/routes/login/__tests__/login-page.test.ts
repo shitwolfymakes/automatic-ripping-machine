@@ -8,20 +8,19 @@ vi.mock('$app/navigation', () => ({
 }));
 
 vi.mock('$lib/api/auth', () => ({
-	login: vi.fn(),
-	guestLogin: vi.fn()
+	login: vi.fn()
 }));
 
+// isGuest is now simply "tokenless" (derived from isAuthenticated) — the test
+// helper drives that directly rather than through a role string.
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');
-	const _role = writable<string | null>('admin');
+	const _isAuthenticated = writable<boolean>(true);
 	return {
 		applyLogin: vi.fn(),
-		role: { subscribe: _role.subscribe },
-		isAdmin: derived(_role, (r) => r === 'admin'),
-		isGuest: derived(_role, (r) => r === 'guest'),
+		isGuest: derived(_isAuthenticated, (a) => !a),
 		// Test-only helper — not part of the real module's public API.
-		__setRole: (r: string | null) => _role.set(r)
+		__setAuthenticated: (a: boolean) => _isAuthenticated.set(a)
 	};
 });
 
@@ -30,16 +29,16 @@ describe('Login page guest escape hatch', () => {
 		cleanup();
 		gotoMock.mockClear();
 		const auth = (await import('$lib/stores/auth')) as unknown as {
-			__setRole: (r: string | null) => void;
+			__setAuthenticated: (a: boolean) => void;
 		};
-		auth.__setRole('admin');
+		auth.__setAuthenticated(true);
 	});
 
-	it('login page offers "Continue browsing as guest" for guest sessions', async () => {
+	it('login page offers "Continue browsing as guest" when tokenless', async () => {
 		const auth = (await import('$lib/stores/auth')) as unknown as {
-			__setRole: (r: string | null) => void;
+			__setAuthenticated: (a: boolean) => void;
 		};
-		auth.__setRole('guest');
+		auth.__setAuthenticated(false);
 		renderComponent(LoginPage);
 
 		const escapeHatch = screen.getByText('← Continue browsing as guest');
@@ -49,11 +48,11 @@ describe('Login page guest escape hatch', () => {
 		expect(gotoMock).toHaveBeenCalledWith('/');
 	});
 
-	it('login page hides the guest escape hatch when no guest session', async () => {
+	it('login page hides the guest escape hatch when authenticated', async () => {
 		const auth = (await import('$lib/stores/auth')) as unknown as {
-			__setRole: (r: string | null) => void;
+			__setAuthenticated: (a: boolean) => void;
 		};
-		auth.__setRole('admin');
+		auth.__setAuthenticated(true);
 		renderComponent(LoginPage);
 
 		expect(screen.queryByText('← Continue browsing as guest')).not.toBeInTheDocument();

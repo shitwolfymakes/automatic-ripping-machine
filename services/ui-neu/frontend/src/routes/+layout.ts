@@ -1,9 +1,6 @@
 import { redirect } from "@sveltejs/kit";
 import type { LayoutLoad } from "./$types";
 import { hydrateConfig } from "$lib/stores/config";
-import { getToken } from "$lib/api/client";
-import { guestLogin } from "$lib/api/auth";
-import { applyLogin } from "$lib/stores/auth";
 import { features } from "$lib/features";
 
 export const prerender = false;
@@ -14,11 +11,6 @@ export const ssr = false;
 // since completing setup or clearing the DB are deliberate actions.
 let setupConfirmedComplete = false;
 
-// Once a guest-acquisition attempt fails (guest access disabled / backend
-// down), stop retrying on every navigation for the rest of this page load.
-// Only a hard page refresh resets this.
-let guestUnavailable = false;
-
 // Hydrate feature flags once per page load.
 let configHydrated = false;
 
@@ -26,31 +18,6 @@ export const load: LayoutLoad = async ({ url, fetch }) => {
   if (!configHydrated) {
     await hydrateConfig();
     configHydrated = true;
-  }
-
-  const path = url.pathname;
-  const isAuthRoute =
-    path.startsWith("/login") || path.startsWith("/change-password");
-
-  // Auth guard: unauthenticated visitors first get one passwordless guest-
-  // acquisition attempt (spec 2026-07-12-guest-autologin); only when that
-  // fails (guest access disabled / backend down) do they go to /login.
-  // One attempt per page load: a failure is remembered so subsequent
-  // client-side navigations redirect immediately instead of re-hammering
-  // the endpoint. NOTE: redirect() throws, so it must stay OUTSIDE the try.
-  if (!isAuthRoute && getToken() === null) {
-    let acquired = false;
-    if (!guestUnavailable) {
-      try {
-        applyLogin(await guestLogin());
-        acquired = true;
-      } catch {
-        guestUnavailable = true;
-      }
-    }
-    if (!acquired) {
-      redirect(307, "/login");
-    }
   }
 
   // Skip setup check if already on /setup

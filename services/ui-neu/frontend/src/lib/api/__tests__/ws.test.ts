@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// getToken gates connect(); give it a token so the socket opens.
+// Mutable so individual tests can exercise both the authenticated and the
+// tokenless (guest) path — a missing token must still open the socket and
+// send an empty-string token, not skip connecting.
+const getTokenMock = vi.fn<() => string | null>(() => 'aaa.bbb.ccc');
 vi.mock('$lib/api/client', () => ({
-	getToken: () => 'aaa.bbb.ccc'
+	getToken: () => getTokenMock()
 }));
 
 import { wsClient, type WSEnvelope } from '$lib/api/ws';
@@ -41,6 +44,7 @@ function authAck(ws: FakeWS) {
 describe('wsClient', () => {
 	beforeEach(() => {
 		FakeWS.instances = [];
+		getTokenMock.mockReturnValue('aaa.bbb.ccc');
 		vi.stubGlobal('WebSocket', FakeWS as unknown as typeof WebSocket);
 		vi.stubGlobal('window', {
 			location: { protocol: 'https:', host: 'localhost:8888' }
@@ -58,6 +62,15 @@ describe('wsClient', () => {
 		expect(ws.url).toBe('wss://localhost:8888/ws');
 		ws.emit('open', {});
 		expect(JSON.parse(ws.sent[0])).toEqual({ op: 'auth', token: 'aaa.bbb.ccc' });
+	});
+
+	it('connects and sends an empty-string token when tokenless (guest)', () => {
+		getTokenMock.mockReturnValue(null);
+		wsClient.start();
+		const ws = FakeWS.instances[0];
+		expect(ws.url).toBe('wss://localhost:8888/ws');
+		ws.emit('open', {});
+		expect(JSON.parse(ws.sent[0])).toEqual({ op: 'auth', token: '' });
 	});
 
 	it('sends subscribe after the auth ack and delivers events to the handler', () => {

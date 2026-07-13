@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { renderComponent, screen, cleanup, waitFor, fireEvent } from "$lib/test-utils";
+import { renderComponent, screen, cleanup, fireEvent } from "$lib/test-utils";
 import Layout from "../+layout.svelte";
 import { createRawSnippet } from "svelte";
 
@@ -13,32 +13,14 @@ vi.mock("$app/navigation", () => ({
   goto: (...args: unknown[]) => gotoMock(...args),
 }));
 
-let unauthorizedHandler: () => void = () => {};
 const getTokenMock = vi.fn(() => null as string | null);
 vi.mock("$lib/api/client", () => ({
-  setUnauthorizedHandler: vi.fn((fn: () => void) => {
-    unauthorizedHandler = fn;
-  }),
+  setUnauthorizedHandler: vi.fn(),
   getToken: () => getTokenMock(),
 }));
 
-// Deferred-promise helper for tests that need to control exactly when a
-// mocked async call resolves, so they can assert on in-between (pending)
-// state — e.g. a second caller racing a still-in-flight first attempt.
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
-
-const guestLoginMock = vi.fn();
 const apiLogoutMock = vi.fn(() => Promise.resolve());
 vi.mock("$lib/api/auth", () => ({
-  guestLogin: () => guestLoginMock(),
   logout: () => apiLogoutMock(),
 }));
 
@@ -109,7 +91,6 @@ describe("Layout guest gating", () => {
   afterEach(async () => {
     cleanup();
     gotoMock.mockClear();
-    guestLoginMock.mockReset();
     apiLogoutMock.mockClear();
     apiLogoutMock.mockResolvedValue(undefined);
     getTokenMock.mockReset();
@@ -179,11 +160,10 @@ describe("Layout guest gating", () => {
   });
 });
 
-describe("Layout guest auto-acquire", () => {
+describe("Layout tokenless browsing", () => {
   afterEach(async () => {
     cleanup();
     gotoMock.mockClear();
-    guestLoginMock.mockReset();
     apiLogoutMock.mockClear();
     apiLogoutMock.mockResolvedValue(undefined);
     getTokenMock.mockReset();
@@ -194,104 +174,47 @@ describe("Layout guest auto-acquire", () => {
     auth.__setRole("admin");
   });
 
-  it("auto-acquires a guest session when unauthenticated", async () => {
+  it("renders as guest (GUEST badge + Login button) with no token and no acquisition attempt", async () => {
     getTokenMock.mockReturnValue(null);
-    guestLoginMock.mockResolvedValue({
-      access_token: "guest-token",
-      expires_at: "2099-01-01T00:00:00Z",
-      password_must_change: false,
-      role: "guest",
-    });
+    const auth = (await import("$lib/stores/auth")) as unknown as {
+      __setRole: (r: string | null) => void;
+    };
+    auth.__setRole("guest");
 
     renderComponent(Layout, { props: { children: childSnippet() } });
 
-    await waitFor(() => expect(guestLoginMock).toHaveBeenCalledTimes(1));
-    expect(gotoMock).not.toHaveBeenCalledWith("/login");
+    expect(screen.getByText("GUEST")).toBeInTheDocument();
+    expect(screen.getByText("Login")).toBeInTheDocument();
+    expect(gotoMock).not.toHaveBeenCalled();
   });
 
-  it("falls back to /login when guest acquisition fails", async () => {
-    getTokenMock.mockReturnValue(null);
-    guestLoginMock.mockRejectedValue(new Error("403 guest disabled"));
-
-    renderComponent(Layout, { props: { children: childSnippet() } });
-
-    await waitFor(() => expect(gotoMock).toHaveBeenCalledWith("/login"));
-    expect(guestLoginMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("admin logout drops into a guest session when enabled", async () => {
+  it("sign-out does a best-effort logout, clears local session, and goes to /", async () => {
     getTokenMock.mockReturnValue("admin-token");
-    guestLoginMock.mockResolvedValue({
-      access_token: "guest-token",
-      expires_at: "2099-01-01T00:00:00Z",
-      password_must_change: false,
-      role: "guest",
-    });
 
     renderComponent(Layout, { props: { children: childSnippet() } });
     const signOutButton = screen.getByTitle("Sign out");
     await fireEvent.click(signOutButton);
 
-    await waitFor(() => expect(gotoMock).toHaveBeenCalledWith("/"));
+    const { logoutLocal } = (await import("$lib/stores/auth")) as unknown as {
+      logoutLocal: ReturnType<typeof vi.fn>;
+    };
     expect(apiLogoutMock).toHaveBeenCalledTimes(1);
-    expect(guestLoginMock).toHaveBeenCalledTimes(1);
+    expect(logoutLocal).toHaveBeenCalled();
+    expect(gotoMock).toHaveBeenCalledWith("/");
   });
 
-  it("admin logout falls back to /login when guest disabled", async () => {
+  it("sign-out still goes to / even if the server-side logout call fails", async () => {
     getTokenMock.mockReturnValue("admin-token");
-    guestLoginMock.mockRejectedValue(new Error("403 guest disabled"));
+    apiLogoutMock.mockRejectedValueOnce(new Error("network error"));
 
     renderComponent(Layout, { props: { children: childSnippet() } });
     const signOutButton = screen.getByTitle("Sign out");
     await fireEvent.click(signOutButton);
 
-    await waitFor(() => expect(gotoMock).toHaveBeenCalledWith("/login"));
-    expect(apiLogoutMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("a concurrent 401 racing the initial mount's still-pending guest acquisition does not bounce to /login", async () => {
-    getTokenMock.mockReturnValue(null);
-    const { promise: guestLoginPromise, resolve: resolveGuestLogin } =
-      deferred<{
-        access_token: string;
-        expires_at: string;
-        password_must_change: boolean;
-        role: string;
-      }>();
-    guestLoginMock.mockReturnValue(guestLoginPromise);
-
-    const { applyLogin } = (await import("$lib/stores/auth")) as unknown as {
-      applyLogin: ReturnType<typeof vi.fn>;
+    const { logoutLocal } = (await import("$lib/stores/auth")) as unknown as {
+      logoutLocal: ReturnType<typeof vi.fn>;
     };
-    const { dashboard } = (await import("$lib/stores/dashboard")) as unknown as {
-      dashboard: { start: ReturnType<typeof vi.fn> };
-    };
-    applyLogin.mockClear();
-    dashboard.start.mockClear();
-
-    renderComponent(Layout, { props: { children: childSnippet() } });
-
-    // onMount's no-token branch has kicked off acquireGuestOrLogin(), whose
-    // guestLogin() call is still pending. Before it resolves, fire the 401
-    // handler (loadThemesFromApi's unauthenticated request failing) — this
-    // is the second, concurrent caller from the defect report.
-    await waitFor(() => expect(guestLoginMock).toHaveBeenCalledTimes(1));
-    unauthorizedHandler();
-
-    // Now let the first (and only) acquisition succeed.
-    resolveGuestLogin({
-      access_token: "guest-token",
-      expires_at: "2099-01-01T00:00:00Z",
-      password_must_change: false,
-      role: "guest",
-    });
-
-    await waitFor(() => expect(applyLogin).toHaveBeenCalledTimes(1));
-
-    // Single-flight: only ONE guestLogin() call total, no /login navigation,
-    // and the success side-effects ran exactly once.
-    expect(guestLoginMock).toHaveBeenCalledTimes(1);
-    expect(gotoMock).not.toHaveBeenCalledWith("/login");
-    expect(dashboard.start).toHaveBeenCalledTimes(1);
+    expect(logoutLocal).toHaveBeenCalled();
+    expect(gotoMock).toHaveBeenCalledWith("/");
   });
 });

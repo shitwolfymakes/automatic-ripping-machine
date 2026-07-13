@@ -19,13 +19,11 @@ vi.mock("$lib/api/client", () => ({
   getToken: () => getTokenMock(),
 }));
 
-// These tests exercise the 401/session-expiry path, not guest acquisition —
-// guest login always rejects here so the layout falls through to /login,
-// matching this suite's pre-guest-autologin expectations.
-const guestLoginMock = vi.fn(() => Promise.reject(new Error("guest disabled")));
+// These tests exercise the 401/session-expiry path. Tokenless browsing is a
+// valid state now — a 401 just routes straight to /login, no guest attempt.
+const apiLogoutMock = vi.fn(() => Promise.resolve());
 vi.mock("$lib/api/auth", () => ({
-  guestLogin: () => guestLoginMock(),
-  logout: vi.fn(() => Promise.resolve()),
+  logout: () => apiLogoutMock(),
 }));
 
 const gotoMock = vi.fn();
@@ -103,7 +101,8 @@ describe("Layout", () => {
     logoutLocalMock.mockClear();
     getTokenMock.mockReset();
     getTokenMock.mockReturnValue("admin-token");
-    guestLoginMock.mockClear();
+    apiLogoutMock.mockClear();
+    apiLogoutMock.mockResolvedValue(undefined);
   });
 
   describe("session expiry (401 handler)", () => {
@@ -124,7 +123,7 @@ describe("Layout", () => {
 
     it("does not re-navigate on repeated 401s once already on /login", async () => {
       renderComponent(Layout, { props: { children: childSnippet() } });
-      // First 401 falls through the (rejected) guest acquire to /login.
+      // First 401 routes straight to /login.
       capturedOn401!();
       await vi.waitFor(() => expect(gotoMock).toHaveBeenCalledTimes(1));
       gotoMock.mockClear();
