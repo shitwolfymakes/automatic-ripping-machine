@@ -1,4 +1,5 @@
 import type { JobView } from '$lib/types/api.gen';
+import { statusLabel } from '$lib/utils/format';
 import { discTypeLabel, isJobActive } from '$lib/utils/job-type';
 import { driveLabel } from '$lib/utils/drive-name';
 
@@ -98,7 +99,7 @@ export function buildMetadataFields(
 
 	// --- Always-present base fields ---
 	fields.push({ label: 'Disc Type', value: discTypeLabel(job.disc_type) });
-	fields.push({ label: 'Status', value: job.status });
+	fields.push({ label: 'Status', value: statusLabel(job.status) });
 	fields.push({ label: 'Year', value: job.year != null ? String(job.year) : '-' });
 	fields.push({ label: 'Drive', value: driveLabel(job.drive_id, driveNames), mono: true });
 	if (job.resumed_from_crash) {
