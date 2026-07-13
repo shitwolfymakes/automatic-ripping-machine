@@ -1,5 +1,7 @@
 import type { JobView } from '$lib/types/api.gen';
+import { statusLabel } from '$lib/utils/format';
 import { discTypeLabel, isJobActive } from '$lib/utils/job-type';
+import { driveLabel } from '$lib/utils/drive-name';
 
 export interface MetadataField {
 	label: string;
@@ -87,16 +89,19 @@ export function videoTypeLabel(vt: string | null | undefined): string {
 // (video_type, label, devpath, multi_title, crc_id, imdb_id, season,
 // tvdb_id, artist/album, output paths, stop_time, job_length, …) has no
 // v3 equivalent, so those fields are dropped here rather than synthesized.
-export function buildMetadataFields(job: JobView): MetadataField[] {
+export function buildMetadataFields(
+	job: JobView,
+	driveNames?: Record<string, string> | null
+): MetadataField[] {
 	const active = isJobActive(job.status);
 
 	const fields: MetadataField[] = [];
 
 	// --- Always-present base fields ---
 	fields.push({ label: 'Disc Type', value: discTypeLabel(job.disc_type) });
-	fields.push({ label: 'Status', value: job.status });
+	fields.push({ label: 'Status', value: statusLabel(job.status) });
 	fields.push({ label: 'Year', value: job.year != null ? String(job.year) : '-' });
-	fields.push({ label: 'Drive', value: job.drive_id ?? '-', mono: true });
+	fields.push({ label: 'Drive', value: driveLabel(job.drive_id, driveNames), mono: true });
 	if (job.resumed_from_crash) {
 		fields.push({ label: 'Recovery', value: 'Resumed from crash' });
 	}
