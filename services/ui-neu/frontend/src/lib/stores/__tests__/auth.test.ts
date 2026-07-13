@@ -52,30 +52,24 @@ describe('auth store', () => {
 		expect(get(passwordMustChange)).toBe(false);
 	});
 
-	it('applyLogin stores the role and derives isAdmin', () => {
+	it('isGuest is true when no token is present', () => {
+		initAuth();
+		expect(get(isAuthenticated)).toBe(false);
+		expect(get(isGuest)).toBe(true);
+	});
+
+	it('isGuest is false and isAdmin true after admin login', () => {
 		applyLogin({ access_token: 'tok-5', expires_at: 'x', password_must_change: false, role: 'admin' });
 		expect(get(role)).toBe('admin');
 		expect(get(isAdmin)).toBe(true);
 		expect(get(isGuest)).toBe(false);
 	});
 
-	it('guest role derives isGuest', () => {
-		applyLogin({ access_token: 'tok-6', expires_at: 'x', password_must_change: false, role: 'guest' });
-		expect(get(role)).toBe('guest');
-		expect(get(isGuest)).toBe(true);
-		expect(get(isAdmin)).toBe(false);
-	});
-
-	it('initAuth restores persisted role', () => {
-		applyLogin({ access_token: 'tok-7', expires_at: 'x', password_must_change: false, role: 'guest' });
-		initAuth();
-		expect(get(isGuest)).toBe(true);
-	});
-
-	it('logoutLocal clears role', () => {
+	it('logoutLocal returns to guest (tokenless) state', () => {
 		applyLogin({ access_token: 'tok-8', expires_at: 'x', password_must_change: false, role: 'admin' });
 		logoutLocal();
 		expect(get(role)).toBeNull();
 		expect(get(isAdmin)).toBe(false);
+		expect(get(isGuest)).toBe(true);
 	});
 });

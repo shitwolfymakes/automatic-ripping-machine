@@ -10,7 +10,10 @@ export const isAuthenticated = { subscribe: _isAuthenticated.subscribe };
 export const passwordMustChange = { subscribe: _passwordMustChange.subscribe };
 export const role = { subscribe: _role.subscribe };
 export const isAdmin = derived(_role, (r) => r === 'admin');
-export const isGuest = derived(_role, (r) => r === 'guest');
+// Anonymous (tokenless) requests act as the guest backend-side, so guest is
+// simply "no token present" — not a role. Any authenticated session (only
+// admin logins exist) is not a guest.
+export const isGuest = derived(_isAuthenticated, (a) => !a);
 
 // Reflect any persisted token (and role) into the in-memory store (call on app start).
 // NOTE: passwordMustChange is intentionally NOT restored here — only the token

@@ -11,8 +11,14 @@ export function login(username: string, password: string): Promise<LoginResult> 
 	return post<LoginResult>('/api/auth/login', { username, password });
 }
 
+/**
+ * @deprecated The backend's /api/auth/guest endpoint is removed — anonymous
+ * (tokenless) requests now act as the guest implicitly. This stub remains
+ * only because +layout.svelte / +layout.ts still call it; Task 4 removes
+ * those callers, at which point this export should be deleted entirely.
+ */
 export function guestLogin(): Promise<LoginResult> {
-	return post<LoginResult>('/api/auth/guest');
+	return Promise.reject(new Error('removed'));
 }
 
 export function logout(): Promise<unknown> {
