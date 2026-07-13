@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { panel, reveal } from '$lib/transitions';
 	import { login } from '$lib/api/auth';
@@ -8,6 +9,21 @@
 	let password = $state('');
 	let error = $state('');
 	let submitting = $state(false);
+
+	// Whether guest browsing is available: probe one cheap guest-readable GET
+	// anonymously. Raw fetch on purpose — the API client would attach the token
+	// and route a 401 through the global logout/redirect handler, which must
+	// not fire for a probe. 200 = guest access enabled, anything else = hide
+	// the Continue-as-Guest button.
+	let guestEnabled = $state(false);
+	onMount(async () => {
+		try {
+			const res = await fetch('/api/system/version');
+			guestEnabled = res.ok;
+		} catch {
+			guestEnabled = false;
+		}
+	});
 
 	async function onSubmit(e: Event) {
 		e.preventDefault();
@@ -43,9 +59,14 @@
 		<button type="submit" disabled={submitting} class="w-full rounded bg-primary px-4 py-2 font-medium text-white disabled:opacity-60">
 			{submitting ? 'Signing in...' : 'Sign in'}
 		</button>
-		{#if $isGuest}
-			<button type="button" onclick={() => goto('/')} class="w-full text-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
-				← Continue browsing as guest
+		{#if $isGuest && guestEnabled}
+			<button
+				type="button"
+				onclick={() => goto('/')}
+				in:reveal
+				class="w-full rounded bg-amber-500 px-4 py-2 font-medium text-white hover:bg-amber-600"
+			>
+				Continue as Guest
 			</button>
 		{/if}
 	</form>
