@@ -72,7 +72,7 @@
 	// --- Tab state ---
 	type Tab = string;
 	// Non-config screen-tabs (their own bespoke UI).
-	const screenTabs = ['sessions', 'transcoding', 'notifications', 'appearance', 'drives', 'system'] as const;
+	const screenTabs = ['sessions', 'transcoding', 'notifications', 'appearance', 'drives', 'users', 'system'] as const;
 	// Config-group tabs derived from the backend schema. Metadata + Ripping have
 	// no bespoke screen-tab home → render as their own tabs. (Transcoding/
 	// Notifications single toggles fold into the existing transcoding/notifications
@@ -103,6 +103,7 @@
 		notifications: 'Notifications',
 		appearance: 'Appearance',
 		drives: 'Drives',
+		users: 'Users',
 		system: 'System',
 	};
 	function tabLabel(id: string): string {
@@ -434,6 +435,14 @@
 			</div>
 		{/if}
 
+		<!-- Users Tab: account management (admin password + guest access) -->
+		{#if activeTab === 'users'}
+			<div in:reveal class="space-y-6">
+				<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Users</h2>
+				<UsersCard />
+			</div>
+		{/if}
+
 		<!-- System Info Tab -->
 		{#if activeTab === 'system'}
 			<div in:reveal class="space-y-6">
@@ -454,11 +463,6 @@
 					</section>
 				{/if}
 			</div>
-
-			<!-- Users -->
-			<section in:reveal class="mt-6">
-				<UsersCard />
-			</section>
 
 			<!-- Service Control -->
 			<section in:reveal class="mt-6">
