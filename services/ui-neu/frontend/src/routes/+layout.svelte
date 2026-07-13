@@ -243,9 +243,6 @@
 					{#if ($dashboard.notification_count ?? 0) > 0}
 						<a in:reveal href="/notifications" class="font-semibold text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300">{$dashboard.notification_count} notification{$dashboard.notification_count !== 1 ? 's' : ''}</a>
 					{/if}
-					{#if $isGuest}
-						<span class="rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">GUEST</span>
-					{/if}
 				</div>
 			</div>
 
