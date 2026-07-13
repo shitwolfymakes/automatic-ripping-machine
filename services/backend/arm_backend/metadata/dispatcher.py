@@ -34,6 +34,11 @@ _BLURAY_BRANDING_RE = re.compile(r"[\s_\-]*blu[\s_\-]?ray(?:\s*(?:tm|™))?", re
 # `_BD` (Blu-ray Disc) token, mirroring the `_NTSC` treatment.
 _BD_TOKEN_RE = re.compile(r"_BD(?=[_.\s\-]|$)", re.IGNORECASE)
 
+# MusicBrainz 403s any User-Agent that doesn't follow their etiquette guide's
+# `AppName/version ( contact )` shape. No longer operator-configurable (Config.
+# musicbrainz_user_agent is dormant — see config_metadata.py); hardcoded here.
+MUSICBRAINZ_USER_AGENT = "ARM/3.0.0 ( https://github.com/automatic-ripping-machine/automatic-ripping-machine )"
+
 
 def _normalize_volume_label(label: str) -> tuple[str, int | None]:
     # Fold compatibility glyphs WITHOUT dropping non-ASCII: NFKC turns
@@ -70,14 +75,14 @@ class MetadataDispatcher:
             return None
 
         if scan.disc_type == DiscType.CD:
-            return await self._identify_cd(scan, cfg)
+            return await self._identify_cd(scan)
 
         return await self._identify_video(scan, cfg)
 
-    async def _identify_cd(self, scan: ScanResult, cfg: Config) -> MetadataResult | None:
-        if not scan.musicbrainz_disc_id or not cfg.musicbrainz_user_agent:
+    async def _identify_cd(self, scan: ScanResult) -> MetadataResult | None:
+        if not scan.musicbrainz_disc_id:
             return None
-        client = MusicBrainzClient(cfg.musicbrainz_user_agent, self._http)
+        client = MusicBrainzClient(MUSICBRAINZ_USER_AGENT, self._http)
         return await self._call("musicbrainz", client.lookup_disc_id(scan.musicbrainz_disc_id))
 
     async def _identify_video(self, scan: ScanResult, cfg: Config) -> MetadataResult | None:
