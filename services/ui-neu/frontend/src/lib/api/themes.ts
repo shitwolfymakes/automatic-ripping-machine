@@ -31,14 +31,6 @@ export function uploadTheme(themeJson: File, css: string = ''): Promise<ThemeFul
 	return apiFormPost<ThemeFull>('/api/themes', form);
 }
 
-export async function fetchThemeCss(id: string): Promise<string> {
-	const res = await fetch(`/api/themes/${encodeURIComponent(id)}/css`);
-	if (!res.ok) {
-		throw new Error(`No CSS for theme '${id}'`);
-	}
-	return res.text();
-}
-
 export function deleteTheme(id: string): Promise<void> {
 	return apiFetch<void>(`/api/themes/${encodeURIComponent(id)}`, {
 		method: 'DELETE'

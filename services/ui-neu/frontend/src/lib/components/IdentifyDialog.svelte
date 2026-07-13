@@ -2,13 +2,16 @@
 	import { resolveJob } from '$lib/api/jobs';
 	import { reveal } from '$lib/transitions';
 	import type { JobView, ResolveResponse } from '$lib/types/api.gen';
+	import { driveLabel } from '$lib/utils/drive-name';
 
 	let {
 		job,
+		driveNames,
 		onclose,
 		onidentified
 	}: {
 		job: JobView;
+		driveNames?: Record<string, string> | null;
 		onclose: () => void;
 		onidentified: (resp: ResolveResponse) => void;
 	} = $props();
@@ -121,7 +124,7 @@
 			</p>
 		{:else}
 			<p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-				The disc on drive <code class="font-mono">{job.drive_id}</code> couldn't be identified
+				The disc on drive <code class="font-mono">{driveLabel(job.drive_id, driveNames)}</code> couldn't be identified
 				automatically. Fill in the details so ARM can proceed. Any session you've already applied
 				will pick up the resolved metadata and queue its transcode tasks.
 			</p>

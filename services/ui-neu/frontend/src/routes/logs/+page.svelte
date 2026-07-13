@@ -7,6 +7,8 @@
 	import LoadState from '$lib/components/LoadState.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { effectiveJobStatus } from '$lib/utils/job-status';
+	import { driveLabel } from '$lib/utils/drive-name';
+	import { dashboard } from '$lib/stores/dashboard';
 
 	let jobs = $state<JobView[]>([]);
 	let loading = $state(true);
@@ -91,7 +93,7 @@
 									</a>
 								</td>
 								<td class="px-4 py-3"><StatusBadge status={effectiveJobStatus(job)} /></td>
-								<td class="px-4 py-3">{job.drive_id}</td>
+								<td class="px-4 py-3">{driveLabel(job.drive_id, $dashboard.drive_names)}</td>
 								<td class="px-4 py-3">{job.year ?? '-'}</td>
 							</tr>
 						{/each}
