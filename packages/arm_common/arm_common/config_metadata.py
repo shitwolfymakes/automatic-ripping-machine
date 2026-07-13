@@ -24,7 +24,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         key="metadata_provider",
         group="Metadata",
         tier="operator",
-        label="Metadata provider",
+        label="Default metadata provider",
         help="Provider for title identify (search + detail).",
         type="enum",
         editable=True,
@@ -66,15 +66,11 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         type="string",
         editable=True,
     ),
-    ConfigFieldMeta(
-        key="musicbrainz_user_agent",
-        group="Metadata",
-        tier="operator",
-        label="MusicBrainz User-Agent",
-        help="Identifies ARM to MusicBrainz (app/version + contact).",
-        type="string",
-        editable=True,
-    ),
+    # NOTE: musicbrainz_user_agent is intentionally NOT registered — the column
+    # + ConfigView/ConfigUpdateRequest wire fields persist (dropping them would be
+    # an OpenAPI change), but the value is no longer read: the backend hardcodes
+    # MUSICBRAINZ_USER_AGENT next to its use (arm_backend.metadata.dispatcher).
+    # See tests/test_config_metadata.py::_DORMANT_EDITABLE_FIELDS.
     # --- Ripping ---
     ConfigFieldMeta(
         key="auto_rip_on_insert",

@@ -22,7 +22,7 @@ from arm_backend.metadata.omdb import OMDBClient
 from arm_backend.metadata.tmdb import TMDBClient
 from arm_backend.metadata.tvdb import TVDBClient
 from arm_backend.seeders import CONFIG_SINGLETON_ID
-from arm_common import DEFAULT_MUSICBRAINZ_USER_AGENT, Config, User
+from arm_common import Config, User
 from arm_common.schemas import (
     MetadataCandidate,
     MetadataKeyTestResponse,
@@ -38,6 +38,10 @@ router = APIRouter(prefix="/api/metadata", tags=["metadata"])
 
 _TMDB_CONFIG_URL = "https://api.themoviedb.org/3/configuration"
 _OMDB_URL = "https://www.omdbapi.com/"
+# MusicBrainz 403s any User-Agent that doesn't follow their etiquette guide's
+# `AppName/version ( contact )` shape. No longer operator-configurable (Config.
+# musicbrainz_user_agent is dormant — see config_metadata.py); hardcoded here.
+MUSICBRAINZ_USER_AGENT = "ARM/3.0.0 ( https://github.com/automatic-ripping-machine/automatic-ripping-machine )"
 _TIMEOUT_SECONDS = 8.0
 
 
@@ -221,13 +225,10 @@ async def search_music(
     country: str | None = None,
     status: str | None = None,
     _: User = Depends(require_jwt),
-    db: AsyncSession = Depends(get_session),
 ) -> MetadataSearchResponse:
-    cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-    ua = (cfg.musicbrainz_user_agent if cfg else None) or DEFAULT_MUSICBRAINZ_USER_AGENT
     http: httpx.AsyncClient = request.app.state.http
     try:
-        results = await MusicBrainzClient(ua, http).search_releases(
+        results = await MusicBrainzClient(MUSICBRAINZ_USER_AGENT, http).search_releases(
             query,
             artist=artist,
             track_count=track_count,
@@ -248,13 +249,10 @@ async def music_release_detail(
     release_id: str,
     request: Request,
     _: User = Depends(require_jwt),
-    db: AsyncSession = Depends(get_session),
 ) -> MetadataReleaseDetail:
-    cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-    ua = (cfg.musicbrainz_user_agent if cfg else None) or DEFAULT_MUSICBRAINZ_USER_AGENT
     http: httpx.AsyncClient = request.app.state.http
     try:
-        result = await MusicBrainzClient(ua, http).get_release(release_id)
+        result = await MusicBrainzClient(MUSICBRAINZ_USER_AGENT, http).get_release(release_id)
     except MetaLookupError as exc:
         # _get collapses every failure mode into a MetaLookupError subclass:
         # a real 404 (unknown MBID), transport failures (wrapped LookupError),
