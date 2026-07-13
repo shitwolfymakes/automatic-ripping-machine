@@ -50,11 +50,11 @@
 		{/if}
 		<label class="block text-sm">
 			<span class="mb-1 block">Username</span>
-			<input bind:value={username} required autocomplete="username" class="w-full rounded border border-primary/20 px-3 py-2 dark:bg-surface-dark" />
+			<input bind:value={username} type="text" name="username" required autocomplete="username" class="w-full rounded border border-primary/20 px-3 py-2 dark:bg-surface-dark" />
 		</label>
 		<label class="block text-sm">
 			<span class="mb-1 block">Password</span>
-			<input bind:value={password} type="password" required autocomplete="current-password" class="w-full rounded border border-primary/20 px-3 py-2 dark:bg-surface-dark" />
+			<input bind:value={password} type="password" name="password" required autocomplete="current-password" class="w-full rounded border border-primary/20 px-3 py-2 dark:bg-surface-dark" />
 		</label>
 		<button type="submit" disabled={submitting} class="w-full rounded bg-primary px-4 py-2 font-medium text-white disabled:opacity-60">
 			{submitting ? 'Signing in...' : 'Sign in'}
