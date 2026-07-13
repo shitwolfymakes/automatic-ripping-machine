@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { reveal } from '$lib/transitions';
 	import { login } from '$lib/api/auth';
 	import { applyLogin, isGuest } from '$lib/stores/auth';
 
