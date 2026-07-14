@@ -1,0 +1,61 @@
+[data-scheme="hifi-deck"] {
+	font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+[data-scheme="hifi-deck"] aside {
+	background: #14110e !important;
+	border-right: 4px solid transparent !important;
+	border-image: linear-gradient(180deg, #6b4226, #4a2b16 40%, #6b4226 70%, #3f2413) 1;
+}
+[data-scheme="hifi-deck"] aside nav a {
+	text-transform: uppercase;
+	font-size: 0.72rem;
+	letter-spacing: 0.14em;
+	border-left: 3px solid transparent;
+	border-radius: 0;
+}
+[data-scheme="hifi-deck"] aside nav a:hover {
+	color: #fbbf24 !important;
+	background: rgba(255, 176, 59, 0.05) !important;
+}
+[data-scheme="hifi-deck"] aside nav a[data-active="true"] {
+	color: #ffb43c !important;
+	border-left: 3px solid #ffb43c;
+	background: rgba(255, 176, 59, 0.08) !important;
+	text-shadow: 0 0 8px rgba(255, 176, 59, 0.5);
+}
+[data-scheme="hifi-deck"] aside hr {
+	border-color: #2e2822;
+}
+[data-scheme="hifi-deck"] header {
+	border-bottom: 1px solid #2e2822 !important;
+}
+[data-scheme="hifi-deck"] .section-frame {
+	border: 1px solid #3a332b !important;
+	background: #1c1915;
+}
+[data-scheme="hifi-deck"] .section-frame-bar-top {
+	background:
+		repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 3px),
+		linear-gradient(180deg, #d8d8d8, #a8a8a8) !important;
+	color: #26221c !important;
+	text-transform: uppercase;
+	letter-spacing: 0.24em;
+	font-size: 0.68rem;
+	font-weight: 600;
+	text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+	border-bottom: 1px solid #77716a;
+}
+[data-scheme="hifi-deck"] .section-frame-bar-bottom {
+	background: linear-gradient(180deg, #23201b, #1a1712) !important;
+}
+[data-scheme="hifi-deck"] [data-progress-track] {
+	background:
+		repeating-linear-gradient(90deg, rgba(255, 190, 80, 0.18) 0 1px, transparent 1px 14px),
+		#171006 !important;
+	border: 1px solid #060402;
+	box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+[data-scheme="hifi-deck"] [data-progress-fill] {
+	background: linear-gradient(90deg, #7a4a00, #e69a1f 55%, #ffd27a) !important;
+	box-shadow: 0 0 12px rgba(255, 176, 59, 0.45);
+}
