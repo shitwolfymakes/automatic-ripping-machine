@@ -8,16 +8,24 @@ metadata:
 The v3 stack runs on **hifi-server** (host `quark`, `192.168.0.68`, user `upb`,
 key `~/.ssh/hifi`) at `~/src/automatic-ripping-machine-v3`, cloned from
 `origin` (`uprightbass360/arm-v3`, now public). Deployed branch:
-`deploy/hifi-20260705`; checkout at **`69366c9d`** since 2026-07-06:
+`deploy/hifi-20260705`; checkout at **`a4c0f666`** since 2026-07-14
+(tier34-themes reconciliation merge: 3 new builtin themes winamp-classic /
+hifi-deck / gruvbox + Tier-32/33 ancestry joined; arm-ui-neu rebuilt,
+arm-backend recreated same-image with all three overlays — offload intact;
+themes verified live via /themes/<id>.css 200 + Playwright screenshots).
+Previous checkout **`69366c9d`** since 2026-07-06:
 **arm-ripper-sr0 rebuilt** there (carries the abandon-now-ejects fix
 `c247c9bd` + entrypoint gid-adopt; verified `_spawn_eject` present in the
 running container). Backend/ui/transcode images still from the `31d88ef1`
 build — no functional delta for them in the 2026-07-06 commits.
-**Deploy gotcha (hit 2026-07-06): hifi's remote-tracking ref
-`origin/deploy/hifi-20260705` goes stale** (a single-branch `git fetch origin
-<branch>` there did NOT update it, and `reset --hard origin/<branch>` silently
-landed on months-old `25679964`). Always `git fetch origin && git reset --hard
-<explicit SHA>` (or FETCH_HEAD) on hifi and verify with `git log --oneline -1`.
+**Deploy gotcha (hit 2026-07-06, ROOT-CAUSED + FIXED 2026-07-14): hifi's
+remote-tracking refs went stale because the clone's fetch refspec was pinned
+single-branch to `spike/timed-review-gate`** — a bare `git fetch origin` there
+fetched nothing useful and `reset --hard origin/<branch>`/an explicit new SHA
+failed with "Could not parse object". Fixed with `git config
+remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'`; still verify with
+`git log --oneline -1` after any reset. `git fetch origin <branch> && git
+reset --hard FETCH_HEAD` remains the belt-and-suspenders recipe.
 Previous state (tip `31d88ef1` as of 2026-07-05 redeploy — carries the
 GEP encoder-probe + installer fixes F-A/F-F/F-G; rebuilt+recreated
 arm-backend/arm-ui-neu/arm-transcode:latest under all 3 overlays, offload
