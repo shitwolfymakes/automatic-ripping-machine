@@ -1,0 +1,67 @@
+[data-scheme="winamp-classic"] {
+	font-family: Tahoma, 'MS Sans Serif', Verdana, sans-serif;
+}
+[data-scheme="winamp-classic"] aside {
+	border-right: 1px solid #3c3c52 !important;
+	background: linear-gradient(180deg, #24243a, #1c1c2c) !important;
+}
+[data-scheme="winamp-classic"] aside nav a {
+	border: 1px solid transparent;
+	border-radius: 2px;
+	text-transform: uppercase;
+	font-size: 0.72rem;
+	letter-spacing: 0.08em;
+}
+[data-scheme="winamp-classic"] aside nav a:hover {
+	background: #2c2c44 !important;
+	border-top-color: #4a4a68;
+	border-left-color: #4a4a68;
+	border-bottom-color: #14141e;
+	border-right-color: #14141e;
+}
+[data-scheme="winamp-classic"] aside nav a[data-active="true"] {
+	color: #d6b236 !important;
+	background: #1a1a28 !important;
+	border-top-color: #14141e;
+	border-left-color: #14141e;
+	border-bottom-color: #4a4a68;
+	border-right-color: #4a4a68;
+}
+[data-scheme="winamp-classic"] aside hr {
+	border-color: #3c3c52;
+}
+[data-scheme="winamp-classic"] header {
+	border-bottom: 1px solid #3c3c52 !important;
+}
+[data-scheme="winamp-classic"] .section-frame {
+	border: 1px solid #3c3c52 !important;
+	border-radius: 3px;
+}
+[data-scheme="winamp-classic"] .section-frame-bar-top {
+	background:
+		repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 3px),
+		linear-gradient(180deg, #3c3c56, #23233a) !important;
+	color: #d6b236 !important;
+	text-transform: uppercase;
+	letter-spacing: 0.18em;
+	font-size: 0.68rem;
+	font-weight: 700;
+	text-shadow: 1px 1px 0 #000;
+	border-bottom: 1px solid #14141e;
+}
+[data-scheme="winamp-classic"] .section-frame-bar-bottom {
+	background: linear-gradient(180deg, #2a2a40, #20202f) !important;
+}
+[data-scheme="winamp-classic"] [data-progress-track] {
+	background: #0a0a10 !important;
+	border: 1px solid #000;
+	box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8);
+	border-radius: 0 !important;
+}
+[data-scheme="winamp-classic"] [data-progress-fill] {
+	background:
+		repeating-linear-gradient(90deg, transparent 0 2px, rgba(0, 0, 0, 0.4) 2px 4px),
+		linear-gradient(90deg, #00c010, #a8c000 65%, #c03000) !important;
+	border-radius: 0 !important;
+	box-shadow: 0 0 6px rgba(0, 192, 16, 0.35);
+}

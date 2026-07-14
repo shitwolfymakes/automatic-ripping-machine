@@ -169,7 +169,7 @@
 		</div>
 	{:else if feedback}
 		<div class="mt-3 border-t border-primary/10 pt-3 dark:border-primary/15">
-			<span class="text-xs {feedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{feedback.message}</span>
+			<span in:reveal class="text-xs {feedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{feedback.message}</span>
 		</div>
 	{/if}
 </div>
