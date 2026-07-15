@@ -596,6 +596,101 @@ def test_app_registers_notifications_router() -> None:
     assert "/api/notifications/channels" in paths
 
 
+def test_create_inapp_channel_rejected(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    body = {"type": "inapp", "name": "another bell", "config": {"type": "inapp"}}
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/channels", json=body, headers=_auth(token))
+    assert r.status_code == 409
+    assert "inapp" in r.json()["detail"].lower()
+
+
+def test_delete_inapp_channel_rejected(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(
+            id="ncl_inbox",
+            type="inapp",
+            name="bell",
+            enabled=True,
+            config={"type": "inapp"},
+            subscribed_events=["rip.completed"],
+        )
+    )
+    with TestClient(app) as client:
+        r = client.delete("/api/notifications/channels/ncl_inbox", headers=_auth(token))
+    assert r.status_code == 409
+
+
+def test_patch_inapp_config_rejected_but_events_ok(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(
+            id="ncl_inbox",
+            type="inapp",
+            name="bell",
+            enabled=True,
+            config={"type": "inapp"},
+            subscribed_events=["rip.completed"],
+        )
+    )
+    with TestClient(app) as client:
+        # config change rejected
+        r1 = client.patch(
+            "/api/notifications/channels/ncl_inbox", json={"config": {"type": "inapp"}}, headers=_auth(token)
+        )
+        assert r1.status_code == 422
+        # subscribed_events change allowed
+        r2 = client.patch(
+            "/api/notifications/channels/ncl_inbox", json={"subscribed_events": ["rip.failed"]}, headers=_auth(token)
+        )
+        assert r2.status_code == 200, r2.text
+    assert db.rows["notification_channels"][0].subscribed_events == ["rip.failed"]
+
+
+def test_patch_inapp_channel_roundtrips_default_events(signing_key: bytes) -> None:
+    # Regression: the bell subscribes to DEFAULT_INBOX_EVENT_TYPES (incl.
+    # rip.needs_user_input), which is NOTABLE but not NOTIFIABLE. PATCHing the
+    # bell with its own event set must NOT 422.
+    from arm_backend.notification_dispatcher import DEFAULT_INBOX_EVENT_TYPES
+
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows.setdefault("notification_channels", []).append(
+        NotificationChannel(
+            id="ncl_inbox",
+            type="inapp",
+            name="bell",
+            enabled=True,
+            config={"type": "inapp"},
+            subscribed_events=sorted(DEFAULT_INBOX_EVENT_TYPES),
+        )
+    )
+    body = {"enabled": False, "subscribed_events": sorted(DEFAULT_INBOX_EVENT_TYPES)}
+    with TestClient(app) as client:
+        r = client.patch("/api/notifications/channels/ncl_inbox", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert db.rows["notification_channels"][0].enabled is False
+
+
+def test_create_channel_accepts_needs_user_input_event(signing_key: bytes) -> None:
+    # An apprise channel can also subscribe to a NOTABLE (inbox-default) event.
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    body = {
+        "type": "apprise",
+        "name": "X",
+        "config": {"type": "apprise", "url": "json://localhost/x"},
+        "subscribed_events": ["rip.needs_user_input"],
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/channels", json=body, headers=_auth(token))
+    assert r.status_code == 201, r.text
+
+
 def test_patch_channel_redacted_url_echo_keeps_stored(signing_key: bytes) -> None:
     """GET returns the url redacted (scheme://****); a client that round-trips
     it in a PATCH must not overwrite the stored url with the mask."""

@@ -24,20 +24,21 @@ from sqlmodel import col, select
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
 from arm_backend.notification_dispatcher import (
-    NOTIFIABLE_EVENT_TYPES,
+    NOTABLE_EVENT_TYPES,
     AppriseNotifier,
     _first_invalid_apprise_url,
     redact_apprise_url,
 )
 from arm_backend.notification_format import synthetic_test_message
 from arm_backend.notifications import catalog as catalog_module
+from arm_backend.notifications.inbox_listener import INBOX_CHANNEL_ID
 from arm_backend.notifications.field_map import (
     compose_url_from_fields,
     mask_config,
     merge_patch_config,
 )
 from arm_backend.notifications.url_composer import compose_apprise_url
-from arm_common import NotificationChannel, NotificationDispatchLog, User
+from arm_common import NotificationChannel, NotificationDispatchLog, NotificationInbox, User
 from arm_common.schemas import (
     ComposeUrlRequest,
     ComposeUrlResult,
@@ -46,6 +47,9 @@ from arm_common.schemas import (
     NotificationChannelUpdateRequest,
     NotificationChannelView,
     NotificationDispatchLogView,
+    NotificationInboxCountView,
+    NotificationInboxUpdateRequest,
+    NotificationInboxView,
     NotificationTestRequest,
     NotificationTestResult,
     ServiceCatalog,
@@ -87,7 +91,7 @@ def _validate_apprise_url(url: str) -> None:
 
 
 def _validate_events(events: list[str]) -> None:
-    bad = [e for e in events if e not in NOTIFIABLE_EVENT_TYPES]
+    bad = [e for e in events if e not in NOTABLE_EVENT_TYPES]
     if bad:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -96,7 +100,7 @@ def _validate_events(events: list[str]) -> None:
 
 
 def _validate_template_keys(templates: dict[str, Any]) -> None:
-    bad = [k for k in templates if k not in NOTIFIABLE_EVENT_TYPES]
+    bad = [k for k in templates if k not in NOTABLE_EVENT_TYPES]
     if bad:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -150,6 +154,11 @@ async def create_channel(
     user: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
+    if req.type == "inapp":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="cannot create an inapp channel; the in-app bell (ncl_inbox) is system-managed",
+        )
     _validate_events(req.subscribed_events)
     _validate_template_keys(req.templates)
     config = _apprise_config_to_storage(req.config.model_dump(mode="json"))
@@ -180,6 +189,11 @@ async def patch_channel(
     ).scalar_one_or_none()
     if ch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown channel_id: {channel_id}")
+    if channel_id == INBOX_CHANNEL_ID and req.config is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="the in-app channel config is fixed; edit subscribed_events/enabled/name instead",
+        )
 
     fields = req.model_dump(exclude_unset=True)
     if "subscribed_events" in fields and fields["subscribed_events"] is not None:
@@ -228,6 +242,11 @@ async def delete_channel(
     ).scalar_one_or_none()
     if ch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown channel_id: {channel_id}")
+    if channel_id == INBOX_CHANNEL_ID:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="cannot delete the system in-app notification channel",
+        )
     await db.delete(ch)
     await db.commit()
 
@@ -248,7 +267,7 @@ async def compose_url(
 
 @router.get("/event-types", response_model=list[str])
 async def event_types(_: User = Depends(require_jwt)) -> list[str]:
-    return sorted(NOTIFIABLE_EVENT_TYPES)
+    return sorted(NOTABLE_EVENT_TYPES)
 
 
 async def _send_and_log(
@@ -354,3 +373,85 @@ async def dispatch_log(
         stmt = stmt.where(col(NotificationDispatchLog.channel_id) == channel_id)
     stmt = stmt.limit(limit)
     return list((await db.execute(stmt)).scalars().all())
+
+
+@router.get("/inbox", response_model=list[NotificationInboxView])
+async def list_inbox(
+    include_cleared: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=200),
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> list[NotificationInbox]:
+    stmt = select(NotificationInbox).order_by(col(NotificationInbox.created_at).desc())
+    rows = list((await db.execute(stmt)).scalars().all())
+    if not include_cleared:
+        rows = [r for r in rows if not r.cleared]
+    return rows[:limit]
+
+
+@router.get("/inbox/count", response_model=NotificationInboxCountView)
+async def inbox_count(
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> NotificationInboxCountView:
+    rows = list((await db.execute(select(NotificationInbox))).scalars().all())
+    cleared = sum(1 for r in rows if r.cleared)
+    unseen = sum(1 for r in rows if not r.seen and not r.cleared)
+    seen = sum(1 for r in rows if r.seen and not r.cleared)
+    return NotificationInboxCountView(unseen=unseen, seen=seen, cleared=cleared, total=len(rows))
+
+
+@router.post("/inbox/dismiss-all")
+async def inbox_dismiss_all(
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> dict[str, int]:
+    rows = list((await db.execute(select(NotificationInbox))).scalars().all())
+    now = datetime.now(UTC)
+    updated = 0
+    for r in rows:
+        if not r.seen:
+            r.seen = True
+            r.seen_at = now
+            updated += 1
+    await db.commit()
+    return {"updated": updated}
+
+
+@router.post("/inbox/purge")
+async def inbox_purge(
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> dict[str, int]:
+    rows = list((await db.execute(select(NotificationInbox))).scalars().all())
+    deleted = 0
+    for r in rows:
+        if r.cleared:
+            await db.delete(r)
+            deleted += 1
+    await db.commit()
+    return {"deleted": deleted}
+
+
+@router.patch("/inbox/{inbox_id}", response_model=NotificationInboxView)
+async def patch_inbox(
+    inbox_id: str,
+    req: NotificationInboxUpdateRequest,
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> NotificationInbox:
+    row = (
+        await db.execute(select(NotificationInbox).where(col(NotificationInbox.id) == inbox_id))
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown inbox_id: {inbox_id}")
+    now = datetime.now(UTC)
+    if req.seen is not None:
+        row.seen = req.seen
+        row.seen_at = now if req.seen else None
+    if req.cleared is not None:
+        row.cleared = req.cleared
+        row.cleared_at = now if req.cleared else None
+    await db.commit()
+    await db.refresh(row)
+    return row

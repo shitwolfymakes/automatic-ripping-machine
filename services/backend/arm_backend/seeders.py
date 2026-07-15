@@ -26,6 +26,7 @@ from arm_common import (
     HwPreference,
     IdentificationMode,
     MediaType,
+    NotificationChannel,
     OutputMode,
     RetentionPolicy,
     TrackSelection,
@@ -103,6 +104,35 @@ async def _seed_config_singleton(session: AsyncSession) -> None:
         existing.session_signing_key = secrets.token_bytes(32)
         session.add(existing)
         await session.flush()
+
+
+# --- In-app notification channel ----------------------------------------------
+
+
+async def _seed_inapp_channel(session: AsyncSession) -> None:
+    # Local imports to avoid the seeders ↔ notification_dispatcher cycle
+    # (notification_dispatcher imports CONFIG_SINGLETON_ID from seeders at
+    # module level; a top-level import here would be circular).
+    from arm_backend.notification_dispatcher import DEFAULT_INBOX_EVENT_TYPES  # noqa: PLC0415
+    from arm_backend.notifications.inbox_listener import INBOX_CHANNEL_ID  # noqa: PLC0415
+
+    existing = (
+        await session.execute(select(NotificationChannel).where(col(NotificationChannel.id) == INBOX_CHANNEL_ID))
+    ).scalar_one_or_none()
+    if existing is not None:
+        return
+    session.add(
+        NotificationChannel(
+            id=INBOX_CHANNEL_ID,
+            type="inapp",
+            name="In-app notifications",
+            enabled=True,
+            config={"type": "inapp"},
+            subscribed_events=sorted(DEFAULT_INBOX_EVENT_TYPES),
+            templates={},
+        )
+    )
+    await session.flush()
 
 
 # --- Built-in rip presets -----------------------------------------------------
@@ -384,6 +414,7 @@ async def _insert_missing(
 async def run_seeders(session: AsyncSession) -> None:
     await _seed_admin_user(session)
     await _seed_config_singleton(session)
+    await _seed_inapp_channel(session)
     await _insert_missing(session, RipPreset, RIP_PRESETS)
     await _insert_missing(session, TranscodePreset, TRANSCODE_PRESETS)
     await _insert_missing(session, Session, SESSIONS)
