@@ -83,22 +83,6 @@ def test_diagnostics_ok(signing_key: bytes, tmp_path) -> None:
     assert media["exists"] is True and media["writable"] is True
 
 
-def test_diagnostics_heals_missing_root_on_read(signing_key: bytes, tmp_path) -> None:
-    """A missing-but-creatable root is silently created, then reports ok —
-    the report never shows a problem the backend could fix itself."""
-    db = FakeSession()
-    _seed(db)
-    app, token = _make_app(signing_key, db, tmp=tmp_path)
-    missing = tmp_path / "not-yet" / "media"
-    app.state.system_paths["MEDIA_ROOT"] = str(missing)
-    r = _get(app, token)
-    assert r.status_code == 200, r.text
-    assert missing.is_dir()
-    media = next(ch for ch in r.json()["checks"] if ch["name"] == "MEDIA_ROOT")
-    assert media["status"] == "ok"
-    assert r.json()["status"] == "ok"
-
-
 @not_root
 def test_diagnostics_uncreatable_required_root_is_error(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
@@ -238,8 +222,10 @@ def test_app_version_real_fallback(monkeypatch) -> None:
 def test_diagnostics_uses_settings_fallback(signing_key: bytes, tmp_path, monkeypatch) -> None:
     """When system_paths is absent from app.state, _roots falls back to
     settings-derived defaults."""
-    monkeypatch.setattr(system_router.settings, "MEDIA_ROOT", str(tmp_path / "m"))
-    monkeypatch.setattr(system_router.settings, "RAW_ROOT", str(tmp_path / "r"))
+    from arm_backend.config import settings
+
+    monkeypatch.setattr(settings, "MEDIA_ROOT", str(tmp_path / "m"))
+    monkeypatch.setattr(settings, "RAW_ROOT", str(tmp_path / "r"))
     db = FakeSession()
     _seed(db)
     app = FastAPI()
@@ -254,22 +240,8 @@ def test_diagnostics_uses_settings_fallback(signing_key: bytes, tmp_path, monkey
 
     r = _get(app, token)
     assert r.status_code == 200, r.text
-    names = {p["name"] for p in r.json()["paths"]}
-    assert {"MEDIA_ROOT", "RAW_ROOT", "LOG_DIR"} <= names
-    # the settings-pointed roots were healed into existence
-    assert (tmp_path / "m").is_dir() and (tmp_path / "r").is_dir()
-
-
-@not_root
-def test_ensure_roots_swallows_oserror(tmp_path, caplog) -> None:
-    """A broken mount must never crash the caller — warn and move on."""
-    fence = tmp_path / "fence"
-    fence.mkdir()
-    fence.chmod(0o555)
-    try:
-        with caplog.at_level("WARNING"):
-            system_router.ensure_roots({"BAD": str(fence / "sub"), "GOOD": str(tmp_path / "good")})
-    finally:
-        fence.chmod(0o755)
-    assert (tmp_path / "good").is_dir()
-    assert any("cannot create BAD" in rec.getMessage() for rec in caplog.records)
+    paths = {p["name"]: p for p in r.json()["paths"]}
+    assert {"MEDIA_ROOT", "RAW_ROOT", "LOG_DIR"} <= set(paths)
+    # read-only diagnostics: settings-pointed roots are reported, not created
+    assert paths["MEDIA_ROOT"]["exists"] is False
+    assert not (tmp_path / "m").exists() and not (tmp_path / "r").exists()
