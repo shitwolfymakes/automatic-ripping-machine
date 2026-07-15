@@ -168,6 +168,12 @@ async def identify(
 
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
 
+    if cfg.ripping_paused:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="ripping is paused; no new jobs accepted",
+        )
+
     scan = req.scan_result
     job = Job(
         drive_id=req.drive_id,

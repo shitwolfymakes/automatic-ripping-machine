@@ -187,7 +187,17 @@ class JobController:
                     logger.error("scan failed device=%s err=%s", device_path, e)
                     return
 
-                job = await self._identify_with_retry(scan_result, pending_session_id=pending_session_id)
+                try:
+                    job = await self._identify_with_retry(scan_result, pending_session_id=pending_session_id)
+                except httpx.HTTPStatusError as e:
+                    # Non-retriable identify rejection (e.g. 409 ripping-paused). Park
+                    # the pipeline quietly — the lock releases via the context manager.
+                    logger.info(
+                        "rip pipeline not started: identify rejected (%s) for drive %s",
+                        e.response.status_code,
+                        self._drive_id,
+                    )
+                    return
                 self._active_job_id = job.id
 
                 # Phase 12 — every log line below carries job_id once identify lands.
@@ -242,6 +252,21 @@ class JobController:
                     scan_result=scan_result,
                     pending_session_id=pending_session_id,
                 )
+            except httpx.HTTPStatusError as e:
+                status_code = e.response.status_code
+                if 400 <= status_code < 500 and status_code != 429:
+                    # Non-retriable client error (e.g. 409 ripping-paused). Retrying
+                    # spins forever holding _active_lock and deadlocks the drive —
+                    # re-raise so the pipeline exits and the lock releases.
+                    logger.warning(
+                        "identify rejected (%s) for drive %s — not retriable; parking pipeline",
+                        status_code,
+                        self._drive_id,
+                    )
+                    raise
+                logger.warning("identify failed (%s); retrying in %.1fs", e, delay)
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, IDENTIFY_RETRY_MAX_SECONDS)
             except httpx.HTTPError as e:
                 logger.warning("identify failed (%s); retrying in %.1fs", e, delay)
                 await asyncio.sleep(delay)
