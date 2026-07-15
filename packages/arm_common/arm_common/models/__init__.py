@@ -4,6 +4,8 @@ from arm_common.models.drive import Drive
 from arm_common.models.event import Event
 from arm_common.models.gpu import Gpu
 from arm_common.models.job import Job
+from arm_common.models.notification_channel import NotificationChannel
+from arm_common.models.notification_dispatch_log import NotificationDispatchLog
 from arm_common.models.rip_preset import RipPreset
 from arm_common.models.session import Session
 from arm_common.models.session_application import SessionApplication
@@ -19,6 +21,8 @@ __all__ = [
     "Event",
     "Gpu",
     "Job",
+    "NotificationChannel",
+    "NotificationDispatchLog",
     "RipPreset",
     "Session",
     "SessionApplication",
