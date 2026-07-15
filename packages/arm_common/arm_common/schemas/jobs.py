@@ -76,7 +76,11 @@ class JobView(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    drive_id: str
+    # Nullable: SET NULL when the drive that ran this job is later deleted
+    # (a Drive row is disposable operational state). `drive_serial` is the
+    # permanent record of which physical drive this was.
+    drive_id: str | None
+    drive_serial: str | None = None
     disc_type: DiscType
     status: JobStatus
     title: str | None

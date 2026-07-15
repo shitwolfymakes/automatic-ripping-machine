@@ -129,7 +129,10 @@ async def delete_drive(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {drive_id}")
     # Refuse to delete a drive with an in-flight (RIPPING) job — same predicate
     # the ripper boot-probe uses. A live ripper re-registers the row on its next
-    # startup (hostname upsert), so this only guards the active-rip case.
+    # startup (hostname upsert), so this only guards the active-rip case; job
+    # history is unaffected either way (jobs.drive_id is SET NULL on delete,
+    # and Job.drive_serial keeps a permanent record of the physical drive —
+    # see migration 0016_2_jobs_drive_serial).
     active = (
         (
             await db.execute(
