@@ -40,7 +40,6 @@ from arm_backend.routers import (
     transcoder,
     transcodes,
 )
-from arm_backend.routers.system import default_roots, ensure_roots
 from arm_backend.seeders import CONFIG_SINGLETON_ID, run_seeders
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
 from arm_backend.utils import ensure_roots, default_roots
