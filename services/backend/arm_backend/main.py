@@ -56,6 +56,7 @@ from arm_backend.routers import (
 from arm_backend.routers.system import _app_version
 from arm_backend.seeders import CONFIG_SINGLETON_ID, run_seeders
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
+from arm_backend.utils import ensure_roots, default_roots
 from arm_backend.ws import WSHub
 from arm_backend.ws.router import router as ws_router
 from arm_common import Config, Gpu, GpuStatus, Host, configure_service_logging
@@ -163,6 +164,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if cfg.session_signing_key is None:  # pragma: no cover — _run_seeders always populates this; defensive only
             raise RuntimeError("session_signing_key missing — seeders should have populated it")
         app.state.signing_key = cfg.session_signing_key
+    # Silently create any missing data root (never chown, never raise —
+    # the entrypoint's writability guard owns the fatal cases). Diagnostics
+    # re-ensures on every read.
+    ensure_roots(default_roots())
     http = httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=10.0))
     app.state.http = http
     app.state.started_at = datetime.now(UTC)

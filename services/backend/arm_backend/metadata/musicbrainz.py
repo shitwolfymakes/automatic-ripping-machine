@@ -188,7 +188,9 @@ class MusicBrainzClient:
             "/release",
             params={"query": lucene, "fmt": "json", "limit": limit},
         )
+
         results: list[MetadataResult] = []
+        # MB's `limit` query param is advisory; re-cap client-side as a guard.
         for rel in (body.get("releases") or [])[:limit]:
             title = rel.get("title")
             if not title:
@@ -199,6 +201,7 @@ class MusicBrainzClient:
             fmt = media[0].get("format") if media and isinstance(media[0], dict) else None
             payload: dict[str, Any] = {"artist": artist_name, "album": title, "format": fmt, **rel}
             results.append(MetadataResult(title=title, year=year, kind="music", payload=payload))
+
         return results
 
 
