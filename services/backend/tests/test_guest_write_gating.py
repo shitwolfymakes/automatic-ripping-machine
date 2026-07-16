@@ -3,8 +3,8 @@
 A `role=guest` user must get 403 `"read-only role: write access required"`
 on every mutating UI route swapped to `Depends(require_writer)`, and must
 NOT get that 403 on the routes intentionally left open to guests (reads,
-`sessions/preview`, `jobs/iso/scan`, `notifications/.../compose-url`,
-`drives/rescan`, `naming/validate`, `naming/preview`, `login`, `logout`).
+`sessions/preview`, `notifications/.../compose-url`, `drives/rescan`,
+`naming/validate`, `naming/preview`, `login`, `logout`).
 
 The 403 fires in the `require_writer` dependency before the route body or
 request validation runs, so gated-route bodies here are minimal (`{}` or
@@ -33,7 +33,6 @@ from arm_backend.routers import (  # noqa: E402
     drives as drives_router,
     files as files_router,
     images as images_router,
-    iso as iso_router,
     jobs as jobs_router,
     notifications as notifications_router,
     rip_presets as rip_presets_router,
@@ -58,7 +57,6 @@ _ALL_ROUTERS = (
     drives_router,
     files_router,
     images_router,
-    iso_router,
     jobs_router,
     notifications_router,
     rip_presets_router,
@@ -177,7 +175,6 @@ _STAY_OPEN_ROUTES: list[tuple[str, str, dict[str, object] | None]] = [
     ("GET", "/api/files/roots", None),
     # explicitly-open mutating routes
     ("POST", "/api/sessions/preview", {"template": "{title}", "media_type": "movie", "has_transcode_preset": False}),
-    ("POST", "/api/jobs/iso/scan", {"path": "does-not-exist.iso"}),
 ]
 
 
