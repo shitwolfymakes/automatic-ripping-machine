@@ -1,5 +1,6 @@
 # Memory
 
+- [PENDING: tier4 serial absorb plan](project_tier4_serial_absorb_plan.md) — PR #9 simmering by owner decision; when it lands, absorb needs an alembic merge revision (0016_2 + 0028) + twin reconciliation; full checklist inside.
 - [Stacked-branch migrations](feedback_stacked_branch_migrations.md) — a migration's down_revision can dangle on sibling lines and only fails at backend boot; test_migration_chain.py guards it, copy parent files byte-identical across lines.
 - [OPEN: ui-neu preflight endpoint mismatch](project_uineu_preflight_endpoint_mismatch.md) — SystemHealth + ReadinessCheckStep POST /api/system/preflight which nothing serves; port to GET /api/system/diagnostics.
 - [No em dashes in PR titles](feedback_no_em_dashes_in_names.md) — use `Tier-N - <desc>` with plain hyphens; user converted all 26 open PR titles 2026-07-06.
