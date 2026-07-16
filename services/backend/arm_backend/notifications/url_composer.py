@@ -31,3 +31,17 @@ def compose_apprise_url(*, service_id: str, required: dict[str, object], advance
     if pairs:
         return f"{base}?{urlencode(pairs)}"
     return base
+
+
+def redact_apprise_url(url: str) -> str:
+    """Return a read/log-safe form of an Apprise URL: ``<scheme>://****``.
+
+    Apprise places credentials in netloc, path, or query depending on the
+    provider — surgical masking is fragile, so keep only the scheme. Lives
+    here (dependency-free) so both the dispatcher's logging and the
+    read-path masking in field_map can share it.
+    """
+    scheme, sep, _ = url.partition("://")
+    if not sep:
+        return "****"
+    return f"{scheme}://****"
