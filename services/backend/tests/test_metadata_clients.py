@@ -190,6 +190,9 @@ async def test_musicbrainz_multi_disc_matches_by_disc_id(http_client):
         "Twilight to Starlight 1",
         "Twilight to Starlight 2",
     ]
+    # the matched medium's position IS the disc number — it must reach the
+    # payload so the {disc} naming token resolves at apply time
+    assert result.payload["disc"] == 2
 
 
 @respx.mock
@@ -926,3 +929,14 @@ async def test_get_release_not_found(http_client):
     respx.get("https://musicbrainz.org/ws/2/release/missing").mock(return_value=httpx.Response(404))
     with pytest.raises(LookupError, match="release not found"):
         await MusicBrainzClient("armv3", http_client).get_release("missing")
+
+
+@respx.mock
+async def test_get_release_missing_title_raises(http_client):
+    # A 200 release body with no `title` is a degenerate response — get_release
+    # must raise the metadata LookupError rather than build a result.
+    respx.get("https://musicbrainz.org/ws/2/release/no-title").mock(
+        return_value=httpx.Response(200, json={"id": "no-title", "date": "1973"})
+    )
+    with pytest.raises(LookupError, match="missing title"):
+        await MusicBrainzClient("armv3", http_client).get_release("no-title")

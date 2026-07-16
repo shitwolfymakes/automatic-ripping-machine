@@ -1,4 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from arm_common.enums import MediaType
 
 
 class NamingVariable(BaseModel):
@@ -23,3 +25,16 @@ class JobNamingPreviewResponse(BaseModel):
     job_output_dir: str
     job_output_name: str
     items: list[NamingPreviewItem]
+
+
+class NamingValidateRequest(BaseModel):
+    # Constraints/defaults mirror TemplatePreviewRequest and the session save
+    # path (min_length=1; has_transcode_preset=True) so the same template
+    # cannot validate here and then fail at save/preview.
+    template: str = Field(min_length=1)
+    media_type: MediaType
+    has_transcode_preset: bool = True
+
+
+class NamingValidateResponse(BaseModel):
+    valid: bool

@@ -18,3 +18,7 @@ class SystemDiagnosticsResponse(BaseModel):
     status: str
     checks: list[SystemDiagnosticCheck]
     paths: list[PathStatus]
+
+
+class SystemVersionResponse(BaseModel):
+    version: str

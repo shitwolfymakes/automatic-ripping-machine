@@ -8,7 +8,10 @@ docs/arch/06-deployment.md), no rippers registered yet, a missing config
 row. The ported UI's settings System-Health panel and first-run wizard
 render it (Tier-12)."""
 
+import functools
+import importlib.metadata
 import logging
+from pathlib import Path
 import os
 
 from fastapi import APIRouter, Depends, Request
@@ -24,6 +27,7 @@ from arm_common.schemas import (
     SystemDiagnosticCheck,
     SystemDiagnosticsResponse,
     PathStatus,
+    SystemVersionResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -101,3 +105,36 @@ async def diagnostics(
         if _WORST[ch.status] > _WORST[overall]:
             overall = ch.status
     return SystemDiagnosticsResponse(status=overall, checks=checks, paths=paths)
+
+
+# The canonical release version lives in the repo-root VERSION file, baked
+# into the image at /app/VERSION; the workspace member's pyproject pins a
+# static 0.0.0, so importlib.metadata is only a last resort. Resolution:
+# ARM_VERSION env > VERSION file > package metadata > sentinel.
+_VERSION_FILE_CANDIDATES: tuple[Path, ...] = (
+    Path("/app/VERSION"),
+    Path(__file__).resolve().parents[4] / "VERSION",  # repo root (dev checkout)
+)
+
+
+@functools.cache
+def _app_version() -> str:
+    env = os.environ.get("ARM_VERSION")
+    if env:
+        return env.strip()
+    for candidate in _VERSION_FILE_CANDIDATES:
+        try:
+            text = candidate.read_text().strip()
+        except OSError:
+            continue
+        if text:
+            return text
+    try:
+        return importlib.metadata.version("arm_backend")
+    except importlib.metadata.PackageNotFoundError:
+        return "0.0.0+unknown"
+
+
+@router.get("/version", response_model=SystemVersionResponse)
+async def system_version(_: User = Depends(require_jwt)) -> SystemVersionResponse:
+    return SystemVersionResponse(version=_app_version())

@@ -1707,6 +1707,55 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Delete Drive",
+        "operationId": "delete_drive_api_drives__drive_id__delete",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/sessions": {
@@ -3864,6 +3913,65 @@
         }
       }
     },
+    "/api/naming/validate": {
+      "post": {
+        "tags": [
+          "naming"
+        ],
+        "summary": "Naming Validate",
+        "operationId": "naming_validate_api_naming_validate_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NamingValidateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NamingValidateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/notifications/channels": {
       "get": {
         "tags": [
@@ -4997,6 +5105,55 @@
           }
         }
       }
+    },
+    "/api/system/version": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "System Version",
+        "operationId": "system_version_api_system_version_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemVersionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5794,6 +5951,17 @@
             "type": "string",
             "title": "Device Path"
           },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
           "display_name": {
             "anyOf": [
               {
@@ -6206,8 +6374,26 @@
             "title": "Id"
           },
           "drive_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Drive Id"
+          },
+          "drive_serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drive Serial"
           },
           "disc_type": {
             "$ref": "#/components/schemas/DiscType"
@@ -6462,8 +6648,26 @@
             "title": "Id"
           },
           "drive_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Drive Id"
+          },
+          "drive_serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drive Serial"
           },
           "disc_type": {
             "$ref": "#/components/schemas/DiscType"
@@ -6884,6 +7088,42 @@
           "output_name"
         ],
         "title": "NamingPreviewItem"
+      },
+      "NamingValidateRequest": {
+        "properties": {
+          "template": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Template"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "has_transcode_preset": {
+            "type": "boolean",
+            "title": "Has Transcode Preset",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "template",
+          "media_type"
+        ],
+        "title": "NamingValidateRequest"
+      },
+      "NamingValidateResponse": {
+        "properties": {
+          "valid": {
+            "type": "boolean",
+            "title": "Valid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "valid"
+        ],
+        "title": "NamingValidateResponse"
       },
       "NamingVariable": {
         "properties": {
@@ -7600,6 +7840,17 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Hw Caps"
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
           }
         },
         "type": "object",
@@ -8619,6 +8870,19 @@
           "paths"
         ],
         "title": "SystemDiagnosticsResponse"
+      },
+      "SystemVersionResponse": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "title": "SystemVersionResponse"
       },
       "TemplatePreviewRequest": {
         "properties": {

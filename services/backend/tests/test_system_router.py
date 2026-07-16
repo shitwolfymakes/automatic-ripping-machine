@@ -155,6 +155,70 @@ def test_diagnostics_unauthenticated_401(signing_key: bytes, tmp_path) -> None:
     assert r.status_code == 401
 
 
+def test_system_version(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as client:
+        r = client.get("/api/system/version", headers=_auth(token))
+    assert r.status_code == 200
+    assert isinstance(r.json()["version"], str) and r.json()["version"]
+
+
+def test_app_version_env_override_wins(monkeypatch) -> None:
+    from arm_backend.routers import system as system_router
+
+    monkeypatch.setenv("ARM_VERSION", "9.9.9-test")
+    system_router._app_version.cache_clear()
+    try:
+        assert system_router._app_version() == "9.9.9-test"
+    finally:
+        system_router._app_version.cache_clear()
+
+
+def test_app_version_reads_version_file(monkeypatch, tmp_path) -> None:
+    """The canonical VERSION file (baked into the image at /app/VERSION,
+    repo root in dev) is the source of truth — not the static pyproject
+    version, which is pinned 0.0.0."""
+    from arm_backend.routers import system as system_router
+
+    vfile = tmp_path / "VERSION"
+    vfile.write_text("3.1.4-test\n")
+    monkeypatch.delenv("ARM_VERSION", raising=False)
+    monkeypatch.setattr(system_router, "_VERSION_FILE_CANDIDATES", (vfile,))
+    system_router._app_version.cache_clear()
+    try:
+        assert system_router._app_version() == "3.1.4-test"
+    finally:
+        system_router._app_version.cache_clear()
+
+
+def test_system_version_requires_auth(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, _ = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as client:
+        assert client.get("/api/system/version").status_code == 401
+
+
+def test_app_version_real_fallback(monkeypatch) -> None:
+    import importlib.metadata
+
+    from arm_backend.routers import system as system_router
+
+    def _raise(_name: str) -> str:
+        raise importlib.metadata.PackageNotFoundError("arm_backend")
+
+    monkeypatch.delenv("ARM_VERSION", raising=False)
+    monkeypatch.setattr(system_router, "_VERSION_FILE_CANDIDATES", ())
+    monkeypatch.setattr(importlib.metadata, "version", _raise)
+    system_router._app_version.cache_clear()
+    try:
+        assert system_router._app_version() == "0.0.0+unknown"
+    finally:
+        system_router._app_version.cache_clear()
+
+
 def test_diagnostics_uses_settings_fallback(signing_key: bytes, tmp_path, monkeypatch) -> None:
     """When system_paths is absent from app.state, _roots falls back to
     settings-derived defaults."""
