@@ -266,6 +266,8 @@ curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic
 
 (Or `bash -c "$(curl -fsSL ...)"` for users who want a TTY; `install.sh --prefix /srv/arm` to override the default path.)
 
+**Run it as your regular user, never via `sudo`/root.** Containers drop privileges to the invoking user's uid:gid (`PUID`/`PGID`), and a root run would seed the unusable `0:0` (the entrypoint's `groupadd --gid 0` collides with the root group) plus root-own everything under a `/root/arm` prefix. The installer refuses to run as root; docker access should come from `docker` group membership (`sudo usermod -aG docker $USER && newgrp docker`). Unattended installs on root-only hosts can pass explicit non-root `PUID=`/`PGID=` env vars to bypass the guard — the installer then chowns everything it generated (certs, `.env`, compose, data dirs; `db/` excluded) to that uid:gid so the PUID-dropped containers can actually use it.
+
 **What the installer does, in order:**
 
 1. **Prereq check.** `docker` ≥ 24, `docker compose` v2, `openssl` ≥ 1.1.1, `bash` ≥ 4. User is in the `docker` group (or `sudo` usable), and in the host's optical group. Fails fast with a clear message if anything is missing.
@@ -280,7 +282,7 @@ curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic
 
 **Idempotent rerun.** Re-running `install.sh` is safe and recommended when adding drives, upgrading across major versions, or recovering from local edits:
 
-- **Existing `.env` is preserved.** Only `PUID`/`PGID`/`CDROM_GID` are re-derived from the host and overwritten if they drifted.
+- **Existing `.env` is preserved.** Host facts (`CDROM_GID`, `ARM_GPUS`, `ARM_RENDER_GID`) are re-derived and overwritten if they drifted. `PUID`/`PGID` are **not** re-derived: they are operator policy (e.g. a uid hand-tuned to match an NFS export) and any existing non-zero values survive a rerun. Only an unusable `0` value is healed back to the derived uid:gid, and passing explicit `PUID=`/`PGID=` env vars to the rerun overrides the persisted values deliberately.
 - **Existing CA is preserved.** The CA is the one cert LAN clients have imported into their trust stores; regenerating it would force every browser, phone, and laptop to re-import. `install.sh --rotate-ca` is a separate, explicit subcommand that regenerates the CA + all leaves (with a confirmation prompt — the nuclear option for suspected CA key compromise).
 - **All leaf certs are regenerated every run**, signed by the existing CA. Leaves are disposable — LAN clients trust the CA, not the specific leaf, so new leaves are invisible across the network. This self-heals hand-edited / corrupted / stale leaves and picks up SAN changes (e.g. host LAN hostname changed, new drive added) without any special flag or branching in the installer. Running containers keep their in-memory cert until restart; the `docker compose up -d` the user runs next cycles anything whose config changed.
 - **Newly-detected drives** get a new `arm-ripper-srN` service block appended to the compose file and a matching leaf cert.

@@ -83,6 +83,16 @@ jobs:
           fi
           shellcheck "${files[@]}"
 
+  test-shell:
+    name: test (shell — plain-bash suites)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      # Zero-infra unit test that sources install.sh via its ARM_INSTALL_SOURCE_ONLY
+      # seam — no docker, no root, <1s. Un-run tests rot.
+      - name: Installer PUID/PGID suite
+        run: bash devtools/test-install-env.sh
+
   test-python:
     name: test (python — pytest)
     runs-on: ubuntu-latest
