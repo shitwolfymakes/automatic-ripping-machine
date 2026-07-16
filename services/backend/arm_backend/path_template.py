@@ -21,7 +21,7 @@ class TemplateValidationError(ValueError):
 _ALLOWED_TOKENS_BY_MEDIA: dict[MediaType, set[str]] = {
     MediaType.MOVIE: {"title", "year", "track", "duration_human", "transcode_slug", "ext"},
     MediaType.TV: {"show", "year", "season", "disc", "track", "duration_human", "transcode_slug", "ext"},
-    MediaType.MUSIC: {"artist", "album", "track", "track_title", "transcode_slug", "ext"},
+    MediaType.MUSIC: {"artist", "album", "disc", "track", "track_title", "transcode_slug", "ext"},
     MediaType.DATA: {"title"},
     MediaType.ISO: {"title", "year", "ext"},
 }
@@ -50,6 +50,7 @@ _SYNTHETIC_CONTEXTS: dict[MediaType, dict[str, str]] = {
     MediaType.MUSIC: {
         "artist": "Pink Floyd",
         "album": "The Dark Side of the Moon",
+        "disc": "01",
         "track": "01",
         "track_title": "Speak to Me",
         "transcode_slug": "flac",
@@ -97,3 +98,42 @@ def validate_template(template: str, media_type: MediaType, has_transcode_preset
     # Synthetic ctx is fully populated; an empty expansion would mean the
     # template was literally empty, which is caught by the schema's min_length.
     return expansion
+
+
+def validate_template_or_http(template: str, media_type: MediaType, has_transcode_preset: bool) -> str:
+    """Validate a template; raise FastAPI HTTPException(422) on failure.
+
+    Shared by the sessions-preview and naming routers so the validate->422
+    behaviour lives in exactly one place. Returns the synthetic expansion.
+    """
+    from fastapi import HTTPException, status
+
+    try:
+        return validate_template(template, media_type, has_transcode_preset)
+    except TemplateValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+
+
+# Human-readable description per token, surfaced by GET /api/naming/variables.
+_TOKEN_DESCRIPTIONS: dict[str, str] = {
+    "title": "Movie/feature title",
+    "show": "TV show name",
+    "year": "Release year",
+    "season": "Season number, zero-padded",
+    "disc": "Disc number within the set",
+    "track": "Track number, zero-padded",
+    "track_title": "Per-track title (music)",
+    "artist": "Album artist (music)",
+    "album": "Album name (music)",
+    "duration_human": "Human-readable runtime, e.g. 02h05m",
+    "transcode_slug": "Slug of the applied transcode preset",
+    "ext": "Output file extension",
+}
+
+
+def tokens_for_media(media_type: MediaType) -> list[dict[str, str]]:
+    """Return the allowed tokens for a media type with descriptions, sorted."""
+    return [
+        {"token": tok, "description": _TOKEN_DESCRIPTIONS.get(tok, "")}
+        for tok in sorted(_ALLOWED_TOKENS_BY_MEDIA[media_type])
+    ]

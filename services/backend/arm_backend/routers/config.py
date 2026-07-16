@@ -5,6 +5,13 @@ output — the validation helper redacts the URL in any 400 response, and
 the handler itself logs nothing about config bodies. Phase 11 added the
 `notifications_enabled` master toggle (default False) so the UI can enable
 or disable outbound Apprise dispatch without dropping the saved URL list.
+
+As of the notification-channels feature, `notification_apprise_urls` is
+DEPRECATED as a delivery source — the dispatcher now reads
+`notification_channels` rows (migration 0015 imported the existing list).
+The field is still accepted/returned here for backward compatibility but
+is no longer used for dispatch; `notifications_enabled` remains the global
+master toggle. New URLs should be added as channels via /api/notifications.
 """
 
 from datetime import datetime, timezone
@@ -30,14 +37,21 @@ def _to_view(cfg: Config) -> ConfigView:
     return ConfigView(
         tmdb_api_key=cfg.tmdb_api_key,
         omdb_api_key=cfg.omdb_api_key,
+        tvdb_api_key=cfg.tvdb_api_key,
         makemkv_key=cfg.makemkv_key,
         musicbrainz_user_agent=cfg.musicbrainz_user_agent,
         auto_transcode_on_idle=cfg.auto_transcode_on_idle,
         auto_rip_on_insert=cfg.auto_rip_on_insert,
         block_on_miss=cfg.block_on_miss,
+        # `bool(...)` coerces the None a bare in-memory Config carries (the
+        # server_default is DB-level only) to False, so _to_view works for
+        # rows/fixtures predating this column. The sibling bools predate their
+        # consumers' fixtures so they don't need it.
+        ripping_paused=bool(cfg.ripping_paused),
         default_retention_policy=cfg.default_retention_policy,
         notification_apprise_urls=list(cfg.notification_apprise_urls or []),
         notifications_enabled=cfg.notifications_enabled,
+        metadata_provider=cfg.metadata_provider or "tmdb",
         updated_by_user_id=cfg.updated_by_user_id,
         updated_at=cfg.updated_at,
     )
@@ -72,6 +86,11 @@ async def update_config(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"invalid apprise URL: {redact_apprise_url(bad)}",
             )
+    if "metadata_provider" in fields and fields["metadata_provider"] not in ("tmdb", "omdb"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"invalid metadata_provider: {fields['metadata_provider']!r} (must be 'tmdb' or 'omdb')",
+        )
     for key, value in fields.items():
         setattr(cfg, key, value)
     cfg.updated_by_user_id = user.id

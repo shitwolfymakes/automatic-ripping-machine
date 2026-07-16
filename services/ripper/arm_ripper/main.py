@@ -42,6 +42,7 @@ async def register_with_retry(client: BackendClient, device_path: str) -> str:
                 hostname=settings.HOSTNAME,
                 device_path=device_path,
                 ripper_version=RIPPER_VERSION,
+                serial=settings.ARM_DRIVE_SERIAL or None,
             )
             logger.info("registered drive_id=%s device=%s", drive.id, device_path)
             return drive.id
