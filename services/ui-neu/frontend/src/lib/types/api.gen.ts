@@ -1093,38 +1093,6 @@ export type InAppChannelConfig = {
 };
 
 /**
- * IsoScanRequest
- */
-export type IsoScanRequest = {
-    /**
-     * Path
-     */
-    path: string;
-};
-
-/**
- * IsoScanResponse
- */
-export type IsoScanResponse = {
-    /**
-     * Path
-     */
-    path: string;
-    /**
-     * Suggested Title
-     */
-    suggested_title: string;
-    /**
-     * Suggested Year
-     */
-    suggested_year: number | null;
-    /**
-     * Exists
-     */
-    exists: boolean;
-};
-
-/**
  * Job
  */
 export type Job = {
@@ -1241,6 +1209,31 @@ export type JobNamingPreviewResponse = {
      * Items
      */
     items: Array<NamingPreviewItem>;
+};
+
+/**
+ * JobStatsResponse
+ *
+ * Dashboard aggregates. `by_type` counts `Job.disc_type` (the only type
+ * fact on the Job row itself; media_type lives on the applied Session).
+ */
+export type JobStatsResponse = {
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * By Status
+     */
+    by_status: {
+        [key: string]: number;
+    };
+    /**
+     * By Type
+     */
+    by_type: {
+        [key: string]: number;
+    };
 };
 
 /**
@@ -2167,48 +2160,6 @@ export type PathStatus = {
 };
 
 /**
- * PathsResponse
- */
-export type PathsResponse = {
-    /**
-     * Paths
-     */
-    paths: Array<PathStatus>;
-};
-
-/**
- * PreflightCheck
- */
-export type PreflightCheck = {
-    /**
-     * Name
-     */
-    name: string;
-    /**
-     * Status
-     */
-    status: string;
-    /**
-     * Detail
-     */
-    detail?: string | null;
-};
-
-/**
- * PreflightResponse
- */
-export type PreflightResponse = {
-    /**
-     * Status
-     */
-    status: string;
-    /**
-     * Checks
-     */
-    checks: Array<PreflightCheck>;
-};
-
-/**
  * RegisterRequest
  */
 export type RegisterRequest = {
@@ -2891,6 +2842,42 @@ export type StorageRoot = {
      * Percent
      */
     percent: number;
+};
+
+/**
+ * SystemDiagnosticCheck
+ */
+export type SystemDiagnosticCheck = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Detail
+     */
+    detail?: string | null;
+};
+
+/**
+ * SystemDiagnosticsResponse
+ */
+export type SystemDiagnosticsResponse = {
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Checks
+     */
+    checks: Array<SystemDiagnosticCheck>;
+    /**
+     * Paths
+     */
+    paths: Array<PathStatus>;
 };
 
 /**
@@ -4229,6 +4216,37 @@ export type ListJobsApiJobsGetResponses = {
 };
 
 export type ListJobsApiJobsGetResponse = ListJobsApiJobsGetResponses[keyof ListJobsApiJobsGetResponses];
+
+export type JobStatsApiJobsStatsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/jobs/stats';
+};
+
+export type JobStatsApiJobsStatsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type JobStatsApiJobsStatsGetError = JobStatsApiJobsStatsGetErrors[keyof JobStatsApiJobsStatsGetErrors];
+
+export type JobStatsApiJobsStatsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: JobStatsResponse;
+};
+
+export type JobStatsApiJobsStatsGetResponse = JobStatsApiJobsStatsGetResponses[keyof JobStatsApiJobsStatsGetResponses];
 
 export type DeleteJobApiJobsJobIdDeleteData = {
     body?: never;
@@ -6767,37 +6785,6 @@ export type PatchInboxApiNotificationsInboxInboxIdPatchResponses = {
 
 export type PatchInboxApiNotificationsInboxInboxIdPatchResponse = PatchInboxApiNotificationsInboxInboxIdPatchResponses[keyof PatchInboxApiNotificationsInboxInboxIdPatchResponses];
 
-export type ScanIsoApiJobsIsoScanPostData = {
-    body: IsoScanRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/jobs/iso/scan';
-};
-
-export type ScanIsoApiJobsIsoScanPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ScanIsoApiJobsIsoScanPostError = ScanIsoApiJobsIsoScanPostErrors[keyof ScanIsoApiJobsIsoScanPostErrors];
-
-export type ScanIsoApiJobsIsoScanPostResponses = {
-    /**
-     * Successful Response
-     */
-    200: IsoScanResponse;
-};
-
-export type ScanIsoApiJobsIsoScanPostResponse = ScanIsoApiJobsIsoScanPostResponses[keyof ScanIsoApiJobsIsoScanPostResponses];
-
 export type DownloadJobLogsZipApiLogsJobIdZipGetData = {
     body?: never;
     headers?: {
@@ -7231,7 +7218,7 @@ export type SettingsSchemaApiSettingsSchemaGetResponses = {
 
 export type SettingsSchemaApiSettingsSchemaGetResponse = SettingsSchemaApiSettingsSchemaGetResponses[keyof SettingsSchemaApiSettingsSchemaGetResponses];
 
-export type PreflightApiSystemPreflightGetData = {
+export type DiagnosticsApiSystemDiagnosticsGetData = {
     body?: never;
     headers?: {
         /**
@@ -7241,57 +7228,26 @@ export type PreflightApiSystemPreflightGetData = {
     };
     path?: never;
     query?: never;
-    url: '/api/system/preflight';
+    url: '/api/system/diagnostics';
 };
 
-export type PreflightApiSystemPreflightGetErrors = {
+export type DiagnosticsApiSystemDiagnosticsGetErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type PreflightApiSystemPreflightGetError = PreflightApiSystemPreflightGetErrors[keyof PreflightApiSystemPreflightGetErrors];
+export type DiagnosticsApiSystemDiagnosticsGetError = DiagnosticsApiSystemDiagnosticsGetErrors[keyof DiagnosticsApiSystemDiagnosticsGetErrors];
 
-export type PreflightApiSystemPreflightGetResponses = {
+export type DiagnosticsApiSystemDiagnosticsGetResponses = {
     /**
      * Successful Response
      */
-    200: PreflightResponse;
+    200: SystemDiagnosticsResponse;
 };
 
-export type PreflightApiSystemPreflightGetResponse = PreflightApiSystemPreflightGetResponses[keyof PreflightApiSystemPreflightGetResponses];
-
-export type PathsApiSystemPathsGetData = {
-    body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/system/paths';
-};
-
-export type PathsApiSystemPathsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type PathsApiSystemPathsGetError = PathsApiSystemPathsGetErrors[keyof PathsApiSystemPathsGetErrors];
-
-export type PathsApiSystemPathsGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: PathsResponse;
-};
-
-export type PathsApiSystemPathsGetResponse = PathsApiSystemPathsGetResponses[keyof PathsApiSystemPathsGetResponses];
+export type DiagnosticsApiSystemDiagnosticsGetResponse = DiagnosticsApiSystemDiagnosticsGetResponses[keyof DiagnosticsApiSystemDiagnosticsGetResponses];
 
 export type StatsApiSystemStatsGetData = {
     body?: never;
