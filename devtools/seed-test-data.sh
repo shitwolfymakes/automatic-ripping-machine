@@ -143,8 +143,6 @@ def script(title, status):
         ]
     if status == "identified":
         lines.append((8, "info", "arm_backend", "awaiting rip start"))
-    if status == "abandoned":
-        lines.append((30, "warning", "arm_backend", "no user identification within timeout; job abandoned"))
     return sorted(lines, key=lambda t: t[0])
 
 os.makedirs("/logs/jobs", exist_ok=True)
@@ -187,25 +185,25 @@ EOF
 fi
 
 # --- generate real ULIDs via the backend (authoritative; matches route patterns) ---
-# 1 drive + 9 jobs + 11 tracks + 4 fingerprints. The 9th job is a multi-title DVD
+# 1 drive + 9 jobs + 26 tracks + 4 fingerprints. The 9th job is a multi-title DVD
 # (Cult Double Feature) whose 3 video tracks are each matched independently; the
 # detail routes validate the ULID pattern, so these must be real backend ULIDs.
 ids="$(docker compose exec -T arm-backend python -c "
 from arm_common.ulid import new_id
 print(new_id('drv'))
 for _ in range(9): print(new_id('job'))
-for _ in range(11): print(new_id('trk'))
+for _ in range(26): print(new_id('trk'))
 for _ in range(4): print(new_id('dfp'))
 ")"
 mapfile -t ID <<<"$ids"
-if [[ "${#ID[@]}" -ne 25 ]]; then
-    echo "ULID generation failed (expected 25 ids, got ${#ID[@]})" >&2
+if [[ "${#ID[@]}" -ne 40 ]]; then
+    echo "ULID generation failed (expected 40 ids, got ${#ID[@]})" >&2
     exit 1
 fi
 DRV="${ID[0]}"
 J=("${ID[@]:1:9}")
-T=("${ID[@]:10:11}")
-F=("${ID[@]:21:4}")
+T=("${ID[@]:10:26}")
+F=("${ID[@]:36:4}")
 
 # --- MusicBrainz-shaped tracklists (ASCII only) for the CD jobs ---
 # Abbey Road (single disc, 17 tracks) for the ripped music CD.
@@ -279,25 +277,24 @@ INSERT INTO tracks (id, job_id, kind, index, source_ref, label, status, attempts
 -- metadata_json. ALL 17 tracks: the disc track-count must match the album so the
 -- "match track count" search filter finds the real 17-track Abbey Road release (a
 -- 2-track stub matched 2-track singles instead). Durations mirror ABBEY_TRACKS.
--- The 15 rows past T[6]/T[7] use their own deterministic ids (T[] holds only 8).
 INSERT INTO tracks (id, job_id, kind, index, source_ref, label, status, attempts, duration_seconds, expected_duration_seconds, output_path) VALUES
- ('${T[6]}', '${J[6]}', 'audio_track', 0,  '1',  'Come Together',                            'done', 1, 259, 259, '/media/music/The Beatles/Abbey Road/01 Come Together.flac'),
- ('${T[7]}', '${J[6]}', 'audio_track', 1,  '2',  'Something',                                'done', 1, 182, 182, '/media/music/The Beatles/Abbey Road/02 Something.flac'),
- ('trk_seedabbeyroad000000003', '${J[6]}', 'audio_track', 2,  '3',  'Maxwell s Silver Hammer',                  'done', 1, 208, 208, '/media/music/The Beatles/Abbey Road/03 Maxwell s Silver Hammer.flac'),
- ('trk_seedabbeyroad000000004', '${J[6]}', 'audio_track', 3,  '4',  'Oh! Darling',                              'done', 1, 207, 207, '/media/music/The Beatles/Abbey Road/04 Oh! Darling.flac'),
- ('trk_seedabbeyroad000000005', '${J[6]}', 'audio_track', 4,  '5',  'Octopus s Garden',                         'done', 1, 171, 171, '/media/music/The Beatles/Abbey Road/05 Octopus s Garden.flac'),
- ('trk_seedabbeyroad000000006', '${J[6]}', 'audio_track', 5,  '6',  'I Want You (She s So Heavy)',              'done', 1, 467, 467, '/media/music/The Beatles/Abbey Road/06 I Want You.flac'),
- ('trk_seedabbeyroad000000007', '${J[6]}', 'audio_track', 6,  '7',  'Here Comes the Sun',                       'done', 1, 186, 186, '/media/music/The Beatles/Abbey Road/07 Here Comes the Sun.flac'),
- ('trk_seedabbeyroad000000008', '${J[6]}', 'audio_track', 7,  '8',  'Because',                                  'done', 1, 166, 166, '/media/music/The Beatles/Abbey Road/08 Because.flac'),
- ('trk_seedabbeyroad000000009', '${J[6]}', 'audio_track', 8,  '9',  'You Never Give Me Your Money',             'done', 1, 242, 242, '/media/music/The Beatles/Abbey Road/09 You Never Give Me Your Money.flac'),
- ('trk_seedabbeyroad000000010', '${J[6]}', 'audio_track', 9,  '10', 'Sun King',                                 'done', 1, 146, 146, '/media/music/The Beatles/Abbey Road/10 Sun King.flac'),
- ('trk_seedabbeyroad000000011', '${J[6]}', 'audio_track', 10, '11', 'Mean Mr. Mustard',                         'done', 1, 66,  66,  '/media/music/The Beatles/Abbey Road/11 Mean Mr. Mustard.flac'),
- ('trk_seedabbeyroad000000012', '${J[6]}', 'audio_track', 11, '12', 'Polythene Pam',                            'done', 1, 72,  72,  '/media/music/The Beatles/Abbey Road/12 Polythene Pam.flac'),
- ('trk_seedabbeyroad000000013', '${J[6]}', 'audio_track', 12, '13', 'She Came In Through the Bathroom Window',   'done', 1, 117, 117, '/media/music/The Beatles/Abbey Road/13 She Came In Through the Bathroom Window.flac'),
- ('trk_seedabbeyroad000000014', '${J[6]}', 'audio_track', 13, '14', 'Golden Slumbers',                          'done', 1, 91,  91,  '/media/music/The Beatles/Abbey Road/14 Golden Slumbers.flac'),
- ('trk_seedabbeyroad000000015', '${J[6]}', 'audio_track', 14, '15', 'Carry That Weight',                        'done', 1, 96,  96,  '/media/music/The Beatles/Abbey Road/15 Carry That Weight.flac'),
- ('trk_seedabbeyroad000000016', '${J[6]}', 'audio_track', 15, '16', 'The End',                                  'done', 1, 140, 140, '/media/music/The Beatles/Abbey Road/16 The End.flac'),
- ('trk_seedabbeyroad000000017', '${J[6]}', 'audio_track', 16, '17', 'Her Majesty',                              'done', 1, 25,  25,  '/media/music/The Beatles/Abbey Road/17 Her Majesty.flac');
+ ('${T[6]}',  '${J[6]}', 'audio_track', 0,  '1',  'Come Together',                            'done', 1, 259, 259, '/media/music/The Beatles/Abbey Road/01 Come Together.flac'),
+ ('${T[7]}',  '${J[6]}', 'audio_track', 1,  '2',  'Something',                                'done', 1, 182, 182, '/media/music/The Beatles/Abbey Road/02 Something.flac'),
+ ('${T[11]}', '${J[6]}', 'audio_track', 2,  '3',  'Maxwell s Silver Hammer',                  'done', 1, 208, 208, '/media/music/The Beatles/Abbey Road/03 Maxwell s Silver Hammer.flac'),
+ ('${T[12]}', '${J[6]}', 'audio_track', 3,  '4',  'Oh! Darling',                              'done', 1, 207, 207, '/media/music/The Beatles/Abbey Road/04 Oh! Darling.flac'),
+ ('${T[13]}', '${J[6]}', 'audio_track', 4,  '5',  'Octopus s Garden',                         'done', 1, 171, 171, '/media/music/The Beatles/Abbey Road/05 Octopus s Garden.flac'),
+ ('${T[14]}', '${J[6]}', 'audio_track', 5,  '6',  'I Want You (She s So Heavy)',              'done', 1, 467, 467, '/media/music/The Beatles/Abbey Road/06 I Want You.flac'),
+ ('${T[15]}', '${J[6]}', 'audio_track', 6,  '7',  'Here Comes the Sun',                       'done', 1, 186, 186, '/media/music/The Beatles/Abbey Road/07 Here Comes the Sun.flac'),
+ ('${T[16]}', '${J[6]}', 'audio_track', 7,  '8',  'Because',                                  'done', 1, 166, 166, '/media/music/The Beatles/Abbey Road/08 Because.flac'),
+ ('${T[17]}', '${J[6]}', 'audio_track', 8,  '9',  'You Never Give Me Your Money',             'done', 1, 242, 242, '/media/music/The Beatles/Abbey Road/09 You Never Give Me Your Money.flac'),
+ ('${T[18]}', '${J[6]}', 'audio_track', 9,  '10', 'Sun King',                                 'done', 1, 146, 146, '/media/music/The Beatles/Abbey Road/10 Sun King.flac'),
+ ('${T[19]}', '${J[6]}', 'audio_track', 10, '11', 'Mean Mr. Mustard',                         'done', 1, 66,  66,  '/media/music/The Beatles/Abbey Road/11 Mean Mr. Mustard.flac'),
+ ('${T[20]}', '${J[6]}', 'audio_track', 11, '12', 'Polythene Pam',                            'done', 1, 72,  72,  '/media/music/The Beatles/Abbey Road/12 Polythene Pam.flac'),
+ ('${T[21]}', '${J[6]}', 'audio_track', 12, '13', 'She Came In Through the Bathroom Window',   'done', 1, 117, 117, '/media/music/The Beatles/Abbey Road/13 She Came In Through the Bathroom Window.flac'),
+ ('${T[22]}', '${J[6]}', 'audio_track', 13, '14', 'Golden Slumbers',                          'done', 1, 91,  91,  '/media/music/The Beatles/Abbey Road/14 Golden Slumbers.flac'),
+ ('${T[23]}', '${J[6]}', 'audio_track', 14, '15', 'Carry That Weight',                        'done', 1, 96,  96,  '/media/music/The Beatles/Abbey Road/15 Carry That Weight.flac'),
+ ('${T[24]}', '${J[6]}', 'audio_track', 15, '16', 'The End',                                  'done', 1, 140, 140, '/media/music/The Beatles/Abbey Road/16 The End.flac'),
+ ('${T[25]}', '${J[6]}', 'audio_track', 16, '17', 'Her Majesty',                              'done', 1, 25,  25,  '/media/music/The Beatles/Abbey Road/17 Her Majesty.flac');
 
 -- Multi-title DVD (J8, ripped): a double feature whose 3 video tracks are each a
 -- separate movie. Titles are UNSET on purpose so the disc demonstrates per-track
@@ -327,4 +324,4 @@ echo "seeded 1 drive + 9 jobs + 26 tracks + 4 fingerprints + per-job logs (tagge
 echo "  spans: ripping / ripped / identified / awaiting_user_id / ripped_partial / failed,"
 echo "  video tracks (excluded, custom_filename, failed+last_error, mixed status), CD music"
 echo "  tracklists (single + multi-disc), crc64/aacs/musicbrainz fingerprints, and per-job logs."
-echo "  view at https://localhost:8082 (login admin / adminadmin); re-run is safe; --clean to remove"
+echo "  view at https://localhost:8081 (login admin / admin); re-run is safe; --clean to remove"

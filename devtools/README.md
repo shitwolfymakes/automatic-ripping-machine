@@ -42,10 +42,11 @@ Phase 9 + 15 backend crash-recovery drill. Injects a synthetic in-flight job int
 ## seed-test-data.sh
 
 Populates the running dev DB with a fixture so the UI shows real data instead
-of the empty state: one seed drive + 7 jobs spanning statuses
-(ripping / ripped / identified / awaiting-id / ripped-partial / failed /
-abandoned, mixed disc types, real titles + TMDB posters) + 3 tracks on the
-ripped job.
+of the empty state: one seed drive + 9 jobs spanning statuses
+(ripping / ripped / identified / awaiting-id / ripped-partial / failed, mixed
+disc types incl. music CDs and a multi-title DVD, real titles + TMDB posters),
+26 tracks (video + audio, excluded / custom-filename / failed variants), disc
+fingerprints, and a per-job log file for each job.
 
 ```bash
 bash devtools/seed-test-data.sh            # clean-then-seed (idempotent; safe to re-run)
@@ -56,13 +57,13 @@ Requires the dev stack running (`docker compose up -d` — needs `arm-db` for th
 inserts and `arm-backend` to mint valid ULID ids). Seed rows are tagged
 `metadata_json {"seed":true}` (the drive by its display_name); `--clean` and
 re-runs key off those, so it never touches real jobs. Dev-only — not invoked by
-`setup-dev.sh` or CI. View the result at `https://localhost:8082` (or the Vue UI
-at `:8081`).
+`setup-dev.sh` or CI. View the result in the UI at `https://localhost:8081`
+(default login `admin` / `admin`).
 
 ## trust-ca.sh
 
 Trusts the ARM v3 local CA (`arm/certs/arm-ca.crt`) on your dev machine so
-`https://localhost:8081` / `:8082` load without the self-signed-cert warning and
+`https://localhost:8081` loads without the self-signed-cert warning and
 `curl`/`wget` stop needing `-k`.
 
 ```bash

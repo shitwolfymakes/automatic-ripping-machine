@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Trust the ARM v3 local CA (arm/certs/arm-ca.crt) on this dev machine so
-# https://localhost:8081 / :8082 load without the self-signed warning and
+# https://localhost:8081 loads without the self-signed warning and
 # curl/wget stop needing -k.
 #
 # Installs into the Linux trust store (update-ca-certificates) and — when
@@ -92,7 +92,7 @@ fi
 # ---------------- summary / exit ----------------
 if [[ "$MODE" == "trust" && "$linux_ok" -eq 1 ]]; then
     echo "  done — browsers may need a restart to pick up the new root."
-    printf '%s\n' "  verify (Linux): curl -s -o /dev/null -w '%{http_code}\\n' https://localhost:8082/   # 200, no -k"
+    printf '%s\n' "  verify (Linux): curl -s -o /dev/null -w '%{http_code}\\n' https://localhost:8081/   # 200, no -k"
 fi
 
 # Fail only if every attempted store failed.
