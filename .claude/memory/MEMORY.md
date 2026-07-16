@@ -1,5 +1,7 @@
 # Memory
 
+- [Stacked-branch migrations](feedback_stacked_branch_migrations.md) — a migration's down_revision can dangle on sibling lines and only fails at backend boot; test_migration_chain.py guards it, copy parent files byte-identical across lines.
+- [OPEN: ui-neu preflight endpoint mismatch](project_uineu_preflight_endpoint_mismatch.md) — SystemHealth + ReadinessCheckStep POST /api/system/preflight which nothing serves; port to GET /api/system/diagnostics.
 - [No em dashes in PR titles](feedback_no_em_dashes_in_names.md) — use `Tier-N - <desc>` with plain hyphens; user converted all 26 open PR titles 2026-07-06.
 - [Deploy-branch discipline](feedback_deploy_branch_discipline.md) — author on the wolfy PR stack, MERGE (never cherry-pick) into the deploy line, absorb wolfy main often; cherry-pick twins are what almost blew up the branch on 2026-07-06.
 - [Session wind-down state 2026-07-05](project_session_state_2026-07-05.md) — READ FIRST on pickup: branch/deploy/PR state (deploy/hifi-20260705 @ 31d88ef1 on origin+wolfy; PR #41 @ 04077f0b), GPU encoder-probe feature COMPLETE + verified, remote NVENC offload live, and the open items (task #7 close-out, paused Settings brainstorm, dispatcher reconnect).
