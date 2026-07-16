@@ -51,6 +51,7 @@ def _to_view(cfg: Config) -> ConfigView:
         default_retention_policy=cfg.default_retention_policy,
         notification_apprise_urls=list(cfg.notification_apprise_urls or []),
         notifications_enabled=cfg.notifications_enabled,
+        metadata_provider=cfg.metadata_provider or "tmdb",
         updated_by_user_id=cfg.updated_by_user_id,
         updated_at=cfg.updated_at,
     )
@@ -85,6 +86,11 @@ async def update_config(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"invalid apprise URL: {redact_apprise_url(bad)}",
             )
+    if "metadata_provider" in fields and fields["metadata_provider"] not in ("tmdb", "omdb"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"invalid metadata_provider: {fields['metadata_provider']!r} (must be 'tmdb' or 'omdb')",
+        )
     for key, value in fields.items():
         setattr(cfg, key, value)
     cfg.updated_by_user_id = user.id

@@ -28,6 +28,13 @@ class Config(SQLModel, table=True):
     # app-name-plus-contact-info string per MB's etiquette guide — see the UI
     # form's placeholder hint.
     musicbrainz_user_agent: str | None = Field(default="armv3")
+    # Persisted metadata provider for the identify flow (search + detail).
+    # Default `tmdb` — free, effectively unlimited, richer than OMDb. Validated
+    # app-side to {tmdb, omdb}; tvdb/makemkv are key-test-only, not search providers.
+    metadata_provider: str = Field(
+        default="tmdb",
+        sa_column=Column(String, nullable=False, server_default="tmdb"),
+    )
     auto_transcode_on_idle: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
     auto_rip_on_insert: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
     block_on_miss: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
