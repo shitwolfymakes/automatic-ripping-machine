@@ -1,47 +1,49 @@
 ---
 name: tier4-serial-absorb-plan
-description: PENDING — wolfy's PR #9 (tier4 drive-serial, migrations 0016_1/0016_2) is simmering; when it lands, the absorb needs an alembic merge revision + twin reconciliation. The full plan, decided 2026-07-16.
+description: LIVE — tier4 (#9) + Tier-5 (#10) merged upstream, neu-ports folded into main (rc3), stack repointed to main 2026-07-16; 24 PRs CONFLICTING pending absorb. Upstream re-parented 0017 → NO merge revision needed, but hifi needs manual 0016_1/0016_2 DDL.
 metadata:
   type: project
 ---
 
-wolfy pushed `dc510be1` to `feat/tier4-quickwins` (PR #9, base feat/neu-ports,
-verified 2026-07-16: suite green, merges clean into neu-ports): drive identity
-anchored to hardware serial (`Drive.serial` via udev ID_SERIAL_SHORT threaded
-from setup-dev.sh → ripper `ARM_DRIVE_SERIAL` → register endpoint swap
-detection with coalesce-guarded upsert), and jobs survive drive delete
-(`jobs.drive_id` → nullable + ON DELETE SET NULL, permanent `Job.drive_serial`
-snapshot). Migrations **0016_1_drive_serial → 0016_2_jobs_drive_serial**, both
-hanging off `0016_notification_inbox`.
+**State as of 2026-07-16 (supersedes the "simmer" plan):**
+- wolfy merged PR #9 (tier4 drive-serial, migrations 0016_1/0016_2) and PR #10
+  (Tier-5 imdb identify) into feat/neu-ports, then neu-ports → main (PR #6),
+  version bumped to **3.0.0-rc3**.
+- All 28 open stack PRs were repointed base=main (28/28 succeeded, done by
+  Claude on owner instruction). 24 went CONFLICTING — main now carries tier4/5
+  twins the stack never absorbed. #54/#55 among them.
+- **Upstream re-parented `0017_config_metadata_provider` to
+  `down_revision = "0016_2_jobs_drive_serial"`** (our lines say
+  `0016_notification_inbox`). Main's chain is LINEAR, single head — the
+  planned alembic merge revision is NOT needed anymore.
 
-**Owner decision 2026-07-16: let PR #9 simmer; pick up its changes when it
-lands.** No pre-staging, no ordering nudge to wolfy.
+**Absorb checklist (bottom of our stack first — feat/user-management):**
+1. Merge wolfy/main into feat/user-management. Take MAIN's 0017 file (the
+   re-parented one — same revision id must have one content everywhere).
+2. Twin conflicts: tier4 quick-wins vs fork implementations — auth.py
+   (`_verify_drive_owner` nullable drive_id vs guest gating), routers/ripper.py
+   (register serial-swap rewrite vs review-gate), routers/{system,naming}.py,
+   metadata/musicbrainz.py, schemas, tests. Union playbook per
+   [[deploy-branch-discipline]]; deploy remains the fork-feature oracle.
+3. test_migration_chain.py should PASS after (linear chain 0016→0016_1→0016_2
+   →0017→…→0028). If it reports two heads, main's 0017 didn't win — fix that.
+4. Regen: services/ui snapshot + npm openapi-types + ui-neu codegen.sh.
+5. Propagate up: ui-settings-polish → mobile-drawer-stats → deploy.
 
-**When absorbing (whoever does it):**
-1. **Migration two-heads:** fork's `0017_config_metadata_provider` shares
-   parent `0016_notification_inbox` with their `0016_1` → after the merge the
-   chain branches and `alembic upgrade head` refuses. `test_migration_chain.py`
-   (on the stack since PR #54) fails immediately — expected. Fix: an **empty
-   alembic merge revision** on the absorbing branch,
-   `down_revision = ("0016_2_jobs_drive_serial", "0028_user_role_disabled")`
-   (or the then-current fork head). NEVER re-parent existing migration files —
-   deployed DBs (hifi at 0028+) assume recorded ancestry ran; the merge
-   revision makes hifi apply only the unapplied 0016_1/0016_2 branch.
-2. **Twin conflicts:** PR #9 also carries older tier4 quick-wins (naming
-   validate, system /version, music disc token) that the fork line implemented
-   separately — expect ~a dozen conflicts concentrated in auth.py (guest gating
-   vs nullable-drive_id `_verify_drive_owner`), routers/ripper.py (review-gate
-   vs register rewrite), routers/system.py, routers/naming.py,
-   metadata/musicbrainz.py, schemas. Same union playbook as the 2026-07-16
-   neu-ports reconciliation ([[deploy-branch-discipline]],
-   [[stacked-branch-migrations]]).
-3. **Regen** services/ui openapi snapshot + services/ui npm openapi-types +
-   ui-neu scripts/codegen.sh (per line — deploy regenerates from its own
-   snapshot).
-4. **hifi compose:** the ripper service is hand-spliced; add
-   `ARM_DRIVE_SERIAL` (from `udevadm info --query=property --name=/dev/sr0 |
-   sed -n 's/^ID_SERIAL_SHORT=//p'` on quark) or accept serial=None — the
-   coalesce upsert degrades gracefully.
+**⚠ hifi DB hazard (the re-parenting cost):** hifi applied 0017 under the OLD
+ancestry; alembic_version=0028. After adopting main's re-parented 0017,
+alembic considers 0016_1/0016_2 applied — they never ran on hifi. Before/when
+tier4 content reaches deploy on hifi, apply their DDL manually (psql):
+`ALTER TABLE drives ADD COLUMN serial VARCHAR;` then
+`ALTER TABLE jobs ADD COLUMN drive_serial VARCHAR;`
+`UPDATE jobs SET drive_serial = drives.serial FROM drives WHERE jobs.drive_id = drives.id AND drives.serial IS NOT NULL;`
+`ALTER TABLE jobs ALTER COLUMN drive_id DROP NOT NULL;`
+`ALTER TABLE jobs DROP CONSTRAINT jobs_drive_id_fkey;`
+`ALTER TABLE jobs ADD CONSTRAINT jobs_drive_id_fkey FOREIGN KEY (drive_id) REFERENCES drives(id) ON DELETE SET NULL;`
+Also splice `ARM_DRIVE_SERIAL` into hifi's hand-generated ripper compose block
+(udevadm ID_SERIAL_SHORT on quark), or accept serial=None (coalesce-safe).
 
-Optional cheap win still on the table: upstream `test_migration_chain.py` to
-neu-ports as a standalone PR so wolfy's line gets the chain guard in CI.
+**Also pending:** the other ~22 conflicting PRs (#11-#47) each need a main
+absorb — wolfy merges bottom-up; coordinate/sequence with them. New-PR plan
+(per-host stats + mobile drawer as stacked PRs off ui-settings-polish)
+unchanged, but their auto-retarget target is now main.
