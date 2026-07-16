@@ -8,7 +8,12 @@ metadata:
 The v3 stack runs on **hifi-server** (host `quark`, `192.168.0.68`, user `upb`,
 key `~/.ssh/hifi`) at `~/src/automatic-ripping-machine-v3`, cloned from
 `origin` (`uprightbass360/arm-v3`, now public). Deployed branch:
-`deploy/hifi-20260705`; checkout at **`a4c0f666`** since 2026-07-14
+`deploy/hifi-20260705`; checkout at **`76234b4c`** since 2026-07-16:
+**arm-backend + arm-ui-neu rebuilt** there (neu-ports reconciliation:
+/api/system/diagnostics replaces preflight/paths, notification unions,
+ensure_roots lifespan, ISO feature retained, mobile drawer Menu/Stats;
+verified diagnostics/resources/iso-scan probes + live drawer post-rebuild).
+Previous checkout **`a4c0f666`** since 2026-07-14
 (tier34-themes reconciliation merge: 3 new builtin themes winamp-classic /
 hifi-deck / gruvbox + Tier-32/33 ancestry joined; arm-ui-neu rebuilt,
 arm-backend recreated same-image with all three overlays — offload intact;
