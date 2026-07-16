@@ -15,11 +15,11 @@ from arm_common.schemas.drives import (
     DriveRescanResponse,
     DriveUpdateRequest,
 )
-from arm_common.schemas.iso import IsoScanRequest, IsoScanResponse
 from arm_common.schemas.jobs import (
     AbandonJobRequest,
     BulkDeleteJobsResponse,
     DiscFingerprintView,
+    JobStatsResponse,
     JobUpdateRequest,
     JobView,
     ManualTriggerRequest,
@@ -89,10 +89,8 @@ from arm_common.schemas.transcoder import (
 )
 from arm_common.schemas.system import (
     PathStatus,
-    PathsResponse,
-    PreflightCheck,
-    PreflightResponse,
-    StatsResponse,
+    SystemDiagnosticCheck,
+    SystemDiagnosticsResponse,
     SystemVersionResponse,
 )
 from arm_common.schemas.notifications import (
@@ -163,10 +161,9 @@ __all__ = [
     "HeartbeatRequest",
     "IdentifyRequest",
     "InAppChannelConfig",
-    "IsoScanRequest",
-    "IsoScanResponse",
     "JobCompleteRequest",
     "JobDetailView",
+    "JobStatsResponse",
     "JobUpdateRequest",
     "JobView",
     "LoginRequest",
@@ -191,9 +188,8 @@ __all__ = [
     "NamingVariablesResponse",
     "PasswordChangeRequest",
     "PathStatus",
-    "PathsResponse",
-    "PreflightCheck",
-    "PreflightResponse",
+    "SystemDiagnosticCheck",
+    "SystemDiagnosticsResponse",
     "RegisterRequest",
     "RegisterTranscoderRequest",
     "RegisterTranscoderResponse",
@@ -215,7 +211,6 @@ __all__ = [
     "SessionCreateRequest",
     "SessionUpdateRequest",
     "SessionView",
-    "StatsResponse",
     "SystemVersionResponse",
     "TemplatePreviewRequest",
     "TemplatePreviewResponse",

@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from arm_backend.notifications.catalog import build_catalog
-from arm_backend.notifications.url_composer import compose_apprise_url
+from arm_backend.notifications.url_composer import compose_apprise_url, redact_apprise_url
 
 _HIDDEN_LITERAL = "<hidden>"
 
@@ -41,10 +41,15 @@ def compose_url_from_fields(service_id: str | None, fields: dict[str, Any]) -> s
     svc = _service(service_id)
     if svc is None:
         return None
-    required_keys = {f["key"] for f in svc.get("required_fields", [])}
+    # Required segments MUST follow the catalog's token order (apprise's URL
+    # template order), never the client dict's iteration order — a token-first
+    # payload would otherwise compose discord://token/id, which validates and
+    # stores silently broken.
+    required_order = [f["key"] for f in svc.get("required_fields", [])]
+    required_keys = set(required_order)
     return compose_apprise_url(
         service_id=service_id,  # type: ignore[arg-type]  # _service guarantees non-None
-        required={k: v for k, v in fields.items() if k in required_keys},
+        required={k: fields[k] for k in required_order if k in fields},
         advanced={k: v for k, v in fields.items() if k not in required_keys},
     )
 
@@ -54,8 +59,14 @@ def mask_config(cfg: dict[str, Any]) -> dict[str, Any]:
     masked literal. Non-apprise / no-fields configs pass through."""
     if not cfg:
         return cfg
-    if cfg.get("type") != "apprise" or not isinstance(cfg.get("fields"), dict):
+    if cfg.get("type") != "apprise":
         return cfg
+    if not isinstance(cfg.get("fields"), dict):
+        # url-only config (e.g. migration-imported): the url IS the secret.
+        out = dict(cfg)
+        if out.get("url"):
+            out["url"] = redact_apprise_url(str(out["url"]))
+        return out
     out = dict(cfg)
     service_id = cfg.get("service_id")
     masked: dict[str, Any] = {}
@@ -65,6 +76,8 @@ def mask_config(cfg: dict[str, Any]) -> dict[str, Any]:
         else:
             masked[k] = v
     out["fields"] = masked
+    if out.get("url"):
+        out["url"] = redact_apprise_url(str(out["url"]))
     return out
 
 
@@ -85,6 +98,11 @@ def merge_patch_config(existing: dict[str, Any], incoming: dict[str, Any] | None
     ):
         return incoming
     merged = dict(incoming)
+    # Seed the stored url so raw-URL channels (no service_id — e.g.
+    # migration-imported) keep a testable/persistable url when the fields
+    # can't recompose one; a successful recomposition below overwrites it.
+    if not merged.get("url") and existing.get("url"):
+        merged["url"] = existing["url"]
     service_id = incoming.get("service_id") or existing.get("service_id")
     merged_fields: dict[str, Any] = dict(existing.get("fields") or {})
     for k, v in incoming["fields"].items():
