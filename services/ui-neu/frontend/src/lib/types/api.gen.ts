@@ -1299,6 +1299,31 @@ export type JobNamingPreviewResponse = {
 };
 
 /**
+ * JobStatsResponse
+ *
+ * Dashboard aggregates. `by_type` counts `Job.disc_type` (the only type
+ * fact on the Job row itself; media_type lives on the applied Session).
+ */
+export type JobStatsResponse = {
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * By Status
+     */
+    by_status: {
+        [key: string]: number;
+    };
+    /**
+     * By Type
+     */
+    by_type: {
+        [key: string]: number;
+    };
+};
+
+/**
  * JobStatus
  */
 export type JobStatus = 'created' | 'awaiting_user_id' | 'identified' | 'ripping' | 'ripped' | 'ripped_partial' | 'awaiting_review' | 'ripped_awaiting_identify' | 'abandoned' | 'failed';
@@ -2222,48 +2247,6 @@ export type PathStatus = {
 };
 
 /**
- * PathsResponse
- */
-export type PathsResponse = {
-    /**
-     * Paths
-     */
-    paths: Array<PathStatus>;
-};
-
-/**
- * PreflightCheck
- */
-export type PreflightCheck = {
-    /**
-     * Name
-     */
-    name: string;
-    /**
-     * Status
-     */
-    status: string;
-    /**
-     * Detail
-     */
-    detail?: string | null;
-};
-
-/**
- * PreflightResponse
- */
-export type PreflightResponse = {
-    /**
-     * Status
-     */
-    status: string;
-    /**
-     * Checks
-     */
-    checks: Array<PreflightCheck>;
-};
-
-/**
  * RegisterRequest
  */
 export type RegisterRequest = {
@@ -2951,6 +2934,42 @@ export type StorageRoot = {
      * Percent
      */
     percent: number;
+};
+
+/**
+ * SystemDiagnosticCheck
+ */
+export type SystemDiagnosticCheck = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Detail
+     */
+    detail?: string | null;
+};
+
+/**
+ * SystemDiagnosticsResponse
+ */
+export type SystemDiagnosticsResponse = {
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Checks
+     */
+    checks: Array<SystemDiagnosticCheck>;
+    /**
+     * Paths
+     */
+    paths: Array<PathStatus>;
 };
 
 /**
@@ -4273,6 +4292,37 @@ export type ListJobsApiJobsGetResponses = {
 };
 
 export type ListJobsApiJobsGetResponse = ListJobsApiJobsGetResponses[keyof ListJobsApiJobsGetResponses];
+
+export type JobStatsApiJobsStatsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/jobs/stats';
+};
+
+export type JobStatsApiJobsStatsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type JobStatsApiJobsStatsGetError = JobStatsApiJobsStatsGetErrors[keyof JobStatsApiJobsStatsGetErrors];
+
+export type JobStatsApiJobsStatsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: JobStatsResponse;
+};
+
+export type JobStatsApiJobsStatsGetResponse = JobStatsApiJobsStatsGetResponses[keyof JobStatsApiJobsStatsGetResponses];
 
 export type DeleteJobApiJobsJobIdDeleteData = {
     body?: never;
@@ -7275,7 +7325,7 @@ export type SettingsSchemaApiSettingsSchemaGetResponses = {
 
 export type SettingsSchemaApiSettingsSchemaGetResponse = SettingsSchemaApiSettingsSchemaGetResponses[keyof SettingsSchemaApiSettingsSchemaGetResponses];
 
-export type PreflightApiSystemPreflightGetData = {
+export type DiagnosticsApiSystemDiagnosticsGetData = {
     body?: never;
     headers?: {
         /**
@@ -7285,57 +7335,26 @@ export type PreflightApiSystemPreflightGetData = {
     };
     path?: never;
     query?: never;
-    url: '/api/system/preflight';
+    url: '/api/system/diagnostics';
 };
 
-export type PreflightApiSystemPreflightGetErrors = {
+export type DiagnosticsApiSystemDiagnosticsGetErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type PreflightApiSystemPreflightGetError = PreflightApiSystemPreflightGetErrors[keyof PreflightApiSystemPreflightGetErrors];
+export type DiagnosticsApiSystemDiagnosticsGetError = DiagnosticsApiSystemDiagnosticsGetErrors[keyof DiagnosticsApiSystemDiagnosticsGetErrors];
 
-export type PreflightApiSystemPreflightGetResponses = {
+export type DiagnosticsApiSystemDiagnosticsGetResponses = {
     /**
      * Successful Response
      */
-    200: PreflightResponse;
+    200: SystemDiagnosticsResponse;
 };
 
-export type PreflightApiSystemPreflightGetResponse = PreflightApiSystemPreflightGetResponses[keyof PreflightApiSystemPreflightGetResponses];
-
-export type PathsApiSystemPathsGetData = {
-    body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/system/paths';
-};
-
-export type PathsApiSystemPathsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type PathsApiSystemPathsGetError = PathsApiSystemPathsGetErrors[keyof PathsApiSystemPathsGetErrors];
-
-export type PathsApiSystemPathsGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: PathsResponse;
-};
-
-export type PathsApiSystemPathsGetResponse = PathsApiSystemPathsGetResponses[keyof PathsApiSystemPathsGetResponses];
+export type DiagnosticsApiSystemDiagnosticsGetResponse = DiagnosticsApiSystemDiagnosticsGetResponses[keyof DiagnosticsApiSystemDiagnosticsGetResponses];
 
 export type StatsApiSystemStatsGetData = {
     body?: never;
