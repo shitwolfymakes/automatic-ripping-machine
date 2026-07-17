@@ -7,6 +7,11 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=None, extra="ignore")
 
     ARM_DRIVE_DEV: str
+    # Hardware serial for this drive (udev ID_SERIAL_SHORT), resolved on the
+    # host at compose-generation time. Lets the backend detect a physical
+    # drive swap behind an unchanged srN slot; None when the drive doesn't
+    # expose one (rare, but some very old ATAPI drives report nothing).
+    ARM_DRIVE_SERIAL: str | None = None
     ARM_BACKEND_URL: str
     ARM_SERVICE_TOKEN: str
     ARM_LOG_LEVEL: str = "info"

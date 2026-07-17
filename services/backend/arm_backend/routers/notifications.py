@@ -215,6 +215,10 @@ async def patch_channel(
         # PATCH merges secrets + recomposes. Either way, validate the final
         # url so a config that resolves to an empty/invalid url is rejected
         # (422) rather than silently bricking the channel.
+        # A client may round-trip the REDACTED url from GET (mask_config
+        # returns scheme://****). Treat it like <hidden>: keep the stored url.
+        if incoming.get("url") == redact_apprise_url(str((ch.config or {}).get("url") or "")):
+            incoming = {**incoming, "url": (ch.config or {}).get("url")}
         if not incoming.get("fields") and incoming.get("url"):
             new_config = incoming
         else:
