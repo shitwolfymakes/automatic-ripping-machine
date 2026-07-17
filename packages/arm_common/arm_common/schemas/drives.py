@@ -9,7 +9,37 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from arm_common.enums import DriveMediaStatus
+from arm_common.enums import DriveMediaStatus, DriveMode, DriveStatus, JobStatus
+
+
+class DriveCurrentJobView(BaseModel):
+    id: str
+    title: str | None
+    status: JobStatus
+
+
+class DriveView(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    hostname: str
+    device_path: str
+    display_name: str | None
+    status: DriveStatus
+    last_seen_at: datetime | None
+    media_status: DriveMediaStatus | None
+    media_status_at: datetime | None
+    default_session_id: str | None
+    rip_speed: int | None
+    drive_mode: DriveMode | None
+    uhd_capable: bool | None
+    prescan_cache_mb: int | None
+    prescan_timeout: int | None
+    prescan_retries: int | None
+    disc_enum_timeout: int | None
+    created_at: datetime | None
+    updated_at: datetime | None
+    current_job: DriveCurrentJobView | None = None
 
 
 class DriveUpdateRequest(BaseModel):
@@ -24,6 +54,13 @@ class DriveUpdateRequest(BaseModel):
 
     display_name: str | None = None
     default_session_id: str | None = None
+    rip_speed: int | None = None
+    drive_mode: DriveMode | None = None
+    uhd_capable: bool | None = None
+    prescan_cache_mb: int | None = None
+    prescan_timeout: int | None = None
+    prescan_retries: int | None = None
+    disc_enum_timeout: int | None = None
 
 
 class DriveDiagnosticItem(BaseModel):

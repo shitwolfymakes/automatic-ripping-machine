@@ -6,11 +6,17 @@ from typing import Any, Literal
 # `{base}{poster_path}` where poster_path is the leading-slash fragment
 # returned in the API payload.
 TMDB_POSTER_BASE_URL = "https://image.tmdb.org/t/p/w500"
-# Cover Art Archive serves the front cover at this canonical path. May 404
-# for releases with no uploaded art; the UI handles broken images via
-# onerror fallback rather than a pre-flight check (avoids a request-per-rip
-# even when no one is looking at the dashboard).
-COVERART_FRONT_URL_TEMPLATE = "https://coverartarchive.org/release/{mbid}/front"
+# Cover Art Archive front-cover endpoints (sized `front-250` variant, matching
+# neu). Both 404 for entities with no uploaded art.
+#
+# Cover-art strategy (the canonical MusicBrainz Picard model): use the
+# per-RELEASE cover as the primary so distinct pressings show distinct covers,
+# and carry the album's release-GROUP id as a `fallback_group` query param so
+# the image proxy can fall back to the group cover when the specific release
+# has no art. Per-release art keeps covers distinct; the group rescues the
+# (common) case of an art-less regional pressing.
+COVERART_RELEASE_FRONT_URL_TEMPLATE = "https://coverartarchive.org/release/{mbid}/front-250"
+COVERART_GROUP_FRONT_URL_TEMPLATE = "https://coverartarchive.org/release-group/{mbid}/front-250"
 
 
 @dataclass(slots=True)
@@ -40,12 +46,21 @@ def extract_poster_url(result: MetadataResult) -> str | None:
     if isinstance(omdb_poster, str) and omdb_poster.startswith("http") and omdb_poster != "N/A":
         return omdb_poster
 
-    # MusicBrainz: derive from the release MBID. The CAA endpoint may 404
-    # for releases with no uploaded front cover; UI handles fallback.
+    # MusicBrainz: per-release front cover as the primary, with the album's
+    # release-group id appended as `fallback_group` (the image proxy falls back
+    # to the group cover on a release-level 404). Both endpoints may 404; the UI
+    # shows its placeholder only when neither has art.
     if result.kind == "music":
         release_id = payload.get("id")
-        if isinstance(release_id, str) and release_id:
-            return COVERART_FRONT_URL_TEMPLATE.format(mbid=release_id)
+        if not (isinstance(release_id, str) and release_id):
+            return None
+        url = COVERART_RELEASE_FRONT_URL_TEMPLATE.format(mbid=release_id)
+        group = payload.get("release-group")
+        if isinstance(group, dict):
+            group_id = group.get("id")
+            if isinstance(group_id, str) and group_id:
+                url = f"{url}?fallback_group={group_id}"
+        return url
 
     return None
 

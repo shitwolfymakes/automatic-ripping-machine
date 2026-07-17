@@ -4,19 +4,33 @@ import pytest
 
 from arm_backend.notifications.inbox_listener import INBOX_CHANNEL_ID, InboxListener
 from arm_backend.notifications.message import Message
-from arm_common import NotificationChannel
+from arm_common import DiscType, Job, JobStatus, NotificationChannel
 
 from tests._fakes import FakeSession
 
 
-def _msg(event_type="rip.completed", job_id=None) -> Message:
+def _job(title="Iron Man") -> Job:
+    return Job(
+        id="job_1",
+        drive_id="sr0",
+        disc_type=DiscType.DVD,
+        title=title,
+        year=2008,
+        status=JobStatus.RIPPED,
+        metadata_json={},
+        resumed_from_crash=False,
+    )
+
+
+def _msg(event_type="rip.completed", job_id=None, *, job=None, payload=None) -> Message:
     return Message(
         event_id="evt_1",
         event_type=event_type,
         job_id=job_id,
         default_title="ARM: rip completed",
         default_body="Iron Man",
-        job=None,
+        job=job,
+        payload=payload or {},
     )
 
 
@@ -74,3 +88,23 @@ async def test_inbox_listener_applies_template_override() -> None:
     await InboxListener().handle(db, _msg())
     assert db.rows["notification_inbox"][0].title == "Done!"
     assert db.rows["notification_inbox"][0].message == "Iron Man"
+
+
+@pytest.mark.asyncio
+async def test_inbox_interpolates_custom_template() -> None:
+    db = FakeSession()
+    db.rows["notification_channels"] = [_inapp(templates={"rip.completed": {"body": "{job_title} done"}})]
+    await InboxListener().handle(db, _msg(job_id="job_1", job=_job("Dune"), payload={}))
+    rows = db.rows.get("notification_inbox", [])
+    assert len(rows) == 1
+    r = rows[0]
+    assert r.message == "Dune done"
+
+
+@pytest.mark.asyncio
+async def test_inbox_bad_template_var_skips_no_raise() -> None:
+    db = FakeSession()
+    db.rows["notification_channels"] = [_inapp(templates={"rip.completed": {"body": "{nope}"}})]
+    await InboxListener().handle(db, _msg(job_id="job_1", job=_job(), payload={}))
+    # must not raise and must NOT add an inbox row
+    assert db.rows.get("notification_inbox", []) == []

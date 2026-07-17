@@ -8,7 +8,7 @@ Each listener decides internally whether it cares and how it delivers.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +25,9 @@ class Message:
     # The loaded Job (or None) so listeners can resolve per-channel
     # template overrides and the inbox can deep-link.
     job: Job | None
+    # The event's payload_json, so listeners can build the render context
+    # without re-loading the Event.
+    payload: dict[str, Any]
     # Global Config.notifications_enabled at dispatch time. Gates EXTERNAL
     # delivery only (AppriseListener no-ops when False); the in-app inbox
     # always delivers so the bell works out of the box.
