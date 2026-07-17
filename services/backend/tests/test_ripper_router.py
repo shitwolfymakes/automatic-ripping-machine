@@ -480,6 +480,8 @@ def test_identify_unidentified_with_hold_does_not_park(signing_key: bytes) -> No
     out = r.json()
     assert out["status"] == "identified"  # not awaiting_review
     assert out["metadata_json"].get("unidentified") is True
+
+
 def test_identify_snapshots_drive_serial_onto_job() -> None:
     """The job created by identify carries the drive's hardware serial at
     that moment — a permanent record that survives the Drive row later
