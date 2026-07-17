@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -192,22 +193,44 @@ async def keydb_status(
 
 @router.post("/register", response_model=Drive, dependencies=[Depends(require_service_token)])
 async def register(req: RegisterRequest, session: AsyncSession = Depends(get_session)) -> Drive:
-    stmt = (
-        pg_insert(Drive)
-        .values(
-            hostname=req.hostname,
-            device_path=req.device_path,
-            status=DriveStatus.ONLINE.value,
+    existing = (await session.execute(select(Drive).where(col(Drive.hostname) == req.hostname))).scalar_one_or_none()
+    # hostname is keyed to the srN slot baked into the compose file at
+    # generation time, not to the physical drive. If a previously-seen
+    # serial doesn't match what's registering now, the kernel/udev
+    # reassigned that slot to a different physical unit (replug, reboot
+    # with a different enumeration order, drive swap) — surface it instead
+    # of silently overwriting device_path as if nothing changed.
+    if (
+        existing is not None
+        and existing.serial is not None
+        and req.serial is not None
+        and existing.serial != req.serial
+    ):
+        logger.warning(
+            "drive serial mismatch on register: hostname=%s previous_serial=%s new_serial=%s "
+            "— the physical drive behind this slot appears to have changed",
+            req.hostname,
+            existing.serial,
+            req.serial,
         )
-        .on_conflict_do_update(
-            index_elements=[col(Drive.hostname)],
-            set_={
-                "device_path": req.device_path,
-                "status": DriveStatus.ONLINE.value,
-            },
-        )
-        .returning(col(Drive.id))
+
+    insert_stmt = pg_insert(Drive).values(
+        hostname=req.hostname,
+        device_path=req.device_path,
+        serial=req.serial,
+        status=DriveStatus.ONLINE.value,
     )
+    stmt = insert_stmt.on_conflict_do_update(
+        index_elements=[col(Drive.hostname)],
+        set_={
+            "device_path": req.device_path,
+            # A transient resolution failure on the ripper side (serial=None)
+            # shouldn't clobber a previously known-good serial — only a real
+            # new value replaces it.
+            "serial": func.coalesce(insert_stmt.excluded.serial, col(Drive.serial)),
+            "status": DriveStatus.ONLINE.value,
+        },
+    ).returning(col(Drive.id))
     result = await session.execute(stmt)
     drive_id = result.scalar_one()
     await session.commit()
@@ -238,6 +261,7 @@ async def identify(
     scan = req.scan_result
     job = Job(
         drive_id=req.drive_id,
+        drive_serial=drive.serial,
         disc_type=scan.disc_type,
         status=JobStatus.CREATED,
     )
