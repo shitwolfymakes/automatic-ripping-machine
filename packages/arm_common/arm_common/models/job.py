@@ -17,7 +17,17 @@ class Job(SQLModel, table=True):
     __tablename__ = "jobs"
 
     id: str = Field(default_factory=_job_id, primary_key=True)
-    drive_id: str = Field(sa_column=Column(String, ForeignKey("drives.id"), nullable=False, index=True))
+    # Nullable + SET NULL on delete: a `Drive` row is disposable operational
+    # state (see arm_common.models.drive.Drive.serial), but a job's history
+    # must survive that row being removed. `drive_serial` below is the
+    # permanent record of which physical drive did the rip.
+    drive_id: str | None = Field(
+        sa_column=Column(String, ForeignKey("drives.id", ondelete="SET NULL"), nullable=True, index=True)
+    )
+    # Snapshot of Drive.serial at job-creation time (identify). Survives
+    # drive_id going NULL on a drive delete; None if the drive never
+    # exposed a serial.
+    drive_serial: str | None = Field(default=None, nullable=True)
     disc_type: DiscType = Field(sa_column=enum_column(DiscType, "disc_type"))
     # Fingerprints (CRC64, AACS Disc ID, MusicBrainz Disc ID, matrix256, …)
     # live in `disc_fingerprints` keyed by (job_id, algo) — see
