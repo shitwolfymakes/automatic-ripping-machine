@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import secrets
+from datetime import datetime, timedelta, timezone
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
@@ -15,7 +16,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import system as system_router  # noqa: E402
-from arm_common import Config, Drive, DriveStatus, User  # noqa: E402
+from arm_common import Config, DiscType, Drive, DriveStatus, Event, Job, JobStatus, User  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -34,11 +35,31 @@ def _seed(db: FakeSession) -> None:
         Drive(id="drv_on0000000000000000000001", hostname="h1", device_path="/dev/sr0", status=DriveStatus.ONLINE),
         Drive(id="drv_off000000000000000000002", hostname="h2", device_path="/dev/sr1", status=DriveStatus.OFFLINE),
     ]
+    db.rows["jobs"] = [
+        Job(
+            id="job_0000000000000000000000001",
+            drive_id="drv_on0000000000000000000001",
+            disc_type=DiscType.DVD,
+            status=JobStatus.RIPPING,
+        ),
+        Job(
+            id="job_0000000000000000000000002",
+            drive_id="drv_on0000000000000000000001",
+            disc_type=DiscType.DVD,
+            status=JobStatus.RIPPED,
+        ),
+    ]
+    db.rows["events"] = [
+        Event(id="evt_0000000000000000000000001", event_type="rip.completed", notified_at=None),
+        Event(id="evt_0000000000000000000000002", event_type="rip.completed", notified_at=datetime.now(timezone.utc)),
+    ]
 
 
 def _make_app(signing_key: bytes, db: FakeSession, *, tmp) -> tuple[FastAPI, str]:
     app = FastAPI()
     app.state.signing_key = signing_key
+    app.state.started_at = datetime.now(timezone.utc) - timedelta(seconds=42)
+    # transcode_dispatcher intentionally NOT set; tests that need it set it directly on app.state
     media = tmp / "media"
     media.mkdir()
     raw = tmp / "raw"
@@ -72,7 +93,15 @@ def _get(app: FastAPI, token: str):
 def test_diagnostics_ok(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
+    # An unvalidated MakeMKV key degrades overall status to "warning" by
+    # design — seed it validated so the baseline really is all-healthy.
+    db.rows["config"][0].makemkv_key = "M-x"
+    db.rows["config"][0].makemkv_key_valid = True
+    db.rows["config"][0].makemkv_key_state = "valid"
+    db.rows["config"][0].community_keydb_state = "ok"
     app, token = _make_app(signing_key, db, tmp=tmp_path)
+    # An absent transcode dispatcher also degrades to "warning" — stub a live one.
+    app.state.transcode_dispatcher = _StubDispatcher(host_paths=True)
     r = _get(app, token)
     assert r.status_code == 200, r.text
     body = r.json()
@@ -219,6 +248,44 @@ def test_app_version_real_fallback(monkeypatch) -> None:
         system_router._app_version.cache_clear()
 
 
+def test_diagnostics_includes_makemkv_key_check_ok(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["config"][0].makemkv_key = "M-x"
+    db.rows["config"][0].makemkv_key_valid = True
+    db.rows["config"][0].makemkv_key_state = "valid"
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    checks = {ch["name"]: ch for ch in r.json()["checks"]}
+    assert checks["makemkv_key"]["status"] == "ok"
+
+
+def test_diagnostics_makemkv_key_warning_when_unknown(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["config"][0].makemkv_key = "M-x"
+    # makemkv_key_valid defaults to None → never checked
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    checks = {ch["name"]: ch for ch in r.json()["checks"]}
+    assert checks["makemkv_key"]["status"] == "warning"
+
+
+def test_diagnostics_makemkv_key_error_when_invalid(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["config"][0].makemkv_key = "M-x"
+    db.rows["config"][0].makemkv_key_valid = False
+    db.rows["config"][0].makemkv_key_state = "binary_expired"
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    checks = {ch["name"]: ch for ch in r.json()["checks"]}
+    assert checks["makemkv_key"]["status"] == "error"
+
+
 def test_diagnostics_uses_settings_fallback(signing_key: bytes, tmp_path, monkeypatch) -> None:
     """When system_paths is absent from app.state, _roots falls back to
     settings-derived defaults."""
@@ -245,3 +312,134 @@ def test_diagnostics_uses_settings_fallback(signing_key: bytes, tmp_path, monkey
     # read-only diagnostics: settings-pointed roots are reported, not created
     assert paths["MEDIA_ROOT"]["exists"] is False
     assert not (tmp_path / "m").exists() and not (tmp_path / "r").exists()
+
+
+class _StubDispatcher:
+    """Minimal stand-in for TranscodeDispatcher exposing only the gate the
+    diagnostics check reads. A real dispatcher needs a docker client + settings,
+    which the Tier-1 fake-session suite has no business constructing."""
+
+    def __init__(self, *, host_paths: bool) -> None:
+        self._host_paths = host_paths
+
+    def host_paths_set(self) -> bool:
+        return self._host_paths
+
+
+def test_diagnostics_transcoder_warning_when_no_dispatcher(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    # _make_app does not set app.state.transcode_dispatcher -> getattr falls to None
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
+    assert check["status"] == "warning"
+    assert "docker" in check["detail"]
+
+
+def test_diagnostics_transcoder_warning_when_host_paths_unset(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.transcode_dispatcher = _StubDispatcher(host_paths=False)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
+    assert check["status"] == "warning"
+    assert "ARM_HOST" in check["detail"]
+
+
+def test_diagnostics_transcoder_ok_when_live(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.transcode_dispatcher = _StubDispatcher(host_paths=True)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
+    assert check["status"] == "ok"
+    assert check["detail"] is None
+
+
+@pytest.mark.parametrize(
+    "state,expected_status",
+    [
+        ("ok", "ok"),
+        ("fresh_kept", "ok"),
+        ("disabled", "ok"),
+        ("download_failed", "warning"),
+        ("empty", "warning"),
+        ("probe_failed", "warning"),
+        (None, "warning"),
+    ],
+)
+def test_diagnostics_community_keydb_check(signing_key: bytes, tmp_path, state, expected_status) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["config"][0].community_keydb_state = state
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "community_keydb")
+    assert check["status"] == expected_status
+
+
+def test_diagnostics_community_keydb_ok_reports_vuk_count(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["config"][0].community_keydb_state = "ok"
+    db.rows["config"][0].community_keydb_vuk_count = 4200
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "community_keydb")
+    assert check["detail"] == "4200 VUK keys installed"
+
+
+def test_diagnostics_overall_not_error_when_only_transcoder_warns(signing_key: bytes, tmp_path) -> None:
+    # Roots are fine; dispatcher absent -> transcoder warns. Overall must be
+    # "warning" (degraded), never promoted to "error".
+    db = FakeSession()
+    _seed(db)
+    db.rows["config"][0].makemkv_key = "M-x"
+    db.rows["config"][0].makemkv_key_valid = True
+    db.rows["config"][0].makemkv_key_state = "valid"
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    body = r.json()
+    transcoder = next(ch for ch in body["checks"] if ch["name"] == "transcoder")
+    assert transcoder["status"] == "warning"
+    assert body["status"] == "warning"
+
+
+def test_stats_counts(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/stats", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["uptime_seconds"] >= 40
+    assert body["drives_online"] == 1
+    assert body["events_unsent"] == 1
+    assert body["jobs_by_status"].get("ripping") == 1
+
+
+def test_stats_no_started_at(signing_key: bytes, tmp_path) -> None:
+    """When started_at is not set on app.state, uptime_seconds should be 0."""
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    del app.state.started_at
+    with TestClient(app) as c:
+        r = c.get("/api/system/stats", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["uptime_seconds"] == 0

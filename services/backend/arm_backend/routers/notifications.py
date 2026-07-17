@@ -29,7 +29,8 @@ from arm_backend.notification_dispatcher import (
     _first_invalid_apprise_url,
     redact_apprise_url,
 )
-from arm_backend.notification_format import synthetic_test_message
+from arm_backend.notification_events import EVENT_VOCAB
+from arm_backend.notification_format import TemplateRenderError, resolve_title_body
 from arm_backend.notifications import catalog as catalog_module
 from arm_backend.notifications.inbox_listener import INBOX_CHANNEL_ID
 from arm_backend.notifications.field_map import (
@@ -42,6 +43,7 @@ from arm_common import NotificationChannel, NotificationDispatchLog, Notificatio
 from arm_common.schemas import (
     ComposeUrlRequest,
     ComposeUrlResult,
+    EventTypeInfo,
     NotificationChannelCreateRequest,
     NotificationChannelTestRequest,
     NotificationChannelUpdateRequest,
@@ -265,9 +267,53 @@ async def compose_url(
     return {"url": compose_apprise_url(service_id=service_id, required=req.required, advanced=req.advanced)}
 
 
-@router.get("/event-types", response_model=list[str])
-async def event_types(_: User = Depends(require_jwt)) -> list[str]:
-    return sorted(NOTABLE_EVENT_TYPES)
+@router.get("/event-types", response_model=list[EventTypeInfo])
+async def event_types(_: User = Depends(require_jwt)) -> list[EventTypeInfo]:
+    return [
+        EventTypeInfo(
+            key=key,
+            label=spec.label,
+            variables=list(spec.variables),
+            default_title=spec.default_title,
+            default_body=spec.default_body,
+        )
+        for key, spec in sorted(EVENT_VOCAB.items())
+    ]
+
+
+# Readable placeholder values for each variable name used in sample contexts.
+_SAMPLE_VALUES: dict[str, str] = {
+    "job_title": "Example Movie",
+    "drive_id": "sr0",
+    "tracks_done": "3",
+    "tracks_total": "3",
+    "tracks_failed": "0",
+    "status": "ripped",
+    "job_id": "job_example",
+    "job_year": "2024",
+    "job_disc_type": "dvd",
+    "occurred_at": "2024-01-01T00:00:00+00:00",
+    "volume_label": "EXAMPLE_DISC",
+    "disc_type": "dvd",
+    "session_id": "ses_example",
+    "session_application_id": "sapp_example",
+}
+
+
+def _sample_context(event_type: str) -> dict[str, str]:
+    """Build a flat string context for *event_type* from its declared variables.
+
+    Every variable is filled with a readable placeholder so template renders
+    never fail due to a missing key. The ``event_type`` variable is always set
+    to the actual event type.
+    """
+    spec = EVENT_VOCAB.get(event_type)
+    variables = spec.variables if spec is not None else ()
+    ctx: dict[str, str] = {"event_type": event_type}
+    for var in variables:
+        if var not in ctx:
+            ctx[var] = _SAMPLE_VALUES.get(var, f"<{var}>")
+    return ctx
 
 
 async def _send_and_log(
@@ -277,8 +323,22 @@ async def _send_and_log(
     url: str,
     event_type: str,
     channel: NotificationChannel | None,
+    template: dict[str, str | None] | None = None,
 ) -> NotificationTestResult:
-    title, body = synthetic_test_message(event_type)
+    spec = EVENT_VOCAB.get(event_type)
+    default_title = spec.default_title if spec is not None else "ARM: test notification"
+    default_body = spec.default_body if spec is not None else f"ARM test notification ({event_type})"
+    ctx = _sample_context(event_type)
+    try:
+        title, body = resolve_title_body(
+            event_type=event_type,
+            default_title=default_title,
+            default_body=default_body,
+            template=template,
+            context=ctx,
+        )
+    except TemplateRenderError as exc:
+        return NotificationTestResult(ok=False, error=f"template error: {exc}")
     now = datetime.now(UTC)
     ok = True
     err: str | None = None
@@ -337,7 +397,10 @@ async def test_channel(
     event_type = req.event_type or (ch.subscribed_events or ["rip.completed"])[0]
     if not url:
         return NotificationTestResult(ok=False, error="could not compose url from fields")
-    return await _send_and_log(db=db, notifier=notifier, url=url, event_type=event_type, channel=ch)
+    # Render using the channel's per-event template override (if any).
+    raw_template = (ch.templates or {}).get(event_type)
+    template: dict[str, str | None] | None = raw_template if isinstance(raw_template, dict) else None
+    return await _send_and_log(db=db, notifier=notifier, url=url, event_type=event_type, channel=ch, template=template)
 
 
 @router.post("/test", response_model=NotificationTestResult)
