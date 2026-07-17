@@ -4,11 +4,14 @@ from typing import Any, Literal
 
 import httpx
 
+from arm_backend.config import settings
 from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult
 
 logger = logging.getLogger("arm_backend.metadata.tmdb")
 
-_BASE_URL = "https://api.themoviedb.org/3"
+
+def _base_url() -> str:
+    return settings.ARM_TMDB_BASE_URL
 
 
 class TMDBClient:
@@ -34,7 +37,7 @@ class TMDBClient:
         other transport errors and 401/5xx/non-200 -> LookupError.
         """
         try:
-            r = await self._http.get(f"{_BASE_URL}/search/{endpoint}", params=params, headers=self._headers)
+            r = await self._http.get(f"{_base_url()}/search/{endpoint}", params=params, headers=self._headers)
         except httpx.TimeoutException as e:
             raise LookupTimeout(f"tmdb {endpoint} timeout") from e
         except httpx.HTTPError as e:
@@ -131,7 +134,7 @@ class TMDBClient:
         runs per-candidate in the search enrichment fan-out and one failure must
         not fail the whole search."""
         try:
-            r = await self._http.get(f"{_BASE_URL}/{kind}/{tmdb_id}/external_ids", headers=self._headers)
+            r = await self._http.get(f"{_base_url()}/{kind}/{tmdb_id}/external_ids", headers=self._headers)
         except httpx.HTTPError:
             return None
         if r.status_code != 200:
@@ -152,7 +155,7 @@ class TMDBClient:
         provider-driven detail lookup when metadata_provider == 'tmdb'."""
         try:
             r = await self._http.get(
-                f"{_BASE_URL}/find/{imdb_id}",
+                f"{_base_url()}/find/{imdb_id}",
                 params={"external_source": "imdb_id"},
                 headers=self._headers,
             )

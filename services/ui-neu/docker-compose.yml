@@ -1,0 +1,38 @@
+# Standalone ui-neu dev compose — nginx serving the static SvelteKit bundle
+# and reverse-proxying /api + /ws to the v3 arm-backend over TLS. This mirrors
+# the root stack's `arm-ui` (Vue) service shape; wiring ui-neu into the root
+# docker-compose is a future pass.
+#
+# Run alongside the already-running root stack (devtools/setup-dev.sh +
+# `docker compose up -d` from the repo root). This file:
+#   * joins the root stack's network (armv3_default, external) so `arm-backend`
+#     resolves by hostname over the shared network;
+#   * publishes on 8082 (the Vue arm-ui owns 8081) so both UIs can run at once;
+#   * mounts the repo-root ./arm/certs (paths are relative to THIS file, which
+#     lives at services/ui-neu/, hence ../../arm/certs).
+#
+#   docker compose -f services/ui-neu/docker-compose.yml up -d --build
+#
+# arm-backend is NOT a service here — it belongs to the root compose project and
+# is reached over the external network, so there's no depends_on.
+
+services:
+  arm-ui-neu:
+    build:
+      context: ../..
+      dockerfile: services/ui-neu/Dockerfile
+    container_name: armv3-ui-neu
+    restart: unless-stopped
+    ports:
+      - "8082:443"
+    volumes:
+      - ../../arm/certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
+      - ../../arm/certs/arm-ui.crt:/etc/ssl/arm/tls.crt:ro
+      - ../../arm/certs/arm-ui.key:/etc/ssl/arm/tls.key:ro
+    networks:
+      - armv3
+
+networks:
+  armv3:
+    name: armv3_default
+    external: true
