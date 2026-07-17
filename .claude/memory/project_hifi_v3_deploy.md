@@ -8,7 +8,17 @@ metadata:
 The v3 stack runs on **hifi-server** (host `quark`, `192.168.0.68`, user `upb`,
 key `~/.ssh/hifi`) at `~/src/automatic-ripping-machine-v3`, cloned from
 `origin` (`uprightbass360/arm-v3`, now public). Deployed branch:
-`deploy/hifi-20260705`; checkout at **`76234b4c`** since 2026-07-16:
+`deploy/hifi-20260705`; checkout at **`33e0470b`** since 2026-07-17:
+**tier-stack absorb deployed** — the manual 0016_1/0016_2 DDL was applied
+first via psql (drives.serial + jobs.drive_serial added, drive_id nullable,
+FK → ON DELETE SET NULL; alembic stays stamped 0028, upgrade head no-ops),
+then backend+ripper-sr0+ui-neu rebuilt under all 3 overlays. Verified:
+diagnostics/stats/resources/drives/jobs all 200, ui-neu + public proxy 200,
+offload env (8 ARM_TRANSCODE_* keys) + ssh bundle intact, ripper
+re-registered. Drive serial is NULL (ARM_DRIVE_SERIAL not spliced into the
+hand-generated ripper block — coalesce-safe; splice udevadm
+ID_SERIAL_SHORT later if wanted).
+Previous checkout **`76234b4c`** since 2026-07-16:
 **arm-backend + arm-ui-neu rebuilt** there (neu-ports reconciliation:
 /api/system/diagnostics replaces preflight/paths, notification unions,
 ensure_roots lifespan, ISO feature retained, mobile drawer Menu/Stats;

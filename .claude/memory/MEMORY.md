@@ -1,6 +1,6 @@
 # Memory
 
-- [DONE: tier4 absorb — all 28 PRs MERGEABLE + CI green](project_tier4_serial_absorb_plan.md) — whole tier stack #11–#47+#37 chain-absorbed main-rc3, propagated to deploy 81c66648; twin template + CI-gate lesson inside; hifi still needs manual 0016_1/2 DDL.
+- [DONE: tier4 absorb — all 28 PRs MERGEABLE + CI green](project_tier4_serial_absorb_plan.md) — whole tier stack #11–#47+#37 chain-absorbed main-rc3, propagated to deploy 81c66648; twin template + CI-gate lesson inside; hifi DDL applied + deployed 33e0470b on 2026-07-17.
 - [Stacked-branch migrations](feedback_stacked_branch_migrations.md) — a migration's down_revision can dangle on sibling lines and only fails at backend boot; test_migration_chain.py guards it, copy parent files byte-identical across lines.
 - [OPEN: ui-neu preflight endpoint mismatch](project_uineu_preflight_endpoint_mismatch.md) — SystemHealth + ReadinessCheckStep POST /api/system/preflight which nothing serves; port to GET /api/system/diagnostics.
 - [No em dashes in PR titles](feedback_no_em_dashes_in_names.md) — use `Tier-N - <desc>` with plain hyphens; user converted all 26 open PR titles 2026-07-06.

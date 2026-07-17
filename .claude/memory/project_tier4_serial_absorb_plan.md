@@ -1,6 +1,6 @@
 ---
 name: tier4-serial-absorb-plan
-description: ABSORB COMPLETE 2026-07-16 — all 28 open PRs MERGEABLE + CI green after chain-absorbing main-rc3 through the whole tier stack (#11→#47 + #37) and up to deploy 81c66648; twin-resolution template + CI-gate lesson below; hifi still needs manual 0016_1/0016_2 DDL.
+description: ABSORB COMPLETE 2026-07-16 — all 28 open PRs MERGEABLE + CI green after chain-absorbing main-rc3 through the whole tier stack (#11→#47 + #37) and up to deploy 81c66648; twin-resolution template + CI-gate lesson below; hifi DDL applied + 33e0470b deployed 2026-07-17.
 metadata:
   type: project
 ---
