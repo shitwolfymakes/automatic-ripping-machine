@@ -96,7 +96,7 @@ export function buildMetadataFields(job: JobView): MetadataField[] {
 	fields.push({ label: 'Disc Type', value: discTypeLabel(job.disc_type) });
 	fields.push({ label: 'Status', value: job.status });
 	fields.push({ label: 'Year', value: job.year != null ? String(job.year) : '-' });
-	fields.push({ label: 'Drive', value: job.drive_id, mono: true });
+	fields.push({ label: 'Drive', value: job.drive_id ?? '-', mono: true });
 	if (job.resumed_from_crash) {
 		fields.push({ label: 'Recovery', value: 'Resumed from crash' });
 	}
