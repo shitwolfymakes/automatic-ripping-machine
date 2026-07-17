@@ -30,6 +30,10 @@ class RegisterRequest(BaseModel):
     device_path: str
     ripper_version: str
     hw_caps: dict[str, Any] = Field(default_factory=dict)
+    # Hardware serial (udev ID_SERIAL_SHORT), when the drive exposes one.
+    # Lets the backend detect a physical drive swap behind an unchanged
+    # hostname/srN slot instead of silently rebinding it.
+    serial: str | None = None
 
 
 class RipperHeartbeatRequest(BaseModel):

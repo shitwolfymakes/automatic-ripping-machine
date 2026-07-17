@@ -106,12 +106,17 @@ def _path_in_whitelist(path: str) -> bool:
     return any(path.startswith(p) for p in _MUST_CHANGE_WHITELIST)
 
 
-async def _verify_drive_owner(session: AsyncSession, drive_id: str, hostname_header: str | None) -> None:
+async def _verify_drive_owner(session: AsyncSession, drive_id: str | None, hostname_header: str | None) -> None:
     if not hostname_header:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="missing X-ARM-Hostname header",
         )
+    if drive_id is None:
+        # The drive that ran this job was deleted after the fact (SET NULL).
+        # No ripper should legitimately be posting updates against a job
+        # whose drive is gone — treat like any other unowned-job attempt.
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="job has no owning drive")
     drive = (await session.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
     if drive is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {drive_id}")

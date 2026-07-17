@@ -33,7 +33,6 @@ from arm_backend.routers import (
     files as files_router,
     health,
     images as images_router,
-    iso as iso_router,
     jobs,
     logs as logs_router,
     metadata as metadata_router,
@@ -51,6 +50,7 @@ from arm_backend.routers import (
 )
 from arm_backend.seeders import CONFIG_SINGLETON_ID, run_seeders
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
+from arm_backend.utils import ensure_roots, default_roots
 from arm_backend.ws import WSHub
 from arm_backend.ws.router import router as ws_router
 from arm_common import Config, Gpu, GpuStatus, configure_service_logging
@@ -137,10 +137,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if cfg.session_signing_key is None:  # pragma: no cover — _run_seeders always populates this; defensive only
             raise RuntimeError("session_signing_key missing — seeders should have populated it")
         app.state.signing_key = cfg.session_signing_key
+    # Silently create any missing data root (never chown, never raise —
+    # the entrypoint's writability guard owns the fatal cases). Diagnostics
+    # re-ensures on every read.
+    ensure_roots(default_roots())
     http = httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=10.0))
     app.state.http = http
     app.state.started_at = datetime.now(UTC)
-    app.state.dispatcher = MetadataDispatcher(http)
+    app.state.dispatcher = MetadataDispatcher(http, omdb_api_key_override=settings.OMDB_API_KEY)
     app.state.ws_hub = WSHub()
 
     # GPU probe — truncate-and-fill the gpus table so the dispatcher's first
@@ -233,7 +237,6 @@ app.include_router(diagnostics.router)
 app.include_router(metadata_router.router)
 app.include_router(naming_router.router)
 app.include_router(notifications_router.router)
-app.include_router(iso_router.router)
 app.include_router(logs_router.router)
 app.include_router(images_router.router)
 app.include_router(themes_router.router)

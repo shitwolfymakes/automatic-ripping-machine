@@ -239,17 +239,30 @@ RIPPER_BEGIN_MARK="# >>> arm-ripper services"
 
 DRIVES_SR=()   # bare drive numbers, e.g. (0 1)
 DRIVES_SG=()   # matching sg node names, index-aligned, e.g. (sg2 sg6)
+DRIVES_SERIAL=()  # ID_SERIAL_SHORT per drive, index-aligned; empty string if unavailable
 
 detect_optical_drives() {
     DRIVES_SR=()
     DRIVES_SG=()
-    local line srdev sgdev
+    DRIVES_SERIAL=()
+    local line srdev sgdev serial
     while IFS= read -r line; do
         [[ -z "${line}" ]] && continue
         srdev="${line%% *}"   # /dev/srN
         sgdev="${line##* }"   # /dev/sgM
         DRIVES_SR+=("${srdev#/dev/sr}")
         DRIVES_SG+=("${sgdev#/dev/}")
+        # Hardware serial, stable across reboots/replugs/renumbering — unlike
+        # the srN/sgM node names above, which the kernel reassigns by
+        # enumeration order. Not read from SCSI INQUIRY (many optical drives
+        # reject the VPD 0x80 Unit Serial Number page with ILLEGAL REQUEST);
+        # udev's ID_SERIAL_SHORT is populated from the ATA IDENTIFY / USB
+        # descriptor instead, which drives do reliably expose. Passed to the
+        # ripper container as ARM_DRIVE_SERIAL so the backend can detect a
+        # drive swap behind an unchanged srN slot (see Drive.serial).
+        serial="$(udevadm info --query=property --name="${srdev}" 2>/dev/null \
+            | sed -n 's/^ID_SERIAL_SHORT=//p')"
+        DRIVES_SERIAL+=("${serial}")
     done < <(
         lsscsi -g 2>/dev/null | awk '
             $2 == "cd/dvd" {
@@ -264,7 +277,7 @@ detect_optical_drives() {
 }
 
 emit_ripper_block() {
-    local n="$1" sg="$2"
+    local n="$1" sg="$2" serial="$3"
     cat <<EOF
 
   arm-ripper-sr${n}:
@@ -289,6 +302,7 @@ emit_ripper_block() {
       - "\${CDROM_GID:-44}"
     environment:
       ARM_DRIVE_DEV: /dev/sr${n}
+      ARM_DRIVE_SERIAL: "${serial}"
       ARM_BACKEND_URL: https://arm-backend:8443
       ARM_SERVICE_TOKEN: \${ARM_SERVICE_TOKEN}
       ARM_LOG_LEVEL: \${ARM_LOG_LEVEL:-info}
@@ -359,7 +373,7 @@ generate_ripper_services() {
         local i summary=""
         for i in "${!DRIVES_SR[@]}"; do
             summary+="sr${DRIVES_SR[$i]}↔${DRIVES_SG[$i]} "
-            emit_ripper_block "${DRIVES_SR[$i]}" "${DRIVES_SG[$i]}" >> "${blocks_file}"
+            emit_ripper_block "${DRIVES_SR[$i]}" "${DRIVES_SG[$i]}" "${DRIVES_SERIAL[$i]}" >> "${blocks_file}"
         done
         echo "==> detected ${#DRIVES_SR[@]} optical drive(s): ${summary}"
     fi
