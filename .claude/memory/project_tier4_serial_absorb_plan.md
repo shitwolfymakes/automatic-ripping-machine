@@ -39,8 +39,15 @@ for the remaining absorbs (#11–#47, then re-absorbs as tiers land):
 - Regen after resolve: snapshot + services/ui npm openapi-types + ui-neu
   codegen.sh (both node_modules need install in a fresh worktree).
 
-**Next: propagate up — merge feat/user-management into ui-settings-polish,
-then mobile-drawer-stats, then deploy/hifi-20260705.**
+**Propagation DONE 2026-07-16:** ui-settings-polish 1bc55258 (PR #55
+MERGEABLE, pushed wolfy), mobile-drawer-stats 75c9e56d (pushed origin),
+deploy c42d959e (pushed origin+wolfy; 1847 tests). Deploy-side resolution
+rule: deploy's per-host /resources (HostResourcesView + resource_probing)
+supersedes the inline-psutil version arriving from below — keep deploy's.
+
+**Remaining:** ~22 tier PRs (#11–#47) still CONFLICTING — absorb per the
+template above as wolfy works bottom-up; hifi manual 0016_1/0016_2 DDL
+still outstanding before this deploy tip lands on the host.
 
 **⚠ hifi DB hazard (the re-parenting cost):** hifi applied 0017 under the OLD
 ancestry; alembic_version=0028. After adopting main's re-parented 0017,
