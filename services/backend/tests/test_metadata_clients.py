@@ -190,6 +190,9 @@ async def test_musicbrainz_multi_disc_matches_by_disc_id(http_client):
         "Twilight to Starlight 1",
         "Twilight to Starlight 2",
     ]
+    # the matched medium's position IS the disc number — it must reach the
+    # payload so the {disc} naming token resolves at apply time
+    assert result.payload["disc"] == 2
 
 
 @respx.mock
