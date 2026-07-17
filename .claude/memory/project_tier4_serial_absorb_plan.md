@@ -1,6 +1,6 @@
 ---
 name: tier4-serial-absorb-plan
-description: LIVE — #54 absorbed main-rc3 2026-07-16 (e33e067f, MERGEABLE; twin-resolution template below); ~23 PRs still CONFLICTING; next propagate up ui-settings-polish → mobile-drawer-stats → deploy; hifi still needs manual 0016_1/0016_2 DDL.
+description: ABSORB COMPLETE 2026-07-16 — all 28 open PRs MERGEABLE + CI green after chain-absorbing main-rc3 through the whole tier stack (#11→#47 + #37) and up to deploy 81c66648; twin-resolution template + CI-gate lesson below; hifi still needs manual 0016_1/0016_2 DDL.
 metadata:
   type: project
 ---
@@ -45,9 +45,24 @@ deploy c42d959e (pushed origin+wolfy; 1847 tests). Deploy-side resolution
 rule: deploy's per-host /resources (HostResourcesView + resource_probing)
 supersedes the inline-psutil version arriving from below — keep deploy's.
 
-**Remaining:** ~22 tier PRs (#11–#47) still CONFLICTING — absorb per the
-template above as wolfy works bottom-up; hifi manual 0016_1/0016_2 DDL
-still outstanding before this deploy tip lands on the host.
+**CHAIN ABSORB COMPLETE 2026-07-16:** all 22 tier PRs (#11–#47 + independent
+#37) chain-absorbed bottom-up (one hard absorb at #11, then merges up the
+stacked ancestry; rerere on), then propagated through #54 → #55 →
+mobile-drawer-stats → deploy (81c66648, pushed origin+wolfy). All 28 open
+PRs MERGEABLE, all CI runs green.
+
+**CI-gate lesson (cost a red-CI repair pass):** local gate per level MUST
+mirror CI: `uvx ruff@<pinned> format --check .` (whole repo, not just
+services/packages), `ruff check .`, `uv run mypy -p arm_common -p
+arm_backend -p arm_ripper -p arm_transcode`, `npm run check` in
+services/ui-neu/frontend when present, pytest, and both codegens. Two
+absorb-wide breaks to remember: (1) tier4's nullable jobs.drive_id needs a
+None-guard in drives.py's jobs_by_drive grouping and `?? '-'` /
+`driveLabel(...)` in ui-neu job-fields; (2) main's diagnostics rename
+silently swallows fork endpoints/tests in auto-merges — grep for stale
+`PreflightCheck`/`/preflight`/`/paths`/dropped `/stats` after every
+system.py merge, and re-seed test_diagnostics_ok healthy for each check
+the tier adds (makemkv, keydb, sdf, transcoder).
 
 **⚠ hifi DB hazard (the re-parenting cost):** hifi applied 0017 under the OLD
 ancestry; alembic_version=0028. After adopting main's re-parented 0017,
