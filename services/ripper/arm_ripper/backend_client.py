@@ -43,8 +43,10 @@ class BackendClient:
     async def close(self) -> None:
         await self._client.aclose()
 
-    async def register(self, *, hostname: str, device_path: str, ripper_version: str) -> Drive:
-        req = RegisterRequest(hostname=hostname, device_path=device_path, ripper_version=ripper_version)
+    async def register(
+        self, *, hostname: str, device_path: str, ripper_version: str, serial: str | None = None
+    ) -> Drive:
+        req = RegisterRequest(hostname=hostname, device_path=device_path, ripper_version=ripper_version, serial=serial)
         r = await self._client.post("/api/ripper/register", json=req.model_dump())
         r.raise_for_status()
         return Drive.model_validate(r.json())

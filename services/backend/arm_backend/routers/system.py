@@ -41,6 +41,7 @@ from arm_common.schemas import (
 )
 from arm_common.utils.resource_probing import probe_cpu_percent, probe_cpu_temp, probe_memory
 
+
 router = APIRouter(prefix="/api/system", tags=["system"])
 
 _WORST = {"ok": 0, "warning": 1, "error": 2}
