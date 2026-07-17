@@ -5,7 +5,8 @@ import pytest
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from arm_backend.path_template import (  # noqa: E402
+from arm_backend.path_template import (
+    tokens_for_media,  # noqa: E402
     TemplateValidationError,
     expand_template,
     referenced_tokens,
@@ -113,8 +114,6 @@ def test_validate_template_or_http_raises_http_422_on_bad_token() -> None:
 
 
 def test_music_allows_disc_token() -> None:
-    from arm_backend.path_template import tokens_for_media, validate_template
-    from arm_common.enums import MediaType
 
     keys = {t["token"] for t in tokens_for_media(MediaType.MUSIC)}
     assert "disc" in keys

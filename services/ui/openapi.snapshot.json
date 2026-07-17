@@ -1200,6 +1200,56 @@
         }
       }
     },
+    "/api/jobs/stats": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Job Stats",
+        "description": "Dashboard aggregates. Full-scan + count in Python (mirrors the\ndispatcher pattern) so the in-memory FakeSession stays sufficient;\njob counts are small at the hobbyist scale this serves.",
+        "operationId": "job_stats_api_jobs_stats_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/jobs/{job_id}": {
       "get": {
         "tags": [
@@ -5685,65 +5735,6 @@
         }
       }
     },
-    "/api/jobs/iso/scan": {
-      "post": {
-        "tags": [
-          "iso"
-        ],
-        "summary": "Scan Iso",
-        "operationId": "scan_iso_api_jobs_iso_scan_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/IsoScanRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/IsoScanResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/logs/{job_id}.zip": {
       "get": {
         "tags": [
@@ -6415,13 +6406,13 @@
         }
       }
     },
-    "/api/system/preflight": {
+    "/api/system/diagnostics": {
       "get": {
         "tags": [
           "system"
         ],
-        "summary": "Preflight",
-        "operationId": "preflight_api_system_preflight_get",
+        "summary": "Diagnostics",
+        "operationId": "diagnostics_api_system_diagnostics_get",
         "parameters": [
           {
             "name": "authorization",
@@ -6446,56 +6437,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PreflightResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/system/paths": {
-      "get": {
-        "tags": [
-          "system"
-        ],
-        "summary": "Paths",
-        "operationId": "paths_api_system_paths_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PathsResponse"
+                  "$ref": "#/components/schemas/SystemDiagnosticsResponse"
                 }
               }
             }
@@ -8035,6 +7977,17 @@
             "type": "string",
             "title": "Device Path"
           },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
           "display_name": {
             "anyOf": [
               {
@@ -9035,55 +8988,6 @@
         "type": "object",
         "title": "InAppChannelConfig"
       },
-      "IsoScanRequest": {
-        "properties": {
-          "path": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Path"
-          }
-        },
-        "type": "object",
-        "required": [
-          "path"
-        ],
-        "title": "IsoScanRequest"
-      },
-      "IsoScanResponse": {
-        "properties": {
-          "path": {
-            "type": "string",
-            "title": "Path"
-          },
-          "suggested_title": {
-            "type": "string",
-            "title": "Suggested Title"
-          },
-          "suggested_year": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Suggested Year"
-          },
-          "exists": {
-            "type": "boolean",
-            "title": "Exists"
-          }
-        },
-        "type": "object",
-        "required": [
-          "path",
-          "suggested_title",
-          "suggested_year",
-          "exists"
-        ],
-        "title": "IsoScanResponse"
-      },
       "Job": {
         "properties": {
           "id": {
@@ -9091,8 +8995,26 @@
             "title": "Id"
           },
           "drive_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Drive Id"
+          },
+          "drive_serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drive Serial"
           },
           "disc_type": {
             "$ref": "#/components/schemas/DiscType"
@@ -9319,6 +9241,36 @@
         ],
         "title": "JobNamingPreviewResponse"
       },
+      "JobStatsResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "By Status"
+          },
+          "by_type": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "By Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "by_status",
+          "by_type"
+        ],
+        "title": "JobStatsResponse",
+        "description": "Dashboard aggregates. `by_type` counts `Job.disc_type` (the only type\nfact on the Job row itself; media_type lives on the applied Session)."
+      },
       "JobStatus": {
         "type": "string",
         "enum": [
@@ -9397,8 +9349,26 @@
             "title": "Id"
           },
           "drive_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Drive Id"
+          },
+          "drive_serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drive Serial"
           },
           "disc_type": {
             "$ref": "#/components/schemas/DiscType"
@@ -10214,6 +10184,7 @@
         "properties": {
           "template": {
             "type": "string",
+            "minLength": 1,
             "title": "Template"
           },
           "media_type": {
@@ -10222,7 +10193,7 @@
           "has_transcode_preset": {
             "type": "boolean",
             "title": "Has Transcode Preset",
-            "default": false
+            "default": true
           }
         },
         "type": "object",
@@ -10942,72 +10913,6 @@
         ],
         "title": "PathStatus"
       },
-      "PathsResponse": {
-        "properties": {
-          "paths": {
-            "items": {
-              "$ref": "#/components/schemas/PathStatus"
-            },
-            "type": "array",
-            "title": "Paths"
-          }
-        },
-        "type": "object",
-        "required": [
-          "paths"
-        ],
-        "title": "PathsResponse"
-      },
-      "PreflightCheck": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "detail": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Detail"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "status"
-        ],
-        "title": "PreflightCheck"
-      },
-      "PreflightResponse": {
-        "properties": {
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "checks": {
-            "items": {
-              "$ref": "#/components/schemas/PreflightCheck"
-            },
-            "type": "array",
-            "title": "Checks"
-          }
-        },
-        "type": "object",
-        "required": [
-          "status",
-          "checks"
-        ],
-        "title": "PreflightResponse"
-      },
       "RegisterRequest": {
         "properties": {
           "hostname": {
@@ -11026,6 +10931,17 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Hw Caps"
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
           }
         },
         "type": "object",
@@ -12117,6 +12033,64 @@
           "events_unsent"
         ],
         "title": "StatsResponse"
+      },
+      "SystemDiagnosticCheck": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "status"
+        ],
+        "title": "SystemDiagnosticCheck"
+      },
+      "SystemDiagnosticsResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/SystemDiagnosticCheck"
+            },
+            "type": "array",
+            "title": "Checks"
+          },
+          "paths": {
+            "items": {
+              "$ref": "#/components/schemas/PathStatus"
+            },
+            "type": "array",
+            "title": "Paths"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "checks",
+          "paths"
+        ],
+        "title": "SystemDiagnosticsResponse"
       },
       "SystemVersionResponse": {
         "properties": {

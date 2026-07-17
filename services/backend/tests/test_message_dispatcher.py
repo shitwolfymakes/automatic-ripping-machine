@@ -75,14 +75,16 @@ async def test_core_isolates_failing_listener() -> None:
 
 
 @pytest.mark.asyncio
-async def test_core_disabled_marks_without_feeding() -> None:
+async def test_core_disabled_still_feeds_listeners_with_gate_flag() -> None:
+    """The global toggle gates apprise only: listeners are still fed (the
+    inbox must work out of the box) with apprise_enabled=False on the message."""
     db = FakeSession()
     db.rows["events"] = [Event(id="evt_1", event_type="rip.completed", emitted_at=datetime.now(UTC), payload_json={})]
     db.rows["config"] = [Config(id=1, notifications_enabled=False)]
     l1 = _RecordingListener()
     d = MessageDispatcher(settings=_settings(), db_factory=_db_factory(db), listeners=[l1])
     await d._tick()
-    assert l1.seen == []
+    assert len(l1.seen) == 1 and l1.seen[0].apprise_enabled is False
     assert db.rows["events"][0].notified_at is not None
 
 
@@ -99,3 +101,57 @@ async def test_core_selects_inbox_only_event_type() -> None:
     d = MessageDispatcher(settings=_settings(), db_factory=_db_factory(db), listeners=[l1])
     await d._tick()
     assert len(l1.seen) == 1 and l1.seen[0].event_type == "rip.needs_user_input"
+
+
+@pytest.mark.asyncio
+async def test_disabled_toggle_still_feeds_listeners_with_apprise_gated() -> None:
+    """notifications_enabled=False must NOT starve the in-app inbox: listeners
+    still run (message.apprise_enabled=False gates only external sends) and
+    the watermark is stamped."""
+    db = FakeSession()
+    db.rows["events"] = [
+        Event(id="evt_gate", event_type="rip.needs_user_input", emitted_at=datetime.now(UTC), payload_json={})
+    ]
+    db.rows["config"] = [Config(id=1, notifications_enabled=False)]
+    listener = _RecordingListener()
+    d = MessageDispatcher(settings=_settings(), db_factory=_db_factory(db), listeners=[listener])
+    await d._tick()
+    assert len(listener.seen) == 1
+    assert listener.seen[0].apprise_enabled is False
+    assert db.rows["events"][0].notified_at is not None
+
+
+@pytest.mark.asyncio
+async def test_enabled_toggle_marks_message_apprise_enabled() -> None:
+    db = FakeSession()
+    db.rows["events"] = [Event(id="evt_on", event_type="rip.completed", emitted_at=datetime.now(UTC), payload_json={})]
+    db.rows["config"] = [Config(id=1, notifications_enabled=True)]
+    listener = _RecordingListener()
+    d = MessageDispatcher(settings=_settings(), db_factory=_db_factory(db), listeners=[listener])
+    await d._tick()
+    assert listener.seen[0].apprise_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_watermark_commits_per_event_not_per_batch() -> None:
+    """External sends happen mid-tick; a batch-wide commit re-sends the whole
+    batch if anything later fails. The watermark must commit per event."""
+
+    class _CountingSession(FakeSession):
+        def __init__(self) -> None:
+            super().__init__()
+            self.commits = 0
+
+        async def commit(self) -> None:
+            self.commits += 1
+            await super().commit()
+
+    db = _CountingSession()
+    db.rows["events"] = [
+        Event(id="evt_a", event_type="rip.completed", emitted_at=datetime.now(UTC), payload_json={}),
+        Event(id="evt_b", event_type="rip.failed", emitted_at=datetime.now(UTC), payload_json={}),
+    ]
+    db.rows["config"] = [Config(id=1, notifications_enabled=True)]
+    d = MessageDispatcher(settings=_settings(), db_factory=_db_factory(db), listeners=[_RecordingListener()])
+    await d._tick()
+    assert db.commits >= 2
