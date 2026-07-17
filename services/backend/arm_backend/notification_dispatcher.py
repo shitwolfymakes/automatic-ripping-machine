@@ -116,10 +116,29 @@ class AppriseDeliveryError(RuntimeError):
 
 
 class _RealAppriseNotifier:
-    """Production notifier. Wraps `apprise.Apprise().async_notify`."""
+    """Production notifier. Wraps `apprise.Apprise().async_notify`.
+
+    Brands outbound notifications via an `AppriseAsset`: the sender is always
+    labelled "ARM", and when `image_url` is set, that public image becomes the
+    Discord avatar / embed thumbnail (and the equivalent on other services).
+    """
+
+    def __init__(self, image_url: str = "") -> None:
+        self._image_url = image_url
+
+    def _asset(self) -> "apprise.AppriseAsset":
+        asset = apprise.AppriseAsset(app_id="ARM", app_desc="Automatic Ripping Machine")
+        if self._image_url:
+            # A static URL (no {TYPE}/{XY} placeholders) is returned verbatim by
+            # AppriseAsset.image_url() for every notify type — so the same ARM
+            # image is used for success/failure/info and for both the avatar mask
+            # and the logo variant.
+            asset.image_url_mask = self._image_url
+            asset.image_url_logo = self._image_url
+        return asset
 
     async def notify(self, urls: Sequence[str], title: str, body: str) -> None:
-        ap = apprise.Apprise()
+        ap = apprise.Apprise(asset=self._asset())
         for url in urls:
             if not ap.add(url):
                 raise AppriseDeliveryError(f"apprise rejected url {_redact_apprise_url(url)}")
@@ -197,6 +216,7 @@ class MessageDispatcher:
                         default_title=default_title,
                         default_body=default_body,
                         job=job,
+                        payload=event.payload_json or {},
                         apprise_enabled=enabled,
                     )
                     for listener in self._listeners:
