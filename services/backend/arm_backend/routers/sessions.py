@@ -12,7 +12,7 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
-from arm_backend.path_template import TemplateValidationError, validate_template
+from arm_backend.path_template import TemplateValidationError, validate_template, validate_template_or_http
 from arm_common import Drive, RipPreset, Session, TranscodePreset, User
 from arm_common.schemas import (
     SessionCloneRequest,
@@ -236,8 +236,5 @@ async def preview_template(
     req: TemplatePreviewRequest,
     _: User = Depends(require_jwt),
 ) -> TemplatePreviewResponse:
-    try:
-        expansion = validate_template(req.template, req.media_type, req.has_transcode_preset)
-    except TemplateValidationError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    expansion = validate_template_or_http(req.template, req.media_type, req.has_transcode_preset)
     return TemplatePreviewResponse(expansion=expansion)
