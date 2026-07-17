@@ -1,6 +1,6 @@
 ---
 name: tier4-serial-absorb-plan
-description: LIVE — tier4 (#9) + Tier-5 (#10) merged upstream, neu-ports folded into main (rc3), stack repointed to main 2026-07-16; 24 PRs CONFLICTING pending absorb. Upstream re-parented 0017 → NO merge revision needed, but hifi needs manual 0016_1/0016_2 DDL.
+description: LIVE — #54 absorbed main-rc3 2026-07-16 (e33e067f, MERGEABLE; twin-resolution template below); ~23 PRs still CONFLICTING; next propagate up ui-settings-polish → mobile-drawer-stats → deploy; hifi still needs manual 0016_1/0016_2 DDL.
 metadata:
   type: project
 ---
@@ -17,18 +17,30 @@ metadata:
   `0016_notification_inbox`). Main's chain is LINEAR, single head — the
   planned alembic merge revision is NOT needed anymore.
 
-**Absorb checklist (bottom of our stack first — feat/user-management):**
-1. Merge wolfy/main into feat/user-management. Take MAIN's 0017 file (the
-   re-parented one — same revision id must have one content everywhere).
-2. Twin conflicts: tier4 quick-wins vs fork implementations — auth.py
-   (`_verify_drive_owner` nullable drive_id vs guest gating), routers/ripper.py
-   (register serial-swap rewrite vs review-gate), routers/{system,naming}.py,
-   metadata/musicbrainz.py, schemas, tests. Union playbook per
-   [[deploy-branch-discipline]]; deploy remains the fork-feature oracle.
-3. test_migration_chain.py should PASS after (linear chain 0016→0016_1→0016_2
-   →0017→…→0028). If it reports two heads, main's 0017 didn't win — fix that.
-4. Regen: services/ui snapshot + npm openapi-types + ui-neu codegen.sh.
-5. Propagate up: ui-settings-polish → mobile-drawer-stats → deploy.
+**DONE 2026-07-16: feat/user-management absorbed main (merge e33e067f, pushed;
+PR #54 MERGEABLE; 1773 tests pass; ruff clean).** The twin-resolution template
+for the remaining absorbs (#11–#47, then re-absorbs as tiers land):
+- Migrations: main's re-parented 0017 auto-merges; chain stays linear →0028.
+- auth.py: keep `require_writer` guest gating + main's nullable `drive_id` in
+  `_verify_drive_owner` (None → 403 "job has no owning drive").
+- ripper /identify: keep fork disc-reuse/review-gate flow, ADD
+  `drive_serial=drive.serial` to the new-Job constructor; register keeps
+  main's serial-swap rewrite (coalesce keeps old serial when ripper sends None).
+- metadata/dispatcher.py: MUST take main's version (`omdb_api_key_override`
+  ctor kwarg) — main.py passes it; keeping the fork file = TypeError at boot
+  and git auto-merges it WRONG (silently keeps fork's).
+- routers/system.py: fork's /stats + /resources + ISO_INGRESS_ROOT stay; adopt
+  main's cached `_app_version` (env > VERSION file > pkg metadata) + its three
+  cache-aware tests. Anonymous tests: guest semantics (200), drop main's 401s.
+- Tests: union both sides' new tests; watch hunk placement (main's trailing
+  asserts belong to THEIR test, not the fork's last test in the hunk).
+- `except A, B:` WITHOUT parens is VALID py3.14 (PEP 758) and is what ruff
+  0.15.11 formats to — not a syntax error, don't "fix" it.
+- Regen after resolve: snapshot + services/ui npm openapi-types + ui-neu
+  codegen.sh (both node_modules need install in a fresh worktree).
+
+**Next: propagate up — merge feat/user-management into ui-settings-polish,
+then mobile-drawer-stats, then deploy/hifi-20260705.**
 
 **⚠ hifi DB hazard (the re-parenting cost):** hifi applied 0017 under the OLD
 ancestry; alembic_version=0028. After adopting main's re-parented 0017,

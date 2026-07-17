@@ -1,6 +1,6 @@
 # Memory
 
-- [LIVE: tier4 absorb + stack repoint to main](project_tier4_serial_absorb_plan.md) — #9/#10 merged, neu-ports→main (rc3), 28 PRs repointed, 24 CONFLICTING; upstream re-parented 0017 (no merge revision needed); hifi needs manual 0016_1/2 DDL; checklist inside.
+- [LIVE: tier4 absorb — #54 done, propagate up next](project_tier4_serial_absorb_plan.md) — user-management absorbed main-rc3 (e33e067f, MERGEABLE); twin-resolution template inside; next ui-settings-polish → mobile-drawer-stats → deploy; hifi still needs manual 0016_1/2 DDL.
 - [Stacked-branch migrations](feedback_stacked_branch_migrations.md) — a migration's down_revision can dangle on sibling lines and only fails at backend boot; test_migration_chain.py guards it, copy parent files byte-identical across lines.
 - [OPEN: ui-neu preflight endpoint mismatch](project_uineu_preflight_endpoint_mismatch.md) — SystemHealth + ReadinessCheckStep POST /api/system/preflight which nothing serves; port to GET /api/system/diagnostics.
 - [No em dashes in PR titles](feedback_no_em_dashes_in_names.md) — use `Tier-N - <desc>` with plain hyphens; user converted all 26 open PR titles 2026-07-06.
