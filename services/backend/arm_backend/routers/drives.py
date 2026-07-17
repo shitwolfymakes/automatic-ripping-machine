@@ -61,6 +61,9 @@ async def list_drives(
     jobs = list((await session.execute(select(Job))).scalars().all())
     jobs_by_drive: dict[str, list[Job]] = {}
     for j in jobs:
+        if j.drive_id is None:
+            # Drive deleted after the fact (SET NULL) — belongs to no drive's view.
+            continue
         jobs_by_drive.setdefault(j.drive_id, []).append(j)
     return [_to_view(d, jobs_by_drive.get(d.id, [])) for d in drives]
 
