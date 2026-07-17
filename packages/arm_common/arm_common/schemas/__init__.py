@@ -17,6 +17,7 @@ from arm_common.schemas.drives import (
 )
 from arm_common.schemas.jobs import (
     AbandonJobRequest,
+    BulkDeleteJobsRequest,
     BulkDeleteJobsResponse,
     DiscFingerprintView,
     JobStatsResponse,
@@ -139,6 +140,7 @@ __all__ = [
     "MetadataReleaseTrack",
     "MetadataSearchResponse",
     "ApplySessionRequest",
+    "BulkDeleteJobsRequest",
     "BulkDeleteJobsResponse",
     "DiscFingerprintInput",
     "DiscFingerprintView",
