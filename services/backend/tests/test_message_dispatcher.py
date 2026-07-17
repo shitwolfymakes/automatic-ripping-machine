@@ -57,7 +57,7 @@ async def test_core_feeds_every_listener_and_sets_watermark() -> None:
     await d._tick()
     assert len(l1.seen) == 1 and len(l2.seen) == 1
     assert l1.seen[0].event_type == "rip.completed"
-    assert l1.seen[0].default_title == "ARM: rip completed"
+    assert l1.seen[0].default_title == "ARM: rip completed — "
     assert db.rows["events"][0].notified_at is not None
 
 

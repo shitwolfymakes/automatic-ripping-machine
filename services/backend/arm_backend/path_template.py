@@ -20,7 +20,18 @@ class TemplateValidationError(ValueError):
 # Per-media-type allowed tokens (arch §02 token table).
 _ALLOWED_TOKENS_BY_MEDIA: dict[MediaType, set[str]] = {
     MediaType.MOVIE: {"title", "year", "track", "duration_human", "transcode_slug", "ext"},
-    MediaType.TV: {"show", "year", "season", "disc", "track", "duration_human", "transcode_slug", "ext"},
+    MediaType.TV: {
+        "show",
+        "year",
+        "season",
+        "disc",
+        "track",
+        "episode",
+        "episode_title",
+        "duration_human",
+        "transcode_slug",
+        "ext",
+    },
     MediaType.MUSIC: {"artist", "album", "disc", "track", "track_title", "transcode_slug", "ext"},
     MediaType.DATA: {"title"},
     MediaType.ISO: {"title", "year", "ext"},
@@ -43,6 +54,8 @@ _SYNTHETIC_CONTEXTS: dict[MediaType, dict[str, str]] = {
         "season": "01",
         "disc": "01",
         "track": "01",
+        "episode": "01",
+        "episode_title": "Pilot",
         "duration_human": "00h45m",
         "transcode_slug": "plex-1080p-h265",
         "ext": "mkv",
@@ -59,6 +72,16 @@ _SYNTHETIC_CONTEXTS: dict[MediaType, dict[str, str]] = {
     MediaType.DATA: {"title": "Data Disc"},
     MediaType.ISO: {"title": "Iron Man", "year": "2008", "ext": "iso"},
 }
+
+
+def synthetic_context(media_type: MediaType) -> dict[str, str]:
+    """Return a copy of the synthetic stand-in values for a media type.
+
+    Public accessor over the save-time-validation context. Callers (e.g. the
+    naming-preview router) may merge real values on top; returning a copy keeps
+    the module-level table immutable.
+    """
+    return dict(_SYNTHETIC_CONTEXTS[media_type])
 
 
 class _StrictDict(dict[str, str]):
@@ -120,6 +143,8 @@ _TOKEN_DESCRIPTIONS: dict[str, str] = {
     "show": "TV show name",
     "year": "Release year",
     "season": "Season number, zero-padded",
+    "episode": "Episode number, zero-padded",
+    "episode_title": "Episode title",
     "disc": "Disc number within the set",
     "track": "Track number, zero-padded",
     "track_title": "Per-track title (music)",

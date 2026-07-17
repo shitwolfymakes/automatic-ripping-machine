@@ -17,11 +17,16 @@ from typing import Any, Literal
 
 import httpx
 
+from arm_backend.config import settings
 from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult
 
 logger = logging.getLogger("arm_backend.metadata.arm_server")
 
-_BASE_URL = "https://1337server.pythonanywhere.com/api/v1/"
+
+def _base_url() -> str:
+    return settings.ARM_ARMSERVER_BASE_URL
+
+
 _USER_AGENT = "automatic-ripping-machine/v3"
 
 
@@ -40,7 +45,7 @@ class ArmServerClient:
         crc64 = crc64.replace("|", "")
         try:
             r = await self._http.get(
-                _BASE_URL,
+                _base_url(),
                 params={"mode": "s", "crc64": crc64},
                 headers={"User-Agent": _USER_AGENT, "Accept": "application/json"},
             )

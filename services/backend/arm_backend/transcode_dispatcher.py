@@ -232,7 +232,7 @@ class TranscodeDispatcher:
         Counts in_progress rows live (cheap). For each available slot,
         dequeues one queued task and spawns. Returns the spawn count.
         """
-        if not self._host_paths_set():
+        if not self.host_paths_set():
             logger.warning("transcode dispatcher disabled: ARM_HOST_*_PATH not set (set them via .env)")
             return 0
 
@@ -353,7 +353,7 @@ class TranscodeDispatcher:
         # NULL semantics: hold the task in queued so a later tick retries.
         return GpuAssignment(gpu=None, codec=codec, action="queue")
 
-    def _host_paths_set(self) -> bool:
+    def host_paths_set(self) -> bool:
         return bool(
             self._settings.ARM_HOST_RAW_PATH
             and self._settings.ARM_HOST_MEDIA_PATH

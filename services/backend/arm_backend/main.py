@@ -16,6 +16,7 @@ from arm_backend.config import settings
 from arm_backend.crash_recovery import sweep_in_flight_jobs
 from arm_backend.db import SessionLocal
 from arm_backend.gpu_probe import load_configured_gpus
+from arm_backend import image_cache
 from arm_backend.log_tailer import LogTailer
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.notification_dispatcher import (
@@ -29,7 +30,9 @@ from arm_backend.routers import (
     config as config_router,
     diagnostics,
     drives,
+    files as files_router,
     health,
+    images as images_router,
     jobs,
     logs as logs_router,
     metadata as metadata_router,
@@ -38,7 +41,9 @@ from arm_backend.routers import (
     rip_presets,
     ripper,
     sessions,
+    settings as settings_router,
     system as system_router,
+    themes as themes_router,
     transcode_presets,
     transcoder,
     transcodes,
@@ -120,6 +125,9 @@ def _build_docker_client() -> object | None:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _run_migrations()
     await _run_seeders()
+    # Rebuild the image-proxy disk-cache index from disk (LRU/TTL). Sync, fast,
+    # no DB — safe to run before the session/dispatchers come up.
+    image_cache.startup_scan()
     async with SessionLocal() as session:
         cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
         if cfg.session_signing_key is None:  # pragma: no cover — _run_seeders always populates this; defensive only
@@ -131,6 +139,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ensure_roots(default_roots())
     http = httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=10.0))
     app.state.http = http
+    app.state.started_at = datetime.now(UTC)
     app.state.dispatcher = MetadataDispatcher(http, omdb_api_key_override=settings.OMDB_API_KEY)
     app.state.ws_hub = WSHub()
 
@@ -170,7 +179,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Phase 11 — outbound Apprise notifications. Off out of the box; the
     # dispatcher polls but no-ops until the user enables notifications in
     # the UI and saves at least one valid Apprise URL.
-    notifier = _RealAppriseNotifier()
+    notifier = _RealAppriseNotifier(settings.ARM_NOTIFY_IMAGE_URL)
     app.state.notifier = notifier
     notification_dispatcher = MessageDispatcher(
         settings=settings,
@@ -225,7 +234,11 @@ app.include_router(metadata_router.router)
 app.include_router(naming_router.router)
 app.include_router(notifications_router.router)
 app.include_router(logs_router.router)
+app.include_router(images_router.router)
+app.include_router(themes_router.router)
+app.include_router(settings_router.router)
 app.include_router(system_router.router)
+app.include_router(files_router.router)
 app.include_router(ws_router)
 
 

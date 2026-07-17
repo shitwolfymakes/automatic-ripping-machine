@@ -25,6 +25,16 @@ def test_blank_descriptor_returns_empty(raw: str | None) -> None:
     assert load_configured_gpus(raw) == []
 
 
+def test_default_descriptor_is_empty_array_and_parses_to_no_gpus() -> None:
+    # The config.py ARM_GPUS default is "[]" (all three layers agree); it must
+    # parse to the same no-GPU result as an empty/blank string.
+    from arm_backend.config import Settings
+
+    assert Settings.model_fields["ARM_GPUS"].default == "[]"
+    assert load_configured_gpus("[]") == []
+    assert load_configured_gpus("") == []
+
+
 def test_invalid_json_returns_empty() -> None:
     assert load_configured_gpus("{not json") == []
 

@@ -5,6 +5,7 @@ description = "ARM v3 Backend — FastAPI + Postgres + state machine"
 requires-python = ">=3.14"
 dependencies = [
     "fastapi>=0.115",
+    "python-multipart>=0.0.9",
     "uvicorn[standard]>=0.32",
     "sqlmodel>=0.0.22",
     "alembic>=1.13",
