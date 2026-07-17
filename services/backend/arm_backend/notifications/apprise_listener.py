@@ -28,6 +28,10 @@ class AppriseListener:
         self._notifier = notifier
 
     async def handle(self, db: AsyncSession, message: Message) -> None:
+        if not message.apprise_enabled:
+            # Global notifications toggle is off: external delivery is gated
+            # here (the inbox listener still runs — see Message.apprise_enabled).
+            return
         channels = (await db.execute(select(NotificationChannel))).scalars().all()
         targets = [
             c

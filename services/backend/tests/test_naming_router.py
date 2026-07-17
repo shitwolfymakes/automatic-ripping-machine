@@ -16,6 +16,8 @@ from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import naming as naming_router  # noqa: E402
 from arm_common import (  # noqa: E402
+    Config,
+    Drive,
     ContainerFormat,
     HwPreference,
     Job,
@@ -449,9 +451,87 @@ def test_naming_validate_rejects_unknown_token(signing_key: bytes) -> None:
 
 
 def test_naming_validate_requires_auth() -> None:
-    import secrets as _secrets
-
-    app, _ = _make_app(_secrets.token_bytes(32), FakeSession())
+    app, _ = _make_app(secrets.token_bytes(32), FakeSession())
     with TestClient(app) as client:
         r = client.post("/api/naming/validate", json={"template": "x", "media_type": "movie"})
     assert r.status_code == 401
+
+
+def test_preview_falls_back_to_drive_default_session(signing_key: bytes) -> None:
+    """No pending_session_id: the preview must resolve the drive's default
+    session when Config.auto_transcode_on_idle is on — the same resolution
+    the real apply path (auto_session.maybe_auto_apply_session) performs."""
+    db = FakeSession()
+    _seed(db)
+    _seed_job(db)
+    db.rows["jobs"][0].metadata_json = {}
+    db.rows["drives"] = [Drive(id="drv_x", hostname="h", device_path="/dev/sr0", default_session_id=_SES_ID)]
+    db.rows["config"] = [Config(id=1, auto_transcode_on_idle=True)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{_JOB_ID_1}/naming-preview", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["items"]
+
+
+def test_preview_default_session_needs_auto_idle_flag(signing_key: bytes) -> None:
+    """Drive default alone is not enough — auto_transcode_on_idle=False means
+    the apply path would not use it, so neither may the preview."""
+    db = FakeSession()
+    _seed(db)
+    _seed_job(db)
+    db.rows["jobs"][0].metadata_json = {}
+    db.rows["drives"] = [Drive(id="drv_x", hostname="h", device_path="/dev/sr0", default_session_id=_SES_ID)]
+    db.rows["config"] = [Config(id=1, auto_transcode_on_idle=False)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{_JOB_ID_1}/naming-preview", headers=_auth(token))
+    assert r.status_code == 409
+
+
+def test_preview_orders_items_by_track_index(signing_key: bytes) -> None:
+    """Items must come back in track-index order (the apply path's order),
+    not DB insertion order."""
+    db = FakeSession()
+    _seed(db)
+    _seed_job(db)
+    db.rows["tracks"] = [
+        Track(id=_TRK_ID_2, job_id=_JOB_ID_1, kind=TrackKind.VIDEO_TITLE, index=2, source_ref="2"),
+        Track(id=_TRK_ID_1, job_id=_JOB_ID_1, kind=TrackKind.VIDEO_TITLE, index=1, source_ref="1"),
+    ]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{_JOB_ID_1}/naming-preview", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    numbers = [i["track_number"] for i in r.json()["items"]]
+    assert numbers == [1, 2]
+
+
+def test_naming_validate_rejects_empty_template(signing_key: bytes) -> None:
+    """The save path enforces min_length=1 on templates; the validate
+    endpoint must not bless an empty template the save will reject."""
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/naming/validate",
+            json={"template": "", "media_type": "movie", "has_transcode_preset": True},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422
+
+
+def test_naming_validate_default_matches_preview(signing_key: bytes) -> None:
+    """has_transcode_preset defaults True, matching /api/sessions/preview —
+    the same template must not validate differently between the two."""
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/naming/validate",
+            json={"template": "{title} ({year})/{title}.{ext}", "media_type": "movie"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
