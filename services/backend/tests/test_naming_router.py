@@ -625,6 +625,8 @@ def test_naming_preview_requires_auth() -> None:
     with TestClient(app) as client:
         r = client.post("/api/naming/preview", json={"template": "x", "media_type": "movie"})
     assert r.status_code == 200
+
+
 def test_naming_validate_rejects_empty_template(signing_key: bytes) -> None:
     """The save path enforces min_length=1 on templates; the validate
     endpoint must not bless an empty template the save will reject."""
