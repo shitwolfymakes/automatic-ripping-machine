@@ -222,20 +222,29 @@ def test_delete_drive_with_active_job_409(signing_key: bytes) -> None:
 
 
 def test_delete_drive_with_non_ripping_job_succeeds(signing_key: bytes) -> None:
+    """A RIPPED (terminal) job on the drive must NOT block deletion — only
+    RIPPING does. On real Postgres this relies on jobs.drive_id being
+    `ON DELETE SET NULL` (migration 0016_2_jobs_drive_serial); the previous
+    `RESTRICT` FK would raise IntegrityError here, invisible to FakeSession
+    since it doesn't model FKs. Job.drive_serial (snapshotted at identify
+    time) keeps a permanent record of the physical drive independent of the
+    drives row, so the job's history isn't lost either way."""
     db = FakeSession()
     db.rows.setdefault("users", []).append(
         User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)
     )
-    db.rows.setdefault("drives", []).append(Drive(id="drv_1", device_path="/dev/sr0", hostname="h1"))
-    # a RIPPED (terminal) job on the drive must NOT block deletion — only RIPPING does
+    db.rows.setdefault("drives", []).append(Drive(id="drv_1", device_path="/dev/sr0", hostname="h1", serial="SN1"))
     db.rows.setdefault("jobs", []).append(
-        Job(id="job_1", drive_id="drv_1", status=JobStatus.RIPPED, disc_type=DiscType.DVD)
+        Job(id="job_1", drive_id="drv_1", drive_serial="SN1", status=JobStatus.RIPPED, disc_type=DiscType.DVD)
     )
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.delete("/api/drives/drv_1", headers=_auth(token))
     assert r.status_code == 204, r.text
     assert db.rows["drives"] == []
+    # job history untouched by the drive delete
+    assert db.rows["jobs"][0].id == "job_1"
+    assert db.rows["jobs"][0].drive_serial == "SN1"
 
 
 def _job(job_id: str, *, drive_id: str = "drv_x", status: JobStatus, title: str | None = "T", created: int = 0) -> Job:

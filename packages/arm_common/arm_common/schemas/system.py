@@ -1,15 +1,10 @@
 from pydantic import BaseModel
 
 
-class PreflightCheck(BaseModel):
+class SystemDiagnosticCheck(BaseModel):
     name: str
     status: str  # "ok" | "warning" | "error"
     detail: str | None = None
-
-
-class PreflightResponse(BaseModel):
-    status: str
-    checks: list[PreflightCheck]
 
 
 class PathStatus(BaseModel):
@@ -19,7 +14,9 @@ class PathStatus(BaseModel):
     writable: bool
 
 
-class PathsResponse(BaseModel):
+class SystemDiagnosticsResponse(BaseModel):
+    status: str
+    checks: list[SystemDiagnosticCheck]
     paths: list[PathStatus]
 
 
