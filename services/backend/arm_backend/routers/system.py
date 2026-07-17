@@ -10,9 +10,11 @@ disabled transcode dispatcher. The ported UI's settings System-Health panel
 and first-run wizard render it (Tier-12). /stats, /resources, and /version
 feed the dashboard tiles."""
 
+import functools
 import importlib.metadata
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 
 import psutil  # type: ignore[import-untyped]
 
@@ -38,6 +40,7 @@ from arm_common.schemas import (
     SystemResourcesResponse,
     SystemVersionResponse,
 )
+
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -242,7 +245,28 @@ async def resources(
     )
 
 
+# The canonical release version lives in the repo-root VERSION file, baked
+# into the image at /app/VERSION; the workspace member's pyproject pins a
+# static 0.0.0, so importlib.metadata is only a last resort. Resolution:
+# ARM_VERSION env > VERSION file > package metadata > sentinel.
+_VERSION_FILE_CANDIDATES: tuple[Path, ...] = (
+    Path("/app/VERSION"),
+    Path(__file__).resolve().parents[4] / "VERSION",  # repo root (dev checkout)
+)
+
+
+@functools.cache
 def _app_version() -> str:
+    env = os.environ.get("ARM_VERSION")
+    if env:
+        return env.strip()
+    for candidate in _VERSION_FILE_CANDIDATES:
+        try:
+            text = candidate.read_text().strip()
+        except OSError:
+            continue
+        if text:
+            return text
     try:
         return importlib.metadata.version("arm_backend")
     except importlib.metadata.PackageNotFoundError:

@@ -323,16 +323,50 @@ def test_system_version_requires_auth(signing_key: bytes, tmp_path) -> None:
         assert client.get("/api/system/version").status_code == 200
 
 
+def test_app_version_env_override_wins(monkeypatch) -> None:
+    from arm_backend.routers import system as system_router
+
+    monkeypatch.setenv("ARM_VERSION", "9.9.9-test")
+    system_router._app_version.cache_clear()
+    try:
+        assert system_router._app_version() == "9.9.9-test"
+    finally:
+        system_router._app_version.cache_clear()
+
+
+def test_app_version_reads_version_file(monkeypatch, tmp_path) -> None:
+    """The canonical VERSION file (baked into the image at /app/VERSION,
+    repo root in dev) is the source of truth — not the static pyproject
+    version, which is pinned 0.0.0."""
+    from arm_backend.routers import system as system_router
+
+    vfile = tmp_path / "VERSION"
+    vfile.write_text("3.1.4-test\n")
+    monkeypatch.delenv("ARM_VERSION", raising=False)
+    monkeypatch.setattr(system_router, "_VERSION_FILE_CANDIDATES", (vfile,))
+    system_router._app_version.cache_clear()
+    try:
+        assert system_router._app_version() == "3.1.4-test"
+    finally:
+        system_router._app_version.cache_clear()
+
+
 def test_app_version_real_fallback(monkeypatch) -> None:
     import importlib.metadata
 
-    from arm_backend.routers.system import _app_version
+    from arm_backend.routers import system as system_router
 
     def _raise(_name: str) -> str:
         raise importlib.metadata.PackageNotFoundError("arm_backend")
 
+    monkeypatch.delenv("ARM_VERSION", raising=False)
+    monkeypatch.setattr(system_router, "_VERSION_FILE_CANDIDATES", ())
     monkeypatch.setattr(importlib.metadata, "version", _raise)
-    assert _app_version() == "0.0.0+unknown"
+    system_router._app_version.cache_clear()
+    try:
+        assert system_router._app_version() == "0.0.0+unknown"
+    finally:
+        system_router._app_version.cache_clear()
 
 
 def test_diagnostics_includes_makemkv_key_check_ok(signing_key: bytes, tmp_path) -> None:

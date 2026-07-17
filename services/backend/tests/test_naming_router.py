@@ -625,3 +625,31 @@ def test_naming_preview_requires_auth() -> None:
     with TestClient(app) as client:
         r = client.post("/api/naming/preview", json={"template": "x", "media_type": "movie"})
     assert r.status_code == 200
+def test_naming_validate_rejects_empty_template(signing_key: bytes) -> None:
+    """The save path enforces min_length=1 on templates; the validate
+    endpoint must not bless an empty template the save will reject."""
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/naming/validate",
+            json={"template": "", "media_type": "movie", "has_transcode_preset": True},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422
+
+
+def test_naming_validate_default_matches_preview(signing_key: bytes) -> None:
+    """has_transcode_preset defaults True, matching /api/sessions/preview —
+    the same template must not validate differently between the two."""
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/naming/validate",
+            json={"template": "{title} ({year})/{title}.{ext}", "media_type": "movie"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
