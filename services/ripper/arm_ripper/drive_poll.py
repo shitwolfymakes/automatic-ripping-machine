@@ -39,6 +39,7 @@ def read_drive_status(device_path: str) -> DriveState:
 # is the number of consecutive NOT_READY readings (≈ this × POLL_INTERVAL
 # seconds) past which we assume the disc was swapped and re-arm. A seated
 # disc's spin transition clears in one or two polls, well under this.
+# default fallback; production passes settings.ARM_NOT_READY_REARM_POLLS (Tier-4)
 DEFAULT_NOT_READY_REARM_POLLS = 3
 
 

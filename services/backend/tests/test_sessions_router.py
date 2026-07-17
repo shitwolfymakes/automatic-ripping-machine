@@ -32,6 +32,7 @@ from arm_common import (  # noqa: E402
     TranscodeTool,
     User,
 )
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -127,7 +128,17 @@ def _seed(db: FakeSession) -> None:
     db.rows["rip_presets"] = [_movie_rip_preset()]
     db.rows["transcode_presets"] = [_movie_transcode_preset()]
     db.rows["sessions"] = [_builtin_session()]
-    db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
+    db.rows["users"] = [
+        User(id="usr_admin", username="admin", password_hash="x", password_must_change=False),
+        User(
+            id="usr_guest",
+            username="guest",
+            password_hash="x",
+            password_must_change=False,
+            role=GUEST_ROLE,
+            disabled=False,
+        ),
+    ]
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -336,12 +347,13 @@ def test_get_session_happy_path(signing_key: bytes) -> None:
 
 
 def test_list_sessions_requires_auth(signing_key: bytes) -> None:
+    """No Authorization header falls back to the guest account (read-only route)."""
     db = FakeSession()
     _seed(db)
     app, _token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.get("/api/sessions")  # no Authorization header
-    assert r.status_code == 401
+    assert r.status_code == 200
 
 
 def test_create_rejects_unknown_rip_preset(signing_key: bytes) -> None:

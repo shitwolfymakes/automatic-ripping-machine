@@ -1,9 +1,10 @@
-"""Phase 11 — `PATCH /api/config` apprise URL validation + view round-trip.
+"""`PATCH /api/config` notification + view round-trip.
 
-Validation runs whether `notifications_enabled` is True or False — saving
-bad URLs is invalid input regardless of the master toggle. The 400 detail
-must redact the offending URL (scheme-only) so the response is safe to
-paste into a bug report.
+As of the settings audit (§1.2), `notification_apprise_urls` is no longer on
+the editable surface — it's dropped from `ConfigUpdateRequest`, so a PATCH that
+sends it is silently ignored (the legacy flat list never dispatches; channels
+do). It still round-trips in `ConfigView` for read back-compat. These tests
+assert the field is inert on write but readable on GET.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import config as config_router  # noqa: E402
 from arm_common import Config, RetentionPolicy, User  # noqa: E402
+from arm_common.secrets import HIDDEN_SECRET  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -69,9 +71,11 @@ def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_valid_url_list_accepted(signing_key: bytes) -> None:
+def test_apprise_urls_patch_is_ignored(signing_key: bytes) -> None:
+    # The field is off the editable surface, so a PATCH carrying it is silently
+    # dropped (200) and the stored list is unchanged — but it still reads back.
     db = FakeSession()
-    _seed(db)
+    _seed(db, urls=["mailto://orig@host"])
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.patch(
@@ -80,10 +84,14 @@ def test_valid_url_list_accepted(signing_key: bytes) -> None:
             headers=_auth(token),
         )
     assert r.status_code == 200, r.text
-    assert r.json()["notification_apprise_urls"] == ["mailto://user:pass@gmail.com"]
+    # Unchanged: the PATCH value never reached the row.
+    assert r.json()["notification_apprise_urls"] == ["mailto://orig@host"]
+    assert db.rows["config"][0].notification_apprise_urls == ["mailto://orig@host"]
 
 
-def test_invalid_url_returns_400_with_redacted_detail(signing_key: bytes) -> None:
+def test_invalid_apprise_url_no_longer_validated(signing_key: bytes) -> None:
+    # No write-path validation remains: a bogus URL in the PATCH body is ignored
+    # rather than rejected, because the field is no longer accepted at all.
     db = FakeSession()
     _seed(db)
     app, token = _make_app(signing_key, db)
@@ -93,42 +101,20 @@ def test_invalid_url_returns_400_with_redacted_detail(signing_key: bytes) -> Non
             json={"notification_apprise_urls": ["not-a-url://AAA-BBB-CCC"]},
             headers=_auth(token),
         )
-    assert r.status_code == 400
-    detail = r.json()["detail"]
-    assert "invalid apprise URL" in detail
-    assert "****" in detail
-    assert "AAA-BBB-CCC" not in detail
+    assert r.status_code == 200, r.text
+    # inert on write: the bogus URL was neither rejected nor persisted
+    assert db.rows["config"][0].notification_apprise_urls == []
 
 
-def test_clearing_urls_is_allowed(signing_key: bytes) -> None:
+def test_apprise_urls_readable_in_view(signing_key: bytes) -> None:
+    # GET still projects the stored list for back-compat.
     db = FakeSession()
     _seed(db, urls=["mailto://user@host"])
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
-        r = client.patch(
-            "/api/config",
-            json={"notification_apprise_urls": []},
-            headers=_auth(token),
-        )
+        r = client.get("/api/config", headers=_auth(token))
     assert r.status_code == 200, r.text
-    assert r.json()["notification_apprise_urls"] == []
-
-
-def test_validation_runs_when_enabled_too(signing_key: bytes) -> None:
-    db = FakeSession()
-    _seed(db, enabled=True)
-    app, token = _make_app(signing_key, db)
-    with TestClient(app) as client:
-        r = client.patch(
-            "/api/config",
-            json={
-                "notifications_enabled": True,
-                "notification_apprise_urls": ["totally-bogus://AAA"],
-            },
-            headers=_auth(token),
-        )
-    assert r.status_code == 400
-    assert "AAA" not in r.json()["detail"]
+    assert r.json()["notification_apprise_urls"] == ["mailto://user@host"]
 
 
 def test_notifications_enabled_round_trips(signing_key: bytes) -> None:
@@ -167,8 +153,8 @@ def test_makemkv_key_round_trips(signing_key: bytes) -> None:
         assert r.status_code == 200, r.text
         assert r.json()["makemkv_key"] is None
 
-        # PATCH persists it and the view echoes it back.
+        # PATCH persists it; the response view masks the secret, but the DB row holds the real value.
         r = client.patch("/api/config", json={"makemkv_key": "T-abc123"}, headers=_auth(token))
         assert r.status_code == 200, r.text
-        assert r.json()["makemkv_key"] == "T-abc123"
+        assert r.json()["makemkv_key"] == HIDDEN_SECRET
         assert db.rows["config"][0].makemkv_key == "T-abc123"

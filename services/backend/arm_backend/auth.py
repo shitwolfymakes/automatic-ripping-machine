@@ -23,8 +23,10 @@ from sqlmodel import col, select
 from arm_backend.config import settings
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import verify_access_token
+from arm_backend.seeders import GUEST_USERNAME
 from arm_common import Drive, Job, User
 from arm_common.models import Track
+from arm_common.models.user import ADMIN_ROLE
 
 
 def check_service_token(token: str) -> bool:
@@ -69,6 +71,17 @@ async def require_jwt(
     authorization: str | None = Header(default=None),
     session: AsyncSession = Depends(get_session),
 ) -> User:
+    if authorization is None:
+        # Anonymous request → act as the guest account when guest access is
+        # enabled (spec 2026-07-12-anonymous-guest). A present-but-bad token
+        # never falls back — only a fully absent header.
+        guest = (await session.execute(select(User).where(col(User.username) == GUEST_USERNAME))).scalar_one_or_none()
+        if guest is None:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="guest account missing")
+        if guest.disabled:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+        return guest
+
     token = _extract_bearer(authorization)
     if not looks_like_jwt(token):
         # Service-token presented to a UI endpoint.
@@ -93,6 +106,8 @@ async def require_jwt(
     user = (await session.execute(select(User).where(col(User.id) == user_id))).scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="unknown user")
+    if user.disabled:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="account disabled")
 
     if user.password_must_change and not _path_in_whitelist(request.url.path):
         raise HTTPException(
@@ -104,6 +119,16 @@ async def require_jwt(
 
 def _path_in_whitelist(path: str) -> bool:
     return any(path.startswith(p) for p in _MUST_CHANGE_WHITELIST)
+
+
+async def require_writer(user: User = Depends(require_jwt)) -> User:
+    """Admin-only gate for mutating routes. Guests read everything, write nothing."""
+    if user.role != ADMIN_ROLE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="read-only role: write access required",
+        )
+    return user
 
 
 async def _verify_drive_owner(session: AsyncSession, drive_id: str | None, hostname_header: str | None) -> None:

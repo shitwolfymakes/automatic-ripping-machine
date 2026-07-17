@@ -118,6 +118,18 @@ confirm() {
     [[ "$reply" =~ ^[yY]([eE][sS])?$ ]]
 }
 
+# Extract the bare host from a URL: strip scheme://, any user@, :port, and /path.
+# https://192.168.0.68:8080/api -> 192.168.0.68 ; https://h.example -> h.example
+url_host() {
+    local url="$1" hostport
+    url="${url#*://}"      # drop scheme://
+    url="${url%%/*}"       # drop /path
+    url="${url##*@}"       # drop user@ (if present)
+    hostport="$url"
+    url="${hostport%%:*}"  # drop :port
+    printf '%s' "$url"
+}
+
 # Resolve the image tag that pins ALL service images (backend/ripper/ui +
 # the transcode image the dispatcher spawns). Reuse an existing pin from the
 # prefix's .env so re-runs don't silently upgrade and work offline; otherwise
@@ -261,7 +273,13 @@ make_leaf() {
     local s
     for s in "${extra_sans[@]:-}"; do
         [[ -z "$s" ]] && continue
-        san+=",DNS:${s}"
+        # IPv4 literal → IP: SAN (a remote transcoder may connect by IP);
+        # anything else is a hostname → DNS:. IPv6 is out of scope.
+        if [[ "$s" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+            san+=",IP:${s}"
+        else
+            san+=",DNS:${s}"
+        fi
     done
 
     cat > "$ext" <<EOF
@@ -409,6 +427,103 @@ detect_render_gid() {
     done
 }
 
+# Run GPU detection ON the remote host over ssh, using the dedicated key.
+# Prints two lines: <ARM_GPUS json> then <render_gid>. Non-zero on ssh failure.
+# Ships the three detection function bodies to the remote `bash -s`; the remote
+# does not have install.sh, so we send the functions inline.
+remote_detect_gpus() {
+    local target="$1" key="$2" out
+    # target is ssh://user@host — strip the scheme for the ssh CLI.
+    local sshdest="${target#ssh://}"
+    # shellcheck disable=SC2029 # intentional: function bodies are expanded client-side and shipped as source to the remote bash -s
+    out="$(
+        {
+            declare -f nvenc_driver_ok detect_gpus detect_render_gid
+            # shellcheck disable=SC2016 # single quotes are intentional: $(...) must expand on the remote, not here
+            printf 'printf "%%s\\n" "$(detect_gpus)"\n'
+            # shellcheck disable=SC2016 # single quotes are intentional: $(...) must expand on the remote, not here
+            printf 'printf "%%s\\n" "$(detect_render_gid || true)"\n'
+        } | ssh -i "$key" -o BatchMode=yes -o ConnectTimeout=10 \
+                -o StrictHostKeyChecking=accept-new "$sshdest" bash -s 2>/dev/null
+    )" || return 1
+    printf '%s\n' "$out"
+}
+
+# Interactive: offer remote transcode offload. On yes, provision a dedicated
+# ssh key, print the authorize line, detect the REMOTE GPU inventory, and set
+# the REMOTE_* globals the rest of install.sh consumes. On no/non-interactive,
+# leaves REMOTE_OFFLOAD empty => byte-for-byte local behavior downstream.
+setup_remote_offload() {
+    REMOTE_OFFLOAD=0
+    # Non-interactive (no tty) => never prompt; stay local.
+    [[ -t 0 ]] || return 0
+    confirm "Enable remote transcode offload (spawn transcodes on a GPU host over ssh)?" || return 0
+    REMOTE_OFFLOAD=1
+
+    read -rp "  Remote docker endpoint (ssh://user@host): " REMOTE_DOCKER_HOST
+    read -rp "  Routable backend URL the transcoder calls back (https://host:port): " REMOTE_BACKEND_URL
+    local def_puid def_pgid
+    def_puid="$(id -u)"; def_pgid="$(id -g)"
+    local uidgid
+    read -rp "  Transcoder write UID:GID for shared media [${def_puid}:${def_pgid}]: " uidgid
+    uidgid="${uidgid:-${def_puid}:${def_pgid}}"
+    REMOTE_TRANSCODE_PUID="${uidgid%%:*}"
+    REMOTE_TRANSCODE_PGID="${uidgid##*:}"
+    REMOTE_BACKEND_SAN="$(url_host "$REMOTE_BACKEND_URL")"
+
+    # Dedicated ed25519 key for backend -> remote docker daemon.
+    local sshdir="$PREFIX/ssh" key="$PREFIX/ssh/id_ed25519"
+    local sshdest="${REMOTE_DOCKER_HOST#ssh://}"
+    local remote_host="${sshdest##*@}"
+    mkdir -p "$sshdir"
+    if [[ ! -f "$key" ]]; then
+        ssh-keygen -t ed25519 -N "" -C "armv3-backend@${remote_host}" -f "$key" >/dev/null
+        log "generated dedicated ssh key: $key"
+    fi
+    ssh-keyscan -t ed25519 "$remote_host" > "$sshdir/known_hosts" 2>/dev/null || \
+        warn "ssh-keyscan of $remote_host failed; known_hosts is empty (detection may prompt)"
+    cat > "$sshdir/config" <<EOF
+Host ${remote_host}
+  User ${sshdest%@*}
+  IdentityFile /home/arm/.ssh/id_ed25519
+  UserKnownHostsFile /home/arm/.ssh/known_hosts
+  StrictHostKeyChecking yes
+EOF
+    chmod 700 "$sshdir"; chmod 600 "$key" "$sshdir/known_hosts" "$sshdir/config"
+    # Own the ssh bundle as the BACKEND's runtime uid (this installer's own
+    # id -u:id -g, i.e. top-level PUID/PGID — the entrypoint's gosu target),
+    # NOT REMOTE_TRANSCODE_PUID/PGID: that's a different uid by design — the
+    # one the *transcoder* drops to for writing the shared media export. The
+    # backend is what mounts this dir :ro and reads the 600 key/config, so it
+    # must be the owner or ssh transport fails silently.
+    chown -R "${def_puid}:${def_pgid}" "$sshdir" 2>/dev/null || true
+
+    echo
+    log "Authorize this key on ${remote_host} — append the line below to ~/.ssh/authorized_keys there:"
+    echo
+    cat "$key.pub"
+    echo
+    read -rp "  Press Enter once the key is authorized on ${remote_host}... " _
+
+    # Remote GPU detection doubles as the connectivity test (uses the dedicated key).
+    REMOTE_GPUS=""; REMOTE_RENDER_GID=""
+    while true; do
+        local detect
+        if detect="$(remote_detect_gpus "$REMOTE_DOCKER_HOST" "$key")"; then
+            REMOTE_GPUS="$(printf '%s' "$detect" | sed -n '1p')"
+            REMOTE_RENDER_GID="$(printf '%s' "$detect" | sed -n '2p')"
+            log "remote GPUs: ${REMOTE_GPUS:-[]}  render_gid=${REMOTE_RENDER_GID:-(none)}"
+            break
+        fi
+        warn "remote GPU detection failed (ssh to ${remote_host} — key authorized? host reachable?)"
+        if ! confirm "  Re-check now? (No = skip; transcodes run CPU-only until fixed)"; then
+            warn "skipping remote GPU detection; seeding ARM_GPUS=[] (CPU-only on the box)"
+            REMOTE_GPUS="[]"; REMOTE_RENDER_GID=""
+            break
+        fi
+    done
+}
+
 seed_env() {
     local env_file="$PREFIX/.env"
 
@@ -420,6 +535,13 @@ seed_env() {
     local arm_gpus render_gid
     arm_gpus="$(detect_gpus)"
     render_gid="$(detect_render_gid || true)"
+
+    # When offloading, the transcode host is remote: use the REMOTE inventory
+    # (detected over ssh) so QSV/VAAPI get the remote render node + GID.
+    if [[ "${REMOTE_OFFLOAD:-0}" == "1" && -n "${REMOTE_GPUS}" ]]; then
+        arm_gpus="${REMOTE_GPUS}"
+        render_gid="${REMOTE_RENDER_GID}"
+    fi
 
     if [[ -f "$env_file" ]]; then
         log ".env exists; preserving secrets, re-deriving PUID/PGID/CDROM_GID/ARM_GPUS/ARM_RENDER_GID"
@@ -439,6 +561,29 @@ seed_env() {
             printf 'ARM_RENDER_GID=%s\n' "$render_gid" >> "$env_file"
         fi
         log "detected GPU(s): ${arm_gpus}  render_gid=${render_gid:-(none)}"
+
+        # Offload keys: only touch them when offload is enabled, so declining
+        # offload on an existing .env leaves it byte-for-byte untouched.
+        if [[ "${REMOTE_OFFLOAD:-0}" == "1" ]]; then
+            local kv key value
+            for kv in \
+                "ARM_TRANSCODE_DOCKER_HOST=${REMOTE_DOCKER_HOST}" \
+                "ARM_TRANSCODE_BACKEND_URL=${REMOTE_BACKEND_URL}" \
+                "ARM_TRANSCODE_PUID=${REMOTE_TRANSCODE_PUID}" \
+                "ARM_TRANSCODE_PGID=${REMOTE_TRANSCODE_PGID}" \
+                "ARM_TRANSCODE_SSH_DIR=./ssh"
+            do
+                key="${kv%%=*}"
+                value="${kv#*=}"
+                if grep -q "^${key}=" "$env_file"; then
+                    sed -i "s|^${key}=.*|${key}=${value}|" "$env_file"
+                else
+                    printf '%s=%s\n' "$key" "$value" >> "$env_file"
+                fi
+            done
+            log "seeded offload keys (ARM_TRANSCODE_DOCKER_HOST=${REMOTE_DOCKER_HOST})"
+        fi
+
         return 0
     fi
 
@@ -470,9 +615,6 @@ ARM_LOG_LEVEL=info
 # which is derived from these). Bump ARM_IMAGE_TAG to upgrade the whole stack.
 ARM_IMAGE_PREFIX=${ARM_IMAGE_PREFIX_DEFAULT}
 ARM_IMAGE_TAG=${ARM_IMAGE_TAG_DEFAULT}
-
-# Optional API keys; primarily set via the UI Settings page.
-OMDB_API_KEY=
 
 # WebSocket Origin allowlist. Add every URL the UI is reachable at.
 ARM_ALLOWED_ORIGINS=https://localhost:8081
@@ -506,6 +648,21 @@ ARM_GPUS=${arm_gpus}
 # Empty => not added (CPU / NVENC-only host).
 ARM_RENDER_GID=${render_gid}
 EOF
+
+    if [[ "${REMOTE_OFFLOAD:-0}" == "1" ]]; then
+        cat >> "$env_file" <<EOF
+
+# Remote transcode offload (install.sh --). The dispatcher targets a remote
+# docker daemon over ssh and spawns transcodes there; the container writes back
+# to shared storage as PUID:PGID and calls the routable backend URL.
+ARM_TRANSCODE_DOCKER_HOST=${REMOTE_DOCKER_HOST}
+ARM_TRANSCODE_BACKEND_URL=${REMOTE_BACKEND_URL}
+ARM_TRANSCODE_PUID=${REMOTE_TRANSCODE_PUID}
+ARM_TRANSCODE_PGID=${REMOTE_TRANSCODE_PGID}
+ARM_TRANSCODE_SSH_DIR=./ssh
+EOF
+    fi
+
     chmod 600 "$env_file"
 }
 
@@ -638,7 +795,6 @@ services:
       DATABASE_URL: postgresql://\${POSTGRES_USER}:\${POSTGRES_PASSWORD}@arm-db:5432/\${POSTGRES_DB}?sslmode=verify-full&sslrootcert=/etc/ssl/arm/arm-ca.crt
       ARM_SERVICE_TOKEN: \${ARM_SERVICE_TOKEN}
       ARM_LOG_LEVEL: \${ARM_LOG_LEVEL:-info}
-      OMDB_API_KEY: \${OMDB_API_KEY:-}
       ARM_ALLOWED_ORIGINS: \${ARM_ALLOWED_ORIGINS:-}
       TLS_CERT_PATH: /etc/ssl/arm/tls.crt
       TLS_KEY_PATH: /etc/ssl/arm/tls.key
@@ -657,6 +813,10 @@ services:
       ARM_DOCKER_NETWORK: \${ARM_DOCKER_NETWORK:-armv3_default}
       ARM_GPUS: \${ARM_GPUS:-[]}
       ARM_RENDER_GID: \${ARM_RENDER_GID:-}
+      ARM_TRANSCODE_DOCKER_HOST: \${ARM_TRANSCODE_DOCKER_HOST:-}
+      ARM_TRANSCODE_BACKEND_URL: \${ARM_TRANSCODE_BACKEND_URL:-}
+      ARM_TRANSCODE_PUID: \${ARM_TRANSCODE_PUID:-}
+      ARM_TRANSCODE_PGID: \${ARM_TRANSCODE_PGID:-}
     volumes:
       - ./raw:/raw
       - ./media:/media
@@ -678,6 +838,23 @@ services:
       - ./certs/arm-ui.crt:/etc/ssl/arm/tls.crt:ro
       - ./certs/arm-ui.key:/etc/ssl/arm/tls.key:ro
 EOF
+
+    # Offload: give arm-backend the ssh key it uses to reach the remote docker
+    # daemon. Injected only when enabled so a local install's compose has no
+    # ssh mount at all.
+    if [[ "${REMOTE_OFFLOAD:-0}" == "1" ]]; then
+        # Insert the ssh mount right after the backend's docker.sock volume line.
+        # The socket mount appears exactly ONCE in the file (only arm-backend
+        # mounts it), so a plain awk one-pass insert is unambiguous — no need for
+        # first-match sed addressing.
+        local tmp="$out.tmp"
+        awk '
+            { print }
+            $0 == "      - /var/run/docker.sock:/var/run/docker.sock" {
+                print "      - ${ARM_TRANSCODE_SSH_DIR:-./ssh}:/home/arm/.ssh:ro"
+            }
+        ' "$out" > "$tmp" && mv "$tmp" "$out"
+    fi
 
     # One ripper service block per detected drive.
     local i
@@ -792,6 +969,11 @@ main() {
     check_prereqs
     ensure_prefix
 
+    local REMOTE_OFFLOAD=0 REMOTE_DOCKER_HOST="" REMOTE_BACKEND_URL="" \
+          REMOTE_TRANSCODE_PUID="" REMOTE_TRANSCODE_PGID="" REMOTE_BACKEND_SAN="" \
+          REMOTE_GPUS="" REMOTE_RENDER_GID=""
+    setup_remote_offload
+
     if [[ $ROTATE_CA -eq 1 ]]; then
         log "ROTATE_CA: this regenerates the CA + every leaf"
         if ! confirm "WARNING: every LAN client must re-import arm-ca.crt. Continue?"; then
@@ -801,7 +983,11 @@ main() {
     fi
 
     make_ca
-    make_leaf arm-backend
+    if [[ "$REMOTE_OFFLOAD" == "1" && -n "$REMOTE_BACKEND_SAN" ]]; then
+        make_leaf arm-backend "$REMOTE_BACKEND_SAN"
+    else
+        make_leaf arm-backend
+    fi
     make_leaf arm-db
     make_leaf arm-ui localhost "$(hostname -f 2>/dev/null || hostname || echo localhost)"
 

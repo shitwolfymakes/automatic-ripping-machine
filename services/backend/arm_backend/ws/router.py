@@ -16,9 +16,11 @@ import logging
 from fastapi import APIRouter, Header, WebSocket, WebSocketDisconnect, status
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, select
 
 from arm_backend.config import settings
 from arm_backend.db import SessionLocal
+from arm_backend.seeders import GUEST_USERNAME
 from arm_backend.ws.authz import can_publish, can_subscribe
 from arm_backend.ws.hub import WSHub
 from arm_backend.ws.principal import (
@@ -27,6 +29,7 @@ from arm_backend.ws.principal import (
     ServicePrincipal,
     resolve_principal,
 )
+from arm_common import User
 from arm_common.schemas import (
     WSAck,
     WSAuthRequest,
@@ -128,7 +131,7 @@ async def _do_auth(
         raise _AuthFailure(CLOSE_UNAUTHORIZED, "first message must be auth")
 
     try:
-        return resolve_principal(
+        principal = resolve_principal(
             msg.token,
             x_arm_hostname,
             task_id_hint=x_arm_task_id,
@@ -136,6 +139,23 @@ async def _do_auth(
         )
     except AuthError as e:
         raise _AuthFailure(CLOSE_UNAUTHORIZED, str(e)) from e
+
+    if not msg.token:
+        # Anonymous connect (empty auth token) → resolve_principal already
+        # handed back the anonymous-guest UIPrincipal without touching the DB
+        # (purity preserved there). The DB-backed guest-enabled check lives
+        # here, mirroring require_jwt's REST fallback (guest missing/disabled
+        # → unauthorized).
+        await _check_guest_enabled(websocket)
+
+    return principal
+
+
+async def _check_guest_enabled(websocket: WebSocket) -> None:
+    async with SessionLocal() as session:
+        guest = (await session.execute(select(User).where(col(User.username) == GUEST_USERNAME))).scalar_one_or_none()
+    if guest is None or guest.disabled:
+        raise _AuthFailure(CLOSE_UNAUTHORIZED, "authentication required")
 
 
 async def _serve_loop(websocket: WebSocket, hub: WSHub, principal: Principal) -> None:
