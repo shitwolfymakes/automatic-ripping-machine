@@ -19,6 +19,14 @@ class Drive(SQLModel, table=True):
     id: str = Field(default_factory=_drive_id, primary_key=True)
     hostname: str = Field(sa_column=Column(String, unique=True, nullable=False, index=True))
     device_path: str = Field(nullable=False)
+    # Hardware serial (udev ID_SERIAL_SHORT), reported by the ripper at
+    # register time. hostname is keyed to the srN slot the compose file was
+    # generated against, which the kernel can silently reassign to a
+    # different physical drive after a replug/reboot; comparing this field
+    # against the previous value lets the register endpoint detect that swap
+    # instead of quietly overwriting device_path. None when the drive
+    # doesn't expose a serial.
+    serial: str | None = Field(default=None, nullable=True)
     display_name: str | None = Field(default=None)
     status: DriveStatus = Field(
         sa_column=enum_column(DriveStatus, "drive_status", server_default=DriveStatus.ONLINE.value)

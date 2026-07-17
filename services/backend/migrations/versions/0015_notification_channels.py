@@ -2,8 +2,11 @@
 
 Creates `notification_channels` and `notification_dispatch_log`. Imports
 any existing `config.notification_apprise_urls` into one channel per URL
-(name "Imported N", enabled = config.notifications_enabled, subscribed to
-every notifiable event). The flat `config.notification_apprise_urls`
+(name "Imported N", enabled, subscribed to every notifiable event —
+delivery stays gated by the global `notifications_enabled` toggle at
+dispatch time, so flipping that toggle back on resumes delivery to
+imported URLs exactly like before the upgrade). The flat
+`config.notification_apprise_urls`
 column is LEFT IN PLACE (read-stopped by the dispatcher; dropped later).
 
 Revision ID: 0015_notification_channels
@@ -96,7 +99,7 @@ def upgrade() -> None:
             'ncl_' || substr(md5(random()::text || u.url || u.ord::text), 1, 24),
             'apprise',
             'Imported ' || u.ord::text,
-            c.notifications_enabled,
+            TRUE,
             jsonb_build_object('type', 'apprise', 'url', u.url),
             {events_array},
             '{{}}'::jsonb,
