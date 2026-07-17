@@ -1,9 +1,19 @@
-"""System preflight / paths / stats. Read-only operator diagnostics.
-Ports neu's system/preflight + system/paths + system/stats, adapted to v3."""
+"""System diagnostics. Read-only operator health report.
 
+Everything the backend can fix silently, it fixes (missing root dirs are
+created at startup and re-ensured before every read — see `ensure_roots`);
+this endpoint reports only what cannot be healed from inside a container:
+a mount that is read-only or wrong-owner (v3 never chowns user mounts —
+docs/arch/06-deployment.md), no rippers registered yet, a missing config
+row. The ported UI's settings System-Health panel and first-run wizard
+render it (Tier-12)."""
+
+import functools
 import importlib.metadata
+import logging
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 
 import psutil  # type: ignore[import-untyped]
 
@@ -14,22 +24,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt
-from arm_backend.config import settings
 from arm_backend.db import get_session
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.utils import default_roots
 from arm_common import Config, Drive, DriveStatus, Event, Job, KeydbState, MakemkvSdfState, User
 from arm_common.schemas import (
     MemoryInfo,
-    PathsResponse,
     PathStatus,
-    PreflightCheck,
-    PreflightResponse,
     StatsResponse,
     StorageRoot,
+    SystemDiagnosticCheck,
+    SystemDiagnosticsResponse,
     SystemResourcesResponse,
     SystemVersionResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -41,14 +52,7 @@ def _roots(request: Request) -> dict[str, str]:
     injected: dict[str, str] | None = getattr(request.app.state, "system_paths", None)
     if injected is not None:
         return injected
-    # LOG_DIR is the fixed `/logs` mount throughout v3 (see logs.py /
-    # log_tailer.py) — convention-over-config, not a Settings field.
-    return {
-        "MEDIA_ROOT": settings.MEDIA_ROOT,
-        "RAW_ROOT": settings.RAW_ROOT,
-        "ISO_INGRESS_ROOT": settings.ISO_INGRESS_ROOT,
-        "LOG_DIR": "/logs",
-    }
+    return default_roots()
 
 
 def _path_status(name: str, path: str) -> PathStatus:
@@ -57,36 +61,49 @@ def _path_status(name: str, path: str) -> PathStatus:
     return PathStatus(name=name, path=path, exists=exists, writable=writable)
 
 
-@router.get("/preflight", response_model=PreflightResponse)
-async def preflight(
+@router.get("/diagnostics", response_model=SystemDiagnosticsResponse)
+async def diagnostics(
     request: Request,
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
-) -> PreflightResponse:
-    checks: list[PreflightCheck] = []
+) -> SystemDiagnosticsResponse:
+    roots = _roots(request)
+    # Heal-on-read: the report never shows a problem the backend could
+    # have fixed itself.
+    # ensure_roots(roots)
+    # DO NOT heal-on-read. These should be guaranteed at launch so if any are missing
+    # then that is an error we want to surface when this endpoint is hit.
+    # TODO: implement a check for missing roots (low priority, most processes will
+    # surface this error)
+
+    checks: list[SystemDiagnosticCheck] = []
 
     cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     checks.append(
-        PreflightCheck(
+        SystemDiagnosticCheck(
             name="config",
             status="ok" if cfg is not None else "error",
             detail=None if cfg is not None else "config singleton missing",
         )
     )
 
-    for name, path in _roots(request).items():
+    paths: list[PathStatus] = []
+    for name, path in roots.items():
         ps = _path_status(name, path)
+        paths.append(ps)
         if ps.exists and ps.writable:
-            checks.append(PreflightCheck(name=name, status="ok"))
+            checks.append(SystemDiagnosticCheck(name=name, status="ok"))
         else:
             sev = "error" if name in _REQUIRED_ROOTS else "warning"
             checks.append(
-                PreflightCheck(name=name, status=sev, detail=f"{path}: exists={ps.exists} writable={ps.writable}")
+                SystemDiagnosticCheck(
+                    name=name, status=sev, detail=f"{path}: exists={ps.exists} writable={ps.writable}"
+                )
             )
 
     drives = list((await db.execute(select(Drive).where(col(Drive.status) == DriveStatus.ONLINE))).scalars().all())
     checks.append(
-        PreflightCheck(
+        SystemDiagnosticCheck(
             name="drives",
             status="ok" if drives else "warning",
             detail=None if drives else "no online drives registered",
@@ -101,7 +118,7 @@ async def preflight(
         mk_status, mk_detail = "error", (makemkv_state_detail(mk_state) or "MakeMKV key invalid")
     else:
         mk_status, mk_detail = "warning", "MakeMKV key not yet validated by a ripper"
-    checks.append(PreflightCheck(name="makemkv_key", status=mk_status, detail=mk_detail))
+    checks.append(SystemDiagnosticCheck(name="makemkv_key", status=mk_status, detail=mk_detail))
 
     kdb_state = cfg.community_keydb_state if cfg is not None else None
     kdb_count = cfg.community_keydb_vuk_count if cfg is not None else None
@@ -117,7 +134,7 @@ async def preflight(
         kdb_status, kdb_detail = "warning", "community keydb unavailable; using last keydb if any"
     else:  # None — never reported by a ripper yet
         kdb_status, kdb_detail = "warning", "community keydb not yet checked by a ripper"
-    checks.append(PreflightCheck(name="community_keydb", status=kdb_status, detail=kdb_detail))
+    checks.append(SystemDiagnosticCheck(name="community_keydb", status=kdb_status, detail=kdb_detail))
 
     sdf_state = cfg.makemkv_sdf_state if cfg is not None else None
     if sdf_state in (MakemkvSdfState.UPDATED, MakemkvSdfState.FRESH_KEPT):
@@ -128,7 +145,7 @@ async def preflight(
         sdf_status_v, sdf_detail = "warning", "SDF refresh failed; using baked/last SDF"
     else:  # None — never reported by a ripper yet
         sdf_status_v, sdf_detail = "warning", "SDF not yet checked by a ripper"
-    checks.append(PreflightCheck(name="makemkv_sdf", status=sdf_status_v, detail=sdf_detail))
+    checks.append(SystemDiagnosticCheck(name="makemkv_sdf", status=sdf_status_v, detail=sdf_detail))
 
     dispatcher = getattr(request.app.state, "transcode_dispatcher", None)
     if dispatcher is None:
@@ -137,18 +154,13 @@ async def preflight(
         tc_status, tc_detail = "warning", "transcoder disabled: ARM_HOST_*_PATH not set"
     else:
         tc_status, tc_detail = "ok", None
-    checks.append(PreflightCheck(name="transcoder", status=tc_status, detail=tc_detail))
+    checks.append(SystemDiagnosticCheck(name="transcoder", status=tc_status, detail=tc_detail))
 
     overall = "ok"
     for ch in checks:
         if _WORST[ch.status] > _WORST[overall]:
             overall = ch.status
-    return PreflightResponse(status=overall, checks=checks)
-
-
-@router.get("/paths", response_model=PathsResponse)
-async def paths(request: Request, _: User = Depends(require_jwt)) -> PathsResponse:
-    return PathsResponse(paths=[_path_status(name, path) for name, path in _roots(request).items()])
+    return SystemDiagnosticsResponse(status=overall, checks=checks, paths=paths)
 
 
 @router.get("/stats", response_model=StatsResponse)
@@ -236,7 +248,28 @@ async def resources(
     )
 
 
+# The canonical release version lives in the repo-root VERSION file, baked
+# into the image at /app/VERSION; the workspace member's pyproject pins a
+# static 0.0.0, so importlib.metadata is only a last resort. Resolution:
+# ARM_VERSION env > VERSION file > package metadata > sentinel.
+_VERSION_FILE_CANDIDATES: tuple[Path, ...] = (
+    Path("/app/VERSION"),
+    Path(__file__).resolve().parents[4] / "VERSION",  # repo root (dev checkout)
+)
+
+
+@functools.cache
 def _app_version() -> str:
+    env = os.environ.get("ARM_VERSION")
+    if env:
+        return env.strip()
+    for candidate in _VERSION_FILE_CANDIDATES:
+        try:
+            text = candidate.read_text().strip()
+        except OSError:
+            continue
+        if text:
+            return text
     try:
         return importlib.metadata.version("arm_backend")
     except importlib.metadata.PackageNotFoundError:

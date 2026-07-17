@@ -277,6 +277,45 @@ def test_register_upserts_and_returns_drive() -> None:
     assert r.json()["hostname"] == _HOSTNAME
 
 
+def test_register_serial_mismatch_logs_warning(caplog: Any) -> None:
+    """A previously-registered hostname re-registering with a different
+    serial means the physical drive behind that srN slot changed (replug,
+    reboot with different enumeration order) — worth a warning even though
+    the upsert still proceeds."""
+    db = _RegisterSession()
+    db.rows["drives"] = [
+        Drive(id="drv_x", hostname=_HOSTNAME, device_path="/dev/sr0", serial="OLD123", status=DriveStatus.ONLINE)
+    ]
+    body = {
+        "hostname": _HOSTNAME,
+        "device_path": "/dev/sr0",
+        "ripper_version": "3.0.0",
+        "serial": "NEW456",
+    }
+    with caplog.at_level("WARNING", logger="arm_backend.routers.ripper"):
+        with TestClient(_make_app(db)) as client:
+            r = client.post("/api/ripper/register", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert "serial mismatch" in caplog.text
+    assert "OLD123" in caplog.text and "NEW456" in caplog.text
+
+
+def test_register_no_serial_from_ripper_does_not_warn(caplog: Any) -> None:
+    """A ripper that fails to resolve a serial (transient udev hiccup, or a
+    drive that never exposes one) sends serial=None — that's not evidence
+    of a swap, so no warning."""
+    db = _RegisterSession()
+    db.rows["drives"] = [
+        Drive(id="drv_x", hostname=_HOSTNAME, device_path="/dev/sr0", serial="OLD123", status=DriveStatus.ONLINE)
+    ]
+    body = {"hostname": _HOSTNAME, "device_path": "/dev/sr0", "ripper_version": "3.0.0"}
+    with caplog.at_level("WARNING", logger="arm_backend.routers.ripper"):
+        with TestClient(_make_app(db)) as client:
+            r = client.post("/api/ripper/register", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert "serial mismatch" not in caplog.text
+
+
 # --- /identify ---------------------------------------------------------------
 
 
@@ -445,6 +484,23 @@ def test_identify_unidentified_with_hold_does_not_park(signing_key: bytes) -> No
     out = r.json()
     assert out["status"] == "identified"  # not awaiting_review
     assert out["metadata_json"].get("unidentified") is True
+
+
+def test_identify_snapshots_drive_serial_onto_job() -> None:
+    """The job created by identify carries the drive's hardware serial at
+    that moment — a permanent record that survives the Drive row later
+    being deleted (jobs.drive_id is SET NULL on delete)."""
+    db = FakeSession()
+    db.rows["drives"] = [
+        Drive(id="drv_x", hostname=_HOSTNAME, device_path="/dev/sr0", serial="SN-ABC", status=DriveStatus.ONLINE)
+    ]
+    db.rows["config"] = [_config()]
+    app = _make_app(db, dispatcher=_Dispatcher(None))
+    body = {"drive_id": "drv_x", "scan_result": _scan_dict()}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["drive_serial"] == "SN-ABC"
 
 
 def test_identify_miss_with_block_on_miss_awaits_user(signing_key: bytes) -> None:
