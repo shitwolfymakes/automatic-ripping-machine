@@ -2,11 +2,14 @@ from typing import Any
 
 import httpx
 
-from arm_common import Drive, DriveMediaStatus, Job
+from arm_common import Drive, DriveMediaStatus, Job, KeydbState, MakemkvKeyState
 from arm_common.schemas import (
+    HeldJobView,
     IdentifyRequest,
     JobCompleteRequest,
     JobView,
+    KeydbStatusReport,
+    MakemkvKeyStatusReport,
     RegisterRequest,
     RipperConfigView,
     RipperHeartbeatRequest,
@@ -103,6 +106,21 @@ class BackendClient:
         r.raise_for_status()
         return JobView.model_validate(r.json())
 
+    async def get_held_job(self, drive_id: str) -> HeldJobView | None:
+        """Boot-probe lookup for a disc held in AWAITING_REVIEW (timed review
+        gate). Returns the held job + its paused flag, or None on 404."""
+        r = await self._client.get(f"/api/ripper/drives/{drive_id}/held-job")
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        return HeldJobView.model_validate(r.json())
+
+    async def recovery_abandon(self, job_id: str) -> JobView:
+        """Abandon a counting-down held job on reboot recovery (review gate §6.3)."""
+        r = await self._client.post(f"/api/ripper/jobs/{job_id}/recovery-abandon")
+        r.raise_for_status()
+        return JobView.model_validate(r.json())
+
     async def get_ripper_config(self) -> RipperConfigView:
         """Tiny config snapshot polled before each disc-insert pipeline.
 
@@ -120,3 +138,15 @@ class BackendClient:
         r = await self._client.post(f"/api/ripper/jobs/{job_id}/resume")
         r.raise_for_status()
         return RipStartResponse.model_validate(r.json())
+
+    async def report_makemkv_key_status(self, *, state: MakemkvKeyState, detail: str | None = None) -> None:
+        req = MakemkvKeyStatusReport(state=state, detail=detail)
+        r = await self._client.post("/api/ripper/makemkv-key-status", json=req.model_dump(mode="json"))
+        r.raise_for_status()
+
+    async def report_keydb_status(
+        self, *, state: KeydbState, vuk_count: int | None = None, age_days: int | None = None
+    ) -> None:
+        req = KeydbStatusReport(state=state, vuk_count=vuk_count, age_days=age_days)
+        r = await self._client.post("/api/ripper/keydb-status", json=req.model_dump(mode="json"))
+        r.raise_for_status()

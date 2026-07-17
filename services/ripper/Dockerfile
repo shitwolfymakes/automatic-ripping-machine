@@ -65,6 +65,7 @@ RUN apt-get update \
         abcde \
         cdparanoia \
         eject \
+        file \
         flac \
         util-linux \
         libdiscid0 \
@@ -101,6 +102,12 @@ RUN mkdir -p /home/arm/.MakeMKV \
 
 COPY services/ripper/install/update_key.sh /usr/local/bin/update_key.sh
 RUN chmod +x /usr/local/bin/update_key.sh
+
+# Community-keydb (FindVUK) fetcher; run per-rip by the JobController. Needs
+# `file` (ZIP validation, installed above) + python3 (zipfile extraction, from
+# the base image) + curl (download). See arm_ripper/community_keydb.py.
+COPY services/ripper/install/update_keydb.sh /usr/local/bin/update_keydb.sh
+RUN chmod +x /usr/local/bin/update_keydb.sh
 
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/
 

@@ -20,7 +20,7 @@ from arm_backend.metadata import MetadataDispatcher
 from arm_backend.metadata.base import extract_poster_url
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
 from arm_backend.seeders import CONFIG_SINGLETON_ID
-from arm_backend.track_selection import select_tracks
+from arm_backend.track_selection import select_tracks, select_tracks_for_review
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
@@ -30,15 +30,20 @@ from arm_common import (
     DriveStatus,
     Job,
     JobStatus,
+    MakemkvKeyState,
     RipPreset,
     Session,
     TrackStatus,
 )
 from arm_common.models import Track
+from arm_common.models._columns import enum_value_str
 from arm_common.schemas import (
+    HeldJobView,
     IdentifyRequest,
     JobCompleteRequest,
     JobView,
+    KeydbStatusReport,
+    MakemkvKeyStatusReport,
     RegisterRequest,
     RipperConfigView,
     RipperHeartbeatRequest,
@@ -86,6 +91,32 @@ async def _resolve_min_length_override(db: AsyncSession, job: Job) -> int | None
     return None
 
 
+async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -> None:
+    """Persist the scan's titles as Track rows for the timed review gate (§4.3).
+
+    Uses the default rip preset for the disc type to compute keep/drop defaults
+    (`excluded`); the operator overrides per title in review. Idempotent on
+    `(job_id, source_ref)` so a ripper re-POST of identify on the same held disc
+    doesn't double-insert (audit M1) — Track rows have no unique constraint.
+    """
+    preset_id = _DEFAULT_RIP_PRESET_BY_DISC_TYPE.get(job.disc_type)
+    if preset_id is None:  # pragma: no cover - every DiscType has a default preset
+        logger.warning("no default rip preset for disc_type=%s; skipping review tracks", job.disc_type.value)
+        return
+    preset = (await db.execute(select(RipPreset).where(col(RipPreset.id) == preset_id))).scalar_one_or_none()
+    if preset is None:
+        logger.warning("built-in rip preset %s not seeded; skipping review tracks", preset_id)
+        return
+    existing_refs = {
+        t.source_ref for t in (await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
+    }
+    for track in select_tracks_for_review(job.id, scan, preset):
+        if track.source_ref in existing_refs:
+            continue
+        db.add(track)
+    await db.flush()
+
+
 def _get_dispatcher(request: Request) -> MetadataDispatcher:
     dispatcher: MetadataDispatcher = request.app.state.dispatcher
     return dispatcher
@@ -106,7 +137,13 @@ async def get_ripper_config(session: AsyncSession = Depends(get_session)) -> Rip
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     if cfg is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="config singleton missing")
-    return RipperConfigView(auto_rip_on_insert=cfg.auto_rip_on_insert, makemkv_key=cfg.makemkv_key)
+    return RipperConfigView(
+        auto_rip_on_insert=cfg.auto_rip_on_insert,
+        makemkv_key=cfg.makemkv_key,
+        community_keydb_enabled=cfg.community_keydb_enabled,
+        ripping_paused=bool(cfg.ripping_paused),
+        manual_wait_seconds=int(cfg.manual_wait_seconds) if cfg.manual_wait_seconds is not None else 60,
+    )
 
 
 @router.post("/heartbeat", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_service_token)])
@@ -127,6 +164,60 @@ async def heartbeat(req: RipperHeartbeatRequest, session: AsyncSession = Depends
     drive.media_status_at = now
     drive.last_seen_at = now
     session.add(drive)
+    await session.commit()
+
+
+def _valid_from_state(state: MakemkvKeyState) -> bool | None:
+    if state == MakemkvKeyState.VALID:
+        return True
+    if state == MakemkvKeyState.PROBE_FAILED:
+        return None
+    return False
+
+
+@router.post(
+    "/makemkv-key-status",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_service_token)],
+)
+async def makemkv_key_status(
+    req: MakemkvKeyStatusReport,
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """A ripper reports its disc-free makemkv probe outcome. Global fact —
+    written to the Config singleton (last writer wins across multiple rippers,
+    by design). test-key / preflight / config-view read it back."""
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    if cfg is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="config singleton missing")
+    cfg.makemkv_key_state = req.state.value
+    cfg.makemkv_key_valid = _valid_from_state(req.state)
+    cfg.makemkv_key_checked_at = datetime.now(timezone.utc)
+    session.add(cfg)
+    await session.commit()
+
+
+@router.post(
+    "/keydb-status",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_service_token)],
+)
+async def keydb_status(
+    req: KeydbStatusReport,
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """A ripper reports its community-keydb fetch outcome. Global fact —
+    written to the Config singleton (last writer wins across rippers, by
+    design). /api/system/preflight reads it back. `age_days` is accepted for
+    symmetry with the ripper's status line but not persisted (no column for
+    it); only state + vuk_count are durable."""
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    if cfg is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="config singleton missing")
+    cfg.community_keydb_state = req.state.value
+    cfg.community_keydb_vuk_count = req.vuk_count
+    cfg.community_keydb_checked_at = datetime.now(timezone.utc)
+    session.add(cfg)
     await session.commit()
 
 
@@ -191,7 +282,11 @@ async def identify(
 
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
 
-    if cfg.ripping_paused:
+    # When the timed review gate is on, a paused machine still scans + identifies
+    # + PARKS the disc for review (pause only suppresses auto-start at expiry, see
+    # below); it does not reject the job. With the gate off, pause keeps its
+    # original meaning: reject new jobs outright. (timed-review-gate spec §3)
+    if cfg.ripping_paused and not cfg.hold_for_review:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="ripping is paused; no new jobs accepted",
@@ -237,7 +332,18 @@ async def identify(
         job.year = result.year
         job.poster_url = extract_poster_url(result)
         job.metadata_json = result.payload
-        job.status = JobStatus.IDENTIFIED
+        # Timed review gate: a GENUINELY identified disc (result is not None — not
+        # the block_on_miss=false synthetic "unidentified" IDENTIFIED below) parks
+        # for operator review when hold_for_review is on, stamping the countdown
+        # anchor and persisting the scan's titles as Track rows so the review UI
+        # shows the full title list. Otherwise it proceeds straight to rip as
+        # today (tracks created at rip-start). (spec §5.1, §4.3)
+        if cfg.hold_for_review:
+            job.status = JobStatus.AWAITING_REVIEW
+            job.wait_start_time = datetime.now(timezone.utc)
+            await _persist_review_tracks(session, job, scan)
+        else:
+            job.status = JobStatus.IDENTIFIED
     else:
         diagnostic: dict[str, object] = {}
         if timed_out:
@@ -266,10 +372,13 @@ async def identify(
     await session.refresh(job)
     logger.info("identify job_id=%s status=%s title=%s", job.id, job.status.value, job.title)
 
-    if job.status == JobStatus.AWAITING_USER_ID:
+    if job.status in (JobStatus.AWAITING_USER_ID, JobStatus.AWAITING_REVIEW):
+        # awaiting_user_id -> needs identification; awaiting_review -> held for the
+        # timed review gate. Distinct event types so the dashboard can label them.
+        event_type = "rip.needs_user_input" if job.status == JobStatus.AWAITING_USER_ID else "rip.awaiting_review"
         await hub.emit(
             topic="ripper.events",
-            event_type="rip.needs_user_input",
+            event_type=event_type,
             payload={
                 "job_id": job.id,
                 "drive_id": job.drive_id,
@@ -310,6 +419,18 @@ async def rip_start(
         .all()
     )
     if existing:
+        # Tracks already exist (crash-resume, or the timed review gate persisted
+        # them at identify and the operator's Start already moved the job to
+        # RIPPING). Ensure the RIPPING transition happened — previously this
+        # branch returned early WITHOUT setting RIPPING/started_at, so a
+        # pre-persisted-tracks job never transitioned and the rip never completed
+        # (audit B2). Tolerate already-RIPPING (Start did it); transition if not.
+        if job.status != JobStatus.RIPPING:
+            job.status = JobStatus.RIPPING
+            if job.started_at is None:
+                job.started_at = datetime.now(timezone.utc)
+            await session.commit()
+            await session.refresh(job)
         return RipStartResponse(
             job_id=job.id,
             rip_preset_id=preset_id,
@@ -317,10 +438,16 @@ async def rip_start(
             min_length_seconds=await _resolve_min_length_override(session, job),
         )
 
-    if job.status != JobStatus.IDENTIFIED:
+    # IDENTIFIED is the normal pre-rip state; AWAITING_REVIEW reaches here only
+    # when the timed review gate auto-started (countdown elapsed) a held disc
+    # whose scan yielded NO persistable titles — _persist_review_tracks then
+    # added nothing, so `existing` above was empty. Fall through and select
+    # tracks now, exactly as for a never-parked disc; without this the disc
+    # 409s and the ripper (4xx = non-retryable) abandons it permanently.
+    if job.status not in (JobStatus.IDENTIFIED, JobStatus.AWAITING_REVIEW):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"job not in identified state: status={job.status.value}",
+            detail=f"job not in identified state: status={enum_value_str(job.status)}",
         )
 
     scan_dict = (job.metadata_json or {}).get("scan_result")
@@ -471,6 +598,89 @@ async def get_in_flight_job(drive_id: str, session: AsyncSession = Depends(get_s
             drive_id,
         )
     return rows[0]
+
+
+@router.get(
+    "/drives/{drive_id}/held-job",
+    response_model=HeldJobView,
+    dependencies=[Depends(require_service_token)],
+)
+async def get_held_job(drive_id: str, session: AsyncSession = Depends(get_session)) -> HeldJobView:
+    """Boot-probe lookup for a disc held in AWAITING_REVIEW (timed review gate).
+
+    Returns the held job plus `paused` (true when the disc should survive a ripper
+    reboot as a hold — global `ripping_paused`, or a per-job pause once that
+    lands). The ripper uses `paused` to choose re-park vs. abandon on restart
+    (timed-review-gate spec §6.3). 404 when the drive is unknown or no held job
+    exists. Distinct from `/in-flight-job` (RIPPING-only) so the two recovery
+    paths stay separate.
+    """
+    drive = (await session.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
+    if drive is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {drive_id}")
+    rows = (
+        (
+            await session.execute(
+                select(Job).where(col(Job.drive_id) == drive_id).where(col(Job.status) == JobStatus.AWAITING_REVIEW)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no held job on this drive")
+    if len(rows) > 1:
+        logger.error(
+            "data-model violation: %d AWAITING_REVIEW jobs on drive_id=%s; returning first",
+            len(rows),
+            drive_id,
+        )
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    # paused = the hold survives a reboot: global ripping_paused OR this disc's
+    # per-job manual_pause. Either means the operator deliberately held it.
+    global_paused = bool(cfg.ripping_paused) if cfg is not None else False
+    paused = global_paused or bool(rows[0].manual_pause)
+    return HeldJobView(job=JobView.model_validate(rows[0]), paused=paused)
+
+
+@router.post(
+    "/jobs/{job_id}/recovery-abandon",
+    response_model=JobView,
+    dependencies=[Depends(require_service_token)],
+)
+async def recovery_abandon(
+    job_id: str,
+    session: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
+) -> Job:
+    """Service-token abandon for ripper reboot recovery (timed review gate §6.3).
+
+    A held disc that was only COUNTING DOWN (not paused) when the ripper restarted
+    is abandoned here so the drive frees; the seated disc then re-fires the
+    ripper's InsertDetector and re-enters review with a fresh countdown. Only
+    AWAITING_REVIEW is abandonable via this path (the operator-facing
+    `/jobs/{id}/abandon` covers the rest); no WS job.abandoned is emitted because
+    the ripper is the caller and has no active task to cancel.
+    """
+    job = (await session.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
+    if job.status != JobStatus.AWAITING_REVIEW:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"recovery-abandon only valid for awaiting_review, got {enum_value_str(job.status)}",
+        )
+    job.status = JobStatus.ABANDONED
+    session.add(job)
+    await session.flush()
+    await hub.emit(
+        topic="ripper.events",
+        event_type="rip.abandoned",
+        payload={"job_id": job.id, "drive_id": job.drive_id, "status": job.status.value},
+        job_id=job.id,
+        session=session,
+    )
+    return job
 
 
 @router.patch("/tracks/{track_id}", response_model=TrackView)

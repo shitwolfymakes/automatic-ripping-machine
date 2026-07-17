@@ -258,6 +258,112 @@
         }
       }
     },
+    "/api/ripper/makemkv-key-status": {
+      "post": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Makemkv Key Status",
+        "description": "A ripper reports its disc-free makemkv probe outcome. Global fact \u2014\nwritten to the Config singleton (last writer wins across multiple rippers,\nby design). test-key / preflight / config-view read it back.",
+        "operationId": "makemkv_key_status_api_ripper_makemkv_key_status_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MakemkvKeyStatusReport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ripper/keydb-status": {
+      "post": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Keydb Status",
+        "description": "A ripper reports its community-keydb fetch outcome. Global fact \u2014\nwritten to the Config singleton (last writer wins across rippers, by\ndesign). /api/system/preflight reads it back. `age_days` is accepted for\nsymmetry with the ripper's status line but not persisted (no column for\nit); only state + vuk_count are durable.",
+        "operationId": "keydb_status_api_ripper_keydb_status_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeydbStatusReport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ripper/register": {
       "post": {
         "tags": [
@@ -599,6 +705,124 @@
             "schema": {
               "type": "string",
               "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ripper/drives/{drive_id}/held-job": {
+      "get": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Get Held Job",
+        "description": "Boot-probe lookup for a disc held in AWAITING_REVIEW (timed review gate).\n\nReturns the held job plus `paused` (true when the disc should survive a ripper\nreboot as a hold \u2014 global `ripping_paused`, or a per-job pause once that\nlands). The ripper uses `paused` to choose re-park vs. abandon on restart\n(timed-review-gate spec \u00a76.3). 404 when the drive is unknown or no held job\nexists. Distinct from `/in-flight-job` (RIPPING-only) so the two recovery\npaths stay separate.",
+        "operationId": "get_held_job_api_ripper_drives__drive_id__held_job_get",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeldJobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ripper/jobs/{job_id}/recovery-abandon": {
+      "post": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Recovery Abandon",
+        "description": "Service-token abandon for ripper reboot recovery (timed review gate \u00a76.3).\n\nA held disc that was only COUNTING DOWN (not paused) when the ripper restarted\nis abandoned here so the drive frees; the seated disc then re-fires the\nripper's InsertDetector and re-enters review with a fresh countdown. Only\nAWAITING_REVIEW is abandonable via this path (the operator-facing\n`/jobs/{id}/abandon` covers the rest); no WS job.abandoned is emitted because\nthe ripper is the caller and has no active task to cancel.",
+        "operationId": "recovery_abandon_api_ripper_jobs__job_id__recovery_abandon_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
             }
           },
           {
@@ -1150,7 +1374,7 @@
           "jobs"
         ],
         "summary": "Update Job",
-        "description": "Edit user-controlled fields on a Job. Currently `poster_url_manual`\nonly \u2014 title/year are owned by the identify/resolve flow.",
+        "description": "Edit user-controlled fields on a Job + optional per-track operator edits.\nJob title/year stay behind identify/resolve; track `status` stays ripper-owned\n(not in TrackEditRequest).",
         "operationId": "update_job_api_jobs__job_id__patch",
         "parameters": [
           {
@@ -1267,6 +1491,136 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/rip-start-review": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Rip Start Review",
+        "description": "Operator Start for a disc held in the timed review gate (spec \u00a75.2).\n\nTransitions AWAITING_REVIEW -> RIPPING here (the backend owns the transition;\nrip-start then tolerates already-RIPPING) and emits the `rip.start` WS command\nso the parked ripper unblocks. Operator-initiated, so JWT-authed on the jobs\nrouter \u2014 NOT the ripper's service-token rip-start path. Pre-flight: at least\none kept (non-excluded) track, else 422 (don't let it fail deep in the ripper).",
+        "operationId": "rip_start_review_api_jobs__job_id__rip_start_review_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/review-pause": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Review Pause",
+        "description": "Pause/resume ONE held disc's review countdown (per-job pause, spec \u00a711).\n\n`?paused=true` freezes this disc's auto-start countdown (waits indefinitely\nfor Start) while other discs keep counting; `?paused=false` resumes with a\nFRESH countdown (new wait_start_time) so it doesn't auto-rip instantly on a\nlong-paused disc. Only valid for AWAITING_REVIEW. Emits a WS command so the\nparked ripper re-evaluates the countdown on its next poll.",
+        "operationId": "review_pause_api_jobs__job_id__review_pause_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "paused",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Paused"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1522,7 +1876,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/Drive"
+                    "$ref": "#/components/schemas/DriveView"
                   },
                   "title": "Response List Drives Api Drives Get"
                 }
@@ -1691,7 +2045,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Drive"
+                  "$ref": "#/components/schemas/DriveView"
                 }
               }
             }
@@ -3236,6 +3590,295 @@
         }
       }
     },
+    "/api/transcodes/stats": {
+      "get": {
+        "tags": [
+          "transcodes"
+        ],
+        "summary": "Transcode Stats",
+        "operationId": "transcode_stats_api_transcodes_stats_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscodeStatsView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcodes/workers": {
+      "get": {
+        "tags": [
+          "transcodes"
+        ],
+        "summary": "Transcode Workers",
+        "operationId": "transcode_workers_api_transcodes_workers_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TranscodeWorkerView"
+                  },
+                  "title": "Response Transcode Workers Api Transcodes Workers Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcodes/{task_id}/retry": {
+      "post": {
+        "tags": [
+          "transcodes"
+        ],
+        "summary": "Retry Transcode",
+        "operationId": "retry_transcode_api_transcodes__task_id__retry_post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscodeTaskView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcodes/{task_id}/log.zip": {
+      "get": {
+        "tags": [
+          "transcodes"
+        ],
+        "summary": "Download Transcode Log Zip",
+        "operationId": "download_transcode_log_zip_api_transcodes__task_id__log_zip_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcodes/{task_id}/log": {
+      "get": {
+        "tags": [
+          "transcodes"
+        ],
+        "summary": "Stream Transcode Log",
+        "operationId": "stream_transcode_log_api_transcodes__task_id__log_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/transcodes/{task_id}": {
       "delete": {
         "tags": [
@@ -3697,6 +4340,102 @@
             }
           },
           {
+            "name": "artist",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Artist"
+            }
+          },
+          {
+            "name": "track_count",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Track Count"
+            }
+          },
+          {
+            "name": "release_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Type"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Format"
+            }
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Country"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
             "name": "authorization",
             "in": "header",
             "required": false,
@@ -3961,6 +4700,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/NamingValidateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/naming/preview": {
+      "post": {
+        "tags": [
+          "naming"
+        ],
+        "summary": "Naming Preview",
+        "operationId": "naming_preview_api_naming_preview_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NamingPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NamingPreviewResponse"
                 }
               }
             }
@@ -4411,7 +5209,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/EventTypeInfo"
                   },
                   "title": "Response Event Types Api Notifications Event Types Get"
                 }
@@ -5019,8 +5817,15 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "integer",
-              "default": 1000,
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Limit"
             }
           },
@@ -5047,6 +5852,544 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/images/proxy": {
+      "get": {
+        "tags": [
+          "images"
+        ],
+        "summary": "Proxy Image",
+        "description": "Proxy and cache external images to avoid browser ORB/CORS issues.",
+        "operationId": "proxy_image_api_images_proxy_get",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Image URL to proxy",
+              "title": "Url"
+            },
+            "description": "Image URL to proxy"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/images/cache": {
+      "get": {
+        "tags": [
+          "images"
+        ],
+        "summary": "Image Cache Stats",
+        "description": "Image-cache statistics (count, size).",
+        "operationId": "image_cache_stats_api_images_cache_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Image Cache Stats Api Images Cache Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/images/cache/clear": {
+      "post": {
+        "tags": [
+          "images"
+        ],
+        "summary": "Image Cache Clear",
+        "description": "Clear the image cache. Returns {success, cleared, freed_bytes}.",
+        "operationId": "image_cache_clear_api_images_cache_clear_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Image Cache Clear Api Images Cache Clear Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/themes": {
+      "get": {
+        "tags": [
+          "themes"
+        ],
+        "summary": "List Themes",
+        "description": "List all themes (metadata only, no CSS).",
+        "operationId": "list_themes_api_themes_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response List Themes Api Themes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "themes"
+        ],
+        "summary": "Upload Theme",
+        "description": "Upload a user theme (JSON file + optional CSS).",
+        "operationId": "upload_theme_api_themes_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_theme_api_themes_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Upload Theme Api Themes Post"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/themes/{theme_id}": {
+      "get": {
+        "tags": [
+          "themes"
+        ],
+        "summary": "Get Theme",
+        "description": "Full theme data including CSS.",
+        "operationId": "get_theme_api_themes__theme_id__get",
+        "parameters": [
+          {
+            "name": "theme_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Theme Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Theme Api Themes  Theme Id  Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Theme not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "themes"
+        ],
+        "summary": "Delete Theme",
+        "description": "Delete a user theme. Built-ins cannot be deleted.",
+        "operationId": "delete_theme_api_themes__theme_id__delete",
+        "parameters": [
+          {
+            "name": "theme_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Theme Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Theme Api Themes  Theme Id  Delete"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/themes/{theme_id}/css": {
+      "get": {
+        "tags": [
+          "themes"
+        ],
+        "summary": "Get Theme Css",
+        "description": "Theme CSS as text/css. 404 if the theme is unknown or has no CSS.",
+        "operationId": "get_theme_css_api_themes__theme_id__css_get",
+        "parameters": [
+          {
+            "name": "theme_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Theme Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Theme not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/infra": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Settings Infra",
+        "description": "Read-only values for the infra-tier (deploy-time) settings shown in the\nSystem section. Allowlisted + stringified; never secrets/bootstrap.",
+        "operationId": "settings_infra_api_settings_infra_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Settings Infra Api Settings Infra Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/schema": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Settings Schema",
+        "operationId": "settings_schema_api_settings_schema_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSchemaResponse"
+                }
               }
             }
           },
@@ -5112,6 +6455,55 @@
         }
       }
     },
+    "/api/system/stats": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Stats",
+        "operationId": "stats_api_system_stats_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/system/version": {
       "get": {
         "tags": [
@@ -5144,6 +6536,434 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SystemVersionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/roots": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Roots",
+        "operationId": "roots_api_files_roots_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileRoot"
+                  },
+                  "title": "Response Roots Api Files Roots Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/list": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "List Directory",
+        "operationId": "list_directory_api_files_list_get",
+        "parameters": [
+          {
+            "name": "root",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Root"
+            }
+          },
+          {
+            "name": "subpath",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Subpath"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryListing"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/mkdir": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Mkdir",
+        "operationId": "mkdir_api_files_mkdir_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MkdirRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilePathResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/rename": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Rename",
+        "operationId": "rename_api_files_rename_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilePathResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/move": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Move",
+        "operationId": "move_api_files_move_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilePathResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/fix-permissions": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Fix Permissions",
+        "operationId": "fix_permissions_api_files_fix_permissions_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FilePathRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixPermsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files": {
+      "delete": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Delete",
+        "operationId": "delete_api_files_delete",
+        "parameters": [
+          {
+            "name": "root",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Root"
+            }
+          },
+          {
+            "name": "subpath",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Subpath"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Delete Api Files Delete"
                 }
               }
             }
@@ -5281,6 +7101,27 @@
         },
         "type": "object",
         "title": "AppriseChannelConfig"
+      },
+      "Body_upload_theme_api_themes_post": {
+        "properties": {
+          "theme_json": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Theme Json",
+            "description": "Theme JSON file"
+          },
+          "theme_css": {
+            "type": "string",
+            "title": "Theme Css",
+            "description": "Optional custom CSS",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "theme_json"
+        ],
+        "title": "Body_upload_theme_api_themes_post"
       },
       "BulkDeleteJobsResponse": {
         "properties": {
@@ -5564,6 +7405,64 @@
         ],
         "title": "ComposeUrlResult"
       },
+      "ConfigFieldMeta": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "group": {
+            "type": "string",
+            "title": "Group"
+          },
+          "tier": {
+            "type": "string",
+            "title": "Tier"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "help": {
+            "type": "string",
+            "title": "Help"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "editable": {
+            "type": "boolean",
+            "title": "Editable"
+          },
+          "enum_values": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enum Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "group",
+          "tier",
+          "label",
+          "help",
+          "type",
+          "editable"
+        ],
+        "title": "ConfigFieldMeta",
+        "description": "Render + classification metadata for one configuration field. The single\nsource of truth for the settings UI: tier (secret/operator/infra), grouping,\nhelp text, render-type, and editability. Lives in code (not a DB table \u2014 the\nfield set is migration-gated; not a sidecar JSON \u2014 that drifts). The guard\ntest (tests/test_config_metadata.py) keeps it in sync with the schemas."
+      },
       "ConfigUpdateRequest": {
         "properties": {
           "tmdb_api_key": {
@@ -5654,6 +7553,17 @@
             ],
             "title": "Block On Miss"
           },
+          "community_keydb_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Keydb Enabled"
+          },
           "ripping_paused": {
             "anyOf": [
               {
@@ -5665,29 +7575,27 @@
             ],
             "title": "Ripping Paused"
           },
-          "default_retention_policy": {
+          "hold_for_review": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/RetentionPolicy"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "notification_apprise_urls": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
+                "type": "boolean"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Notification Apprise Urls"
+            "title": "Hold For Review"
+          },
+          "manual_wait_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Wait Seconds"
           },
           "notifications_enabled": {
             "anyOf": [
@@ -5784,9 +7692,21 @@
             "type": "boolean",
             "title": "Block On Miss"
           },
+          "community_keydb_enabled": {
+            "type": "boolean",
+            "title": "Community Keydb Enabled"
+          },
           "ripping_paused": {
             "type": "boolean",
             "title": "Ripping Paused"
+          },
+          "hold_for_review": {
+            "type": "boolean",
+            "title": "Hold For Review"
+          },
+          "manual_wait_seconds": {
+            "type": "integer",
+            "title": "Manual Wait Seconds"
           },
           "default_retention_policy": {
             "$ref": "#/components/schemas/RetentionPolicy"
@@ -5805,6 +7725,40 @@
           "metadata_provider": {
             "type": "string",
             "title": "Metadata Provider"
+          },
+          "makemkv_key_valid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Makemkv Key Valid"
+          },
+          "makemkv_key_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Makemkv Key State"
+          },
+          "makemkv_key_checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Makemkv Key Checked At"
           },
           "updated_by_user_id": {
             "anyOf": [
@@ -5840,7 +7794,10 @@
           "auto_transcode_on_idle",
           "auto_rip_on_insert",
           "block_on_miss",
+          "community_keydb_enabled",
           "ripping_paused",
+          "hold_for_review",
+          "manual_wait_seconds",
           "default_retention_policy",
           "notification_apprise_urls",
           "notifications_enabled",
@@ -5898,6 +7855,53 @@
           "log_level"
         ],
         "title": "DiagnosticsServiceView"
+      },
+      "DirectoryListing": {
+        "properties": {
+          "root": {
+            "type": "string",
+            "title": "Root"
+          },
+          "subpath": {
+            "type": "string",
+            "title": "Subpath"
+          },
+          "parent_subpath": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Subpath"
+          },
+          "readonly": {
+            "type": "boolean",
+            "title": "Readonly"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/FileEntry"
+            },
+            "type": "array",
+            "title": "Entries"
+          },
+          "unavailable": {
+            "type": "boolean",
+            "title": "Unavailable",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "root",
+          "subpath",
+          "readonly",
+          "entries"
+        ],
+        "title": "DirectoryListing"
       },
       "DiscFingerprintInput": {
         "properties": {
@@ -6037,6 +8041,82 @@
             "type": "object",
             "title": "Rip Params Json"
           },
+          "rip_speed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rip Speed"
+          },
+          "drive_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "uhd_capable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uhd Capable"
+          },
+          "prescan_cache_mb": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Cache Mb"
+          },
+          "prescan_timeout": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Timeout"
+          },
+          "prescan_retries": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Retries"
+          },
+          "disc_enum_timeout": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Enum Timeout"
+          },
           "default_session_id": {
             "anyOf": [
               {
@@ -6081,11 +8161,41 @@
           "last_seen_at",
           "media_status",
           "media_status_at",
+          "drive_mode",
           "default_session_id",
           "created_at",
           "updated_at"
         ],
         "title": "Drive"
+      },
+      "DriveCurrentJobView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "status"
+        ],
+        "title": "DriveCurrentJobView"
       },
       "DriveDiagnosticItem": {
         "properties": {
@@ -6166,6 +8276,14 @@
         "title": "DriveMediaStatus",
         "description": "What the drive thinks is in its tray. Reported by each ripper\non a heartbeat so the backend can fail manual-trigger requests\nfast when the user clicks Start without loading a disc."
       },
+      "DriveMode": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "manual"
+        ],
+        "title": "DriveMode"
+      },
       "DriveRescanResponse": {
         "properties": {
           "online": {
@@ -6217,12 +8335,331 @@
               }
             ],
             "title": "Default Session Id"
+          },
+          "rip_speed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rip Speed"
+          },
+          "drive_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "uhd_capable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uhd Capable"
+          },
+          "prescan_cache_mb": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Cache Mb"
+          },
+          "prescan_timeout": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Timeout"
+          },
+          "prescan_retries": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Retries"
+          },
+          "disc_enum_timeout": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Enum Timeout"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "title": "DriveUpdateRequest",
         "description": "PATCH /api/drives/{id} body. Both fields optional + nullable.\n\n`default_session_id=None` (explicit null) clears the field; omitting it\nleaves it untouched. `extra=\"forbid\"` keeps the API honest \u2014 UI typos\nsurface as 422 instead of being silently dropped."
+      },
+      "DriveView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "hostname": {
+            "type": "string",
+            "title": "Hostname"
+          },
+          "device_path": {
+            "type": "string",
+            "title": "Device Path"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DriveStatus"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "media_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveMediaStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "media_status_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Status At"
+          },
+          "default_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Session Id"
+          },
+          "rip_speed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rip Speed"
+          },
+          "drive_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "uhd_capable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uhd Capable"
+          },
+          "prescan_cache_mb": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Cache Mb"
+          },
+          "prescan_timeout": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Timeout"
+          },
+          "prescan_retries": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Retries"
+          },
+          "disc_enum_timeout": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Enum Timeout"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "current_job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveCurrentJobView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "hostname",
+          "device_path",
+          "display_name",
+          "status",
+          "last_seen_at",
+          "media_status",
+          "media_status_at",
+          "default_session_id",
+          "rip_speed",
+          "drive_mode",
+          "uhd_capable",
+          "prescan_cache_mb",
+          "prescan_timeout",
+          "prescan_retries",
+          "disc_enum_timeout",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DriveView"
+      },
+      "EventTypeInfo": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "variables": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Variables"
+          },
+          "default_title": {
+            "type": "string",
+            "title": "Default Title"
+          },
+          "default_body": {
+            "type": "string",
+            "title": "Default Body"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "variables",
+          "default_title",
+          "default_body"
+        ],
+        "title": "EventTypeInfo"
       },
       "FailTaskRequest": {
         "properties": {
@@ -6237,6 +8674,150 @@
           "last_error"
         ],
         "title": "FailTaskRequest"
+      },
+      "FileEntry": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "modified": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified"
+          },
+          "extension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extension"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "default": "other"
+          },
+          "permissions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permissions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "FileEntry"
+      },
+      "FilePathRequest": {
+        "properties": {
+          "root": {
+            "type": "string",
+            "title": "Root"
+          },
+          "subpath": {
+            "type": "string",
+            "title": "Subpath"
+          }
+        },
+        "type": "object",
+        "required": [
+          "root",
+          "subpath"
+        ],
+        "title": "FilePathRequest"
+      },
+      "FilePathResponse": {
+        "properties": {
+          "root": {
+            "type": "string",
+            "title": "Root"
+          },
+          "subpath": {
+            "type": "string",
+            "title": "Subpath"
+          }
+        },
+        "type": "object",
+        "required": [
+          "root",
+          "subpath"
+        ],
+        "title": "FilePathResponse"
+      },
+      "FileRoot": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "writable": {
+            "type": "boolean",
+            "title": "Writable"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "path",
+          "writable"
+        ],
+        "title": "FileRoot"
+      },
+      "FixPermsResponse": {
+        "properties": {
+          "fixed": {
+            "type": "integer",
+            "title": "Fixed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fixed"
+        ],
+        "title": "FixPermsResponse"
       },
       "HTTPValidationError": {
         "properties": {
@@ -6331,6 +8912,24 @@
           "progress_pct"
         ],
         "title": "HeartbeatRequest"
+      },
+      "HeldJobView": {
+        "properties": {
+          "job": {
+            "$ref": "#/components/schemas/JobView"
+          },
+          "paused": {
+            "type": "boolean",
+            "title": "Paused"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job",
+          "paused"
+        ],
+        "title": "HeldJobView",
+        "description": "Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).\n\n`paused` is true when the held disc should survive a ripper reboot as a hold\n(global `ripping_paused` on \u2014 or, once it lands, a per-job pause). The ripper\nuses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)\non restart. See the timed-review-gate spec \u00a76.3."
       },
       "HwPreference": {
         "type": "string",
@@ -6442,6 +9041,28 @@
             ],
             "title": "Year"
           },
+          "disc_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Number"
+          },
+          "disc_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Total"
+          },
           "poster_url": {
             "anyOf": [
               {
@@ -6475,6 +9096,23 @@
           "resumed_from_crash": {
             "type": "boolean",
             "title": "Resumed From Crash"
+          },
+          "wait_start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wait Start Time"
+          },
+          "manual_pause": {
+            "type": "boolean",
+            "title": "Manual Pause",
+            "default": false
           },
           "started_at": {
             "anyOf": [
@@ -6530,10 +9168,13 @@
           "drive_id",
           "disc_type",
           "year",
+          "disc_number",
+          "disc_total",
           "poster_url",
           "poster_url_manual",
           "status",
           "resumed_from_crash",
+          "wait_start_time",
           "started_at",
           "ripped_at",
           "created_at",
@@ -6639,6 +9280,7 @@
           "ripping",
           "ripped",
           "ripped_partial",
+          "awaiting_review",
           "ripped_awaiting_identify",
           "abandoned",
           "failed"
@@ -6657,11 +9299,48 @@
               }
             ],
             "title": "Poster Url Manual"
+          },
+          "disc_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Number"
+          },
+          "disc_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Total"
+          },
+          "tracks": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TrackEditRequest"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracks"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "JobUpdateRequest",
-        "description": "PATCH /api/jobs/{id} body. Currently only the manual poster override\nis editable \u2014 title/year live behind the identify/resolve flow."
+        "description": "PATCH /api/jobs/{id} body. `poster_url_manual` + disc fields edit the job;\n`tracks` applies per-track operator edits in the same atomic save. The JOB's\ntitle/year still live behind identify/resolve."
       },
       "JobView": {
         "properties": {
@@ -6719,6 +9398,28 @@
             ],
             "title": "Year"
           },
+          "disc_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Number"
+          },
+          "disc_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Total"
+          },
           "poster_url": {
             "anyOf": [
               {
@@ -6750,10 +9451,37 @@
             "type": "boolean",
             "title": "Resumed From Crash"
           },
+          "wait_start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wait Start Time"
+          },
+          "manual_pause": {
+            "type": "boolean",
+            "title": "Manual Pause",
+            "default": false
+          },
           "rip_progress": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/RipProgressSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transcode_progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscodeProgressSummary"
               },
               {
                 "type": "null"
@@ -6773,6 +9501,54 @@
           "resumed_from_crash"
         ],
         "title": "JobView"
+      },
+      "KeydbState": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "disabled",
+          "fresh_kept",
+          "download_failed",
+          "empty",
+          "probe_failed"
+        ],
+        "title": "KeydbState",
+        "description": "Outcome of the ripper's community-keydb fetch (`update_keydb.sh`),\nstored on the Config singleton and surfaced by /api/system/preflight.\n\nOK              \u2014 downloaded, filtered, installed; vuk_count set.\nDISABLED        \u2014 community keydb gated off via config.\nFRESH_KEPT      \u2014 age-gated skip; existing keydb retained (age_days set).\nDOWNLOAD_FAILED \u2014 all download retries failed; existing keydb retained.\nEMPTY           \u2014 fetched file not a ZIP / no keydb.cfg / no VUK entries.\nPROBE_FAILED    \u2014 wrapper could not run or parse the script."
+      },
+      "KeydbStatusReport": {
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/KeydbState"
+          },
+          "vuk_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vuk Count"
+          },
+          "age_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "KeydbStatusReport",
+        "description": "Body of POST /api/ripper/keydb-status \u2014 the ripper's community-keydb\nfetch outcome. Global (not per-drive); the backend writes it to the Config\nsingleton. `vuk_count` / `age_days` are present on ok / fresh_kept.\nBoth fields are None on all other states."
       },
       "LoginRequest": {
         "properties": {
@@ -6815,6 +9591,42 @@
           "password_must_change"
         ],
         "title": "LoginResponse"
+      },
+      "MakemkvKeyState": {
+        "type": "string",
+        "enum": [
+          "valid",
+          "unregistered_or_expired",
+          "binary_expired",
+          "format_invalid",
+          "probe_failed"
+        ],
+        "title": "MakemkvKeyState",
+        "description": "Outcome of the ripper's disc-free `makemkvcon info disc:9999` probe.\nStored on the Config singleton and read by test-key / preflight / config view.\n\nVALID                   \u2014 clean probe, key accepted.\nUNREGISTERED_OR_EXPIRED \u2014 MSG:5052/5055 (evaluation expired / no valid key).\nBINARY_EXPIRED          \u2014 MSG:5021 (60-day kill-switch; no key overrides it).\nFORMAT_INVALID          \u2014 configured key fails the M-/T- serial regex (pre-probe).\nPROBE_FAILED            \u2014 binary missing / timeout / undeterminable (\u2192 valid=null)."
+      },
+      "MakemkvKeyStatusReport": {
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/MakemkvKeyState"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "MakemkvKeyStatusReport",
+        "description": "Body of POST /api/ripper/makemkv-key-status \u2014 the ripper's disc-free\n`makemkvcon` probe outcome. Global (not per-drive); the backend writes it\nto the Config singleton. `detail` is a human-readable reason string."
       },
       "ManualTriggerRequest": {
         "properties": {
@@ -6919,6 +9731,61 @@
               }
             ],
             "title": "Provider Id"
+          },
+          "release_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Type"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "track_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Count"
           }
         },
         "type": "object",
@@ -6941,7 +9808,14 @@
             "title": "Provider"
           },
           "valid": {
-            "type": "boolean",
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Valid"
           },
           "detail": {
@@ -6954,6 +9828,18 @@
               }
             ],
             "title": "Detail"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
           }
         },
         "type": "object",
@@ -7006,6 +9892,83 @@
             ],
             "title": "Poster Url"
           },
+          "catalog_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Number"
+          },
+          "barcode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "disc_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Count"
+          },
+          "track_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Count"
+          },
           "tracks": {
             "items": {
               "$ref": "#/components/schemas/MetadataReleaseTrack"
@@ -7037,6 +10000,28 @@
           "title": {
             "type": "string",
             "title": "Title"
+          },
+          "length_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Length Ms"
+          },
+          "disc_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Number"
           }
         },
         "type": "object",
@@ -7071,6 +10056,57 @@
           "candidates"
         ],
         "title": "MetadataSearchResponse"
+      },
+      "MkdirRequest": {
+        "properties": {
+          "root": {
+            "type": "string",
+            "title": "Root"
+          },
+          "subpath": {
+            "type": "string",
+            "title": "Subpath"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "root",
+          "subpath",
+          "name"
+        ],
+        "title": "MkdirRequest"
+      },
+      "MoveRequest": {
+        "properties": {
+          "root": {
+            "type": "string",
+            "title": "Root"
+          },
+          "subpath": {
+            "type": "string",
+            "title": "Subpath"
+          },
+          "dest_root": {
+            "type": "string",
+            "title": "Dest Root"
+          },
+          "dest_subpath": {
+            "type": "string",
+            "title": "Dest Subpath"
+          }
+        },
+        "type": "object",
+        "required": [
+          "root",
+          "subpath",
+          "dest_root",
+          "dest_subpath"
+        ],
+        "title": "MoveRequest"
       },
       "NamingPreviewItem": {
         "properties": {
@@ -7110,6 +10146,49 @@
           "output_name"
         ],
         "title": "NamingPreviewItem"
+      },
+      "NamingPreviewRequest": {
+        "properties": {
+          "template": {
+            "type": "string",
+            "title": "Template"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "has_transcode_preset": {
+            "type": "boolean",
+            "title": "Has Transcode Preset",
+            "default": false
+          },
+          "variables": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Variables",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "template",
+          "media_type"
+        ],
+        "title": "NamingPreviewRequest"
+      },
+      "NamingPreviewResponse": {
+        "properties": {
+          "rendered": {
+            "type": "string",
+            "title": "Rendered"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rendered"
+        ],
+        "title": "NamingPreviewResponse"
       },
       "NamingValidateRequest": {
         "properties": {
@@ -7947,6 +11026,29 @@
         "title": "RegisterTranscoderResponse",
         "description": "Bootstrap bundle the transcoder needs before it can claim + run.\n\n`raw_input_path` is the absolute path the transcoder should read from\n(`/raw/<job>/title_tNN.mkv` for video, `/raw/<job>/track_NN.wav` for\naudio, `/raw/<job>/dump.iso` for data). `media_root` plus the task's\n`output_path` is where the final file lands."
       },
+      "RenameRequest": {
+        "properties": {
+          "root": {
+            "type": "string",
+            "title": "Root"
+          },
+          "subpath": {
+            "type": "string",
+            "title": "Subpath"
+          },
+          "new_name": {
+            "type": "string",
+            "title": "New Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "root",
+          "subpath",
+          "new_name"
+        ],
+        "title": "RenameRequest"
+      },
       "ResolveFanOutOutcomeView": {
         "properties": {
           "session_application_id": {
@@ -8018,6 +11120,28 @@
               }
             ],
             "title": "Year"
+          },
+          "disc_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Number"
+          },
+          "disc_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Total"
           },
           "metadata": {
             "additionalProperties": true,
@@ -8354,6 +11478,21 @@
               }
             ],
             "title": "Makemkv Key"
+          },
+          "community_keydb_enabled": {
+            "type": "boolean",
+            "title": "Community Keydb Enabled",
+            "default": true
+          },
+          "ripping_paused": {
+            "type": "boolean",
+            "title": "Ripping Paused",
+            "default": false
+          },
+          "manual_wait_seconds": {
+            "type": "integer",
+            "title": "Manual Wait Seconds",
+            "default": 60
           }
         },
         "type": "object",
@@ -8835,6 +11974,76 @@
         ],
         "title": "SessionView"
       },
+      "SettingsGroup": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigFieldMeta"
+            },
+            "type": "array",
+            "title": "Fields"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "fields"
+        ],
+        "title": "SettingsGroup",
+        "description": "A named section of the settings page (e.g. Metadata, Ripping, System)."
+      },
+      "SettingsSchemaResponse": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/SettingsGroup"
+            },
+            "type": "array",
+            "title": "Groups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "groups"
+        ],
+        "title": "SettingsSchemaResponse",
+        "description": "Render metadata for the settings page \u2014 grouped field classification.\nStatic (derived from CONFIG_FIELD_META); values come from /api/config and\n/api/settings/infra."
+      },
+      "StatsResponse": {
+        "properties": {
+          "uptime_seconds": {
+            "type": "integer",
+            "title": "Uptime Seconds"
+          },
+          "jobs_by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Jobs By Status"
+          },
+          "drives_online": {
+            "type": "integer",
+            "title": "Drives Online"
+          },
+          "events_unsent": {
+            "type": "integer",
+            "title": "Events Unsent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uptime_seconds",
+          "jobs_by_status",
+          "drives_online",
+          "events_unsent"
+        ],
+        "title": "StatsResponse"
+      },
       "SystemDiagnosticCheck": {
         "properties": {
           "name": {
@@ -8941,6 +12150,120 @@
           "expansion"
         ],
         "title": "TemplatePreviewResponse"
+      },
+      "TrackEditRequest": {
+        "properties": {
+          "track_id": {
+            "type": "string",
+            "title": "Track Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "imdb_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imdb Id"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "video_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Type"
+          },
+          "episode_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Number"
+          },
+          "episode_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Name"
+          },
+          "excluded": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded"
+          },
+          "custom_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Filename"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "track_id"
+        ],
+        "title": "TrackEditRequest",
+        "description": "One entry in JobUpdateRequest.tracks. `track_id` selects the row; every\nother field is an optional operator edit (omitted=untouched, null=clear)."
       },
       "TrackKind": {
         "type": "string",
@@ -9132,6 +12455,132 @@
               }
             ],
             "title": "Last Error"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "edition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edition"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "imdb_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imdb Id"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "video_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Type"
+          },
+          "episode_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Number"
+          },
+          "episode_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Name"
+          },
+          "excluded": {
+            "type": "boolean",
+            "title": "Excluded",
+            "default": false
+          },
+          "custom_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Filename"
           }
         },
         "type": "object",
@@ -9454,6 +12903,77 @@
         ],
         "title": "TranscodePresetView"
       },
+      "TranscodeProgressSummary": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "transcoding",
+              "done",
+              "done_partial",
+              "failed"
+            ],
+            "title": "State"
+          },
+          "tasks_total": {
+            "type": "integer",
+            "title": "Tasks Total"
+          },
+          "tasks_done": {
+            "type": "integer",
+            "title": "Tasks Done"
+          },
+          "percent": {
+            "type": "number",
+            "title": "Percent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state",
+          "tasks_total",
+          "tasks_done",
+          "percent"
+        ],
+        "title": "TranscodeProgressSummary",
+        "description": "Per-job transcode-phase summary surfaced on `JobView`, derived by\naggregating ALL of a job's `SessionApplication` rows. `state` is the\njob-level rollup (see `_summarize_transcode_progress`): `transcoding`\nwhile any session is in-flight, `done`/`done_partial`/`failed` once all\nare terminal. `None` on `JobView` means no session was applied (the job\nis `ripped`/awaiting action). Live per-task percent flows on the\n`transcode.progress.{task_id}` WS topic; `percent` here is a poll-time\nmean of the job's task `progress_pct`."
+      },
+      "TranscodeStatsView": {
+        "properties": {
+          "tasks_by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Tasks By Status"
+          },
+          "total_tasks": {
+            "type": "integer",
+            "title": "Total Tasks"
+          },
+          "gpus_total": {
+            "type": "integer",
+            "title": "Gpus Total"
+          },
+          "gpus_available": {
+            "type": "integer",
+            "title": "Gpus Available"
+          },
+          "max_parallel": {
+            "type": "integer",
+            "title": "Max Parallel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tasks_by_status",
+          "total_tasks",
+          "gpus_total",
+          "gpus_available",
+          "max_parallel"
+        ],
+        "title": "TranscodeStatsView"
+      },
       "TranscodeTaskStatus": {
         "type": "string",
         "enum": [
@@ -9584,6 +13104,74 @@
           "none"
         ],
         "title": "TranscodeTool"
+      },
+      "TranscodeWorkerView": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "claimed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed By"
+          },
+          "progress_pct": {
+            "type": "integer",
+            "title": "Progress Pct"
+          },
+          "claim_heartbeat_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Heartbeat At"
+          },
+          "gpu_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gpu Id"
+          },
+          "source_track_id": {
+            "type": "string",
+            "title": "Source Track Id"
+          },
+          "output_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "progress_pct",
+          "source_track_id"
+        ],
+        "title": "TranscodeWorkerView"
       },
       "ValidationError": {
         "properties": {

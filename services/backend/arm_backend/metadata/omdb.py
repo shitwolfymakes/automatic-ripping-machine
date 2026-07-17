@@ -3,11 +3,14 @@ from typing import Any, Literal
 
 import httpx
 
+from arm_backend.config import settings
 from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult
 
 logger = logging.getLogger("arm_backend.metadata.omdb")
 
-_BASE_URL = "https://www.omdbapi.com/"
+
+def _base_url() -> str:
+    return settings.ARM_OMDB_BASE_URL
 
 
 class OMDBClient:
@@ -31,7 +34,7 @@ class OMDBClient:
         only pass the query-specific params.
         """
         try:
-            r = await self._http.get(_BASE_URL, params={"apikey": self._api_key, **params})
+            r = await self._http.get(_base_url(), params={"apikey": self._api_key, **params})
         except httpx.TimeoutException as e:
             raise LookupTimeout("omdb timeout") from e
         except httpx.HTTPError as e:

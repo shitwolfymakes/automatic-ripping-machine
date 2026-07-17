@@ -4,7 +4,6 @@ update-key script, so true validity is confirmed at rip time). Ports neu's
 GET /api/v1/metadata/test-key."""
 
 import logging
-import re
 from typing import Literal
 
 import httpx
@@ -14,6 +13,7 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
+from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.metadata.arm_server import ArmServerClient
 from arm_backend.metadata.base import LookupError as MetaLookupError
 from arm_backend.metadata.base import LookupTimeout, MetadataResult, extract_poster_url
@@ -22,7 +22,7 @@ from arm_backend.metadata.omdb import OMDBClient
 from arm_backend.metadata.tmdb import TMDBClient
 from arm_backend.metadata.tvdb import TVDBClient
 from arm_backend.seeders import CONFIG_SINGLETON_ID
-from arm_common import Config, User
+from arm_common import DEFAULT_MUSICBRAINZ_USER_AGENT, Config, User
 from arm_common.schemas import (
     MetadataCandidate,
     MetadataKeyTestResponse,
@@ -36,10 +36,6 @@ logger = logging.getLogger("arm_backend.routers.metadata")
 
 router = APIRouter(prefix="/api/metadata", tags=["metadata"])
 
-# MakeMKV registration keys look like `M-xxxx...` (Crockford-ish base32 with
-# dashes). We can only confirm the format offline; true validity is checked by
-# the ripper at scan time. Mirrors neu's INVALID_MAKEMKV_SERIAL case.
-_MAKEMKV_SERIAL_RE = re.compile(r"^M-[0-9A-Za-z-]+$")
 _TMDB_CONFIG_URL = "https://api.themoviedb.org/3/configuration"
 _OMDB_URL = "https://www.omdbapi.com/"
 _TIMEOUT_SECONDS = 8.0
@@ -59,16 +55,19 @@ async def test_key(
     http: httpx.AsyncClient = request.app.state.http
 
     if provider == "makemkv":
-        key = (cfg.makemkv_key or "").strip()
-        if not key:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no makemkv key configured")
-        valid = bool(_MAKEMKV_SERIAL_RE.match(key))
-        detail = (
-            "format/presence only — MakeMKV validity is confirmed at rip time"
-            if valid
-            else "key does not match the MakeMKV serial format (M-...)"
+        if cfg.makemkv_key_checked_at is None and cfg.makemkv_key_state is None:
+            return MetadataKeyTestResponse(
+                provider=provider,
+                valid=None,
+                detail="not yet validated — no ripper has checked this key",
+                checked_at=None,
+            )
+        return MetadataKeyTestResponse(
+            provider=provider,
+            valid=cfg.makemkv_key_valid,
+            detail=makemkv_state_detail(cfg.makemkv_key_state),
+            checked_at=cfg.makemkv_key_checked_at,
         )
-        return MetadataKeyTestResponse(provider=provider, valid=valid, detail=detail)
 
     key_attr = {"omdb": "omdb_api_key", "tmdb": "tmdb_api_key", "tvdb": "tvdb_api_key"}[provider]
     key = (getattr(cfg, key_attr) or "").strip()
@@ -119,12 +118,19 @@ SearchProvider = Literal["tmdb", "omdb"]
 def _to_candidate(r: MetadataResult) -> MetadataCandidate:
     payload = r.payload or {}
     provider_id = payload.get("imdb_id") or payload.get("imdbID") or payload.get("id")
+    rg = payload.get("release-group") or {}
+    track_count = payload.get("track_count") or payload.get("track-count")
     return MetadataCandidate(
         title=r.title,
         year=r.year,
         kind=r.kind,
         poster_url=extract_poster_url(r),
         provider_id=str(provider_id) if provider_id is not None else None,
+        release_type=(rg.get("primary-type") if isinstance(rg, dict) else None),
+        format=payload.get("format"),
+        country=payload.get("country"),
+        status=payload.get("status"),
+        track_count=int(track_count) if isinstance(track_count, int) else None,
     )
 
 
@@ -208,14 +214,28 @@ async def lookup_metadata(
 async def search_music(
     request: Request,
     query: str,
+    artist: str | None = None,
+    track_count: int | None = None,
+    release_type: str | None = None,
+    format: str | None = None,
+    country: str | None = None,
+    status: str | None = None,
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
 ) -> MetadataSearchResponse:
     cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-    ua = (cfg.musicbrainz_user_agent if cfg else None) or "armv3"
+    ua = (cfg.musicbrainz_user_agent if cfg else None) or DEFAULT_MUSICBRAINZ_USER_AGENT
     http: httpx.AsyncClient = request.app.state.http
     try:
-        results = await MusicBrainzClient(ua, http).search_releases(query)
+        results = await MusicBrainzClient(ua, http).search_releases(
+            query,
+            artist=artist,
+            track_count=track_count,
+            release_type=release_type,
+            format=format,
+            country=country,
+            status=status,
+        )
     except (MetaLookupError, LookupTimeout) as exc:
         return MetadataSearchResponse(candidates=[], detail=str(exc))
     except httpx.HTTPError as exc:
@@ -231,7 +251,7 @@ async def music_release_detail(
     db: AsyncSession = Depends(get_session),
 ) -> MetadataReleaseDetail:
     cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-    ua = (cfg.musicbrainz_user_agent if cfg else None) or "armv3"
+    ua = (cfg.musicbrainz_user_agent if cfg else None) or DEFAULT_MUSICBRAINZ_USER_AGENT
     http: httpx.AsyncClient = request.app.state.http
     try:
         result = await MusicBrainzClient(ua, http).get_release(release_id)
@@ -247,12 +267,27 @@ async def music_release_detail(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"musicbrainz unavailable: {exc}") from exc
     payload = result.payload or {}
     raw_tracks = payload.get("tracks") or []
-    tracks = [MetadataReleaseTrack(position=t.get("position"), title=t.get("title") or "") for t in raw_tracks]
+    tracks = [
+        MetadataReleaseTrack(
+            position=t.get("position"),
+            title=t.get("title") or "",
+            length_ms=t.get("length_ms"),
+            disc_number=t.get("disc_number"),
+        )
+        for t in raw_tracks
+    ]
     return MetadataReleaseDetail(
         release_id=release_id,
         title=result.title,
         artist=payload.get("artist"),
         year=result.year,
         poster_url=extract_poster_url(result),
+        catalog_number=payload.get("catalog_number"),
+        barcode=payload.get("barcode"),
+        country=payload.get("country"),
+        format=payload.get("format"),
+        status=payload.get("status"),
+        disc_count=payload.get("disc_count"),
+        track_count=payload.get("track_count"),
         tracks=tracks,
     )
