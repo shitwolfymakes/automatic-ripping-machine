@@ -12,6 +12,7 @@ from arm_backend.routers._params import JobIdParam
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
 from arm_backend.path_sanitize import sanitize_path_component
+from arm_backend.auto_session import resolve_effective_session_id
 from arm_backend.path_template import (
     TemplateValidationError,
     expand_template,
@@ -19,7 +20,6 @@ from arm_backend.path_template import (
     tokens_for_media,
     validate_template_or_http,
 )
-from arm_backend.auto_session import resolve_effective_session_id
 from arm_backend.transcode_apply import compute_outputs
 from arm_common import Job, Session, Track, TranscodePreset, User
 from arm_common.enums import MediaType

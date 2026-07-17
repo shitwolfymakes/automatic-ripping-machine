@@ -8347,6 +8347,17 @@
             "type": "string",
             "title": "Device Path"
           },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
           "display_name": {
             "anyOf": [
               {
@@ -9354,8 +9365,26 @@
             "title": "Id"
           },
           "drive_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Drive Id"
+          },
+          "drive_serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drive Serial"
           },
           "disc_type": {
             "$ref": "#/components/schemas/DiscType"
@@ -9690,8 +9719,26 @@
             "title": "Id"
           },
           "drive_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Drive Id"
+          },
+          "drive_serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drive Serial"
           },
           "disc_type": {
             "$ref": "#/components/schemas/DiscType"
@@ -10562,6 +10609,7 @@
         "properties": {
           "template": {
             "type": "string",
+            "minLength": 1,
             "title": "Template"
           },
           "media_type": {
@@ -10570,7 +10618,7 @@
           "has_transcode_preset": {
             "type": "boolean",
             "title": "Has Transcode Preset",
-            "default": false
+            "default": true
           }
         },
         "type": "object",
@@ -11308,6 +11356,17 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Hw Caps"
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
           }
         },
         "type": "object",

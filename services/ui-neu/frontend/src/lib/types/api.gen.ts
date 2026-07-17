@@ -592,6 +592,10 @@ export type Drive = {
      */
     device_path: string;
     /**
+     * Serial
+     */
+    serial?: string | null;
+    /**
      * Display Name
      */
     display_name?: string | null;
@@ -1103,7 +1107,11 @@ export type Job = {
     /**
      * Drive Id
      */
-    drive_id: string;
+    drive_id: string | null;
+    /**
+     * Drive Serial
+     */
+    drive_serial?: string | null;
     disc_type: DiscType;
     /**
      * Title
@@ -1278,7 +1286,11 @@ export type JobView = {
     /**
      * Drive Id
      */
-    drive_id: string;
+    drive_id: string | null;
+    /**
+     * Drive Serial
+     */
+    drive_serial?: string | null;
     disc_type: DiscType;
     status: JobStatus;
     /**
@@ -2181,6 +2193,10 @@ export type RegisterRequest = {
     hw_caps?: {
         [key: string]: unknown;
     };
+    /**
+     * Serial
+     */
+    serial?: string | null;
 };
 
 /**

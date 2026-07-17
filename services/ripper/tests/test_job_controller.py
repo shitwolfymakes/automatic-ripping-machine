@@ -14,9 +14,11 @@ from arm_common.schemas import (
     RipperConfigView,
     RipStartResponse,
     ScanResult,
+    ScanTitle,
     TrackView,
     WSEnvelope,
 )
+from arm_ripper.drive_poll import DriveState
 from arm_ripper.job_controller import JobController
 
 
@@ -153,7 +155,11 @@ def stub_eject(monkeypatch):
 @pytest.fixture
 def stub_scan(monkeypatch):
     async def _scan(_device_path: str) -> ScanResult:
-        return ScanResult(disc_type=DiscType.DVD, volume_label="TEST")
+        return ScanResult(
+            disc_type=DiscType.DVD,
+            volume_label="TEST",
+            titles=[ScanTitle(index=0, duration_seconds=3600)],
+        )
 
     monkeypatch.setattr(jc_module, "scan_disc", _scan)
 
@@ -612,3 +618,150 @@ async def test_sdf_refresh_reports_result(monkeypatch):
     controller._spawn_sdf_refresh(enabled=True)
     await controller._drain_sdf_tasks()
     assert client.sdf_reports == [(MakemkvSdfState.UPDATED, None)]
+
+
+# ---------------------------------------------------------------------------
+# _scan_with_ready_retry — DISC_OK + zero-title race
+# ---------------------------------------------------------------------------
+
+
+async def _noop_async(*_a, **_k):
+    return None
+
+
+def _async_return(value):
+    async def _coro(*_a, **_k):
+        return value
+
+    return _coro()
+
+
+def _titled_scan() -> ScanResult:
+    return ScanResult(
+        disc_type=DiscType.DVD,
+        volume_label="MOVIE",
+        titles=[ScanTitle(index=0, duration_seconds=3600)],
+    )
+
+
+def _empty_scan() -> ScanResult:
+    return ScanResult(disc_type=DiscType.UNKNOWN, volume_label=None, titles=[])
+
+
+async def test_scan_retry_recovers_transient_not_ready(monkeypatch):
+    monkeypatch.setattr(jc_module.asyncio, "sleep", _noop_async)
+    results = deque([_empty_scan(), _titled_scan()])
+    calls = {"n": 0}
+
+    async def _scan(device_path):
+        calls["n"] += 1
+        return results.popleft()
+
+    monkeypatch.setattr(jc_module, "scan_disc", _scan)
+    monkeypatch.setattr(jc_module, "read_drive_status", lambda _p: DriveState.DISC_OK)
+
+    controller = JobController(FakeClient(), "drv_test")
+    out = await controller._scan_with_ready_retry("/dev/sr0")
+    assert out.titles
+    assert calls["n"] == 2
+
+
+async def test_scan_retry_exhausts_and_logs_marker(monkeypatch, caplog):
+    monkeypatch.setattr(jc_module.asyncio, "sleep", _noop_async)
+    monkeypatch.setattr(jc_module, "scan_disc", lambda _p: _async_return(_empty_scan()))
+    monkeypatch.setattr(jc_module, "read_drive_status", lambda _p: DriveState.DISC_OK)
+
+    controller = JobController(FakeClient(), "drv_test")
+    with caplog.at_level("ERROR"):
+        out = await controller._scan_with_ready_retry("/dev/sr0")
+    assert not out.titles
+    assert "DISC_UNREADABLE_AFTER_RETRIES" in caplog.text
+
+
+async def test_scan_retry_stops_when_disc_pulled(monkeypatch):
+    monkeypatch.setattr(jc_module.asyncio, "sleep", _noop_async)
+    calls = {"n": 0}
+
+    async def _scan(device_path):
+        calls["n"] += 1
+        return _empty_scan()
+
+    states = deque([DriveState.DISC_OK, DriveState.NO_DISC])
+    monkeypatch.setattr(jc_module, "scan_disc", _scan)
+    monkeypatch.setattr(jc_module, "read_drive_status", lambda _p: states.popleft())
+
+    controller = JobController(FakeClient(), "drv_test")
+    out = await controller._scan_with_ready_retry("/dev/sr0")
+    assert not out.titles
+    assert calls["n"] == 1
+
+
+async def test_scan_retry_stops_pre_sleep_when_disc_absent(monkeypatch):
+    """Drive reports non-DISC_OK on the first status check (pre-sleep): stop immediately, no sleep."""
+    sleep_calls = {"n": 0}
+
+    async def _count_sleep(_):
+        sleep_calls["n"] += 1
+
+    monkeypatch.setattr(jc_module.asyncio, "sleep", _count_sleep)
+    monkeypatch.setattr(jc_module, "scan_disc", lambda _p: _async_return(_empty_scan()))
+    monkeypatch.setattr(jc_module, "read_drive_status", lambda _p: DriveState.NO_DISC)
+
+    controller = JobController(FakeClient(), "drv_test")
+    out = await controller._scan_with_ready_retry("/dev/sr0")
+    assert not out.titles
+    assert sleep_calls["n"] == 0  # exited before the backoff block — no sleep
+
+
+async def test_scan_retry_no_retry_on_first_success(monkeypatch):
+    calls = {"n": 0, "status": 0}
+
+    async def _scan(device_path):
+        calls["n"] += 1
+        return _titled_scan()
+
+    def _status(_p):
+        calls["status"] += 1
+        return DriveState.DISC_OK
+
+    monkeypatch.setattr(jc_module, "scan_disc", _scan)
+    monkeypatch.setattr(jc_module, "read_drive_status", _status)
+
+    controller = JobController(FakeClient(), "drv_test")
+    out = await controller._scan_with_ready_retry("/dev/sr0")
+    assert out.titles
+    assert calls["n"] == 1
+    assert calls["status"] == 0
+
+
+async def test_scan_retry_propagates_scanerror(monkeypatch):
+    async def _scan(device_path):
+        raise jc_module.ScanError("makemkvcon rc=1")
+
+    monkeypatch.setattr(jc_module, "scan_disc", _scan)
+    controller = JobController(FakeClient(), "drv_test")
+    with pytest.raises(jc_module.ScanError):
+        await controller._scan_with_ready_retry("/dev/sr0")
+
+
+async def test_run_command_kill_survives_process_lookup_error(monkeypatch):
+    class _DeadProc:
+        returncode = None
+
+        async def communicate(self):
+            raise asyncio.TimeoutError
+
+        def kill(self):
+            raise ProcessLookupError  # child already exited
+
+        async def wait(self):
+            return None
+
+    async def _fake_exec(*_a, **_k):
+        return _DeadProc()
+
+    monkeypatch.setattr(jc_module.asyncio, "create_subprocess_exec", _fake_exec)
+
+    rc, msg = await JobController._run_command("eject", "-sv", "/dev/sr0", log_failure=False)
+    assert rc is None
+    assert msg == "timeout"
