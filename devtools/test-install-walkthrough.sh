@@ -117,4 +117,10 @@ check "injection idempotent" "1" "$(grep -c '"8080:8443"' "$FIX")"
 # certs path: offload on -> remote-user-writable path
 check "certs path (offload)" "/home/sam/.arm/certs" "$(offload_certs_path "ssh://sam@192.168.0.92")"
 
+# idempotence with a CHANGED port: single ports key, latest port wins
+inject_offload_compose "$FIX" "https://192.168.0.68:9090"
+check "port injection converges to latest" "1" "$(grep -c '"9090:8443"' "$FIX")"
+check "no stale port left" "0" "$(grep -c '"8080:8443"' "$FIX")"
+check "single ports key" "1" "$(grep -c '^    ports:$' "$FIX")"
+
 exit "$fail"

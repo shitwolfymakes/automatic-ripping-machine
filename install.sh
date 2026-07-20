@@ -952,9 +952,15 @@ inject_offload_compose() {
             }
         ' "$out" > "$tmp" && mv "$tmp" "$out"
     fi
-    if ! grep -q "\"${port}:8443\"" "$out"; then
-        # The remote transcoder calls back on this URL; without the publish the
-        # prompt-seeded ARM_TRANSCODE_BACKEND_URL points at a closed port.
+    # The remote transcoder calls back on this URL; without the publish the
+    # prompt-seeded ARM_TRANSCODE_BACKEND_URL points at a closed port.
+    # Converge-to-latest: an existing publish is updated in place (never a
+    # second ports: key); only a file with no publish gets the awk insert.
+    if grep -qE '"[0-9]+:8443"' "$out"; then
+        if ! grep -q "\"${port}:8443\"" "$out"; then
+            sed -i -E "s/\"[0-9]+:8443\"/\"${port}:8443\"/" "$out"
+        fi
+    else
         awk -v port="$port" '
             { print }
             /^  arm-backend:$/ {
