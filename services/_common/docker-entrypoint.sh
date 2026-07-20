@@ -20,14 +20,19 @@ PGID="${PGID:-1000}"
 setup_render_access() {
     local dri_dir="${ARM_RENDER_NODE_DIR:-/dev/dri}"
     if [[ -n "${RENDER_GID:-}" ]]; then
+        if [[ "${RENDER_GID}" == "0" ]]; then
+            echo "render access: refusing explicit RENDER_GID=0 — never adding arm to gid 0" >&2
+            return 0
+        fi
         _join_render_gid "${RENDER_GID}" "render-host"
         echo "render access: RENDER_GID=${RENDER_GID} (explicit)"
         return 0
     fi
-    local node gid g seen failed=0
+    local node gid g seen failed=0 found=0
     local gids=()
     for node in "${dri_dir}"/renderD*; do
         [[ -e "$node" ]] || continue
+        found=1
         if ! gid="$(stat -c '%g' "$node" 2>/dev/null)"; then
             echo "render access: FAILED — cannot stat ${node}" >&2
             failed=1
@@ -45,10 +50,15 @@ setup_render_access() {
     done
     if [[ "${#gids[@]}" -gt 0 ]]; then
         echo "render access: derived gid(s) ${gids[*]} from ${dri_dir}/renderD*"
-    elif [[ "$failed" == "0" && "${ARM_GPU_DEVICE:-}" == /dev/dri/* ]]; then
-        # The dispatcher assigned a render-node GPU but nothing is visible —
-        # HandBrake will fail encoder init; make the cause greppable here.
-        echo "render access: FAILED — ARM_GPU_DEVICE=${ARM_GPU_DEVICE} set but no ${dri_dir}/renderD* visible" >&2
+    elif [[ "${ARM_GPU_DEVICE:-}" == /dev/dri/* ]]; then
+        # The dispatcher assigned a render-node GPU but no usable gid was
+        # derived — HandBrake will fail encoder init; make the cause greppable.
+        # (Per-node stat failures already printed their own FAILED line.)
+        if [[ "$found" == "0" ]]; then
+            echo "render access: FAILED — ARM_GPU_DEVICE=${ARM_GPU_DEVICE} set but no ${dri_dir}/renderD* visible" >&2
+        elif [[ "$failed" == "0" ]]; then
+            echo "render access: FAILED — ARM_GPU_DEVICE=${ARM_GPU_DEVICE} set but no usable render gid (node group is root)" >&2
+        fi
     fi
     return 0
 }
@@ -68,8 +78,9 @@ _join_render_gid() {
 
 # Test seam: lets services/_common/test-entrypoint-render.sh source the
 # functions above without executing the entrypoint (mirrors install.sh's
-# ARM_INSTALL_SOURCE_ONLY). No-op in production.
-[[ -n "${ARM_ENTRYPOINT_SOURCE_ONLY:-}" ]] && return 0
+# ARM_INSTALL_SOURCE_ONLY). The sourced-ness check makes a leaked env var
+# harmless when the entrypoint is EXECUTED (top-level `return` would abort).
+[[ -n "${ARM_ENTRYPOINT_SOURCE_ONLY:-}" && "${BASH_SOURCE[0]}" != "$0" ]] && return 0
 
 if [[ -f /etc/ssl/arm/arm-ca.crt ]]; then
     cp /etc/ssl/arm/arm-ca.crt /usr/local/share/ca-certificates/arm-ca.crt

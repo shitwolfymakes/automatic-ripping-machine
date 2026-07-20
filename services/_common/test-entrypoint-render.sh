@@ -70,7 +70,7 @@ usermod() { USERMODS+=("${3}"); }          # called as: usermod --append --group
 run_fn() {  # run setup_render_access in THIS shell; capture output to files.
     # (Command substitution would subshell the call and lose the shadow
     # functions' array mutations — capture via redirection instead.)
-    setup_render_access >"$TMP/out" 2>"$TMP/err" || true
+    setup_render_access >"$TMP/out" 2>"$TMP/err"
 }
 out() { cat "$TMP/out" 2>/dev/null || true; }
 err() { cat "$TMP/err" 2>/dev/null || true; }
@@ -148,6 +148,18 @@ GETENT_KNOWN=(44)
 run_fn
 check "adopt: no groupadd" "0" "${#GROUPADDS[@]}"
 check "adopt: joined existing group" "grp44" "${USERMODS[0]:-}"
+
+# 11. Explicit RENDER_GID=0 -> refused (never add arm to gid 0), no join.
+reset_state
+RENDER_GID=0 run_fn
+check "explicit gid0: refused" "0" "${#USERMODS[@]}"
+check "explicit gid0: warning" "yes" "$( [[ "$(err)" == *"never adding arm to gid 0"* ]] && echo yes || echo no )"
+
+# 12. All nodes group-root + HW assigned -> accurate 'no usable gid' FAILED line.
+reset_state
+touch "$TMP/renderD128"; STAT_GIDS[renderD128]=0
+ARM_GPU_DEVICE=/dev/dri/renderD128 run_fn
+check "gid0+assigned: no-usable FAILED line" "yes" "$( [[ "$(err)" == *"no usable render gid"* ]] && echo yes || echo no )"
 
 # 10. Unstatable node -> FAILED line, continues (no crash under set -e).
 reset_state
