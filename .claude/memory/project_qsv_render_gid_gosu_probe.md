@@ -1,12 +1,21 @@
 ---
 name: qsv-render-gid gosu-drop probe blocker
-description: Why QSV/VAAPI hardware encode (and the encoder-capability probe) needs RENDER_GID as an ENV var, not docker --group-add — gosu resets supplementary groups
+description: RESOLVED by entrypoint self-derivation (PR #56, verified on hifi 2026-07-20) — the entrypoint now derives the render gid from the mounted /dev/dri node itself; RENDER_GID env is only an optional override. Kept for the gosu-resets-groups mechanism + N97 hardware truth.
 metadata:
   type: project
 ---
 
-**QSV/VAAPI HW encode in the transcode container needs the render GID passed as
-an ENV var (`RENDER_GID`), NOT a docker `--group-add`.** The entrypoint drops to
+**RESOLVED 2026-07-20 (PR #56 `fix/render-gid-self-derive`):** the entrypoint's
+`setup_render_access` now stats every mounted `/dev/dri/renderD*` node and joins
+`arm` to each distinct gid before the gosu drop — device nodes keep their HOST
+gid inside the container, so this is correct on local AND remote offload hosts
+with zero config. Explicit `RENDER_GID` env is a forced override (gid 0 refused
+on both paths); greppable `render access:` log lines state every outcome.
+`ARM_RENDER_GID` is unset on hifi since 2026-07-20 — production runs derivation.
+The history below explains WHY env-var (not --group-add) was ever needed:
+
+**QSV/VAAPI HW encode in the transcode container needs the render GID inside
+/etc/group before the drop, NOT a docker `--group-add`.** The entrypoint drops to
 `arm` via `gosu`, and **gosu RESETS supplementary groups** — so a Docker
 `--group-add <gid>` on the initial (root) process does NOT survive into the `arm`
 process. Verified on hifi: `docker run --group-add 993 … id` → `groups=1000(arm)`

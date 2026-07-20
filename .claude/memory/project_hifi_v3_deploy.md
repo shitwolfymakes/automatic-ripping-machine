@@ -8,7 +8,17 @@ metadata:
 The v3 stack runs on **hifi-server** (host `quark`, `192.168.0.68`, user `upb`,
 key `~/.ssh/hifi`) at `~/src/automatic-ripping-machine-v3`, cloned from
 `origin` (`uprightbass360/arm-v3`, now public). Deployed branch:
-`deploy/hifi-20260705`; checkout at **`33e0470b`** since 2026-07-17:
+`deploy/hifi-20260705`; checkout at **`93e0f062`** since 2026-07-20:
+**render-gid self-derivation deployed** (PR #56 line merged): arm-transcode +
+arm-backend rebuilt; verified explicit + derivation paths in real containers,
+drill reports {"qsv":["h264","h265"]} with zero flags, remote NVENC spawn OK.
+**`ARM_RENDER_GID` is now UNSET in .env by design** — the entrypoint derives
+gid 993 from /dev/dri/renderD128 itself; do not "fix" the empty value.
+Note: /raw holds three ORPHAN job dirs (deleted jobs); Total Recall's raw is
+gone, so re-applying transcode sessions to old jobs fails with HandBrake rc=2
+"open … failed" — data state, not a bug (3 failed tasks from 2026-07-20 are
+this).
+Previous checkout **`33e0470b`** since 2026-07-17:
 **tier-stack absorb deployed** — the manual 0016_1/0016_2 DDL was applied
 first via psql (drives.serial + jobs.drive_serial added, drive_id nullable,
 FK → ON DELETE SET NULL; alembic stays stamped 0028, upgrade head no-ops),
