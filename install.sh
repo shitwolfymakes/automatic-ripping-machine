@@ -215,6 +215,20 @@ url_host() {
     printf '%s' "$url"
 }
 
+# offload_image_ref <envfile> — the transcode image ref the REMOTE daemon
+# must hold, honoring the same precedence compose uses: ARM_TRANSCODE_IMAGE
+# override > .env ARM_IMAGE_PREFIX/ARM_IMAGE_TAG pins > script defaults.
+# (Live-verification catch: the report checked the DEFAULT prefix and
+# spuriously FAILed on deployments pinning a local prefix in .env.)
+offload_image_ref() {
+    local envf="$1" override prefix tag
+    override="$(sed -nE 's/^ARM_TRANSCODE_IMAGE=(.+)$/\1/p' "$envf" 2>/dev/null | head -n1)"
+    if [[ -n "$override" ]]; then printf '%s' "$override"; return 0; fi
+    prefix="$(sed -nE 's/^ARM_IMAGE_PREFIX=(.+)$/\1/p' "$envf" 2>/dev/null | head -n1)"
+    tag="$(sed -nE 's/^ARM_IMAGE_TAG=(.+)$/\1/p' "$envf" 2>/dev/null | head -n1)"
+    printf '%s/arm-transcode:%s' "${prefix:-$ARM_IMAGE_PREFIX_DEFAULT}" "${tag:-$ARM_IMAGE_TAG_DEFAULT}"
+}
+
 # ------------------------------------------------ offload input validation
 # (is_ugid lives above with the PUID/PGID resolution helpers — one definition,
 # the stricter 32-bit-capped form.)
@@ -823,7 +837,7 @@ offload_completion_report() {
     raw_p="$(eget ARM_HOST_RAW_PATH)"; media_p="$(eget ARM_HOST_MEDIA_PATH)"; logs_p="$(eget ARM_HOST_LOGS_PATH)"
     certs_p="$(eget ARM_HOST_CERTS_PATH)"
     gpus_raw="$(eget ARM_GPUS)"
-    image_ref="${OFFLOAD_IMAGE_REF:-${ARM_IMAGE_PREFIX_DEFAULT}/arm-transcode:${ARM_IMAGE_TAG_DEFAULT}}"
+    image_ref="${OFFLOAD_IMAGE_REF:-$(offload_image_ref "$envf")}"
     [[ -n "$endpoint" ]] || return 0
 
     local failed_steps=()
@@ -1051,7 +1065,7 @@ setup_remote_offload() {
     if [[ -z "${ARM_IMAGE_TAG_DEFAULT:-}" && -z "$persisted_tag" ]]; then
         log "  (image tag not resolved yet — checked in the completion table)"
     else
-        local image_ref="${ARM_IMAGE_PREFIX_DEFAULT}/arm-transcode:${ARM_IMAGE_TAG_DEFAULT:-$persisted_tag}"
+        local image_ref; image_ref="$(offload_image_ref "$PREFIX/.env")"
         if [[ "$(verify_image "$image_ref")" == PASS ]]; then
             okline "image present on remote (${image_ref})"
         else
