@@ -184,6 +184,7 @@ ARM_HOST_RAW_PATH=/a
 ARM_HOST_MEDIA_PATH=/b
 ARM_HOST_LOGS_PATH=/c
 ARM_HOST_CERTS_PATH=/home/sam/.arm/certs
+ARM_GPUS=[{"vendor":"nvenc","device_path":"nvidia://0"}]
 EOF
 CAFIX2="$TMPROOT/ca2.crt"; printf 'x\n' > "$CAFIX2"
 remote_script 'exit 255'
@@ -220,5 +221,33 @@ PREFIX="$PERSISTDIR"; CERTS_ONLY=0
 setup_remote_offload </dev/null >/dev/null 2>&1 || true
 check "non-interactive persisted rerun: restored" "1" "$REMOTE_OFFLOAD"
 check "non-interactive persisted rerun: gpus kept" "yes" "$( [[ "$REMOTE_GPUS" == *nvenc* ]] && echo yes || echo no )"
+
+# --- final-review fixes ------------------------------------------------------
+
+# F1: ensure_ca creates a CA when absent, reuses when present (real openssl).
+CADIR="$TMPROOT/caprefix"; mkdir -p "$CADIR/certs"
+PREFIX="$CADIR" ensure_ca >/dev/null 2>&1
+check "ensure_ca: creates" "yes" "$( [[ -s "$CADIR/certs/arm-ca.crt" && -s "$CADIR/certs/arm-ca.key" ]] && echo yes || echo no )"
+before="$(sha256sum "$CADIR/certs/arm-ca.crt")"
+PREFIX="$CADIR" ensure_ca >/dev/null 2>&1
+check "ensure_ca: idempotent" "$before" "$(sha256sum "$CADIR/certs/arm-ca.crt")"
+
+# F2: unresolved-tag ref renders SKIPPED in the report, no verify call.
+remote_script 'echo SHOULD-NOT-RUN; exit 9'
+BACKEND_RUNNING_TEST=(bash -c 'echo false' --)
+out="$(OFFLOAD_ENV_FILE="$ENVFIX" OFFLOAD_CA_FILE="$CAFIX2" OFFLOAD_IMAGE_REF="x/arm-transcode:" OFFLOAD_REOFFER=0 offload_completion_report)"
+check "report: unresolved tag -> SKIPPED row" "yes" "$( [[ "$out" == *"SKIPPED — image tag unresolved"* ]] && echo yes || echo no )"
+
+# F3: GPUs row rendered from env inventory.
+check "report: GPUs row present" "yes" "$( [[ "$out" == *"GPUs"* && "$out" == *"nvenc x1"* ]] && echo yes || echo no )"
+
+# F4: FAIL rows re-offer paste blocks when enabled.
+KEYDIR="$TMPROOT/persist/ssh"; mkdir -p "$KEYDIR"
+printf 'ssh-ed25519 AAAA test@x\n' > "$KEYDIR/id_ed25519.pub"
+remote_script 'exit 255'
+out="$(PREFIX="$TMPROOT/persist" OFFLOAD_ENV_FILE="$ENVFIX" OFFLOAD_CA_FILE="$CAFIX2" OFFLOAD_IMAGE_REF="x/arm-transcode:t" OFFLOAD_REOFFER=1 offload_completion_report)"
+check "report: reoffer key block on ssh FAIL" "yes" "$( [[ "$out" == *"Fix-it blocks"* && "$out" == *"authorized_keys"* ]] && echo yes || echo no )"
+out="$(PREFIX="$TMPROOT/persist" OFFLOAD_ENV_FILE="$ENVFIX" OFFLOAD_CA_FILE="$CAFIX2" OFFLOAD_IMAGE_REF="x/arm-transcode:t" OFFLOAD_REOFFER=0 offload_completion_report)"
+check "report: no reoffer when disabled" "no" "$( [[ "$out" == *"Fix-it blocks"* ]] && echo yes || echo no )"
 
 exit "$fail"
