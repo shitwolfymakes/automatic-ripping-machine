@@ -690,6 +690,73 @@ verify_paths() {  # <p...> — report every missing path
     (( ${#missing[@]} == 0 )) && printf 'PASS' || printf 'FAIL %s' "${missing[*]}"
 }
 
+# offload_persisted: rc 0 iff a prior run already seeded a remote offload host
+# into .env — used both to skip the questionnaire on rerun and to gate the
+# completion report.
+offload_persisted() {
+    [[ -f "$PREFIX/.env" ]] && grep -q '^ARM_TRANSCODE_DOCKER_HOST=.\+' "$PREFIX/.env"
+}
+
+# Seam-able "is the local backend container running?" probe (mirrors REMOTE_RUN).
+if ! declare -p BACKEND_RUNNING_TEST >/dev/null 2>&1; then
+    BACKEND_RUNNING_TEST=(docker inspect -f '{{.State.Running}}' armv3-backend)
+fi
+
+verify_callback() {  # <url> — PASS / FAIL / PENDING
+    local running
+    running="$("${BACKEND_RUNNING_TEST[@]}" 2>/dev/null || true)"
+    [[ "$running" != "true" ]] && { printf 'PENDING'; return 0; }
+    "${REMOTE_RUN[@]}" curl -ksf -o /dev/null --max-time 10 "$1/api/health" >/dev/null 2>&1 \
+        && printf 'PASS' || printf 'FAIL'
+}
+
+# _report_row <label> <status> — pad label with dots to column 28, print status.
+_report_row() {
+    local label="$1" status="$2" dots=""
+    local n=$(( 28 - ${#label} ))
+    (( n < 1 )) && n=1
+    dots="$(printf '.%.0s' $(seq 1 "$n"))"
+    printf '    %s %s %s\n' "$label" "$dots" "$status"
+}
+
+# offload_completion_report — read config (env-file/CA/image overridable for
+# tests via OFFLOAD_ENV_FILE/OFFLOAD_CA_FILE/OFFLOAD_IMAGE_REF), run the
+# read-only battery, print the table. Informational: never exits non-zero.
+offload_completion_report() {
+    local envf="${OFFLOAD_ENV_FILE:-$PREFIX/.env}"
+    local caf="${OFFLOAD_CA_FILE:-$PREFIX/certs/arm-ca.crt}"
+    eget() { sed -nE "s/^$1=(.+)\$/\\1/p" "$envf" | head -n1; }
+    local endpoint url raw_p media_p logs_p certs_p image_ref
+    endpoint="$(eget ARM_TRANSCODE_DOCKER_HOST)"; url="$(eget ARM_TRANSCODE_BACKEND_URL)"
+    raw_p="$(eget ARM_HOST_RAW_PATH)"; media_p="$(eget ARM_HOST_MEDIA_PATH)"; logs_p="$(eget ARM_HOST_LOGS_PATH)"
+    certs_p="$(eget ARM_HOST_CERTS_PATH)"
+    image_ref="${OFFLOAD_IMAGE_REF:-${ARM_IMAGE_PREFIX_DEFAULT}/arm-transcode:${ARM_IMAGE_TAG_DEFAULT}}"
+    [[ -n "$endpoint" ]] || return 0
+
+    printf '\n  Remote offload verification (%s):\n' "$endpoint"
+    local v
+    v="$(verify_docker_access)"
+    case "$v" in PASS*) _report_row "ssh + docker access" "PASS" ;;
+                 FAIL_DOCKER) _report_row "ssh + docker access" "FAIL — remote user not in docker group" ;;
+                 *) _report_row "ssh + docker access" "FAIL — ssh/key" ;; esac
+    case "$(verify_ca "$caf" "$certs_p")" in
+        PASS) _report_row "CA fingerprint" "PASS" ;;
+        FAIL_MISMATCH) _report_row "CA fingerprint" "FAIL — stale CA at ${certs_p}" ;;
+        *) _report_row "CA fingerprint" "FAIL — absent at ${certs_p}" ;; esac
+    case "$(verify_image "$image_ref")" in
+        PASS) _report_row "transcode image" "PASS  (${image_ref})" ;;
+        *) _report_row "transcode image" "FAIL — not on remote daemon" ;; esac
+    v="$(verify_paths "$raw_p" "$media_p" "$logs_p")"
+    case "$v" in PASS) _report_row "data paths" "PASS  (raw, media, logs)" ;;
+                 *) _report_row "data paths" "FAIL — missing: ${v#FAIL }" ;; esac
+    case "$(verify_callback "$url")" in
+        PASS) _report_row "backend callback URL" "PASS  (reachable from the remote)" ;;
+        FAIL) _report_row "backend callback URL" "FAIL — backend is up but ${url} is unreachable from the remote (published port? firewall?)" ;;
+        *)    printf '    %-27s %s\n' "backend callback URL ......" "PENDING — stack not running; after"
+              # shellcheck disable=SC2016 # backticks are literal text here, not command substitution
+              printf '    %-27s %s\n' "" '`docker compose up -d`, re-run `bash install.sh`' ;; esac
+}
+
 # Interactive: offer remote transcode offload. On yes, provision a dedicated
 # ssh key, print the authorize line, detect the REMOTE GPU inventory, and set
 # the REMOTE_* globals the rest of install.sh consumes. On no/non-interactive,
@@ -702,6 +769,24 @@ setup_remote_offload() {
     [[ $CERTS_ONLY -eq 1 ]] && return 0
     # Non-interactive (no tty) => never prompt; stay local.
     [[ -t 0 ]] || return 0
+
+    # Rerun with offload already persisted in .env: skip the questionnaire
+    # entirely and re-derive the REMOTE_* globals from .env — verification
+    # runs at completion instead of re-walking the interactive setup.
+    if offload_persisted; then
+        REMOTE_OFFLOAD=1
+        REMOTE_DOCKER_HOST="$(sed -nE 's/^ARM_TRANSCODE_DOCKER_HOST=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+        REMOTE_BACKEND_URL="$(sed -nE 's/^ARM_TRANSCODE_BACKEND_URL=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+        REMOTE_TRANSCODE_PUID="$(sed -nE 's/^ARM_TRANSCODE_PUID=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+        REMOTE_TRANSCODE_PGID="$(sed -nE 's/^ARM_TRANSCODE_PGID=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+        REMOTE_BACKEND_SAN="$(url_host "$REMOTE_BACKEND_URL")"
+        offload_remote_run_init "$REMOTE_DOCKER_HOST" "$PREFIX/ssh/id_ed25519" "$PREFIX/ssh/known_hosts"
+        REMOTE_GPUS="$(sed -nE 's/^ARM_GPUS=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+        REMOTE_RENDER_GID="$(sed -nE 's/^ARM_RENDER_GID=(.*)$/\1/p' "$PREFIX/.env" | head -n1)"
+        log "offload already configured (${REMOTE_DOCKER_HOST}); skipping questionnaire — verification runs at completion"
+        return 0
+    fi
+
     confirm "Enable remote transcode offload (spawn transcodes on a GPU host over ssh)?" || return 0
     REMOTE_OFFLOAD=1
 
@@ -1307,29 +1392,17 @@ ensure_udev_rule() {
 print_next_steps() {
     cat <<EOF
 
-install complete
-
-Prefix:   $PREFIX
-Drives:   ${#DRIVES_SR[@]} ripper service(s) configured
-Image:    $ARM_IMAGE_PREFIX_DEFAULT/arm-<svc>:$ARM_IMAGE_TAG_DEFAULT
-          (latest stable from $ARM_RELEASE_REPO; bump ARM_IMAGE_TAG in .env to change)
-
 Next:
   cd $PREFIX
-  docker compose pull
   docker compose up -d
 
-First-boot admin credentials (you'll be forced to change the password):
-  docker exec armv3-backend cat /logs/first-boot.log
+  (re-run \`bash install.sh\` after \`docker compose up -d\` if any row above
+   read PENDING, to confirm offload end-to-end)
 
 Then open: https://localhost:8081
-  (Import $PREFIX/certs/arm-ca.crt into your browser/OS trust store
-   to silence the cert warning across every device on the LAN.)
-
-GPU host? GPUs are auto-detected into ARM_GPUS in $PREFIX/.env and the
-backend wires them to the transcoder automatically. Re-run install.sh after
-adding/removing a GPU or updating drivers. (NVIDIA hosts: install.sh offered
-to set up nvidia-container-toolkit above.)
+First-boot admin credentials (you'll be forced to change the password):
+  docker exec armv3-backend cat /logs/first-boot.log
+  (import $PREFIX/certs/arm-ca.crt into your browser/OS trust store to silence the cert warning)
 
 EOF
 }
@@ -1342,12 +1415,14 @@ EOF
 # ----------------------------------------------------------------- main
 
 main() {
+    section 1 6 "Prerequisites"
     check_prereqs
     ensure_prefix
 
     local REMOTE_OFFLOAD=0 REMOTE_DOCKER_HOST="" REMOTE_BACKEND_URL="" \
           REMOTE_TRANSCODE_PUID="" REMOTE_TRANSCODE_PGID="" REMOTE_BACKEND_SAN="" \
           REMOTE_GPUS="" REMOTE_RENDER_GID=""
+    section 2 6 "Remote transcode offload"
     setup_remote_offload
 
     if [[ $ROTATE_CA -eq 1 ]]; then
@@ -1358,6 +1433,7 @@ main() {
         rm -f "$PREFIX/certs/arm-ca.key" "$PREFIX/certs/arm-ca.crt"
     fi
 
+    section 3 6 "Certificates"
     make_ca
     # Backend leaf needs the remote-routable SAN when offloading, so the remote
     # transcoder can TLS-verify its callback. If this run didn't re-prompt (non-
@@ -1378,6 +1454,7 @@ main() {
     make_leaf arm-db
     make_leaf arm-ui localhost "$(hostname -f 2>/dev/null || hostname || echo localhost)"
 
+    section 4 6 "Optical drives"
     detect_drives
     local n
     for n in "${DRIVES_SR[@]:-}"; do
@@ -1397,10 +1474,18 @@ main() {
     fi
 
     ensure_nvidia_container_toolkit
+    section 5 6 "Configuration"
     [[ $NO_ENV -eq 0 ]]     && seed_env
     [[ $NO_COMPOSE -eq 0 ]] && generate_compose
     [[ $NO_UDEV -eq 0 ]]    && ensure_udev_rule
 
+    section 6 6 "Verification & next steps"
+    if offload_persisted; then
+        [[ -z "${REMOTE_RUN+x}" ]] && offload_remote_run_init \
+            "$(sed -nE 's/^ARM_TRANSCODE_DOCKER_HOST=(.+)$/\1/p' "$PREFIX/.env" | head -n1)" \
+            "$PREFIX/ssh/id_ed25519" "$PREFIX/ssh/known_hosts"
+        offload_completion_report
+    fi
     print_next_steps
 
     if [[ $START -eq 1 ]]; then

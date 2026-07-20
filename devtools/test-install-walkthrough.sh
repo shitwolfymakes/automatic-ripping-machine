@@ -165,4 +165,32 @@ check "verify_paths: all missing" "FAIL /a /b /c" "$(verify_paths /a /b /c)"
 remote_script 'exit 0'
 check "verify_paths: pass" "PASS" "$(verify_paths /a /b /c)"
 
+# --- completion phase --------------------------------------------------------
+
+remote_script 'echo 27.4'
+BACKEND_RUNNING_TEST=(bash -c 'echo false' --)
+check "verify_callback: pending when backend down" "PENDING" "$(verify_callback https://h:8080)"
+BACKEND_RUNNING_TEST=(bash -c 'echo true' --)
+remote_script 'exit 0'
+check "verify_callback: pass" "PASS" "$(verify_callback https://h:8080)"
+remote_script 'exit 7'
+check "verify_callback: fail when up but unreachable" "FAIL" "$(verify_callback https://h:8080)"
+
+# table rendering: drive every row through scripted outcomes.
+ENVFIX="$TMPROOT/env"; cat > "$ENVFIX" <<'EOF'
+ARM_TRANSCODE_DOCKER_HOST=ssh://sam@192.168.0.92
+ARM_TRANSCODE_BACKEND_URL=https://192.168.0.68:8080
+ARM_HOST_RAW_PATH=/a
+ARM_HOST_MEDIA_PATH=/b
+ARM_HOST_LOGS_PATH=/c
+ARM_HOST_CERTS_PATH=/home/sam/.arm/certs
+EOF
+CAFIX2="$TMPROOT/ca2.crt"; printf 'x\n' > "$CAFIX2"
+remote_script 'exit 255'
+BACKEND_RUNNING_TEST=(bash -c 'echo false' --)
+out="$(OFFLOAD_ENV_FILE="$ENVFIX" OFFLOAD_CA_FILE="$CAFIX2" OFFLOAD_IMAGE_REF=x/t:1 offload_completion_report)"
+check "table: header names endpoint" "yes" "$( [[ "$out" == *"Remote offload verification (ssh://sam@192.168.0.92)"* ]] && echo yes || echo no )"
+check "table: ssh row FAIL" "yes" "$( [[ "$out" == *"ssh + docker access"*FAIL* ]] && echo yes || echo no )"
+check "table: callback PENDING wording" "yes" "$( [[ "$out" == *"PENDING — stack not running"* && "$out" == *"re-run \`bash install.sh\`"* ]] && echo yes || echo no )"
+
 exit "$fail"
