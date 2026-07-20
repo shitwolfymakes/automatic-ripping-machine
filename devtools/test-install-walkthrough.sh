@@ -268,4 +268,14 @@ BACKEND_RUNNING_TEST=(bash -c 'echo false' --)
 out="$(OFFLOAD_ENV_FILE="$REFENV" OFFLOAD_CA_FILE="$CAFIX2" OFFLOAD_REOFFER=0 offload_completion_report)"
 check "report: image row honors .env pin" "yes" "$( [[ "$out" == *"armv3-local/arm-transcode:hifi"* ]] && echo yes || echo no )"
 
+
+# --- leaf key permissions (live-verification catch #2) -----------------------
+# Reruns regenerate leaves; a 400 owner-only key crash-loops PUID!=runner
+# stacks on their next restart. make_leaf must emit 440 group-readable.
+LEAFDIR="$TMPROOT/leafprefix"; mkdir -p "$LEAFDIR/certs"
+PREFIX="$LEAFDIR" ensure_ca >/dev/null 2>&1
+PREFIX="$LEAFDIR" ARM_PGID="$(id -g)" make_leaf test-leaf >/dev/null 2>&1
+check "leaf key exists" "yes" "$( [[ -s "$LEAFDIR/certs/test-leaf.key" ]] && echo yes || echo no )"
+check "leaf key mode 440" "440" "$(stat -c '%a' "$LEAFDIR/certs/test-leaf.key")"
+
 exit "$fail"

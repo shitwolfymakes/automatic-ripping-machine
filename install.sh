@@ -370,7 +370,14 @@ make_leaf() {
     rm -f "$key" "$crt"
 
     run_quiet openssl ecparam -name prime256v1 -genkey -noout -out "$key"
-    chmod 400 "$key"
+    # 440 + resolved PGID, not 400: the PUID-dropped services read their key
+    # as a NON-owner when PUID differs from the installer's uid (e.g. an NFS
+    # deployment pinning PUID=1001 while the operator is uid 1000). 400-owner
+    # keys crash-loop every such stack on the restart after any rerun (leaves
+    # regenerate every run). chgrp is best-effort — the operator may not be in the
+    # target group; the completion of a root escape-hatch run chowns anyway.
+    chmod 440 "$key"
+    chgrp "${ARM_PGID:-$(id -g)}" "$key" 2>/dev/null || true
 
     run_quiet openssl req -new -key "$key" -subj "/CN=${name}" -out "$csr"
 
