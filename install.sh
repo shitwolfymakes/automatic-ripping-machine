@@ -1101,7 +1101,7 @@ ensure_udev_rule() {
 print_next_steps() {
     cat <<EOF
 
-==> install complete
+install complete
 
 Prefix:   $PREFIX
 Drives:   ${#DRIVES_SR[@]} ripper service(s) configured
