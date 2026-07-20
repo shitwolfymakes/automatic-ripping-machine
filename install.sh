@@ -90,9 +90,40 @@ done
 
 # ------------------------------------------------------------------- helpers
 
-log()  { printf '==> %s\n' "$*"; }
-warn() { printf 'WARN: %s\n' "$*" >&2; }
-err()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+# Output vocabulary (spec 2026-07-20 §6): plain indented detail lines;
+# symbols carry meaning, not decoration. No colors.
+log()      { printf '  %s\n' "$*"; }
+okline()   { printf '  ✓ %s\n' "$*"; }
+failline() { printf '  ✗ %s\n' "$*"; }
+warnline() { printf '  ! %s\n' "$*"; }
+warn()     { printf 'WARN: %s\n' "$*" >&2; }
+err()      { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+
+_RULE="────────────────────────────────────────────────────────────────────────"
+# section <n> <total> <title> — blank line + ruled phase header.
+section() {
+    local n="$1" total="$2" title="$3" head
+    head="── [${n}/${total}] ${title} "
+    printf '\n%s%s\n' "$head" "${_RULE:0:$(( ${#_RULE} - ${#head} > 0 ? ${#_RULE} - ${#head} : 4 ))}"
+}
+# fence_open <label> / fence_close — visually bracket operator paste blocks.
+fence_open() {
+    local label="$1" head
+    head="──── ${label} "
+    printf '\n%s%s\n' "$head" "${_RULE:0:$(( ${#_RULE} - ${#head} > 0 ? ${#_RULE} - ${#head} : 4 ))}"
+}
+fence_close() { printf '%s\n\n' "$_RULE"; }
+
+# run_quiet <cmd...> — capture stdout+stderr; stay silent on success, replay
+# everything on failure (suppression must never hide an error), pass rc through.
+run_quiet() {
+    local out rc=0
+    out="$("$@" 2>&1)" || rc=$?
+    if (( rc != 0 )); then
+        printf '%s\n' "$out"
+    fi
+    return "$rc"
+}
 
 require() {
     local bin="$1" hint="$2"
@@ -240,9 +271,9 @@ make_ca() {
     fi
 
     log "generating CA (EC P-384, 10y)"
-    openssl ecparam -name secp384r1 -genkey -noout -out "$ca_key"
+    run_quiet openssl ecparam -name secp384r1 -genkey -noout -out "$ca_key"
     chmod 400 "$ca_key"
-    openssl req -x509 -new -nodes -key "$ca_key" -sha384 -days 3650 \
+    run_quiet openssl req -x509 -new -nodes -key "$ca_key" -sha384 -days 3650 \
         -subj "/CN=ARM v3 Local CA" \
         -addext "basicConstraints=critical,CA:TRUE" \
         -addext "keyUsage=critical,keyCertSign,cRLSign" \
@@ -259,18 +290,30 @@ make_leaf() {
     local crt="$PREFIX/certs/${name}.crt"
     local ext="$PREFIX/certs/${name}.ext"
 
-    log "issuing leaf: $name${extra_sans[*]:+ (extra SANs: ${extra_sans[*]})}"
+    local sans=""
+    local s
+    for s in "${extra_sans[@]:-}"; do
+        [[ -z "$s" ]] && continue
+        [[ -n "$sans" ]] && sans+=", "
+        # IPv4 literal → IP: SAN (a remote transcoder may connect by IP);
+        # anything else is a hostname → DNS:. IPv6 is out of scope.
+        if [[ "$s" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+            sans+="IP:${s}"
+        else
+            sans+="DNS:${s}"
+        fi
+    done
+    log "issued leaf: ${name}${sans:+  (SANs: ${sans})}"
 
     # Clear any prior 0400/0444 leaf so openssl can overwrite.
     rm -f "$key" "$crt"
 
-    openssl ecparam -name prime256v1 -genkey -noout -out "$key"
+    run_quiet openssl ecparam -name prime256v1 -genkey -noout -out "$key"
     chmod 400 "$key"
 
-    openssl req -new -key "$key" -subj "/CN=${name}" -out "$csr"
+    run_quiet openssl req -new -key "$key" -subj "/CN=${name}" -out "$csr"
 
     local san="DNS:${name}"
-    local s
     for s in "${extra_sans[@]:-}"; do
         [[ -z "$s" ]] && continue
         # IPv4 literal → IP: SAN (a remote transcoder may connect by IP);
@@ -287,7 +330,7 @@ subjectAltName = ${san}
 extendedKeyUsage = serverAuth, clientAuth
 EOF
 
-    openssl x509 -req -in "$csr" -CA "$PREFIX/certs/arm-ca.crt" \
+    run_quiet openssl x509 -req -in "$csr" -CA "$PREFIX/certs/arm-ca.crt" \
         -CAkey "$PREFIX/certs/arm-ca.key" -CAcreateserial \
         -out "$crt" -days 3650 -sha384 -extfile "$ext"
     chmod 444 "$crt"
@@ -1084,6 +1127,11 @@ to set up nvidia-container-toolkit above.)
 
 EOF
 }
+
+# Test seam: lets devtools/test-install-walkthrough.sh source the functions
+# above without executing the install. Sourced-ness check makes a leaked env
+# var harmless when executed (mirrors the entrypoint seam from PR #56).
+[[ -n "${ARM_INSTALL_SOURCE_ONLY:-}" && "${BASH_SOURCE[0]}" != "$0" ]] && return 0
 
 # ----------------------------------------------------------------- main
 
