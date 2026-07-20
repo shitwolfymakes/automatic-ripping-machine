@@ -90,7 +90,12 @@ Reached via reverse proxy at **`https://arm.murphbutt.xyz`** → `192.168.0.68:8
 (self-signed inside; proxy terminates public TLS). Admin login `admin` /
 **password was changed to `adminadmin`** on first login.
 
-## Compose
+## Compose — HISTORICAL (pre-2026-07-20 old deployment only)
+
+**Current stack (`~/arm`) uses `docker compose` with the auto-merged
+`docker-compose.override.yml` — no `-f` flags needed.** The recipe below
+applies only to the STOPPED rollback deployment at
+`~/src/automatic-ripping-machine-v3`:
 
 **Use ALL THREE overlays — omitting the ssh one silently breaks remote offload:**
 ```
