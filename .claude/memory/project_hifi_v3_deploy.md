@@ -8,7 +8,24 @@ metadata:
 The v3 stack runs on **hifi-server** (host `quark`, `192.168.0.68`, user `upb`,
 key `~/.ssh/hifi`) at `~/src/automatic-ripping-machine-v3`, cloned from
 `origin` (`uprightbass360/arm-v3`, now public). Deployed branch:
-`deploy/hifi-20260705`; checkout at **`93e0f062`** since 2026-07-20:
+`deploy/hifi-20260705`; checkout at **`62eb6733`** since 2026-07-20 (evening):
+**installer-managed prefix migration + walkthrough hardening.** The stack now
+runs from `~/arm` (installer-generated compose + one `docker-compose.override.yml`
+for NFS repoints/ui-neu:8888/nfs-check gate — the three-overlay incantation is
+retired; offload ssh mount + callback port publish are installer-native).
+Image pins: `armv3-local/arm-<svc>:hifi` (local builds tagged; rebuild in the
+repo checkout then re-tag + `docker save|ssh|docker load` arm-transcode to the
+remote). `.env` pins ARM_IMAGE_PREFIX/ARM_IMAGE_TAG so reruns skip the GitHub
+release lookup. Old deployment at `~/src/automatic-ripping-machine-v3` is the
+STOPPED rollback path. Walkthrough verified live: persisted reruns
+(`PUID=1001 PGID=1000 bash install.sh --no-udev`, non-interactive OK) print
+the six-phase output + all-PASS offload table (callback tested FROM the
+remote). Remote transcoder facts: CA mirrored at `/home/sam/.arm/certs`
+(ARM_HOST_CERTS_PATH — remote-user-writable, no sudo), image
+`armv3-local/arm-transcode:hifi` loaded there 2026-07-20.
+**Cert-key 440 gotcha is DEAD** — make_leaf now emits 440 group-owned keys
+(fix ec459efc); no manual chmod after reruns anymore.
+Previous checkout **`93e0f062`** since 2026-07-20 (morning):
 **render-gid self-derivation deployed** (PR #56 line merged): arm-transcode +
 arm-backend rebuilt; verified explicit + derivation paths in real containers,
 drill reports {"qsv":["h264","h265"]} with zero flags, remote NVENC spawn OK.
@@ -107,11 +124,9 @@ docker compose \
    mode `drwxrws---` (no "other"). So the containers MUST run as 1001:1000 to
    write. `chown 1001 -R` was run on the Import dirs to settle it. (This matches
    neu's `ARM_UID=1001/ARM_GID=1000`.)
-2. **Cert keys chmod 440.** `install.sh --certs-only` writes leaf keys
-   `r--------` owned uid 1000, but the backend/ripper run as 1001 → can't read
-   their TLS key → crash-loop on `load_cert_chain`. Fix: `chmod 440
-   arm-backend.key arm-ripper-sr0.key` (group-readable; gid 1000 matches). Re-run
-   after any cert regen.
+2. **Cert keys chmod 440 — RESOLVED 2026-07-20 (ec459efc):** make_leaf now
+   emits leaf keys 440 group-owned (chgrp to resolved PGID) natively; the
+   manual chmod-after-regen ritual is no longer needed.
 3. **Ripper service is hand-spliced** into `docker-compose.yml` (lsscsi was
    missing at first; the drive is a Pioneer BD-RW at `/dev/sr0`↔`/dev/sg0`,
    `cdrom` gid **24** not 44). Its `/raw`+`/logs` point at NFS like the backend.
