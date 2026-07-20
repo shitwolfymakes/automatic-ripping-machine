@@ -96,6 +96,8 @@ jobs:
       # *_SOURCE_ONLY seams — no docker, no root, <1s each. Un-run tests rot.
       - name: Entrypoint writability-guard suite
         run: bash services/_common/test-entrypoint-guard.sh
+      - name: Entrypoint render-access suite
+        run: bash services/_common/test-entrypoint-render.sh
       - name: Installer PUID/PGID suite
         run: bash devtools/test-install-env.sh
 
