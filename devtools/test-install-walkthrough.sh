@@ -250,4 +250,22 @@ check "report: reoffer key block on ssh FAIL" "yes" "$( [[ "$out" == *"Fix-it bl
 out="$(PREFIX="$TMPROOT/persist" OFFLOAD_ENV_FILE="$ENVFIX" OFFLOAD_CA_FILE="$CAFIX2" OFFLOAD_IMAGE_REF="x/arm-transcode:t" OFFLOAD_REOFFER=0 offload_completion_report)"
 check "report: no reoffer when disabled" "no" "$( [[ "$out" == *"Fix-it blocks"* ]] && echo yes || echo no )"
 
+
+# --- offload_image_ref precedence (live-verification catch) ------------------
+
+REFENV="$TMPROOT/refenv"
+printf 'ARM_IMAGE_PREFIX=armv3-local\nARM_IMAGE_TAG=hifi\n' > "$REFENV"
+check "image ref: .env prefix+tag pins win" "armv3-local/arm-transcode:hifi" "$(offload_image_ref "$REFENV")"
+printf 'ARM_TRANSCODE_IMAGE=ghcr.io/x/custom:v9\nARM_IMAGE_PREFIX=armv3-local\nARM_IMAGE_TAG=hifi\n' > "$REFENV"
+check "image ref: ARM_TRANSCODE_IMAGE override wins" "ghcr.io/x/custom:v9" "$(offload_image_ref "$REFENV")"
+printf '\n' > "$REFENV"
+check "image ref: defaults fallback" "${ARM_IMAGE_PREFIX_DEFAULT}/arm-transcode:${ARM_IMAGE_TAG_DEFAULT}" "$(offload_image_ref "$REFENV")"
+
+# report uses the env-pinned ref (not the default prefix)
+printf 'ARM_TRANSCODE_DOCKER_HOST=ssh://sam@h\nARM_TRANSCODE_BACKEND_URL=https://b:8080\nARM_HOST_RAW_PATH=/a\nARM_HOST_MEDIA_PATH=/b\nARM_HOST_LOGS_PATH=/c\nARM_HOST_CERTS_PATH=/x\nARM_GPUS=[{"vendor":"nvenc"}]\nARM_IMAGE_PREFIX=armv3-local\nARM_IMAGE_TAG=hifi\n' > "$REFENV"
+remote_script 'exit 0'
+BACKEND_RUNNING_TEST=(bash -c 'echo false' --)
+out="$(OFFLOAD_ENV_FILE="$REFENV" OFFLOAD_CA_FILE="$CAFIX2" OFFLOAD_REOFFER=0 offload_completion_report)"
+check "report: image row honors .env pin" "yes" "$( [[ "$out" == *"armv3-local/arm-transcode:hifi"* ]] && echo yes || echo no )"
+
 exit "$fail"
