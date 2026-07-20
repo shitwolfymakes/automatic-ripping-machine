@@ -182,6 +182,10 @@ valid_https_url() {
 }
 url_port() { local s="${1#https://}"; [[ "$s" == *:* ]] && printf '%s' "${s##*:}"; true; }
 
+# offload helpers
+offload_backend_port() { local p; p="$(url_port "$1")"; printf '%s' "${p:-443}"; }
+offload_certs_path()   { printf '/home/%s/.arm/certs' "$(endpoint_user "$1")"; }
+
 # prompt_valid <prompt> <validator> <shape-hint> — loop until valid; echo value.
 prompt_valid() {
     local prompt="$1" validator="$2" hint="$3" value
@@ -753,7 +757,8 @@ seed_env() {
                 "ARM_TRANSCODE_BACKEND_URL=${REMOTE_BACKEND_URL}" \
                 "ARM_TRANSCODE_PUID=${REMOTE_TRANSCODE_PUID}" \
                 "ARM_TRANSCODE_PGID=${REMOTE_TRANSCODE_PGID}" \
-                "ARM_TRANSCODE_SSH_DIR=./ssh"
+                "ARM_TRANSCODE_SSH_DIR=./ssh" \
+                "ARM_HOST_CERTS_PATH=$(offload_certs_path "$REMOTE_DOCKER_HOST")"
             do
                 key="${kv%%=*}"
                 value="${kv#*=}"
@@ -933,6 +938,33 @@ emit_ripper_block() {
 EOF
 }
 
+# inject_offload_compose <compose-file> <backend-url> — add the ssh mount and
+# publish the callback port on arm-backend. Idempotent (guards on markers).
+inject_offload_compose() {
+    local out="$1" backend_url="$2" port tmp
+    port="$(offload_backend_port "$backend_url")"
+    tmp="$out.tmp"
+    if ! grep -q '/home/arm/.ssh:ro' "$out"; then
+        awk '
+            { print }
+            $0 == "      - /var/run/docker.sock:/var/run/docker.sock" {
+                print "      - ${ARM_TRANSCODE_SSH_DIR:-./ssh}:/home/arm/.ssh:ro"
+            }
+        ' "$out" > "$tmp" && mv "$tmp" "$out"
+    fi
+    if ! grep -q "\"${port}:8443\"" "$out"; then
+        # The remote transcoder calls back on this URL; without the publish the
+        # prompt-seeded ARM_TRANSCODE_BACKEND_URL points at a closed port.
+        awk -v port="$port" '
+            { print }
+            /^  arm-backend:$/ {
+                print "    ports:"
+                print "      - \"" port ":8443\""
+            }
+        ' "$out" > "$tmp" && mv "$tmp" "$out"
+    fi
+}
+
 generate_compose() {
     local out="$PREFIX/docker-compose.yml"
     log "generating $out"
@@ -1042,17 +1074,9 @@ EOF
         offload_active=1
     fi
     if [[ $offload_active -eq 1 ]]; then
-        # Insert the ssh mount right after the backend's docker.sock volume line.
-        # The socket mount appears exactly ONCE in the file (only arm-backend
-        # mounts it), so a plain awk one-pass insert is unambiguous — no need for
-        # first-match sed addressing.
-        local tmp="$out.tmp"
-        awk '
-            { print }
-            $0 == "      - /var/run/docker.sock:/var/run/docker.sock" {
-                print "      - ${ARM_TRANSCODE_SSH_DIR:-./ssh}:/home/arm/.ssh:ro"
-            }
-        ' "$out" > "$tmp" && mv "$tmp" "$out"
+        local cb_url
+        cb_url="${REMOTE_BACKEND_URL:-$(sed -nE 's/^ARM_TRANSCODE_BACKEND_URL=(.+)$/\1/p' "$PREFIX/.env" 2>/dev/null | head -n1)}"
+        inject_offload_compose "$out" "${cb_url:-https://localhost:8443}"
     fi
 
     # One ripper service block per detected drive.

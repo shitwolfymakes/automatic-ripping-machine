@@ -93,4 +93,28 @@ check "url_port empty (443 implied)" "" "$(url_port "https://arm.example.com")"
 out="$(printf 'garbage\nssh://sam@h\n' | prompt_valid "  Remote docker endpoint" valid_ssh_endpoint "ssh://user@host[:port]" 2>&1)"
 check "prompt_valid: re-prompts then accepts" "yes" "$( [[ "$out" == *"expected shape: ssh://user@host[:port]"* && "$out" == *"ssh://sam@h" ]] && echo yes || echo no )"
 
+# --- structural: callback port + certs path ----------------------------------
+
+# offload_backend_port: derives the publish port from the callback URL.
+check "publish port from URL" "8080" "$(offload_backend_port "https://192.168.0.68:8080")"
+check "publish port default 443" "443" "$(offload_backend_port "https://arm.example.com")"
+
+# compose injection: run the awk-injection helper against a fixture compose.
+FIX="$TMPROOT/compose-fixture.yml"
+cat > "$FIX" <<'EOF'
+  arm-backend:
+    image: x/arm-backend:t
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+EOF
+inject_offload_compose "$FIX" "https://192.168.0.68:8080"
+check "ssh mount injected" "1" "$(grep -c '/home/arm/.ssh:ro' "$FIX")"
+check "port published" "1" "$(grep -c '"8080:8443"' "$FIX")"
+# idempotent: second run must not duplicate
+inject_offload_compose "$FIX" "https://192.168.0.68:8080"
+check "injection idempotent" "1" "$(grep -c '"8080:8443"' "$FIX")"
+
+# certs path: offload on -> remote-user-writable path
+check "certs path (offload)" "/home/sam/.arm/certs" "$(offload_certs_path "ssh://sam@192.168.0.92")"
+
 exit "$fail"
