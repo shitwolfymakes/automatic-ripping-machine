@@ -149,19 +149,19 @@ run_fn
 check "adopt: no groupadd" "0" "${#GROUPADDS[@]}"
 check "adopt: joined existing group" "grp44" "${USERMODS[0]:-}"
 
-# 11. Explicit RENDER_GID=0 -> refused (never add arm to gid 0), no join.
+# 10. Explicit RENDER_GID=0 -> refused (never add arm to gid 0), no join.
 reset_state
 RENDER_GID=0 run_fn
 check "explicit gid0: refused" "0" "${#USERMODS[@]}"
 check "explicit gid0: warning" "yes" "$( [[ "$(err)" == *"never adding arm to gid 0"* ]] && echo yes || echo no )"
 
-# 12. All nodes group-root + HW assigned -> accurate 'no usable gid' FAILED line.
+# 11. All nodes group-root + HW assigned -> accurate 'no usable gid' FAILED line.
 reset_state
 touch "$TMP/renderD128"; STAT_GIDS[renderD128]=0
 ARM_GPU_DEVICE=/dev/dri/renderD128 run_fn
 check "gid0+assigned: no-usable FAILED line" "yes" "$( [[ "$(err)" == *"no usable render gid"* ]] && echo yes || echo no )"
 
-# 10. Unstatable node -> FAILED line, continues (no crash under set -e).
+# 12. Unstatable node -> FAILED line, continues (no crash under set -e).
 reset_state
 touch "$TMP/renderD128"   # no STAT_GIDS entry -> shadow stat returns 1
 run_fn
