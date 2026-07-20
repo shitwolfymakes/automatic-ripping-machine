@@ -120,8 +120,9 @@ docker compose \
    `_origin_allowed`) closes the browser connection with 403 if the
    reverse-proxy origin isn't allowlisted — this is what broke the live WS at
    first. Env change needs `up -d --force-recreate arm-backend`.
-5. **GPU = Intel Alder Lake-N QSV.** `ARM_GPUS=[{"vendor":"qsv","device_path":"/dev/dri/renderD128","encoder_kinds":["h264","h265"]}]`,
-   `ARM_RENDER_GID=993`.
+5. **GPU = Intel Alder Lake-N QSV.** `ARM_GPUS=[{"vendor":"qsv","device_path":"/dev/dri/renderD128","encoder_kinds":["h264","h265"]}]`.
+   `ARM_RENDER_GID` is deliberately EMPTY since 2026-07-20 — the entrypoint
+   derives gid 993 from the render node (see qsv-render-gid memory).
 
 ## Deploy / redeploy
 
