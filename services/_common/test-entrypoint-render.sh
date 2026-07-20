@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2317,SC2329
+# (The shadow functions below are invoked INDIRECTLY by the sourced
+# entrypoint, which newer shellcheck flags as unreachable/uninvoked —
+# the exact "ignore if invoked indirectly" case the warning describes.)
 # Plain-bash unit test for the entrypoint's render-node access setup.
 # No bats — the repo gates shell with shellcheck only. Runs with no Docker,
 # no root: it sources docker-entrypoint.sh (via ARM_ENTRYPOINT_SOURCE_ONLY)
