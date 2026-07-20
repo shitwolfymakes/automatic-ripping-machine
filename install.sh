@@ -95,9 +95,40 @@ done
 
 # ------------------------------------------------------------------- helpers
 
-log()  { printf '==> %s\n' "$*"; }
-warn() { printf 'WARN: %s\n' "$*" >&2; }
-err()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+# Output vocabulary (spec 2026-07-20 §6): plain indented detail lines;
+# symbols carry meaning, not decoration. No colors.
+log()      { printf '  %s\n' "$*"; }
+okline()   { printf '  ✓ %s\n' "$*"; }
+failline() { printf '  ✗ %s\n' "$*"; }
+warnline() { printf '  ! %s\n' "$*"; }
+warn()     { printf 'WARN: %s\n' "$*" >&2; }
+err()      { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+
+_RULE="────────────────────────────────────────────────────────────────────────"
+# section <n> <total> <title> — blank line + ruled phase header.
+section() {
+    local n="$1" total="$2" title="$3" head
+    head="── [${n}/${total}] ${title} "
+    printf '\n%s%s\n' "$head" "${_RULE:0:$(( ${#_RULE} - ${#head} > 0 ? ${#_RULE} - ${#head} : 4 ))}"
+}
+# fence_open <label> / fence_close — visually bracket operator paste blocks.
+fence_open() {
+    local label="$1" head
+    head="──── ${label} "
+    printf '\n%s%s\n' "$head" "${_RULE:0:$(( ${#_RULE} - ${#head} > 0 ? ${#_RULE} - ${#head} : 4 ))}"
+}
+fence_close() { printf '%s\n\n' "$_RULE"; }
+
+# run_quiet <cmd...> — capture stdout+stderr; stay silent on success, replay
+# everything on failure (suppression must never hide an error), pass rc through.
+run_quiet() {
+    local out rc=0
+    out="$("$@" 2>&1)" || rc=$?
+    if (( rc != 0 )); then
+        printf '%s\n' "$out"
+    fi
+    return "$rc"
+}
 
 require() {
     local bin="$1" hint="$2"
@@ -182,6 +213,41 @@ url_host() {
     hostport="$url"
     url="${hostport%%:*}"  # drop :port
     printf '%s' "$url"
+}
+
+# ------------------------------------------------ offload input validation
+# (is_ugid lives above with the PUID/PGID resolution helpers — one definition,
+# the stricter 32-bit-capped form.)
+
+# ssh://[user@]host[:port] — host is a DNS name or IPv4; port numeric.
+valid_ssh_endpoint() {
+    [[ "$1" =~ ^ssh://([A-Za-z0-9._-]+@)?[A-Za-z0-9.-]+(:[0-9]+)?$ ]]
+}
+endpoint_user() { local s="${1#ssh://}"; [[ "$s" == *@* ]] && printf '%s' "${s%%@*}"; true; }
+endpoint_host() { local s="${1#ssh://}"; s="${s##*@}"; printf '%s' "${s%%:*}"; }
+endpoint_port() { local s="${1#ssh://}"; s="${s##*@}"; [[ "$s" == *:* ]] && printf '%s' "${s##*:}"; true; }
+
+# https://host[:port] — no path/query (the installer appends /api/... itself).
+valid_https_url() {
+    [[ "$1" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]]
+}
+url_port() { local s="${1#https://}"; [[ "$s" == *:* ]] && printf '%s' "${s##*:}"; true; }
+
+# offload helpers
+offload_backend_port() { local p; p="$(url_port "$1")"; printf '%s' "${p:-443}"; }
+offload_certs_path()   { printf '/home/%s/.arm/certs' "$(endpoint_user "$1")"; }
+
+# prompt_valid <prompt> <validator> <shape-hint> — loop until valid; echo value.
+prompt_valid() {
+    local prompt="$1" validator="$2" hint="$3" value
+    while true; do
+        read -rp "${prompt} (${hint}): " value
+        if "$validator" "$value"; then
+            printf '%s' "$value"
+            return 0
+        fi
+        printf '    ! expected shape: %s   (you entered: %s)\n' "$hint" "$value" >&2
+    done
 }
 
 # Resolve the image tag that pins ALL service images (backend/ripper/ui +
@@ -307,7 +373,14 @@ fix_prefix_ownership() {
 
 # ---------------------------------------------------------- cert generation
 
-make_ca() {
+# ensure_ca — idempotent CA bootstrap: create $PREFIX/certs/arm-ca.{key,crt} if
+# absent, reuse (with the standard log message) if already present. Split out
+# from make_ca so the remote-offload walkthrough (section 2) can guarantee the
+# CA exists before its Step 2 paste block runs — the walkthrough runs before
+# section 3's make_ca call, so a fresh interactive install would otherwise
+# `cat` a CA file that doesn't exist yet and crash under `set -e`.
+ensure_ca() {
+    mkdir -p "$PREFIX/certs"
     local ca_key="$PREFIX/certs/arm-ca.key"
     local ca_crt="$PREFIX/certs/arm-ca.crt"
 
@@ -317,9 +390,9 @@ make_ca() {
     fi
 
     log "generating CA (EC P-384, 10y)"
-    openssl ecparam -name secp384r1 -genkey -noout -out "$ca_key"
+    run_quiet openssl ecparam -name secp384r1 -genkey -noout -out "$ca_key"
     chmod 400 "$ca_key"
-    openssl req -x509 -new -nodes -key "$ca_key" -sha384 -days 3650 \
+    run_quiet openssl req -x509 -new -nodes -key "$ca_key" -sha384 -days 3650 \
         -subj "/CN=ARM v3 Local CA" \
         -addext "basicConstraints=critical,CA:TRUE" \
         -addext "keyUsage=critical,keyCertSign,cRLSign" \
@@ -327,6 +400,8 @@ make_ca() {
         -out "$ca_crt"
     chmod 444 "$ca_crt"
 }
+
+make_ca() { ensure_ca; }
 
 make_leaf() {
     local name="$1"; shift
@@ -336,18 +411,30 @@ make_leaf() {
     local crt="$PREFIX/certs/${name}.crt"
     local ext="$PREFIX/certs/${name}.ext"
 
-    log "issuing leaf: $name${extra_sans[*]:+ (extra SANs: ${extra_sans[*]})}"
+    local sans=""
+    local s
+    for s in "${extra_sans[@]:-}"; do
+        [[ -z "$s" ]] && continue
+        [[ -n "$sans" ]] && sans+=", "
+        # IPv4 literal → IP: SAN (a remote transcoder may connect by IP);
+        # anything else is a hostname → DNS:. IPv6 is out of scope.
+        if [[ "$s" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+            sans+="IP:${s}"
+        else
+            sans+="DNS:${s}"
+        fi
+    done
+    log "issued leaf: ${name}${sans:+  (SANs: ${sans})}"
 
     # Clear any prior 0400/0444 leaf so openssl can overwrite.
     rm -f "$key" "$crt"
 
-    openssl ecparam -name prime256v1 -genkey -noout -out "$key"
+    run_quiet openssl ecparam -name prime256v1 -genkey -noout -out "$key"
     chmod 400 "$key"
 
-    openssl req -new -key "$key" -subj "/CN=${name}" -out "$csr"
+    run_quiet openssl req -new -key "$key" -subj "/CN=${name}" -out "$csr"
 
     local san="DNS:${name}"
-    local s
     for s in "${extra_sans[@]:-}"; do
         [[ -z "$s" ]] && continue
         # IPv4 literal → IP: SAN (a remote transcoder may connect by IP);
@@ -364,7 +451,7 @@ subjectAltName = ${san}
 extendedKeyUsage = serverAuth, clientAuth
 EOF
 
-    openssl x509 -req -in "$csr" -CA "$PREFIX/certs/arm-ca.crt" \
+    run_quiet openssl x509 -req -in "$csr" -CA "$PREFIX/certs/arm-ca.crt" \
         -CAkey "$PREFIX/certs/arm-ca.key" -CAcreateserial \
         -out "$crt" -days 3650 -sha384 -extfile "$ext"
     chmod 444 "$crt"
@@ -609,6 +696,228 @@ remote_detect_gpus() {
     printf '%s\n' "$out"
 }
 
+# REMOTE_RUN seam: how verification reaches the remote. Tests pre-set the
+# array; production initializes it from the endpoint + the dedicated key.
+offload_remote_run_init() {  # <endpoint> <keyfile> <known_hosts>
+    if ! declare -p REMOTE_RUN >/dev/null 2>&1; then
+        local host port user dest
+        user="$(endpoint_user "$1")"; host="$(endpoint_host "$1")"; port="$(endpoint_port "$1")"
+        dest="${user:+${user}@}${host}"
+        REMOTE_RUN=(ssh -i "$2" -o BatchMode=yes -o ConnectTimeout=10
+                    -o UserKnownHostsFile="$3" -o StrictHostKeyChecking=accept-new
+                    ${port:+-p "$port"} "$dest")
+    fi
+}
+
+paste_block_key() {  # <pubkey-line> <host> <user>
+    fence_open "paste EVERYTHING between the lines, on $2 (as $3)"
+    printf 'mkdir -p ~/.ssh && chmod 700 ~/.ssh\n'
+    printf "grep -qxF '%s' ~/.ssh/authorized_keys 2>/dev/null || \\\\\n" "$1"
+    printf "  echo '%s' >> ~/.ssh/authorized_keys\n" "$1"
+    printf 'chmod 600 ~/.ssh/authorized_keys\n'
+    fence_close
+}
+
+paste_block_ca() {  # <ca-file> <certs-path> <host> <user>
+    fence_open "paste EVERYTHING between the lines, on $3 (as $4)"
+    printf 'mkdir -p %s\n' "$2"
+    printf "tee %s/arm-ca.crt >/dev/null <<'ARM_CA_EOF'\n" "$2"
+    cat "$1"
+    printf 'ARM_CA_EOF\n'
+    fence_close
+}
+
+paste_block_pull() {  # <ref>
+    fence_open "run on the REMOTE host"
+    printf 'docker pull %s\n' "$1"
+    fence_close
+}
+
+paste_block_save_load() {  # <ref> <endpoint> <keyfile>
+    local user host; user="$(endpoint_user "$2")"; host="$(endpoint_host "$2")"
+    fence_open "run on THIS host (not the remote)"
+    printf 'docker save %s | \\\n  ssh -i %s %s docker load\n' "$1" "$3" "${user:+${user}@}${host}"
+    fence_close
+}
+
+verify_docker_access() {
+    local out rc=0
+    out="$("${REMOTE_RUN[@]}" docker info --format '{{.ServerVersion}}' 2>&1)" || rc=$?
+    if (( rc == 255 )); then printf 'FAIL_SSH'; return 0; fi
+    if (( rc != 0 )); then
+        [[ "$out" == *"permission denied"* ]] && { printf 'FAIL_DOCKER'; return 0; }
+        printf 'FAIL_SSH'; return 0
+    fi
+    printf 'PASS %s' "$(printf '%s' "$out" | tail -n1)"
+}
+
+verify_ca() {  # <local-ca-file> <remote-certs-path>
+    local want got rc=0
+    want="$(sha256sum "$1" | cut -d" " -f1)"
+    got="$("${REMOTE_RUN[@]}" sha256sum "$2/arm-ca.crt" 2>/dev/null)" || rc=$?
+    got="${got%% *}"
+    if (( rc != 0 )) || [[ -z "$got" ]]; then printf 'FAIL_ABSENT'; return 0; fi
+    if [[ "$got" == "$want" ]]; then printf 'PASS'; else printf 'FAIL_MISMATCH'; fi
+}
+
+verify_image() {  # <ref>
+    "${REMOTE_RUN[@]}" docker image inspect --format ok "$1" >/dev/null 2>&1 \
+        && printf 'PASS' || printf 'FAIL'
+}
+
+verify_paths() {  # <p...> — report every missing path
+    local missing=() p
+    for p in "$@"; do
+        "${REMOTE_RUN[@]}" test -d "$p" >/dev/null 2>&1 || missing+=("$p")
+    done
+    (( ${#missing[@]} == 0 )) && printf 'PASS' || printf 'FAIL %s' "${missing[*]}"
+}
+
+# offload_persisted: rc 0 iff a prior run already seeded a remote offload host
+# into .env — used both to skip the questionnaire on rerun and to gate the
+# completion report.
+offload_persisted() {
+    [[ -f "$PREFIX/.env" ]] && grep -q '^ARM_TRANSCODE_DOCKER_HOST=.\+' "$PREFIX/.env"
+}
+
+# Seam-able "is the local backend container running?" probe (mirrors REMOTE_RUN).
+if ! declare -p BACKEND_RUNNING_TEST >/dev/null 2>&1; then
+    BACKEND_RUNNING_TEST=(docker inspect -f '{{.State.Running}}' armv3-backend)
+fi
+
+verify_callback() {  # <url> — PASS / FAIL / PENDING
+    local running
+    running="$("${BACKEND_RUNNING_TEST[@]}" 2>/dev/null || true)"
+    [[ "$running" != "true" ]] && { printf 'PENDING'; return 0; }
+    "${REMOTE_RUN[@]}" curl -ksf -o /dev/null --max-time 10 "$1/api/health" >/dev/null 2>&1 \
+        && printf 'PASS' || printf 'FAIL'
+}
+
+# _report_row <label> <status> — pad label with dots to column 28, print status.
+_report_row() {
+    local label="$1" status="$2" dots=""
+    local n=$(( 28 - ${#label} ))
+    (( n < 1 )) && n=1
+    dots="$(printf '.%.0s' $(seq 1 "$n"))"
+    printf '    %s %s %s\n' "$label" "$dots" "$status"
+}
+
+# offload_completion_report — read config (env-file/CA/image overridable for
+# tests via OFFLOAD_ENV_FILE/OFFLOAD_CA_FILE/OFFLOAD_IMAGE_REF), run the
+# read-only battery, print the table. Informational: never exits non-zero.
+#
+# OFFLOAD_REOFFER seam: gates whether FAILed rows re-print their paste block
+# after the table. Defaults to the tty state (interactive runs get the
+# fix-it blocks re-offered; non-interactive/piped runs don't spam a block
+# nobody can paste anywhere) — tests pre-set it to force either branch.
+offload_completion_report() {
+    if ! declare -p OFFLOAD_REOFFER >/dev/null 2>&1; then
+        if [[ -t 0 ]]; then OFFLOAD_REOFFER=1; else OFFLOAD_REOFFER=0; fi
+    fi
+
+    local envf="${OFFLOAD_ENV_FILE:-$PREFIX/.env}"
+    local caf="${OFFLOAD_CA_FILE:-$PREFIX/certs/arm-ca.crt}"
+    eget() { sed -nE "s/^$1=(.+)\$/\\1/p" "$envf" | head -n1; }
+    local endpoint url raw_p media_p logs_p certs_p image_ref gpus_raw
+    endpoint="$(eget ARM_TRANSCODE_DOCKER_HOST)"; url="$(eget ARM_TRANSCODE_BACKEND_URL)"
+    raw_p="$(eget ARM_HOST_RAW_PATH)"; media_p="$(eget ARM_HOST_MEDIA_PATH)"; logs_p="$(eget ARM_HOST_LOGS_PATH)"
+    certs_p="$(eget ARM_HOST_CERTS_PATH)"
+    gpus_raw="$(eget ARM_GPUS)"
+    image_ref="${OFFLOAD_IMAGE_REF:-${ARM_IMAGE_PREFIX_DEFAULT}/arm-transcode:${ARM_IMAGE_TAG_DEFAULT}}"
+    [[ -n "$endpoint" ]] || return 0
+
+    local failed_steps=()
+
+    printf '\n  Remote offload verification (%s):\n' "$endpoint"
+    local v
+    v="$(verify_docker_access)"
+    case "$v" in PASS*) _report_row "ssh + docker access" "PASS" ;;
+                 FAIL_DOCKER) _report_row "ssh + docker access" "FAIL — remote user not in docker group"; failed_steps+=(key) ;;
+                 *) _report_row "ssh + docker access" "FAIL — ssh/key"; failed_steps+=(key) ;; esac
+    case "$(verify_ca "$caf" "$certs_p")" in
+        PASS) _report_row "CA fingerprint" "PASS" ;;
+        FAIL_MISMATCH) _report_row "CA fingerprint" "FAIL — stale CA at ${certs_p}"; failed_steps+=(ca) ;;
+        *) _report_row "CA fingerprint" "FAIL — absent at ${certs_p}"; failed_steps+=(ca) ;; esac
+    # F2: the ref ends in ":" when ARM_IMAGE_TAG_DEFAULT (and no persisted
+    # ARM_IMAGE_TAG) resolved to empty — running verify_image against that
+    # always FAILs and is not actionable; report it as unresolved instead.
+    if [[ "$image_ref" == *: ]]; then
+        _report_row "transcode image" "SKIPPED — image tag unresolved this run"
+    else
+        case "$(verify_image "$image_ref")" in
+            PASS) _report_row "transcode image" "PASS  (${image_ref})" ;;
+            *) _report_row "transcode image" "FAIL — not on remote daemon"; failed_steps+=(image) ;; esac
+    fi
+    v="$(verify_paths "$raw_p" "$media_p" "$logs_p")"
+    case "$v" in PASS) _report_row "data paths" "PASS  (raw, media, logs)" ;;
+                 *) _report_row "data paths" "FAIL — missing: ${v#FAIL }" ;; esac
+    # F3: inventory-from-.env row (informational — not a live re-probe of the
+    # remote; the walkthrough's remote_detect_gpus already did the live probe).
+    if [[ -n "$gpus_raw" && "$gpus_raw" == *'"vendor"'* ]]; then
+        local gpu_count vendor_list
+        gpu_count="$(grep -o '"vendor"' <<<"$gpus_raw" | wc -l)"
+        vendor_list="$(grep -o '"vendor":"[a-z]*"' <<<"$gpus_raw" | head -n1 | sed -E 's/.*:"([a-z]*)"/\1/')"
+        _report_row "GPUs" "PASS  (${vendor_list} x${gpu_count})"
+    else
+        _report_row "GPUs" "FAIL — no GPU inventory (CPU-only transcodes)"
+    fi
+    case "$(verify_callback "$url")" in
+        PASS) _report_row "backend callback URL" "PASS  (reachable from the remote)" ;;
+        FAIL) _report_row "backend callback URL" "FAIL — backend is up but ${url} is unreachable from the remote (published port? firewall?)" ;;
+        *)    _report_row "backend callback URL" "PENDING — stack not running; after"
+              # shellcheck disable=SC2016 # backticks are literal text here, not command substitution
+              printf '    %-27s %s\n' "" '`docker compose up -d`, re-run `bash install.sh`' ;; esac
+
+    # F4: re-offer the paste block for any FAILed step that has one (paths /
+    # callback / GPUs have no one-liner fix — mounting shares and opening
+    # firewall ports aren't paste-able — so only key/ca/image re-offer).
+    if (( ${#failed_steps[@]} > 0 )) && [[ "${OFFLOAD_REOFFER}" == "1" ]]; then
+        echo; log "Fix-it blocks for the FAILed rows:"
+        local step remote_user_disp
+        remote_user_disp="$(endpoint_user "$endpoint")"
+        for step in "${failed_steps[@]}"; do
+            case "$step" in
+                key)
+                    if [[ -f "$PREFIX/ssh/id_ed25519.pub" ]]; then
+                        paste_block_key "$(cat "$PREFIX/ssh/id_ed25519.pub")" \
+                            "$(endpoint_host "$endpoint")" "${remote_user_disp:-<user>}"
+                    fi
+                    ;;
+                ca)
+                    paste_block_ca "$caf" "$certs_p" "$(endpoint_host "$endpoint")" "${remote_user_disp:-<user>}"
+                    ;;
+                image)
+                    if [[ "$image_ref" == *.*/* || "$image_ref" == docker.io/* || "$image_ref" == ghcr.io/* ]]; then
+                        log "  Pull it there:"
+                        paste_block_pull "$image_ref"
+                    else
+                        log "  This is a locally-built image pin — transfer it from this host:"
+                        paste_block_save_load "$image_ref" "$endpoint" "$PREFIX/ssh/id_ed25519"
+                    fi
+                    ;;
+            esac
+        done
+    fi
+}
+
+# offload_restore_persisted — re-derive the REMOTE_* globals from a prior
+# run's .env (ARM_TRANSCODE_DOCKER_HOST etc.) without prompting. Used both by
+# setup_remote_offload's persisted-skip path (interactive rerun) and by the
+# non-interactive path — it must be tty-independent, since a headless rerun
+# of an already-offloaded deployment still needs its remote GPU inventory
+# restored, or seed_env's local GPU detection silently overwrites it.
+offload_restore_persisted() {
+    REMOTE_DOCKER_HOST="$(sed -nE 's/^ARM_TRANSCODE_DOCKER_HOST=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+    REMOTE_BACKEND_URL="$(sed -nE 's/^ARM_TRANSCODE_BACKEND_URL=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+    REMOTE_TRANSCODE_PUID="$(sed -nE 's/^ARM_TRANSCODE_PUID=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+    REMOTE_TRANSCODE_PGID="$(sed -nE 's/^ARM_TRANSCODE_PGID=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+    REMOTE_BACKEND_SAN="$(url_host "$REMOTE_BACKEND_URL")"
+    REMOTE_OFFLOAD=1
+    offload_remote_run_init "$REMOTE_DOCKER_HOST" "$PREFIX/ssh/id_ed25519" "$PREFIX/ssh/known_hosts"
+    REMOTE_GPUS="$(sed -nE 's/^ARM_GPUS=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+    REMOTE_RENDER_GID="$(sed -nE 's/^ARM_RENDER_GID=(.*)$/\1/p' "$PREFIX/.env" | head -n1)"
+}
+
 # Interactive: offer remote transcode offload. On yes, provision a dedicated
 # ssh key, print the authorize line, detect the REMOTE GPU inventory, and set
 # the REMOTE_* globals the rest of install.sh consumes. On no/non-interactive,
@@ -619,34 +928,50 @@ setup_remote_offload() {
     # skip the questionnaire entirely (setup-dev.sh calls us --certs-only and a
     # dev at a tty would otherwise be prompted mid cert-bootstrap).
     [[ $CERTS_ONLY -eq 1 ]] && return 0
+
+    # Rerun with offload already persisted in .env: skip the questionnaire
+    # entirely and re-derive the REMOTE_* globals from .env — verification
+    # runs at completion instead of re-walking the interactive setup. This
+    # MUST run before the tty guard below: a non-interactive rerun (e.g. cron,
+    # CI, or setup-dev.sh) of an already-offloaded deployment still needs its
+    # remote GPU inventory restored, or seed_env's local GPU detection
+    # silently overwrites the persisted remote ARM_GPUS/ARM_RENDER_GID.
+    if offload_persisted; then
+        offload_restore_persisted
+        log "offload already configured (${REMOTE_DOCKER_HOST}); skipping questionnaire — verification runs at completion"
+        return 0
+    fi
+
     # Non-interactive (no tty) => never prompt; stay local.
     [[ -t 0 ]] || return 0
+
     confirm "Enable remote transcode offload (spawn transcodes on a GPU host over ssh)?" || return 0
     REMOTE_OFFLOAD=1
 
-    read -rp "  Remote docker endpoint (ssh://user@host): " REMOTE_DOCKER_HOST
-    read -rp "  Routable backend URL the transcoder calls back (https://host:port): " REMOTE_BACKEND_URL
-    local def_puid="$ARM_PUID" def_pgid="$ARM_PGID"
-    local uidgid
-    read -rp "  Transcoder write UID:GID for shared media [${def_puid}:${def_pgid}]: " uidgid
-    uidgid="${uidgid:-${def_puid}:${def_pgid}}"
+    REMOTE_DOCKER_HOST="$(prompt_valid "  Remote docker endpoint" valid_ssh_endpoint "ssh://user@host[:port]")"
+    [[ -z "$(endpoint_user "$REMOTE_DOCKER_HOST")" ]] && \
+        warnline "no user in endpoint — docker's ssh:// URL usually needs one (user@host)"
+    REMOTE_BACKEND_URL="$(prompt_valid "  Routable backend URL the transcoder calls back" valid_https_url "https://host:port")"
+    [[ -z "$(url_port "$REMOTE_BACKEND_URL")" ]] && \
+        warnline "no port in URL — the stack serves 8443 internally; a portless URL is almost certainly wrong"
+    local def_puid="${ARM_PUID:-$(id -u)}" def_pgid="${ARM_PGID:-$(id -g)}" uidgid
+    while true; do
+        read -rp "  Transcoder write UID:GID for shared media [${def_puid}:${def_pgid}]: " uidgid
+        uidgid="${uidgid:-${def_puid}:${def_pgid}}"
+        if is_ugid "${uidgid%%:*}" && is_ugid "${uidgid##*:}"; then break; fi
+        printf '    ! expected shape: uid:gid (numeric, non-zero)   (you entered: %s)\n' "$uidgid" >&2
+    done
     REMOTE_TRANSCODE_PUID="${uidgid%%:*}"
     REMOTE_TRANSCODE_PGID="${uidgid##*:}"
     REMOTE_BACKEND_SAN="$(url_host "$REMOTE_BACKEND_URL")"
 
     # Dedicated ed25519 key for backend -> remote docker daemon.
     local sshdir="$PREFIX/ssh" key="$PREFIX/ssh/id_ed25519"
-    local sshdest="${REMOTE_DOCKER_HOST#ssh://}"
-    # sshdest may be user@host, user@host:port, host, or host:port. Split the
-    # host from an optional :port and an optional user@ SEPARATELY: ssh-keyscan
-    # takes `-p PORT HOST`, not `HOST:PORT`, so a `host:2222` endpoint would
-    # otherwise keyscan-fail -> empty known_hosts -> offload silently dead.
-    local hostport="${sshdest##*@}"          # strip user@ -> host[:port]
-    local remote_host="${hostport%%:*}"      # bare host for keyscan + ssh config Host
-    local remote_port=""
-    [[ "$hostport" == *:* ]] && remote_port="${hostport##*:}"
-    local remote_user=""
-    [[ "$sshdest" == *@* ]] && remote_user="${sshdest%@*}"
+    # Use the new endpoint helper functions to split the ssh endpoint.
+    local remote_user remote_host remote_port
+    remote_user="$(endpoint_user "$REMOTE_DOCKER_HOST")"
+    remote_host="$(endpoint_host "$REMOTE_DOCKER_HOST")"
+    remote_port="$(endpoint_port "$REMOTE_DOCKER_HOST")"
     mkdir -p "$sshdir"
     if [[ ! -f "$key" ]]; then
         ssh-keygen -t ed25519 -N "" -C "armv3-backend@${remote_host}" -f "$key" >/dev/null
@@ -676,14 +1001,96 @@ setup_remote_offload() {
     # must be the owner or ssh transport fails silently.
     chown -R "${def_puid}:${def_pgid}" "$sshdir" 2>/dev/null || true
 
-    echo
-    log "Authorize this key on ${remote_host} — append the line below to ~/.ssh/authorized_keys there:"
-    echo
-    cat "$key.pub"
-    echo
-    read -rp "  Press Enter once the key is authorized on ${remote_host}... " _
+    offload_remote_run_init "$REMOTE_DOCKER_HOST" "$key" "$sshdir/known_hosts"
+    local remote_user_disp; remote_user_disp="$(endpoint_user "$REMOTE_DOCKER_HOST")"
 
-    # Remote GPU detection doubles as the connectivity test (uses the dedicated key).
+    # Step 1 — authorize the ARM key
+    echo; log "Step 1 of 5 — authorize the ARM key on the remote"
+    paste_block_key "$(cat "$key.pub")" "$remote_host" "${remote_user_disp:-<user>}"
+    while true; do
+        read -rp "  Press Enter to verify... " _
+        case "$(verify_docker_access)" in
+            PASS*) okline "docker reachable over the ARM key"; break ;;
+            FAIL_DOCKER)
+                failline "ssh reached ${remote_host} but docker was denied."
+                log "  Likely cause: user '${remote_user_disp}' is not in the remote docker group."
+                log "  Fix on the remote:  sudo usermod -aG docker ${remote_user_disp}   (then log out/in there)" ;;
+            *)  failline "ssh to ${remote_host} failed — key not authorized yet, or host unreachable." ;;
+        esac
+        confirm "  Re-check now? (No = skip; offload will FAIL in the completion table)" || { warnline "step skipped"; break; }
+    done
+
+    # Step 2 — CA for transcoder callbacks
+    # ensure_ca: the CA is normally created in section 3 (make_ca), which runs
+    # AFTER this walkthrough (section 2) — on a fresh interactive install
+    # there's no CA on disk yet, and paste_block_ca's `cat` of a missing file
+    # would crash under `set -e`. Make it idempotently here; section 3's
+    # make_ca call below is a no-op reuse in that case.
+    ensure_ca
+    local certs_path; certs_path="$(offload_certs_path "$REMOTE_DOCKER_HOST")"
+    echo; log "Step 2 of 5 — place the CA for transcoder callbacks"
+    paste_block_ca "$PREFIX/certs/arm-ca.crt" "$certs_path" "$remote_host" "${remote_user_disp:-<user>}"
+    while true; do
+        read -rp "  Press Enter to verify... " _
+        case "$(verify_ca "$PREFIX/certs/arm-ca.crt" "$certs_path")" in
+            PASS) okline "CA present, fingerprint matches"; break ;;
+            FAIL_MISMATCH) failline "a DIFFERENT CA is at ${certs_path}/arm-ca.crt — stale from a previous install? Re-paste the block." ;;
+            *) failline "CA not found at ${certs_path}/arm-ca.crt" ;;
+        esac
+        confirm "  Re-check now? (No = skip)" || { warnline "step skipped"; break; }
+    done
+
+    # Step 3 — transcode image. ARM_IMAGE_TAG_DEFAULT is empty until
+    # resolve_image_tag runs in main() (after this walkthrough), so on a fresh
+    # install there's no tag yet — check .env too (same precedence
+    # resolve_image_tag itself uses on a rerun) before deciding it's unresolved.
+    local persisted_tag=""
+    [[ -f "$PREFIX/.env" ]] && \
+        persisted_tag="$(sed -nE 's/^ARM_IMAGE_TAG=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+    echo; log "Step 3 of 5 — transcode image on the remote"
+    if [[ -z "${ARM_IMAGE_TAG_DEFAULT:-}" && -z "$persisted_tag" ]]; then
+        log "  (image tag not resolved yet — checked in the completion table)"
+    else
+        local image_ref="${ARM_IMAGE_PREFIX_DEFAULT}/arm-transcode:${ARM_IMAGE_TAG_DEFAULT:-$persisted_tag}"
+        if [[ "$(verify_image "$image_ref")" == PASS ]]; then
+            okline "image present on remote (${image_ref})"
+        else
+            failline "${image_ref} not present on the remote daemon."
+            if [[ "$image_ref" == *.*/* || "$image_ref" == docker.io/* || "$image_ref" == ghcr.io/* ]]; then
+                log "  Pull it there:"
+                paste_block_pull "$image_ref"
+            else
+                log "  This is a locally-built image pin — transfer it from this host:"
+                paste_block_save_load "$image_ref" "$REMOTE_DOCKER_HOST" "$key"
+            fi
+            while true; do
+                confirm "  Re-check now? (No = skip)" || { warnline "step skipped"; break; }
+                [[ "$(verify_image "$image_ref")" == PASS ]] && { okline "image present on remote"; break; }
+                failline "still not present"
+            done
+        fi
+    fi
+
+    # Step 4 — shared data paths (best effort: env may not be seeded yet on a
+    # first run; read the .env when present, else skip with a note — the
+    # completion battery re-checks with final values).
+    echo; log "Step 4 of 5 — shared data paths on the remote"
+    local raw_p media_p logs_p
+    raw_p="$(sed -nE 's/^ARM_HOST_RAW_PATH=(.+)$/\1/p' "$PREFIX/.env" 2>/dev/null | head -n1)"
+    media_p="$(sed -nE 's/^ARM_HOST_MEDIA_PATH=(.+)$/\1/p' "$PREFIX/.env" 2>/dev/null | head -n1)"
+    logs_p="$(sed -nE 's/^ARM_HOST_LOGS_PATH=(.+)$/\1/p' "$PREFIX/.env" 2>/dev/null | head -n1)"
+    if [[ -n "$raw_p" && -n "$media_p" && -n "$logs_p" ]]; then
+        local v; v="$(verify_paths "$raw_p" "$media_p" "$logs_p")"
+        case "$v" in
+            PASS) okline "data paths exist on the remote" ;;
+            *) warnline "missing on the remote: ${v#FAIL } — mount the shared export there" ;;
+        esac
+    else
+        log "  (paths not seeded yet — checked in the completion table)"
+    fi
+
+    # Step 5 — remote GPU detection doubles as the connectivity test (uses the dedicated key).
+    echo; log "Step 5 of 5 — remote GPU detection"
     REMOTE_GPUS=""; REMOTE_RENDER_GID=""
     while true; do
         local detect
@@ -782,7 +1189,8 @@ seed_env() {
                 "ARM_TRANSCODE_BACKEND_URL=${REMOTE_BACKEND_URL}" \
                 "ARM_TRANSCODE_PUID=${REMOTE_TRANSCODE_PUID}" \
                 "ARM_TRANSCODE_PGID=${REMOTE_TRANSCODE_PGID}" \
-                "ARM_TRANSCODE_SSH_DIR=./ssh"
+                "ARM_TRANSCODE_SSH_DIR=./ssh" \
+                "ARM_HOST_CERTS_PATH=$(offload_certs_path "$REMOTE_DOCKER_HOST")"
             do
                 key="${kv%%=*}"
                 value="${kv#*=}"
@@ -962,6 +1370,39 @@ emit_ripper_block() {
 EOF
 }
 
+# inject_offload_compose <compose-file> <backend-url> — add the ssh mount and
+# publish the callback port on arm-backend. Idempotent (guards on markers).
+inject_offload_compose() {
+    local out="$1" backend_url="$2" port tmp
+    port="$(offload_backend_port "$backend_url")"
+    tmp="$out.tmp"
+    if ! grep -q '/home/arm/.ssh:ro' "$out"; then
+        awk '
+            { print }
+            $0 == "      - /var/run/docker.sock:/var/run/docker.sock" {
+                print "      - ${ARM_TRANSCODE_SSH_DIR:-./ssh}:/home/arm/.ssh:ro"
+            }
+        ' "$out" > "$tmp" && mv "$tmp" "$out"
+    fi
+    # The remote transcoder calls back on this URL; without the publish the
+    # prompt-seeded ARM_TRANSCODE_BACKEND_URL points at a closed port.
+    # Converge-to-latest: an existing publish is updated in place (never a
+    # second ports: key); only a file with no publish gets the awk insert.
+    if grep -qE '"[0-9]+:8443"' "$out"; then
+        if ! grep -q "\"${port}:8443\"" "$out"; then
+            sed -i -E "s/\"[0-9]+:8443\"/\"${port}:8443\"/" "$out"
+        fi
+    else
+        awk -v port="$port" '
+            { print }
+            /^  arm-backend:$/ {
+                print "    ports:"
+                print "      - \"" port ":8443\""
+            }
+        ' "$out" > "$tmp" && mv "$tmp" "$out"
+    fi
+}
+
 generate_compose() {
     local out="$PREFIX/docker-compose.yml"
     log "generating $out"
@@ -1071,17 +1512,9 @@ EOF
         offload_active=1
     fi
     if [[ $offload_active -eq 1 ]]; then
-        # Insert the ssh mount right after the backend's docker.sock volume line.
-        # The socket mount appears exactly ONCE in the file (only arm-backend
-        # mounts it), so a plain awk one-pass insert is unambiguous — no need for
-        # first-match sed addressing.
-        local tmp="$out.tmp"
-        awk '
-            { print }
-            $0 == "      - /var/run/docker.sock:/var/run/docker.sock" {
-                print "      - ${ARM_TRANSCODE_SSH_DIR:-./ssh}:/home/arm/.ssh:ro"
-            }
-        ' "$out" > "$tmp" && mv "$tmp" "$out"
+        local cb_url
+        cb_url="${REMOTE_BACKEND_URL:-$(sed -nE 's/^ARM_TRANSCODE_BACKEND_URL=(.+)$/\1/p' "$PREFIX/.env" 2>/dev/null | head -n1)}"
+        inject_offload_compose "$out" "${cb_url:-https://localhost:8443}"
     fi
 
     # One ripper service block per detected drive.
@@ -1164,41 +1597,41 @@ ensure_udev_rule() {
 print_next_steps() {
     cat <<EOF
 
-==> install complete
-
-Prefix:   $PREFIX
-Drives:   ${#DRIVES_SR[@]} ripper service(s) configured
-Image:    $ARM_IMAGE_PREFIX_DEFAULT/arm-<svc>:$ARM_IMAGE_TAG_DEFAULT
-          (latest stable from $ARM_RELEASE_REPO; bump ARM_IMAGE_TAG in .env to change)
-
 Next:
   cd $PREFIX
-  docker compose pull
   docker compose up -d
+EOF
+    # The "PENDING" callout only makes sense when offload_completion_report
+    # actually ran (section 6 gates it on offload_persisted) — otherwise there
+    # is no row above to have read PENDING, and the line is a dangling
+    # reference to a table the user never saw.
+    if offload_persisted; then
+        cat <<EOF
 
-First-boot admin credentials (you'll be forced to change the password):
-  docker exec armv3-backend cat /logs/first-boot.log
+  (re-run \`bash install.sh\` after \`docker compose up -d\` if any row above
+   read PENDING, to confirm offload end-to-end)
+EOF
+    fi
+    cat <<EOF
 
 Then open: https://localhost:8081
-  (Import $PREFIX/certs/arm-ca.crt into your browser/OS trust store
-   to silence the cert warning across every device on the LAN.)
-
-GPU host? GPUs are auto-detected into ARM_GPUS in $PREFIX/.env and the
-backend wires them to the transcoder automatically. Re-run install.sh after
-adding/removing a GPU or updating drivers. (NVIDIA hosts: install.sh offered
-to set up nvidia-container-toolkit above.)
+First-boot admin credentials (you'll be forced to change the password):
+  docker exec armv3-backend cat /logs/first-boot.log
+  (import $PREFIX/certs/arm-ca.crt into your browser/OS trust store to silence the cert warning)
 
 EOF
 }
 
-# Test seam: lets devtools/test-install-env.sh source the functions above
-# without executing the install (mirrors ARM_ENTRYPOINT_SOURCE_ONLY in
-# services/_common/docker-entrypoint.sh). No-op in production.
-[[ -n "${ARM_INSTALL_SOURCE_ONLY:-}" ]] && return 0
+# Test seam: lets devtools/test-install-env.sh and
+# devtools/test-install-walkthrough.sh source the functions above without
+# executing the install. Sourced-ness check makes a leaked env var harmless
+# when executed (mirrors the entrypoint seam from PR #56).
+[[ -n "${ARM_INSTALL_SOURCE_ONLY:-}" && "${BASH_SOURCE[0]}" != "$0" ]] && return 0
 
 # ----------------------------------------------------------------- main
 
 main() {
+    section 1 6 "Prerequisites"
     check_prereqs
     resolve_puid_pgid
     ensure_prefix
@@ -1206,6 +1639,7 @@ main() {
     local REMOTE_OFFLOAD=0 REMOTE_DOCKER_HOST="" REMOTE_BACKEND_URL="" \
           REMOTE_TRANSCODE_PUID="" REMOTE_TRANSCODE_PGID="" REMOTE_BACKEND_SAN="" \
           REMOTE_GPUS="" REMOTE_RENDER_GID=""
+    section 2 6 "Remote transcode offload"
     setup_remote_offload
 
     if [[ $ROTATE_CA -eq 1 ]]; then
@@ -1216,6 +1650,7 @@ main() {
         rm -f "$PREFIX/certs/arm-ca.key" "$PREFIX/certs/arm-ca.crt"
     fi
 
+    section 3 6 "Certificates"
     make_ca
     # Backend leaf needs the remote-routable SAN when offloading, so the remote
     # transcoder can TLS-verify its callback. If this run didn't re-prompt (non-
@@ -1236,6 +1671,7 @@ main() {
     make_leaf arm-db
     make_leaf arm-ui localhost "$(hostname -f 2>/dev/null || hostname || echo localhost)"
 
+    section 4 6 "Optical drives"
     detect_drives
     local n
     for n in "${DRIVES_SR[@]:-}"; do
@@ -1256,11 +1692,19 @@ main() {
     fi
 
     ensure_nvidia_container_toolkit
+    section 5 6 "Configuration"
     [[ $NO_ENV -eq 0 ]]     && seed_env
     [[ $NO_COMPOSE -eq 0 ]] && generate_compose
     [[ $NO_UDEV -eq 0 ]]    && ensure_udev_rule
 
     fix_prefix_ownership
+    section 6 6 "Verification & next steps"
+    if offload_persisted; then
+        [[ -z "${REMOTE_RUN+x}" ]] && offload_remote_run_init \
+            "$(sed -nE 's/^ARM_TRANSCODE_DOCKER_HOST=(.+)$/\1/p' "$PREFIX/.env" | head -n1)" \
+            "$PREFIX/ssh/id_ed25519" "$PREFIX/ssh/known_hosts"
+        offload_completion_report
+    fi
     print_next_steps
 
     if [[ $START -eq 1 ]]; then
