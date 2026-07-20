@@ -161,6 +161,40 @@ url_host() {
     printf '%s' "$url"
 }
 
+# ------------------------------------------------ offload input validation
+
+# Validate numeric UID/GID (non-zero).
+is_ugid() {
+    [[ "$1" =~ ^[1-9][0-9]*$ ]]
+}
+
+# ssh://[user@]host[:port] — host is a DNS name or IPv4; port numeric.
+valid_ssh_endpoint() {
+    [[ "$1" =~ ^ssh://([A-Za-z0-9._-]+@)?[A-Za-z0-9.-]+(:[0-9]+)?$ ]]
+}
+endpoint_user() { local s="${1#ssh://}"; [[ "$s" == *@* ]] && printf '%s' "${s%%@*}"; true; }
+endpoint_host() { local s="${1#ssh://}"; s="${s##*@}"; printf '%s' "${s%%:*}"; }
+endpoint_port() { local s="${1#ssh://}"; s="${s##*@}"; [[ "$s" == *:* ]] && printf '%s' "${s##*:}"; true; }
+
+# https://host[:port] — no path/query (the installer appends /api/... itself).
+valid_https_url() {
+    [[ "$1" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]]
+}
+url_port() { local s="${1#https://}"; [[ "$s" == *:* ]] && printf '%s' "${s##*:}"; true; }
+
+# prompt_valid <prompt> <validator> <shape-hint> — loop until valid; echo value.
+prompt_valid() {
+    local prompt="$1" validator="$2" hint="$3" value
+    while true; do
+        read -rp "${prompt} (${hint}): " value
+        if "$validator" "$value"; then
+            printf '%s' "$value"
+            return 0
+        fi
+        printf '    ! expected shape: %s   (you entered: %s)\n' "$hint" "$value" >&2
+    done
+}
+
 # Resolve the image tag that pins ALL service images (backend/ripper/ui +
 # the transcode image the dispatcher spawns). Reuse an existing pin from the
 # prefix's .env so re-runs don't silently upgrade and work offline; otherwise
@@ -590,30 +624,30 @@ setup_remote_offload() {
     confirm "Enable remote transcode offload (spawn transcodes on a GPU host over ssh)?" || return 0
     REMOTE_OFFLOAD=1
 
-    read -rp "  Remote docker endpoint (ssh://user@host): " REMOTE_DOCKER_HOST
-    read -rp "  Routable backend URL the transcoder calls back (https://host:port): " REMOTE_BACKEND_URL
-    local def_puid def_pgid
-    def_puid="$(id -u)"; def_pgid="$(id -g)"
-    local uidgid
-    read -rp "  Transcoder write UID:GID for shared media [${def_puid}:${def_pgid}]: " uidgid
-    uidgid="${uidgid:-${def_puid}:${def_pgid}}"
+    REMOTE_DOCKER_HOST="$(prompt_valid "  Remote docker endpoint" valid_ssh_endpoint "ssh://user@host[:port]")"
+    [[ -z "$(endpoint_user "$REMOTE_DOCKER_HOST")" ]] && \
+        warnline "no user in endpoint — docker's ssh:// URL usually needs one (user@host)"
+    REMOTE_BACKEND_URL="$(prompt_valid "  Routable backend URL the transcoder calls back" valid_https_url "https://host:port")"
+    [[ -z "$(url_port "$REMOTE_BACKEND_URL")" ]] && \
+        warnline "no port in URL — the stack serves 8443 internally; a portless URL is almost certainly wrong"
+    local def_puid="${ARM_PUID:-$(id -u)}" def_pgid="${ARM_PGID:-$(id -g)}" uidgid
+    while true; do
+        read -rp "  Transcoder write UID:GID for shared media [${def_puid}:${def_pgid}]: " uidgid
+        uidgid="${uidgid:-${def_puid}:${def_pgid}}"
+        if is_ugid "${uidgid%%:*}" && is_ugid "${uidgid##*:}"; then break; fi
+        printf '    ! expected shape: uid:gid (numeric, non-zero)   (you entered: %s)\n' "$uidgid" >&2
+    done
     REMOTE_TRANSCODE_PUID="${uidgid%%:*}"
     REMOTE_TRANSCODE_PGID="${uidgid##*:}"
     REMOTE_BACKEND_SAN="$(url_host "$REMOTE_BACKEND_URL")"
 
     # Dedicated ed25519 key for backend -> remote docker daemon.
     local sshdir="$PREFIX/ssh" key="$PREFIX/ssh/id_ed25519"
-    local sshdest="${REMOTE_DOCKER_HOST#ssh://}"
-    # sshdest may be user@host, user@host:port, host, or host:port. Split the
-    # host from an optional :port and an optional user@ SEPARATELY: ssh-keyscan
-    # takes `-p PORT HOST`, not `HOST:PORT`, so a `host:2222` endpoint would
-    # otherwise keyscan-fail -> empty known_hosts -> offload silently dead.
-    local hostport="${sshdest##*@}"          # strip user@ -> host[:port]
-    local remote_host="${hostport%%:*}"      # bare host for keyscan + ssh config Host
-    local remote_port=""
-    [[ "$hostport" == *:* ]] && remote_port="${hostport##*:}"
-    local remote_user=""
-    [[ "$sshdest" == *@* ]] && remote_user="${sshdest%@*}"
+    # Use the new endpoint helper functions to split the ssh endpoint.
+    local remote_user remote_host remote_port
+    remote_user="$(endpoint_user "$REMOTE_DOCKER_HOST")"
+    remote_host="$(endpoint_host "$REMOTE_DOCKER_HOST")"
+    remote_port="$(endpoint_port "$REMOTE_DOCKER_HOST")"
     mkdir -p "$sshdir"
     if [[ ! -f "$key" ]]; then
         ssh-keygen -t ed25519 -N "" -C "armv3-backend@${remote_host}" -f "$key" >/dev/null

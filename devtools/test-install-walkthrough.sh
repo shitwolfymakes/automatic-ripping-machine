@@ -62,4 +62,35 @@ rc=0; out="$(run_quiet sh -c 'echo boom-detail >&2; exit 3' 2>&1)" || rc=$?
 check "run_quiet: rc passthrough" "3" "$rc"
 check "run_quiet: replays output on failure" "yes" "$( [[ "$out" == *boom-detail* ]] && echo yes || echo no )"
 
+# --- input validators --------------------------------------------------------
+
+for good in "ssh://sam@192.168.0.92" "ssh://sam@host.lan:2222" "ssh://10.0.0.5"; do
+    rc=0; valid_ssh_endpoint "$good" || rc=$?
+    check "endpoint accepts: $good" "0" "$rc"
+done
+for bad in "sam@192.168.0.92" "ssh://" "ssh://user@" "http://sam@h" "ssh://sam@h:port"; do
+    rc=0; valid_ssh_endpoint "$bad" || rc=$?
+    check "endpoint rejects: $bad" "1" "$rc"
+done
+check "endpoint_user" "sam" "$(endpoint_user "ssh://sam@h.lan:2222")"
+check "endpoint_user empty" "" "$(endpoint_user "ssh://h.lan")"
+check "endpoint_host" "h.lan" "$(endpoint_host "ssh://sam@h.lan:2222")"
+check "endpoint_port" "2222" "$(endpoint_port "ssh://sam@h.lan:2222")"
+check "endpoint_port empty" "" "$(endpoint_port "ssh://sam@h.lan")"
+
+for good in "https://192.168.0.68:8080" "https://arm.example.com"; do
+    rc=0; valid_https_url "$good" || rc=$?
+    check "url accepts: $good" "0" "$rc"
+done
+for bad in "http://192.168.0.68:8080" "192.168.0.68:8080" "https://" "https://h:port" "https://h:8080/api"; do
+    rc=0; valid_https_url "$bad" || rc=$?
+    check "url rejects: $bad" "1" "$rc"
+done
+check "url_port" "8080" "$(url_port "https://192.168.0.68:8080")"
+check "url_port empty (443 implied)" "" "$(url_port "https://arm.example.com")"
+
+# prompt_valid: feeds one bad then one good line; must re-prompt then echo it
+out="$(printf 'garbage\nssh://sam@h\n' | prompt_valid "  Remote docker endpoint" valid_ssh_endpoint "ssh://user@host[:port]" 2>&1)"
+check "prompt_valid: re-prompts then accepts" "yes" "$( [[ "$out" == *"expected shape: ssh://user@host[:port]"* && "$out" == *"ssh://sam@h" ]] && echo yes || echo no )"
+
 exit "$fail"
