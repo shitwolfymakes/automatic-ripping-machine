@@ -193,4 +193,32 @@ check "table: header names endpoint" "yes" "$( [[ "$out" == *"Remote offload ver
 check "table: ssh row FAIL" "yes" "$( [[ "$out" == *"ssh + docker access"*FAIL* ]] && echo yes || echo no )"
 check "table: callback PENDING wording" "yes" "$( [[ "$out" == *"PENDING — stack not running"* && "$out" == *"re-run \`bash install.sh\`"* ]] && echo yes || echo no )"
 
+# --- Critical regression: non-interactive persisted rerun must restore remote state
+PERSISTDIR="$TMPROOT/persist"; mkdir -p "$PERSISTDIR/ssh"
+cat > "$PERSISTDIR/.env" <<'EOF'
+ARM_TRANSCODE_DOCKER_HOST=ssh://sam@192.168.0.92
+ARM_TRANSCODE_BACKEND_URL=https://192.168.0.68:8080
+ARM_TRANSCODE_PUID=1001
+ARM_TRANSCODE_PGID=1000
+ARM_GPUS=[{"vendor":"nvenc","device_path":"nvidia://0"}]
+ARM_RENDER_GID=
+EOF
+CERTS_ONLY=0
+PREFIX="$PERSISTDIR"
+REMOTE_OFFLOAD=0
+declare -p REMOTE_RUN >/dev/null 2>&1 && unset REMOTE_RUN
+remote_script 'exit 0'
+offload_restore_persisted
+check "restore: offload flag" "1" "$REMOTE_OFFLOAD"
+check "restore: endpoint" "ssh://sam@192.168.0.92" "$REMOTE_DOCKER_HOST"
+check "restore: remote gpus" "yes" "$( [[ "$REMOTE_GPUS" == *nvenc* ]] && echo yes || echo no )"
+check "restore: backend san" "192.168.0.68" "$REMOTE_BACKEND_SAN"
+
+# order: non-interactive call with persisted config must still restore (tty guard after skip)
+REMOTE_OFFLOAD=0; REMOTE_GPUS=""
+PREFIX="$PERSISTDIR"; CERTS_ONLY=0
+setup_remote_offload </dev/null >/dev/null 2>&1 || true
+check "non-interactive persisted rerun: restored" "1" "$REMOTE_OFFLOAD"
+check "non-interactive persisted rerun: gpus kept" "yes" "$( [[ "$REMOTE_GPUS" == *nvenc* ]] && echo yes || echo no )"
+
 exit "$fail"

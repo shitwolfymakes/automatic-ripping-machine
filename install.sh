@@ -752,9 +752,27 @@ offload_completion_report() {
     case "$(verify_callback "$url")" in
         PASS) _report_row "backend callback URL" "PASS  (reachable from the remote)" ;;
         FAIL) _report_row "backend callback URL" "FAIL — backend is up but ${url} is unreachable from the remote (published port? firewall?)" ;;
-        *)    printf '    %-27s %s\n' "backend callback URL ......" "PENDING — stack not running; after"
+        *)    _report_row "backend callback URL" "PENDING — stack not running; after"
               # shellcheck disable=SC2016 # backticks are literal text here, not command substitution
               printf '    %-27s %s\n' "" '`docker compose up -d`, re-run `bash install.sh`' ;; esac
+}
+
+# offload_restore_persisted — re-derive the REMOTE_* globals from a prior
+# run's .env (ARM_TRANSCODE_DOCKER_HOST etc.) without prompting. Used both by
+# setup_remote_offload's persisted-skip path (interactive rerun) and by the
+# non-interactive path — it must be tty-independent, since a headless rerun
+# of an already-offloaded deployment still needs its remote GPU inventory
+# restored, or seed_env's local GPU detection silently overwrites it.
+offload_restore_persisted() {
+    REMOTE_DOCKER_HOST="$(sed -nE 's/^ARM_TRANSCODE_DOCKER_HOST=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+    REMOTE_BACKEND_URL="$(sed -nE 's/^ARM_TRANSCODE_BACKEND_URL=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+    REMOTE_TRANSCODE_PUID="$(sed -nE 's/^ARM_TRANSCODE_PUID=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+    REMOTE_TRANSCODE_PGID="$(sed -nE 's/^ARM_TRANSCODE_PGID=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+    REMOTE_BACKEND_SAN="$(url_host "$REMOTE_BACKEND_URL")"
+    REMOTE_OFFLOAD=1
+    offload_remote_run_init "$REMOTE_DOCKER_HOST" "$PREFIX/ssh/id_ed25519" "$PREFIX/ssh/known_hosts"
+    REMOTE_GPUS="$(sed -nE 's/^ARM_GPUS=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
+    REMOTE_RENDER_GID="$(sed -nE 's/^ARM_RENDER_GID=(.*)$/\1/p' "$PREFIX/.env" | head -n1)"
 }
 
 # Interactive: offer remote transcode offload. On yes, provision a dedicated
@@ -767,25 +785,22 @@ setup_remote_offload() {
     # skip the questionnaire entirely (setup-dev.sh calls us --certs-only and a
     # dev at a tty would otherwise be prompted mid cert-bootstrap).
     [[ $CERTS_ONLY -eq 1 ]] && return 0
-    # Non-interactive (no tty) => never prompt; stay local.
-    [[ -t 0 ]] || return 0
 
     # Rerun with offload already persisted in .env: skip the questionnaire
     # entirely and re-derive the REMOTE_* globals from .env — verification
-    # runs at completion instead of re-walking the interactive setup.
+    # runs at completion instead of re-walking the interactive setup. This
+    # MUST run before the tty guard below: a non-interactive rerun (e.g. cron,
+    # CI, or setup-dev.sh) of an already-offloaded deployment still needs its
+    # remote GPU inventory restored, or seed_env's local GPU detection
+    # silently overwrites the persisted remote ARM_GPUS/ARM_RENDER_GID.
     if offload_persisted; then
-        REMOTE_OFFLOAD=1
-        REMOTE_DOCKER_HOST="$(sed -nE 's/^ARM_TRANSCODE_DOCKER_HOST=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
-        REMOTE_BACKEND_URL="$(sed -nE 's/^ARM_TRANSCODE_BACKEND_URL=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
-        REMOTE_TRANSCODE_PUID="$(sed -nE 's/^ARM_TRANSCODE_PUID=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
-        REMOTE_TRANSCODE_PGID="$(sed -nE 's/^ARM_TRANSCODE_PGID=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
-        REMOTE_BACKEND_SAN="$(url_host "$REMOTE_BACKEND_URL")"
-        offload_remote_run_init "$REMOTE_DOCKER_HOST" "$PREFIX/ssh/id_ed25519" "$PREFIX/ssh/known_hosts"
-        REMOTE_GPUS="$(sed -nE 's/^ARM_GPUS=(.+)$/\1/p' "$PREFIX/.env" | head -n1)"
-        REMOTE_RENDER_GID="$(sed -nE 's/^ARM_RENDER_GID=(.*)$/\1/p' "$PREFIX/.env" | head -n1)"
+        offload_restore_persisted
         log "offload already configured (${REMOTE_DOCKER_HOST}); skipping questionnaire — verification runs at completion"
         return 0
     fi
+
+    # Non-interactive (no tty) => never prompt; stay local.
+    [[ -t 0 ]] || return 0
 
     confirm "Enable remote transcode offload (spawn transcodes on a GPU host over ssh)?" || return 0
     REMOTE_OFFLOAD=1
