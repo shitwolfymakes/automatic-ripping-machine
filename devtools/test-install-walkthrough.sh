@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2317,SC2329
+# shellcheck disable=SC2317,SC2329,SC2034
 # (Shadow functions below are invoked indirectly by sourced install.sh code —
 # newer shellcheck flags them unreachable; this is the documented
-# "ignore if invoked indirectly" case.)
+# "ignore if invoked indirectly" case. SC2034: REMOTE_RUN is consumed by
+# sourced install.sh functions via "${REMOTE_RUN[@]}", not in this file;
+# LOCAL_FP is computed for parity with production but not asserted on here.)
 # Plain-bash unit test for install.sh's remote-offload walkthrough machinery:
 # output helpers, input validators, paste-block generators, verify-step
 # classification, and the completion table. Sources install.sh via
@@ -122,5 +124,45 @@ inject_offload_compose "$FIX" "https://192.168.0.68:9090"
 check "port injection converges to latest" "1" "$(grep -c '"9090:8443"' "$FIX")"
 check "no stale port left" "0" "$(grep -c '"8080:8443"' "$FIX")"
 check "single ports key" "1" "$(grep -c '^    ports:$' "$FIX")"
+
+# --- walkthrough: paste generators + verify classification -------------------
+
+PUBLINE='ssh-ed25519 AAAA...xyz armv3-backend@192.168.0.92'
+out="$(paste_block_key "$PUBLINE" "192.168.0.92" "sam")"
+check "key block: fenced + host/user named" "yes" "$( [[ "$out" == *"on 192.168.0.92 (as sam)"* ]] && echo yes || echo no )"
+check "key block: append-if-absent" "yes" "$( [[ "$out" == *"grep -qxF"* && "$out" == *">> ~/.ssh/authorized_keys"* ]] && echo yes || echo no )"
+check "key block: chmods" "yes" "$( [[ "$out" == *"chmod 700 ~/.ssh"* && "$out" == *"chmod 600 ~/.ssh/authorized_keys"* ]] && echo yes || echo no )"
+
+CAFIX="$TMPROOT/ca.crt"; printf -- '-----BEGIN CERTIFICATE-----\nAAA\n-----END CERTIFICATE-----\n' > "$CAFIX"
+out="$(paste_block_ca "$CAFIX" "/home/sam/.arm/certs" "192.168.0.92" "sam")"
+check "ca block: mkdir + tee heredoc + PEM inlined" "yes" "$( [[ "$out" == *"mkdir -p /home/sam/.arm/certs"* && "$out" == *"BEGIN CERTIFICATE"* && "$out" == *"ARM_CA_EOF"* ]] && echo yes || echo no )"
+
+out="$(paste_block_save_load "x/arm-transcode:t" "ssh://sam@192.168.0.92" "/p/ssh/id_ed25519")"
+check "save/load: runs on THIS host" "yes" "$( [[ "$out" == *"THIS host"* && "$out" == *"docker save x/arm-transcode:t"* && "$out" == *"docker load"* ]] && echo yes || echo no )"
+
+# verify classification via the REMOTE_RUN seam: shadow runner scripts outcomes.
+remote_script() { REMOTE_RUN=(bash -c "$1" --); }
+remote_script 'exit 255'
+check "verify_docker: ssh failure" "FAIL_SSH" "$(verify_docker_access)"
+remote_script 'echo "permission denied while trying to connect to the Docker daemon" >&2; exit 1'
+check "verify_docker: docker group" "FAIL_DOCKER" "$(verify_docker_access)"
+remote_script 'echo 27.4'
+check "verify_docker: pass" "PASS 27.4" "$(verify_docker_access)"
+
+LOCAL_FP="$(openssl x509 -noout -fingerprint -sha256 -in "$CAFIX" 2>/dev/null || sha256sum "$CAFIX")"
+remote_script 'exit 1'
+check "verify_ca: absent" "FAIL_ABSENT" "$(verify_ca "$CAFIX" /home/sam/.arm/certs)"
+remote_script 'echo WRONG-FINGERPRINT'
+check "verify_ca: mismatch" "FAIL_MISMATCH" "$(verify_ca "$CAFIX" /home/sam/.arm/certs)"
+
+remote_script 'exit 1'
+check "verify_image: fail" "FAIL" "$(verify_image x/arm-transcode:t)"
+remote_script 'echo ok'
+check "verify_image: pass" "PASS" "$(verify_image x/arm-transcode:t)"
+
+remote_script 'exit 1'
+check "verify_paths: all missing" "FAIL /a /b /c" "$(verify_paths /a /b /c)"
+remote_script 'exit 0'
+check "verify_paths: pass" "PASS" "$(verify_paths /a /b /c)"
 
 exit "$fail"

@@ -613,6 +613,83 @@ remote_detect_gpus() {
     printf '%s\n' "$out"
 }
 
+# REMOTE_RUN seam: how verification reaches the remote. Tests pre-set the
+# array; production initializes it from the endpoint + the dedicated key.
+offload_remote_run_init() {  # <endpoint> <keyfile> <known_hosts>
+    if ! declare -p REMOTE_RUN >/dev/null 2>&1; then
+        local host port user dest
+        user="$(endpoint_user "$1")"; host="$(endpoint_host "$1")"; port="$(endpoint_port "$1")"
+        dest="${user:+${user}@}${host}"
+        REMOTE_RUN=(ssh -i "$2" -o BatchMode=yes -o ConnectTimeout=10
+                    -o UserKnownHostsFile="$3" -o StrictHostKeyChecking=accept-new
+                    ${port:+-p "$port"} "$dest")
+    fi
+}
+
+paste_block_key() {  # <pubkey-line> <host> <user>
+    fence_open "paste EVERYTHING between the lines, on $2 (as $3)"
+    printf 'mkdir -p ~/.ssh && chmod 700 ~/.ssh\n'
+    printf "grep -qxF '%s' ~/.ssh/authorized_keys 2>/dev/null || \\\\\n" "$1"
+    printf "  echo '%s' >> ~/.ssh/authorized_keys\n" "$1"
+    printf 'chmod 600 ~/.ssh/authorized_keys\n'
+    fence_close
+}
+
+paste_block_ca() {  # <ca-file> <certs-path> <host> <user>
+    fence_open "paste EVERYTHING between the lines, on $3 (as $4)"
+    printf 'mkdir -p %s\n' "$2"
+    printf "tee %s/arm-ca.crt >/dev/null <<'ARM_CA_EOF'\n" "$2"
+    cat "$1"
+    printf 'ARM_CA_EOF\n'
+    fence_close
+}
+
+paste_block_pull() {  # <ref>
+    fence_open "run on the REMOTE host"
+    printf 'docker pull %s\n' "$1"
+    fence_close
+}
+
+paste_block_save_load() {  # <ref> <endpoint> <keyfile>
+    local user host; user="$(endpoint_user "$2")"; host="$(endpoint_host "$2")"
+    fence_open "run on THIS host (not the remote)"
+    printf 'docker save %s | \\\n  ssh -i %s %s docker load\n' "$1" "$3" "${user:+${user}@}${host}"
+    fence_close
+}
+
+verify_docker_access() {
+    local out rc=0
+    out="$("${REMOTE_RUN[@]}" docker info --format '{{.ServerVersion}}' 2>&1)" || rc=$?
+    if (( rc == 255 )); then printf 'FAIL_SSH'; return 0; fi
+    if (( rc != 0 )); then
+        [[ "$out" == *"permission denied"* ]] && { printf 'FAIL_DOCKER'; return 0; }
+        printf 'FAIL_SSH'; return 0
+    fi
+    printf 'PASS %s' "$(printf '%s' "$out" | tail -n1)"
+}
+
+verify_ca() {  # <local-ca-file> <remote-certs-path>
+    local want got rc=0
+    want="$(sha256sum "$1" | cut -d" " -f1)"
+    got="$("${REMOTE_RUN[@]}" sha256sum "$2/arm-ca.crt" 2>/dev/null)" || rc=$?
+    got="${got%% *}"
+    if (( rc != 0 )) || [[ -z "$got" ]]; then printf 'FAIL_ABSENT'; return 0; fi
+    if [[ "$got" == "$want" ]]; then printf 'PASS'; else printf 'FAIL_MISMATCH'; fi
+}
+
+verify_image() {  # <ref>
+    "${REMOTE_RUN[@]}" docker image inspect --format ok "$1" >/dev/null 2>&1 \
+        && printf 'PASS' || printf 'FAIL'
+}
+
+verify_paths() {  # <p...> — report every missing path
+    local missing=() p
+    for p in "$@"; do
+        "${REMOTE_RUN[@]}" test -d "$p" >/dev/null 2>&1 || missing+=("$p")
+    done
+    (( ${#missing[@]} == 0 )) && printf 'PASS' || printf 'FAIL %s' "${missing[*]}"
+}
+
 # Interactive: offer remote transcode offload. On yes, provision a dedicated
 # ssh key, print the authorize line, detect the REMOTE GPU inventory, and set
 # the REMOTE_* globals the rest of install.sh consumes. On no/non-interactive,
@@ -681,12 +758,77 @@ setup_remote_offload() {
     # must be the owner or ssh transport fails silently.
     chown -R "${def_puid}:${def_pgid}" "$sshdir" 2>/dev/null || true
 
-    echo
-    log "Authorize this key on ${remote_host} — append the line below to ~/.ssh/authorized_keys there:"
-    echo
-    cat "$key.pub"
-    echo
-    read -rp "  Press Enter once the key is authorized on ${remote_host}... " _
+    offload_remote_run_init "$REMOTE_DOCKER_HOST" "$key" "$sshdir/known_hosts"
+    local remote_user_disp; remote_user_disp="$(endpoint_user "$REMOTE_DOCKER_HOST")"
+
+    # Step 1 — authorize the ARM key
+    echo; log "Step 1 of 4 — authorize the ARM key on the remote"
+    paste_block_key "$(cat "$key.pub")" "$remote_host" "${remote_user_disp:-<user>}"
+    while true; do
+        read -rp "  Press Enter to verify... " _
+        case "$(verify_docker_access)" in
+            PASS*) okline "docker reachable over the ARM key"; break ;;
+            FAIL_DOCKER)
+                failline "ssh reached ${remote_host} but docker was denied."
+                log "  Likely cause: user '${remote_user_disp}' is not in the remote docker group."
+                log "  Fix on the remote:  sudo usermod -aG docker ${remote_user_disp}   (then log out/in there)" ;;
+            *)  failline "ssh to ${remote_host} failed — key not authorized yet, or host unreachable." ;;
+        esac
+        confirm "  Re-check now? (No = skip; offload will FAIL in the completion table)" || { warnline "step skipped"; break; }
+    done
+
+    # Step 2 — CA for transcoder callbacks
+    local certs_path; certs_path="$(offload_certs_path "$REMOTE_DOCKER_HOST")"
+    echo; log "Step 2 of 4 — place the CA for transcoder callbacks"
+    paste_block_ca "$PREFIX/certs/arm-ca.crt" "$certs_path" "$remote_host" "${remote_user_disp:-<user>}"
+    while true; do
+        read -rp "  Press Enter to verify... " _
+        case "$(verify_ca "$PREFIX/certs/arm-ca.crt" "$certs_path")" in
+            PASS) okline "CA present, fingerprint matches"; break ;;
+            FAIL_MISMATCH) failline "a DIFFERENT CA is at ${certs_path}/arm-ca.crt — stale from a previous install? Re-paste the block." ;;
+            *) failline "CA not found at ${certs_path}/arm-ca.crt" ;;
+        esac
+        confirm "  Re-check now? (No = skip)" || { warnline "step skipped"; break; }
+    done
+
+    # Step 3 — transcode image
+    local image_ref="${ARM_IMAGE_PREFIX_DEFAULT}/arm-transcode:${ARM_IMAGE_TAG_DEFAULT}"
+    echo; log "Step 3 of 4 — transcode image on the remote"
+    if [[ "$(verify_image "$image_ref")" == PASS ]]; then
+        okline "image present on remote (${image_ref})"
+    else
+        failline "${image_ref} not present on the remote daemon."
+        if [[ "$image_ref" == *.*/* || "$image_ref" == docker.io/* || "$image_ref" == ghcr.io/* ]]; then
+            log "  Pull it there:"
+            paste_block_pull "$image_ref"
+        else
+            log "  This is a locally-built image pin — transfer it from this host:"
+            paste_block_save_load "$image_ref" "$REMOTE_DOCKER_HOST" "$key"
+        fi
+        while true; do
+            confirm "  Re-check now? (No = skip)" || { warnline "step skipped"; break; }
+            [[ "$(verify_image "$image_ref")" == PASS ]] && { okline "image present on remote"; break; }
+            failline "still not present"
+        done
+    fi
+
+    # Step 4 — shared data paths (best effort: env may not be seeded yet on a
+    # first run; read the .env when present, else skip with a note — the
+    # completion battery re-checks with final values).
+    echo; log "Step 4 of 4 — shared data paths on the remote"
+    local raw_p media_p logs_p
+    raw_p="$(sed -nE 's/^ARM_HOST_RAW_PATH=(.+)$/\1/p' "$PREFIX/.env" 2>/dev/null | head -n1)"
+    media_p="$(sed -nE 's/^ARM_HOST_MEDIA_PATH=(.+)$/\1/p' "$PREFIX/.env" 2>/dev/null | head -n1)"
+    logs_p="$(sed -nE 's/^ARM_HOST_LOGS_PATH=(.+)$/\1/p' "$PREFIX/.env" 2>/dev/null | head -n1)"
+    if [[ -n "$raw_p" && -n "$media_p" && -n "$logs_p" ]]; then
+        local v; v="$(verify_paths "$raw_p" "$media_p" "$logs_p")"
+        case "$v" in
+            PASS) okline "data paths exist on the remote" ;;
+            *) warnline "missing on the remote: ${v#FAIL } — mount the shared export there" ;;
+        esac
+    else
+        log "  (paths not seeded yet — checked in the completion table)"
+    fi
 
     # Remote GPU detection doubles as the connectivity test (uses the dedicated key).
     REMOTE_GPUS=""; REMOTE_RENDER_GID=""
