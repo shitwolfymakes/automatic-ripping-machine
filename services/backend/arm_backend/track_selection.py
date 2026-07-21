@@ -107,3 +107,28 @@ def select_tracks(job_id: str, scan: ScanResult, rip_preset: RipPreset) -> list[
             )
         ]
     raise TrackSelectionError(f"cannot select tracks for disc_type={scan.disc_type}")
+
+
+def select_tracks_for_review(job_id: str, scan: ScanResult, rip_preset: RipPreset) -> list[Track]:
+    """Persist EVERY scanned title as a Track for the timed review gate, marking
+    preset-rejected titles `excluded=True` (the default keep/drop set) so the
+    review UI shows the full title list and the operator can re-enable any.
+
+    Differs from `select_tracks` (which returns only the preset's subset): here
+    the preset computes *defaults*, not membership. The kept set is whatever
+    `select_tracks` would have produced, matched by `source_ref`. (spec §4.3)
+
+    DATA discs have no per-title list — they synthesise a single full-dump Track,
+    so review persistence delegates straight to `select_tracks`.
+    """
+    if scan.disc_type == DiscType.DATA:
+        return select_tracks(job_id, scan, rip_preset)
+
+    kept_refs = {t.source_ref for t in select_tracks(job_id, scan, rip_preset)}
+    is_cd = scan.disc_type == DiscType.CD
+    rows: list[Track] = []
+    for title in scan.titles:
+        track = _audio_track(job_id, title) if is_cd else _video_track(job_id, title)
+        track.excluded = str(title.index) not in kept_refs
+        rows.append(track)
+    return rows

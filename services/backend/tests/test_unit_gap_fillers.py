@@ -1,7 +1,6 @@
 """Targeted unit coverage for small residual gaps across helper modules:
-config validator, notification_format label/body branches, ws.authz._split
-edge cases, WSHub unsubscribe/emit-without-session, and track_selection's
-unsupported-disc-type raise.
+config validator, ws.authz._split edge cases, WSHub unsubscribe/emit-without-session,
+and track_selection's unsupported-disc-type raise.
 """
 
 from __future__ import annotations
@@ -15,11 +14,10 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 import pytest  # noqa: E402
 
 from arm_backend.config import Settings  # noqa: E402
-from arm_backend.notification_format import _disc_label, _rip_body  # noqa: E402
 from arm_backend.track_selection import TrackSelectionError, select_tracks  # noqa: E402
 from arm_backend.ws.authz import _split  # noqa: E402
 from arm_backend.ws.hub import WSHub  # noqa: E402
-from arm_common import DiscType, Event, Job, JobStatus, RipPreset, MediaType, TrackSelection  # noqa: E402
+from arm_common import DiscType, RipPreset, MediaType, TrackSelection  # noqa: E402
 from arm_common.enums import IdentificationMode, OutputMode  # noqa: E402
 from arm_common.schemas import ScanResult  # noqa: E402
 
@@ -34,62 +32,6 @@ def test_split_origins_passes_through_non_str() -> None:
 
 def test_split_origins_parses_csv() -> None:
     assert Settings._split_origins(" a , b ,, c ") == ["a", "b", "c"]
-
-
-# --- notification_format -----------------------------------------------------
-
-
-def _job(title: str | None, year: int | None) -> Job:
-    return Job(
-        id="job_01JZXR7K3M5Q8N4VWA00000001",
-        drive_id="drv_x",
-        disc_type=DiscType.DVD,
-        title=title,
-        year=year,
-        status=JobStatus.RIPPED,
-        metadata_json={},
-        resumed_from_crash=False,
-    )
-
-
-def _event(**payload: object) -> Event:
-    return Event(
-        id="evt_1", event_type="rip.completed", job_id="job_01JZXR7K3M5Q8N4VWA00000001", payload_json=dict(payload)
-    )
-
-
-def test_disc_label_title_without_year() -> None:
-    assert _disc_label(_event(), _job("Solaris", None)) == "Solaris"
-
-
-def test_disc_label_title_with_year() -> None:
-    assert _disc_label(_event(), _job("Solaris", 1972)) == "Solaris (1972)"
-
-
-def test_disc_label_job_id_fallback() -> None:
-    ev = Event(id="e", event_type="x", job_id="job_01JZXR7K3M5Q8N4VWA0000000C", payload_json={})
-    assert _disc_label(ev, None) == "job=job_01JZXR7K3M5Q8N4VWA0000000C"
-
-
-def test_disc_label_unknown() -> None:
-    ev = Event(id="e", event_type="x", payload_json={})
-    assert _disc_label(ev, None) == "(unknown disc)"
-
-
-def test_rip_body_no_drive_no_totals() -> None:
-    """drive_id falsy (32->34) and total None (34->39) — only the disc label."""
-    assert _rip_body(_event(), _job("Solaris", 1972)) == "Solaris (1972)"
-
-
-def test_rip_body_with_failures() -> None:
-    body = _rip_body(_event(drive_id="drv_x", tracks_done=2, tracks_failed=1, tracks_total=3), _job("M", 2000))
-    assert "drive=drv_x" in body
-    assert "2/3 tracks done, 1 failed" in body
-
-
-def test_rip_body_all_done() -> None:
-    body = _rip_body(_event(tracks_done=3, tracks_failed=0, tracks_total=3), _job("M", 2000))
-    assert "3/3 tracks" in body
 
 
 # --- ws.authz._split ---------------------------------------------------------

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import secrets
+from datetime import datetime, timedelta, timezone
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
@@ -19,6 +20,7 @@ from arm_common import (  # noqa: E402
     ContainerFormat,
     DiscType,
     Drive,
+    DriveMode,
     DriveStatus,
     HwPreference,
     IdentificationMode,
@@ -243,3 +245,191 @@ def test_delete_drive_with_non_ripping_job_succeeds(signing_key: bytes) -> None:
     # job history untouched by the drive delete
     assert db.rows["jobs"][0].id == "job_1"
     assert db.rows["jobs"][0].drive_serial == "SN1"
+
+
+def _job(job_id: str, *, drive_id: str = "drv_x", status: JobStatus, title: str | None = "T", created: int = 0) -> Job:
+    return Job(
+        id=job_id,
+        drive_id=drive_id,
+        disc_type=DiscType.DVD,
+        status=status,
+        title=title,
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=created),
+    )
+
+
+def test_list_returns_driveview_with_null_tuning(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/drives", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    row = r.json()[0]
+    for f in (
+        "rip_speed",
+        "drive_mode",
+        "uhd_capable",
+        "prescan_cache_mb",
+        "prescan_timeout",
+        "prescan_retries",
+        "disc_enum_timeout",
+    ):
+        assert row[f] is None
+    assert row["current_job"] is None
+    assert "rip_params_json" not in row
+    assert "last_seen_at" in row  # raw-Drive field preserved in the view (UI renders it)
+
+
+def test_current_job_is_active_job(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["jobs"] = [_job("job_a", status=JobStatus.RIPPING, title="Iron Man")]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/drives", headers=_auth(token))
+    row = next(d for d in r.json() if d["id"] == "drv_x")
+    assert row["current_job"] == {"id": "job_a", "title": "Iron Man", "status": "ripping"}
+
+
+def test_current_job_none_when_only_terminal(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["jobs"] = [
+        _job("job_done", status=JobStatus.RIPPED),
+        _job("job_fail", status=JobStatus.FAILED),
+    ]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/drives", headers=_auth(token))
+    row = next(d for d in r.json() if d["id"] == "drv_x")
+    assert row["current_job"] is None
+
+
+def test_current_job_none_when_ripped_awaiting_identify(signing_key: bytes) -> None:
+    # RIPPED_AWAITING_IDENTIFY is terminal — rip done, drive idle, awaiting a
+    # human identify. A drive carrying only this must show current_job=None.
+    db = FakeSession()
+    _seed(db)
+    db.rows["jobs"] = [_job("job_awaiting", status=JobStatus.RIPPED_AWAITING_IDENTIFY)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/drives", headers=_auth(token))
+    row = next(d for d in r.json() if d["id"] == "drv_x")
+    assert row["current_job"] is None
+
+
+def test_current_job_picks_most_recent_active(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["jobs"] = [
+        _job("job_old", status=JobStatus.IDENTIFIED, created=0),
+        _job("job_new", status=JobStatus.RIPPING, created=100),
+    ]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/drives", headers=_auth(token))
+    row = next(d for d in r.json() if d["id"] == "drv_x")
+    assert row["current_job"]["id"] == "job_new"
+
+
+def test_current_job_grouped_per_drive_no_crossleak(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["drives"].append(Drive(id="drv_y", hostname="host-2", device_path="/dev/sr1", status=DriveStatus.ONLINE))
+    db.rows["jobs"] = [_job("job_x", drive_id="drv_x", status=JobStatus.RIPPING)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/drives", headers=_auth(token))
+    by_id = {d["id"]: d for d in r.json()}
+    assert by_id["drv_x"]["current_job"]["id"] == "job_x"
+    assert by_id["drv_y"]["current_job"] is None
+
+
+def test_patch_tuning_fields_persisted(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {
+        "rip_speed": 8,
+        "drive_mode": "manual",
+        "uhd_capable": True,
+        "prescan_cache_mb": 1024,
+        "prescan_timeout": 30,
+        "prescan_retries": 3,
+        "disc_enum_timeout": 60,
+    }
+    with TestClient(app) as c:
+        r = c.patch("/api/drives/drv_x", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    row = r.json()
+    for k, v in body.items():
+        assert row[k] == v
+    assert db.rows["drives"][0].rip_speed == 8
+    assert db.rows["drives"][0].drive_mode == DriveMode.MANUAL
+
+
+def test_patch_invalid_drive_mode_422(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/drives/drv_x", json={"drive_mode": "bogus"}, headers=_auth(token))
+    assert r.status_code == 422
+
+
+def test_patch_partial_leaves_others_untouched(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["drives"][0].drive_mode = DriveMode.AUTO
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/drives/drv_x", json={"rip_speed": 4}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["rip_speed"] == 4
+    assert r.json()["drive_mode"] == "auto"
+
+
+def test_patch_explicit_null_clears_tuning(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["drives"][0].rip_speed = 9
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/drives/drv_x", json={"rip_speed": None}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["rip_speed"] is None
+
+
+def test_patch_unknown_tuning_field_422(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/drives/drv_x", json={"bogus_field": 1}, headers=_auth(token))
+    assert r.status_code == 422
+
+
+def test_current_job_handles_none_created_at(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    # One active job with created_at=None (fresh row, unstamped) + one with a
+    # real timestamp. The None-created_at job must sort to the epoch-min
+    # sentinel (not crash), so the timestamped job wins.
+    db.rows["jobs"] = [
+        Job(
+            id="job_none",
+            drive_id="drv_x",
+            disc_type=DiscType.DVD,
+            status=JobStatus.RIPPING,
+            title="no-ts",
+            created_at=None,
+        ),
+        _job("job_ts", status=JobStatus.IDENTIFIED, title="has-ts", created=50),
+    ]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/drives", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    row = next(d for d in r.json() if d["id"] == "drv_x")
+    assert row["current_job"]["id"] == "job_ts"  # real timestamp beats the None-sentinel
