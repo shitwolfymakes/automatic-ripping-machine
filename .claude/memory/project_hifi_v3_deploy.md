@@ -8,7 +8,10 @@ metadata:
 The v3 stack runs on **hifi-server** (host `quark`, `192.168.0.68`, user `upb`,
 key `~/.ssh/hifi`) at `~/src/automatic-ripping-machine-v3`, cloned from
 `origin` (`uprightbass360/arm-v3`, now public). Deployed branch:
-`deploy/hifi-20260705`; checkout at **`62eb6733`** since 2026-07-20 (evening):
+`deploy/hifi-20260705`; checkout at **`165380e8`** since 2026-07-21:
+**hifi-deck + gruvbox builtin themes removed** (winamp-classic stays;
+arm-ui-neu rebuilt+recreated, removed theme URLs now SPA-fallback).
+Previous checkout **`62eb6733`** since 2026-07-20 (evening):
 **installer-managed prefix migration + walkthrough hardening.** The stack now
 runs from `~/arm` (installer-generated compose + one `docker-compose.override.yml`
 for NFS repoints/ui-neu:8888/nfs-check gate — the three-overlay incantation is
