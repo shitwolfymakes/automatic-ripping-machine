@@ -743,53 +743,6 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 			'--color-surface-dark': 'rgb(34, 34, 48)',
 			'--radius': '0.25rem'
 		}
-	},
-	{
-		id: 'hifi-deck',
-		label: 'Hi-Fi',
-		swatch: '#d97706',
-		mode: 'dark',
-		author: 'Claude',
-		description: '70s audiophile stack — matte black, brushed aluminum, amber VU meters, walnut trim',
-		tokens: {
-			'--color-primary': 'rgb(217, 119, 6)',            // amber backlight
-			'--color-primary-hover': 'rgb(245, 158, 11)',
-			'--color-primary-dark': 'rgb(146, 64, 14)',
-			'--color-primary-light-bg': 'rgb(38, 30, 20)',
-			'--color-primary-light-bg-dark': 'rgb(30, 24, 16)',
-			'--color-primary-text': 'rgb(251, 191, 36)',
-			'--color-primary-text-dark': 'rgb(251, 191, 36)',
-			'--color-primary-border': 'rgb(180, 130, 50)',
-			'--color-on-primary': 'rgb(20, 16, 12)',
-			'--color-page': 'rgb(18, 16, 14)',                // warm matte black
-			'--color-page-dark': 'rgb(18, 16, 14)',
-			'--color-surface': 'rgb(28, 25, 21)',             // faceplate
-			'--color-surface-dark': 'rgb(28, 25, 21)',
-			'--radius': '0.375rem'
-		}
-	},
-	{
-		id: 'gruvbox',
-		label: 'Gruvbox',
-		swatch: '#d65d0e',
-		author: 'Claude',
-		description: 'Retro groove editor palette — warm cream/charcoal with orange, aqua, and yellow accents',
-		tokens: {
-			'--color-primary': 'rgb(214, 93, 14)',            // gruvbox orange
-			'--color-primary-hover': 'rgb(175, 58, 3)',       // faded orange
-			'--color-primary-dark': 'rgb(139, 46, 2)',
-			'--color-primary-light-bg': 'rgb(249, 226, 189)', // warm cream highlight
-			'--color-primary-light-bg-dark': 'rgb(69, 46, 22)',
-			'--color-primary-text': 'rgb(175, 58, 3)',
-			'--color-primary-text-dark': 'rgb(254, 128, 25)', // bright orange
-			'--color-primary-border': 'rgb(214, 93, 14)',
-			'--color-on-primary': 'rgb(29, 32, 33)',          // bg0_h on orange
-			'--color-page': 'rgb(251, 241, 199)',             // light bg0
-			'--color-page-dark': 'rgb(29, 32, 33)',           // dark bg0_h
-			'--color-surface': 'rgb(249, 245, 215)',          // light bg0_s
-			'--color-surface-dark': 'rgb(40, 40, 40)',        // dark bg0
-			'--radius': '0.375rem'
-		}
 	}
 ];
 
