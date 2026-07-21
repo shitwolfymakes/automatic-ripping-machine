@@ -4,9 +4,79 @@ Generate new color themes for the ARM (Automatic Ripping Machine) dashboard UI. 
 
 ## How Themes Work
 
-Each theme is a **JSON file** in `backend/themes/builtin/` (built-in) or uploaded by users via the Settings page. Themes define 13 required CSS custom properties applied to `:root` at runtime, plus 7 optional status-color tokens. Dark-only themes set `"mode": "dark"`. Themes may optionally include custom CSS rules in the `"css"` field using the `[data-scheme="<id>"]` selector prefix.
+There are two kinds of themes, with different formats:
 
-## Theme JSON Format
+- **Built-in themes** ship with the frontend as a pair: a token entry in
+  `frontend/src/lib/stores/colorScheme.ts` (`COLOR_SCHEMES`) plus an optional
+  static CSS sidecar at `frontend/static/themes/<id>.css`. The sidecar is
+  served same-origin at `/themes/<id>.css` and fetched at runtime when the
+  theme activates. The backend is not involved.
+- **User-uploaded themes** are a single **JSON file** uploaded via the
+  Settings page and served by the backend theme API. Their custom CSS lives in
+  the JSON's `"css"` string field.
+
+Both kinds define the same token set, applied to `:root` at runtime. Dark-only
+themes set `mode: 'dark'`. All custom CSS rules are scoped with a
+`[data-scheme="<id>"]` selector prefix.
+
+## Built-in Theme Format (new themes go here)
+
+### 1. Registry entry — `colorScheme.ts`
+
+Append a `ColorScheme` object to `COLOR_SCHEMES`:
+
+```ts
+{
+	id: 'winamp-classic',
+	label: 'Winamp',
+	swatch: '#d4b02f',
+	mode: 'dark', // omit for dual light/dark themes
+	author: 'Claude',
+	description: 'Classic MP3-player skin — charcoal chrome, gold titlebars, spectrum-analyzer progress',
+	tokens: {
+		'--color-primary': 'rgb(214, 178, 54)',
+		'--color-primary-hover': 'rgb(232, 199, 84)',
+		'--color-primary-dark': 'rgb(150, 122, 30)',
+		'--color-primary-light-bg': 'rgb(44, 44, 60)',
+		'--color-primary-light-bg-dark': 'rgb(36, 36, 50)',
+		'--color-primary-text': 'rgb(222, 189, 84)',
+		'--color-primary-text-dark': 'rgb(222, 189, 84)',
+		'--color-primary-border': 'rgb(150, 122, 30)',
+		'--color-on-primary': 'rgb(18, 18, 24)',
+		'--color-page': 'rgb(20, 20, 30)',
+		'--color-page-dark': 'rgb(20, 20, 30)',
+		'--color-surface': 'rgb(34, 34, 48)',
+		'--color-surface-dark': 'rgb(34, 34, 48)',
+		'--radius': '0.25rem'
+	}
+}
+```
+
+Built-in entries include `--radius` in `tokens` (corner rounding — `0px` for
+hard-edged retro themes, `0.5rem` typical otherwise). Do **not** set the `css`
+field on new built-in entries — custom CSS belongs in the static sidecar
+(older entries with inline `css` strings are legacy).
+
+### 2. CSS sidecar — `static/themes/<id>.css` (optional)
+
+Plain CSS (no JSON escaping), every rule prefixed with
+`[data-scheme="<id>"]`. Omit the file entirely for pure color-swap themes.
+
+Status-color token overrides use `:root`-level blocks — the sidecar is the
+only place a theme can scope them per mode:
+
+```css
+:root[data-scheme='my-theme'] {
+	/* light-mode status palette */
+	--color-status-success: rgb(152, 151, 26);
+}
+:root[data-scheme='my-theme'].dark {
+	/* brighter variants on dark backgrounds */
+	--color-status-success: rgb(184, 187, 38);
+}
+```
+
+## User-Uploaded Theme JSON Format
 
 Each theme is a single `.json` file named `<id>.json`:
 
@@ -44,13 +114,13 @@ Each theme is a single `.json` file named `<id>.json`:
 |-------|----------|-------------|
 | `id` | Yes | URL-safe, lowercase, kebab-case. Used as filename and `[data-scheme]` value |
 | `label` | Yes | Short display name (1-2 words) shown under the swatch |
-| `version` | No | Integer version number (default: 1) |
+| `version` | No | Integer version number (default: 1). JSON themes only |
 | `author` | No | Theme author name |
 | `description` | No | Short description of the theme |
 | `swatch` | Yes | Hex color for the preview circle (e.g. `"#3b82f6"`) |
 | `mode` | No | Set to `"dark"` to lock dark mode on. Omit for dual light/dark themes |
 | `tokens` | Yes | Object with 13 required CSS custom properties (plus 7 optional status colors - see below) |
-| `css` | No | Custom CSS string scoped under `[data-scheme="<id>"]` (default: `""`) |
+| `css` | No | JSON themes only: custom CSS string scoped under `[data-scheme="<id>"]` (default: `""`). Built-ins use the static sidecar instead |
 
 ### Token Reference
 
@@ -77,6 +147,9 @@ Page & surface backgrounds:
   --color-page-dark             Dark mode: full page bg (very dark, accent-tinted)
   --color-surface               Light mode: card/panel bg (slightly lighter than page)
   --color-surface-dark          Dark mode: card/panel bg (slightly lighter than page-dark)
+
+Built-in registry entries only:
+  --radius                      Corner rounding (0px for hard-edged themes)
 ```
 
 #### Optional status-color tokens
@@ -85,7 +158,9 @@ The 7 status-color tokens below paint job-state badges, lifecycle nodes,
 progress bars, and dashboard chips. They default to a sensible palette in
 `frontend/src/app.css` and themes don't need to override them - omit the
 keys to inherit defaults. Set them only when the default palette clashes
-with your theme accent.
+with your theme accent. Built-in themes override them in the CSS sidecar
+(scoped `:root[data-scheme]` blocks, per-mode — see above); JSON themes may
+set them in `tokens`.
 
 ```
   --color-status-ripping      Active rip / "Ripping" lifecycle node (default: blue)
@@ -104,9 +179,11 @@ the waiting token).
 
 ## Custom CSS
 
-For themes with distinctive visual styles beyond color tokens. The `"css"` field contains a CSS string where every rule is prefixed with `[data-scheme="<id>"]`.
-
-**Important:** The CSS is stored as a JSON string value, so all double quotes within the CSS must be escaped as `\"`.
+For themes with distinctive visual styles beyond color tokens. Built-in
+themes: plain CSS in `static/themes/<id>.css`. JSON themes: a CSS string in
+the `"css"` field — stored as a JSON string value, so all double quotes
+within the CSS must be escaped as `\"`. Either way, every rule is prefixed
+with `[data-scheme="<id>"]`.
 
 ### Available Selectors
 
@@ -125,6 +202,9 @@ For themes with distinctive visual styles beyond color tokens. The `"css"` field
 [data-scheme="<id>"] [data-progress-track] { }          /* Progress bar track */
 [data-scheme="<id>"] [data-progress-fill] { }           /* Progress bar fill */
 [data-scheme="<id>"] aside::before { }                  /* Pseudo-element for decorative lines */
+/* Status-token overrides (sidecar only): */
+:root[data-scheme="<id>"] { }                           /* Light-mode --color-status-* values */
+:root[data-scheme="<id>"].dark { }                      /* Dark-mode --color-status-* values */
 
 /* Section frames (dashboard panels like "WAITING FOR REVIEW", "ACTIVE RIPS") */
 [data-scheme="<id>"] .section-frame { }                 /* Frame container */
@@ -151,11 +231,40 @@ For themes with distinctive visual styles beyond color tokens. The `"css"` field
 
 ## Existing Theme IDs (do NOT reuse)
 
-`blue`, `ocean`, `forest`, `sunset`, `rose`, `violet`, `glass`, `cinema`, `gaming`, `royale`, `lcars`, `tactical`, `craft`, `terminal`, `blockbuster`, `hollywood-video-v2`
+`blue`, `sunset`, `stealth-ops`, `library-archive`, `synth-retro`,
+`synth-retro-v2`, `research-outpost`, `lcars`, `coffee`, `cinema`,
+`royal-archive`, `royale`, `craft`, `terminal`, `forest`, `ocean`,
+`tactical`, `deep-sea-abyss`, `nordic-frost`, `solarized-dark`,
+`blockbuster`, `vcr-osd`, `glass`, `tokyo-night`, `violet`,
+`retro-console`, `hollywood-video-v2`, `dracula-pro`, `gaming`, `rose`,
+`winamp-classic`
 
-## Examples
+## Example — stylized dark-only built-in (registry entry above + sidecar)
 
-**Simple dual-mode theme (color swap only, no custom CSS):**
+`static/themes/winamp-classic.css`:
+
+```css
+[data-scheme='winamp-classic'] {
+	font-family: Tahoma, 'MS Sans Serif', Verdana, sans-serif;
+}
+[data-scheme='winamp-classic'] aside nav a[data-active='true'] {
+	color: #d6b236 !important;
+	background: #1a1a28 !important;
+	border-top-color: #14141e;
+	border-left-color: #14141e;
+	border-bottom-color: #4a4a68;
+	border-right-color: #4a4a68;
+}
+[data-scheme='winamp-classic'] [data-progress-fill] {
+	background:
+		repeating-linear-gradient(90deg, transparent 0 2px, rgba(0, 0, 0, 0.4) 2px 4px),
+		linear-gradient(90deg, #00c010, #a8c000 65%, #c03000) !important;
+	border-radius: 0 !important;
+	box-shadow: 0 0 6px rgba(0, 192, 16, 0.35);
+}
+```
+
+## Example — simple dual-mode JSON upload (color swap only, no custom CSS)
 
 ```json
 {
@@ -181,35 +290,5 @@ For themes with distinctive visual styles beyond color tokens. The `"css"` field
     "--color-surface-dark": "rgb(21, 54, 37)"
   },
   "css": ""
-}
-```
-
-**Stylized dark-only theme (with custom CSS):**
-
-```json
-{
-  "id": "cinema",
-  "label": "Cinema",
-  "version": 1,
-  "author": "ARM Team",
-  "description": "Gold on black, inspired by classic movie theaters",
-  "swatch": "#ca8a04",
-  "mode": "dark",
-  "tokens": {
-    "--color-primary": "rgb(212, 175, 55)",
-    "--color-primary-hover": "rgb(188, 155, 40)",
-    "--color-primary-dark": "rgb(138, 109, 59)",
-    "--color-primary-light-bg": "rgb(30, 25, 10)",
-    "--color-primary-light-bg-dark": "rgb(30, 25, 10)",
-    "--color-primary-text": "rgb(212, 175, 55)",
-    "--color-primary-text-dark": "rgb(212, 175, 55)",
-    "--color-primary-border": "rgb(138, 109, 59)",
-    "--color-on-primary": "rgb(13, 13, 13)",
-    "--color-page": "rgb(26, 26, 26)",
-    "--color-page-dark": "rgb(26, 26, 26)",
-    "--color-surface": "rgb(13, 13, 13)",
-    "--color-surface-dark": "rgb(13, 13, 13)"
-  },
-  "css": "[data-scheme=\"cinema\"] {\n\tfont-family: 'Garamond', 'Times New Roman', Georgia, serif;\n}\n[data-scheme=\"cinema\"] aside {\n\tborder-color: #8a6d3b !important;\n}\n[data-scheme=\"cinema\"] aside nav a {\n\ttext-transform: uppercase;\n\tletter-spacing: 0.15em;\n\tfont-family: Arial, Helvetica, sans-serif;\n\tfont-size: 0.75rem;\n\tborder-radius: 0;\n\tborder-left: 2px solid transparent;\n}\n[data-scheme=\"cinema\"] aside nav a:hover {\n\tcolor: #d4af37 !important;\n\tbackground: linear-gradient(90deg, rgba(212, 175, 55, 0.05), transparent) !important;\n}\n[data-scheme=\"cinema\"] aside nav a[data-active=\"true\"] {\n\tcolor: #d4af37 !important;\n\tborder-left: 2px solid #d4af37;\n\tbackground: transparent !important;\n}\n[data-scheme=\"cinema\"] aside nav a svg { display: none; }\n[data-scheme=\"cinema\"] aside [data-logo] img {\n\tfilter: sepia(1) saturate(2) brightness(0.9) hue-rotate(5deg);\n}\n[data-scheme=\"cinema\"] aside hr { border-color: #8a6d3b; }\n[data-scheme=\"cinema\"] [data-progress-track] {\n\tbackground: #222 !important;\n\theight: 2px !important;\n\tborder-radius: 0 !important;\n}\n[data-scheme=\"cinema\"] [data-progress-fill] {\n\tbackground: #d4af37 !important;\n\tbox-shadow: 0 0 8px #d4af37;\n\tborder-radius: 0 !important;\n}\n[data-scheme=\"cinema\"] header { border-color: #8a6d3b !important; }"
 }
 ```
