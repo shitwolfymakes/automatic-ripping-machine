@@ -237,7 +237,7 @@ with `[data-scheme="<id>"]`.
 `tactical`, `deep-sea-abyss`, `nordic-frost`, `solarized-dark`,
 `blockbuster`, `vcr-osd`, `glass`, `tokyo-night`, `violet`,
 `retro-console`, `hollywood-video-v2`, `dracula-pro`, `gaming`, `rose`,
-`winamp-classic`
+`winamp-classic`, `winamp-shade`
 
 ## Example — stylized dark-only built-in (registry entry above + sidecar)
 
