@@ -118,7 +118,7 @@ Each theme is a single `.json` file named `<id>.json`:
 | `author` | No | Theme author name |
 | `description` | No | Short description of the theme |
 | `swatch` | Yes | Hex color for the preview circle (e.g. `"#3b82f6"`) |
-| `mode` | No | Set to `"dark"` to lock dark mode on. Omit for dual light/dark themes |
+| `mode` | No | `"dark"` or `"light"` locks that mode on while the theme is active. Omit for dual light/dark themes |
 | `tokens` | Yes | Object with 13 required CSS custom properties (plus 7 optional status colors - see below) |
 | `css` | No | JSON themes only: custom CSS string scoped under `[data-scheme="<id>"]` (default: `""`). Built-ins use the static sidecar instead |
 
@@ -176,6 +176,29 @@ Pick contrasting hues so users can distinguish "ripping" from "transcoding"
 at a glance, and keep `--color-status-finishing` distinct from
 `--color-status-waiting` (the dashboard's `.status-warning` class also uses
 the waiting token).
+
+#### Optional appearance tokens
+
+Beyond colors, four appearance tokens cover the most common customizations
+that previously required custom CSS. All are optional with no-op defaults,
+and all work in both built-in entries and uploaded JSON `tokens`:
+
+```
+  --radius        Corner rounding for cards/controls (e.g. "0px" hard-edged,
+                  "0.5rem" default). Also drives the derived radius scale.
+  --font-family   App-wide font stack (e.g. "'Trebuchet MS', Tahoma, sans-serif").
+                  Falls back to the Tailwind sans stack. Embedding an actual
+                  webfont still requires an @font-face rule in custom CSS.
+  --frame-accent  Theme-level default accent for section frames. Per-instance
+                  accents set by pages (e.g. the dashboard's per-panel colors)
+                  take precedence; frames without an explicit accent fall back
+                  to this token, then to the historical #f90.
+  --logo-filter   CSS filter applied to the sidebar logo image
+                  (e.g. "sepia(1) hue-rotate(65deg) saturate(2.5)").
+  --logo-url      Replaces the logo image entirely via CSS content replacement,
+                  e.g. "url(data:image/svg+xml;base64,...)". Chromium/Safari;
+                  browsers without img content support keep the stock logo.
+```
 
 ## Custom CSS
 
