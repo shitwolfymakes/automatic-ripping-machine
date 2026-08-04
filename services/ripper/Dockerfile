@@ -30,6 +30,12 @@ RUN apt-get update \
         libleptonica-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Optional internal mirror for the MakeMKV artifacts (see install_makemkv.sh
+# for the expected layout). Declared only in this build stage, which is
+# discarded, so neither ARG survives into the final image's history.
+ARG MAKEMKV_MIRROR_URL=
+ARG MAKEMKV_MIRROR_PASSWORD=
+
 COPY services/ripper/install/install_makemkv.sh /install_makemkv.sh
 RUN chmod +x /install_makemkv.sh && /install_makemkv.sh
 
