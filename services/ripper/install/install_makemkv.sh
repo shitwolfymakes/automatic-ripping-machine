@@ -24,6 +24,12 @@ set -euxo pipefail
 # build logs; it is passed to curl via --config for the same reason.
 { set +x; } 2>/dev/null
 MAKEMKV_MIRROR_URL="${MAKEMKV_MIRROR_URL:-}"
+# Password sources, in order: env var, BuildKit secret mount. -s skips an
+# empty secret file (CI passes the secret unconditionally; absent repo
+# secret arrives as empty).
+if [[ -z "${MAKEMKV_MIRROR_PASSWORD:-}" && -s /run/secrets/makemkv_mirror_password ]]; then
+    MAKEMKV_MIRROR_PASSWORD="$(cat /run/secrets/makemkv_mirror_password)"
+fi
 MIRROR_CURL_CFG=""
 if [[ -n "${MAKEMKV_MIRROR_PASSWORD:-}" ]]; then
     umask_prev="$(umask)"; umask 077
