@@ -32,6 +32,10 @@
 	--color-status-success: rgb(0, 255, 0);
 	--color-status-error: rgb(255, 40, 40);
 }
+/* site logo — LED-green tint (in-app this comes from the --logo-filter token) */
+[data-scheme='winamp-shade'] aside [data-logo] img {
+	filter: brightness(0) invert(58.5%) sepia(100%) saturate(400%) hue-rotate(9deg) brightness(93%);
+}
 /* nav — same gray plates as the transport buttons */
 [data-scheme='winamp-shade'] aside nav a {
 	position: relative;
@@ -180,7 +184,7 @@
 	content: 'SYSTEM';
 }
 /* plain-card containers — steel chassis bevel */
-[data-scheme='winamp-shade'] main .rounded-lg.border {
+[data-scheme='winamp-shade'] main .rounded-lg.border:not(button):not(input):not(select):not(textarea) {
 	border: 2px solid;
 	border-color: rgb(85, 90, 125) rgb(15, 16, 26) rgb(15, 16, 26) rgb(85, 90, 125) !important;
 	border-radius: 0 !important;
@@ -190,7 +194,7 @@
 	background-position: 6px 4px !important;
 	background-repeat: no-repeat !important;
 }
-[data-scheme='winamp-shade'] main .rounded-lg.border::after {
+[data-scheme='winamp-shade'] main .rounded-lg.border:not(button):not(input):not(select):not(textarea)::after {
 	content: '';
 	position: absolute;
 	pointer-events: none;
@@ -202,14 +206,14 @@
 	border-top: none;
 }
 /* card header rows — titlebar bleeds edge-to-edge, action buttons wrap BELOW it */
-[data-scheme='winamp-shade'] main .rounded-lg.border > div:has(> h2) {
+[data-scheme='winamp-shade'] main div.rounded-lg.border > div:has(> h2) {
 	padding: 0 0 0.6rem;
 	row-gap: 0.6rem;
 }
-[data-scheme='winamp-shade'] main .rounded-lg.border > div:has(> h2) > h2 {
+[data-scheme='winamp-shade'] main div.rounded-lg.border > div:has(> h2) > h2 {
 	flex: 1 1 100%;
 }
-[data-scheme='winamp-shade'] main .rounded-lg.border > div:has(> h2) > :not(h2) {
+[data-scheme='winamp-shade'] main div.rounded-lg.border > div:has(> h2) > :not(h2) {
 	margin-left: 1rem;
 	margin-right: 1rem;
 }
@@ -291,6 +295,43 @@
 	border-color: rgb(245, 246, 248) rgb(40, 42, 52) rgb(40, 42, 52) rgb(245, 246, 248);
 	outline: 1px solid rgb(10, 11, 20);
 	z-index: 1;
+}
+/* modal/drawer backdrops are <button> overlays — keep them plain scrims */
+[data-scheme='winamp-shade'] button[class*='inset-0'] {
+	background: rgba(0, 0, 0, 0.55) !important;
+	border: none !important;
+	outline: none !important;
+	box-shadow: none !important;
+	text-shadow: none;
+}
+/* text inputs — shared gray plate, recessed with inside shadow */
+[data-scheme='winamp-shade'] input[type='text'],
+[data-scheme='winamp-shade'] input[type='number'],
+[data-scheme='winamp-shade'] input[type='password'],
+[data-scheme='winamp-shade'] input[type='search'],
+[data-scheme='winamp-shade'] input[type='email'],
+[data-scheme='winamp-shade'] input[type='url'],
+[data-scheme='winamp-shade'] input:not([type]),
+[data-scheme='winamp-shade'] textarea {
+	background: linear-gradient(180deg, rgb(178, 181, 190), rgb(203, 205, 212)) !important;
+	color: rgb(28, 30, 38) !important;
+	border: 1px solid !important;
+	border-color: rgb(58, 62, 72) rgb(245, 246, 248) rgb(245, 246, 248) rgb(58, 62, 72) !important;
+	outline: 1px solid rgb(30, 32, 40);
+	border-radius: 0 !important;
+	box-shadow: inset 1px 2px 3px rgba(0, 0, 0, 0.35) !important;
+}
+[data-scheme='winamp-shade'] input::placeholder,
+[data-scheme='winamp-shade'] textarea::placeholder {
+	color: rgb(80, 84, 96) !important;
+}
+[data-scheme='winamp-shade'] input:focus,
+[data-scheme='winamp-shade'] textarea:focus {
+	outline: 1px solid rgb(0, 180, 0);
+}
+/* full-bleed tab-strip buttons: seat them inside the card's pinstripe frame */
+[data-scheme='winamp-shade'] main div[class*='border-t'] > button[class*='flex-1'] {
+	margin: 4px 8px 8px;
 }
 /* transport-bar buttons — raised steel bevel, dark glyphs */
 [data-scheme='winamp-shade'] button,
