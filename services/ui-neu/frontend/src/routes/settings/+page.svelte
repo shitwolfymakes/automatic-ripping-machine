@@ -10,7 +10,7 @@
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
 	import { theme, toggleTheme } from '$lib/stores/theme';
 	import { colorScheme, COLOR_SCHEMES, schemeLocksMode, allSchemes, loadThemesFromApi } from '$lib/stores/colorScheme';
-	import { uploadTheme, deleteTheme as deleteThemeApi } from '$lib/api/themes';
+	import { deleteTheme as deleteThemeApi } from '$lib/api/themes';
 	import { createPollingStore } from '$lib/stores/polling';
 	import { fetchDrives, fetchDriveDiagnostic, rescanDrives } from '$lib/api/drives';
 	import { fetchSessions } from '$lib/api/sessions';
@@ -126,11 +126,7 @@
 	}
 
 	// --- Theme management ---
-	let themeUploading = $state(false);
 	let themeFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
-	let themeJsonFile = $state<File | null>(null);
-	let themeName = $state('');
-	let themeCssText = $state('');
 
 	// --- Image cache state ---
 	let cacheStats = $state<ImageCacheStats | null>(null);
@@ -159,44 +155,6 @@
 			cacheFeedback = { type: 'error', message: e instanceof Error ? e.message : 'Failed to clear cache' };
 		}
 		cacheBusy = false;
-	}
-
-	async function handleThemeUpload() {
-		if (!themeJsonFile) return;
-		const name = themeName.trim();
-		if (!name) {
-			themeFeedback = { type: 'error', message: 'Theme name is required' };
-			return;
-		}
-		themeUploading = true;
-		themeFeedback = null;
-		try {
-			const text = await themeJsonFile.text();
-			const data = JSON.parse(text);
-			// Override label and derive id from the name field
-			data.label = name;
-			data.id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-			if (!data.id || !data.tokens) {
-				throw new Error('Invalid theme: missing required fields (tokens)');
-			}
-			// Re-create the file with patched data
-			const patched = new File([JSON.stringify(data)], `${data.id}.json`, { type: 'application/json' });
-			await uploadTheme(patched, themeCssText);
-			await loadThemesFromApi();
-			themeFeedback = { type: 'success', message: `Theme "${data.label}" uploaded` };
-			themeJsonFile = null;
-			themeName = '';
-			themeCssText = '';
-		} catch (e) {
-			themeFeedback = { type: 'error', message: e instanceof Error ? e.message : 'Upload failed' };
-		} finally {
-			themeUploading = false;
-		}
-	}
-
-	function handleJsonFileSelect(event: Event) {
-		const input = event.target as HTMLInputElement;
-		themeJsonFile = input.files?.[0] ?? null;
 	}
 
 	async function handleThemeDelete(id: string, label: string) {
@@ -474,65 +432,13 @@
 								</div>
 							{/each}
 						</div>
+						{#if themeFeedback}
+							<p class="mt-3 text-sm {themeFeedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+								{themeFeedback.message}
+							</p>
+						{/if}
 					</div>
 				{/if}
-
-				<!-- Upload Theme -->
-				<div class="rounded-lg border border-primary/20 bg-surface p-6 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
-					<h3 class="mb-1 text-base font-semibold text-gray-900 dark:text-white">Import Theme</h3>
-					<p class="mb-4 text-sm text-gray-500 dark:text-gray-400">Upload a theme JSON file and optional custom CSS.</p>
-					<div class="space-y-4">
-						<!-- Theme name -->
-						<div>
-							<label for="theme-name-input" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Theme Name <span class="text-red-500">*</span></label>
-							<input
-								id="theme-name-input"
-								type="text"
-								bind:value={themeName}
-								placeholder="My Theme"
-								disabled={themeUploading}
-								class="w-full rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-sm dark:border-primary/30 dark:bg-primary/10 dark:text-white"
-							/>
-						</div>
-						<!-- JSON file picker -->
-						<div>
-							<span class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Theme JSON <span class="text-red-500">*</span></span>
-							<label class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-primary/10 px-4 py-2 text-sm font-medium text-primary-text transition-colors hover:bg-primary/20 dark:text-primary-text-dark">
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-								{themeJsonFile ? themeJsonFile.name : 'Choose .json file'}
-								<input type="file" accept=".json" class="hidden" onchange={handleJsonFileSelect} disabled={themeUploading} />
-							</label>
-						</div>
-						<!-- CSS textarea -->
-						<div>
-							<label for="theme-css-input" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Custom CSS <span class="text-xs text-gray-400">(optional)</span></label>
-							<textarea
-								id="theme-css-input"
-								bind:value={themeCssText}
-								placeholder={'[data-scheme="my-theme"] {\n  /* custom styles */\n}'}
-								rows="6"
-								disabled={themeUploading}
-								class="w-full rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 font-mono text-sm dark:border-primary/30 dark:bg-primary/10 dark:text-white"
-							></textarea>
-						</div>
-						<!-- Upload button -->
-						<div class="flex items-center gap-3">
-							<button
-								type="button"
-								onclick={handleThemeUpload}
-								disabled={!themeJsonFile || !themeName.trim() || themeUploading}
-								class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-colors hover:bg-primary-hover disabled:opacity-50"
-							>
-								{themeUploading ? 'Uploading...' : 'Upload Theme'}
-							</button>
-							{#if themeFeedback}
-								<span class="text-sm {themeFeedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
-									{themeFeedback.message}
-								</span>
-							{/if}
-						</div>
-					</div>
-				</div>
 
 				<!-- Dark Mode -->
 				<div class="rounded-lg border border-primary/20 bg-surface p-6 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
