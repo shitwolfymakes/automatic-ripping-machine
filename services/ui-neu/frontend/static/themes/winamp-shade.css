@@ -270,20 +270,15 @@
 	outline-offset: -5px;
 }
 /* EQ-slider grabber at the end of every meter fill */
-[data-scheme='winamp-shade'] [data-progress-track],
-[data-scheme='winamp-shade'] div[class*='bg-primary/15'] {
-	overflow: visible !important;
-}
 [data-scheme='winamp-shade'] [data-progress-fill],
 [data-scheme='winamp-shade'] div[class*='duration-500'][style*='width'] {
 	position: relative;
-	overflow: visible;
 }
 [data-scheme='winamp-shade'] [data-progress-fill]::after,
 [data-scheme='winamp-shade'] div[class*='duration-500'][style*='width']::after {
 	content: '';
 	position: absolute;
-	right: -4px;
+	right: 0;
 	top: 50%;
 	transform: translateY(-50%);
 	width: 11px;
@@ -295,6 +290,15 @@
 	border-color: rgb(245, 246, 248) rgb(40, 42, 52) rgb(40, 42, 52) rgb(245, 246, 248);
 	outline: 1px solid rgb(10, 11, 20);
 	z-index: 1;
+}
+/* control strips (filter bars) — plain chassis, no gold inner frame */
+[data-scheme='winamp-shade'] main div.rounded-lg.border:not(button):not(input):not(select):not(textarea):has(> input),
+[data-scheme='winamp-shade'] main div.rounded-lg.border:not(button):not(input):not(select):not(textarea):has(> select) {
+	background-image: none !important;
+}
+[data-scheme='winamp-shade'] main div.rounded-lg.border:not(button):not(input):not(select):not(textarea):has(> input)::after,
+[data-scheme='winamp-shade'] main div.rounded-lg.border:not(button):not(input):not(select):not(textarea):has(> select)::after {
+	content: none;
 }
 /* modal/drawer backdrops are <button> overlays — keep them plain scrims */
 [data-scheme='winamp-shade'] button[class*='inset-0'] {
@@ -313,8 +317,10 @@
 [data-scheme='winamp-shade'] input[type='url'],
 [data-scheme='winamp-shade'] input:not([type]),
 [data-scheme='winamp-shade'] textarea {
-	background: linear-gradient(180deg, rgb(178, 181, 190), rgb(203, 205, 212)) !important;
-	color: rgb(28, 30, 38) !important;
+	background: linear-gradient(180deg, rgb(96, 100, 111), rgb(118, 122, 133)) !important;
+	color: rgb(245, 246, 250) !important;
+	text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
+	caret-color: rgb(245, 246, 250);
 	border: 1px solid !important;
 	border-color: rgb(58, 62, 72) rgb(245, 246, 248) rgb(245, 246, 248) rgb(58, 62, 72) !important;
 	outline: 1px solid rgb(30, 32, 40);
@@ -323,7 +329,8 @@
 }
 [data-scheme='winamp-shade'] input::placeholder,
 [data-scheme='winamp-shade'] textarea::placeholder {
-	color: rgb(80, 84, 96) !important;
+	color: rgba(255, 255, 255, 0.55) !important;
+	text-shadow: none;
 }
 [data-scheme='winamp-shade'] input:focus,
 [data-scheme='winamp-shade'] textarea:focus {
@@ -360,7 +367,9 @@
 /* selects: kill native dark widget chrome so the pewter face actually paints */
 [data-scheme='winamp-shade'] select {
 	appearance: none;
-	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 2l4 5 4-5z' fill='%23f2f4f8'/%3E%3Cpath d='M1 1l4 5 4-5z' fill='%23262932'/%3E%3C/svg%3E"), linear-gradient(180deg, rgb(234, 236, 241) 0%, rgb(203, 205, 212) 45%, rgb(184, 186, 194) 100%) !important;
+	color: rgb(245, 246, 250) !important;
+	text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 2l4 5 4-5z' fill='%23262932'/%3E%3Cpath d='M1 1l4 5 4-5z' fill='%23f2f4f8'/%3E%3C/svg%3E"), linear-gradient(180deg, rgb(138, 142, 153) 0%, rgb(114, 118, 129) 55%, rgb(100, 104, 115) 100%) !important;
 	background-repeat: no-repeat, no-repeat !important;
 	background-position: right 0.5rem center, 0 0 !important;
 	padding-right: 1.5rem;
