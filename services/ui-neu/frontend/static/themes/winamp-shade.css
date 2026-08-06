@@ -341,10 +341,15 @@
 	margin: 4px 8px 8px;
 }
 /* theme-picker swatch tiles — dark engraved label on the silver plate */
-[data-scheme='winamp-shade'] button:has(> span[style*='background']) span,
-[data-scheme='winamp-shade'] button:has(> span[style*='background']) {
+[data-scheme='winamp-shade'] button:has(> span[style*='background']),
+[data-scheme='winamp-shade'] button:has(> span[style*='background']) > span:not([class*='absolute']) {
 	color: rgb(28, 30, 38) !important;
 	text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+}
+/* keep the hover description tooltip white-on-dark */
+[data-scheme='winamp-shade'] button span[class*='absolute'] {
+	color: rgb(245, 246, 250) !important;
+	text-shadow: none !important;
 }
 /* transport-bar buttons — raised steel bevel, dark glyphs */
 [data-scheme='winamp-shade'] button,
