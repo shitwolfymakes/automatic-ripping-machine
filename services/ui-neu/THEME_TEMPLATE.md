@@ -27,8 +27,8 @@ Append a `ColorScheme` object to `COLOR_SCHEMES`:
 
 ```ts
 {
-	id: 'winamp-classic',
-	label: 'Winamp',
+	id: 'retro-gold',
+	label: 'Retro Gold',
 	swatch: '#d4b02f',
 	mode: 'dark', // omit for dual light/dark themes
 	author: 'Claude',
@@ -260,17 +260,17 @@ with `[data-scheme="<id>"]`.
 `tactical`, `deep-sea-abyss`, `nordic-frost`, `solarized-dark`,
 `blockbuster`, `vcr-osd`, `glass`, `tokyo-night`, `violet`,
 `retro-console`, `hollywood-video-v2`, `dracula-pro`, `gaming`, `rose`,
-`winamp-classic`, `winamp-shade`
+`winamp-97`
 
 ## Example — stylized dark-only built-in (registry entry above + sidecar)
 
-`static/themes/winamp-classic.css`:
+`static/themes/retro-gold.css`:
 
 ```css
-[data-scheme='winamp-classic'] {
+[data-scheme='retro-gold'] {
 	font-family: Tahoma, 'MS Sans Serif', Verdana, sans-serif;
 }
-[data-scheme='winamp-classic'] aside nav a[data-active='true'] {
+[data-scheme='retro-gold'] aside nav a[data-active='true'] {
 	color: #d6b236 !important;
 	background: #1a1a28 !important;
 	border-top-color: #14141e;
@@ -278,7 +278,7 @@ with `[data-scheme="<id>"]`.
 	border-bottom-color: #4a4a68;
 	border-right-color: #4a4a68;
 }
-[data-scheme='winamp-classic'] [data-progress-fill] {
+[data-scheme='retro-gold'] [data-progress-fill] {
 	background:
 		repeating-linear-gradient(90deg, transparent 0 2px, rgba(0, 0, 0, 0.4) 2px 4px),
 		linear-gradient(90deg, #00c010, #a8c000 65%, #c03000) !important;

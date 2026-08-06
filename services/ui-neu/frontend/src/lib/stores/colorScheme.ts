@@ -721,32 +721,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		}
 	},
 	{
-		id: 'winamp-classic',
-		label: 'Winamp',
-		swatch: '#d4b02f',
-		mode: 'dark',
-		author: 'Claude',
-		description: 'Classic MP3-player skin — charcoal chrome, gold titlebars, spectrum-analyzer progress',
-		tokens: {
-			'--color-primary': 'rgb(214, 178, 54)',           // titlebar gold
-			'--color-primary-hover': 'rgb(232, 199, 84)',
-			'--color-primary-dark': 'rgb(150, 122, 30)',
-			'--color-primary-light-bg': 'rgb(44, 44, 60)',
-			'--color-primary-light-bg-dark': 'rgb(36, 36, 50)',
-			'--color-primary-text': 'rgb(222, 189, 84)',
-			'--color-primary-text-dark': 'rgb(222, 189, 84)',
-			'--color-primary-border': 'rgb(150, 122, 30)',
-			'--color-on-primary': 'rgb(18, 18, 24)',
-			'--color-page': 'rgb(20, 20, 30)',                // charcoal slate
-			'--color-page-dark': 'rgb(20, 20, 30)',
-			'--color-surface': 'rgb(34, 34, 48)',             // window chrome
-			'--color-surface-dark': 'rgb(34, 34, 48)',
-			'--radius': '0.25rem'
-		}
-	},
-	{
-		id: 'winamp-shade',
-		label: 'Winamp Shade',
+		id: 'winamp-97',
+		label: 'Winamp 97',
 		swatch: '#00ff00',
 		mode: 'dark',
 		author: 'Gemini',
