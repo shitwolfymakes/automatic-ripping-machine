@@ -88,9 +88,9 @@ def probe_thediscdb_hash(source_path: str) -> str | None:
     """Compute the ContentHash for a device/ISO path. Never raises."""
     try:
         files = collect_hash_files(source_path)
-    except Exception as e:  # noqa: BLE001 — pycdlib raises many flavors
+        if not files:
+            return None
+        return _hash_from_listing(files)
+    except Exception as e:  # noqa: BLE001 — pycdlib / struct.error on out-of-range sizes
         logger.debug("thediscdb hash probe failed for %s: %s", source_path, e)
         return None
-    if not files:
-        return None
-    return _hash_from_listing(files)

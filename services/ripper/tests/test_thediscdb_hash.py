@@ -50,3 +50,13 @@ def test_probe_soft_fails_on_unreadable_source() -> None:
         side_effect=OSError("boom"),
     ):
         assert probe_thediscdb_hash("/dev/sr0") is None
+
+
+def test_probe_soft_fails_on_out_of_range_size() -> None:
+    # struct.pack("<q", size) raises struct.error for sizes > 2**63-1.
+    # probe_thediscdb_hash must catch it and return None (soft-fail).
+    with mock.patch(
+        "arm_ripper.scan.thediscdb_hash.collect_hash_files",
+        return_value=[("huge.m2ts", 2**63)],
+    ):
+        assert probe_thediscdb_hash("/fake/path") is None
