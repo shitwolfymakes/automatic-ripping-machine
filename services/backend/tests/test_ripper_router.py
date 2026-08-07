@@ -669,6 +669,46 @@ def test_identify_thediscdb_disabled_store_not_consulted() -> None:
     assert app.state.thediscdb.called_with == []  # store never consulted
 
 
+class _RaisingStore:
+    """Simulates a corrupt sqlite index / any lookup failure."""
+
+    def __init__(self, exc: Exception) -> None:
+        self.exc = exc
+        self.called_with: list[str] = []
+
+    def lookup(self, content_hash: str) -> DiscMatch | None:
+        self.called_with.append(content_hash)
+        raise self.exc
+
+
+def test_identify_thediscdb_lookup_raises_behaves_as_no_match() -> None:
+    """A TheDiscDB failure (e.g. corrupt sqlite index) must never block
+    identify: the endpoint still returns 200 and behaves exactly as if the
+    store had no match — normal fuzzy identify proceeds and no "thediscdb"
+    key is stamped onto metadata_json."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(thediscdb_enabled=True)]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    app.state.thediscdb = _RaisingStore(RuntimeError("index corrupt"))
+
+    scan = _scan_dict("bluray")
+    scan["fingerprints"] = [{"algo": "thediscdb", "value": "2D61282D8DA5EAC2CA87B451BCE9A055"}]
+
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    out = r.json()
+    assert out["title"] == "Iron Man"
+    assert "thediscdb" not in (out["metadata_json"] or {})
+    assert app.state.thediscdb.called_with == ["2D61282D8DA5EAC2CA87B451BCE9A055"]
+
+
 class _AllMissDispatcher:
     """Both the exact-identity and fuzzy paths miss — the total-miss branch."""
 

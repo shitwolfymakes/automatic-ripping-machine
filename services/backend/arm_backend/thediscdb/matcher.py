@@ -59,7 +59,11 @@ def build_map(match: DiscMatch, scan: ScanResult) -> dict[str, Any]:
     by_source_file = {t.source_file.lower(): t for t in scan.titles if t.source_file}
     matched: dict[str, dict[str, Any]] = {}
     for entry in match.disc.get("Titles") or []:
+        if not isinstance(entry, dict):
+            continue
         item = entry.get("Item") or {}
+        if not isinstance(item, dict):
+            item = {}
         source_file = str(entry.get("SourceFile") or "").lower()
         scan_title = by_source_file.get(source_file)
         if scan_title is None:
@@ -100,7 +104,9 @@ def build_map(match: DiscMatch, scan: ScanResult) -> dict[str, Any]:
 
 
 def external_imdb_id(match: DiscMatch) -> str | None:
-    ids = match.metadata.get("ExternalIds") or {}
+    ids = match.metadata.get("ExternalIds")
+    if not isinstance(ids, dict):
+        return None
     imdb = ids.get("Imdb")
     return str(imdb) if imdb else None
 

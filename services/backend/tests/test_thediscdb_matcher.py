@@ -11,7 +11,7 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
 import pytest
 
-from arm_backend.thediscdb.matcher import apply_map, build_map, parse_duration  # noqa: E402
+from arm_backend.thediscdb.matcher import apply_map, build_map, external_imdb_id, parse_duration  # noqa: E402
 from arm_backend.thediscdb.snapshot import DiscMatch  # noqa: E402
 from arm_common import Job, Track  # noqa: E402
 from arm_common.schemas import ScanResult, ScanTitle  # noqa: E402
@@ -166,6 +166,67 @@ def test_build_map_duration_fallback_ignores_with_source_file() -> None:
     result = build_map(match, scan)
     # No join by duration fallback since the title has a source_file.
     assert result["matched"] == {}
+
+
+def test_build_map_skips_non_dict_title_entry() -> None:
+    # Malformed third-party JSON: a non-dict entry in Titles must be skipped,
+    # not raise (AttributeError on entry.get would otherwise 500 identify).
+    match = _match(
+        [
+            "not a dict",
+            {
+                "SourceFile": "00001.mpls",
+                "Duration": "2:11:34",
+                "Comment": "Main.mkv",
+                "Item": {"Title": "Round Midnight", "Type": "MainMovie"},
+            },
+        ]
+    )
+    scan = ScanResult(
+        disc_type=DiscType.BLURAY,
+        titles=[ScanTitle(index=0, duration_seconds=7894, source_file="00001.mpls")],
+    )
+    result = build_map(match, scan)
+    assert result["matched"]["0"]["type"] == "MainMovie"
+
+
+def test_build_map_non_dict_item_treated_as_missing() -> None:
+    # Item present but not a dict (upstream layout drift) -> treated as {}.
+    match = _match(
+        [
+            {
+                "SourceFile": "00001.mpls",
+                "Duration": "2:11:34",
+                "Comment": "Main.mkv",
+                "Item": "also not a dict",
+            }
+        ]
+    )
+    scan = ScanResult(
+        disc_type=DiscType.BLURAY,
+        titles=[ScanTitle(index=0, duration_seconds=7894, source_file="00001.mpls")],
+    )
+    result = build_map(match, scan)
+    assert result["matched"]["0"]["type"] == "Unknown"
+    assert result["matched"]["0"]["title"] is None
+
+
+def test_external_imdb_id_returns_id() -> None:
+    match = _match([])
+    assert external_imdb_id(match) == "tt0090557"
+
+
+def test_external_imdb_id_malformed_external_ids_returns_none() -> None:
+    # ExternalIds as a non-dict (malformed third-party JSON) must not raise.
+    match = DiscMatch(
+        kind="movie",
+        title_slug="x",
+        release_slug="y",
+        disc={"ContentHash": "X", "Titles": []},
+        metadata={"ExternalIds": "garbage"},
+        release={},
+    )
+    assert external_imdb_id(match) is None
 
 
 class FakeAsyncSession:
