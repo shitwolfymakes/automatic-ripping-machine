@@ -1,4 +1,5 @@
 """Snapshot index: tarball -> sqlite build, lookup, atomic replace."""
+
 from __future__ import annotations
 
 import io

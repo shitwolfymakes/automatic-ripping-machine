@@ -1,4 +1,5 @@
 """Matcher: duration parse, SourceFile join, map build, track stamping."""
+
 from __future__ import annotations
 
 import os
@@ -38,10 +39,18 @@ def test_parse_duration() -> None:
 def test_build_map_joins_by_source_file() -> None:
     match = _match(
         [
-            {"SourceFile": "00001.mpls", "Duration": "2:11:34", "Comment": "Main.mkv",
-             "Item": {"Title": "Round Midnight", "Type": "MainMovie"}},
-            {"SourceFile": "00011.mpls", "Duration": "0:12:00", "Comment": "Making Of.mkv",
-             "Item": {"Title": "The Making Of", "Type": "Featurette"}},
+            {
+                "SourceFile": "00001.mpls",
+                "Duration": "2:11:34",
+                "Comment": "Main.mkv",
+                "Item": {"Title": "Round Midnight", "Type": "MainMovie"},
+            },
+            {
+                "SourceFile": "00011.mpls",
+                "Duration": "0:12:00",
+                "Comment": "Making Of.mkv",
+                "Item": {"Title": "The Making Of", "Type": "Featurette"},
+            },
         ]
     )
     scan = ScanResult(
@@ -55,7 +64,10 @@ def test_build_map_joins_by_source_file() -> None:
     result = build_map(match, scan)
     assert result["release_slug"] == "2022-criterion-blu-ray"
     assert result["matched"]["0"] == {
-        "type": "MainMovie", "title": "Round Midnight", "season": None, "episode": None,
+        "type": "MainMovie",
+        "title": "Round Midnight",
+        "season": None,
+        "episode": None,
         "filename": "Main.mkv",
     }
     assert result["matched"]["1"]["type"] == "Featurette"
@@ -64,8 +76,14 @@ def test_build_map_joins_by_source_file() -> None:
 
 def test_build_map_series_episode_fields() -> None:
     match = _match(
-        [{"SourceFile": "00800.mpls", "Duration": "1:06:55", "Comment": "1883 S01E01.mkv",
-          "Item": {"Title": "1883", "Type": "Episode", "Season": "1", "Episode": "1"}}],
+        [
+            {
+                "SourceFile": "00800.mpls",
+                "Duration": "1:06:55",
+                "Comment": "1883 S01E01.mkv",
+                "Item": {"Title": "1883", "Type": "Episode", "Season": "1", "Episode": "1"},
+            }
+        ],
         kind="series",
     )
     scan = ScanResult(
@@ -74,7 +92,10 @@ def test_build_map_series_episode_fields() -> None:
     )
     result = build_map(match, scan)
     assert result["matched"]["5"] == {
-        "type": "Episode", "title": "1883", "season": 1, "episode": 1,
+        "type": "Episode",
+        "title": "1883",
+        "season": 1,
+        "episode": 1,
         "filename": "1883 S01E01.mkv",
     }
 
@@ -82,8 +103,14 @@ def test_build_map_series_episode_fields() -> None:
 def test_build_map_duration_fallback_when_no_source_file() -> None:
     # DVD scans may lack source_file; duration within ±2s joins.
     match = _match(
-        [{"SourceFile": "VTS_01_1.VOB", "Duration": "1:30:00", "Comment": "Movie.mkv",
-          "Item": {"Title": "Movie", "Type": "MainMovie"}}]
+        [
+            {
+                "SourceFile": "VTS_01_1.VOB",
+                "Duration": "1:30:00",
+                "Comment": "Movie.mkv",
+                "Item": {"Title": "Movie", "Type": "MainMovie"},
+            }
+        ]
     )
     scan = ScanResult(
         disc_type=DiscType.DVD,
@@ -96,8 +123,14 @@ def test_build_map_duration_fallback_when_no_source_file() -> None:
 def test_build_map_ambiguous_duration_no_join() -> None:
     # Two scan titles inside the window and no source_file -> ambiguous, skip.
     match = _match(
-        [{"SourceFile": "VTS_01_1.VOB", "Duration": "1:30:00", "Comment": "Movie.mkv",
-          "Item": {"Title": "Movie", "Type": "MainMovie"}}]
+        [
+            {
+                "SourceFile": "VTS_01_1.VOB",
+                "Duration": "1:30:00",
+                "Comment": "Movie.mkv",
+                "Item": {"Title": "Movie", "Type": "MainMovie"},
+            }
+        ]
     )
     scan = ScanResult(
         disc_type=DiscType.DVD,
@@ -114,8 +147,14 @@ def test_build_map_duration_fallback_ignores_with_source_file() -> None:
     # A scan title WITH a source_file within the duration window must NOT
     # be joined by duration fallback.
     match = _match(
-        [{"SourceFile": "VTS_01_1.VOB", "Duration": "1:30:00", "Comment": "Movie.mkv",
-          "Item": {"Title": "Movie", "Type": "MainMovie"}}]
+        [
+            {
+                "SourceFile": "VTS_01_1.VOB",
+                "Duration": "1:30:00",
+                "Comment": "Movie.mkv",
+                "Item": {"Title": "Movie", "Type": "MainMovie"},
+            }
+        ]
     )
     scan = ScanResult(
         disc_type=DiscType.DVD,
