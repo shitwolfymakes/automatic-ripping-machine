@@ -50,6 +50,8 @@ class ConfigView(BaseModel):
     block_on_miss: bool
     community_keydb_enabled: bool
     makemkv_sdf_enabled: bool
+    thediscdb_enabled: bool
+    thediscdb_refresh_days: int
     ripping_paused: bool
     hold_for_review: bool
     manual_wait_seconds: int
