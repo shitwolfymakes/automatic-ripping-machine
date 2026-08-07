@@ -149,6 +149,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.dispatcher = MetadataDispatcher(http, omdb_api_key_override=settings.OMDB_API_KEY)
     app.state.ws_hub = WSHub()
 
+    from arm_backend.thediscdb.snapshot import SnapshotStore
+
+    app.state.thediscdb = SnapshotStore(Path(settings.ARM_THEDISCDB_PATH))
+
     # GPU probe — truncate-and-fill the gpus table so the dispatcher's first
     # tick sees a consistent inventory. Runs before the dispatcher starts.
     await _refresh_gpu_inventory(app.state.ws_hub)

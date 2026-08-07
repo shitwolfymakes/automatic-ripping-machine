@@ -18,9 +18,10 @@ from arm_backend.auto_session import maybe_auto_apply_session
 from arm_backend.crash_recovery import reset_job_for_recovery
 from arm_backend.db import get_session
 from arm_backend.metadata import MetadataDispatcher
-from arm_backend.metadata.base import extract_poster_url
+from arm_backend.metadata.base import MetadataResult, extract_poster_url
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
 from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.thediscdb.matcher import apply_map, build_map, external_imdb_id
 from arm_backend.track_selection import select_tracks, select_tracks_for_review
 from arm_backend.ws import WSHub
 from arm_common import (
@@ -298,6 +299,7 @@ async def register(req: RegisterRequest, session: AsyncSession = Depends(get_ses
 @router.post("/identify", response_model=Job, dependencies=[Depends(require_service_token)])
 async def identify(
     req: IdentifyRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     dispatcher: MetadataDispatcher = Depends(_get_dispatcher),
     hub: WSHub = Depends(_get_hub),
@@ -372,6 +374,25 @@ async def identify(
         session.add(DiscFingerprint(job_id=job.id, algo=algo, value=fp.value))
     await session.flush()
 
+    thediscdb_match = None
+    if not already_identified and cfg.thediscdb_enabled:
+        store = getattr(request.app.state, "thediscdb", None)
+        content_hash = next(
+            (fp.value for fp in scan.fingerprints if fp.algo.lower() == "thediscdb" and fp.value),
+            None,
+        )
+        if store is not None and content_hash:
+            thediscdb_match = await asyncio.to_thread(store.lookup, content_hash)
+            if thediscdb_match is not None:
+                job.metadata_json = {
+                    **(job.metadata_json or {}),
+                    "thediscdb": {
+                        **build_map(thediscdb_match, scan),
+                        "matched_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                }
+                logger.info("thediscdb: matched job_id=%s release=%s", job.id, thediscdb_match.release_slug)
+
     if already_identified:
         # Guard 1: preserve existing identity — do not re-run the dispatcher or
         # overwrite title/year/poster/metadata set by the previous identify run.
@@ -379,10 +400,17 @@ async def identify(
         timed_out = False
     else:
         try:
-            result = await asyncio.wait_for(
-                dispatcher.identify(scan, cfg),
-                timeout=DISPATCH_TIMEOUT_SECONDS,
-            )
+
+            async def _identify() -> MetadataResult | None:
+                if thediscdb_match is not None:
+                    imdb = external_imdb_id(thediscdb_match)
+                    if imdb:
+                        exact = await dispatcher.identify_from_imdb(imdb, cfg)
+                        if exact is not None:
+                            return exact
+                return await dispatcher.identify(scan, cfg)
+
+            result = await asyncio.wait_for(_identify(), timeout=DISPATCH_TIMEOUT_SECONDS)
             timed_out = False
         except asyncio.TimeoutError:
             logger.info("identify dispatch_timeout job_id=%s", job.id)
@@ -393,7 +421,7 @@ async def identify(
             job.title = result.title
             job.year = result.year
             job.poster_url = extract_poster_url(result)
-            job.metadata_json = result.payload
+            job.metadata_json = {**(job.metadata_json or {}), **result.payload}
             # Timed review gate: a GENUINELY identified disc (result is not None — not
             # the block_on_miss=false synthetic "unidentified" IDENTIFIED below) parks
             # for operator review when hold_for_review is on, stamping the countdown
@@ -404,6 +432,7 @@ async def identify(
                 job.status = JobStatus.AWAITING_REVIEW
                 job.wait_start_time = datetime.now(timezone.utc)
                 await _persist_review_tracks(session, job, scan)
+                await apply_map(session, job)
             else:
                 job.status = JobStatus.IDENTIFIED
         else:
@@ -538,6 +567,7 @@ async def rip_start(
         )
 
     session.add_all(new_tracks)
+    await apply_map(session, job)
     job.status = JobStatus.RIPPING
     job.started_at = datetime.now(timezone.utc)
     await session.commit()

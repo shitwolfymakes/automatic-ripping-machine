@@ -26,6 +26,7 @@ import pytest  # noqa: E402
 from arm_backend.db import get_session  # noqa: E402
 from arm_backend.metadata.base import MetadataResult  # noqa: E402
 from arm_backend.routers import ripper as ripper_router  # noqa: E402
+from arm_backend.thediscdb.snapshot import DiscMatch  # noqa: E402
 from arm_common import (  # noqa: E402
     Config,
     DiscFingerprint,
@@ -112,6 +113,7 @@ def _config(
     makemkv_sdf_enabled: bool = True,
     hold_for_review: bool = False,
     ripping_paused: bool = False,
+    thediscdb_enabled: bool = False,
 ) -> Config:
     return Config(
         id=1,
@@ -122,6 +124,7 @@ def _config(
         makemkv_sdf_enabled=makemkv_sdf_enabled,
         hold_for_review=hold_for_review,
         ripping_paused=ripping_paused,
+        thediscdb_enabled=thediscdb_enabled,
         manual_wait_seconds=60,
         default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
     )
@@ -553,6 +556,119 @@ def test_identify_timeout_records_diagnostic() -> None:
     assert r.json()["metadata_json"]["dispatch_timeout"] is True
 
 
+# --- /identify (TheDiscDB match) ----------------------------------------------
+
+
+class _ImdbExactDispatcher:
+    """Fake dispatcher for the TheDiscDB exact-identity path: identify_from_imdb
+    returns a hit and identify(...) must NEVER be called (exact path wins)."""
+
+    def __init__(self, result: MetadataResult | None) -> None:
+        self.result = result
+        self.identify_from_imdb_calls: list[str] = []
+
+    async def identify_from_imdb(self, imdb_id: str, _cfg: Any) -> MetadataResult | None:
+        self.identify_from_imdb_calls.append(imdb_id)
+        return self.result
+
+    async def identify(self, _scan: Any, _cfg: Any) -> MetadataResult | None:
+        pytest.fail("dispatcher.identify must not be called when the exact TheDiscDB identity succeeds")
+
+
+def _thediscdb_match() -> DiscMatch:
+    return DiscMatch(
+        kind="movie",
+        title_slug="round-midnight-1986",
+        release_slug="2022-criterion-blu-ray",
+        disc={
+            "Titles": [
+                {
+                    "SourceFile": "00001.mpls",
+                    "Duration": "2:11:34",
+                    "Comment": "Main.mkv",
+                    "Item": {"Title": "Round Midnight", "Type": "MainMovie"},
+                }
+            ]
+        },
+        metadata={"ExternalIds": {"Imdb": "tt0090557"}},
+        release={},
+    )
+
+
+class _FakeStore:
+    def __init__(self, match: DiscMatch | None) -> None:
+        self.match = match
+        self.called_with: list[str] = []
+
+    def lookup(self, content_hash: str) -> DiscMatch | None:
+        self.called_with.append(content_hash)
+        return self.match
+
+
+def test_identify_thediscdb_match_stamps_map_and_uses_exact_identity() -> None:
+    """A TheDiscDB content-hash match on a new job: the exact-identity path
+    (identify_from_imdb) wins over fuzzy identify, the match is stored in
+    job.metadata_json["thediscdb"], and it is applied onto the review Track
+    row persisted by the hold_for_review path."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(hold_for_review=True, thediscdb_enabled=True)]
+    db.rows["rip_presets"] = [_movie_preset()]
+    dispatcher = _ImdbExactDispatcher(MetadataResult(title="Round Midnight", year=1986, kind="movie"))
+    app = _make_app(db, dispatcher=dispatcher)  # type: ignore[arg-type]
+    app.state.thediscdb = _FakeStore(_thediscdb_match())
+
+    scan = _scan_dict("bluray")
+    scan["titles"] = [{"index": 0, "duration_seconds": 7894, "source_file": "00001.mpls"}]
+    scan["fingerprints"] = [{"algo": "thediscdb", "value": "2D61282D8DA5EAC2CA87B451BCE9A055"}]
+
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    out = r.json()
+    assert out["title"] == "Round Midnight"
+    assert out["metadata_json"]["thediscdb"]["matched"]["0"]["type"] == "MainMovie"
+    assert app.state.thediscdb.called_with == ["2D61282D8DA5EAC2CA87B451BCE9A055"]
+    assert dispatcher.identify_from_imdb_calls == ["tt0090557"]
+
+    tracks = [row for row in db.added if type(row).__name__ == "Track"]
+    by_ref = {t.source_ref: t for t in tracks}
+    assert by_ref["0"].role == "MainMovie"
+    assert by_ref["0"].role_source == "thediscdb"
+    assert by_ref["0"].custom_filename == "Main.mkv"
+    assert by_ref["0"].excluded is False
+
+
+def test_identify_thediscdb_disabled_store_not_consulted() -> None:
+    """thediscdb_enabled=False -> the store must never be queried and normal
+    fuzzy-identify behavior is unchanged."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(thediscdb_enabled=False)]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    app.state.thediscdb = _FakeStore(_thediscdb_match())
+
+    scan = _scan_dict("bluray")
+    scan["fingerprints"] = [{"algo": "thediscdb", "value": "2D61282D8DA5EAC2CA87B451BCE9A055"}]
+
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    out = r.json()
+    assert out["title"] == "Iron Man"
+    assert "thediscdb" not in (out["metadata_json"] or {})
+    assert app.state.thediscdb.called_with == []  # store never consulted
+
+
 # --- /jobs/{id} & in-flight --------------------------------------------------
 
 
@@ -879,6 +995,34 @@ def test_rip_start_success_creates_tracks_and_emits() -> None:
     assert r.status_code == 200
     assert [t["id"] for t in r.json()["tracks"]] == ["trk_new"]
     assert any(e["event_type"] == "rip.started" for e in hub.events)
+
+
+def test_rip_start_applies_stored_thediscdb_map_to_new_tracks() -> None:
+    """A job whose identify run stored a TheDiscDB map must have that map
+    applied (apply_map) onto the freshly-created rip-start Track rows."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    thediscdb_meta = {
+        "release_slug": "2022-criterion-blu-ray",
+        "title_slug": "round-midnight-1986",
+        "kind": "movie",
+        "contributors": [],
+        "matched": {"1": {"type": "MainMovie", "title": "Round Midnight", "filename": "Main.mkv"}},
+    }
+    db.rows["jobs"] = [
+        _job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict(), "thediscdb": thediscdb_meta})
+    ]
+    db.rows["tracks"] = []
+    db.rows["rip_presets"] = [_movie_preset()]
+    new = [_track("trk_new", status=TrackStatus.QUEUED, index=1)]
+    with TestClient(_make_app(db)) as client, _patch_select_tracks(new):
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    out_track = r.json()["tracks"][0]
+    assert out_track["role"] == "MainMovie"
+    assert out_track["custom_filename"] == "Main.mkv"
+    assert out_track["excluded"] is False
+    assert new[0].role_source == "thediscdb"
 
 
 # --- /resume (no-default-preset branch; happy path is in test_ripper_resume) --
