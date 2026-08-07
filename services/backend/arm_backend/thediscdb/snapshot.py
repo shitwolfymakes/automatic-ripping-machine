@@ -7,8 +7,11 @@ The data repo (github.com/TheDiscDb/data, MIT) lays out
 skipped in v1 (deferred; different grouping shape).
 
 Refresh keeps the previous index on any failure (mirror philosophy: a
-third-party outage must never break local operation). Build is atomic:
-write `<dest>.new`, then os.replace over the live file.
+third-party outage must never break local operation). Build raises an
+exception if the tarball contains zero indexable discs (e.g., upstream
+layout change), so refresh propagates the error and the previous index
+remains untouched. Build is atomic: write `<dest>.new`, then os.replace
+over the live file.
 """
 from __future__ import annotations
 
@@ -94,6 +97,9 @@ def build_index(tarball: Path, dest_sqlite: Path) -> int:
                 obj = _load(tar, member)
                 if obj is not None:
                     release_by_dir["/".join(parts[2:5])] = obj  # "<kind>/<title>/<release>"
+
+    if not discs:
+        raise ValueError("thediscdb: tarball contained no indexable discs — refusing to replace index")
 
     new_path = dest_sqlite.with_suffix(".sqlite.new")
     new_path.unlink(missing_ok=True)

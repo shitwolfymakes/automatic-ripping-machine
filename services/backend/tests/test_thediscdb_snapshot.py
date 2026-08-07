@@ -82,3 +82,29 @@ def test_missing_store(tmp_path: Path) -> None:
     assert not store.exists()
     assert store.lookup("2D61282D8DA5EAC2CA87B451BCE9A055") is None
     assert store.count() == 0
+
+
+def test_empty_tarball_refuses_to_replace(tmp_path: Path) -> None:
+    # Build a populated index first
+    dest = tmp_path / "index.sqlite"
+    build_index(_mini_tarball(tmp_path), dest)
+    assert SnapshotStore(tmp_path).count() == 1
+
+    # Create a tarball with no disc entries (unrelated JSON)
+    empty_tar = tmp_path / "empty.tar.gz"
+    with tarfile.open(empty_tar, "w:gz") as tar:
+        raw = json.dumps({"unrelated": "data"}).encode()
+        info = tarfile.TarInfo("unrelated.json")
+        info.size = len(raw)
+        tar.addfile(info, io.BytesIO(raw))
+
+    # Attempt to rebuild with empty tarball should raise
+    try:
+        build_index(empty_tar, dest)
+        assert False, "Expected ValueError for empty disc tarball"
+    except ValueError as e:
+        assert "no indexable discs" in str(e)
+
+    # Verify live index unchanged and no .new leftover
+    assert SnapshotStore(tmp_path).count() == 1
+    assert not dest.with_suffix(".sqlite.new").exists()
