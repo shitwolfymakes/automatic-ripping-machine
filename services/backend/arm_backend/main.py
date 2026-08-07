@@ -3,7 +3,7 @@ import logging
 import subprocess
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -110,6 +110,32 @@ async def _refresh_gpu_inventory(hub: WSHub) -> None:
         await session.commit()
 
 
+async def _thediscdb_refresh_loop(app: FastAPI) -> None:
+    """Daily check; refresh the snapshot when absent or older than
+    cfg.thediscdb_refresh_days. Failures keep the previous index."""
+    from arm_backend.thediscdb.snapshot import refresh as thediscdb_refresh
+
+    while True:
+        try:
+            async with SessionLocal() as session:
+                cfg = (
+                    await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))
+                ).scalar_one_or_none()
+                if cfg is not None and cfg.thediscdb_enabled:
+                    stale_after = timedelta(days=max(1, cfg.thediscdb_refresh_days))
+                    last = cfg.thediscdb_refreshed_at
+                    store = app.state.thediscdb
+                    if not store.exists() or last is None or datetime.now(UTC) - last > stale_after:
+                        count = await thediscdb_refresh(app.state.http, Path(settings.ARM_THEDISCDB_PATH))
+                        cfg.thediscdb_refreshed_at = datetime.now(UTC)
+                        session.add(cfg)
+                        await session.commit()
+                        logger.info("thediscdb: snapshot refreshed (%d discs)", count)
+        except Exception as e:  # noqa: BLE001 — never kill the loop
+            logger.warning("thediscdb: refresh loop error: %s", e)
+        await asyncio.sleep(24 * 3600)
+
+
 def _build_docker_client(docker_host: str = "") -> object | None:
     """Construct a docker-py client. When `docker_host` is set (e.g.
     "ssh://sam@transcoder-server"), target that remote daemon so transcode
@@ -152,6 +178,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from arm_backend.thediscdb.snapshot import SnapshotStore
 
     app.state.thediscdb = SnapshotStore(Path(settings.ARM_THEDISCDB_PATH))
+    thediscdb_refresh_task = asyncio.create_task(_thediscdb_refresh_loop(app))
 
     # GPU probe — truncate-and-fill the gpus table so the dispatcher's first
     # tick sees a consistent inventory. Runs before the dispatcher starts.
@@ -217,6 +244,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        thediscdb_refresh_task.cancel()
+        try:
+            await asyncio.wait_for(thediscdb_refresh_task, timeout=10.0)
+        except (TimeoutError, asyncio.CancelledError):  # pragma: no cover — cancellation is the expected path
+            pass
         disk_refresher.stop()
         try:
             await asyncio.wait_for(disk_refresher_task, timeout=10.0)
