@@ -1,8 +1,10 @@
 """Join a TheDiscDB disc map to a MakeMKV scan and stamp Track rows.
 
 Join keys, in order: SourceFile == ScanTitle.source_file (case-insensitive);
-else duration within ±2s IF exactly one scan title is in the window
-(ambiguity -> no join; a wrong label is worse than no label).
+else duration within ±2s IF exactly one scan title with source_file=None is in
+the window (ambiguity -> no join; a wrong label is worse than no label).
+Duration fallback only considers titles with source_file=None to prevent
+mis-joins when SourceFile naming skews from expected values.
 
 The map is stored JSON-safe in job.metadata_json["thediscdb"] at identify
 time, then applied to Track rows wherever tracks are created (identify's
@@ -122,10 +124,12 @@ async def apply_map(session: AsyncSession, job: Job) -> int:
         track.role_source = "thediscdb"
         if entry.get("title") and not track.episode_name:
             track.episode_name = str(entry["title"])
-        if entry.get("season") is not None:
-            track.season = int(entry["season"])
-        if entry.get("episode") is not None and track.episode_number is None:
-            track.episode_number = int(entry["episode"])
+        season = _int_or_none(entry.get("season"))
+        if season is not None and track.season is None:
+            track.season = season
+        episode = _int_or_none(entry.get("episode"))
+        if episode is not None and track.episode_number is None:
+            track.episode_number = episode
         if entry.get("filename") and not track.custom_filename:
             track.custom_filename = str(entry["filename"])
         if entry.get("type") in _SELECT_TYPES:

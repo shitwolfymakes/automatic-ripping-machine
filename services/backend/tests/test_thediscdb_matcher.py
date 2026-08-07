@@ -3,12 +3,16 @@ from __future__ import annotations
 
 import os
 from typing import Any
+from unittest.mock import MagicMock
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from arm_backend.thediscdb.matcher import build_map, parse_duration  # noqa: E402
+import pytest
+
+from arm_backend.thediscdb.matcher import apply_map, build_map, parse_duration  # noqa: E402
 from arm_backend.thediscdb.snapshot import DiscMatch  # noqa: E402
+from arm_common import Job, Track  # noqa: E402
 from arm_common.schemas import ScanResult, ScanTitle  # noqa: E402
 from arm_common import DiscType  # noqa: E402
 
@@ -103,3 +107,240 @@ def test_build_map_ambiguous_duration_no_join() -> None:
         ],
     )
     assert build_map(match, scan)["matched"] == {}
+
+
+def test_build_map_duration_fallback_ignores_with_source_file() -> None:
+    # Duration fallback only considers scan titles with source_file=None.
+    # A scan title WITH a source_file within the duration window must NOT
+    # be joined by duration fallback.
+    match = _match(
+        [{"SourceFile": "VTS_01_1.VOB", "Duration": "1:30:00", "Comment": "Movie.mkv",
+          "Item": {"Title": "Movie", "Type": "MainMovie"}}]
+    )
+    scan = ScanResult(
+        disc_type=DiscType.DVD,
+        titles=[
+            # This has a source_file, so duration fallback should skip it.
+            ScanTitle(index=0, duration_seconds=5401, source_file="VTS_02_1.VOB"),
+        ],
+    )
+    result = build_map(match, scan)
+    # No join by duration fallback since the title has a source_file.
+    assert result["matched"] == {}
+
+
+class FakeAsyncSession:
+    """Minimal fake async session for testing apply_map without a database."""
+
+    def __init__(self, tracks: list[Track]) -> None:
+        self.tracks = tracks
+        self.added: list[Track] = []
+
+    async def execute(self, query: Any) -> Any:
+        """Fake execute that returns scalars."""
+        return MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=self.tracks))))
+
+    def add(self, track: Track) -> None:
+        """Track added for session."""
+        self.added.append(track)
+
+    async def flush(self) -> None:
+        """Noop flush."""
+        pass
+
+
+@pytest.mark.asyncio
+async def test_apply_map_fills_empty_fields() -> None:
+    # apply_map fills empty fields and sets role/role_source.
+    track = Track(
+        id=1,
+        job_id=1,
+        source_ref="0",
+        role=None,
+        role_source=None,
+        episode_name=None,
+        season=None,
+        episode_number=None,
+        custom_filename=None,
+        excluded=True,
+    )
+    job = Job(
+        id=1,
+        metadata_json={
+            "thediscdb": {
+                "matched": {
+                    "0": {
+                        "type": "MainMovie",
+                        "title": "The Movie",
+                        "season": 2,
+                        "episode": 5,
+                        "filename": "output.mkv",
+                    }
+                }
+            }
+        },
+    )
+    session = FakeAsyncSession([track])
+    updated = await apply_map(session, job)  # type: ignore[arg-type]
+    assert updated == 1
+    assert track.role == "MainMovie"
+    assert track.role_source == "thediscdb"
+    assert track.episode_name == "The Movie"
+    assert track.season == 2
+    assert track.episode_number == 5
+    assert track.custom_filename == "output.mkv"
+    assert track.excluded is False  # MainMovie selected
+
+
+@pytest.mark.asyncio
+async def test_apply_map_not_overwrite_preset_fields() -> None:
+    # apply_map never overwrites pre-set season/episode_number/episode_name/custom_filename.
+    track = Track(
+        id=1,
+        job_id=1,
+        source_ref="0",
+        role=None,
+        role_source=None,
+        episode_name="Original Name",
+        season=10,
+        episode_number=99,
+        custom_filename="original.mkv",
+        excluded=False,
+    )
+    job = Job(
+        id=1,
+        metadata_json={
+            "thediscdb": {
+                "matched": {
+                    "0": {
+                        "type": "Episode",
+                        "title": "New Title",
+                        "season": 2,
+                        "episode": 5,
+                        "filename": "new.mkv",
+                    }
+                }
+            }
+        },
+    )
+    session = FakeAsyncSession([track])
+    updated = await apply_map(session, job)  # type: ignore[arg-type]
+    assert updated == 1
+    # Preset fields unchanged
+    assert track.episode_name == "Original Name"
+    assert track.season == 10
+    assert track.episode_number == 99
+    assert track.custom_filename == "original.mkv"
+    # But role and excluded should still update
+    assert track.role == "Episode"
+    assert track.excluded is False  # Already False, stays False
+
+
+@pytest.mark.asyncio
+async def test_apply_map_malformed_data_no_raise() -> None:
+    # apply_map never raises on malformed map data (e.g. "garbage" for season).
+    track = Track(
+        id=1,
+        job_id=1,
+        source_ref="0",
+        role=None,
+        role_source=None,
+        episode_name=None,
+        season=None,
+        episode_number=None,
+        custom_filename=None,
+        excluded=True,
+    )
+    job = Job(
+        id=1,
+        metadata_json={
+            "thediscdb": {
+                "matched": {
+                    "0": {
+                        "type": "MainMovie",
+                        "title": "The Movie",
+                        "season": "garbage",  # Invalid season
+                        "episode": "also_garbage",  # Invalid episode
+                        "filename": "output.mkv",
+                    }
+                }
+            }
+        },
+    )
+    session = FakeAsyncSession([track])
+    # Should not raise; invalid season/episode are skipped
+    updated = await apply_map(session, job)  # type: ignore[arg-type]
+    assert updated == 1
+    assert track.role == "MainMovie"
+    assert track.episode_name == "The Movie"
+    assert track.season is None  # Not set due to invalid conversion
+    assert track.episode_number is None  # Not set due to invalid conversion
+    assert track.custom_filename == "output.mkv"
+
+
+@pytest.mark.asyncio
+async def test_apply_map_featurette_not_selected() -> None:
+    # apply_map only sets excluded=False for MainMovie/Episode, not Featurette.
+    track = Track(
+        id=1,
+        job_id=1,
+        source_ref="0",
+        role=None,
+        role_source=None,
+        episode_name=None,
+        season=None,
+        episode_number=None,
+        custom_filename=None,
+        excluded=True,
+    )
+    job = Job(
+        id=1,
+        metadata_json={
+            "thediscdb": {
+                "matched": {
+                    "0": {
+                        "type": "Featurette",
+                        "title": "Behind the Scenes",
+                        "season": None,
+                        "episode": None,
+                        "filename": "bonus.mkv",
+                    }
+                }
+            }
+        },
+    )
+    session = FakeAsyncSession([track])
+    updated = await apply_map(session, job)  # type: ignore[arg-type]
+    assert updated == 1
+    assert track.role == "Featurette"
+    assert track.excluded is True  # Featurette not selected
+
+
+@pytest.mark.asyncio
+async def test_apply_map_missing_thediscdb_record() -> None:
+    # apply_map returns 0 when metadata_json has no "thediscdb" key.
+    track = Track(id=1, job_id=1, source_ref="0", role=None, role_source=None)
+    job = Job(id=1, metadata_json={})  # No thediscdb
+    session = FakeAsyncSession([track])
+    updated = await apply_map(session, job)  # type: ignore[arg-type]
+    assert updated == 0
+
+
+@pytest.mark.asyncio
+async def test_apply_map_empty_matched_dict() -> None:
+    # apply_map returns 0 when matched dict is empty.
+    track = Track(id=1, job_id=1, source_ref="0", role=None, role_source=None)
+    job = Job(id=1, metadata_json={"thediscdb": {"matched": {}}})
+    session = FakeAsyncSession([track])
+    updated = await apply_map(session, job)  # type: ignore[arg-type]
+    assert updated == 0
+
+
+@pytest.mark.asyncio
+async def test_apply_map_non_dict_record() -> None:
+    # apply_map returns 0 when "thediscdb" is not a dict.
+    track = Track(id=1, job_id=1, source_ref="0", role=None, role_source=None)
+    job = Job(id=1, metadata_json={"thediscdb": "not a dict"})
+    session = FakeAsyncSession([track])
+    updated = await apply_map(session, job)  # type: ignore[arg-type]
+    assert updated == 0
