@@ -359,6 +359,14 @@ export type ConfigUpdateRequest = {
      */
     makemkv_sdf_enabled?: boolean | null;
     /**
+     * Thediscdb Enabled
+     */
+    thediscdb_enabled?: boolean | null;
+    /**
+     * Thediscdb Refresh Days
+     */
+    thediscdb_refresh_days?: number | null;
+    /**
      * Ripping Paused
      */
     ripping_paused?: boolean | null;

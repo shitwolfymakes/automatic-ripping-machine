@@ -7981,6 +7981,28 @@
             ],
             "title": "Makemkv Sdf Enabled"
           },
+          "thediscdb_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thediscdb Enabled"
+          },
+          "thediscdb_refresh_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thediscdb Refresh Days"
+          },
           "ripping_paused": {
             "anyOf": [
               {

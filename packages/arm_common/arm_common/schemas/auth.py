@@ -77,6 +77,8 @@ class ConfigUpdateRequest(BaseModel):
     block_on_miss: bool | None = None
     community_keydb_enabled: bool | None = None
     makemkv_sdf_enabled: bool | None = None
+    thediscdb_enabled: bool | None = None
+    thediscdb_refresh_days: int | None = None
     ripping_paused: bool | None = None
     hold_for_review: bool | None = None
     manual_wait_seconds: int | None = None
