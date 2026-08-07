@@ -281,9 +281,7 @@ async def system_version(_: User = Depends(require_jwt)) -> SystemVersionRespons
 
 
 @router.post("/thediscdb/refresh", dependencies=[Depends(require_jwt)])
-async def thediscdb_refresh_now(
-    request: Request, session: AsyncSession = Depends(get_session)
-) -> dict[str, Any]:
+async def thediscdb_refresh_now(request: Request, session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
     """Rebuild the TheDiscDB snapshot index from GitHub, on demand."""
     try:
         count = await thediscdb_refresh(request.app.state.http, Path(settings.ARM_THEDISCDB_PATH))
