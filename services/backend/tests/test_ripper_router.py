@@ -669,6 +669,45 @@ def test_identify_thediscdb_disabled_store_not_consulted() -> None:
     assert app.state.thediscdb.called_with == []  # store never consulted
 
 
+class _AllMissDispatcher:
+    """Both the exact-identity and fuzzy paths miss — the total-miss branch."""
+
+    async def identify_from_imdb(self, _imdb_id: str, _cfg: Any) -> MetadataResult | None:
+        return None
+
+    async def identify(self, _scan: Any, _cfg: Any) -> MetadataResult | None:
+        return None
+
+
+def test_identify_thediscdb_match_survives_total_identify_miss() -> None:
+    """A TheDiscDB match was found, but BOTH identify_from_imdb and the fuzzy
+    fallback miss (block_on_miss=False -> synthetic unidentified IDENTIFIED).
+    The stamped "thediscdb" record must survive the miss-path's metadata_json
+    assignment (a full overwrite here would silently orphan the map, making
+    rip_start's apply_map a no-op even though good disc-map data exists)."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=False, thediscdb_enabled=True)]
+    app = _make_app(db, dispatcher=_AllMissDispatcher())  # type: ignore[arg-type]
+    app.state.thediscdb = _FakeStore(_thediscdb_match())
+
+    scan = _scan_dict("bluray")
+    scan["titles"] = [{"index": 0, "duration_seconds": 7894, "source_file": "00001.mpls"}]
+    scan["fingerprints"] = [{"algo": "thediscdb", "value": "2D61282D8DA5EAC2CA87B451BCE9A055"}]
+
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    out = r.json()
+    assert out["status"] == "identified"  # unchanged synthetic-miss behavior
+    assert out["metadata_json"]["unidentified"] is True
+    assert out["metadata_json"]["thediscdb"]["matched"]  # map survived the overwrite
+
+
 # --- /jobs/{id} & in-flight --------------------------------------------------
 
 

@@ -443,11 +443,11 @@ async def identify(
                 job.status = JobStatus.AWAITING_USER_ID
                 job.title = scan.volume_label
                 if diagnostic:
-                    job.metadata_json = diagnostic
+                    job.metadata_json = {**(job.metadata_json or {}), **diagnostic}
             else:
                 job.status = JobStatus.IDENTIFIED
                 job.title = scan.volume_label
-                job.metadata_json = {"unidentified": True, **diagnostic}
+                job.metadata_json = {**(job.metadata_json or {}), "unidentified": True, **diagnostic}
 
     job.metadata_json = {
         **(job.metadata_json or {}),
@@ -567,6 +567,7 @@ async def rip_start(
         )
 
     session.add_all(new_tracks)
+    await session.flush()
     await apply_map(session, job)
     job.status = JobStatus.RIPPING
     job.started_at = datetime.now(timezone.utc)
