@@ -66,6 +66,24 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         type="string",
         editable=True,
     ),
+    ConfigFieldMeta(
+        key="thediscdb_enabled",
+        group="Metadata",
+        tier="operator",
+        label="TheDiscDB disc matching",
+        help="Match discs against the local TheDiscDB snapshot to label titles, pick the main feature, and name extras/episodes.",
+        type="bool",
+        editable=True,
+    ),
+    ConfigFieldMeta(
+        key="thediscdb_refresh_days",
+        group="Metadata",
+        tier="operator",
+        label="TheDiscDB refresh interval (days)",
+        help="How often the backend refreshes its TheDiscDB snapshot from GitHub.",
+        type="int",
+        editable=True,
+    ),
     # NOTE: musicbrainz_user_agent is intentionally NOT registered — the column
     # + ConfigView/ConfigUpdateRequest wire fields persist (dropping them would be
     # an OpenAPI change), but the value is no longer read: the backend hardcodes

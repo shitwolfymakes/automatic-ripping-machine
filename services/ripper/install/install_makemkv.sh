@@ -10,14 +10,59 @@
 # before every rip (arm_ripper/makemkv_key.py).
 set -euxo pipefail
 
-MAKEMKV_VERSION="$(curl -fsSL https://www.makemkv.com/download/ | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)"
-test -n "$MAKEMKV_VERSION"
-echo "Building MakeMKV ${MAKEMKV_VERSION}"
+# Optional internal mirror (MAKEMKV_MIRROR_URL) — used instead of
+# makemkv.com when set, e.g. to ride out makemkv.com outages or to get
+# reproducible rebuilds after upstream deletes old tarballs. Expected layout:
+#   $MAKEMKV_MIRROR_URL/LATEST                      -> current version string
+#   $MAKEMKV_MIRROR_URL/<ver>/makemkv-sha-<ver>.txt -> original signed sha file
+#   $MAKEMKV_MIRROR_URL/<ver>/makemkv-{oss,bin}-<ver>.tar.gz
+# MAKEMKV_MIRROR_PASSWORD (optional) is sent as an X-SHARE-PASSWORD header
+# (Filebrowser password-protected shares). The GPG + sha256 verification
+# below is identical for both sources, so the mirror needs zero trust.
+#
+# xtrace is suspended around password handling so the secret never lands in
+# build logs; it is passed to curl via --config for the same reason.
+{ set +x; } 2>/dev/null
+MAKEMKV_MIRROR_URL="${MAKEMKV_MIRROR_URL:-}"
+# Password sources, in order: env var, BuildKit secret mount. -s skips an
+# empty secret file (CI passes the secret unconditionally; absent repo
+# secret arrives as empty).
+if [[ -z "${MAKEMKV_MIRROR_PASSWORD:-}" && -s /run/secrets/makemkv_mirror_password ]]; then
+    MAKEMKV_MIRROR_PASSWORD="$(cat /run/secrets/makemkv_mirror_password)"
+fi
+MIRROR_CURL_CFG=""
+if [[ -n "${MAKEMKV_MIRROR_PASSWORD:-}" ]]; then
+    umask_prev="$(umask)"; umask 077
+    MIRROR_CURL_CFG="$(mktemp)"
+    printf 'header "X-SHARE-PASSWORD: %s"\n' "$MAKEMKV_MIRROR_PASSWORD" > "$MIRROR_CURL_CFG"
+    umask "$umask_prev"
+fi
+set -x
+
+fetch() { # fetch <curl-args...> — curl with the mirror auth header, if any
+    if [[ -n "$MIRROR_CURL_CFG" ]]; then
+        curl -fsSL --config "$MIRROR_CURL_CFG" "$@"
+    else
+        curl -fsSL "$@"
+    fi
+}
+
+if [[ -n "$MAKEMKV_MIRROR_URL" ]]; then
+    MAKEMKV_VERSION="$(fetch "$MAKEMKV_MIRROR_URL/LATEST" | tr -d '[:space:]')"
+    test -n "$MAKEMKV_VERSION"
+    DOWNLOAD_BASE="$MAKEMKV_MIRROR_URL/$MAKEMKV_VERSION"
+    echo "Building MakeMKV ${MAKEMKV_VERSION} (source: mirror)"
+else
+    MAKEMKV_VERSION="$(curl -fsSL https://www.makemkv.com/download/ | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)"
+    test -n "$MAKEMKV_VERSION"
+    DOWNLOAD_BASE="https://www.makemkv.com/download"
+    echo "Building MakeMKV ${MAKEMKV_VERSION}"
+fi
 
 work="$(mktemp -d)"
 cd "$work"
 
-curl -fsSLO "https://www.makemkv.com/download/makemkv-sha-${MAKEMKV_VERSION}.txt"
+fetch -O "$DOWNLOAD_BASE/makemkv-sha-${MAKEMKV_VERSION}.txt"
 mv "makemkv-sha-${MAKEMKV_VERSION}.txt" sha256sums.txt.sig
 
 GNUPGHOME="$(mktemp -d)" && export GNUPGHOME
@@ -51,7 +96,7 @@ rm -rf "$GNUPGHOME" sha256sums.txt.sig
 
 PREFIX="/usr/local"
 for ball in makemkv-oss makemkv-bin; do
-    curl -fsSLO "https://www.makemkv.com/download/${ball}-${MAKEMKV_VERSION}.tar.gz"
+    fetch -O "$DOWNLOAD_BASE/${ball}-${MAKEMKV_VERSION}.tar.gz"
     expected="$(grep "  ${ball}-${MAKEMKV_VERSION}.tar.gz\$" sha256sums.txt | cut -d' ' -f1)"
     test -n "$expected"
     echo "$expected  ${ball}-${MAKEMKV_VERSION}.tar.gz" | sha256sum -c -
@@ -74,4 +119,5 @@ done
 
 cd /
 rm -rf "$work"
+if [[ -n "$MIRROR_CURL_CFG" ]]; then rm -f "$MIRROR_CURL_CFG"; fi
 ldconfig

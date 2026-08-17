@@ -55,6 +55,8 @@ def _to_view(cfg: Config) -> ConfigView:
         # consumers' fixtures, so they don't need it.
         community_keydb_enabled=bool(cfg.community_keydb_enabled),
         makemkv_sdf_enabled=bool(cfg.makemkv_sdf_enabled),
+        thediscdb_enabled=bool(cfg.thediscdb_enabled),
+        thediscdb_refresh_days=int(cfg.thediscdb_refresh_days) if cfg.thediscdb_refresh_days is not None else 7,
         ripping_paused=bool(cfg.ripping_paused),
         # bool()/int() coerce the None a bare in-memory Config carries (DB-level
         # server_default only) for rows/fixtures predating these columns.

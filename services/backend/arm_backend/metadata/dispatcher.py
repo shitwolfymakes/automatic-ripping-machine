@@ -125,6 +125,15 @@ class MetadataDispatcher:
 
         return None
 
+    async def identify_from_imdb(self, imdb_id: str, cfg: Config) -> MetadataResult | None:
+        """Exact-ID identify for a TheDiscDB-matched disc. TMDb's /find
+        endpoint resolves an IMDb id for both movies and TV; requires a TMDb
+        key. Returns None (caller falls back to fuzzy identify) otherwise."""
+        if not imdb_id or not cfg.tmdb_api_key:
+            return None
+        tmdb = TMDBClient(cfg.tmdb_api_key, self._http)
+        return await self._call("tmdb_find_imdb", tmdb.find_by_imdb_id(imdb_id))
+
     async def _call(self, label: str, coro) -> MetadataResult | None:  # type: ignore[no-untyped-def]
         try:
             return await asyncio.wait_for(coro, timeout=PROVIDER_TIMEOUT_SECONDS)

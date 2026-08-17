@@ -15,10 +15,11 @@ import importlib.metadata
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import psutil  # type: ignore[import-untyped]
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -28,6 +29,7 @@ from arm_backend.db import get_session
 from arm_backend.disk_usage_cache import get_disk_usage
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.thediscdb.snapshot import refresh as thediscdb_refresh
 from arm_backend.utils import default_roots
 from arm_common import Config, Drive, DriveStatus, Event, Job, KeydbState, MakemkvSdfState, User
 from arm_common.schemas import (
@@ -276,3 +278,18 @@ def _app_version() -> str:
 @router.get("/version", response_model=SystemVersionResponse)
 async def system_version(_: User = Depends(require_jwt)) -> SystemVersionResponse:
     return SystemVersionResponse(version=_app_version())
+
+
+@router.post("/thediscdb/refresh", dependencies=[Depends(require_jwt)])
+async def thediscdb_refresh_now(request: Request, session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
+    """Rebuild the TheDiscDB snapshot index from GitHub, on demand."""
+    try:
+        count = await thediscdb_refresh(request.app.state.http, Path(settings.ARM_THEDISCDB_PATH))
+    except Exception as e:  # noqa: BLE001 — network/tar/sqlite: report, keep old index
+        raise HTTPException(status_code=502, detail=f"thediscdb refresh failed: {e}") from e
+    now = datetime.now(timezone.utc)
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
+    cfg.thediscdb_refreshed_at = now
+    session.add(cfg)
+    await session.commit()
+    return {"discs": count, "refreshed_at": now.isoformat()}

@@ -223,3 +223,6 @@ services/ui/src/api/generated.ts
 .superpowers/
 .playwright-mcp/
 services/ui-neu/nginx.http.conf
+
+# Local gh CLI response cache — accidentally committed; must stay untracked.
+/gh-cli-cache/
