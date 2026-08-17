@@ -72,6 +72,11 @@ def _get(app: FastAPI, token: str):
 def test_diagnostics_ok(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
+    # An unvalidated MakeMKV key degrades overall status to "warning" by
+    # design — seed it validated so the baseline really is all-healthy.
+    db.rows["config"][0].makemkv_key = "M-x"
+    db.rows["config"][0].makemkv_key_valid = True
+    db.rows["config"][0].makemkv_key_state = "valid"
     app, token = _make_app(signing_key, db, tmp=tmp_path)
     r = _get(app, token)
     assert r.status_code == 200, r.text
@@ -217,6 +222,44 @@ def test_app_version_real_fallback(monkeypatch) -> None:
         assert system_router._app_version() == "0.0.0+unknown"
     finally:
         system_router._app_version.cache_clear()
+
+
+def test_diagnostics_includes_makemkv_key_check_ok(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["config"][0].makemkv_key = "M-x"
+    db.rows["config"][0].makemkv_key_valid = True
+    db.rows["config"][0].makemkv_key_state = "valid"
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    checks = {ch["name"]: ch for ch in r.json()["checks"]}
+    assert checks["makemkv_key"]["status"] == "ok"
+
+
+def test_diagnostics_makemkv_key_warning_when_unknown(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["config"][0].makemkv_key = "M-x"
+    # makemkv_key_valid defaults to None → never checked
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    checks = {ch["name"]: ch for ch in r.json()["checks"]}
+    assert checks["makemkv_key"]["status"] == "warning"
+
+
+def test_diagnostics_makemkv_key_error_when_invalid(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["config"][0].makemkv_key = "M-x"
+    db.rows["config"][0].makemkv_key_valid = False
+    db.rows["config"][0].makemkv_key_state = "binary_expired"
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    checks = {ch["name"]: ch for ch in r.json()["checks"]}
+    assert checks["makemkv_key"]["status"] == "error"
 
 
 def test_diagnostics_uses_settings_fallback(signing_key: bytes, tmp_path, monkeypatch) -> None:

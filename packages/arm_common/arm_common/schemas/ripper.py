@@ -2,7 +2,16 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from arm_common.enums import DiscType, DriveMediaStatus, TrackStatus
+from arm_common.enums import DiscType, DriveMediaStatus, MakemkvKeyState, TrackStatus
+
+
+class MakemkvKeyStatusReport(BaseModel):
+    """Body of POST /api/ripper/makemkv-key-status — the ripper's disc-free
+    `makemkvcon` probe outcome. Global (not per-drive); the backend writes it
+    to the Config singleton. `detail` is a human-readable reason string."""
+
+    state: MakemkvKeyState
+    detail: str | None = None
 
 
 class RegisterRequest(BaseModel):

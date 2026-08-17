@@ -52,6 +52,9 @@ class ConfigView(BaseModel):
     notification_apprise_urls: list[str]
     notifications_enabled: bool
     metadata_provider: str
+    makemkv_key_valid: bool | None = None
+    makemkv_key_state: str | None = None
+    makemkv_key_checked_at: datetime | None = None
     updated_by_user_id: str | None
     updated_at: datetime | None
 
