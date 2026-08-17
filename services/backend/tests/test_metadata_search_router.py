@@ -22,6 +22,7 @@ from arm_backend.metadata import omdb as omdb_mod  # noqa: E402
 from arm_backend.metadata.base import LookupError as MetaLookupError  # noqa: E402
 from arm_backend.routers import metadata as metadata_router  # noqa: E402
 from arm_common import Config, User  # noqa: E402
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -162,12 +163,26 @@ def test_music_search(signing_key: bytes) -> None:
 
 
 def test_search_unauthenticated_401(signing_key: bytes) -> None:
+    """No Authorization header falls back to the guest account; with guest
+    access disabled (the seeded default), the request still 401s before the
+    route body (and its outbound metadata-provider call) ever runs."""
     db = FakeSession()
     _seed(db, tmdb_api_key="k")
+    db.rows["users"].append(
+        User(
+            id="usr_guest",
+            username="guest",
+            password_hash="x",
+            password_must_change=False,
+            role=GUEST_ROLE,
+            disabled=True,
+        )
+    )
     app, _ = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/search", params={"title": "x", "type": "movie"})
     assert r.status_code == 401
+    assert r.json()["detail"] == "authentication required"
 
 
 # ---------------------------------------------------------------------------
@@ -529,3 +544,60 @@ def test_music_release_detail_unavailable_502(signing_key: bytes) -> None:
     with TestClient(app) as c:
         r = c.get("/api/metadata/music/mbid-1", headers=_auth(token))
     assert r.status_code == 502, r.text
+
+
+@respx.mock
+def test_music_search_threads_artist_and_track_count(signing_key: bytes) -> None:
+    route = respx.get("https://musicbrainz.org/ws/2/release").mock(
+        return_value=httpx.Response(200, json={"releases": []})
+    )
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get(
+            "/api/metadata/music/search",
+            params={"query": "abbey road", "artist": "the beatles", "track_count": 17},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    sent = route.calls.last.request.url.params["query"]
+    assert "abbey road" in sent
+    assert 'artist:"the beatles"' in sent
+    assert "tracks:17" in sent
+
+
+@respx.mock
+def test_music_detail_maps_enriched_fields(signing_key: bytes) -> None:
+    respx.get("https://musicbrainz.org/ws/2/release/mbid-9").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "mbid-9",
+                "title": "Abbey Road",
+                "date": "1969-09-26",
+                "artist-credit": [{"name": "The Beatles"}],
+                "country": "GB",
+                "barcode": "0094638246619",
+                "status": "Official",
+                "label-info": [{"catalog-number": "PCS 7088"}],
+                "media": [{"format": "CD", "tracks": [{"position": "1", "title": "Come Together", "length": 259000}]}],
+            },
+        )
+    )
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/music/mbid-9", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["country"] == "GB"
+    assert body["barcode"] == "0094638246619"
+    assert body["status"] == "Official"
+    assert body["catalog_number"] == "PCS 7088"
+    assert body["format"] == "CD"
+    assert body["disc_count"] == 1
+    assert body["track_count"] == 1
+    assert body["tracks"][0]["length_ms"] == 259000
+    assert body["tracks"][0]["disc_number"] == 1

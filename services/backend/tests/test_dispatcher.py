@@ -158,40 +158,68 @@ async def test_dispatcher_cd_without_disc_id_misses():
 
 
 @respx.mock
-async def test_omdb_env_override_takes_precedence_over_config():
+async def test_omdb_config_key_used_by_dispatcher():
+    """OMDb key is read directly from cfg.omdb_api_key — no env override."""
     respx.get("https://api.themoviedb.org/3/search/movie").mock(return_value=httpx.Response(200, json={"results": []}))
     respx.get("https://api.themoviedb.org/3/search/tv").mock(return_value=httpx.Response(200, json={"results": []}))
     omdb_route = respx.get("https://www.omdbapi.com/").mock(
         return_value=httpx.Response(
             200,
-            json={"Response": "True", "Title": "Override Hit", "Year": "2001"},
+            json={"Response": "True", "Title": "Config Hit", "Year": "2001"},
         )
     )
 
     async with httpx.AsyncClient() as client:
-        dispatcher = MetadataDispatcher(client, omdb_api_key_override="from-env")
+        dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="OBSCURE")
         result = await dispatcher.identify(scan, _config(omdb_api_key="from-config"))
     assert result is not None
-    assert result.title == "Override Hit"
-    assert omdb_route.calls.last.request.url.params["apikey"] == "from-env"
+    assert result.title == "Config Hit"
+    assert omdb_route.calls.last.request.url.params["apikey"] == "from-config"
+
+
+async def test_identify_from_imdb_uses_tmdb_find(monkeypatch):
+    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata.base import MetadataResult
+
+    class FakeTMDB:
+        def __init__(self, api_key, http):  # matches TMDBClient signature
+            pass
+
+        async def find_by_imdb_id(self, imdb_id):
+            assert imdb_id == "tt0090557"
+            return MetadataResult(title="Round Midnight", year=1986, kind="movie")
+
+    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        hit = await dispatcher.identify_from_imdb("tt0090557", _config())
+        assert hit is not None
+        assert hit.title == "Round Midnight"
+
+        hit_nokey = await dispatcher.identify_from_imdb("tt0090557", _config(tmdb_api_key=None))
+        assert hit_nokey is None
+
+        hit_noid = await dispatcher.identify_from_imdb("", _config())
+        assert hit_noid is None
 
 
 @respx.mock
-async def test_omdb_env_override_used_when_config_empty():
+async def test_omdb_skipped_when_config_key_empty():
+    """When cfg.omdb_api_key is None the OMDb branch is skipped entirely."""
     respx.get("https://api.themoviedb.org/3/search/movie").mock(return_value=httpx.Response(200, json={"results": []}))
     respx.get("https://api.themoviedb.org/3/search/tv").mock(return_value=httpx.Response(200, json={"results": []}))
+    # OMDb must NOT be called — any unexpected call will raise via respx strict mode.
     omdb_route = respx.get("https://www.omdbapi.com/").mock(
         return_value=httpx.Response(
             200,
-            json={"Response": "True", "Title": "Env Hit", "Year": "1999"},
+            json={"Response": "True", "Title": "Should Not Appear", "Year": "1999"},
         )
     )
 
     async with httpx.AsyncClient() as client:
-        dispatcher = MetadataDispatcher(client, omdb_api_key_override="from-env")
+        dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="OBSCURE")
         result = await dispatcher.identify(scan, _config(omdb_api_key=None))
-    assert result is not None
-    assert result.title == "Env Hit"
-    assert omdb_route.calls.last.request.url.params["apikey"] == "from-env"
+    assert result is None
+    assert omdb_route.call_count == 0

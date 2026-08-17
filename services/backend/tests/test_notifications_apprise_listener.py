@@ -12,7 +12,7 @@ import pytest  # noqa: E402
 
 from arm_backend.notifications.apprise_listener import AppriseListener  # noqa: E402
 from arm_backend.notifications.message import Message  # noqa: E402
-from arm_common import NotificationChannel  # noqa: E402
+from arm_common import DiscType, Job, JobStatus, NotificationChannel  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -28,14 +28,28 @@ class _FakeNotifier:
             raise RuntimeError("boom")
 
 
-def _msg(event_type="rip.completed") -> Message:
+def _job(title="Dune") -> Job:
+    return Job(
+        id="job_1",
+        drive_id="sr0",
+        disc_type=DiscType.DVD,
+        title=title,
+        year=2010,
+        status=JobStatus.RIPPED,
+        metadata_json={},
+        resumed_from_crash=False,
+    )
+
+
+def _msg(event_type="rip.completed", *, job=None, payload=None) -> Message:
     return Message(
         event_id="evt_1",
         event_type=event_type,
-        job_id=None,
+        job_id="job_1",
         default_title="ARM: rip completed",
         default_body="disc",
-        job=None,
+        job=job,
+        payload=payload or {},
     )
 
 
@@ -125,3 +139,47 @@ async def test_apprise_listener_applies_template_override() -> None:
     await AppriseListener(notifier).handle(db, _msg())
     assert notifier.calls[0][1] == "Custom"  # title overridden, body falls back to default
     assert notifier.calls[0][2] == "disc"
+
+
+@pytest.mark.asyncio
+async def test_apprise_renders_custom_template_with_vars() -> None:
+    db = FakeSession()
+    db.rows["notification_channels"] = [
+        NotificationChannel(
+            id="ncl_a",
+            type="apprise",
+            name="A",
+            enabled=True,
+            config={"type": "apprise", "url": "json://a/x"},
+            subscribed_events=["rip.completed"],
+            templates={
+                "rip.completed": {"title": "Done: {job_title}", "body": "{tracks_done}/{tracks_total} on {drive_id}"}
+            },
+        )
+    ]
+    notifier = _FakeNotifier()
+    msg = _msg(job=_job("Dune"), payload={"drive_id": "sr0", "tracks_done": 2, "tracks_failed": 0, "tracks_total": 2})
+    await AppriseListener(notifier).handle(db, msg)
+    assert notifier.calls, "notifier not called"
+    _urls, title, body = notifier.calls[0]
+    assert title == "Done: Dune"
+    assert body == "2/2 on sr0"
+
+
+@pytest.mark.asyncio
+async def test_apprise_bad_template_var_records_error_not_raise() -> None:
+    ch = NotificationChannel(
+        id="ncl_a",
+        type="apprise",
+        name="A",
+        enabled=True,
+        config={"type": "apprise", "url": "json://a/x"},
+        subscribed_events=["rip.completed"],
+        templates={"rip.completed": {"title": "t", "body": "{nope}"}},
+    )
+    db = FakeSession()
+    db.rows["notification_channels"] = [ch]
+    notifier = _FakeNotifier()
+    await AppriseListener(notifier).handle(db, _msg(job=_job(), payload={}))  # must not raise
+    assert notifier.calls == [], "should not fire apprise on a render error"
+    assert ch.last_error and "nope" in ch.last_error

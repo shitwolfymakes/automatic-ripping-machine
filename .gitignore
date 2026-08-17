@@ -26,6 +26,14 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# The Python-packaging `lib/` / `build/` rules above unintentionally match the
+# vendored SvelteKit UI's source tree (services/ui-neu/frontend/src/lib, and a
+# `+page`/route `build`). Un-ignore the UI source so it is tracked; real build
+# artifacts there are still excluded by services/ui-neu/.gitignore + the
+# explicit frontend/build, .svelte-kit, node_modules rules.
+!services/ui-neu/frontend/src/lib/
+!services/ui-neu/frontend/src/lib/**
+
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
@@ -212,3 +220,9 @@ node_modules/
 /certs/
 .claude/scheduled_tasks.lock
 services/ui/src/api/generated.ts
+.superpowers/
+.playwright-mcp/
+services/ui-neu/nginx.http.conf
+
+# Local gh CLI response cache — accidentally committed; must stay untracked.
+/gh-cli-cache/

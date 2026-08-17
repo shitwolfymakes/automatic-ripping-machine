@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from arm_backend.notification_dispatcher import AppriseNotifier, redact_apprise_url
-from arm_backend.notification_format import resolve_title_body
+from arm_backend.notification_format import TemplateRenderError, context_from_message, resolve_title_body
 from arm_backend.notifications.message import Message
 from arm_common import NotificationChannel, NotificationDispatchLog
 
@@ -38,15 +38,39 @@ class AppriseListener:
             for c in channels
             if c.enabled and c.type == "apprise" and message.event_type in (c.subscribed_events or [])
         ]
+        _ctx = context_from_message(
+            event_type=message.event_type,
+            job=message.job,
+            job_id=message.job_id,
+            payload=message.payload,
+        )
         for channel in targets:
             url = (channel.config or {}).get("url", "")
             template = (channel.templates or {}).get(message.event_type)
-            title, body = resolve_title_body(
-                event_type=message.event_type,
-                default_title=message.default_title,
-                default_body=message.default_body,
-                template=template,
-            )
+            try:
+                title, body = resolve_title_body(
+                    event_type=message.event_type,
+                    default_title=message.default_title,
+                    default_body=message.default_body,
+                    template=template,
+                    context=_ctx,
+                )
+            except TemplateRenderError as exc:
+                channel.last_fired_at = datetime.now(UTC)
+                channel.last_error = str(exc)
+                db.add(
+                    NotificationDispatchLog(
+                        channel_id=channel.id,
+                        event_id=message.event_id,
+                        event_type=message.event_type,
+                        title="",
+                        body="",
+                        success=False,
+                        error=str(exc),
+                    )
+                )
+                logger.warning("template render failed: channel=%s %s", channel.id, exc)
+                continue
             fire_now = datetime.now(UTC)
             ok = True
             err: str | None = None

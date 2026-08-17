@@ -17,16 +17,63 @@ import asyncio
 import logging
 from dataclasses import dataclass
 
+from arm_ripper.drive_poll import DriveState, read_drive_status
+from arm_ripper.scan.thediscdb_hash import probe_thediscdb_hash
+from arm_ripper.source import is_iso_source
+
 logger = logging.getLogger("arm_ripper.scan.disc_probe")
+
+# Bounds the wait for the optical device to re-settle after makemkvcon info
+# released it. Polled on settings.POLL_INTERVAL_SECONDS granularity; the
+# normal re-settle clears in one or two polls.
+DEVICE_READY_TIMEOUT_SECONDS = 6.0
 
 
 @dataclass(frozen=True)
 class DiscProbe:
     crc64: str | None
+    thediscdb: str | None = None
+
+
+async def await_device_ready(device_path: str) -> bool:
+    """Wait until the optical device reports DISC_OK before fingerprinting.
+
+    `makemkvcon info` opens and releases the device just before the probe runs;
+    the kernel reports "no medium" during the brief re-settle, so pydvdid would
+    race (ENOMEDIUM) and yield an empty fingerprint. Poll the same readiness
+    ioctl `poll_loop` trusts (`read_drive_status`) until the medium is ready.
+
+    Returns True once DISC_OK (probe is safe). Returns False on a genuine
+    no-medium reading (NO_DISC / TRAY_OPEN) or if the readiness budget expires
+    while the device stays NOT_READY / NO_INFO. ISO sources are always ready.
+    Never raises — read_drive_status's OSError (e.g. ENOMEDIUM on the re-settling
+    device) is caught here and treated as not-ready.
+    """
+    if is_iso_source(device_path):
+        return True
+    from arm_ripper.config import settings  # lazy: avoid import-time Settings() construction
+
+    interval = settings.POLL_INTERVAL_SECONDS
+    polls = max(1, int(DEVICE_READY_TIMEOUT_SECONDS / interval))
+    for attempt in range(polls):
+        try:
+            state = read_drive_status(device_path)
+        except OSError:
+            state = DriveState.NO_INFO
+        if state == DriveState.DISC_OK:
+            return True
+        if state in (DriveState.NO_DISC, DriveState.TRAY_OPEN):
+            logger.info("disc probe: no medium (%s) device=%s", state.name, device_path)
+            return False
+        if attempt < polls - 1:
+            await asyncio.sleep(interval)
+    logger.info("disc probe: device not ready after %.0fs device=%s", DEVICE_READY_TIMEOUT_SECONDS, device_path)
+    return False
 
 
 async def probe_disc(device_path: str) -> DiscProbe:
-    """Compute the disc's pydvdid CRC64, read off the device via PyCdlib.
+    """Compute the disc's pydvdid CRC64 and TheDiscDB ContentHash, read off
+    the device via PyCdlib.
 
     Needs only read access to the disc — no mount, no CAP_SYS_ADMIN — so a
     DVD always gets its 1337server fingerprint, even on discs the kernel
@@ -34,12 +81,19 @@ async def probe_disc(device_path: str) -> DiscProbe:
     drops root. pydvdid returns None for anything without a /VIDEO_TS tree
     (Blu-ray / CD), so this is a cheap no-op there.
 
-    Never raises — failures are logged and degrade to crc64=None.
+    Probes only when the device reports ready (see await_device_ready); an
+    unready device degrades to crc64=None and thediscdb=None without racing
+    either probe. Never raises.
     """
+    if not await await_device_ready(device_path):
+        return DiscProbe(crc64=None, thediscdb=None)
     crc64 = await asyncio.to_thread(_compute_crc, device_path)
     if crc64:
         logger.info("dvd crc64 device=%s value=%s", device_path, crc64)
-    return DiscProbe(crc64=crc64)
+    thediscdb = await asyncio.to_thread(probe_thediscdb_hash, device_path)
+    if thediscdb:
+        logger.info("thediscdb hash device=%s value=%s", device_path, thediscdb)
+    return DiscProbe(crc64=crc64, thediscdb=thediscdb)
 
 
 def _compute_crc(device_path: str) -> str | None:

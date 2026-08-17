@@ -38,7 +38,6 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@arm-db:5432/${POSTGRES_DB}?sslmode=verify-full&sslrootcert=/etc/ssl/arm/arm-ca.crt
       ARM_SERVICE_TOKEN: ${ARM_SERVICE_TOKEN}
       ARM_LOG_LEVEL: ${ARM_LOG_LEVEL:-info}
-      OMDB_API_KEY: ${OMDB_API_KEY:-}
       ARM_ALLOWED_ORIGINS: ${ARM_ALLOWED_ORIGINS:-}
       TLS_CERT_PATH: /etc/ssl/arm/tls.crt
       TLS_KEY_PATH: /etc/ssl/arm/tls.key
@@ -49,6 +48,11 @@ services:
       MEDIA_ROOT: /media
       MAX_PARALLEL_TRANSCODES: ${MAX_PARALLEL_TRANSCODES:-1}
       ARM_TRANSCODE_IMAGE: ${ARM_TRANSCODE_IMAGE:-arm-transcode:latest}
+      ARM_TRANSCODE_STALE_THRESHOLD_SECONDS: ${ARM_TRANSCODE_STALE_THRESHOLD_SECONDS:-90}
+      ARM_TRANSCODE_MAX_ATTEMPTS: ${ARM_TRANSCODE_MAX_ATTEMPTS:-3}
+      ARM_TRANSCODE_DISPATCH_INTERVAL_SECONDS: ${ARM_TRANSCODE_DISPATCH_INTERVAL_SECONDS:-5}
+      ARM_NOTIFICATION_DISPATCH_INTERVAL_SECONDS: ${ARM_NOTIFICATION_DISPATCH_INTERVAL_SECONDS:-5}
+      ARM_NOTIFY_IMAGE_URL: ${ARM_NOTIFY_IMAGE_URL:-}
       # Default to the same host paths the bind mounts below resolve to —
       # `${PWD}` is the directory `docker compose` was invoked from, which
       # for this project is always the repo root. Override in `.env` only if
@@ -63,6 +67,15 @@ services:
       # injects device access into each ephemeral transcoder. [] => CPU-only.
       ARM_GPUS: ${ARM_GPUS:-[]}
       ARM_RENDER_GID: ${ARM_RENDER_GID:-}
+      # NOTE: setting these 4 keys by hand is NOT enough for remote offload —
+      # the backend also needs an ssh key mounted at /home/arm/.ssh (ro).
+      # install.sh adds that volume automatically; if you hand-copy this
+      # compose file, add `./ssh:/home/arm/.ssh:ro` to arm-backend's volumes
+      # yourself. See ARM_TRANSCODE_SSH_DIR in .env.example.
+      ARM_TRANSCODE_DOCKER_HOST: ${ARM_TRANSCODE_DOCKER_HOST:-}
+      ARM_TRANSCODE_BACKEND_URL: ${ARM_TRANSCODE_BACKEND_URL:-}
+      ARM_TRANSCODE_PUID: ${ARM_TRANSCODE_PUID:-}
+      ARM_TRANSCODE_PGID: ${ARM_TRANSCODE_PGID:-}
     volumes:
       - ./arm/logs:/logs
       - ./arm/media:/media
@@ -101,6 +114,21 @@ services:
       - arm-backend
     ports:
       - "8081:443"
+    volumes:
+      - ./arm/certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
+      - ./arm/certs/arm-ui.crt:/etc/ssl/arm/tls.crt:ro
+      - ./arm/certs/arm-ui.key:/etc/ssl/arm/tls.key:ro
+
+  arm-ui-neu:
+    build:
+      context: .
+      dockerfile: services/ui-neu/Dockerfile
+    container_name: armv3-ui-neu
+    restart: unless-stopped
+    depends_on:
+      - arm-backend
+    ports:
+      - "8082:443"
     volumes:
       - ./arm/certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
       - ./arm/certs/arm-ui.crt:/etc/ssl/arm/tls.crt:ro

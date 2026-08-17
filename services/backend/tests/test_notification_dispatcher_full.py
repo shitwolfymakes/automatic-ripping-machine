@@ -26,7 +26,8 @@ from tests._fakes import FakeSession  # noqa: E402
 
 
 class _FakeApprise:
-    def __init__(self) -> None:
+    def __init__(self, asset: Any = None) -> None:
+        self.asset = asset
         self.added: list[str] = []
         self.notified: list[dict[str, Any]] = []
 
@@ -39,12 +40,44 @@ class _FakeApprise:
         return True
 
 
-async def test_real_apprise_notifier(monkeypatch: pytest.MonkeyPatch) -> None:
-    fake = _FakeApprise()
-    monkeypatch.setattr(nd, "apprise", type("M", (), {"Apprise": lambda: fake}))
-    await _RealAppriseNotifier().notify(["json://localhost", "mailto://x"], "Title", "Body")
+def _patch_apprise(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """Patch nd.apprise so Apprise(asset=...) records the asset it was built
+    with. Returns a holder dict whose 'instance' is the _FakeApprise created."""
+    holder: dict[str, Any] = {}
+
+    def _make(asset: Any = None) -> _FakeApprise:
+        fake = _FakeApprise(asset=asset)
+        holder["instance"] = fake
+        return fake
+
+    # keep the real AppriseAsset so the notifier builds a genuine asset object
+    import apprise as _real_apprise
+
+    monkeypatch.setattr(nd, "apprise", type("M", (), {"Apprise": _make, "AppriseAsset": _real_apprise.AppriseAsset}))
+    return holder
+
+
+async def test_real_apprise_notifier_no_image(monkeypatch: pytest.MonkeyPatch) -> None:
+    holder = _patch_apprise(monkeypatch)
+    await _RealAppriseNotifier("").notify(["json://localhost", "mailto://x"], "Title", "Body")
+    fake = holder["instance"]
     assert fake.added == ["json://localhost", "mailto://x"]
     assert fake.notified == [{"title": "Title", "body": "Body"}]
+    # Even with no image URL the sender is branded "ARM".
+    assert fake.asset is not None
+    assert fake.asset.app_id == "ARM"
+    # No image override applied — mask stays apprise's default (not our URL).
+    assert "arm" not in (fake.asset.image_url_mask or "").lower()
+
+
+async def test_real_apprise_notifier_with_image(monkeypatch: pytest.MonkeyPatch) -> None:
+    holder = _patch_apprise(monkeypatch)
+    url = "https://example.com/arm-logo.png"
+    await _RealAppriseNotifier(url).notify(["json://localhost"], "T", "B")
+    fake = holder["instance"]
+    assert fake.asset.app_id == "ARM"
+    assert fake.asset.image_url_mask == url
+    assert fake.asset.image_url_logo == url
 
 
 async def test_load_job_none_returns_none() -> None:
@@ -78,22 +111,32 @@ async def test_real_notifier_raises_when_async_notify_fails(monkeypatch: pytest.
     """apprise signals failure by RETURN VALUE (False/None), never raising —
     the notifier must convert that into an exception or failures are
     unrecordable (last_success_at/dispatch_log lie)."""
-    fake = _FakeApprise()
 
-    async def _failing_notify(*, title: str, body: str) -> bool:
-        return False
+    class _FailingNotify(_FakeApprise):
+        async def async_notify(self, *, title: str, body: str) -> bool:
+            return False
 
-    fake.async_notify = _failing_notify  # type: ignore[method-assign]
-    monkeypatch.setattr(nd, "apprise", type("M", (), {"Apprise": lambda: fake}))
+    import apprise as _real_apprise
+
+    monkeypatch.setattr(
+        nd, "apprise", type("M", (), {"Apprise": _FailingNotify, "AppriseAsset": _real_apprise.AppriseAsset})
+    )
     with pytest.raises(nd.AppriseDeliveryError):
-        await _RealAppriseNotifier().notify(["json://localhost"], "T", "B")
+        await _RealAppriseNotifier("").notify(["json://localhost"], "T", "B")
 
 
 async def test_real_notifier_raises_on_invalid_url(monkeypatch: pytest.MonkeyPatch) -> None:
     """ap.add() returns False for a URL apprise can't parse; an empty bag
     makes async_notify return None. Both must surface as failures."""
-    fake = _FakeApprise()
-    fake.add = lambda url: False  # type: ignore[method-assign]
-    monkeypatch.setattr(nd, "apprise", type("M", (), {"Apprise": lambda: fake}))
+
+    class _RejectingAdd(_FakeApprise):
+        def add(self, url: str) -> bool:
+            return False
+
+    import apprise as _real_apprise
+
+    monkeypatch.setattr(
+        nd, "apprise", type("M", (), {"Apprise": _RejectingAdd, "AppriseAsset": _real_apprise.AppriseAsset})
+    )
     with pytest.raises(nd.AppriseDeliveryError):
-        await _RealAppriseNotifier().notify(["garbage"], "T", "B")
+        await _RealAppriseNotifier("").notify(["garbage"], "T", "B")

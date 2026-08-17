@@ -2,7 +2,36 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from arm_common.enums import DiscType, DriveMediaStatus, TrackStatus
+from arm_common.enums import DiscType, DriveMediaStatus, KeydbState, MakemkvKeyState, MakemkvSdfState, TrackStatus
+
+
+class MakemkvKeyStatusReport(BaseModel):
+    """Body of POST /api/ripper/makemkv-key-status — the ripper's disc-free
+    `makemkvcon` probe outcome. Global (not per-drive); the backend writes it
+    to the Config singleton. `detail` is a human-readable reason string."""
+
+    state: MakemkvKeyState
+    detail: str | None = None
+
+
+class KeydbStatusReport(BaseModel):
+    """Body of POST /api/ripper/keydb-status — the ripper's community-keydb
+    fetch outcome. Global (not per-drive); the backend writes it to the Config
+    singleton. `vuk_count` / `age_days` are present on ok / fresh_kept.
+    Both fields are None on all other states."""
+
+    state: KeydbState
+    vuk_count: int | None = None
+    age_days: int | None = None
+
+
+class SdfStatusReport(BaseModel):
+    """Body of POST /api/ripper/sdf-status — the ripper's MakeMKV SDF fetch
+    outcome. Global (not per-drive); the backend writes it to the Config
+    singleton. `age_days` is present on fresh_kept; None on all other states."""
+
+    state: MakemkvSdfState
+    age_days: int | None = None
 
 
 class RegisterRequest(BaseModel):
@@ -108,3 +137,13 @@ class RipperConfigView(BaseModel):
     # monthly forum beta-key scrape. Defaulted so older backends omitting it
     # still validate.
     makemkv_key: str | None = None
+    # Operator toggle for the community-keydb (FindVUK) auto-fetch. Defaulted
+    # True so older backends omitting it still validate and keep the feature on.
+    community_keydb_enabled: bool = True
+    makemkv_sdf_enabled: bool = True
+    # Timed review gate: global pause suppresses the auto-start at countdown
+    # expiry; manual_wait_seconds is the countdown duration. The ripper re-reads
+    # these while parked so a mid-wait pause/duration change is honoured.
+    # Defaulted so older backends omitting them still validate (no hold, 60s).
+    ripping_paused: bool = False
+    manual_wait_seconds: int = 60
