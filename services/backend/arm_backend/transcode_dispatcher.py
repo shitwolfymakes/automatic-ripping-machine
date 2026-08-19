@@ -232,7 +232,7 @@ class TranscodeDispatcher:
         Counts in_progress rows live (cheap). For each available slot,
         dequeues one queued task and spawns. Returns the spawn count.
         """
-        if not self._host_paths_set():
+        if not self.host_paths_set():
             logger.warning("transcode dispatcher disabled: ARM_HOST_*_PATH not set (set them via .env)")
             return 0
 
@@ -353,7 +353,7 @@ class TranscodeDispatcher:
         # NULL semantics: hold the task in queued so a later tick retries.
         return GpuAssignment(gpu=None, codec=codec, action="queue")
 
-    def _host_paths_set(self) -> bool:
+    def host_paths_set(self) -> bool:
         return bool(
             self._settings.ARM_HOST_RAW_PATH
             and self._settings.ARM_HOST_MEDIA_PATH
@@ -362,15 +362,34 @@ class TranscodeDispatcher:
         )
 
     def _spawn_container(self, task: TranscodeTask, *, assignment: GpuAssignment | None = None) -> Any:
+        remote = bool(self._settings.ARM_TRANSCODE_DOCKER_HOST)
+        if remote and not self._settings.ARM_TRANSCODE_BACKEND_URL:
+            logger.warning(
+                "ARM_TRANSCODE_DOCKER_HOST set but ARM_TRANSCODE_BACKEND_URL empty — "
+                "remote transcoder will use the unroutable in-network https://arm-backend:8443; "
+                "set ARM_TRANSCODE_BACKEND_URL to a host-routable backend URL"
+            )
+        backend_url = (
+            self._settings.ARM_TRANSCODE_BACKEND_URL
+            if remote and self._settings.ARM_TRANSCODE_BACKEND_URL
+            else "https://arm-backend:8443"
+        )
         env = {
             "ARM_TRANSCODE_TASK_ID": task.id,
-            "ARM_BACKEND_URL": "https://arm-backend:8443",
+            "ARM_BACKEND_URL": backend_url,
             "ARM_SERVICE_TOKEN": self._settings.ARM_SERVICE_TOKEN,
             "ARM_LOG_LEVEL": self._settings.ARM_LOG_LEVEL,
             # Phase 12 — per-task log filename so parallel transcoders don't
             # clobber a shared `/logs/arm-transcode.log` rotation.
             "ARM_SERVICE_NAME": f"arm-transcode-{task.id[-12:]}",
         }
+        # Override the drop uid/gid so the transcoder writes /media as the
+        # owner of the (possibly remote) media export, instead of the
+        # entrypoint's default uid. Empty settings leave the default in place.
+        if self._settings.ARM_TRANSCODE_PUID:
+            env["PUID"] = self._settings.ARM_TRANSCODE_PUID
+        if self._settings.ARM_TRANSCODE_PGID:
+            env["PGID"] = self._settings.ARM_TRANSCODE_PGID
         certs_root = Path(self._settings.ARM_HOST_CERTS_PATH)
         volumes = {
             self._settings.ARM_HOST_RAW_PATH: {"bind": "/raw", "mode": "ro"},
@@ -402,7 +421,7 @@ class TranscodeDispatcher:
             labels={_DOCKER_LABEL_KEY: task.id},
             environment=env,
             volumes=volumes,
-            network=self._settings.ARM_DOCKER_NETWORK,
+            network=(None if remote else self._settings.ARM_DOCKER_NETWORK),
             detach=True,
             auto_remove=True,
             **extra_run_kwargs,

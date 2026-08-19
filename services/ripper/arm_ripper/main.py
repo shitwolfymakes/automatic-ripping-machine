@@ -1,13 +1,14 @@
 import asyncio
 import logging
 import ssl
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import httpx
 
-from arm_common import DriveMediaStatus, configure_service_logging
-from arm_ripper.backend_client import BackendClient
-from arm_ripper.config import MAKEMKV_KEYCHECK_INTERVAL_SECONDS, settings
+from arm_common import DriveMediaStatus, JobStatus, configure_service_logging
+from arm_ripper.backend_client import BackendClient, JobView
+from arm_ripper.config import settings
 from arm_ripper.drive_poll import DriveState, InsertDetector, read_drive_status
 from arm_ripper.drive_status import probe_drive_media
 from arm_ripper.job_controller import JobController
@@ -54,7 +55,41 @@ async def register_with_retry(client: BackendClient, device_path: str) -> str:
             delay = min(delay * 2, 30.0)
 
 
-async def heartbeat_loop(client: BackendClient, drive_id: str, device_path: str) -> None:
+# AWAITING_REVIEW is intentionally excluded: recovery for review-gated discs is
+# owned by the boot probe + the review-countdown auto-start path. Picking up an
+# AWAITING_REVIEW job here would call controller.pickup → _run_rip → rip_start,
+# which transitions straight to RIPPING and bypasses the countdown, manual_pause,
+# and global ripping_paused. Only re-acquire IDENTIFIED (the resolve-after-timeout
+# seated disc — Defect-1's target) and RIPPING (harmless restart race).
+_RIP_READY = frozenset({JobStatus.IDENTIFIED, JobStatus.RIPPING})
+
+
+async def maybe_reacquire_current_job(
+    controller: JobController,
+    *,
+    get_current_job: Callable[[str], Awaitable[JobView | None]],
+    drive_id: str,
+    device_path: str,
+    seated: bool,
+) -> None:
+    """Idle re-probe: if the ripper is idle with a disc seated, ask the backend
+    for the drive's current non-terminal job. If it's rip-ready (operator
+    resolved it after our in-memory wait timed out), pick it up. Pull-based, so
+    it survives a backend restart and the 30-min ceiling."""
+    if not seated or not controller.is_idle():
+        return
+    try:
+        job = await get_current_job(drive_id)
+    except (httpx.HTTPError, OSError) as exc:
+        logger.warning("current-job reprobe failed: %s", exc)
+        return
+    if job is None or job.status not in _RIP_READY:
+        return
+    logger.info("reacquiring current job %s status=%s via heartbeat reprobe", job.id, job.status.value)
+    await controller.pickup(job, device_path)
+
+
+async def heartbeat_loop(client: BackendClient, drive_id: str, device_path: str, controller: JobController) -> None:
     """Post the current media status to the backend every
     HEARTBEAT_INTERVAL_SECONDS. Errors are logged + swallowed —
     the heartbeat is best-effort and stale rows fall back to
@@ -63,6 +98,11 @@ async def heartbeat_loop(client: BackendClient, drive_id: str, device_path: str)
     For ISO sources we skip the SCSI ioctl (it fails on regular files)
     and report `loaded` unconditionally — the source is always present
     by construction in manual-trigger mode.
+
+    After each successful heartbeat, maybe_reacquire_current_job checks
+    whether the idle ripper should re-acquire a rip-ready job from the
+    backend (handles the case where the in-memory wait timed out or the
+    backend restarted while a disc was seated).
     """
     while True:
         try:
@@ -71,6 +111,13 @@ async def heartbeat_loop(client: BackendClient, drive_id: str, device_path: str)
             else:
                 status, _ = probe_drive_media(device_path)
             await client.heartbeat(drive_id=drive_id, media_status=status)
+            await maybe_reacquire_current_job(
+                controller,
+                get_current_job=client.get_current_job,
+                drive_id=drive_id,
+                device_path=device_path,
+                seated=(status == DriveMediaStatus.LOADED),
+            )
         except (httpx.HTTPError, OSError) as exc:
             logger.warning("heartbeat failed: %s", exc)
         await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
@@ -107,11 +154,11 @@ async def makemkv_keycheck_loop(client: BackendClient) -> None:
             logger.warning("makemkv keycheck failed: %s", exc)
         except Exception:  # noqa: BLE001 — keycheck is best-effort; never let it kill the loop
             logger.exception("makemkv keycheck: unexpected error")
-        await asyncio.sleep(MAKEMKV_KEYCHECK_INTERVAL_SECONDS)
+        await asyncio.sleep(settings.MAKEMKV_KEYCHECK_INTERVAL_SECONDS)
 
 
 async def poll_loop(controller: JobController) -> None:
-    detector = InsertDetector()
+    detector = InsertDetector(not_ready_rearm_polls=settings.ARM_NOT_READY_REARM_POLLS)
     last_state: DriveState | None = None
     active_task: asyncio.Task[None] | None = None
     while True:
@@ -181,7 +228,7 @@ async def amain() -> None:
                     await boot_probe(client, drive_id, device_path, controller)
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("boot probe failed: %s", exc)
-            heartbeat_task = asyncio.create_task(heartbeat_loop(client, drive_id, device_path))
+            heartbeat_task = asyncio.create_task(heartbeat_loop(client, drive_id, device_path, controller))
             keycheck_task = asyncio.create_task(makemkv_keycheck_loop(client))
             try:
                 if iso_mode:

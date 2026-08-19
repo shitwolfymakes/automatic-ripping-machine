@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from arm_common.enums import DiscType, DriveMediaStatus, MakemkvKeyState, TrackStatus
+from arm_common.enums import DiscType, DriveMediaStatus, KeydbState, MakemkvKeyState, TrackStatus
 
 
 class MakemkvKeyStatusReport(BaseModel):
@@ -12,6 +12,17 @@ class MakemkvKeyStatusReport(BaseModel):
 
     state: MakemkvKeyState
     detail: str | None = None
+
+
+class KeydbStatusReport(BaseModel):
+    """Body of POST /api/ripper/keydb-status — the ripper's community-keydb
+    fetch outcome. Global (not per-drive); the backend writes it to the Config
+    singleton. `vuk_count` / `age_days` are present on ok / fresh_kept.
+    Both fields are None on all other states."""
+
+    state: KeydbState
+    vuk_count: int | None = None
+    age_days: int | None = None
 
 
 class RegisterRequest(BaseModel):
@@ -117,3 +128,12 @@ class RipperConfigView(BaseModel):
     # monthly forum beta-key scrape. Defaulted so older backends omitting it
     # still validate.
     makemkv_key: str | None = None
+    # Operator toggle for the community-keydb (FindVUK) auto-fetch. Defaulted
+    # True so older backends omitting it still validate and keep the feature on.
+    community_keydb_enabled: bool = True
+    # Timed review gate: global pause suppresses the auto-start at countdown
+    # expiry; manual_wait_seconds is the countdown duration. The ripper re-reads
+    # these while parked so a mid-wait pause/duration change is honoured.
+    # Defaulted so older backends omitting them still validate (no hold, 60s).
+    ripping_paused: bool = False
+    manual_wait_seconds: int = 60

@@ -104,6 +104,16 @@ def test_config_patch_metadata_provider_rejects_invalid(signing_key: bytes) -> N
     assert "metadata_provider" in r.json()["detail"]
 
 
+def test_patch_config_rejects_non_editable_key(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        # MEDIA_ROOT is an infra (non-editable) key; forcing it into the body must 400
+        r = c.patch("/api/config", json={"MEDIA_ROOT": "/evil"}, headers=_auth(token))
+    assert r.status_code == 400, r.text
+
+
 def test_config_view_exposes_makemkv_status(signing_key: bytes) -> None:
     db = FakeSession()
     _seed(db)
