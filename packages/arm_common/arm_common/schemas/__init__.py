@@ -42,6 +42,8 @@ from arm_common.schemas.metadata import (
 from arm_common.schemas.naming import (
     JobNamingPreviewResponse,
     NamingPreviewItem,
+    NamingPreviewRequest,
+    NamingPreviewResponse,
     NamingValidateRequest,
     NamingValidateResponse,
     NamingVariable,
@@ -90,6 +92,7 @@ from arm_common.schemas.transcoder import (
 )
 from arm_common.schemas.system import (
     PathStatus,
+    StatsResponse,
     SystemDiagnosticCheck,
     SystemDiagnosticsResponse,
     SystemVersionResponse,
@@ -178,6 +181,8 @@ __all__ = [
     "ManualTriggerRequest",
     "ManualTriggerResponse",
     "NamingPreviewItem",
+    "NamingPreviewRequest",
+    "NamingPreviewResponse",
     "NamingValidateRequest",
     "NamingValidateResponse",
     "NamingVariable",
@@ -219,6 +224,7 @@ __all__ = [
     "SessionView",
     "SettingsGroup",
     "SettingsSchemaResponse",
+    "StatsResponse",
     "SystemVersionResponse",
     "TemplatePreviewRequest",
     "TemplatePreviewResponse",

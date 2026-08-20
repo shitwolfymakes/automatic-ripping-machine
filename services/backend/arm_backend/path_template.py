@@ -61,6 +61,16 @@ _SYNTHETIC_CONTEXTS: dict[MediaType, dict[str, str]] = {
 }
 
 
+def synthetic_context(media_type: MediaType) -> dict[str, str]:
+    """Return a copy of the synthetic stand-in values for a media type.
+
+    Public accessor over the save-time-validation context. Callers (e.g. the
+    naming-preview router) may merge real values on top; returning a copy keeps
+    the module-level table immutable.
+    """
+    return dict(_SYNTHETIC_CONTEXTS[media_type])
+
+
 class _StrictDict(dict[str, str]):
     """`format_map` helper that raises `TemplateValidationError` on unknown tokens."""
 

@@ -4031,6 +4031,65 @@
         }
       }
     },
+    "/api/naming/preview": {
+      "post": {
+        "tags": [
+          "naming"
+        ],
+        "summary": "Naming Preview",
+        "operationId": "naming_preview_api_naming_preview_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NamingPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NamingPreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/notifications/channels": {
       "get": {
         "tags": [
@@ -5251,6 +5310,55 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SystemDiagnosticsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/stats": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Stats",
+        "operationId": "stats_api_system_stats_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsResponse"
                 }
               }
             }
@@ -7414,6 +7522,49 @@
         ],
         "title": "NamingPreviewItem"
       },
+      "NamingPreviewRequest": {
+        "properties": {
+          "template": {
+            "type": "string",
+            "title": "Template"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "has_transcode_preset": {
+            "type": "boolean",
+            "title": "Has Transcode Preset",
+            "default": false
+          },
+          "variables": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Variables",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "template",
+          "media_type"
+        ],
+        "title": "NamingPreviewRequest"
+      },
+      "NamingPreviewResponse": {
+        "properties": {
+          "rendered": {
+            "type": "string",
+            "title": "Rendered"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rendered"
+        ],
+        "title": "NamingPreviewResponse"
+      },
       "NamingValidateRequest": {
         "properties": {
           "template": {
@@ -9176,6 +9327,37 @@
         ],
         "title": "SettingsSchemaResponse",
         "description": "Render metadata for the settings page \u2014 grouped field classification.\nStatic (derived from CONFIG_FIELD_META); values come from /api/config and\n/api/settings/infra."
+      },
+      "StatsResponse": {
+        "properties": {
+          "uptime_seconds": {
+            "type": "integer",
+            "title": "Uptime Seconds"
+          },
+          "jobs_by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Jobs By Status"
+          },
+          "drives_online": {
+            "type": "integer",
+            "title": "Drives Online"
+          },
+          "events_unsent": {
+            "type": "integer",
+            "title": "Events Unsent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uptime_seconds",
+          "jobs_by_status",
+          "drives_online",
+          "events_unsent"
+        ],
+        "title": "StatsResponse"
       },
       "SystemDiagnosticCheck": {
         "properties": {
