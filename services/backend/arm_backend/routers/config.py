@@ -30,14 +30,21 @@ from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_common import Config, User
 from arm_common.config_metadata import CONFIG_FIELD_META
 from arm_common.schemas import ConfigUpdateRequest, ConfigView
+from arm_common.secrets import HIDDEN_SECRET
 
 router = APIRouter(prefix="/api/config", tags=["config"])
 
 _NON_EDITABLE_KEYS = frozenset(m.key for m in CONFIG_FIELD_META if not m.editable)
 
+# Secret-tier config fields, derived from the registry so a future secret field
+# auto-masks. The `& ConfigView.model_fields` guard keeps masking aligned to what's
+# actually exposed: e.g. when tvdb_api_key gains its registry+ConfigView entry (B29),
+# it masks automatically; a secret-tier field not yet on ConfigView is skipped.
+_SECRET_KEYS = frozenset(m.key for m in CONFIG_FIELD_META if m.tier == "secret") & set(ConfigView.model_fields)
+
 
 def _to_view(cfg: Config) -> ConfigView:
-    return ConfigView(
+    view = ConfigView(
         tmdb_api_key=cfg.tmdb_api_key,
         omdb_api_key=cfg.omdb_api_key,
         tvdb_api_key=cfg.tvdb_api_key,
@@ -61,6 +68,10 @@ def _to_view(cfg: Config) -> ConfigView:
         updated_by_user_id=cfg.updated_by_user_id,
         updated_at=cfg.updated_at,
     )
+    for key in _SECRET_KEYS:
+        if getattr(view, key):  # non-empty stored secret → mask; None/"" stays as-is
+            setattr(view, key, HIDDEN_SECRET)
+    return view
 
 
 @router.get("", response_model=ConfigView)
@@ -98,6 +109,12 @@ async def update_config(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="config singleton missing")
 
     fields = req.model_dump(exclude_unset=True)
+    # A secret field whose submitted value is the masked sentinel means "keep the
+    # stored secret" — drop it from the update set so it isn't overwritten with the
+    # literal "<hidden>". Real values update; "" / None clears (normal setattr below).
+    for key in _SECRET_KEYS:
+        if fields.get(key) == HIDDEN_SECRET:
+            del fields[key]
     if fields.get("notification_apprise_urls"):
         bad = _first_invalid_apprise_url(fields["notification_apprise_urls"])
         if bad is not None:

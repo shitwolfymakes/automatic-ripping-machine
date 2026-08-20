@@ -23,6 +23,7 @@ from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import config as config_router  # noqa: E402
 from arm_common import Config, RetentionPolicy, User  # noqa: E402
+from arm_common.secrets import HIDDEN_SECRET  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -167,8 +168,8 @@ def test_makemkv_key_round_trips(signing_key: bytes) -> None:
         assert r.status_code == 200, r.text
         assert r.json()["makemkv_key"] is None
 
-        # PATCH persists it and the view echoes it back.
+        # PATCH persists it; the response view masks the secret, but the DB row holds the real value.
         r = client.patch("/api/config", json={"makemkv_key": "T-abc123"}, headers=_auth(token))
         assert r.status_code == 200, r.text
-        assert r.json()["makemkv_key"] == "T-abc123"
+        assert r.json()["makemkv_key"] == HIDDEN_SECRET
         assert db.rows["config"][0].makemkv_key == "T-abc123"
