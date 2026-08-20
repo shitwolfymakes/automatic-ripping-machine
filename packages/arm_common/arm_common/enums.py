@@ -29,6 +29,11 @@ class DriveMediaStatus(StrEnum):
     UNKNOWN = "unknown"  # CDS_NO_INFO, or ioctl unsupported on a probed device
 
 
+class DriveMode(StrEnum):
+    AUTO = "auto"  # ripper auto-rips on disc insert
+    MANUAL = "manual"  # ripper waits for an explicit manual.trigger
+
+
 class JobStatus(StrEnum):
     CREATED = "created"
     AWAITING_USER_ID = "awaiting_user_id"

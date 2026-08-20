@@ -1575,7 +1575,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/Drive"
+                    "$ref": "#/components/schemas/DriveView"
                   },
                   "title": "Response List Drives Api Drives Get"
                 }
@@ -1744,7 +1744,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Drive"
+                  "$ref": "#/components/schemas/DriveView"
                 }
               }
             }
@@ -6676,6 +6676,82 @@
             "type": "object",
             "title": "Rip Params Json"
           },
+          "rip_speed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rip Speed"
+          },
+          "drive_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "uhd_capable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uhd Capable"
+          },
+          "prescan_cache_mb": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Cache Mb"
+          },
+          "prescan_timeout": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Timeout"
+          },
+          "prescan_retries": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Retries"
+          },
+          "disc_enum_timeout": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Enum Timeout"
+          },
           "default_session_id": {
             "anyOf": [
               {
@@ -6720,11 +6796,41 @@
           "last_seen_at",
           "media_status",
           "media_status_at",
+          "drive_mode",
           "default_session_id",
           "created_at",
           "updated_at"
         ],
         "title": "Drive"
+      },
+      "DriveCurrentJobView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "status"
+        ],
+        "title": "DriveCurrentJobView"
       },
       "DriveDiagnosticItem": {
         "properties": {
@@ -6805,6 +6911,14 @@
         "title": "DriveMediaStatus",
         "description": "What the drive thinks is in its tray. Reported by each ripper\non a heartbeat so the backend can fail manual-trigger requests\nfast when the user clicks Start without loading a disc."
       },
+      "DriveMode": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "manual"
+        ],
+        "title": "DriveMode"
+      },
       "DriveRescanResponse": {
         "properties": {
           "online": {
@@ -6856,12 +6970,295 @@
               }
             ],
             "title": "Default Session Id"
+          },
+          "rip_speed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rip Speed"
+          },
+          "drive_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "uhd_capable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uhd Capable"
+          },
+          "prescan_cache_mb": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Cache Mb"
+          },
+          "prescan_timeout": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Timeout"
+          },
+          "prescan_retries": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Retries"
+          },
+          "disc_enum_timeout": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Enum Timeout"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "title": "DriveUpdateRequest",
         "description": "PATCH /api/drives/{id} body. Both fields optional + nullable.\n\n`default_session_id=None` (explicit null) clears the field; omitting it\nleaves it untouched. `extra=\"forbid\"` keeps the API honest \u2014 UI typos\nsurface as 422 instead of being silently dropped."
+      },
+      "DriveView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "hostname": {
+            "type": "string",
+            "title": "Hostname"
+          },
+          "device_path": {
+            "type": "string",
+            "title": "Device Path"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DriveStatus"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "media_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveMediaStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "media_status_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Status At"
+          },
+          "default_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Session Id"
+          },
+          "rip_speed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rip Speed"
+          },
+          "drive_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "uhd_capable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uhd Capable"
+          },
+          "prescan_cache_mb": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Cache Mb"
+          },
+          "prescan_timeout": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Timeout"
+          },
+          "prescan_retries": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Retries"
+          },
+          "disc_enum_timeout": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Enum Timeout"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "current_job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveCurrentJobView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "hostname",
+          "device_path",
+          "display_name",
+          "status",
+          "last_seen_at",
+          "media_status",
+          "media_status_at",
+          "default_session_id",
+          "rip_speed",
+          "drive_mode",
+          "uhd_capable",
+          "prescan_cache_mb",
+          "prescan_timeout",
+          "prescan_retries",
+          "disc_enum_timeout",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DriveView"
       },
       "FailTaskRequest": {
         "properties": {
