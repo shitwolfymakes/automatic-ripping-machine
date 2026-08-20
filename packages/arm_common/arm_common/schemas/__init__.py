@@ -89,6 +89,8 @@ from arm_common.schemas.transcoder import (
     HeartbeatRequest,
     RegisterTranscoderRequest,
     RegisterTranscoderResponse,
+    TranscodeStatsView,
+    TranscodeWorkerView,
 )
 from arm_common.schemas.system import (
     PathStatus,
@@ -234,7 +236,9 @@ __all__ = [
     "TranscodePresetCreateRequest",
     "TranscodePresetUpdateRequest",
     "TranscodePresetView",
+    "TranscodeStatsView",
     "TranscodeTaskView",
+    "TranscodeWorkerView",
     "WSAck",
     "WSAuthRequest",
     "WSEnvelope",
