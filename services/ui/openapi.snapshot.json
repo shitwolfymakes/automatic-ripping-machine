@@ -748,6 +748,124 @@
         }
       }
     },
+    "/api/ripper/drives/{drive_id}/held-job": {
+      "get": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Get Held Job",
+        "description": "Boot-probe lookup for a disc held in AWAITING_REVIEW (timed review gate).\n\nReturns the held job plus `paused` (true when the disc should survive a ripper\nreboot as a hold \u2014 global `ripping_paused`, or a per-job pause once that\nlands). The ripper uses `paused` to choose re-park vs. abandon on restart\n(timed-review-gate spec \u00a76.3). 404 when the drive is unknown or no held job\nexists. Distinct from `/in-flight-job` (RIPPING-only) so the two recovery\npaths stay separate.",
+        "operationId": "get_held_job_api_ripper_drives__drive_id__held_job_get",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeldJobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ripper/jobs/{job_id}/recovery-abandon": {
+      "post": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Recovery Abandon",
+        "description": "Service-token abandon for ripper reboot recovery (timed review gate \u00a76.3).\n\nA held disc that was only COUNTING DOWN (not paused) when the ripper restarted\nis abandoned here so the drive frees; the seated disc then re-fires the\nripper's InsertDetector and re-enters review with a fresh countdown. Only\nAWAITING_REVIEW is abandonable via this path (the operator-facing\n`/jobs/{id}/abandon` covers the rest); no WS job.abandoned is emitted because\nthe ripper is the caller and has no active task to cancel.",
+        "operationId": "recovery_abandon_api_ripper_jobs__job_id__recovery_abandon_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ripper/tracks/{track_id}": {
       "patch": {
         "tags": [
@@ -1373,6 +1491,136 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/rip-start-review": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Rip Start Review",
+        "description": "Operator Start for a disc held in the timed review gate (spec \u00a75.2).\n\nTransitions AWAITING_REVIEW -> RIPPING here (the backend owns the transition;\nrip-start then tolerates already-RIPPING) and emits the `rip.start` WS command\nso the parked ripper unblocks. Operator-initiated, so JWT-authed on the jobs\nrouter \u2014 NOT the ripper's service-token rip-start path. Pre-flight: at least\none kept (non-excluded) track, else 422 (don't let it fail deep in the ripper).",
+        "operationId": "rip_start_review_api_jobs__job_id__rip_start_review_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/review-pause": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Review Pause",
+        "description": "Pause/resume ONE held disc's review countdown (per-job pause, spec \u00a711).\n\n`?paused=true` freezes this disc's auto-start countdown (waits indefinitely\nfor Start) while other discs keep counting; `?paused=false` resumes with a\nFRESH countdown (new wait_start_time) so it doesn't auto-rip instantly on a\nlong-paused disc. Only valid for AWAITING_REVIEW. Emits a WS command so the\nparked ripper re-evaluates the countdown on its next poll.",
+        "operationId": "review_pause_api_jobs__job_id__review_pause_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "paused",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Paused"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -7327,6 +7575,28 @@
             ],
             "title": "Ripping Paused"
           },
+          "hold_for_review": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold For Review"
+          },
+          "manual_wait_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Wait Seconds"
+          },
           "notifications_enabled": {
             "anyOf": [
               {
@@ -7430,6 +7700,14 @@
             "type": "boolean",
             "title": "Ripping Paused"
           },
+          "hold_for_review": {
+            "type": "boolean",
+            "title": "Hold For Review"
+          },
+          "manual_wait_seconds": {
+            "type": "integer",
+            "title": "Manual Wait Seconds"
+          },
           "default_retention_policy": {
             "$ref": "#/components/schemas/RetentionPolicy"
           },
@@ -7518,6 +7796,8 @@
           "block_on_miss",
           "community_keydb_enabled",
           "ripping_paused",
+          "hold_for_review",
+          "manual_wait_seconds",
           "default_retention_policy",
           "notification_apprise_urls",
           "notifications_enabled",
@@ -8633,6 +8913,24 @@
         ],
         "title": "HeartbeatRequest"
       },
+      "HeldJobView": {
+        "properties": {
+          "job": {
+            "$ref": "#/components/schemas/JobView"
+          },
+          "paused": {
+            "type": "boolean",
+            "title": "Paused"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job",
+          "paused"
+        ],
+        "title": "HeldJobView",
+        "description": "Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).\n\n`paused` is true when the held disc should survive a ripper reboot as a hold\n(global `ripping_paused` on \u2014 or, once it lands, a per-job pause). The ripper\nuses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)\non restart. See the timed-review-gate spec \u00a76.3."
+      },
       "HwPreference": {
         "type": "string",
         "enum": [
@@ -8799,6 +9097,23 @@
             "type": "boolean",
             "title": "Resumed From Crash"
           },
+          "wait_start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wait Start Time"
+          },
+          "manual_pause": {
+            "type": "boolean",
+            "title": "Manual Pause",
+            "default": false
+          },
           "started_at": {
             "anyOf": [
               {
@@ -8859,6 +9174,7 @@
           "poster_url_manual",
           "status",
           "resumed_from_crash",
+          "wait_start_time",
           "started_at",
           "ripped_at",
           "created_at",
@@ -8964,6 +9280,7 @@
           "ripping",
           "ripped",
           "ripped_partial",
+          "awaiting_review",
           "ripped_awaiting_identify",
           "abandoned",
           "failed"
@@ -9133,6 +9450,23 @@
           "resumed_from_crash": {
             "type": "boolean",
             "title": "Resumed From Crash"
+          },
+          "wait_start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wait Start Time"
+          },
+          "manual_pause": {
+            "type": "boolean",
+            "title": "Manual Pause",
+            "default": false
           },
           "rip_progress": {
             "anyOf": [
@@ -11139,6 +11473,16 @@
             "type": "boolean",
             "title": "Community Keydb Enabled",
             "default": true
+          },
+          "ripping_paused": {
+            "type": "boolean",
+            "title": "Ripping Paused",
+            "default": false
+          },
+          "manual_wait_seconds": {
+            "type": "integer",
+            "title": "Manual Wait Seconds",
+            "default": 60
           }
         },
         "type": "object",

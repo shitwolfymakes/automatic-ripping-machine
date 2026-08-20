@@ -94,9 +94,27 @@ class JobView(BaseModel):
     poster_url_manual: str | None = None
     metadata_json: dict[str, Any]
     resumed_from_crash: bool
+    # Timed review gate: when the countdown started (AWAITING_REVIEW). Drives the
+    # ripper's remaining-delay calc + the UI's cosmetic countdown. Null otherwise.
+    wait_start_time: datetime | None = None
+    # Per-job review-gate pause: freezes this disc's countdown (UI shows paused).
+    manual_pause: bool = False
     # Populated only by the list endpoint for ripping jobs; None on
     # detail responses and on terminal/early-state jobs.
     rip_progress: RipProgressSummary | None = None
+
+
+class HeldJobView(BaseModel):
+    """Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).
+
+    `paused` is true when the held disc should survive a ripper reboot as a hold
+    (global `ripping_paused` on — or, once it lands, a per-job pause). The ripper
+    uses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)
+    on restart. See the timed-review-gate spec §6.3.
+    """
+
+    job: JobView
+    paused: bool
 
 
 class TrackEditRequest(BaseModel):

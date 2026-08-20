@@ -4,6 +4,7 @@ import httpx
 
 from arm_common import Drive, DriveMediaStatus, Job, KeydbState, MakemkvKeyState
 from arm_common.schemas import (
+    HeldJobView,
     IdentifyRequest,
     JobCompleteRequest,
     JobView,
@@ -102,6 +103,21 @@ class BackendClient:
         r = await self._client.get(f"/api/ripper/drives/{drive_id}/in-flight-job")
         if r.status_code == 404:
             return None
+        r.raise_for_status()
+        return JobView.model_validate(r.json())
+
+    async def get_held_job(self, drive_id: str) -> HeldJobView | None:
+        """Boot-probe lookup for a disc held in AWAITING_REVIEW (timed review
+        gate). Returns the held job + its paused flag, or None on 404."""
+        r = await self._client.get(f"/api/ripper/drives/{drive_id}/held-job")
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        return HeldJobView.model_validate(r.json())
+
+    async def recovery_abandon(self, job_id: str) -> JobView:
+        """Abandon a counting-down held job on reboot recovery (review gate §6.3)."""
+        r = await self._client.post(f"/api/ripper/jobs/{job_id}/recovery-abandon")
         r.raise_for_status()
         return JobView.model_validate(r.json())
 

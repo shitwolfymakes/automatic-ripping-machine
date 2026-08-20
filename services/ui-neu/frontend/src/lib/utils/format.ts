@@ -1,0 +1,242 @@
+export function timeAgo(dateString: string | null | undefined): string {
+	if (!dateString) return 'N/A';
+	const date = new Date(dateString);
+	const now = new Date();
+	const seconds = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
+
+	if (seconds < 60) return `${seconds}s ago`;
+	const minutes = Math.floor(seconds / 60);
+	if (minutes < 60) return `${minutes}m ago`;
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) return `${hours}h ago`;
+	const days = Math.floor(hours / 24);
+	return `${days}d ago`;
+}
+
+export function formatBytes(bytes: number): string {
+	if (bytes === 0) return '0 B';
+	const k = 1024;
+	const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+	const i = Math.floor(Math.log(bytes) / Math.log(k));
+	return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
+export function formatDateTime(dateString: string | null | undefined): string {
+	if (!dateString) return 'N/A';
+	return new Date(dateString).toLocaleString();
+}
+
+export function elapsedTime(startTime: string | null | undefined): string {
+	if (!startTime) return 'N/A';
+	const start = new Date(startTime);
+	const now = new Date();
+	const totalSeconds = Math.max(0, Math.floor((now.getTime() - start.getTime()) / 1000));
+
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
+
+	if (hours > 0) return `${hours}h ${minutes}m`;
+	if (minutes > 0) return `${minutes}m ${seconds}s`;
+	return `${seconds}s`;
+}
+
+/**
+ * Estimate time remaining for an in-flight job.
+ * Returns null when an ETA can't be reasonably computed (just started,
+ * already done, no progress signal); the caller renders an em-dash.
+ *
+ * The 30s elapsed threshold smooths the noisy first-percent jitter
+ * that MakeMKV/abcde produce during drive-spin and warm-up.
+ * Capped at 24h+ to avoid printing absurd estimates from sub-1%
+ * progress values that haven't yet stabilised.
+ */
+export function etaTime(
+	startTime: string | null | undefined,
+	progressPct: number | null | undefined
+): string | null {
+	if (!startTime || progressPct == null) return null;
+	if (progressPct <= 0 || progressPct >= 100) return null;
+	const start = new Date(startTime);
+	const elapsedSec = (Date.now() - start.getTime()) / 1000;
+	if (elapsedSec < 30) return null;
+	const remainingSec = (elapsedSec * (100 - progressPct)) / progressPct;
+	if (remainingSec >= 24 * 3600) return '24h+';
+	const h = Math.floor(remainingSec / 3600);
+	const m = Math.floor((remainingSec % 3600) / 60);
+	const s = Math.floor(remainingSec % 60);
+	if (h > 0) return `${h}h ${m}m`;
+	if (m > 0) return `${m}m ${s}s`;
+	return `${s}s`;
+}
+
+/**
+ * Map a job status to a themeable CSS variable reference suitable for
+ * inline `style="background: ${statusAccentVar(status)}"` use. Falls back
+ * to the primary brand color so unrecognized statuses still pick up
+ * theme tinting.
+ *
+ * Accepts a job status (v3 JobStatus), a transcode-task status
+ * (v3 TaskStatus), or a track status (TrackStatus) value. The status
+ * vocabulary is now owned by v3 — see the generated `$lib/types/api.gen`
+ * (`JobStatus` / `TaskStatus` / `TrackStatus`), not arm_contracts. v2.0.0
+ * disambiguated 'ripping' into 'video_ripping'/'audio_ripping' and 'waiting'
+ * into 'manual_paused'/'makemkv_throttled'; both new and legacy strings are
+ * mapped here so in-flight jobs observed mid-deploy still tint correctly.
+ */
+export function statusAccentVar(status: string | null | undefined): string {
+	switch (status?.toLowerCase()) {
+		case 'identifying':
+		case 'created': // v3 JobStatus
+			return 'var(--color-status-scanning)';
+		case 'identified': // v3 JobStatus — queued to rip
+		case 'ready':
+		case 'active':
+		case 'ripping':         // legacy pre-v2.0.0
+		case 'video_ripping':
+		case 'audio_ripping':
+		case 'importing':
+			return 'var(--color-status-ripping)';
+		case 'copying':
+		case 'ejecting':
+			return 'var(--color-status-finishing)';
+		case 'transcoding':
+		case 'processing':
+			return 'var(--color-status-transcoding)';
+		case 'success':
+		case 'completed':
+		case 'complete':
+		case 'transcoded':
+		case 'ripped': // v3 JobStatus — terminal rip success
+			return 'var(--color-status-success)';
+		case 'fail':
+		case 'failed':
+		case 'error':
+			return 'var(--color-status-error)';
+		case 'waiting':         // legacy pre-v2.0.0
+		case 'manual_paused':
+		case 'makemkv_throttled':
+		case 'waiting_transcode':
+		case 'pending':
+		case 'awaiting_user_id': // v3 JobStatus
+		case 'awaiting_review': // v3 JobStatus — held for the timed review gate
+		case 'ripped_partial': // v3 JobStatus — partial success
+		case 'ripped_awaiting_identify': // v3 JobStatus
+			return 'var(--color-status-waiting)';
+		default: // incl. 'abandoned' (v3) — neutral
+			return 'var(--color-primary)';
+	}
+}
+
+/**
+ * Map a status string to a CSS class. Receives values from three different
+ * v3 status enums (all in the generated `$lib/types/api.gen`, not
+ * arm_contracts) depending on caller:
+ *   - JobStatus (Job.status) - StatusBadge in JobRow, JobCard, ActiveJobRow,
+ *     DriveCard, jobs/[id]. Disambiguated in v2.0.0: 'ripping' ->
+ *     'video_ripping'/'audio_ripping', 'waiting' ->
+ *     'manual_paused'/'makemkv_throttled'. Old strings kept as defensive
+ *     fallbacks for in-flight jobs observed mid-deploy.
+ *   - TaskStatus (transcode-task status) - StatusBadge in TranscodeCard,
+ *     transcoder/+page.svelte
+ *   - TrackStatus (Track.status) - StatusBadge at jobs/[id]:849.
+ *     'failed' is a real TrackStatus member as of v2.0.0 (was previously
+ *     only handled defensively for transcode-task status).
+ * Plus two locally-generated literals: 'importing' (folder-import override
+ * for status='ripping') and 'skipped' (UI-only marker for filtered/disabled
+ * tracks). Both are produced inline at the StatusBadge call site, not by any
+ * backend.
+ */
+export function statusColor(status: string | null | undefined): string {
+	switch (status?.toLowerCase()) {
+		case 'identifying':
+		case 'created': // v3 JobStatus — disc inserted, not yet identified
+			return 'status-scanning';
+		case 'awaiting_user_id': // v3 JobStatus — needs manual identification
+		case 'awaiting_review': // v3 JobStatus — held for the timed review gate
+		case 'ripped_awaiting_identify': // v3 JobStatus — ripped, still needs ID
+			return 'status-warning';
+		case 'identified': // v3 JobStatus — identified, queued/ready to rip
+		case 'ready':
+		case 'ripping':         // legacy pre-v2.0.0; in-flight jobs mid-deploy
+		case 'video_ripping':
+		case 'audio_ripping':
+		case 'importing': // locally generated when isFolderImport && status='ripping'
+			return 'status-active';
+		case 'copying':
+		case 'ejecting':
+			return 'status-finishing';
+		case 'transcoding':
+		case 'processing': // TaskStatus (transcode task) - TranscodeCard / transcoder page
+			return 'status-processing';
+		case 'success':
+		case 'completed': // TaskStatus (transcode task) terminal
+		case 'transcoded': // TrackStatus terminal (transcode-phase)
+		case 'ripped': // v3 JobStatus — rip complete (terminal)
+			return 'status-success';
+		case 'ripped_partial': // v3 JobStatus — rip finished with some titles failed
+			return 'status-warning';
+		case 'fail':
+		case 'failed': // TaskStatus (transcode task) terminal AND TrackStatus.failed (v2.0.0+)
+			return 'status-error';
+		case 'waiting':         // legacy pre-v2.0.0; in-flight jobs mid-deploy
+		case 'manual_paused':
+		case 'makemkv_throttled':
+		case 'waiting_transcode':
+		case 'pending': // TaskStatus (transcode task) + TrackStatus member
+			return 'status-warning';
+		case 'abandoned': // v3 JobStatus — user abandoned (terminal)
+		case 'skipped': // locally generated for !track.enabled || filtered (jobs/[id]:849)
+			return 'status-unknown';
+		default:
+			return 'status-unknown';
+	}
+}
+
+const STATUS_LABELS: Record<string, string> = {
+	// v3 JobStatus values (packages/arm_common enums.py)
+	created: 'Created',
+	awaiting_user_id: 'Awaiting ID',
+	awaiting_review: 'Ready — review',
+	identified: 'Identified',
+	ripped: 'Ripped',
+	ripped_partial: 'Ripped (partial)',
+	ripped_awaiting_identify: 'Ripped (awaiting ID)',
+	abandoned: 'Abandoned',
+	// generic / legacy / per-track / per-task statuses
+	identifying: 'Scanning',
+	ready: 'Ready',
+	active: 'Active',
+	ripping: 'Ripping',           // legacy pre-v2.0.0; in-flight jobs mid-deploy
+	video_ripping: 'Ripping',
+	audio_ripping: 'Ripping',
+	importing: 'Processing',
+	copying: 'Copying',
+	ejecting: 'Ejecting',
+	processing: 'Transcoding',
+	transcoding: 'Transcoding',
+	success: 'Success',
+	completed: 'Completed',
+	complete: 'Complete',
+	fail: 'Failed',
+	failed: 'Failed',
+	error: 'Error',
+	waiting: 'Waiting',           // legacy pre-v2.0.0; in-flight jobs mid-deploy
+	manual_paused: 'Paused',
+	makemkv_throttled: 'Throttled',
+	waiting_transcode: 'Waiting to Transcode',
+	pending: 'Pending',
+	skipped: 'Skipped',
+	transcoded: 'Transcoded',
+	info: 'Scanning',
+	cancelled: 'Cancelled',
+	// TrackStatus / TranscodeTaskStatus (per-track + per-task rows)
+	queued: 'Queued',
+	in_progress: 'In Progress',
+	done: 'Done',
+};
+
+export function statusLabel(status: string | null | undefined): string {
+	if (!status) return 'Unknown';
+	return STATUS_LABELS[status.toLowerCase()] ?? status;
+}

@@ -2,7 +2,7 @@ from arm_common.config_metadata import CONFIG_FIELD_META, ConfigFieldMeta
 from arm_common.schemas import ConfigUpdateRequest, ConfigView
 
 _VALID_TIERS = {"secret", "operator", "infra"}
-_VALID_TYPES = {"string", "bool", "enum", "string[]"}
+_VALID_TYPES = {"string", "bool", "int", "enum", "string[]"}
 
 
 def _by_key() -> dict[str, ConfigFieldMeta]:

@@ -56,6 +56,11 @@ class Config(SQLModel, table=True):
     auto_rip_on_insert: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
     block_on_miss: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
     ripping_paused: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
+    # Timed pre-rip review gate: when on, an inserted disc scans + identifies then
+    # parks in AWAITING_REVIEW for `manual_wait_seconds` before auto-starting the
+    # rip (suppressed while `ripping_paused`). Off = today's auto-rip behavior.
+    hold_for_review: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
+    manual_wait_seconds: int = Field(sa_column=Column(Integer, nullable=False, server_default="60"))
     default_retention_policy: RetentionPolicy = Field(
         sa_column=enum_column(
             RetentionPolicy,

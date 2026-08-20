@@ -35,6 +35,7 @@ from arm_common import (
     User,
 )
 from arm_common.models import Track, TranscodeTask
+from arm_common.models._columns import enum_value_str
 from arm_common.schemas import (
     AbandonJobRequest,
     ApplySessionRequest,
@@ -211,6 +212,9 @@ _NON_TERMINAL_STATUSES: frozenset[JobStatus] = frozenset(
         JobStatus.AWAITING_USER_ID,
         JobStatus.IDENTIFIED,
         JobStatus.RIPPING,
+        # A held review-gate disc is non-terminal so Cancel-via-abandon works and
+        # the delete/retry guards treat it as live (timed review gate).
+        JobStatus.AWAITING_REVIEW,
     }
 )
 
@@ -279,6 +283,104 @@ async def abandon_job(
     await db.refresh(job)
 
     logger.info("abandon job_id=%s delete_raw=%s", job.id, delete_raw)
+    return job
+
+
+@router.post("/{job_id}/rip-start-review", response_model=JobView)
+async def rip_start_review(
+    job_id: JobIdParam,
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
+) -> Job:
+    """Operator Start for a disc held in the timed review gate (spec §5.2).
+
+    Transitions AWAITING_REVIEW -> RIPPING here (the backend owns the transition;
+    rip-start then tolerates already-RIPPING) and emits the `rip.start` WS command
+    so the parked ripper unblocks. Operator-initiated, so JWT-authed on the jobs
+    router — NOT the ripper's service-token rip-start path. Pre-flight: at least
+    one kept (non-excluded) track, else 422 (don't let it fail deep in the ripper).
+    """
+    job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
+    if job.status != JobStatus.AWAITING_REVIEW:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"rip-start-review only valid for awaiting_review, got {enum_value_str(job.status)}",
+        )
+    tracks = list((await db.execute(select(Track).where(col(Track.job_id) == job_id))).scalars().all())
+    if tracks and all(t.excluded for t in tracks):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="at least one track must be kept (not excluded) to start the rip",
+        )
+
+    job.status = JobStatus.RIPPING
+    job.started_at = datetime.now(timezone.utc)
+    db.add(job)
+    await db.flush()
+
+    payload = {"job_id": job.id, "drive_id": job.drive_id}
+    await hub.emit(
+        topic=f"ripper.commands.{job.drive_id}",
+        event_type="rip.start",
+        payload=payload,
+        job_id=job.id,
+        session=db,
+    )
+    await hub.emit(
+        topic="ripper.events",
+        event_type="rip.started",
+        payload=payload,
+        job_id=job.id,
+        session=db,
+    )
+    await db.commit()
+    await db.refresh(job)
+    logger.info("rip-start-review job_id=%s -> ripping", job.id)
+    return job
+
+
+@router.post("/{job_id}/review-pause", response_model=JobView)
+async def review_pause(
+    job_id: JobIdParam,
+    paused: bool = True,
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
+) -> Job:
+    """Pause/resume ONE held disc's review countdown (per-job pause, spec §11).
+
+    `?paused=true` freezes this disc's auto-start countdown (waits indefinitely
+    for Start) while other discs keep counting; `?paused=false` resumes with a
+    FRESH countdown (new wait_start_time) so it doesn't auto-rip instantly on a
+    long-paused disc. Only valid for AWAITING_REVIEW. Emits a WS command so the
+    parked ripper re-evaluates the countdown on its next poll.
+    """
+    job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
+    if job.status != JobStatus.AWAITING_REVIEW:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"review-pause only valid for awaiting_review, got {enum_value_str(job.status)}",
+        )
+    job.manual_pause = paused
+    if not paused:
+        job.wait_start_time = datetime.now(timezone.utc)  # fresh countdown on resume
+    db.add(job)
+    await db.flush()
+    await hub.emit(
+        topic=f"ripper.commands.{job.drive_id}",
+        event_type="review.pause",
+        payload={"job_id": job.id, "drive_id": job.drive_id, "paused": paused},
+        job_id=job.id,
+        session=db,
+    )
+    await db.commit()
+    await db.refresh(job)
+    logger.info("review-pause job_id=%s paused=%s", job.id, paused)
     return job
 
 
@@ -637,7 +739,15 @@ _RESOLVABLE_STATUSES_PROMOTE: frozenset[JobStatus] = frozenset(
     {JobStatus.AWAITING_USER_ID, JobStatus.RIPPED_AWAITING_IDENTIFY}
 )
 _RESOLVABLE_STATUSES_PRESERVE: frozenset[JobStatus] = frozenset(
-    {JobStatus.IDENTIFIED, JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL}
+    {
+        JobStatus.IDENTIFIED,
+        JobStatus.RIPPED,
+        JobStatus.RIPPED_PARTIAL,
+        # A held review-gate disc accepts identity edits WITHOUT flipping status —
+        # resolve = "I've identified it"; the separate Start = "begin ripping".
+        # PRESERVE (not PROMOTE) keeps it in AWAITING_REVIEW after an edit.
+        JobStatus.AWAITING_REVIEW,
+    }
 )
 _RESOLVABLE_STATUSES: frozenset[JobStatus] = _RESOLVABLE_STATUSES_PROMOTE | _RESOLVABLE_STATUSES_PRESERVE
 

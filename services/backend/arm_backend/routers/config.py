@@ -23,7 +23,7 @@ from sqlmodel import col, select
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
 from arm_backend.seeders import CONFIG_SINGLETON_ID
-from arm_common import Config, User
+from arm_common import Config, Job, JobStatus, User
 from arm_common.config_metadata import CONFIG_FIELD_META
 from arm_common.schemas import ConfigUpdateRequest, ConfigView
 from arm_common.secrets import HIDDEN_SECRET
@@ -55,6 +55,10 @@ def _to_view(cfg: Config) -> ConfigView:
         # consumers' fixtures, so they don't need it.
         community_keydb_enabled=bool(cfg.community_keydb_enabled),
         ripping_paused=bool(cfg.ripping_paused),
+        # bool()/int() coerce the None a bare in-memory Config carries (DB-level
+        # server_default only) for rows/fixtures predating these columns.
+        hold_for_review=bool(cfg.hold_for_review),
+        manual_wait_seconds=int(cfg.manual_wait_seconds) if cfg.manual_wait_seconds is not None else 60,
         default_retention_policy=cfg.default_retention_policy,
         notification_apprise_urls=list(cfg.notification_apprise_urls or []),
         notifications_enabled=cfg.notifications_enabled,
@@ -117,10 +121,24 @@ async def update_config(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"invalid metadata_provider: {fields['metadata_provider']!r} (must be 'tmdb' or 'omdb')",
         )
+    # Detect un-pause (ripping_paused ON -> OFF) before applying, so we can give
+    # held review-gate discs a FRESH countdown rather than resuming an already-
+    # expired one (which would auto-rip the instant ripping resumes — surprising
+    # to an operator who paused to deal with it later). timed-review-gate spec §6.3.
+    unpausing = bool(cfg.ripping_paused) and fields.get("ripping_paused") is False
+
     for key, value in fields.items():
         setattr(cfg, key, value)
     cfg.updated_by_user_id = user.id
     cfg.updated_at = datetime.now(timezone.utc)
+
+    if unpausing:
+        now = datetime.now(timezone.utc)
+        held = (await session.execute(select(Job).where(col(Job.status) == JobStatus.AWAITING_REVIEW))).scalars().all()
+        for job in held:
+            job.wait_start_time = now
+            session.add(job)
+
     await session.commit()
     await session.refresh(cfg)
     return _to_view(cfg)
