@@ -94,6 +94,10 @@ from arm_common.schemas.system import (
     SystemDiagnosticsResponse,
     SystemVersionResponse,
 )
+from arm_common.schemas.settings import (
+    SettingsGroup,
+    SettingsSchemaResponse,
+)
 from arm_common.schemas.notifications import (
     AppriseChannelConfig,
     CatalogField,
@@ -213,6 +217,8 @@ __all__ = [
     "SessionCreateRequest",
     "SessionUpdateRequest",
     "SessionView",
+    "SettingsGroup",
+    "SettingsSchemaResponse",
     "SystemVersionResponse",
     "TemplatePreviewRequest",
     "TemplatePreviewResponse",

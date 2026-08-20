@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     # owning drive's ripper was offline).
     RAW_ROOT: str = "/raw"
 
+    # Sandbox root for ISO-import scanning (kept for the diagnostics path
+    # check; the iso-scan endpoint itself was dropped upstream in favor of
+    # the ephemeral-worker design).
+    ISO_INGRESS_ROOT: str = "/ingress"
+
     # Optional .env override for the OMDB key. When set, takes precedence over
     # config.omdb_api_key on every identify call — useful in dev where the
     # secret lives in .env and the Config row stays empty.
