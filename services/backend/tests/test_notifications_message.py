@@ -9,6 +9,7 @@ def test_message_is_frozen_dataclass() -> None:
         default_title="ARM: rip completed",
         default_body="disc",
         job=None,
+        payload={},
     )
     assert m.event_id == "evt_1"
     assert m.event_type == "rip.completed"
@@ -22,3 +23,17 @@ def test_message_is_frozen_dataclass() -> None:
     except dataclasses.FrozenInstanceError:
         raised = True
     assert raised
+
+
+def test_message_carries_payload() -> None:
+    m = Message(
+        event_id="evt_1",
+        event_type="rip.completed",
+        job_id="job_1",
+        default_title="t",
+        default_body="b",
+        job=None,
+        payload={"drive_id": "sr0", "tracks_total": 3},
+    )
+    assert m.payload["drive_id"] == "sr0"
+    assert m.payload["tracks_total"] == 3

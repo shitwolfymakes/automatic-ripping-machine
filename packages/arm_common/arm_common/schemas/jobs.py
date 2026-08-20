@@ -9,6 +9,8 @@ from arm_common.enums import DiscType, JobStatus, SessionApplicationStatus, Trac
 class ResolveRequest(BaseModel):
     title: str
     year: int | None = None
+    disc_number: int | None = None
+    disc_total: int | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -85,6 +87,8 @@ class JobView(BaseModel):
     status: JobStatus
     title: str | None
     year: int | None
+    disc_number: int | None = None
+    disc_total: int | None = None
     # Computed at identify; UI prefers `poster_url_manual` if set.
     poster_url: str | None = None
     poster_url_manual: str | None = None
@@ -95,12 +99,35 @@ class JobView(BaseModel):
     rip_progress: RipProgressSummary | None = None
 
 
+class TrackEditRequest(BaseModel):
+    """One entry in JobUpdateRequest.tracks. `track_id` selects the row; every
+    other field is an optional operator edit (omitted=untouched, null=clear)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    track_id: str
+    title: str | None = None
+    year: int | None = None
+    imdb_id: str | None = None
+    poster_url: str | None = None
+    video_type: str | None = None
+    episode_number: int | None = None
+    episode_name: str | None = None
+    excluded: bool | None = None
+    custom_filename: str | None = None
+
+
 class JobUpdateRequest(BaseModel):
-    """PATCH /api/jobs/{id} body. Currently only the manual poster override
-    is editable — title/year live behind the identify/resolve flow.
-    """
+    """PATCH /api/jobs/{id} body. `poster_url_manual` + disc fields edit the job;
+    `tracks` applies per-track operator edits in the same atomic save. The JOB's
+    title/year still live behind identify/resolve."""
+
+    model_config = ConfigDict(extra="forbid")
 
     poster_url_manual: str | None = None
+    disc_number: int | None = None
+    disc_total: int | None = None
+    tracks: list[TrackEditRequest] | None = None
 
 
 class TrackView(BaseModel):
@@ -128,6 +155,18 @@ class TrackView(BaseModel):
     expected_duration_seconds: int | None = None
     attempts: int
     last_error: str | None
+    label: str | None = None
+    role: str | None = None
+    edition: str | None = None
+    title: str | None = None
+    year: int | None = None
+    imdb_id: str | None = None
+    poster_url: str | None = None
+    video_type: str | None = None
+    episode_number: int | None = None
+    episode_name: str | None = None
+    excluded: bool = False
+    custom_filename: str | None = None
 
 
 class RipStartResponse(BaseModel):

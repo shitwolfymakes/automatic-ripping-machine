@@ -1,7 +1,5 @@
 from pydantic import BaseModel
 
-from arm_common.enums import RetentionPolicy
-
 
 class ConfigFieldMeta(BaseModel):
     """Render + classification metadata for one configuration field. The single
@@ -19,8 +17,6 @@ class ConfigFieldMeta(BaseModel):
     editable: bool
     enum_values: list[str] | None = None
 
-
-_RETENTION = [p.value for p in RetentionPolicy]
 
 CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     # --- Metadata ---
@@ -99,6 +95,16 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         editable=True,
     ),
     ConfigFieldMeta(
+        key="community_keydb_enabled",
+        group="Ripping",
+        tier="operator",
+        label="Community keydb (FindVUK)",
+        help="Auto-download community AACS VUK keys so MakeMKV can decrypt "
+        "Blu-rays its own key server no longer covers.",
+        type="bool",
+        editable=True,
+    ),
+    ConfigFieldMeta(
         key="ripping_paused",
         group="Ripping",
         tier="operator",
@@ -107,16 +113,10 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         type="bool",
         editable=True,
     ),
-    ConfigFieldMeta(
-        key="default_retention_policy",
-        group="Ripping",
-        tier="operator",
-        label="Default retention policy",
-        help="What to do with raw rips after a session completes.",
-        type="enum",
-        editable=True,
-        enum_values=_RETENTION,
-    ),
+    # NOTE: default_retention_policy is intentionally NOT registered — the column
+    # + RetentionPolicy enum persist, but no consumer prunes raw rips yet, so the
+    # knob is hidden rather than shown-but-inert. Re-add when retention lands.
+    # See docs/superpowers/specs/2026-06-18-settings-audit-design.md §1.1.
     # --- Transcoding ---
     ConfigFieldMeta(
         key="auto_transcode_on_idle",
@@ -137,15 +137,9 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         type="bool",
         editable=True,
     ),
-    ConfigFieldMeta(
-        key="notification_apprise_urls",
-        group="Notifications",
-        tier="operator",
-        label="Apprise URLs (legacy)",
-        help="Deprecated flat URL list; prefer notification channels.",
-        type="string[]",
-        editable=True,
-    ),
+    # NOTE: notification_apprise_urls (legacy flat list) is hidden — dispatch is
+    # driven by NotificationChannel rows (/api/notifications), not this field. It
+    # still round-trips in ConfigView for back-compat. §1.2.
     # --- System (read-only infra, values from env Settings) ---
     ConfigFieldMeta(
         key="MEDIA_ROOT",

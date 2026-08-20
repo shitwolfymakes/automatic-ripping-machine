@@ -36,6 +36,11 @@ class Job(SQLModel, table=True):
     # in migration 0006 to make the multi-fingerprint design first-class.
     title: str | None = Field(default=None)
     year: int | None = Field(sa_column=Column(Integer, nullable=True))
+    # Multi-disc CD sets: which disc of the set this job ripped (1-based) and
+    # the set size. Null = single-disc / unknown. Set at identify (resolve) or
+    # corrected later via PATCH. No Postgres enum — plain nullable ints.
+    disc_number: int | None = Field(sa_column=Column(Integer, nullable=True))
+    disc_total: int | None = Field(sa_column=Column(Integer, nullable=True))
     # Poster shown in the UI. `poster_url` is computed at identify time
     # (TMDB / OMDB / Cover Art Archive). `poster_url_manual` is a user
     # override editable from JobDetail; the UI prefers it when set.

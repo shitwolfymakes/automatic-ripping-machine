@@ -40,6 +40,7 @@ from arm_common.schemas import (
     IdentifyRequest,
     JobCompleteRequest,
     JobView,
+    KeydbStatusReport,
     MakemkvKeyStatusReport,
     RegisterRequest,
     RipperConfigView,
@@ -108,7 +109,11 @@ async def get_ripper_config(session: AsyncSession = Depends(get_session)) -> Rip
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     if cfg is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="config singleton missing")
-    return RipperConfigView(auto_rip_on_insert=cfg.auto_rip_on_insert, makemkv_key=cfg.makemkv_key)
+    return RipperConfigView(
+        auto_rip_on_insert=cfg.auto_rip_on_insert,
+        makemkv_key=cfg.makemkv_key,
+        community_keydb_enabled=cfg.community_keydb_enabled,
+    )
 
 
 @router.post("/heartbeat", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_service_token)])
@@ -158,6 +163,30 @@ async def makemkv_key_status(
     cfg.makemkv_key_state = req.state.value
     cfg.makemkv_key_valid = _valid_from_state(req.state)
     cfg.makemkv_key_checked_at = datetime.now(timezone.utc)
+    session.add(cfg)
+    await session.commit()
+
+
+@router.post(
+    "/keydb-status",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_service_token)],
+)
+async def keydb_status(
+    req: KeydbStatusReport,
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """A ripper reports its community-keydb fetch outcome. Global fact —
+    written to the Config singleton (last writer wins across rippers, by
+    design). /api/system/preflight reads it back. `age_days` is accepted for
+    symmetry with the ripper's status line but not persisted (no column for
+    it); only state + vuk_count are durable."""
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    if cfg is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="config singleton missing")
+    cfg.community_keydb_state = req.state.value
+    cfg.community_keydb_vuk_count = req.vuk_count
+    cfg.community_keydb_checked_at = datetime.now(timezone.utc)
     session.add(cfg)
     await session.commit()
 

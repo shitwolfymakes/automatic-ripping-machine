@@ -24,7 +24,7 @@ from arm_backend.db import get_session
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_backend.utils import default_roots
-from arm_common import Config, Drive, DriveStatus, Event, Job, User
+from arm_common import Config, Drive, DriveStatus, Event, Job, KeydbState, User
 from arm_common.schemas import (
     PathStatus,
     StatsResponse,
@@ -112,6 +112,22 @@ async def diagnostics(
     else:
         mk_status, mk_detail = "warning", "MakeMKV key not yet validated by a ripper"
     checks.append(SystemDiagnosticCheck(name="makemkv_key", status=mk_status, detail=mk_detail))
+
+    kdb_state = cfg.community_keydb_state if cfg is not None else None
+    kdb_count = cfg.community_keydb_vuk_count if cfg is not None else None
+    # Compare against KeydbState members (StrEnum, so they equal the stored
+    # VARCHAR) rather than bare strings — a renamed member then fails at import
+    # instead of silently falling through to the "not yet checked" branch.
+    if kdb_state in (KeydbState.OK, KeydbState.FRESH_KEPT):
+        kdb_status = "ok"
+        kdb_detail = f"{kdb_count} VUK keys installed" if kdb_count else "keydb present"
+    elif kdb_state == KeydbState.DISABLED:
+        kdb_status, kdb_detail = "ok", "community keydb disabled"
+    elif kdb_state in (KeydbState.DOWNLOAD_FAILED, KeydbState.EMPTY, KeydbState.PROBE_FAILED):
+        kdb_status, kdb_detail = "warning", "community keydb unavailable; using last keydb if any"
+    else:  # None — never reported by a ripper yet
+        kdb_status, kdb_detail = "warning", "community keydb not yet checked by a ripper"
+    checks.append(SystemDiagnosticCheck(name="community_keydb", status=kdb_status, detail=kdb_detail))
 
     dispatcher = getattr(request.app.state, "transcode_dispatcher", None)
     if dispatcher is None:

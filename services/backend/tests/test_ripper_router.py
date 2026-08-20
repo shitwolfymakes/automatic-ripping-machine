@@ -103,12 +103,13 @@ def _make_app(
     return app
 
 
-def _config(*, block_on_miss: bool = True) -> Config:
+def _config(*, block_on_miss: bool = True, community_keydb_enabled: bool = True) -> Config:
     return Config(
         id=1,
         auto_transcode_on_idle=False,
         auto_rip_on_insert=True,
         block_on_miss=block_on_miss,
+        community_keydb_enabled=community_keydb_enabled,
         default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
     )
 
@@ -181,7 +182,16 @@ def test_get_config_returns_flag() -> None:
     with TestClient(_make_app(db)) as client:
         r = client.get("/api/ripper/config", headers=_SERVICE_AUTH)
     assert r.status_code == 200
-    assert r.json() == {"auto_rip_on_insert": True, "makemkv_key": None}
+    assert r.json() == {"auto_rip_on_insert": True, "makemkv_key": None, "community_keydb_enabled": True}
+
+
+def test_get_config_reflects_community_keydb_disabled() -> None:
+    db = FakeSession()
+    db.rows["config"] = [_config(community_keydb_enabled=False)]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/config", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["community_keydb_enabled"] is False
 
 
 def test_get_config_includes_makemkv_key() -> None:

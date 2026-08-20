@@ -35,3 +35,19 @@ def test_operator_and_secret_keys_are_real_config_view_fields():
     for m in CONFIG_FIELD_META:
         if m.tier in {"operator", "secret"}:
             assert m.key in view_fields, f"{m.key} not a ConfigView field"
+
+
+def test_community_keydb_toggle_metadata_present():
+    meta = {m.key: m for m in CONFIG_FIELD_META}
+    m = meta["community_keydb_enabled"]
+    assert m.group == "Ripping"
+    assert m.tier == "operator"
+    assert m.type == "bool"
+    assert m.editable is True
+
+
+def test_community_keydb_toggle_in_view_and_update():
+    from arm_common.schemas import ConfigUpdateRequest, ConfigView
+
+    assert "community_keydb_enabled" in ConfigView.model_fields
+    assert "community_keydb_enabled" in ConfigUpdateRequest.model_fields

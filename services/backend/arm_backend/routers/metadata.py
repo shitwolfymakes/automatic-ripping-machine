@@ -22,7 +22,7 @@ from arm_backend.metadata.omdb import OMDBClient
 from arm_backend.metadata.tmdb import TMDBClient
 from arm_backend.metadata.tvdb import TVDBClient
 from arm_backend.seeders import CONFIG_SINGLETON_ID
-from arm_common import Config, User
+from arm_common import DEFAULT_MUSICBRAINZ_USER_AGENT, Config, User
 from arm_common.schemas import (
     MetadataCandidate,
     MetadataKeyTestResponse,
@@ -118,12 +118,19 @@ SearchProvider = Literal["tmdb", "omdb"]
 def _to_candidate(r: MetadataResult) -> MetadataCandidate:
     payload = r.payload or {}
     provider_id = payload.get("imdb_id") or payload.get("imdbID") or payload.get("id")
+    rg = payload.get("release-group") or {}
+    track_count = payload.get("track_count") or payload.get("track-count")
     return MetadataCandidate(
         title=r.title,
         year=r.year,
         kind=r.kind,
         poster_url=extract_poster_url(r),
         provider_id=str(provider_id) if provider_id is not None else None,
+        release_type=(rg.get("primary-type") if isinstance(rg, dict) else None),
+        format=payload.get("format"),
+        country=payload.get("country"),
+        status=payload.get("status"),
+        track_count=int(track_count) if isinstance(track_count, int) else None,
     )
 
 
@@ -207,14 +214,28 @@ async def lookup_metadata(
 async def search_music(
     request: Request,
     query: str,
+    artist: str | None = None,
+    track_count: int | None = None,
+    release_type: str | None = None,
+    format: str | None = None,
+    country: str | None = None,
+    status: str | None = None,
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
 ) -> MetadataSearchResponse:
     cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-    ua = (cfg.musicbrainz_user_agent if cfg else None) or "armv3"
+    ua = (cfg.musicbrainz_user_agent if cfg else None) or DEFAULT_MUSICBRAINZ_USER_AGENT
     http: httpx.AsyncClient = request.app.state.http
     try:
-        results = await MusicBrainzClient(ua, http).search_releases(query)
+        results = await MusicBrainzClient(ua, http).search_releases(
+            query,
+            artist=artist,
+            track_count=track_count,
+            release_type=release_type,
+            format=format,
+            country=country,
+            status=status,
+        )
     except (MetaLookupError, LookupTimeout) as exc:
         return MetadataSearchResponse(candidates=[], detail=str(exc))
     except httpx.HTTPError as exc:
@@ -230,7 +251,7 @@ async def music_release_detail(
     db: AsyncSession = Depends(get_session),
 ) -> MetadataReleaseDetail:
     cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-    ua = (cfg.musicbrainz_user_agent if cfg else None) or "armv3"
+    ua = (cfg.musicbrainz_user_agent if cfg else None) or DEFAULT_MUSICBRAINZ_USER_AGENT
     http: httpx.AsyncClient = request.app.state.http
     try:
         result = await MusicBrainzClient(ua, http).get_release(release_id)
@@ -246,12 +267,27 @@ async def music_release_detail(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"musicbrainz unavailable: {exc}") from exc
     payload = result.payload or {}
     raw_tracks = payload.get("tracks") or []
-    tracks = [MetadataReleaseTrack(position=t.get("position"), title=t.get("title") or "") for t in raw_tracks]
+    tracks = [
+        MetadataReleaseTrack(
+            position=t.get("position"),
+            title=t.get("title") or "",
+            length_ms=t.get("length_ms"),
+            disc_number=t.get("disc_number"),
+        )
+        for t in raw_tracks
+    ]
     return MetadataReleaseDetail(
         release_id=release_id,
         title=result.title,
         artist=payload.get("artist"),
         year=result.year,
         poster_url=extract_poster_url(result),
+        catalog_number=payload.get("catalog_number"),
+        barcode=payload.get("barcode"),
+        country=payload.get("country"),
+        format=payload.get("format"),
+        status=payload.get("status"),
+        disc_count=payload.get("disc_count"),
+        track_count=payload.get("track_count"),
         tracks=tracks,
     )

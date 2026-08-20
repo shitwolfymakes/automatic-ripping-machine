@@ -22,10 +22,6 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
-from arm_backend.notification_dispatcher import (
-    _first_invalid_apprise_url,
-    redact_apprise_url,
-)
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_common import Config, User
 from arm_common.config_metadata import CONFIG_FIELD_META
@@ -53,10 +49,11 @@ def _to_view(cfg: Config) -> ConfigView:
         auto_transcode_on_idle=cfg.auto_transcode_on_idle,
         auto_rip_on_insert=cfg.auto_rip_on_insert,
         block_on_miss=cfg.block_on_miss,
-        # `bool(...)` coerces the None a bare in-memory Config carries (the
-        # server_default is DB-level only) to False, so _to_view works for
-        # rows/fixtures predating this column. The sibling bools predate their
-        # consumers' fixtures so they don't need it.
+        # `bool(...)` coerces the None a bare in-memory Config carries (these
+        # columns' server_default is DB-level only) to False, so _to_view works
+        # for rows/fixtures predating them. The sibling bools above predate their
+        # consumers' fixtures, so they don't need it.
+        community_keydb_enabled=bool(cfg.community_keydb_enabled),
         ripping_paused=bool(cfg.ripping_paused),
         default_retention_policy=cfg.default_retention_policy,
         notification_apprise_urls=list(cfg.notification_apprise_urls or []),
@@ -115,13 +112,6 @@ async def update_config(
     for key in _SECRET_KEYS:
         if fields.get(key) == HIDDEN_SECRET:
             del fields[key]
-    if fields.get("notification_apprise_urls"):
-        bad = _first_invalid_apprise_url(fields["notification_apprise_urls"])
-        if bad is not None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"invalid apprise URL: {redact_apprise_url(bad)}",
-            )
     if "metadata_provider" in fields and fields["metadata_provider"] not in ("tmdb", "omdb"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

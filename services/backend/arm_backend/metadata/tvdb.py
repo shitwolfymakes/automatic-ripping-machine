@@ -2,11 +2,14 @@ import logging
 
 import httpx
 
+from arm_backend.config import settings
 from arm_backend.metadata.base import LookupError, LookupTimeout
 
 logger = logging.getLogger("arm_backend.metadata.tvdb")
 
-_BASE_URL = "https://api4.thetvdb.com/v4"
+
+def _base_url() -> str:
+    return settings.ARM_TVDB_BASE_URL
 
 
 class TVDBClient:
@@ -25,7 +28,7 @@ class TVDBClient:
         """POST /v4/login. Returns None on success; raises LookupError on
         auth/transport failure, LookupTimeout on timeout."""
         try:
-            r = await self._http.post(f"{_BASE_URL}/login", json={"apikey": self._api_key})
+            r = await self._http.post(f"{_base_url()}/login", json={"apikey": self._api_key})
         except httpx.TimeoutException as e:
             raise LookupTimeout("tvdb login timeout") from e
         except httpx.HTTPError as e:

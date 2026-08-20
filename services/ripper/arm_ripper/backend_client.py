@@ -2,11 +2,12 @@ from typing import Any
 
 import httpx
 
-from arm_common import Drive, DriveMediaStatus, Job, MakemkvKeyState
+from arm_common import Drive, DriveMediaStatus, Job, KeydbState, MakemkvKeyState
 from arm_common.schemas import (
     IdentifyRequest,
     JobCompleteRequest,
     JobView,
+    KeydbStatusReport,
     MakemkvKeyStatusReport,
     RegisterRequest,
     RipperConfigView,
@@ -125,4 +126,11 @@ class BackendClient:
     async def report_makemkv_key_status(self, *, state: MakemkvKeyState, detail: str | None = None) -> None:
         req = MakemkvKeyStatusReport(state=state, detail=detail)
         r = await self._client.post("/api/ripper/makemkv-key-status", json=req.model_dump(mode="json"))
+        r.raise_for_status()
+
+    async def report_keydb_status(
+        self, *, state: KeydbState, vuk_count: int | None = None, age_days: int | None = None
+    ) -> None:
+        req = KeydbStatusReport(state=state, vuk_count=vuk_count, age_days=age_days)
+        r = await self._client.post("/api/ripper/keydb-status", json=req.model_dump(mode="json"))
         r.raise_for_status()

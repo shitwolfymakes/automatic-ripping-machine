@@ -23,7 +23,7 @@ from sqlmodel import col, select
 from arm_backend.auth import require_jwt
 from arm_backend.config import settings
 from arm_backend.db import get_session
-from arm_backend.routers.logs import LOG_DIR, PER_FILE_DEFAULT, PER_FILE_HARD_CAP
+from arm_backend.routers.logs import LOG_DIR
 from arm_common import Gpu, GpuStatus, SessionApplication, TranscodeTaskStatus, User
 from arm_common.models import TranscodeTask
 from arm_common.schemas import TranscodeStatsView, TranscodeTaskView, TranscodeWorkerView
@@ -147,7 +147,7 @@ async def download_transcode_log_zip(
     with path.open("r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
             lines.append(line)
-            if len(lines) >= PER_FILE_HARD_CAP:
+            if len(lines) >= settings.ARM_LOG_PER_FILE_HARD_CAP:
                 break
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -166,7 +166,7 @@ async def download_transcode_log_zip(
 @router.get("/{task_id}/log")
 async def stream_transcode_log(
     task_id: str,
-    limit: int = Query(default=PER_FILE_DEFAULT, ge=0),
+    limit: int | None = Query(default=None, ge=0),
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
@@ -174,7 +174,8 @@ async def stream_transcode_log(
     path = _transcode_log_path(task_id)
     if not path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no transcoder log for task {task_id}")
-    cap = max(0, min(limit, PER_FILE_HARD_CAP))
+    eff_limit = settings.ARM_LOG_PER_FILE_DEFAULT if limit is None else limit
+    cap = max(0, min(eff_limit, settings.ARM_LOG_PER_FILE_HARD_CAP))
 
     def gen() -> Iterator[bytes]:
         yielded = 0

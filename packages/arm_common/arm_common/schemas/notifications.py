@@ -165,3 +165,11 @@ class NotificationInboxCountView(BaseModel):
     seen: int
     cleared: int
     total: int
+
+
+class EventTypeInfo(BaseModel):
+    key: str
+    label: str
+    variables: list[str]
+    default_title: str
+    default_body: str
