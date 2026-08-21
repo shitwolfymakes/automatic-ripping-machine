@@ -91,6 +91,11 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           provenance: true
           sbom: false                          # generated separately via syft below
+          # Optional MakeMKV mirror (ripper build; ignored by the others).
+          build-args: |
+            MAKEMKV_MIRROR_URL=${{ vars.MAKEMKV_MIRROR_URL }}
+          secrets: |
+            makemkv_mirror_password=${{ secrets.MAKEMKV_MIRROR_PASSWORD }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 

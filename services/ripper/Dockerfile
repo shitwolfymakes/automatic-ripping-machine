@@ -30,8 +30,15 @@ RUN apt-get update \
         libleptonica-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Optional internal mirror for the MakeMKV artifacts (see install_makemkv.sh
+# for the expected layout). The URL is a plain ARG in this discarded build
+# stage; the password is a BuildKit secret so it never enters image history
+# or logs (pass with --secret id=makemkv_mirror_password[,env=...]).
+ARG MAKEMKV_MIRROR_URL=
+
 COPY services/ripper/install/install_makemkv.sh /install_makemkv.sh
-RUN chmod +x /install_makemkv.sh && /install_makemkv.sh
+RUN --mount=type=secret,id=makemkv_mirror_password \
+    chmod +x /install_makemkv.sh && /install_makemkv.sh
 
 # ccextractor is built in the same stage so MakeMKV can call it as
 # /usr/local/bin/mmccextr at runtime for closed-caption SRT extraction.
