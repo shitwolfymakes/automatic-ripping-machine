@@ -1328,6 +1328,7 @@ export type JobView = {
      */
     manual_pause?: boolean;
     rip_progress?: RipProgressSummary | null;
+    transcode_progress?: TranscodeProgressSummary | null;
 };
 
 /**
@@ -3133,6 +3134,37 @@ export type TranscodePresetView = {
      * Updated At
      */
     updated_at: string | null;
+};
+
+/**
+ * TranscodeProgressSummary
+ *
+ * Per-job transcode-phase summary surfaced on `JobView`, derived by
+ * aggregating ALL of a job's `SessionApplication` rows. `state` is the
+ * job-level rollup (see `_summarize_transcode_progress`): `transcoding`
+ * while any session is in-flight, `done`/`done_partial`/`failed` once all
+ * are terminal. `None` on `JobView` means no session was applied (the job
+ * is `ripped`/awaiting action). Live per-task percent flows on the
+ * `transcode.progress.{task_id}` WS topic; `percent` here is a poll-time
+ * mean of the job's task `progress_pct`.
+ */
+export type TranscodeProgressSummary = {
+    /**
+     * State
+     */
+    state: 'transcoding' | 'done' | 'done_partial' | 'failed';
+    /**
+     * Tasks Total
+     */
+    tasks_total: number;
+    /**
+     * Tasks Done
+     */
+    tasks_done: number;
+    /**
+     * Percent
+     */
+    percent: number;
 };
 
 /**

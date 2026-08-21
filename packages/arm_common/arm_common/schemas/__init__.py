@@ -45,6 +45,7 @@ from arm_common.schemas.jobs import (
     RipStartResponse,
     TrackEditRequest,
     TrackView,
+    TranscodeProgressSummary,
 )
 from arm_common.schemas.metadata import (
     MetadataCandidate,
@@ -268,6 +269,7 @@ __all__ = [
     "TranscodePresetCreateRequest",
     "TranscodePresetUpdateRequest",
     "TranscodePresetView",
+    "TranscodeProgressSummary",
     "TranscodeStatsView",
     "TranscodeTaskView",
     "TranscodeWorkerView",
