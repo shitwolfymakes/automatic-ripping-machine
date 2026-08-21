@@ -217,11 +217,13 @@
 }
 
 [data-scheme="lcars"] header {
-	background: #c9c !important;
-	border-color: #c9c !important;
+	background: #000 !important;
+	border-color: #000 !important;
 	border-bottom: none !important;
 	height: 60px !important;
 	min-height: 60px !important;
+	padding-left: 0 !important;  /* run flush to the left edge */
+	padding-right: 0 !important; /* run flush to the right edge */
 }
 
 [data-scheme="lcars"] header button {
@@ -230,6 +232,88 @@
 
 [data-scheme="lcars"] header .dark\:bg-white\/30 {
 	background: #000 !important;
+}
+
+/* ── LCARS stats bar: one continuous run of rectangular, butted colour cells
+   with black text, separated by thin black breaks. Scoped to the header stats
+   bar ONLY — the rounded-pill language elsewhere (sidebar, headings, badges)
+   is a separate visual element and is left untouched. Colours rotate across
+   ALL items as a single run (the two groups don't reset the rotation). ───── */
+[data-scheme="lcars"] header .lg\:flex {
+	gap: 0 !important;
+	height: 60px;
+	flex: 1 1 auto; /* stretch the run toward the right-side action cluster */
+}
+
+[data-scheme="lcars"] header .lg\:flex > div {
+	gap: 0 !important;
+	height: 100%;
+}
+
+/* The last stat cell stretches to fill the gap up to the action buttons,
+   carrying the run flush to the right edge. */
+[data-scheme="lcars"] header .lg\:flex > div:last-child {
+	flex: 1 1 auto;
+}
+[data-scheme="lcars"] header .lg\:flex > div:last-child > :last-child {
+	flex: 1 1 auto;
+}
+
+[data-scheme="lcars"] header .lg\:flex > div > a,
+[data-scheme="lcars"] header .lg\:flex > div > span {
+	color: #000 !important;
+	display: flex !important;
+	align-items: center;
+	height: 100%;
+	padding: 0 16px !important;
+	border-radius: 0 !important;
+	border-right: 8px solid #000 !important; /* the black break between cells */
+	font-weight: 600 !important;
+	line-height: 1 !important;
+	white-space: nowrap;
+}
+
+
+/* Continuous colour rotation across BOTH groups. Listing the items in document
+   order (4 health pills, then the activity counts) as a flat sequence keeps the
+   run unbroken — no nth-child reset at the divider. */
+[data-scheme="lcars"] header .lg\:flex > div:first-child > a:nth-child(1) { background: #f90 !important; }   /* ARM          orange */
+[data-scheme="lcars"] header .lg\:flex > div:first-child > a:nth-child(2) { background: #fcb98b !important; } /* DB           peach  */
+[data-scheme="lcars"] header .lg\:flex > div:first-child > a:nth-child(3) { background: #c9c !important; }   /* TRANSCODE    mauve  */
+[data-scheme="lcars"] header .lg\:flex > div:first-child > a:nth-child(4) { background: #fc3 !important; }   /* KEY          gold   */
+/* activity group continues the run: peach, orange, slate, salmon … */
+[data-scheme="lcars"] header .lg\:flex > div:last-child > :nth-child(1) { background: #fcb98b !important; } /* 1 DRIVE        peach  */
+[data-scheme="lcars"] header .lg\:flex > div:last-child > :nth-child(2) { background: #f90 !important; }   /* 8 RIPPING      orange */
+[data-scheme="lcars"] header .lg\:flex > div:last-child > :nth-child(3) { background: #a9c0c4 !important; } /* 4 TRANSCODING  slate  */
+[data-scheme="lcars"] header .lg\:flex > div:last-child > :nth-child(4) { background: #ff8b8b !important; } /* 1 NOTIFICATION salmon */
+[data-scheme="lcars"] header .lg\:flex > div:last-child > :nth-child(5) { background: #fc3 !important; }   /* (queued, if shown) gold */
+
+/* Last stat cell: keep a trailing break, because the run continues into the
+   right-side action cluster (below) so the colour reaches the screen edge. */
+[data-scheme="lcars"] header .lg\:flex > div:last-child > :last-child {
+	border-right: 5px solid #000 !important;
+}
+
+/* Carry the run's terminating colour through the right-side action cluster
+   (Auto-Start + icon buttons) all the way to the screen's right edge, so the
+   coloured strip is unbroken edge-to-edge. */
+[data-scheme="lcars"] header > .ml-auto {
+	background: #c9c !important; /* same mauve as the last stat cell */
+	height: 100%;
+	padding-right: 16px !important;
+	padding-left: 16px !important;
+}
+
+/* The status dot inside each health cell stays as a live signal; ring it so it
+   reads on the coloured block. */
+[data-scheme="lcars"] header .lg\:flex > div > a > div.rounded-full {
+	box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+/* Hide the vertical divider — the butted cells already form the run. */
+[data-scheme="lcars"] header .lg\:flex > div.w-px,
+[data-scheme="lcars"] header .lg\:flex > .h-6.w-px {
+	display: none !important;
 }
 
 [data-scheme="lcars"] header .text-gray-700,
@@ -243,14 +327,36 @@
 	background: rgba(0, 0, 0, 0.15) !important;
 }
 
+/* Action-cluster icons sit on the mauve fill now — black reads, not white. */
 [data-scheme="lcars"] header > div:last-child button {
+	color: #000 !important;
+}
+
+/* …but the Auto-Start button's label is white (the text-bearing action button,
+   not the icon-only ones). */
+[data-scheme="lcars"] header > div:last-child button.text-sm.font-medium {
+	color: #fff !important;
+}
+
+/* Quick-actions flyout (the cog dropdown) renders on the dark surface panel, so
+   its menu items must be WHITE — the header's black-text rule above would
+   otherwise make them black-on-dark. Scoped to items inside the flyout panel. */
+[data-scheme="lcars"] header > div:last-child .z-50.bg-surface button,
+[data-scheme="lcars"] header > div:last-child .z-50.bg-surface a,
+[data-scheme="lcars"] header > div:last-child .z-50.dark\:bg-surface-dark button,
+[data-scheme="lcars"] header > div:last-child .z-50.dark\:bg-surface-dark a {
 	color: #fff !important;
 }
 
 [data-scheme="lcars"] .absolute.rounded-lg.bg-surface,
 [data-scheme="lcars"] .absolute.rounded-lg.dark\:bg-surface-dark,
 [data-scheme="lcars"] .absolute.z-50.bg-surface,
-[data-scheme="lcars"] .absolute.z-50.dark\:bg-surface-dark {
+[data-scheme="lcars"] .absolute.z-50.dark\:bg-surface-dark,
+/* The header Quick-actions flyout is position:fixed (no .absolute class) — match
+   it by its .z-50.rounded-lg.bg-surface signature so it gets the same dark panel
+   + orange frame as the other LCARS dropdowns. */
+[data-scheme="lcars"] .z-50.rounded-lg.bg-surface,
+[data-scheme="lcars"] .z-50.rounded-lg.dark\:bg-surface-dark {
 	border-radius: 8px !important;
 	background-color: #1a1a2e !important;
 	border: 1px solid rgb(255, 153, 0) !important;
@@ -324,6 +430,17 @@
 	color: #000 !important;
 }
 
+/* Sub-text spans inside an h2 pill (e.g. "Tracklist (13 tracks via
+   MusicBrainz)") carry their own gray text class, so the h2's black colour
+   doesn't reach them — they wash out on the gold/peach pill. Force black.
+   Needs the gray text classes in the selector to out-specify the generic
+   `.text-sm.text-gray-400 → #fca` rule. */
+[data-scheme="lcars"] main h2 span.text-gray-500.dark\:text-gray-400,
+[data-scheme="lcars"] main h2 span.text-sm.dark\:text-gray-400,
+[data-scheme="lcars"] main h2 span.text-sm.text-gray-500 {
+	color: #000 !important;
+}
+
 [data-scheme="lcars"] main section > .mb-3.flex.items-center {
 	display: inline-flex;
 	background: #fca;
@@ -359,6 +476,15 @@
 	border-radius: 21px !important;
 	border: none !important;
 	box-shadow: none !important;
+}
+
+/* Files-page file-list panel: the translucent periwinkle surface above reads as
+   near-black over the page. Give the file browser a SOLID lifted panel so it's
+   a distinct surface, not black-on-black. Scoped to the file-list container
+   (overflow-hidden rounded-lg bg-surface). */
+[data-scheme="lcars"] main .overflow-hidden.rounded-lg.bg-surface,
+[data-scheme="lcars"] main .overflow-hidden.rounded-lg.dark\:bg-surface-dark {
+	background: #1a1a2e !important;
 }
 
 [data-scheme="lcars"] [data-dialog] {
@@ -527,6 +653,27 @@
 
 [data-scheme="lcars"] main .dark\:text-amber-400 {
 	color: #f90 !important;
+}
+
+/* Top status bar (header) — the live-activity counts ("8 ripping",
+   "4 transcoding", "1 notification") keep their raw Tailwind blue/indigo/amber
+   because the main-scoped overrides above don't reach <header>. The header bar
+   sits on the light-purple LCARS plate (#c9c), so it needs DARK, saturated
+   tints (the opposite of the light tints main uses on its dark canvas) to read.
+   Keep the colour-coding intent, just make each legible on #c9c. */
+[data-scheme="lcars"] header .text-blue-600,
+[data-scheme="lcars"] header .dark\:text-blue-400 {
+	color: #1f2a6b !important; /* deep LCARS blue */
+}
+
+[data-scheme="lcars"] header .text-indigo-600,
+[data-scheme="lcars"] header .dark\:text-indigo-400 {
+	color: #5a1a52 !important; /* deep plum — distinct from the purple bar */
+}
+
+[data-scheme="lcars"] header .text-amber-600,
+[data-scheme="lcars"] header .dark\:text-amber-400 {
+	color: #7a3800 !important; /* dark amber — warm alert, reads on #c9c */
 }
 
 [data-scheme="lcars"] main .overflow-x-auto.rounded-lg {
@@ -717,6 +864,22 @@
 	border: none !important;
 	border-radius: 63px !important;
 	box-shadow: inset 6px 0 0 0 #f90 !important;
+}
+
+/* Files-page "Modify at your own risk" warning: the base theme paints it with
+   an 8%-translucent periwinkle fill, so it reads as a faint outline. Make it a
+   SOLID LCARS caution banner — solid gold fill, black text. Scoped to the
+   primary-light-bg warning banner (border-primary + text-primary-dark). */
+[data-scheme="lcars"] main .rounded-lg.bg-primary-light-bg.text-primary-dark,
+[data-scheme="lcars"] main .rounded-lg.bg-primary-light-bg.dark\:text-primary-text-dark {
+	background: #fc3 !important;
+	color: #000 !important;
+	border: none !important;
+	box-shadow: inset 8px 0 0 0 #f90 !important;
+}
+[data-scheme="lcars"] main .rounded-lg.bg-primary-light-bg.text-primary-dark .font-semibold,
+[data-scheme="lcars"] main .rounded-lg.bg-primary-light-bg.dark\:text-primary-text-dark .font-semibold {
+	color: #000 !important;
 }
 
 /* Small inline warning chips (Stale / N custom / etc.) — just normalize the
@@ -1123,6 +1286,15 @@
 	color: #fff !important;
 }
 
+/* "Show dismissed" toggle label (notifications) sits on the peach page-header
+   plate, so its muted grey is illegible — force black. Scoped to checkbox
+   labels carrying the gray-600/400 text classes. Needs .text-sm too so it
+   out-specifies the generic `.text-sm.text-gray-600 → #ccc` rule. */
+[data-scheme="lcars"] main label.text-sm.text-gray-600,
+[data-scheme="lcars"] main label.text-sm.dark\:text-gray-400 {
+	color: #000 !important;
+}
+
 [data-scheme="lcars"] main p.text-xs.text-gray-400,
 
 [data-scheme="lcars"] main .mt-1.text-xs.text-gray-400 {
@@ -1163,6 +1335,37 @@
 
 [data-scheme="lcars"] main .border-b-2 {
 	border-color: #fc3 !important;
+}
+
+/* Filter-tab rows (e.g. transcoder ALL/QUEUED/IN_PROGRESS/DONE/FAILED) render
+   as hollow underline pills — only a coloured bottom border on a transparent
+   button. Make them SOLID LCARS pills like the rest of the theme: filled
+   background, black text, no underline. Active = gold (matches the section
+   heading), inactive = periwinkle. */
+[data-scheme="lcars"] main .border-b.flex > button.border-b-2.capitalize,
+[data-scheme="lcars"] main .flex.gap-1.border-b > button.border-b-2.capitalize,
+[data-scheme="lcars"] main .flex > button.border-b-2.capitalize {
+	border: none !important;
+	border-radius: 20px !important;
+	background: #99f !important; /* inactive fill */
+	color: #000 !important;
+	font-weight: 700 !important;
+	padding: 4px 18px !important;
+}
+
+/* Active tab: the markup tags it with the primary-text colour classes. Match
+   the same parent chain as the base rule above (.flex.gap-1.border-b) plus the
+   active class so this out-specifies it. */
+[data-scheme="lcars"] main .flex.gap-1.border-b > button.border-b-2.capitalize.text-primary-text,
+[data-scheme="lcars"] main .flex.gap-1.border-b > button.border-b-2.capitalize.border-primary {
+	background: #fc3 !important; /* active fill — gold */
+	color: #000 !important;
+}
+
+/* The tab row's own bottom rule (the underline track) is redundant now. */
+[data-scheme="lcars"] main .flex.gap-1.border-b,
+[data-scheme="lcars"] main .flex.border-b:has(> button.border-b-2.capitalize) {
+	border-bottom: none !important;
 }
 
 [data-scheme="lcars"] .lcars-input,

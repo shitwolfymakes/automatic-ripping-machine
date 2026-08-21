@@ -4,11 +4,12 @@
 	import ProgressBar from './ProgressBar.svelte';
 	import { statusAccentVar } from '$lib/utils/format';
 	import { getVideoTypeConfig, isJobActive, discTypeLabel } from '$lib/utils/job-type';
+	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import PosterImage from './PosterImage.svelte';
 	import { jobPoster } from '$lib/utils/poster';
 	import SkeletonCard from './SkeletonCard.svelte';
-	import { abandonJob } from '$lib/api/jobs';
+	import { formatEta } from '$lib/stores/rips.svelte';
 	import { slide } from 'svelte/transition';
 
 	interface Props {
@@ -17,9 +18,10 @@
 		progressStage?: string | null;
 		tracksRipped?: number | null;
 		tracksTotal?: number | null;
+		eta?: number | null;
 	}
 
-	let { job, progress = null, progressStage = null, tracksRipped = null, tracksTotal = null }: Props = $props();
+	let { job, progress = null, progressStage = null, tracksRipped = null, tracksTotal = null, eta = null }: Props = $props();
 
 	function formatStage(s: string): string {
 		if (s === 'scratch-to-media') return 'Copying to shared storage';
@@ -34,7 +36,11 @@
 	let expanded = $state(false);
 
 	let typeConfig = $derived(getVideoTypeConfig(null, job?.disc_type ?? null));
-	let active = $derived(isJobActive(job?.status ?? null));
+	// Gate the progress row on the EFFECTIVE status so it shows while the job
+	// is genuinely in-flight (ripping OR transcoding) and disappears once it is
+	// terminal (complete/failed). A done job (raw `ripped` + transcode_progress
+	// 'done') reads effective 'complete' → not active → no progress bar.
+	let active = $derived(job ? isJobActive(effectiveJobStatus(job)) : false);
 	let accentVar = $derived(statusAccentVar(job?.status));
 
 	function toggle(e: MouseEvent) {
@@ -43,22 +49,6 @@
 		expanded = !expanded;
 	}
 
-	let abandoning = $state(false);
-	let abandonError = $state<string | null>(null);
-
-	async function handleAbandon() {
-		if (!job) return;
-		if (!confirm(`Abandon job "${job.title || job.id}"?`)) return;
-		abandoning = true;
-		abandonError = null;
-		try {
-			await abandonJob(job.id);
-		} catch (e) {
-			abandonError = e instanceof Error ? e.message : 'Failed to abandon';
-		} finally {
-			abandoning = false;
-		}
-	}
 </script>
 
 {#if !job}
@@ -88,8 +78,13 @@
 			{/if}
 
 			<!-- Status badge -->
-			<div class="shrink-0">
-				<StatusBadge status={job.status} />
+			<div class="shrink-0 flex items-center gap-1.5">
+				<StatusBadge status={effectiveJobStatus(job)} />
+				{#if isPartialComplete(job)}
+					<span class="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+						>Done {job.transcode_progress?.tasks_done}/{job.transcode_progress?.tasks_total}</span
+					>
+				{/if}
 			</div>
 
 			<!-- Type + disc badges -->
@@ -113,6 +108,12 @@
 				</span>
 			{/if}
 
+			<!-- Details -->
+			<a
+				href="/jobs/{job.id}"
+				class="shrink-0 rounded-md border border-primary/30 bg-primary/15 px-4 py-1.5 text-sm font-medium text-primary hover:bg-primary/25"
+			>Details</a>
+
 			<!-- Expand chevron -->
 			<button class="row-toggle shrink-0 p-0.5 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-transform" class:rotate-180={expanded} title={expanded ? 'Collapse' : 'Expand'}>
 				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
@@ -129,7 +130,12 @@
 				<!-- Render the bar even at 0%. The MakeMKV prelude (libredrive
 				     init, key ingest) can sit at 0 for several seconds and
 				     "ripping 0%" is more honest than an indeterminate spinner. -->
-				<ProgressBar value={progress} colorVar={accentVar} />
+				<div class="flex items-center gap-2">
+					<div class="flex-1"><ProgressBar value={progress} colorVar={accentVar} /></div>
+					{#if eta != null}
+						<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">{formatEta(eta)} left</span>
+					{/if}
+				</div>
 			{:else}
 				<div class="flex items-center gap-2">
 					<div class="h-2.5 flex-1 overflow-hidden rounded-full bg-primary/15">
@@ -152,22 +158,10 @@
 				<PosterImage url={jobPoster(job)} alt={job.title ?? 'Poster'} class="h-32 {job.disc_type === 'cd' ? 'w-32' : 'w-22'} shrink-0 rounded-sm object-cover" />
 
 				<div class="min-w-0 flex-1">
-					<!-- Title + abandon -->
-					<div class="mb-2 flex items-start justify-between gap-2">
+					<!-- Title -->
+					<div class="mb-2">
 						<a href="/jobs/{job.id}" class="text-sm font-semibold text-primary hover:underline">{job.title || 'Untitled'}</a>
-						<div class="flex items-center gap-2">
-							{#if active}
-								<button
-									onclick={handleAbandon}
-									disabled={abandoning}
-									class="text-xs font-medium text-red-500 hover:underline disabled:opacity-50 dark:text-red-400"
-								>{abandoning ? 'Abandoning...' : 'Abandon'}</button>
-							{/if}
-						</div>
 					</div>
-					{#if abandonError}
-						<div class="mb-2 text-xs text-red-500 dark:text-red-400">{abandonError}</div>
-					{/if}
 
 					<!-- Data table -->
 					<table class="w-full text-xs">
@@ -176,7 +170,7 @@
 								<td class="py-1 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap">Job ID</td>
 								<td class="py-1 text-gray-900 dark:text-white">{job.id}</td>
 								<td class="py-1 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap pl-6">Status</td>
-								<td class="py-1"><StatusBadge status={job.status} /></td>
+								<td class="py-1"><StatusBadge status={effectiveJobStatus(job)} /></td>
 							</tr>
 							<tr>
 								<td class="py-1 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap">Type</td>
@@ -215,13 +209,6 @@
 						</tbody>
 					</table>
 
-					<!-- Actions -->
-					<div class="mt-3 flex items-center gap-2">
-						<a
-							href="/jobs/{job.id}"
-							class="rounded-md border border-primary/30 bg-primary/15 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/25"
-						>Open details</a>
-					</div>
 				</div>
 			</div>
 		</div>

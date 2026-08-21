@@ -5,6 +5,7 @@
 	import ProgressBar from './ProgressBar.svelte';
 	import { jobPoster } from '$lib/utils/poster';
 	import { getVideoTypeConfig, isJobActive, discTypeLabel } from '$lib/utils/job-type';
+	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import JobLifecycle from './JobLifecycle.svelte';
@@ -18,7 +19,12 @@
 	let { job, progress = null, progressStage = null }: Props = $props();
 
 	let typeConfig = $derived(getVideoTypeConfig(null, job?.disc_type ?? null));
-	let active = $derived(isJobActive(job?.status ?? null));
+	// Use the EFFECTIVE status so the stepper shows while a job is genuinely
+	// in-flight (ripping OR transcoding) and hides once it is terminal. A
+	// transcoding job (raw `ripped` + transcode_progress.state 'transcoding')
+	// reads effective 'transcoding' (active); a finished one reads 'complete'
+	// (not active) so a done job shows no in-progress stepper.
+	let active = $derived(job ? isJobActive(effectiveJobStatus(job)) : false);
 </script>
 
 {#if !job}
@@ -36,7 +42,14 @@
 				<h3 class="truncate font-semibold text-gray-900 dark:text-white">
 					{job.title || 'Untitled'}
 				</h3>
-				<StatusBadge status={job.status} />
+				<div class="flex shrink-0 items-center gap-1.5">
+					<StatusBadge status={effectiveJobStatus(job)} />
+					{#if isPartialComplete(job)}
+						<span class="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+							>Done {job.transcode_progress?.tasks_done}/{job.transcode_progress?.tasks_total}</span
+						>
+					{/if}
+				</div>
 			</div>
 
 			<!-- Row 2: Year -->
@@ -49,7 +62,7 @@
 			<!-- Row 3: Active → lifecycle/track counts -->
 			<div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
 				{#if active}
-					<JobLifecycle status={job.status} sourceType={null} size="sm" />
+					<JobLifecycle status={effectiveJobStatus(job)} sourceType={null} size="sm" partial={isPartialComplete(job)} />
 					{#if job.rip_progress && job.rip_progress.tracks_total > 0}
 						<span>{job.rip_progress.tracks_done} / {job.rip_progress.tracks_total} titles</span>
 					{/if}
