@@ -7,8 +7,8 @@ describe('isAwaitingAction (FINISHING membership)', () => {
 	it('ripped + no session -> awaiting action (in FINISHING)', () => {
 		expect(isAwaitingAction(job('ripped', null))).toBe(true);
 	});
-	it('identified + no session -> awaiting action', () => {
-		expect(isAwaitingAction(job('identified', null))).toBe(true);
+	it('identified -> NOT awaiting action (pre-rip; shows on the review card, not FINISHING)', () => {
+		expect(isAwaitingAction(job('identified', null))).toBe(false);
 	});
 	it('ripped + transcoding -> NOT awaiting (leaves FINISHING)', () => {
 		expect(isAwaitingAction(job('ripped', { state: 'transcoding', tasks_total: 1, tasks_done: 0, percent: 0 }))).toBe(false);

@@ -40,17 +40,21 @@ export function countRipping(jobs: JobLike[]): number {
 	return jobs.filter((j) => RIPPING_STATUSES.has(effectiveJobStatus(j))).length;
 }
 
-const FINISHING_RAW = new Set(['identified', 'ripped', 'ripped_partial']);
+// FINISHING is the POST-rip "awaiting a transcode session" bucket. `identified`
+// is PRE-rip (disc identified, waiting to start) — it belongs on the review card,
+// not here — so it is deliberately excluded.
+const FINISHING_RAW = new Set(['ripped', 'ripped_partial']);
 
 /**
  * A job belongs in the dashboard's FINISHING ("awaiting action") section when
- * the rip is done/identified but NO transcode session is in flight or complete
- * — i.e. it needs the operator to apply a session. A transcoding or completed
- * job leaves FINISHING (it shows transcode state / drops to All Jobs).
+ * the rip is done but NO transcode session is in flight or complete — i.e. it
+ * needs the operator to apply a session. A transcoding or completed job leaves
+ * FINISHING (it shows transcode state / drops to All Jobs). Pre-rip `identified`
+ * jobs are NOT finishing — they show the review card.
  */
 export function isAwaitingAction(job: JobLike): boolean {
 	const s = job.status?.toLowerCase() ?? '';
 	if (!FINISHING_RAW.has(s)) return false;
 	const eff = effectiveJobStatus(job);
-	return eff === 'ripped' || eff === 'ripped_partial' || eff === 'identified';
+	return eff === 'ripped' || eff === 'ripped_partial';
 }

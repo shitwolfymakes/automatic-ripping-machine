@@ -14,6 +14,7 @@ vi.mock('$lib/api/jobs', () => ({
 	abandonJob: vi.fn(() => Promise.resolve()),
 	startWaitingJob: vi.fn(() => Promise.resolve(createJob())),
 	pauseWaitingJob: vi.fn(() => Promise.resolve(createJob())),
+	resolveJob: vi.fn(() => Promise.resolve(createJob())),
 	updateTrack: vi.fn(() => Promise.resolve(createJob())),
 	patchJob: vi.fn(() => Promise.resolve(createJob())),
 	applySession: vi.fn(() => Promise.resolve({ created_task_ids: [], collisions: [] })),
@@ -85,10 +86,24 @@ describe('DiscReviewWidget', () => {
 			});
 		});
 
-		it('hides Start for non-review statuses (identify-only waiting)', async () => {
+		it('shows Start rip on an awaiting_user_id job (review-card start)', async () => {
 			renderWidget({ status: 'awaiting_user_id' });
 			await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
-			expect(screen.queryByText('Start rip')).not.toBeInTheDocument();
+			expect(screen.getByText('Start rip')).toBeInTheDocument();
+		});
+
+		it('keeps Start rip after the job is identified (saving must not flip it to Done)', async () => {
+			renderWidget({ status: 'identified' });
+			await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
+			expect(screen.getByText('Start rip')).toBeInTheDocument();
+			// The old "Done" button is gone — Start rip / Cancel are the actions.
+			expect(screen.queryByText('Done')).not.toBeInTheDocument();
+		});
+
+		it('renders a View details link to the job page', async () => {
+			renderWidget({ id: 'job_vd', status: 'awaiting_user_id' });
+			const link = await screen.findByText('View details');
+			expect(link.closest('a')?.getAttribute('href')).toBe('/jobs/job_vd');
 		});
 
 		it('renders disc type info', async () => {
@@ -121,9 +136,16 @@ describe('DiscReviewWidget', () => {
 			expect(screen.queryByText('Settings')).not.toBeInTheDocument();
 		});
 
-		it('shows the Disc info button', async () => {
-			renderWidget({ disc_type: 'bluray' });
-			await waitFor(() => expect(screen.getByText('Disc info')).toBeInTheDocument());
+		it('Info is the first action button and toggles the Info form', async () => {
+			renderWidget({ status: 'awaiting_user_id', disc_type: 'dvd' });
+			expect(screen.getByRole('button', { name: 'Info' })).toBeInTheDocument();
+			await fireEvent.click(screen.getByRole('button', { name: 'Info' }));
+			await waitFor(() => expect(screen.getByLabelText('Title')).toBeInTheDocument());
+		});
+
+		it('no longer renders a standalone "Disc info" button', () => {
+			renderWidget({ status: 'awaiting_user_id', disc_type: 'dvd' });
+			expect(screen.queryByRole('button', { name: 'Disc info' })).not.toBeInTheDocument();
 		});
 
 		it('opens the Apply session dialog', async () => {
@@ -134,33 +156,23 @@ describe('DiscReviewWidget', () => {
 		});
 	});
 
-	describe('disc info', () => {
-		it('saves disc_number / disc_total via patchJob', async () => {
-			const { patchJob } = await import('$lib/api/jobs');
-			const mockPatch = vi.mocked(patchJob);
-			mockFetchJob.mockResolvedValue(detail({ id: 'job_d', disc_type: 'bluray' }));
-			renderWidget({ id: 'job_d', disc_type: 'bluray' });
-			await waitFor(() => expect(screen.getByText('Disc info')).toBeInTheDocument());
-			await fireEvent.click(screen.getByText('Disc info'));
-
-			const numberInput = await screen.findByLabelText(/disc number/i);
-			const totalInput = screen.getByLabelText(/disc total/i);
-			await fireEvent.input(numberInput, { target: { value: '2' } });
-			await fireEvent.input(totalInput, { target: { value: '4' } });
-			await fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
-
-			await waitFor(() => {
-				expect(mockPatch).toHaveBeenCalledWith('job_d', { disc_number: 2, disc_total: 4 });
-			});
-		});
-	});
-
 	describe('interactions', () => {
 		it('Start rip calls startWaitingJob for an awaiting_review job', async () => {
 			renderWidget({ id: 'job_9', status: 'awaiting_review' });
 			const btn = await screen.findByText('Start rip');
 			await fireEvent.click(btn);
 			await waitFor(() => expect(mockStart).toHaveBeenCalledWith('job_9'));
+		});
+
+		it('Start rip saves (resolveJob) before starting an awaiting_user_id job', async () => {
+			const { resolveJob } = await import('$lib/api/jobs');
+			const mockResolve = vi.mocked(resolveJob);
+			renderWidget({ id: 'job_u', status: 'awaiting_user_id' });
+			const btn = await screen.findByText('Start rip');
+			await fireEvent.click(btn);
+			// resolve (the save) fires; for awaiting_user_id no rip-start-review is needed
+			await waitFor(() => expect(mockResolve).toHaveBeenCalled());
+			expect(mockStart).not.toHaveBeenCalled();
 		});
 
 		it('the countdown pause control toggles per-job pause', async () => {
