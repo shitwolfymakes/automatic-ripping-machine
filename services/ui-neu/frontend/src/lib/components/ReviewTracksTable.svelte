@@ -1,16 +1,21 @@
 <script lang="ts">
-	import type { JobView, TrackView } from '$lib/types/api.gen';
+	import type { JobView, TrackView, ScanTitle } from '$lib/types/api.gen';
 	import { updateTrack } from '$lib/api/jobs';
+	import { trackToRow, scanTitleToRow } from '$lib/utils/review-rows';
 	import TrackTitleSearch from './TrackTitleSearch.svelte';
 
 	interface Props {
 		job: JobView;
 		tracks: TrackView[];
+		scanTitles?: ScanTitle[];
 		isVideo: boolean;
 		isMusic: boolean;
 		onrefresh?: () => void;
 	}
-	let { job, tracks, isVideo, isMusic, onrefresh }: Props = $props();
+	let { job, tracks, scanTitles = [], isVideo, isMusic, onrefresh }: Props = $props();
+
+	// Materialized tracks always win; scanned titles are the pre-rip fallback.
+	let rows = $derived(tracks.length ? tracks.map(trackToRow) : scanTitles.map(scanTitleToRow));
 
 	let openSearchTrackIds = $state<Set<string>>(new Set());
 	let savingTrackField = $state<string | null>(null);
@@ -69,9 +74,11 @@
 	{#if errorMessage}
 		<p class="mb-2 text-xs text-red-600 dark:text-red-400">{errorMessage}</p>
 	{/if}
-	{#if tracks.length > 0}
+	{#if rows.length > 0}
 		<div>
-			<h4 class="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Tracks ({tracks.length})</h4>
+			<h4 class="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+				{tracks.length ? 'Tracks' : 'Scanned titles'} ({rows.length})
+			</h4>
 			<div class="overflow-x-auto rounded-md border border-primary/15 dark:border-primary/20">
 				<table class="w-full text-left text-xs">
 					<thead class="bg-page text-gray-500 dark:bg-primary/5 dark:text-gray-400">
@@ -85,56 +92,64 @@
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-gray-100 dark:divide-gray-700/50">
-						{#each tracks as track}
-							<tr class="{track.excluded ? 'opacity-40' : ''}">
-								<td class="px-3 py-1.5 font-mono text-gray-700 dark:text-gray-300">{track.index}</td>
+						{#each rows as row}
+							<tr class="{row.excluded ? 'opacity-40' : ''}">
+								<td class="px-3 py-1.5 font-mono text-gray-700 dark:text-gray-300">{row.index}</td>
 								<td
-									class="px-3 py-1.5 {isVideo ? 'cursor-pointer hover:bg-primary/5 dark:hover:bg-primary/10' : ''}"
-									onclick={() => { if (isVideo) toggleTrackSearch(track.id); }}
+									class="px-3 py-1.5 {isVideo && row.trackId ? 'cursor-pointer hover:bg-primary/5 dark:hover:bg-primary/10' : ''}"
+									onclick={() => { if (isVideo && row.trackId) toggleTrackSearch(row.trackId!); }}
 								>
-									{#if track.title}
+									{#if row.title}
 										<div class="flex items-center gap-1.5">
-											<span class="font-medium text-gray-700 dark:text-gray-300">{track.title}</span>
-											{#if track.year}
-												<span class="text-gray-400">({track.year})</span>
+											<span class="font-medium text-gray-700 dark:text-gray-300">{row.title}</span>
+											{#if row.year}
+												<span class="text-gray-400">({row.year})</span>
 											{/if}
 										</div>
-									{:else}
+									{:else if row.trackId}
 										<span class="text-gray-400">{job.title || 'Untitled'}{#if job.year} ({job.year}){/if}</span>
+									{:else}
+										<span class="text-gray-400">—</span>
 									{/if}
 								</td>
 								{#if isVideo}
 									<td class="px-2 py-1.5 text-center">
-										<input
-											type="text"
-											value={track.episode_number ?? ''}
-											onchange={(e) => handleEpisodeNumberInput(track.id, e.currentTarget.value)}
-											placeholder="--"
-											disabled={track.excluded}
-											class="w-10 rounded-sm border border-primary/25 bg-primary/5 px-1 py-0.5 text-center text-xs text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary disabled:opacity-30 dark:border-primary/30 dark:bg-primary/10 dark:text-white"
-										/>
+										{#if row.trackId}
+											<input
+												type="text"
+												value={row.episodeNumber ?? ''}
+												onchange={(e) => handleEpisodeNumberInput(row.trackId!, e.currentTarget.value)}
+												placeholder="--"
+												disabled={row.excluded}
+												class="w-10 rounded-sm border border-primary/25 bg-primary/5 px-1 py-0.5 text-center text-xs text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary disabled:opacity-30 dark:border-primary/30 dark:bg-primary/10 dark:text-white"
+											/>
+										{:else}
+											<span class="text-gray-400">—</span>
+										{/if}
 									</td>
 								{/if}
-								<td class="px-3 py-1.5 text-gray-700 dark:text-gray-300">{formatLength(track.duration_seconds)}</td>
-								<td class="px-3 py-1.5 font-mono text-gray-500 dark:text-gray-400">{track.output_path || track.source_ref}</td>
+								<td class="px-3 py-1.5 text-gray-700 dark:text-gray-300">{formatLength(row.durationSeconds)}</td>
+								<td class="px-3 py-1.5 font-mono text-gray-500 dark:text-gray-400">{row.sourceLabel}</td>
 								{#if isVideo}
 									<td class="px-1 py-1.5">
-										<button
-											onclick={() => toggleTrackSearch(track.id)}
-											class="rounded p-1 transition-colors {openSearchTrackIds.has(track.id) ? 'text-primary' : 'text-gray-400 hover:text-primary dark:text-gray-500 dark:hover:text-primary'}"
-											title={openSearchTrackIds.has(track.id) ? 'Close search' : 'Search title'}
-										>
-											<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-												<circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-											</svg>
-										</button>
+										{#if row.trackId}
+											<button
+												onclick={() => toggleTrackSearch(row.trackId!)}
+												class="rounded p-1 transition-colors {openSearchTrackIds.has(row.trackId) ? 'text-primary' : 'text-gray-400 hover:text-primary dark:text-gray-500 dark:hover:text-primary'}"
+												title={openSearchTrackIds.has(row.trackId) ? 'Close search' : 'Search title'}
+											>
+												<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+													<circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+												</svg>
+											</button>
+										{/if}
 									</td>
 								{/if}
 							</tr>
-							{#if isVideo && openSearchTrackIds.has(track.id)}
+							{#if isVideo && row.trackId && openSearchTrackIds.has(row.trackId)}
 								<tr>
 									<td colspan="99" class="px-3 py-2">
-										<TrackTitleSearch jobId={job.id} {track} onapply={() => handleTrackTitleApply(track.id)} onclear={() => onrefresh?.()} onclose={() => toggleTrackSearch(track.id)} />
+										<TrackTitleSearch jobId={job.id} track={tracks.find((t) => t.id === row.trackId)!} onapply={() => handleTrackTitleApply(row.trackId!)} onclear={() => onrefresh?.()} onclose={() => toggleTrackSearch(row.trackId!)} />
 									</td>
 								</tr>
 							{/if}

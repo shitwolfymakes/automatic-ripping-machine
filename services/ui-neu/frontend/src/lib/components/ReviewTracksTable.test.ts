@@ -28,6 +28,17 @@ afterEach(() => {
 	cleanup();
 });
 
+function scanTitle(overrides: Record<string, unknown> = {}) {
+	return {
+		index: 0,
+		duration_seconds: 4568,
+		chapter_count: 6,
+		size_bytes: 1993701376,
+		source_file: 'B1_t00.mkv',
+		...overrides
+	} as any;
+}
+
 describe('ReviewTracksTable', () => {
 	it('renders a row per track', () => {
 		renderComponent(ReviewTracksTable, {
@@ -55,5 +66,55 @@ describe('ReviewTracksTable', () => {
 		await fireEvent.click(screen.getByText(/^X/));
 		// TrackTitleSearch renders a search input with placeholder "Title..."
 		await waitFor(() => expect(screen.getByPlaceholderText('Title...')).toBeInTheDocument());
+	});
+
+	it('falls back to scanned titles when there are no materialized tracks', () => {
+		renderComponent(ReviewTracksTable, {
+			props: {
+				job,
+				tracks: [],
+				scanTitles: [scanTitle({ index: 0 }), scanTitle({ index: 1, source_file: 'B1_t01.mkv' })],
+				isVideo: true,
+				isMusic: false,
+				onrefresh: vi.fn()
+			}
+		});
+		expect(screen.getByText('Scanned titles (2)')).toBeInTheDocument();
+		// length rendered from the scan (4568s -> 1h 16m 8s)
+		expect(screen.getAllByText(/1h 16m/).length).toBeGreaterThan(0);
+		// read-only: no episode input rendered for scanned rows
+		expect(screen.queryByPlaceholderText('--')).not.toBeInTheDocument();
+	});
+
+	it('materialized tracks win over scanned titles when both are present', () => {
+		renderComponent(ReviewTracksTable, {
+			props: {
+				job,
+				tracks: [track()],
+				scanTitles: [scanTitle(), scanTitle({ index: 1 }), scanTitle({ index: 2 })],
+				isVideo: true,
+				isMusic: false,
+				onrefresh: vi.fn()
+			}
+		});
+		expect(screen.getByText('Tracks (1)')).toBeInTheDocument();
+		expect(screen.queryByText(/Scanned titles/)).not.toBeInTheDocument();
+	});
+
+	it('shows "No tracks yet." when there are neither tracks nor scanned titles', () => {
+		renderComponent(ReviewTracksTable, {
+			props: { job, tracks: [], scanTitles: [], isVideo: true, isMusic: false, onrefresh: vi.fn() }
+		});
+		expect(screen.getByText('No tracks yet.')).toBeInTheDocument();
+	});
+
+	it('a scanned title row is read-only (clicking it does not open TrackTitleSearch)', async () => {
+		renderComponent(ReviewTracksTable, {
+			props: { job, tracks: [], scanTitles: [scanTitle()], isVideo: true, isMusic: false, onrefresh: vi.fn() }
+		});
+		// the title cell shows an em-dash and is not clickable → no search field appears
+		// (isVideo: true also renders a second em-dash in the episode column, so use getAllByText)
+		await fireEvent.click(screen.getAllByText('—')[0]);
+		expect(screen.queryByPlaceholderText('Title...')).not.toBeInTheDocument();
 	});
 });
