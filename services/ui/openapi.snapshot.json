@@ -748,6 +748,65 @@
         }
       }
     },
+    "/api/ripper/drives/{drive_id}/current-job": {
+      "get": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Get Current Job",
+        "description": "The drive's single non-terminal job, if any (any pre-rip status OR\nripping). Lets an idle ripper re-acquire a disc whose resolution landed after\nthe in-memory wait timed out. 404 when the drive is unknown or no live job.",
+        "operationId": "get_current_job_api_ripper_drives__drive_id__current_job_get",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ripper/drives/{drive_id}/held-job": {
       "get": {
         "tags": [

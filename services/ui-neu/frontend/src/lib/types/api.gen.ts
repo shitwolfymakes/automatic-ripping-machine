@@ -3757,6 +3757,42 @@ export type GetInFlightJobApiRipperDrivesDriveIdInFlightJobGetResponses = {
 
 export type GetInFlightJobApiRipperDrivesDriveIdInFlightJobGetResponse = GetInFlightJobApiRipperDrivesDriveIdInFlightJobGetResponses[keyof GetInFlightJobApiRipperDrivesDriveIdInFlightJobGetResponses];
 
+export type GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Drive Id
+         */
+        drive_id: string;
+    };
+    query?: never;
+    url: '/api/ripper/drives/{drive_id}/current-job';
+};
+
+export type GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetError = GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetErrors[keyof GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetErrors];
+
+export type GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: JobView;
+};
+
+export type GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetResponse = GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetResponses[keyof GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetResponses];
+
 export type GetHeldJobApiRipperDrivesDriveIdHeldJobGetData = {
     body?: never;
     headers?: {

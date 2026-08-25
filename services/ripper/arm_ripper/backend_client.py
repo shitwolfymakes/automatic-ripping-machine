@@ -106,6 +106,14 @@ class BackendClient:
         r.raise_for_status()
         return JobView.model_validate(r.json())
 
+    async def get_current_job(self, drive_id: str) -> JobView | None:
+        """The drive's current non-terminal job (idle re-probe). None on 404."""
+        r = await self._client.get(f"/api/ripper/drives/{drive_id}/current-job")
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        return JobView.model_validate(r.json())
+
     async def get_held_job(self, drive_id: str) -> HeldJobView | None:
         """Boot-probe lookup for a disc held in AWAITING_REVIEW (timed review
         gate). Returns the held job + its paused flag, or None on 404."""

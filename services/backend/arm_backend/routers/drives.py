@@ -9,6 +9,7 @@ from sqlmodel import col, select
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
 from arm_common import Drive, DriveStatus, Job, JobStatus, Session, User
+from arm_common.enums import TERMINAL_JOB_STATUSES
 from arm_common.schemas import (
     DriveDiagnosticItem,
     DriveDiagnosticResponse,
@@ -27,17 +28,9 @@ router = APIRouter(prefix="/api/drives", tags=["drives"])
 # operator-facing health view that shouldn't flap on a single missed heartbeat.
 _STALE_AFTER = timedelta(minutes=5)
 
-_TERMINAL_JOB_STATUSES = {
-    JobStatus.RIPPED,
-    JobStatus.RIPPED_PARTIAL,
-    JobStatus.RIPPED_AWAITING_IDENTIFY,
-    JobStatus.ABANDONED,
-    JobStatus.FAILED,
-}
-
 
 def _current_job(jobs_for_drive: list[Job]) -> DriveCurrentJobView | None:
-    active = [j for j in jobs_for_drive if j.status not in _TERMINAL_JOB_STATUSES]
+    active = [j for j in jobs_for_drive if j.status not in TERMINAL_JOB_STATUSES]
     if not active:
         return None
     latest = max(active, key=lambda j: j.created_at or datetime.min.replace(tzinfo=timezone.utc))

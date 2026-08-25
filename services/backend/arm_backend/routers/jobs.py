@@ -60,6 +60,7 @@ from arm_common.schemas import (
     TranscodeProgressSummary,
     TranscodeTaskView,
 )
+from arm_common.enums import NON_TERMINAL_JOB_STATUSES, TERMINAL_JOB_STATUSES
 from arm_common.ulid import is_valid_id
 
 logger = logging.getLogger("arm_backend.routers.jobs")
@@ -325,19 +326,6 @@ async def get_job_detail(
     )
 
 
-_NON_TERMINAL_STATUSES: frozenset[JobStatus] = frozenset(
-    {
-        JobStatus.CREATED,
-        JobStatus.AWAITING_USER_ID,
-        JobStatus.IDENTIFIED,
-        JobStatus.RIPPING,
-        # A held review-gate disc is non-terminal so Cancel-via-abandon works and
-        # the delete/retry guards treat it as live (timed review gate).
-        JobStatus.AWAITING_REVIEW,
-    }
-)
-
-
 @router.post("/{job_id}/abandon", response_model=JobView)
 async def abandon_job(
     job_id: JobIdParam,
@@ -363,7 +351,7 @@ async def abandon_job(
     job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
-    if job.status not in _NON_TERMINAL_STATUSES:
+    if job.status not in NON_TERMINAL_JOB_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"job already in terminal status {job.status.value}",
@@ -503,16 +491,6 @@ async def review_pause(
     return job
 
 
-_TERMINAL_STATUSES: frozenset[JobStatus] = frozenset(
-    {
-        JobStatus.RIPPED,
-        JobStatus.RIPPED_PARTIAL,
-        JobStatus.ABANDONED,
-        JobStatus.FAILED,
-    }
-)
-
-
 async def _resolve_media_outputs(db: AsyncSession, job_id: str) -> list[Path]:
     """Return absolute paths of every transcode output recorded against this
     job's tracks. `output_path` is relative; join to MEDIA_ROOT. Tasks with
@@ -643,7 +621,7 @@ async def delete_job(
     job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
-    if job.status not in _TERMINAL_STATUSES:
+    if job.status not in TERMINAL_JOB_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"job in non-terminal status {job.status.value}; abandon it first",
@@ -696,7 +674,7 @@ async def delete_all_jobs(
     skipped: list[str] = []
     totals = {"raw_dir_removed": 0, "media_files_removed": 0, "media_dirs_pruned": 0}
     for job in rows:
-        if job.status not in _TERMINAL_STATUSES:
+        if job.status not in TERMINAL_JOB_STATUSES:
             skipped.append(job.id)
             continue
         if delete_raw:

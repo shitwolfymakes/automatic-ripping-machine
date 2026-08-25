@@ -137,6 +137,38 @@ class JobController:
     def is_active(self) -> bool:
         return self._active_lock.locked()
 
+    def is_idle(self) -> bool:
+        """True when no rip pipeline is running (no active task claimed the lock).
+
+        Used by the heartbeat idle re-probe to decide whether to attempt pickup.
+        """
+        return self._active_task is None
+
+    async def pickup(self, job: JobView, device_path: str) -> None:
+        """Re-acquire a rip-ready job from a heartbeat reprobe.
+
+        Claims _active_task before starting so is_idle() returns False from the
+        moment we enter, preventing a double-rip if heartbeat fires again while
+        the pipeline is starting up. The actual rip runs via _run_rip, which
+        follows the same path as a normal pipeline (rip-start → execute → complete
+        → eject) but skips scan/identify since the job already exists.
+        """
+        if not self.is_idle():
+            logger.debug("pickup ignored: controller already busy")
+            return
+        if self._device_path is None and device_path:
+            self._device_path = device_path
+        async with self._active_lock:
+            self._active_task = asyncio.current_task()
+            self._active_job_id = job.id
+            try:
+                with with_log_context(job_id=job.id):
+                    logger.info("pickup: re-acquiring job %s status=%s", job.id, job.status.value)
+                    await self._run_rip(job, device_path)
+            finally:
+                self._active_task = None
+                self._active_job_id = None
+
     async def on_ws_command(self, envelope: WSEnvelope) -> None:
         """Handler registered for `ripper.commands.{drive_id}` topic."""
         if envelope.event_type in ("identify.resolved", "rip.start", "review.pause"):
