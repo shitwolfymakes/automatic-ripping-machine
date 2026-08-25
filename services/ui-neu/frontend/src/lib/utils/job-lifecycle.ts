@@ -62,6 +62,8 @@ const STATUS_TO_STAGE: Record<string, LifecycleStageId> = {
 	'copying':            'ripping',
 	'ejecting':           'ripping',
 	'importing':          'ripping',
+	'ripped':            'ripping',          // rip done; awaiting a session (no transcode yet)
+	'ripped_partial':    'ripping',
 	// Transcoding
 	'transcoding':        'transcoding',
 	'finishing':          'transcoding',
