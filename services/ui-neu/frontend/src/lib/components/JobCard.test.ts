@@ -90,6 +90,7 @@ describe('JobCard', () => {
 							state: 'transcoding',
 							tasks_total: 3,
 							tasks_done: 1,
+							tasks_failed: 0,
 							percent: 33
 						}
 					})
@@ -125,6 +126,7 @@ describe('JobCard', () => {
 							state: 'done',
 							tasks_total: 2,
 							tasks_done: 2,
+							tasks_failed: 0,
 							percent: 100
 						}
 					})

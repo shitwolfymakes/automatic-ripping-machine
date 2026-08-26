@@ -7,6 +7,7 @@ function createTranscodeTask(overrides: Partial<TranscodeTaskView> = {}): Transc
 	return {
 		id: 't-1',
 		session_application_id: 'job-1',
+		job_id: 'job-1',
 		source_track_id: 'track-1',
 		status: 'in_progress',
 		output_path: '/media/transcode/my_movie.mkv',
@@ -114,6 +115,16 @@ describe('TranscodeCard', () => {
 				const idLink = screen.getByText('#t-1');
 				expect(idLink).toBeInTheDocument();
 				expect(idLink.getAttribute('href')).toBe('/jobs/job-1');
+			});
+		});
+
+		it('links to /jobs/{job_id}, not session_application_id', async () => {
+			const job = { id: 'txt_1', job_id: 'job_42', session_application_id: 'sap_9', status: 'in_progress', source_track_id: 'trk', progress_pct: 0, attempts: 1 } as any;
+			const { getByText } = renderComponent(TranscodeCard, { props: { job } });
+			await fireEvent.click(getByText('Transcode #txt_1'));
+			await waitFor(() => {
+				const link = getByText('Open job').closest('a');
+				expect(link?.getAttribute('href')).toBe('/jobs/job_42');
 			});
 		});
 	});

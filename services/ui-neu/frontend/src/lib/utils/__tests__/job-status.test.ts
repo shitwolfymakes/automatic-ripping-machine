@@ -79,3 +79,29 @@ describe('reviewPhaseBadge', () => {
 		expect(reviewPhaseBadge(badgeJob('ripped', null)).accent).toContain('#8b5cf6');
 	});
 });
+
+import { transcodeColumnStatus } from '$lib/utils/job-status';
+
+const tp = (state: string, tasks_total: number, tasks_done: number, tasks_failed: number) =>
+	({ status: 'ripped', transcode_progress: { state, tasks_total, tasks_done, tasks_failed, percent: 0 } }) as any;
+
+describe('transcodeColumnStatus', () => {
+	it('null when no transcode_progress', () => {
+		expect(transcodeColumnStatus({ status: 'ripped', transcode_progress: null } as any)).toBeNull();
+	});
+	it('done -> Complete/complete (green; the all-succeed gate)', () => {
+		expect(transcodeColumnStatus(tp('done', 4, 4, 0))).toEqual({ label: 'Complete', badgeStatus: 'complete' });
+	});
+	it('done_partial -> Transcode failed (red)', () => {
+		expect(transcodeColumnStatus(tp('done_partial', 4, 2, 2))).toEqual({ label: 'Transcode failed', badgeStatus: 'transcode_failed' });
+	});
+	it('failed -> Transcode failed (red)', () => {
+		expect(transcodeColumnStatus(tp('failed', 4, 0, 4))).toEqual({ label: 'Transcode failed', badgeStatus: 'transcode_failed' });
+	});
+	it('transcoding + tasks_failed>0 -> Failed — retrying (red, never green/blue)', () => {
+		expect(transcodeColumnStatus(tp('transcoding', 4, 1, 1))).toEqual({ label: 'Failed — retrying 1/4', badgeStatus: 'transcode_failed' });
+	});
+	it('transcoding + no failures -> Transcoding N/M (blue)', () => {
+		expect(transcodeColumnStatus(tp('transcoding', 4, 2, 0))).toEqual({ label: 'Transcoding 2/4', badgeStatus: 'transcoding' });
+	});
+});

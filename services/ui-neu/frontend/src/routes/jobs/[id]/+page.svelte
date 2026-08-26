@@ -356,8 +356,9 @@
 								<th class="px-4 py-3 font-medium">Filename</th>
 								<th class="px-4 py-3 font-medium">Length</th>
 								<th class="px-4 py-3 font-medium">Size</th>
+								<th class="px-4 py-3 font-medium">Include</th>
 								<th class="px-4 py-3 font-medium">Rip</th>
-								<th class="px-4 py-3 font-medium">Status</th>
+								<th class="px-4 py-3 font-medium">Transcode</th>
 							</tr>
 						</thead>
 						<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
@@ -428,7 +429,7 @@
 										{:else}—{/if}
 									</td>
 									<td class="px-4 py-3 text-gray-700 dark:text-gray-300" data-label="Size">{trackSizeLabel(track)}</td>
-									<td class="px-4 py-3" data-label="Rip">
+									<td class="px-4 py-3" data-label="Include">
 										<input
 											type="checkbox"
 											checked={!track.excluded}
@@ -437,21 +438,22 @@
 											class="h-4 w-4 rounded border-primary/30 text-primary focus:ring-primary"
 										/>
 									</td>
-									<td class="px-4 py-3" data-label="Status">
-										<div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-											<span class="flex items-center gap-1">
-												<StatusBadge status={track.status} />
-												{#if track.attempts > 1}
-													<span class="text-[10px] text-gray-400" title="Rip attempts">×{track.attempts}</span>
-												{/if}
-											</span>
-											{#if track.transcode_status}
-												<span class="flex items-center gap-1">
-													<span class="text-[10px] uppercase tracking-wide text-gray-400">Transcode</span>
-													<StatusBadge status={track.transcode_status} />
-												</span>
+									<!-- Rip outcome -->
+									<td class="px-4 py-3" data-label="Rip">
+										<span class="flex items-center gap-1">
+											<StatusBadge status={track.status} />
+											{#if track.attempts > 1}
+												<span class="text-[10px] text-gray-400" title="Rip attempts">×{track.attempts}</span>
 											{/if}
-										</div>
+										</span>
+									</td>
+									<!-- Transcode outcome (— when no transcode task yet) -->
+									<td class="px-4 py-3" data-label="Transcode">
+										{#if track.transcode_status}
+											<StatusBadge status={track.transcode_status} />
+										{:else}
+											<span class="text-gray-400 dark:text-gray-500">—</span>
+										{/if}
 									</td>
 								</tr>
 								{#if track.status === 'failed' && track.last_error}

@@ -121,7 +121,7 @@
 		</div>
 
 		<!-- Arrow -->
-		<div class="hidden items-center justify-center px-1 text-gray-400 dark:text-gray-600 sm:flex" aria-hidden="true">→</div>
+		<div class="hidden items-center justify-center px-1 text-lg font-semibold text-gray-400 dark:text-gray-600 sm:flex" aria-hidden="true">&gt;</div>
 
 		<!-- Transcode preset -->
 		<div class="flex flex-col gap-0.5 px-4 py-3">
@@ -137,7 +137,7 @@
 		</div>
 
 		<!-- Arrow -->
-		<div class="hidden items-center justify-center px-1 text-gray-400 dark:text-gray-600 sm:flex" aria-hidden="true">→</div>
+		<div class="hidden items-center justify-center px-1 text-lg font-semibold text-gray-400 dark:text-gray-600 sm:flex" aria-hidden="true">&gt;</div>
 
 		<!-- Output path sample -->
 		<div class="flex flex-col gap-0.5 px-4 py-3">

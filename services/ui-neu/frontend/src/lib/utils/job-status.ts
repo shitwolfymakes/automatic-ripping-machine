@@ -90,3 +90,30 @@ export function reviewPhaseBadge(job: BadgeJob): { label: string; accent: string
 		return { label: 'RIPPED · NEEDS SESSION', accent: 'var(--color-violet-500, #8b5cf6)' };
 	return { label: s.toUpperCase(), accent: 'var(--color-primary)' };
 }
+
+/**
+ * The jobs-table Transcode column display for a job, gated so it is only
+ * "Complete" (green) when every task succeeded. A retry-in-flight on a session
+ * that already has failures reads red ("Failed — retrying"), never hopeful blue.
+ * Returns null when no session has been applied (render an em-dash).
+ */
+export function transcodeColumnStatus(
+	job: Pick<JobView, 'transcode_progress'>
+): { label: string; badgeStatus: string } | null {
+	const tp = job.transcode_progress;
+	if (tp == null) return null;
+	const { tasks_done, tasks_total, tasks_failed } = tp;
+	switch (tp.state) {
+		case 'done':
+			return { label: 'Complete', badgeStatus: 'complete' };
+		case 'done_partial':
+		case 'failed':
+			return { label: 'Transcode failed', badgeStatus: 'transcode_failed' };
+		case 'transcoding':
+			return tasks_failed > 0
+				? { label: `Failed — retrying ${tasks_done}/${tasks_total}`, badgeStatus: 'transcode_failed' }
+				: { label: `Transcoding ${tasks_done}/${tasks_total}`, badgeStatus: 'transcoding' };
+		default:
+			return null;
+	}
+}
