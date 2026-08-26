@@ -21,6 +21,7 @@
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { get } from 'svelte/store';
+	import { startRipperEvents, onRipperEvent } from '$lib/stores/ripperEvents.svelte';
 
 	// --- Dashboard state ---
 	// Seed from the persistent singleton store the layout already polls, so
@@ -221,6 +222,15 @@
 	onMount(() => {
 		let stopped = false;
 		startWS();
+		// Instant status: any ripper.events burst -> immediate refresh of both
+		// surfaces (sections/cards AND the jobs table). Polls below stay as
+		// reconciliation. Unregister only our listener on unmount — the topic
+		// subscription is shared with the job detail page.
+		startRipperEvents();
+		const offRipperEvents = onRipperEvent(() => {
+			refreshDashboard();
+			loadJobs();
+		});
 
 		function poll(fn: () => Promise<void>, intervalMs: number) {
 			(async () => {
@@ -235,6 +245,7 @@
 		poll(loadJobs, 10000);
 		return () => {
 			stopped = true;
+			offRipperEvents();
 			stopWS();
 		};
 	});
