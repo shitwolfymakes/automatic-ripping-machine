@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from arm_common.enums import DiscType, DriveMediaStatus, KeydbState, MakemkvKeyState, TrackStatus
+from arm_common.enums import DiscType, DriveMediaStatus, KeydbState, MakemkvKeyState, MakemkvSdfState, TrackStatus
 
 
 class MakemkvKeyStatusReport(BaseModel):
@@ -22,6 +22,15 @@ class KeydbStatusReport(BaseModel):
 
     state: KeydbState
     vuk_count: int | None = None
+    age_days: int | None = None
+
+
+class SdfStatusReport(BaseModel):
+    """Body of POST /api/ripper/sdf-status — the ripper's MakeMKV SDF fetch
+    outcome. Global (not per-drive); the backend writes it to the Config
+    singleton. `age_days` is present on fresh_kept; None on all other states."""
+
+    state: MakemkvSdfState
     age_days: int | None = None
 
 
@@ -131,6 +140,7 @@ class RipperConfigView(BaseModel):
     # Operator toggle for the community-keydb (FindVUK) auto-fetch. Defaulted
     # True so older backends omitting it still validate and keep the feature on.
     community_keydb_enabled: bool = True
+    makemkv_sdf_enabled: bool = True
     # Timed review gate: global pause suppresses the auto-start at countdown
     # expiry; manual_wait_seconds is the countdown duration. The ripper re-reads
     # these while parked so a mid-wait pause/duration change is honoured.

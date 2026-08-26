@@ -355,6 +355,10 @@ export type ConfigUpdateRequest = {
      */
     community_keydb_enabled?: boolean | null;
     /**
+     * Makemkv Sdf Enabled
+     */
+    makemkv_sdf_enabled?: boolean | null;
+    /**
      * Ripping Paused
      */
     ripping_paused?: boolean | null;
@@ -418,6 +422,10 @@ export type ConfigView = {
      * Community Keydb Enabled
      */
     community_keydb_enabled: boolean;
+    /**
+     * Makemkv Sdf Enabled
+     */
+    makemkv_sdf_enabled: boolean;
     /**
      * Ripping Paused
      */
@@ -1426,6 +1434,20 @@ export type MakemkvKeyStatusReport = {
      */
     detail?: string | null;
 };
+
+/**
+ * MakemkvSdfState
+ *
+ * Outcome of the ripper's MakeMKV SDF fetch (`update_sdf.sh`), stored on
+ * the Config singleton and surfaced by /api/system/preflight.
+ *
+ * UPDATED         — downloaded (official or mirror) and installed.
+ * FRESH_KEPT      — age-gated skip; existing SDF retained (age_days set).
+ * DISABLED        — SDF refresh gated off via config.
+ * DOWNLOAD_FAILED — all sources failed; baked/existing SDF retained.
+ * PROBE_FAILED    — wrapper could not run or parse the script.
+ */
+export type MakemkvSdfState = 'updated' | 'fresh_kept' | 'disabled' | 'download_failed' | 'probe_failed';
 
 /**
  * ManualTriggerRequest
@@ -2472,6 +2494,10 @@ export type RipperConfigView = {
      */
     community_keydb_enabled?: boolean;
     /**
+     * Makemkv Sdf Enabled
+     */
+    makemkv_sdf_enabled?: boolean;
+    /**
      * Ripping Paused
      */
     ripping_paused?: boolean;
@@ -2553,6 +2579,21 @@ export type ScanTitle = {
      * Source File
      */
     source_file?: string | null;
+};
+
+/**
+ * SdfStatusReport
+ *
+ * Body of POST /api/ripper/sdf-status — the ripper's MakeMKV SDF fetch
+ * outcome. Global (not per-drive); the backend writes it to the Config
+ * singleton. `age_days` is present on fresh_kept; None on all other states.
+ */
+export type SdfStatusReport = {
+    state: MakemkvSdfState;
+    /**
+     * Age Days
+     */
+    age_days?: number | null;
 };
 
 /**
@@ -3622,6 +3663,37 @@ export type KeydbStatusApiRipperKeydbStatusPostResponses = {
 };
 
 export type KeydbStatusApiRipperKeydbStatusPostResponse = KeydbStatusApiRipperKeydbStatusPostResponses[keyof KeydbStatusApiRipperKeydbStatusPostResponses];
+
+export type SdfStatusApiRipperSdfStatusPostData = {
+    body: SdfStatusReport;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/ripper/sdf-status';
+};
+
+export type SdfStatusApiRipperSdfStatusPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SdfStatusApiRipperSdfStatusPostError = SdfStatusApiRipperSdfStatusPostErrors[keyof SdfStatusApiRipperSdfStatusPostErrors];
+
+export type SdfStatusApiRipperSdfStatusPostResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type SdfStatusApiRipperSdfStatusPostResponse = SdfStatusApiRipperSdfStatusPostResponses[keyof SdfStatusApiRipperSdfStatusPostResponses];
 
 export type RegisterApiRipperRegisterPostData = {
     body: RegisterRequest;

@@ -2,7 +2,7 @@ from typing import Any
 
 import httpx
 
-from arm_common import Drive, DriveMediaStatus, Job, KeydbState, MakemkvKeyState
+from arm_common import Drive, DriveMediaStatus, Job, KeydbState, MakemkvKeyState, MakemkvSdfState
 from arm_common.schemas import (
     HeldJobView,
     IdentifyRequest,
@@ -15,6 +15,7 @@ from arm_common.schemas import (
     RipperHeartbeatRequest,
     RipStartResponse,
     ScanResult,
+    SdfStatusReport,
     TrackUpdateRequest,
     TrackView,
 )
@@ -157,4 +158,9 @@ class BackendClient:
     ) -> None:
         req = KeydbStatusReport(state=state, vuk_count=vuk_count, age_days=age_days)
         r = await self._client.post("/api/ripper/keydb-status", json=req.model_dump(mode="json"))
+        r.raise_for_status()
+
+    async def report_sdf_status(self, *, state: MakemkvSdfState, age_days: int | None = None) -> None:
+        req = SdfStatusReport(state=state, age_days=age_days)
+        r = await self._client.post("/api/ripper/sdf-status", json=req.model_dump(mode="json"))
         r.raise_for_status()
