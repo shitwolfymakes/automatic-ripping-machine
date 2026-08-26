@@ -75,7 +75,7 @@ const STATUS_TO_STAGE: Record<string, LifecycleStageId> = {
 	'transcoded':         'complete'
 };
 
-const FAILURE_STATUSES = new Set(['fail', 'failed', 'failure', 'error']);
+const FAILURE_STATUSES = new Set(['fail', 'failed', 'failure', 'error', 'transcode_failed']);
 const PAUSED_STATUSES = new Set(['manual_paused']);
 
 export function isFolderImport(sourceType: string | null | undefined): boolean {

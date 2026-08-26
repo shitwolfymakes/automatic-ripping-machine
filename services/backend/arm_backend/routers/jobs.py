@@ -319,9 +319,26 @@ async def get_job_detail(
         )
     job_view = JobView.model_validate(job)
     job_view.transcode_progress = _summarize_transcode_progress(list(sas), job_tasks)
+
+    # Most-recent transcode task status per source track (ULID ids are
+    # monotonic, so the greatest id is the newest task). Built from the
+    # already-loaded job_tasks — no extra query.
+    latest_task_status: dict[str, TranscodeTaskStatus] = {}
+    latest_task_id: dict[str, str] = {}
+    for task in job_tasks:
+        prev = latest_task_id.get(task.source_track_id)
+        if prev is None or task.id > prev:
+            latest_task_id[task.source_track_id] = task.id
+            latest_task_status[task.source_track_id] = task.status
+
+    def _track_view(t: Track) -> TrackView:
+        tv = TrackView.model_validate(t)
+        tv.transcode_status = latest_task_status.get(t.id)
+        return tv
+
     return JobDetailView(
         job=job_view,
-        tracks=[TrackView.model_validate(t) for t in tracks],
+        tracks=[_track_view(t) for t in tracks],
         fingerprints=[DiscFingerprintView.model_validate(fp) for fp in fingerprints],
     )
 

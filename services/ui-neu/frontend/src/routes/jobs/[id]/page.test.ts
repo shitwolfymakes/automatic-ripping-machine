@@ -391,4 +391,29 @@ describe('Job detail page (v3)', () => {
 		// No IMDb pill/link for music (grid also suppresses it via not-music gate in neu; here disc_type cd).
 		expect(screen.queryByRole('link', { name: 'IMDb' })).not.toBeInTheDocument();
 	});
+
+	it('shows a Transcode badge when the track has a transcode_status', async () => {
+		mockFetchJob.mockResolvedValueOnce({
+			job: createJob({ id: 'job_42', status: 'ripped' }),
+			tracks: [createTrack({ id: 'trk_1', source_ref: 'title_01.mkv', status: 'done', transcode_status: 'failed' } as any)],
+			fingerprints: []
+		} as any);
+		renderComponent(Page);
+		// "Transcode" caption appears only as a badge caption span.
+		await waitFor(() => expect(screen.getByText('Transcode')).toBeInTheDocument());
+		// The transcode badge renders the failed label.
+		expect(screen.getByText('Failed')).toBeInTheDocument();
+	});
+
+	it('shows only the rip badge when transcode_status is null', async () => {
+		mockFetchJob.mockResolvedValueOnce({
+			job: createJob({ id: 'job_42', status: 'ripped' }),
+			tracks: [createTrack({ id: 'trk_2', source_ref: 'title_02.mkv', status: 'done', transcode_status: null } as any)],
+			fingerprints: []
+		} as any);
+		renderComponent(Page);
+		// No "Transcode" caption when transcode_status is absent.
+		await waitFor(() => expect(screen.getByText('Done')).toBeInTheDocument());
+		expect(screen.queryByText('Transcode')).not.toBeInTheDocument();
+	});
 });

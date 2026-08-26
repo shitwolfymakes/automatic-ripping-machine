@@ -15,11 +15,11 @@ describe('effectiveJobStatus', () => {
 	it('ripped + done -> complete', () => {
 		expect(effectiveJobStatus(job('ripped', { state: 'done', tasks_total: 2, tasks_done: 2, percent: 100 }))).toBe('complete');
 	});
-	it('ripped + done_partial -> complete', () => {
-		expect(effectiveJobStatus(job('ripped', { state: 'done_partial', tasks_total: 2, tasks_done: 1, percent: 50 }))).toBe('complete');
+	it('ripped + done_partial -> transcode_failed (not complete — some tracks failed)', () => {
+		expect(effectiveJobStatus(job('ripped', { state: 'done_partial', tasks_total: 2, tasks_done: 1, percent: 50 }))).toBe('transcode_failed');
 	});
-	it('ripped + failed -> failed', () => {
-		expect(effectiveJobStatus(job('ripped', { state: 'failed', tasks_total: 1, tasks_done: 0, percent: 0 }))).toBe('failed');
+	it('ripped + failed -> transcode_failed (all tracks failed; rip itself was fine)', () => {
+		expect(effectiveJobStatus(job('ripped', { state: 'failed', tasks_total: 1, tasks_done: 0, percent: 0 }))).toBe('transcode_failed');
 	});
 	it('ripped_partial + done -> complete', () => {
 		expect(effectiveJobStatus(job('ripped_partial', { state: 'done', tasks_total: 1, tasks_done: 1, percent: 100 }))).toBe('complete');

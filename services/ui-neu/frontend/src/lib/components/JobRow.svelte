@@ -3,7 +3,7 @@
 	import StatusBadge from './StatusBadge.svelte';
 	import Skeleton from './Skeleton.svelte';
 	import { getVideoTypeConfig, discTypeLabel } from '$lib/utils/job-type';
-	import { effectiveJobStatus } from '$lib/utils/job-status';
+	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import VideoTypeIcon from './VideoTypeIcon.svelte';
 
@@ -59,8 +59,13 @@
 
 	<!-- Status -->
 	<td class="px-4 py-3" data-label="Status">
-		<div>
+		<div class="flex items-center gap-1.5">
 			<StatusBadge status={effectiveJobStatus(job)} />
+			{#if isPartialComplete(job)}
+				<span class="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+					>Done {job.transcode_progress?.tasks_done}/{job.transcode_progress?.tasks_total}</span
+				>
+			{/if}
 		</div>
 	</td>
 

@@ -12445,6 +12445,16 @@
           "status": {
             "$ref": "#/components/schemas/TrackStatus"
           },
+          "transcode_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscodeTaskStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "output_path": {
             "anyOf": [
               {
