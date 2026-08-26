@@ -67,6 +67,15 @@ services:
       # injects device access into each ephemeral transcoder. [] => CPU-only.
       ARM_GPUS: ${ARM_GPUS:-[]}
       ARM_RENDER_GID: ${ARM_RENDER_GID:-}
+      # NOTE: setting these 4 keys by hand is NOT enough for remote offload —
+      # the backend also needs an ssh key mounted at /home/arm/.ssh (ro).
+      # install.sh adds that volume automatically; if you hand-copy this
+      # compose file, add `./ssh:/home/arm/.ssh:ro` to arm-backend's volumes
+      # yourself. See ARM_TRANSCODE_SSH_DIR in .env.example.
+      ARM_TRANSCODE_DOCKER_HOST: ${ARM_TRANSCODE_DOCKER_HOST:-}
+      ARM_TRANSCODE_BACKEND_URL: ${ARM_TRANSCODE_BACKEND_URL:-}
+      ARM_TRANSCODE_PUID: ${ARM_TRANSCODE_PUID:-}
+      ARM_TRANSCODE_PGID: ${ARM_TRANSCODE_PGID:-}
     volumes:
       - ./arm/logs:/logs
       - ./arm/media:/media
