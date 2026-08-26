@@ -11,6 +11,7 @@ time, then applied to Track rows wherever tracks are created (identify's
 review path and rip-start) — apply_map is idempotent and only fills
 operator-empty fields, so re-running never clobbers operator edits.
 """
+
 from __future__ import annotations
 
 import logging
@@ -31,7 +32,7 @@ _SELECT_TYPES = {"MainMovie", "Episode"}
 
 
 def parse_duration(text: str) -> int | None:
-    """"H:MM:SS" or "MM:SS" -> seconds; None on anything else."""
+    """ "H:MM:SS" or "MM:SS" -> seconds; None on anything else."""
     if not text:
         return None
     parts = text.split(":")
@@ -49,15 +50,13 @@ def parse_duration(text: str) -> int | None:
 def _int_or_none(value: Any) -> int | None:
     try:
         return int(value) if value is not None and str(value).strip() != "" else None
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
 def build_map(match: DiscMatch, scan: ScanResult) -> dict[str, Any]:
     """Produce the JSON-safe match record keyed by track source_ref."""
-    by_source_file = {
-        t.source_file.lower(): t for t in scan.titles if t.source_file
-    }
+    by_source_file = {t.source_file.lower(): t for t in scan.titles if t.source_file}
     matched: dict[str, dict[str, Any]] = {}
     for entry in match.disc.get("Titles") or []:
         if not isinstance(entry, dict):
@@ -73,7 +72,8 @@ def build_map(match: DiscMatch, scan: ScanResult) -> dict[str, Any]:
             if want is None:
                 continue
             candidates = [
-                t for t in scan.titles
+                t
+                for t in scan.titles
                 if t.source_file is None and abs(t.duration_seconds - want) <= DURATION_WINDOW_SECONDS
             ]
             if len(candidates) != 1:
@@ -95,7 +95,9 @@ def build_map(match: DiscMatch, scan: ScanResult) -> dict[str, Any]:
         "kind": match.kind,
         # Community credit (spec): who contributed this disc layout.
         "contributors": [
-            str(c.get("Name")) for c in (match.release.get("Contributors") or []) if isinstance(c, dict) and c.get("Name")
+            str(c.get("Name"))
+            for c in (match.release.get("Contributors") or [])
+            if isinstance(c, dict) and c.get("Name")
         ],
         "matched": matched,
     }
@@ -118,9 +120,7 @@ async def apply_map(session: AsyncSession, job: Job) -> int:
     matched = record.get("matched")
     if not isinstance(matched, dict) or not matched:
         return 0
-    tracks = (
-        (await session.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
-    )
+    tracks = (await session.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
     updated = 0
     for track in tracks:
         entry = matched.get(track.source_ref)

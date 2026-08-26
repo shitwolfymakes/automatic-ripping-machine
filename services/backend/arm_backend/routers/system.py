@@ -206,7 +206,7 @@ _CPU_TEMP_KEYS = ("coretemp", "cpu_thermal", "k10temp")
 def _cpu_temp() -> float:
     try:
         temps = psutil.sensors_temperatures()
-    except (AttributeError, OSError):
+    except AttributeError, OSError:
         return 0.0
     for key in _CPU_TEMP_KEYS:
         readings = temps.get(key)
@@ -285,9 +285,7 @@ async def system_version(_: User = Depends(require_jwt)) -> SystemVersionRespons
 
 
 @router.post("/thediscdb/refresh", dependencies=[Depends(require_writer)])
-async def thediscdb_refresh_now(
-    request: Request, session: AsyncSession = Depends(get_session)
-) -> dict[str, Any]:
+async def thediscdb_refresh_now(request: Request, session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
     """Rebuild the TheDiscDB snapshot index from GitHub, on demand."""
     try:
         count = await thediscdb_refresh(request.app.state.http, Path(settings.ARM_THEDISCDB_PATH))

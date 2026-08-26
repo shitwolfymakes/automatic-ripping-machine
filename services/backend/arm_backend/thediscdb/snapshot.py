@@ -13,6 +13,7 @@ layout change), so refresh propagates the error and the previous index
 remains untouched. Build is atomic: write `<dest>.new`, then os.replace
 over the live file.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -76,7 +77,7 @@ def build_index(tarball: Path, dest_sqlite: Path) -> int:
         try:
             loaded = json.load(fh)
             return loaded if isinstance(loaded, dict) else None
-        except (json.JSONDecodeError, UnicodeDecodeError):
+        except json.JSONDecodeError, UnicodeDecodeError:
             logger.debug("thediscdb: skipping malformed %s", member.name)
             return None
 

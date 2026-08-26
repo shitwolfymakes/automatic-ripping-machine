@@ -247,12 +247,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         thediscdb_refresh_task.cancel()
         try:
             await asyncio.wait_for(thediscdb_refresh_task, timeout=10.0)
-        except (TimeoutError, asyncio.CancelledError):  # pragma: no cover — cancellation is the expected path
+        except TimeoutError, asyncio.CancelledError:  # pragma: no cover — cancellation is the expected path
             pass
         disk_refresher.stop()
         try:
             await asyncio.wait_for(disk_refresher_task, timeout=10.0)
-        except (TimeoutError, asyncio.CancelledError):
+        except TimeoutError, asyncio.CancelledError:
             disk_refresher_task.cancel()
         log_tailer.stop()
         try:
