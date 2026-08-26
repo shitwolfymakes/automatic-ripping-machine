@@ -52,7 +52,7 @@ def refresh_path(path: str) -> None:
         return
     try:
         data = json.loads(result.stdout)
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         return
     data["ts"] = time.time()
     with _cache_lock:

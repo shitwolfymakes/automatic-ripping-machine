@@ -61,7 +61,7 @@ async def upload_theme(
     """Upload a user theme (JSON file + optional CSS)."""
     try:
         data = json.loads(await theme_json.read())
-    except json.JSONDecodeError, UnicodeDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
         raise HTTPException(status_code=400, detail="Invalid JSON file") from None
     try:
         return theme_service.save_user_theme(data, css=theme_css)

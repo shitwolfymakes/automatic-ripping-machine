@@ -514,3 +514,49 @@ def test_stats_no_started_at(signing_key: bytes, tmp_path) -> None:
         r = c.get("/api/system/stats", headers=_auth(token))
     assert r.status_code == 200, r.text
     assert r.json()["uptime_seconds"] == 0
+
+
+def test_thediscdb_refresh_now_returns_count_and_persists_refreshed_at(
+    signing_key: bytes, tmp_path, monkeypatch
+) -> None:
+    async def _fake(http, path):  # noqa: ANN001, ANN202 — matches thediscdb_refresh signature
+        return 4724
+
+    monkeypatch.setattr(system_router, "thediscdb_refresh", _fake)
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.http = object()
+    with TestClient(app) as c:
+        r = c.post("/api/system/thediscdb/refresh", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["discs"] == 4724
+    assert datetime.fromisoformat(body["refreshed_at"])
+    assert db.rows["config"][0].thediscdb_refreshed_at is not None
+
+
+def test_thediscdb_refresh_now_maps_failure_to_502(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    async def _fake(http, path):  # noqa: ANN001, ANN202 — matches thediscdb_refresh signature
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(system_router, "thediscdb_refresh", _fake)
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.http = object()
+    with TestClient(app) as c:
+        r = c.post("/api/system/thediscdb/refresh", headers=_auth(token))
+    assert r.status_code == 502, r.text
+    assert db.rows["config"][0].thediscdb_refreshed_at is None
+
+
+def test_thediscdb_refresh_now_denied_for_guest(signing_key: bytes, tmp_path) -> None:
+    """Refresh is a mutating route (network fetch + config write) — guests get 403."""
+    db = FakeSession()
+    _seed(db)
+    app, _ = _make_app(signing_key, db, tmp=tmp_path)
+    guest_token, _ = issue_access_token("usr_guest", "guest", signing_key)
+    with TestClient(app) as c:
+        r = c.post("/api/system/thediscdb/refresh", headers=_auth(guest_token))
+    assert r.status_code == 403
