@@ -2,7 +2,7 @@
 
 Date: 2026-08-06
 Branch: `feat/media-identification` (off the Tier-33 chain tip)
-Status: approved (design), pending implementation plan
+Status: implemented (see plan of the same date)
 
 ## Problem
 
