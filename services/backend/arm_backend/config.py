@@ -26,10 +26,9 @@ class Settings(BaseSettings):
     # owning drive's ripper was offline).
     RAW_ROOT: str = "/raw"
 
-    # Root for ISO-import ingress. ISOs the operator drops here are exposed via
-    # the file browser (the ISO-as-Drive import design mounts them ripper-side).
-    # Fixed container path like MEDIA_ROOT/RAW_ROOT; bind-mount a host dir here
-    # in compose.
+    # Sandbox root for ISO-import scanning (kept for the diagnostics path
+    # check; the iso-scan endpoint itself was dropped upstream in favor of
+    # the ephemeral-worker design).
     ISO_INGRESS_ROOT: str = "/ingress"
 
     # Disk cache for the image-proxy router (GET /api/images/proxy). Posters
