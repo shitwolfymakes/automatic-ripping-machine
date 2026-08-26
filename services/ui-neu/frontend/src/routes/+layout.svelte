@@ -18,6 +18,8 @@
 	import { isScreenEnabled } from '$lib/features';
 	import { logout as apiLogout } from '$lib/api/auth';
 	import { countRipping } from '$lib/utils/job-status';
+	import BottomStatsBar from '$lib/components/BottomStatsBar.svelte';
+	import SidebarStats from '$lib/components/SidebarStats.svelte';
 	let { children } = $props();
 
 	let sidebarOpen = $state(false);
@@ -157,6 +159,11 @@
 					</a>
 				{/each}
 			</nav>
+			<!-- Sidebar stats only at 2xl+, where the bottom bar (lg:flex 2xl:hidden)
+			     is hidden — the two surfaces never show at the same viewport width. -->
+			<div class="hidden 2xl:block">
+				<SidebarStats />
+			</div>
 		</div>
 	</aside>
 
@@ -210,7 +217,7 @@
 						<span class="font-semibold text-blue-600 dark:text-blue-400">{rippingCount} ripping</span>
 					{/if}
 					{#if $dashboard.active_transcodes.length > 0}
-						<span class="font-semibold text-indigo-600 dark:text-indigo-400">{$dashboard.active_transcodes.length} transcoding</span>
+						<a href="/transcoder" class="font-semibold text-indigo-600 hover:text-indigo-500 transition-colors dark:text-indigo-400 dark:hover:text-indigo-300">{$dashboard.active_transcodes.length} transcoding</a>
 					{/if}
 					{#if $dashboard.transcoder_online && (Number($dashboard.transcoder_stats?.pending) || 0) > 0}
 						<span class="font-semibold text-yellow-600 dark:text-yellow-400">{$dashboard.transcoder_stats?.pending} queued</span>
@@ -362,6 +369,7 @@
 	</div>
 </div>
 {/if}
+<BottomStatsBar />
 
 <!-- Folder import wizard (global, triggered from gear menu) -->
 <ImportWizard

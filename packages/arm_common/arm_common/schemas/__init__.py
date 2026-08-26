@@ -110,10 +110,13 @@ from arm_common.schemas.transcoder import (
     TranscodeWorkerView,
 )
 from arm_common.schemas.system import (
+    MemoryInfo,
     PathStatus,
     StatsResponse,
+    StorageRoot,
     SystemDiagnosticCheck,
     SystemDiagnosticsResponse,
+    SystemResourcesResponse,
     SystemVersionResponse,
 )
 from arm_common.schemas.settings import (
@@ -211,6 +214,7 @@ __all__ = [
     "MakemkvKeyStatusReport",
     "ManualTriggerRequest",
     "ManualTriggerResponse",
+    "MemoryInfo",
     "MkdirRequest",
     "MoveRequest",
     "NamingPreviewItem",
@@ -259,6 +263,8 @@ __all__ = [
     "SettingsGroup",
     "SettingsSchemaResponse",
     "StatsResponse",
+    "StorageRoot",
+    "SystemResourcesResponse",
     "SystemVersionResponse",
     "TemplatePreviewRequest",
     "TemplatePreviewResponse",

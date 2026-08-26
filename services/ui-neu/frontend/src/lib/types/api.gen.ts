@@ -1466,6 +1466,28 @@ export type ManualTriggerResponse = {
 export type MediaType = 'movie' | 'tv' | 'music' | 'data' | 'iso';
 
 /**
+ * MemoryInfo
+ */
+export type MemoryInfo = {
+    /**
+     * Total Gb
+     */
+    total_gb: number;
+    /**
+     * Used Gb
+     */
+    used_gb: number;
+    /**
+     * Free Gb
+     */
+    free_gb: number;
+    /**
+     * Percent
+     */
+    percent: number;
+};
+
+/**
  * MetadataCandidate
  */
 export type MetadataCandidate = {
@@ -2764,6 +2786,36 @@ export type StatsResponse = {
 };
 
 /**
+ * StorageRoot
+ */
+export type StorageRoot = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Total Gb
+     */
+    total_gb: number;
+    /**
+     * Used Gb
+     */
+    used_gb: number;
+    /**
+     * Free Gb
+     */
+    free_gb: number;
+    /**
+     * Percent
+     */
+    percent: number;
+};
+
+/**
  * SystemDiagnosticCheck
  */
 export type SystemDiagnosticCheck = {
@@ -2797,6 +2849,25 @@ export type SystemDiagnosticsResponse = {
      * Paths
      */
     paths: Array<PathStatus>;
+};
+
+/**
+ * SystemResourcesResponse
+ */
+export type SystemResourcesResponse = {
+    /**
+     * Cpu Percent
+     */
+    cpu_percent: number;
+    /**
+     * Cpu Temp
+     */
+    cpu_temp: number;
+    memory: MemoryInfo;
+    /**
+     * Storage
+     */
+    storage: Array<StorageRoot>;
 };
 
 /**
@@ -7102,6 +7173,37 @@ export type StatsApiSystemStatsGetResponses = {
 };
 
 export type StatsApiSystemStatsGetResponse = StatsApiSystemStatsGetResponses[keyof StatsApiSystemStatsGetResponses];
+
+export type ResourcesApiSystemResourcesGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/system/resources';
+};
+
+export type ResourcesApiSystemResourcesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ResourcesApiSystemResourcesGetError = ResourcesApiSystemResourcesGetErrors[keyof ResourcesApiSystemResourcesGetErrors];
+
+export type ResourcesApiSystemResourcesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SystemResourcesResponse;
+};
+
+export type ResourcesApiSystemResourcesGetResponse = ResourcesApiSystemResourcesGetResponses[keyof ResourcesApiSystemResourcesGetResponses];
 
 export type SystemVersionApiSystemVersionGetData = {
     body?: never;

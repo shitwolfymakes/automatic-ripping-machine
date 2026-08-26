@@ -15,6 +15,10 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+import psutil  # type: ignore[import-untyped]
+
+from arm_backend.disk_usage_cache import get_disk_usage
+
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -26,10 +30,13 @@ from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_backend.utils import default_roots
 from arm_common import Config, Drive, DriveStatus, Event, Job, KeydbState, User
 from arm_common.schemas import (
+    MemoryInfo,
     PathStatus,
     StatsResponse,
+    StorageRoot,
     SystemDiagnosticCheck,
     SystemDiagnosticsResponse,
+    SystemResourcesResponse,
     SystemVersionResponse,
 )
 
@@ -175,6 +182,58 @@ async def stats(
         jobs_by_status=by_status,
         drives_online=drives_online,
         events_unsent=events_unsent,
+    )
+
+
+_GiB = 1073741824
+_CPU_TEMP_KEYS = ("coretemp", "cpu_thermal", "k10temp")
+
+
+def _cpu_temp() -> float:
+    try:
+        temps = psutil.sensors_temperatures()
+    except AttributeError, OSError:
+        return 0.0
+    for key in _CPU_TEMP_KEYS:
+        readings = temps.get(key)
+        if readings:
+            return float(readings[0].current)
+    return 0.0
+
+
+@router.get("/resources", response_model=SystemResourcesResponse)
+async def resources(
+    request: Request,
+    _: User = Depends(require_jwt),
+) -> SystemResourcesResponse:
+    cpu_percent = psutil.cpu_percent(interval=None)
+    mem = psutil.virtual_memory()
+    memory = MemoryInfo(
+        total_gb=round(mem.total / _GiB, 1),
+        used_gb=round(mem.used / _GiB, 1),
+        free_gb=round(mem.available / _GiB, 1),
+        percent=mem.percent,
+    )
+    storage: list[StorageRoot] = []
+    for name, path in _roots(request).items():
+        usage = get_disk_usage(path)
+        if usage is None:
+            continue
+        storage.append(
+            StorageRoot(
+                name=name,
+                path=path,
+                total_gb=round(usage["total"] / _GiB, 1),
+                used_gb=round(usage["used"] / _GiB, 1),
+                free_gb=round(usage["free"] / _GiB, 1),
+                percent=usage["percent"],
+            )
+        )
+    return SystemResourcesResponse(
+        cpu_percent=cpu_percent,
+        cpu_temp=_cpu_temp(),
+        memory=memory,
+        storage=storage,
     )
 
 

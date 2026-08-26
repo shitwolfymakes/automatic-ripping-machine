@@ -29,3 +29,26 @@ class StatsResponse(BaseModel):
 
 class SystemVersionResponse(BaseModel):
     version: str
+
+
+class MemoryInfo(BaseModel):
+    total_gb: float
+    used_gb: float
+    free_gb: float
+    percent: float
+
+
+class StorageRoot(BaseModel):
+    name: str
+    path: str
+    total_gb: float
+    used_gb: float
+    free_gb: float
+    percent: float
+
+
+class SystemResourcesResponse(BaseModel):
+    cpu_percent: float
+    cpu_temp: float
+    memory: MemoryInfo
+    storage: list[StorageRoot]

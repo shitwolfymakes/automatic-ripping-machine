@@ -17,6 +17,7 @@ from arm_backend.crash_recovery import sweep_in_flight_jobs
 from arm_backend.db import SessionLocal
 from arm_backend.gpu_probe import load_configured_gpus
 from arm_backend import image_cache
+from arm_backend.disk_refresh import DiskRefresher
 from arm_backend.log_tailer import LogTailer
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.notification_dispatcher import (
@@ -198,9 +199,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     log_tailer_task = asyncio.create_task(log_tailer.run())
     app.state.log_tailer = log_tailer
 
+    _roots_map = getattr(app.state, "system_paths", None) or {
+        "MEDIA_ROOT": settings.MEDIA_ROOT,
+        "RAW_ROOT": settings.RAW_ROOT,
+        "ISO_INGRESS_ROOT": settings.ISO_INGRESS_ROOT,
+        "LOG_DIR": "/logs",
+    }
+    disk_refresher = DiskRefresher(list(_roots_map.values()))
+    disk_refresher_task = asyncio.create_task(disk_refresher.run())
+    app.state.disk_refresher = disk_refresher
+
     try:
         yield
     finally:
+        disk_refresher.stop()
+        try:
+            await asyncio.wait_for(disk_refresher_task, timeout=10.0)
+        except TimeoutError, asyncio.CancelledError:
+            disk_refresher_task.cancel()
         log_tailer.stop()
         try:
             await asyncio.wait_for(log_tailer_task, timeout=10.0)
