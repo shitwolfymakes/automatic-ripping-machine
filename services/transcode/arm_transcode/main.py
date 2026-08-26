@@ -19,6 +19,7 @@ Container exits when the run() coroutine returns.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import ssl
@@ -36,6 +37,7 @@ from arm_common.enums import TranscodeTool
 from arm_transcode.api_client import BackendClient
 from arm_transcode.atomic import atomic_output
 from arm_transcode.config import TranscoderConfig
+from arm_transcode.encoder_probe import probe_encoders
 from arm_transcode.ffmpeg_audio import transcode_audio
 from arm_transcode.handbrake import transcode_handbrake
 from arm_transcode.heartbeat import HeartbeatPump, ProgressState
@@ -233,6 +235,9 @@ async def run() -> int:
 
 
 def main() -> int:
+    if "--probe-encoders" in sys.argv[1:]:
+        print(json.dumps(probe_encoders(), separators=(",", ":")))
+        return 0
     return asyncio.run(run())
 
 

@@ -143,4 +143,11 @@ if [[ -x /usr/local/bin/update_key.sh ]] && command -v makemkvcon >/dev/null 2>&
 fi
 
 umask 002
+# gosu switches UID but preserves the inherited environment — including
+# HOME=/root from the root-owned parent. Processes running as `arm` must see
+# HOME=/home/arm so `~` resolves to the arm user's dotfiles: paramiko (via the
+# transcode dispatcher's docker-py ssh:// client) reads ~/.ssh/known_hosts, and
+# with HOME=/root it looks in the nonexistent /root/.ssh and the remote
+# transcode host key is "not found in known_hosts" → dispatcher disabled.
+export HOME=/home/arm
 exec /usr/bin/tini -- gosu arm "$@"
