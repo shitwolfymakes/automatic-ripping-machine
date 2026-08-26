@@ -252,6 +252,45 @@ describe('DiscReviewWidget', () => {
 		});
 	});
 
+	describe('post-rip mode', () => {
+		it('post-rip job shows Apply session as primary and hides Start rip', async () => {
+			mockFetchJob.mockResolvedValue(detail({ status: 'ripped', title: 'Test Movie', disc_type: 'bluray' }));
+			renderWidget({ status: 'ripped' });
+			await waitFor(() => expect(screen.getByText('Apply session & transcode')).toBeInTheDocument());
+			expect(screen.queryByText('Start rip')).not.toBeInTheDocument();
+		});
+
+		it('pre-rip job still shows Start rip (regression)', async () => {
+			renderWidget({ status: 'awaiting_review' });
+			await waitFor(() => expect(screen.getByText('Start rip')).toBeInTheDocument());
+		});
+	});
+
+	describe('phase badge + title fallback', () => {
+		it('renders a phase badge for a post-rip card', async () => {
+			mockFetchJob.mockResolvedValue(detail({ status: 'ripped', title: 'MysterySuspense', disc_type: 'dvd' }));
+			renderWidget({ id: 'job_z', status: 'ripped', title: 'MysterySuspense', disc_type: 'dvd' });
+			await waitFor(() => {
+				expect(screen.getByText('RIPPED · NEEDS SESSION')).toBeInTheDocument();
+			});
+		});
+
+		it('shows RIPPED · NEEDS TITLE when post-rip job has a pending session but no title', async () => {
+			mockFetchJob.mockResolvedValue(
+				detail({ status: 'ripped', title: null, metadata_json: { pending_session_id: 'sess_x' } })
+			);
+			renderWidget({ status: 'ripped', title: null, metadata_json: { pending_session_id: 'sess_x' } });
+			await waitFor(() => expect(screen.getByText('RIPPED · NEEDS TITLE')).toBeInTheDocument());
+		});
+
+		it('unidentified disc shows a clean fallback, not "Untitled"', async () => {
+			renderWidget({ id: 'job_u', status: 'awaiting_user_id', title: null, disc_type: 'unknown' as any });
+			await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
+			expect(screen.queryByText('Untitled')).toBeNull();
+			expect(screen.getByText(/Unidentified disc/)).toBeInTheDocument();
+		});
+	});
+
 	it('renders skeleton when job prop is omitted', () => {
 		const { container } = renderComponent(DiscReviewWidget, { props: {} });
 		expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();

@@ -4,6 +4,7 @@
 	import { abandonJob, fetchJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { readJobMetadata, videoTypeLabel } from '$lib/utils/job-fields';
+	import { reviewPhaseBadge } from '$lib/utils/job-status';
 	import CountdownTimer from './CountdownTimer.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
 	import PosterImage from './PosterImage.svelte';
@@ -64,6 +65,10 @@
 			(data?.job?.status ?? job?.status) ?? ''
 		)
 	);
+	// Post-rip phase: the disc already ripped and is awaiting a transcode session.
+	// The card comes back so the operator can apply a session (which starts the
+	// transcode) and fix metadata. No countdown, and "Apply session" is primary.
+	let isPostRip = $derived(['ripped', 'ripped_partial'].includes((data?.job?.status ?? job?.status) ?? ''));
 
 	// Prefer the reloaded detail (fresh after an apply/resolve) over the list-level
 	// `job` prop, so the poster/title update immediately without a full dashboard
@@ -83,6 +88,22 @@
 		jobMeta.pending_session_id
 			? (sessionNameById.get(jobMeta.pending_session_id) ?? shortId(jobMeta.pending_session_id))
 			: null
+	);
+
+	// Header phase pill. For a post-rip job that already HAS a session pending but
+	// is missing a title, switch the label to NEEDS TITLE; otherwise use the
+	// helper's default (NEEDS SESSION for post-rip).
+	let phaseBadge = $derived.by(() => {
+		const b = reviewPhaseBadge(displayJob);
+		if (isPostRip && jobMeta.pending_session_id && !(displayJob.title?.trim())) {
+			return { ...b, label: 'RIPPED · NEEDS TITLE' };
+		}
+		return b;
+	});
+	// Clean fallback for an unidentified disc: prefer the title, then a
+	// generic phrase — never the bare "Untitled".
+	let displayTitle = $derived(
+		displayJob.title?.trim() || 'Unidentified disc'
 	);
 
 	async function loadDetail() {
@@ -207,7 +228,7 @@
 		<div class="flex items-center gap-2">
 			<div class="h-2 w-2 animate-pulse rounded-full bg-white/80"></div>
 			<span class="text-sm font-semibold text-on-primary">
-				{isReviewGate ? 'Ready — Review & Start' : 'Awaiting Review'}
+				{isReviewGate ? 'Ready — Review & Start' : isPostRip ? 'Ripped — Apply Session' : 'Awaiting Review'}
 			</span>
 		</div>
 		<!-- Timed review gate: cosmetic countdown to auto-start (the ripper owns the
@@ -233,8 +254,9 @@
 
 		<div class="min-w-0 flex-1">
 			<div class="flex items-center gap-2">
+				<span class="shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white" style:background-color={phaseBadge.accent}>{phaseBadge.label}</span>
 				<h3 class="min-w-0 truncate text-lg font-semibold text-gray-900 dark:text-white">
-					{displayJob.title || 'Untitled'}
+					{displayTitle}
 					{#if displayJob.year}
 						<span class="font-normal text-gray-500 dark:text-gray-400">({displayJob.year})</span>
 					{/if}
@@ -252,7 +274,7 @@
 				{#if displayJob.disc_number != null}
 					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">Disc {displayJob.disc_number}{#if displayJob.disc_total != null}/{displayJob.disc_total}{/if}</span>
 				{/if}
-				{#if jobMeta.titleCount != null}
+				{#if jobMeta.titleCount != null && jobMeta.titleCount > 0}
 					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{jobMeta.titleCount} titles</span>
 				{/if}
 				{#if jobMeta.season}
@@ -296,7 +318,7 @@
 		{#if isMusic}
 			<button onclick={() => toggleSection('music')} class="{btnBase} {showMusicSearch ? 'bg-primary text-on-primary' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}">Search</button>
 		{/if}
-		<button onclick={() => (showApplySession = true)} class="{btnBase} bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15">Apply session</button>
+		<button onclick={() => (showApplySession = true)} class="{btnBase} {isPostRip ? 'bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}">{isPostRip ? 'Apply session & transcode' : 'Apply session'}</button>
 		<a
 			href="/jobs/{job.id}"
 			class="{btnBase} bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15"

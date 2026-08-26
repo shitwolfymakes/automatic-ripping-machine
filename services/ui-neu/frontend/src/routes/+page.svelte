@@ -67,9 +67,15 @@
 	let waitingJobs = $derived(
 		activeJobs.filter((j: JobView) => {
 			if (dismissedJobIds.has(j.id)) return false;
-			// In review while awaiting (incl. awaiting_review), or sticky after an
-			// apply promoted it to identified.
-			return isAwaiting(j) || (stickyReviewIds.has(j.id) && j.status?.toLowerCase() === 'identified');
+			// In review while awaiting (incl. awaiting_review), sticky after an apply
+			// promoted it to identified, OR post-rip awaiting a transcode session
+			// (ripped/ripped_partial, no session in flight) — these come BACK as a
+			// rich review card so the operator can apply a session + fix metadata.
+			return (
+				isAwaiting(j) ||
+				(stickyReviewIds.has(j.id) && j.status?.toLowerCase() === 'identified') ||
+				isAwaitingAction(j)
+			);
 		})
 	);
 	let waitingJobIds = $derived(new Set(waitingJobs.map((j) => j.id)));
