@@ -15,6 +15,7 @@ over the live file.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -186,6 +187,6 @@ async def refresh(http: httpx.AsyncClient, dir_path: Path) -> int:
             with open(tmp_path, "wb") as out:
                 async for chunk in resp.aiter_bytes():
                     out.write(chunk)
-        return build_index(tmp_path, Path(dir_path) / INDEX_FILENAME)
+        return await asyncio.to_thread(build_index, tmp_path, Path(dir_path) / INDEX_FILENAME)
     finally:
         tmp_path.unlink(missing_ok=True)

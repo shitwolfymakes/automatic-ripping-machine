@@ -382,16 +382,20 @@ async def identify(
             None,
         )
         if store is not None and content_hash:
-            thediscdb_match = await asyncio.to_thread(store.lookup, content_hash)
-            if thediscdb_match is not None:
-                job.metadata_json = {
-                    **(job.metadata_json or {}),
-                    "thediscdb": {
-                        **build_map(thediscdb_match, scan),
-                        "matched_at": datetime.now(timezone.utc).isoformat(),
-                    },
-                }
-                logger.info("thediscdb: matched job_id=%s release=%s", job.id, thediscdb_match.release_slug)
+            try:
+                thediscdb_match = await asyncio.to_thread(store.lookup, content_hash)
+                if thediscdb_match is not None:
+                    job.metadata_json = {
+                        **(job.metadata_json or {}),
+                        "thediscdb": {
+                            **build_map(thediscdb_match, scan),
+                            "matched_at": datetime.now(timezone.utc).isoformat(),
+                        },
+                    }
+                    logger.info("thediscdb: matched job_id=%s release=%s", job.id, thediscdb_match.release_slug)
+            except Exception as e:
+                logger.warning("thediscdb: lookup failed job_id=%s: %s", job.id, e)
+                thediscdb_match = None
 
     if already_identified:
         # Guard 1: preserve existing identity — do not re-run the dispatcher or
