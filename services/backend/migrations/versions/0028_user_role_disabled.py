@@ -1,7 +1,7 @@
 """users: role + disabled for the fixed admin/guest model
 
 Revision ID: 0028_user_role_disabled
-Revises: 0027_add_host_table
+Revises: 0026_add_makemkv_sdf_columns
 Create Date: 2026-07-12
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0028_user_role_disabled"
-down_revision: Union[str, None] = "0027_add_host_table"
+down_revision: Union[str, None] = "0026_add_makemkv_sdf_columns"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

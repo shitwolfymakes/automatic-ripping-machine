@@ -224,5 +224,10 @@ services/ui/src/api/generated.ts
 .playwright-mcp/
 services/ui-neu/nginx.http.conf
 
+# Host-specific deploy notes for a contributor's personal infra — carried live
+# credentials and host-targeting detail. Removed from the tree; keep it out.
+# (Committed memory under .claude/memory/ is otherwise intentional — see CLAUDE.md.)
+.claude/memory/project_hifi_v3_deploy.md
+
 # Local gh CLI response cache — accidentally committed; must stay untracked.
 /gh-cli-cache/

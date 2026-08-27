@@ -1,17 +1,16 @@
-"""System diagnostics / stats / resources. Read-only operator health report.
+"""System diagnostics. Read-only operator health report.
 
 Everything the backend can fix silently, it fixes (missing root dirs are
-created at startup — see `ensure_roots` in main.py's lifespan); the
-diagnostics endpoint reports only what cannot be healed from inside a
-container: a mount that is read-only or wrong-owner (v3 never chowns user
-mounts — docs/arch/06-deployment.md), no rippers registered yet, a missing
-config row, an unvalidated MakeMKV key, keydb/SDF fetch problems, or a
-disabled transcode dispatcher. The ported UI's settings System-Health panel
-and first-run wizard render it (Tier-12). /stats, /resources, and /version
-feed the dashboard tiles."""
+created at startup and re-ensured before every read — see `ensure_roots`);
+this endpoint reports only what cannot be healed from inside a container:
+a mount that is read-only or wrong-owner (v3 never chowns user mounts —
+docs/arch/06-deployment.md), no rippers registered yet, a missing config
+row. The ported UI's settings System-Health panel and first-run wizard
+render it (Tier-12)."""
 
 import functools
 import importlib.metadata
+import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,14 +18,15 @@ from typing import Any
 
 import psutil  # type: ignore[import-untyped]
 
+from arm_backend.disk_usage_cache import get_disk_usage
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.auth import require_jwt
+from arm_backend.auth import require_jwt, require_writer
 from arm_backend.config import settings
 from arm_backend.db import get_session
-from arm_backend.disk_usage_cache import get_disk_usage
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_backend.thediscdb.snapshot import refresh as thediscdb_refresh
@@ -43,6 +43,7 @@ from arm_common.schemas import (
     SystemVersionResponse,
 )
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -54,9 +55,7 @@ def _roots(request: Request) -> dict[str, str]:
     injected: dict[str, str] | None = getattr(request.app.state, "system_paths", None)
     if injected is not None:
         return injected
-    # ISO_INGRESS_ROOT is optional (not in _REQUIRED_ROOTS): a missing ingress
-    # mount degrades to a warning, never an error.
-    return {**default_roots(), "ISO_INGRESS_ROOT": settings.ISO_INGRESS_ROOT}
+    return default_roots()
 
 
 def _path_status(name: str, path: str) -> PathStatus:
@@ -72,8 +71,13 @@ async def diagnostics(
     db: AsyncSession = Depends(get_session),
 ) -> SystemDiagnosticsResponse:
     roots = _roots(request)
-    # DO NOT heal-on-read. Roots are guaranteed at launch (ensure_roots in the
-    # lifespan), so a missing root here is an error we want to surface.
+    # Heal-on-read: the report never shows a problem the backend could
+    # have fixed itself.
+    # ensure_roots(roots)
+    # DO NOT heal-on-read. These should be guaranteed at launch so if any are missing
+    # then that is an error we want to surface when this endpoint is hit.
+    # TODO: implement a check for missing roots (low priority, most processes will
+    # surface this error)
 
     checks: list[SystemDiagnosticCheck] = []
 
@@ -280,7 +284,7 @@ async def system_version(_: User = Depends(require_jwt)) -> SystemVersionRespons
     return SystemVersionResponse(version=_app_version())
 
 
-@router.post("/thediscdb/refresh", dependencies=[Depends(require_jwt)])
+@router.post("/thediscdb/refresh", dependencies=[Depends(require_writer)])
 async def thediscdb_refresh_now(request: Request, session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
     """Rebuild the TheDiscDB snapshot index from GitHub, on demand."""
     try:

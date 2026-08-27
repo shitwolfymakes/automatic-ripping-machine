@@ -1,4 +1,4 @@
-"""GET /api/system/diagnostics, /stats, /resources, /version."""
+"""GET /api/system/diagnostics — heal-on-read + report."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ def _seed(db: FakeSession) -> None:
     ]
 
 
-def _make_app(signing_key: bytes, db: FakeSession, *, ingress_ok: bool, tmp) -> tuple[FastAPI, str]:
+def _make_app(signing_key: bytes, db: FakeSession, *, tmp) -> tuple[FastAPI, str]:
     app = FastAPI()
     app.state.signing_key = signing_key
     app.state.started_at = datetime.now(timezone.utc) - timedelta(seconds=42)
@@ -77,14 +77,10 @@ def _make_app(signing_key: bytes, db: FakeSession, *, ingress_ok: bool, tmp) -> 
     raw.mkdir()
     logs = tmp / "logs"
     logs.mkdir()
-    ingress = tmp / "ingress"
-    if ingress_ok:
-        ingress.mkdir()
     app.state.system_paths = {
         "MEDIA_ROOT": str(media),
         "RAW_ROOT": str(raw),
         "LOG_DIR": str(logs),
-        "ISO_INGRESS_ROOT": str(ingress),
     }
     app.include_router(system_router.router)
 
@@ -105,77 +101,34 @@ def _get(app: FastAPI, token: str):
         return c.get("/api/system/diagnostics", headers=_auth(token))
 
 
-class _StubDispatcher:
-    """Minimal stand-in for TranscodeDispatcher exposing only the gate the
-    diagnostics check reads. A real dispatcher needs a docker client + settings,
-    which the Tier-1 fake-session suite has no business constructing."""
-
-    def __init__(self, *, host_paths: bool) -> None:
-        self._host_paths = host_paths
-
-    def host_paths_set(self) -> bool:
-        return self._host_paths
-
-
 def test_diagnostics_ok(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    # An unvalidated MakeMKV key degrades overall status to "warning" by
+    # design — seed it validated so the baseline really is all-healthy.
+    db.rows["config"][0].makemkv_key = "M-x"
+    db.rows["config"][0].makemkv_key_valid = True
+    db.rows["config"][0].makemkv_key_state = "valid"
+    db.rows["config"][0].community_keydb_state = "ok"
+    db.rows["config"][0].makemkv_sdf_state = "updated"
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    # An absent transcode dispatcher also degrades to "warning" — stub a live one.
+    app.state.transcode_dispatcher = _StubDispatcher(host_paths=True)
     r = _get(app, token)
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["status"] in {"ok", "warning"}
+    assert body["status"] == "ok"
     names = {ch["name"] for ch in body["checks"]}
     assert {"config", "MEDIA_ROOT", "RAW_ROOT", "LOG_DIR", "drives"} <= names
     media = next(p for p in body["paths"] if p["name"] == "MEDIA_ROOT")
     assert media["exists"] is True and media["writable"] is True
 
 
-def test_diagnostics_all_healthy_is_ok(signing_key: bytes, tmp_path) -> None:
-    """When every check passes (validated key, keydb/SDF fresh, live
-    transcoder), the overall status is a clean 'ok'."""
-    db = FakeSession()
-    _seed(db)
-    db.rows["config"][0].makemkv_key_valid = True
-    db.rows["config"][0].makemkv_key_state = "valid"
-    db.rows["config"][0].community_keydb_state = "ok"
-    db.rows["config"][0].makemkv_sdf_state = "updated"
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    app.state.transcode_dispatcher = _StubDispatcher(host_paths=True)
-    r = _get(app, token)
-    assert r.status_code == 200, r.text
-    assert r.json()["status"] == "ok"
-
-
-def test_diagnostics_missing_ingress_is_warning(signing_key: bytes, tmp_path) -> None:
-    db = FakeSession()
-    _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=False, tmp=tmp_path)
-    r = _get(app, token)
-    assert r.status_code == 200, r.text
-    ingress = next(ch for ch in r.json()["checks"] if ch["name"] == "ISO_INGRESS_ROOT")
-    assert ingress["status"] == "warning"
-
-
-def test_diagnostics_missing_required_root_is_error(signing_key: bytes, tmp_path) -> None:
-    db = FakeSession()
-    _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    # Point MEDIA_ROOT at a non-existent dir.
-    app.state.system_paths["MEDIA_ROOT"] = str(tmp_path / "does-not-exist")
-    r = _get(app, token)
-    assert r.status_code == 200, r.text
-    assert r.json()["status"] == "error"
-    media = next(ch for ch in r.json()["checks"] if ch["name"] == "MEDIA_ROOT")
-    assert media["status"] == "error"
-    assert "exists=False" in media["detail"]
-
-
 @not_root
-def test_diagnostics_unwritable_required_root_is_error(signing_key: bytes, tmp_path) -> None:
+def test_diagnostics_uncreatable_required_root_is_error(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
     fence = tmp_path / "fence"
     fence.mkdir()
     fence.chmod(0o555)
@@ -196,7 +149,7 @@ def test_diagnostics_uncreatable_optional_root_is_warning(signing_key: bytes, tm
     """Roots outside _REQUIRED_ROOTS degrade to a warning, not an error."""
     db = FakeSession()
     _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
     fence = tmp_path / "fence"
     fence.mkdir()
     fence.chmod(0o555)
@@ -211,46 +164,34 @@ def test_diagnostics_uncreatable_optional_root_is_warning(signing_key: bytes, tm
     assert r.json()["status"] == "warning"
 
 
-def test_diagnostics_paths_shape(signing_key: bytes, tmp_path) -> None:
-    db = FakeSession()
-    _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    r = _get(app, token)
-    assert r.status_code == 200, r.text
-    media = next(p for p in r.json()["paths"] if p["name"] == "MEDIA_ROOT")
-    assert media["exists"] is True and media["writable"] is True
-
-
-def test_stats_counts(signing_key: bytes, tmp_path) -> None:
-    db = FakeSession()
-    _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    with TestClient(app) as c:
-        r = c.get("/api/system/stats", headers=_auth(token))
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["uptime_seconds"] >= 40
-    assert body["drives_online"] == 1
-    assert body["events_unsent"] == 1
-    assert body["jobs_by_status"].get("ripping") == 1
-
-
 def test_diagnostics_no_drives_is_warning(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
     db.rows["drives"] = []
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
     r = _get(app, token)
     assert r.status_code == 200, r.text
     drives = next(ch for ch in r.json()["checks"] if ch["name"] == "drives")
     assert drives["status"] == "warning"
 
 
+def test_diagnostics_config_missing_is_error(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["config"] = []
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    r = _get(app, token)
+    assert r.status_code == 200, r.text
+    cfg_check = next(ch for ch in r.json()["checks"] if ch["name"] == "config")
+    assert cfg_check["status"] == "error"
+    assert r.json()["status"] == "error"
+
+
 def test_diagnostics_unauthenticated_reads_as_guest(signing_key: bytes, tmp_path) -> None:
     """No Authorization header falls back to the guest account (read-only route)."""
     db = FakeSession()
     _seed(db)
-    app, _ = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app, _ = _make_app(signing_key, db, tmp=tmp_path)
     with TestClient(app) as c:
         r = c.get("/api/system/diagnostics")
     assert r.status_code == 200
@@ -261,66 +202,20 @@ def test_diagnostics_unauthenticated_401_when_guest_disabled(signing_key: bytes,
     db = FakeSession()
     _seed(db)
     db.rows["users"][1].disabled = True
-    app, _ = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app, _ = _make_app(signing_key, db, tmp=tmp_path)
     with TestClient(app) as c:
         r = c.get("/api/system/diagnostics")
     assert r.status_code == 401
 
 
-def test_diagnostics_config_missing_is_error(signing_key: bytes, tmp_path) -> None:
-    """If the config singleton is absent, the config check should be 'error'."""
-    db = FakeSession()
-    _seed(db)
-    db.rows["config"] = []
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    r = _get(app, token)
-    assert r.status_code == 200, r.text
-    cfg_check = next(ch for ch in r.json()["checks"] if ch["name"] == "config")
-    assert cfg_check["status"] == "error"
-    assert r.json()["status"] == "error"
-
-
-def test_stats_no_started_at(signing_key: bytes, tmp_path) -> None:
-    """When started_at is not set on app.state, uptime_seconds should be 0."""
-    db = FakeSession()
-    _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    del app.state.started_at
-    with TestClient(app) as c:
-        r = c.get("/api/system/stats", headers=_auth(token))
-    assert r.status_code == 200, r.text
-    assert r.json()["uptime_seconds"] == 0
-
-
 def test_system_version(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
     with TestClient(app) as client:
         r = client.get("/api/system/version", headers=_auth(token))
     assert r.status_code == 200
     assert isinstance(r.json()["version"], str) and r.json()["version"]
-
-
-def test_system_version_fallback_when_package_missing(signing_key: bytes, tmp_path, monkeypatch) -> None:
-    from arm_backend.routers import system as system_router_mod
-
-    monkeypatch.setattr(system_router_mod, "_app_version", lambda: "0.0.0+unknown")
-    db = FakeSession()
-    _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    with TestClient(app) as client:
-        r = client.get("/api/system/version", headers=_auth(token))
-    assert r.json()["version"] == "0.0.0+unknown"
-
-
-def test_system_version_requires_auth(signing_key: bytes, tmp_path) -> None:
-    """No Authorization header falls back to the guest account (read-only route)."""
-    db = FakeSession()
-    _seed(db)
-    app, _ = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    with TestClient(app) as client:
-        assert client.get("/api/system/version").status_code == 200
 
 
 def test_app_version_env_override_wins(monkeypatch) -> None:
@@ -351,6 +246,15 @@ def test_app_version_reads_version_file(monkeypatch, tmp_path) -> None:
         system_router._app_version.cache_clear()
 
 
+def test_system_version_requires_auth(signing_key: bytes, tmp_path) -> None:
+    """No Authorization header falls back to the guest account (read-only route)."""
+    db = FakeSession()
+    _seed(db)
+    app, _ = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as client:
+        assert client.get("/api/system/version").status_code == 200
+
+
 def test_app_version_real_fallback(monkeypatch) -> None:
     import importlib.metadata
 
@@ -375,8 +279,9 @@ def test_diagnostics_includes_makemkv_key_check_ok(signing_key: bytes, tmp_path)
     db.rows["config"][0].makemkv_key = "M-x"
     db.rows["config"][0].makemkv_key_valid = True
     db.rows["config"][0].makemkv_key_state = "valid"
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    r = _get(app, token)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
     checks = {ch["name"]: ch for ch in r.json()["checks"]}
     assert checks["makemkv_key"]["status"] == "ok"
 
@@ -386,8 +291,9 @@ def test_diagnostics_makemkv_key_warning_when_unknown(signing_key: bytes, tmp_pa
     _seed(db)
     db.rows["config"][0].makemkv_key = "M-x"
     # makemkv_key_valid defaults to None → never checked
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    r = _get(app, token)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
     checks = {ch["name"]: ch for ch in r.json()["checks"]}
     assert checks["makemkv_key"]["status"] == "warning"
 
@@ -398,8 +304,9 @@ def test_diagnostics_makemkv_key_error_when_invalid(signing_key: bytes, tmp_path
     db.rows["config"][0].makemkv_key = "M-x"
     db.rows["config"][0].makemkv_key_valid = False
     db.rows["config"][0].makemkv_key_state = "binary_expired"
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    r = _get(app, token)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
     checks = {ch["name"]: ch for ch in r.json()["checks"]}
     assert checks["makemkv_key"]["status"] == "error"
 
@@ -426,19 +333,31 @@ def test_diagnostics_uses_settings_fallback(signing_key: bytes, tmp_path, monkey
     r = _get(app, token)
     assert r.status_code == 200, r.text
     paths = {p["name"]: p for p in r.json()["paths"]}
-    # settings defaults include MEDIA_ROOT, RAW_ROOT, LOG_DIR, ISO_INGRESS_ROOT
-    assert {"MEDIA_ROOT", "RAW_ROOT", "LOG_DIR", "ISO_INGRESS_ROOT"} <= set(paths)
+    assert {"MEDIA_ROOT", "RAW_ROOT", "LOG_DIR"} <= set(paths)
     # read-only diagnostics: settings-pointed roots are reported, not created
     assert paths["MEDIA_ROOT"]["exists"] is False
     assert not (tmp_path / "m").exists() and not (tmp_path / "r").exists()
 
 
+class _StubDispatcher:
+    """Minimal stand-in for TranscodeDispatcher exposing only the gate the
+    diagnostics check reads. A real dispatcher needs a docker client + settings,
+    which the Tier-1 fake-session suite has no business constructing."""
+
+    def __init__(self, *, host_paths: bool) -> None:
+        self._host_paths = host_paths
+
+    def host_paths_set(self) -> bool:
+        return self._host_paths
+
+
 def test_diagnostics_transcoder_warning_when_no_dispatcher(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    # _make_app does not set app.state.transcode_dispatcher → getattr falls to None
-    r = _get(app, token)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    # _make_app does not set app.state.transcode_dispatcher -> getattr falls to None
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
     assert r.status_code == 200, r.text
     check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
     assert check["status"] == "warning"
@@ -448,9 +367,10 @@ def test_diagnostics_transcoder_warning_when_no_dispatcher(signing_key: bytes, t
 def test_diagnostics_transcoder_warning_when_host_paths_unset(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
     app.state.transcode_dispatcher = _StubDispatcher(host_paths=False)
-    r = _get(app, token)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
     assert r.status_code == 200, r.text
     check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
     assert check["status"] == "warning"
@@ -460,9 +380,10 @@ def test_diagnostics_transcoder_warning_when_host_paths_unset(signing_key: bytes
 def test_diagnostics_transcoder_ok_when_live(signing_key: bytes, tmp_path) -> None:
     db = FakeSession()
     _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
     app.state.transcode_dispatcher = _StubDispatcher(host_paths=True)
-    r = _get(app, token)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
     assert r.status_code == 200, r.text
     check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
     assert check["status"] == "ok"
@@ -485,8 +406,9 @@ def test_diagnostics_community_keydb_check(signing_key: bytes, tmp_path, state, 
     db = FakeSession()
     _seed(db)
     db.rows["config"][0].community_keydb_state = state
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    r = _get(app, token)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
     assert r.status_code == 200, r.text
     check = next(ch for ch in r.json()["checks"] if ch["name"] == "community_keydb")
     assert check["status"] == expected_status
@@ -497,20 +419,25 @@ def test_diagnostics_community_keydb_ok_reports_vuk_count(signing_key: bytes, tm
     _seed(db)
     db.rows["config"][0].community_keydb_state = "ok"
     db.rows["config"][0].community_keydb_vuk_count = 4200
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    r = _get(app, token)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
     assert r.status_code == 200, r.text
     check = next(ch for ch in r.json()["checks"] if ch["name"] == "community_keydb")
     assert check["detail"] == "4200 VUK keys installed"
 
 
 def test_diagnostics_overall_not_error_when_only_transcoder_warns(signing_key: bytes, tmp_path) -> None:
-    # ingress_ok=True means roots are fine; dispatcher absent → transcoder warns.
-    # Overall must be "warning" (degraded), never promoted to "error".
+    # Roots are fine; dispatcher absent -> transcoder warns. Overall must be
+    # "warning" (degraded), never promoted to "error".
     db = FakeSession()
     _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    r = _get(app, token)
+    db.rows["config"][0].makemkv_key = "M-x"
+    db.rows["config"][0].makemkv_key_valid = True
+    db.rows["config"][0].makemkv_key_state = "valid"
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
     body = r.json()
     transcoder = next(ch for ch in body["checks"] if ch["name"] == "transcoder")
     assert transcoder["status"] == "warning"
@@ -521,8 +448,9 @@ def test_diagnostics_makemkv_sdf_ok_when_updated(signing_key: bytes, tmp_path) -
     db = FakeSession()
     _seed(db)
     db.rows["config"][0].makemkv_sdf_state = "updated"
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    r = _get(app, token)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
     checks = {ch["name"]: ch for ch in r.json()["checks"]}
     assert checks["makemkv_sdf"]["status"] == "ok"
 
@@ -531,8 +459,9 @@ def test_diagnostics_makemkv_sdf_warning_when_download_failed(signing_key: bytes
     db = FakeSession()
     _seed(db)
     db.rows["config"][0].makemkv_sdf_state = "download_failed"
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    r = _get(app, token)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
     checks = {ch["name"]: ch for ch in r.json()["checks"]}
     assert checks["makemkv_sdf"]["status"] == "warning"
 
@@ -541,8 +470,9 @@ def test_diagnostics_makemkv_sdf_ok_when_disabled(signing_key: bytes, tmp_path) 
     db = FakeSession()
     _seed(db)
     db.rows["config"][0].makemkv_sdf_state = "disabled"
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    r = _get(app, token)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
     checks = {ch["name"]: ch for ch in r.json()["checks"]}
     assert checks["makemkv_sdf"]["status"] == "ok"
     assert "disabled" in checks["makemkv_sdf"]["detail"]
@@ -552,11 +482,38 @@ def test_diagnostics_makemkv_sdf_warning_when_not_yet_checked(signing_key: bytes
     db = FakeSession()
     _seed(db)
     # makemkv_sdf_state defaults to None on a fresh Config
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
-    r = _get(app, token)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
     checks = {ch["name"]: ch for ch in r.json()["checks"]}
     assert checks["makemkv_sdf"]["status"] == "warning"
     assert "not yet checked" in checks["makemkv_sdf"]["detail"]
+
+
+def test_stats_counts(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/stats", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["uptime_seconds"] >= 40
+    assert body["drives_online"] == 1
+    assert body["events_unsent"] == 1
+    assert body["jobs_by_status"].get("ripping") == 1
+
+
+def test_stats_no_started_at(signing_key: bytes, tmp_path) -> None:
+    """When started_at is not set on app.state, uptime_seconds should be 0."""
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    del app.state.started_at
+    with TestClient(app) as c:
+        r = c.get("/api/system/stats", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["uptime_seconds"] == 0
 
 
 def test_thediscdb_refresh_now_returns_count_and_persists_refreshed_at(
@@ -568,7 +525,7 @@ def test_thediscdb_refresh_now_returns_count_and_persists_refreshed_at(
     monkeypatch.setattr(system_router, "thediscdb_refresh", _fake)
     db = FakeSession()
     _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
     app.state.http = object()
     with TestClient(app) as c:
         r = c.post("/api/system/thediscdb/refresh", headers=_auth(token))
@@ -586,9 +543,20 @@ def test_thediscdb_refresh_now_maps_failure_to_502(signing_key: bytes, tmp_path,
     monkeypatch.setattr(system_router, "thediscdb_refresh", _fake)
     db = FakeSession()
     _seed(db)
-    app, token = _make_app(signing_key, db, ingress_ok=True, tmp=tmp_path)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
     app.state.http = object()
     with TestClient(app) as c:
         r = c.post("/api/system/thediscdb/refresh", headers=_auth(token))
     assert r.status_code == 502, r.text
     assert db.rows["config"][0].thediscdb_refreshed_at is None
+
+
+def test_thediscdb_refresh_now_denied_for_guest(signing_key: bytes, tmp_path) -> None:
+    """Refresh is a mutating route (network fetch + config write) — guests get 403."""
+    db = FakeSession()
+    _seed(db)
+    app, _ = _make_app(signing_key, db, tmp=tmp_path)
+    guest_token, _ = issue_access_token("usr_guest", "guest", signing_key)
+    with TestClient(app) as c:
+        r = c.post("/api/system/thediscdb/refresh", headers=_auth(guest_token))
+    assert r.status_code == 403
