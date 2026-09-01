@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import os
 import secrets
+from datetime import datetime, timezone
 from typing import Any
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
@@ -27,6 +28,7 @@ from arm_backend.metadata.base import MetadataResult  # noqa: E402
 from arm_backend.routers import ripper as ripper_router  # noqa: E402
 from arm_common import (  # noqa: E402
     Config,
+    DiscFingerprint,
     DiscType,
     Drive,
     DriveStatus,
@@ -103,12 +105,24 @@ def _make_app(
     return app
 
 
-def _config(*, block_on_miss: bool = True) -> Config:
+def _config(
+    *,
+    block_on_miss: bool = True,
+    community_keydb_enabled: bool = True,
+    makemkv_sdf_enabled: bool = True,
+    hold_for_review: bool = False,
+    ripping_paused: bool = False,
+) -> Config:
     return Config(
         id=1,
         auto_transcode_on_idle=False,
         auto_rip_on_insert=True,
         block_on_miss=block_on_miss,
+        community_keydb_enabled=community_keydb_enabled,
+        makemkv_sdf_enabled=makemkv_sdf_enabled,
+        hold_for_review=hold_for_review,
+        ripping_paused=ripping_paused,
+        manual_wait_seconds=60,
         default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
     )
 
@@ -181,7 +195,23 @@ def test_get_config_returns_flag() -> None:
     with TestClient(_make_app(db)) as client:
         r = client.get("/api/ripper/config", headers=_SERVICE_AUTH)
     assert r.status_code == 200
-    assert r.json() == {"auto_rip_on_insert": True, "makemkv_key": None}
+    assert r.json() == {
+        "auto_rip_on_insert": True,
+        "makemkv_key": None,
+        "community_keydb_enabled": True,
+        "makemkv_sdf_enabled": True,
+        "ripping_paused": False,
+        "manual_wait_seconds": 60,
+    }
+
+
+def test_get_config_reflects_community_keydb_disabled() -> None:
+    db = FakeSession()
+    db.rows["config"] = [_config(community_keydb_enabled=False)]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/config", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["community_keydb_enabled"] is False
 
 
 def test_get_config_includes_makemkv_key() -> None:
@@ -323,6 +353,139 @@ def test_identify_success_sets_identified_and_poster() -> None:
     assert {f.algo for f in fps} == {"crc64"}  # dedup + empty skipped
 
 
+def test_identify_with_hold_parks_review(signing_key: bytes) -> None:
+    """hold_for_review on + a genuine identify success -> AWAITING_REVIEW with a
+    countdown anchor, a rip.awaiting_review event, AND the scan's titles persisted
+    as Track rows (every title; preset-rejected ones excluded by default)."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(hold_for_review=True)]
+    db.rows["rip_presets"] = [_movie_preset()]  # ALL_TRACKS default (drops <60s)
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    hub = _Hub()
+    app = _make_app(db, dispatcher=_Dispatcher(result), hub=hub)
+    scan = _scan_dict()
+    # Two titles: a long feature (kept) + a sub-minlength stub (excluded default).
+    scan["titles"] = [
+        {"index": 1, "duration_seconds": 4200},
+        {"index": 2, "duration_seconds": 5},
+    ]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    out = r.json()
+    assert out["status"] == "awaiting_review"
+    assert out["title"] == "Iron Man"
+    assert out["wait_start_time"] is not None
+    assert any(e["event_type"] == "rip.awaiting_review" for e in hub.events)
+    tracks = [row for row in db.added if type(row).__name__ == "Track"]
+    assert {t.source_ref for t in tracks} == {"1", "2"}  # every title persisted
+    by_ref = {t.source_ref: t for t in tracks}
+    assert by_ref["1"].excluded is False  # main feature kept by default
+    assert by_ref["2"].excluded is True  # short extra excluded by default
+
+
+async def test_persist_review_tracks_is_idempotent() -> None:
+    """Idempotency (audit M1): a title whose Track row already exists (ripper
+    re-POSTed identify on the same held disc) is NOT re-inserted."""
+    from arm_backend.routers.ripper import _persist_review_tracks
+    from arm_common import Job as _Job, Track as _Track, TrackKind as _TrackKind
+    from arm_common.schemas import ScanResult as _ScanResult, ScanTitle as _ScanTitle
+
+    db = FakeSession()
+    db.rows["rip_presets"] = [_movie_preset()]
+    job = _Job(
+        id="job_01JZXR7K3M5Q8N4VWA0000I01", drive_id="drv_x", disc_type=DiscType.DVD, status=JobStatus.AWAITING_REVIEW
+    )
+    # Title index 1 already persisted (source_ref "1"); index 2 is new.
+    db.rows["tracks"] = [_Track(id="trk_pre", job_id=job.id, kind=_TrackKind.VIDEO_TITLE, index=1, source_ref="1")]
+    scan = _ScanResult(
+        disc_type=DiscType.DVD,
+        titles=[_ScanTitle(index=1, duration_seconds=4200), _ScanTitle(index=2, duration_seconds=3600)],
+    )
+    await _persist_review_tracks(db, job, scan)
+    added_refs = {t.source_ref for t in db.added if type(t).__name__ == "Track"}
+    assert added_refs == {"2"}  # index 1 skipped (already exists), only 2 added
+
+
+def test_identify_with_hold_parks_without_preset_seeded() -> None:
+    """hold_for_review on but the default rip preset isn't seeded -> still parks in
+    AWAITING_REVIEW (review-track persistence is skipped, logged) rather than
+    failing identify."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(hold_for_review=True)]
+    db.rows["rip_presets"] = []  # not seeded
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    assert r.json()["status"] == "awaiting_review"
+    assert [row for row in db.added if type(row).__name__ == "Track"] == []
+
+
+def test_identify_with_hold_parks_even_when_paused() -> None:
+    """When hold_for_review is on, a paused machine still scans + identifies +
+    parks (pause only suppresses auto-start at expiry) — it does NOT 409."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(hold_for_review=True, ripping_paused=True)]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    assert r.json()["status"] == "awaiting_review"
+
+
+def test_identify_paused_without_hold_still_409s() -> None:
+    """With hold_for_review off, pause keeps its original meaning: reject."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(hold_for_review=False, ripping_paused=True)]
+    app = _make_app(db, dispatcher=_Dispatcher(None))
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 409
+
+
+def test_identify_unidentified_with_hold_does_not_park(signing_key: bytes) -> None:
+    """hold_for_review on but identify MISSES (block_on_miss off) -> the synthetic
+    IDENTIFIED-unidentified must NOT park in review (audit H5: gate on genuine
+    success, not status==IDENTIFIED)."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(hold_for_review=True, block_on_miss=False)]
+    app = _make_app(db, dispatcher=_Dispatcher(None))
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    out = r.json()
+    assert out["status"] == "identified"  # not awaiting_review
+    assert out["metadata_json"].get("unidentified") is True
+
+
 def test_identify_snapshots_drive_serial_onto_job() -> None:
     """The job created by identify carries the drive's hardware serial at
     that moment — a permanent record that survives the Drive row later
@@ -448,6 +611,123 @@ def test_in_flight_single_and_multi(caplog: pytest.LogCaptureFixture) -> None:
     assert any("data-model violation" in rec.message for rec in caplog.records)
 
 
+# --- /held-job + /recovery-abandon (timed review gate reboot recovery) --------
+
+
+def test_held_job_unknown_drive_404() -> None:
+    db = FakeSession()
+    db.rows["drives"] = []
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 404
+    assert "unknown drive_id" in r.json()["detail"]
+
+
+def test_held_job_none_404() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 404
+    assert "no held job" in r.json()["detail"]
+
+
+def test_held_job_returns_job_unpaused() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(ripping_paused=False)]
+    db.rows["jobs"] = [_job("job_01JZXR7K3M5Q8N4VWA0000H01", status=JobStatus.AWAITING_REVIEW)]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    out = r.json()
+    assert out["job"]["id"] == "job_01JZXR7K3M5Q8N4VWA0000H01"
+    assert out["paused"] is False
+
+
+def test_held_job_paused_flag_from_global() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(ripping_paused=True)]
+    db.rows["jobs"] = [_job("job_01JZXR7K3M5Q8N4VWA0000H02", status=JobStatus.AWAITING_REVIEW)]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["paused"] is True
+
+
+def test_held_job_paused_flag_from_per_job_manual_pause() -> None:
+    """paused is global ripping_paused OR this disc's manual_pause — a per-job
+    pause alone (global off) still marks it paused for reboot recovery."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(ripping_paused=False)]
+    held = _job("job_01JZXR7K3M5Q8N4VWA0000H07", status=JobStatus.AWAITING_REVIEW)
+    held.manual_pause = True
+    db.rows["jobs"] = [held]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["paused"] is True
+
+
+def test_held_job_multi_row_logs_and_returns_first(caplog: pytest.LogCaptureFixture) -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    db.rows["jobs"] = [
+        _job("job_01JZXR7K3M5Q8N4VWA0000H03", status=JobStatus.AWAITING_REVIEW),
+        _job("job_01JZXR7K3M5Q8N4VWA0000H04", status=JobStatus.AWAITING_REVIEW),
+    ]
+    with TestClient(_make_app(db)) as client:
+        with caplog.at_level("ERROR", logger="arm_backend.routers.ripper"):
+            r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["job"]["id"] == "job_01JZXR7K3M5Q8N4VWA0000H03"
+    assert any("data-model violation" in rec.message for rec in caplog.records)
+
+
+def test_recovery_abandon_transitions_and_emits() -> None:
+    db = FakeSession()
+    hub = _Hub()
+    db.rows["jobs"] = [_job("job_01JZXR7K3M5Q8N4VWA0000H05", status=JobStatus.AWAITING_REVIEW)]
+    with TestClient(_make_app(db, hub=hub)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA0000H05/recovery-abandon", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["status"] == "abandoned"
+    assert any(e["event_type"] == "rip.abandoned" for e in hub.events)
+
+
+def test_recovery_abandon_unknown_404() -> None:
+    db = FakeSession()
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA0000404/recovery-abandon", headers=_SERVICE_AUTH)
+    assert r.status_code == 404
+
+
+def test_recovery_abandon_wrong_status_409() -> None:
+    db = FakeSession()
+    db.rows["jobs"] = [_job("job_01JZXR7K3M5Q8N4VWA0000H06", status=JobStatus.RIPPING)]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA0000H06/recovery-abandon", headers=_SERVICE_AUTH)
+    assert r.status_code == 409
+    assert "awaiting_review" in r.json()["detail"]
+
+
+def test_recovery_abandon_unknown_status_409_not_500() -> None:
+    """A forward-incompatible status (raw str from _StrEnumString) must yield the
+    intended 409 here, not an AttributeError 500 from f-string `.value`."""
+    db = FakeSession()
+    job = _job("job_01JZXR7K3M5Q8N4VWA0000H08", status=JobStatus.RIPPING)
+    object.__setattr__(job, "status", "some_future_status")
+    db.rows["jobs"] = [job]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA0000H08/recovery-abandon", headers=_SERVICE_AUTH)
+    assert r.status_code == 409
+    assert "some_future_status" in r.json()["detail"]
+
+
 # --- /rip-start --------------------------------------------------------------
 
 
@@ -472,6 +752,57 @@ def test_rip_start_returns_existing_tracks() -> None:
     assert [t["id"] for t in r.json()["tracks"]] == ["trk_1"]
 
 
+def test_rip_start_existing_tracks_transitions_non_ripping() -> None:
+    """Timed-review auto-start: rip-start on a held job whose review tracks were
+    pre-persisted must transition AWAITING_REVIEW -> RIPPING (audit B2), not
+    return early without transitioning. started_at is stamped (was None)."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW)]
+    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED)]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    assert db.rows["jobs"][0].status == JobStatus.RIPPING
+    assert db.rows["jobs"][0].started_at is not None
+
+
+def test_rip_start_existing_tracks_preserves_started_at() -> None:
+    """The transition keeps an already-set started_at (covers the started_at-not-
+    None branch) rather than overwriting it."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    job = _job(status=JobStatus.AWAITING_REVIEW)
+    stamped = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    job.started_at = stamped
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED)]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    assert db.rows["jobs"][0].status == JobStatus.RIPPING
+    assert db.rows["jobs"][0].started_at == stamped  # preserved, not overwritten
+
+
+def test_rip_start_awaiting_review_no_tracks_selects_and_rips() -> None:
+    """Timed-review auto-start where NO review tracks were persisted (a genuinely
+    identified disc whose scan yielded zero persistable titles -> select_tracks_for_review
+    added nothing). rip-start must fall through and select tracks now, exactly as
+    for a never-parked IDENTIFIED disc — NOT 409. A 409 here is non-retryable on the
+    ripper, so the disc would be stuck in AWAITING_REVIEW forever."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW, meta={"scan_result": _scan_dict()})]
+    db.rows["tracks"] = []
+    db.rows["rip_presets"] = [_movie_preset()]
+    new = [_track("trk_new", status=TrackStatus.QUEUED)]
+    with TestClient(_make_app(db)) as client, _patch_select_tracks(new):
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    assert [t["id"] for t in r.json()["tracks"]] == ["trk_new"]
+    assert db.rows["jobs"][0].status == JobStatus.RIPPING
+
+
 def test_rip_start_not_identified_409() -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]
@@ -481,6 +812,22 @@ def test_rip_start_not_identified_409() -> None:
         r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 409
     assert "not in identified state" in r.json()["detail"]
+
+
+def test_rip_start_unknown_status_409_not_500() -> None:
+    """A forward-incompatible status (loaded as a raw str by _StrEnumString) on the
+    no-existing-tracks branch must produce the intended 409, not an AttributeError
+    500 from f-string `.value` access. enum_value_str renders the raw string."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    job = _job(status=JobStatus.IDENTIFIED)
+    object.__setattr__(job, "status", "some_future_status")  # simulate post-load raw string
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = []
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 409
+    assert "some_future_status" in r.json()["detail"]
 
 
 def test_rip_start_missing_scan_result_409() -> None:
@@ -737,3 +1084,124 @@ class _patch_select_tracks:
 
     def __exit__(self, *_exc: Any) -> None:
         ripper_router.select_tracks = self._orig  # type: ignore[assignment]
+
+
+# --- dedupe / reuse (Task 3: identify wires find_reusable_job_for_disc) ------
+
+
+def test_identify_reuses_pre_rip_job_no_duplicate() -> None:
+    """A re-scanned disc whose fingerprint matches an existing AWAITING_USER_ID job
+    must reuse that job (same id), preserve its title, and add neither a duplicate
+    Job row nor a duplicate DiscFingerprint row (the algo already exists)."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, hold_for_review=False)]
+    existing = _job("job_exist", status=JobStatus.AWAITING_USER_ID, disc_type="dvd")
+    existing.title = "Operator Title"  # a resolved identity to protect
+    db.rows["jobs"] = [existing]
+    db.rows["disc_fingerprints"] = [DiscFingerprint(job_id="job_exist", algo="crc64", value="abc")]
+
+    dispatcher = _Dispatcher(result=None)  # must NOT be consulted on reuse-of-identified
+    hub = _Hub()
+    app = _make_app(db, dispatcher=dispatcher, hub=hub)
+    scan = _scan_dict("dvd")
+    scan["fingerprints"] = [{"algo": "crc64", "value": "abc"}]
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan},
+            headers=_SERVICE_AUTH,
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["id"] == "job_exist"  # reused, not new
+    assert resp.json()["title"] == "Operator Title"  # identity preserved
+    new_jobs = [r for r in db.added if type(r).__name__ == "Job"]
+    assert new_jobs == []  # no duplicate Job
+    new_fps = [r for r in db.added if type(r).__name__ == "DiscFingerprint"]
+    assert new_fps == []  # no duplicate fingerprint rows
+
+
+def test_identify_terminal_match_mints_fresh() -> None:
+    """A fingerprint matching only a terminal (RIPPED) job must mint a brand-new
+    Job — terminal jobs are excluded from the reuse candidates."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, hold_for_review=False)]
+    db.rows["jobs"] = [_job("job_done", status=JobStatus.RIPPED, disc_type="dvd")]
+    db.rows["disc_fingerprints"] = [DiscFingerprint(job_id="job_done", algo="crc64", value="abc")]
+    dispatcher = _Dispatcher(result=None)
+    app = _make_app(db, dispatcher=dispatcher, hub=_Hub())
+    scan = _scan_dict("dvd")
+    scan["fingerprints"] = [{"algo": "crc64", "value": "abc"}]
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan},
+            headers=_SERVICE_AUTH,
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["id"] != "job_done"
+    assert [r for r in db.added if type(r).__name__ == "Job"]  # a fresh Job was persisted
+
+
+# --- /current-job (heartbeat re-probe: any non-terminal status) ---------------
+
+
+def test_current_job_returns_non_terminal() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job("job_01JZXR7K3M5Q8N4VWA0000C01", status=JobStatus.IDENTIFIED, disc_type=DiscType.DVD)]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/current-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["id"] == "job_01JZXR7K3M5Q8N4VWA0000C01"
+
+
+def test_current_job_404_when_only_terminal() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job("job_done", status=JobStatus.RIPPED, disc_type=DiscType.DVD)]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/current-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 404
+
+
+def test_current_job_404_unknown_drive() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_UNKNOWN/current-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 404
+    assert "unknown drive_id" in r.json()["detail"]
+
+
+def test_sdf_status_persists_state() -> None:
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/sdf-status", headers=_SERVICE_AUTH, json={"state": "updated"})
+    assert r.status_code == 204
+    cfg = db.rows["config"][0]
+    assert cfg.makemkv_sdf_state == "updated"
+    assert cfg.makemkv_sdf_checked_at is not None
+
+
+def test_sdf_status_404_when_no_config() -> None:
+    db = FakeSession()
+    db.rows["config"] = []
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/sdf-status", headers=_SERVICE_AUTH, json={"state": "updated"})
+    assert r.status_code == 404
+
+
+def test_get_config_reflects_makemkv_sdf_enabled() -> None:
+    db = FakeSession()
+    db.rows["config"] = [_config(makemkv_sdf_enabled=False)]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/config", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["makemkv_sdf_enabled"] is False

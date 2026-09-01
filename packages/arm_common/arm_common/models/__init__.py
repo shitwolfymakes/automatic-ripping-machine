@@ -1,4 +1,4 @@
-from arm_common.models.config import Config
+from arm_common.models.config import DEFAULT_MUSICBRAINZ_USER_AGENT, Config
 from arm_common.models.disc_fingerprint import DiscFingerprint
 from arm_common.models.drive import Drive
 from arm_common.models.event import Event
@@ -16,6 +16,7 @@ from arm_common.models.transcode_task import TranscodeTask
 from arm_common.models.user import User
 
 __all__ = [
+    "DEFAULT_MUSICBRAINZ_USER_AGENT",
     "Config",
     "DiscFingerprint",
     "Drive",

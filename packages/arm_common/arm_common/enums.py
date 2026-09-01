@@ -29,6 +29,11 @@ class DriveMediaStatus(StrEnum):
     UNKNOWN = "unknown"  # CDS_NO_INFO, or ioctl unsupported on a probed device
 
 
+class DriveMode(StrEnum):
+    AUTO = "auto"  # ripper auto-rips on disc insert
+    MANUAL = "manual"  # ripper waits for an explicit manual.trigger
+
+
 class JobStatus(StrEnum):
     CREATED = "created"
     AWAITING_USER_ID = "awaiting_user_id"
@@ -36,6 +41,12 @@ class JobStatus(StrEnum):
     RIPPING = "ripping"
     RIPPED = "ripped"
     RIPPED_PARTIAL = "ripped_partial"
+    # A scanned + identified disc held for operator review (timed review gate).
+    # The rip pipeline parks here, counting down `manual_wait_seconds`; on expiry
+    # it auto-starts (unless globally paused), or the operator Starts/Cancels.
+    # Distinct from AWAITING_USER_ID ("could not identify — needs operator ID").
+    # Resolvable (PRESERVE) for identity edits; non-terminal; not an APPLY status.
+    AWAITING_REVIEW = "awaiting_review"
     # Set by the (future) deferred-placeholder rip path when a disc rips
     # successfully but identification never landed. Resolvable via the
     # /resolve endpoint just like AWAITING_USER_ID. Inert today — no code
@@ -43,6 +54,29 @@ class JobStatus(StrEnum):
     RIPPED_AWAITING_IDENTIFY = "ripped_awaiting_identify"
     ABANDONED = "abandoned"
     FAILED = "failed"
+
+
+# Canonical JobStatus groupings. Single source of truth — routers/services must
+# import these rather than re-defining local copies.
+TERMINAL_JOB_STATUSES: frozenset[JobStatus] = frozenset(
+    {
+        JobStatus.RIPPED,
+        JobStatus.RIPPED_PARTIAL,
+        JobStatus.RIPPED_AWAITING_IDENTIFY,
+        JobStatus.ABANDONED,
+        JobStatus.FAILED,
+    }
+)
+# Pre-rip = disc present, not yet committed to a rip (reusable on re-identify).
+PRE_RIP_JOB_STATUSES: frozenset[JobStatus] = frozenset(
+    {
+        JobStatus.CREATED,
+        JobStatus.AWAITING_USER_ID,
+        JobStatus.IDENTIFIED,
+        JobStatus.AWAITING_REVIEW,
+    }
+)
+NON_TERMINAL_JOB_STATUSES: frozenset[JobStatus] = PRE_RIP_JOB_STATUSES | frozenset({JobStatus.RIPPING})
 
 
 class TrackStatus(StrEnum):
@@ -145,3 +179,59 @@ class VideoCodec(StrEnum):
     H264 = "h264"
     H265 = "h265"
     AV1 = "av1"
+
+
+class MakemkvKeyState(StrEnum):
+    """Outcome of the ripper's disc-free `makemkvcon info disc:9999` probe.
+    Stored on the Config singleton and read by test-key / preflight / config view.
+
+    VALID                   — clean probe, key accepted.
+    UNREGISTERED_OR_EXPIRED — MSG:5052/5055 (evaluation expired / no valid key).
+    BINARY_EXPIRED          — MSG:5021 (60-day kill-switch; no key overrides it).
+    FORMAT_INVALID          — configured key fails the M-/T- serial regex (pre-probe).
+    PROBE_FAILED            — binary missing / timeout / undeterminable (→ valid=null).
+    """
+
+    VALID = "valid"
+    UNREGISTERED_OR_EXPIRED = "unregistered_or_expired"
+    BINARY_EXPIRED = "binary_expired"
+    FORMAT_INVALID = "format_invalid"
+    PROBE_FAILED = "probe_failed"
+
+
+class KeydbState(StrEnum):
+    """Outcome of the ripper's community-keydb fetch (`update_keydb.sh`),
+    stored on the Config singleton and surfaced by /api/system/preflight.
+
+    OK              — downloaded, filtered, installed; vuk_count set.
+    DISABLED        — community keydb gated off via config.
+    FRESH_KEPT      — age-gated skip; existing keydb retained (age_days set).
+    DOWNLOAD_FAILED — all download retries failed; existing keydb retained.
+    EMPTY           — fetched file not a ZIP / no keydb.cfg / no VUK entries.
+    PROBE_FAILED    — wrapper could not run or parse the script.
+    """
+
+    OK = "ok"
+    DISABLED = "disabled"
+    FRESH_KEPT = "fresh_kept"
+    DOWNLOAD_FAILED = "download_failed"
+    EMPTY = "empty"
+    PROBE_FAILED = "probe_failed"
+
+
+class MakemkvSdfState(StrEnum):
+    """Outcome of the ripper's MakeMKV SDF fetch (`update_sdf.sh`), stored on
+    the Config singleton and surfaced by /api/system/preflight.
+
+    UPDATED         — downloaded (official or mirror) and installed.
+    FRESH_KEPT      — age-gated skip; existing SDF retained (age_days set).
+    DISABLED        — SDF refresh gated off via config.
+    DOWNLOAD_FAILED — all sources failed; baked/existing SDF retained.
+    PROBE_FAILED    — wrapper could not run or parse the script.
+    """
+
+    UPDATED = "updated"
+    FRESH_KEPT = "fresh_kept"
+    DISABLED = "disabled"
+    DOWNLOAD_FAILED = "download_failed"
+    PROBE_FAILED = "probe_failed"
