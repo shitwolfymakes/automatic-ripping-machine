@@ -11,6 +11,11 @@ vi.mock('$lib/api/users', () => ({
 	setUserPassword: (...args: unknown[]) => setUserPassword(...args)
 }));
 
+const changePassword = vi.fn();
+vi.mock('$lib/api/auth', () => ({
+	changePassword: (...args: unknown[]) => changePassword(...args)
+}));
+
 import UsersCard from '../UsersCard.svelte';
 
 const admin: UserView = {
@@ -88,5 +93,94 @@ describe('UsersCard', () => {
 
 		await screen.findAllByText('guest');
 		expect(screen.queryByRole('button', { name: /set password/i })).not.toBeInTheDocument();
+	});
+
+	it('closes the change-password slide-over via the Close button', async () => {
+		fetchUsers.mockResolvedValue([admin, guest]);
+		renderComponent(UsersCard, { props: {} });
+
+		await screen.findAllByText('admin');
+		await fireEvent.click(screen.getByRole('button', { name: /change password/i }));
+		expect(await screen.findByLabelText(/current password/i)).toBeInTheDocument();
+
+		await fireEvent.click(screen.getByRole('button', { name: /close/i }));
+
+		await waitFor(() =>
+			expect(screen.queryByLabelText(/current password/i)).not.toBeInTheDocument()
+		);
+	});
+
+	it('closes the slide-over and reports success after a password change', async () => {
+		fetchUsers.mockResolvedValue([admin, guest]);
+		changePassword.mockResolvedValue({});
+		renderComponent(UsersCard, { props: {} });
+
+		await screen.findAllByText('admin');
+		await fireEvent.click(screen.getByRole('button', { name: /change password/i }));
+
+		await fireEvent.input(await screen.findByLabelText(/current password/i), {
+			target: { value: 'oldpass1' }
+		});
+		await fireEvent.input(screen.getByLabelText(/^new password$/i), {
+			target: { value: 'newpassword1' }
+		});
+		await fireEvent.input(screen.getByLabelText(/confirm new password/i), {
+			target: { value: 'newpassword1' }
+		});
+		await fireEvent.click(screen.getByRole('button', { name: /set new password/i }));
+
+		expect(await screen.findByText(/admin password changed/i)).toBeInTheDocument();
+		expect(screen.queryByLabelText(/current password/i)).not.toBeInTheDocument();
+	});
+
+	it('surfaces an error when the guest toggle PATCH fails', async () => {
+		fetchUsers.mockResolvedValue([admin, guest]);
+		setUserDisabled.mockRejectedValue(new Error('backend unreachable'));
+		renderComponent(UsersCard, { props: {} });
+
+		await screen.findAllByText('guest');
+		await fireEvent.click(screen.getByRole('switch', { name: /guest/i }));
+
+		expect(await screen.findByText(/backend unreachable/i)).toBeInTheDocument();
+		// The row still reads Disabled — a failed PATCH must not look like a win.
+		expect(screen.getByText('Disabled')).toBeInTheDocument();
+	});
+
+	it('falls back to a generic message when the toggle rejects a non-Error', async () => {
+		fetchUsers.mockResolvedValue([admin, guest]);
+		setUserDisabled.mockRejectedValue('boom');
+		renderComponent(UsersCard, { props: {} });
+
+		await screen.findAllByText('guest');
+		await fireEvent.click(screen.getByRole('switch', { name: /guest/i }));
+
+		expect(await screen.findByText(/failed to update guest access/i)).toBeInTheDocument();
+	});
+
+	it('auto-dismisses the feedback banner after 4 seconds', async () => {
+		vi.useFakeTimers();
+		try {
+			fetchUsers.mockResolvedValue([admin, guest]);
+			setUserDisabled.mockResolvedValue({ ...guest, disabled: false });
+			renderComponent(UsersCard, { props: {} });
+
+			await vi.advanceTimersByTimeAsync(0);
+			await fireEvent.click(screen.getByRole('switch', { name: /guest/i }));
+			await vi.advanceTimersByTimeAsync(0);
+			expect(screen.getByText(/guest access enabled/i)).toBeInTheDocument();
+
+			await vi.advanceTimersByTimeAsync(4000);
+			expect(screen.queryByText(/guest access enabled/i)).not.toBeInTheDocument();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('reports an error when the initial user load fails', async () => {
+		fetchUsers.mockRejectedValue(new Error('users endpoint down'));
+		renderComponent(UsersCard, { props: {} });
+
+		expect(await screen.findByText(/users endpoint down/i)).toBeInTheDocument();
+		expect(screen.queryByRole('switch', { name: /guest/i })).not.toBeInTheDocument();
 	});
 });
