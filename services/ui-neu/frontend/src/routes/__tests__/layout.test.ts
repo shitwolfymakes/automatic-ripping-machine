@@ -34,14 +34,24 @@ vi.mock("$app/navigation", () => ({
 const logoutLocalMock = vi.fn();
 vi.mock("$lib/stores/auth", async () => {
   const { derived, writable } = await import("svelte/store");
+  // Mirrors the real store's split: isAdmin reads the persisted role, but
+  // isGuest is simply "no token" — NOT role === 'guest'. A guest never logs
+  // in, so its role is null; a role-based isGuest would report false for an
+  // anonymous visitor and show them admin chrome.
   const _role = writable<string | null>("admin");
+  const _isAuthenticated = writable<boolean>(true);
   return {
     initAuth: vi.fn(),
     logoutLocal: () => logoutLocalMock(),
-    applyLogin: vi.fn(),
     role: { subscribe: _role.subscribe },
     isAdmin: derived(_role, (r) => r === "admin"),
-    isGuest: derived(_role, (r) => r === "guest"),
+    isGuest: derived(_isAuthenticated, (a) => !a),
+    // Test-only helper — sets both halves the way a real session would, so a
+    // test can't leave the two in a combination production never produces.
+    __setSession: (kind: "admin" | "guest") => {
+      _role.set(kind === "admin" ? "admin" : null);
+      _isAuthenticated.set(kind === "admin");
+    },
   };
 });
 

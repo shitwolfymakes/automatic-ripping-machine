@@ -9,7 +9,6 @@ vi.mock('$lib/stores/auth', async () => {
 	return {
 		role: { subscribe: _role.subscribe },
 		isAdmin: derived(_role, (r) => r === 'admin'),
-		isGuest: derived(_role, (r) => r === 'guest'),
 		// Test-only helper — not part of the real module's public API.
 		__setRole: (r: string | null) => _role.set(r)
 	};
