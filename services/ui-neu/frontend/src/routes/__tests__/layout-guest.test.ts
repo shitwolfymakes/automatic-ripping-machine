@@ -3,10 +3,24 @@ import { renderComponent, screen, cleanup, fireEvent } from "$lib/test-utils";
 import Layout from "../+layout.svelte";
 import { createRawSnippet } from "svelte";
 
+// Writable, not readable: +layout.svelte's guest bounce keys off
+// $page.url.pathname, so a fixed pathname makes that effect untestable.
 vi.mock("$app/stores", async () => {
-  const { readable } = await import("svelte/store");
-  return { page: readable({ url: { pathname: "/" }, params: {} }) };
+  const { writable } = await import("svelte/store");
+  const _page = writable({ url: { pathname: "/" }, params: {} });
+  return {
+    page: { subscribe: _page.subscribe },
+    // Test-only helper — not part of the real module's public API.
+    __setPathname: (pathname: string) => _page.set({ url: { pathname }, params: {} }),
+  };
 });
+
+async function setPathname(pathname: string) {
+  const stores = (await import("$app/stores")) as unknown as {
+    __setPathname: (p: string) => void;
+  };
+  stores.__setPathname(pathname);
+}
 
 const gotoMock = vi.fn();
 vi.mock("$app/navigation", () => ({
@@ -98,6 +112,7 @@ function childSnippet() {
 describe("Layout guest gating", () => {
   afterEach(async () => {
     cleanup();
+    await setPathname("/");
     gotoMock.mockClear();
     apiLogoutMock.mockClear();
     apiLogoutMock.mockResolvedValue(undefined);
@@ -161,6 +176,7 @@ describe("Layout guest gating", () => {
 describe("Layout tokenless browsing", () => {
   afterEach(async () => {
     cleanup();
+    await setPathname("/");
     gotoMock.mockClear();
     apiLogoutMock.mockClear();
     apiLogoutMock.mockResolvedValue(undefined);
@@ -213,5 +229,48 @@ describe("Layout tokenless browsing", () => {
     };
     expect(logoutLocal).toHaveBeenCalled();
     expect(gotoMock).toHaveBeenCalledWith("/");
+  });
+});
+
+describe("Layout guest bounce off /settings", () => {
+  afterEach(async () => {
+    cleanup();
+    await setPathname("/");
+    gotoMock.mockClear();
+    const auth = (await import("$lib/stores/auth")) as unknown as {
+      __setSession: (kind: "admin" | "guest") => void;
+    };
+    auth.__setSession("admin");
+  });
+
+  async function renderAt(pathname: string, kind: "admin" | "guest") {
+    const auth = (await import("$lib/stores/auth")) as unknown as {
+      __setSession: (k: "admin" | "guest") => void;
+    };
+    auth.__setSession(kind);
+    await setPathname(pathname);
+    renderComponent(Layout, { props: { children: childSnippet() } });
+  }
+
+  it("redirects a guest who lands on /settings to the dashboard", async () => {
+    await renderAt("/settings", "guest");
+    expect(gotoMock).toHaveBeenCalledWith("/");
+  });
+
+  it("redirects a guest who navigates to /settings after mounting", async () => {
+    await renderAt("/", "guest");
+    expect(gotoMock).not.toHaveBeenCalled();
+    await setPathname("/settings");
+    expect(gotoMock).toHaveBeenCalledWith("/");
+  });
+
+  it("leaves an admin on /settings alone", async () => {
+    await renderAt("/settings", "admin");
+    expect(gotoMock).not.toHaveBeenCalled();
+  });
+
+  it("does not bounce a guest off a non-settings route", async () => {
+    await renderAt("/jobs", "guest");
+    expect(gotoMock).not.toHaveBeenCalled();
   });
 });
