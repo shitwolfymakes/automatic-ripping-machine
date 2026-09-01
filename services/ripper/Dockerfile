@@ -116,13 +116,30 @@ RUN chmod +x /usr/local/bin/update_key.sh
 COPY services/ripper/install/update_keydb.sh /usr/local/bin/update_keydb.sh
 RUN chmod +x /usr/local/bin/update_keydb.sh
 
+COPY services/ripper/install/mirror_fetch.sh /usr/local/bin/mirror_fetch.sh
 COPY services/ripper/install/update_sdf.sh /usr/local/bin/update_sdf.sh
 RUN chmod +x /usr/local/bin/update_sdf.sh
 
 # Bake a baseline MakeMKV SDF so protected-disc scans never hang on the
 # first-boot SDF download (the runtime update_sdf.sh keeps it current).
-RUN ( curl -fsSL --connect-timeout 15 --max-time 120 -o /home/arm/.MakeMKV/sdf.bin https://www.makemkv.com/svq/sdf.bin \
-      || curl -fsSL --connect-timeout 15 --max-time 120 -o /home/arm/.MakeMKV/sdf.bin https://www.makemkv.info/svq/sdf.bin ) \
+# Upstream first, then the optional internal mirror last — same order as the
+# runtime script, so the build rides out a makemkv.com outage.
+ARG MAKEMKV_MIRROR_URL=
+RUN --mount=type=secret,id=makemkv_mirror_password \
+    set -eu; \
+    . /usr/local/bin/mirror_fetch.sh; \
+    if [ -s /run/secrets/makemkv_mirror_password ]; then \
+        MAKEMKV_MIRROR_PASSWORD="$(cat /run/secrets/makemkv_mirror_password)"; \
+    fi; \
+    sdf_mirror="$(mirror_url_for sdf.bin)"; \
+    for url in https://www.makemkv.com/svq/sdf.bin https://www.makemkv.info/svq/sdf.bin $sdf_mirror; do \
+        set --; \
+        if mirror_is_mirror_url "$url" && [ -n "${MAKEMKV_MIRROR_PASSWORD:-}" ]; then \
+            set -- -H "X-SHARE-PASSWORD: ${MAKEMKV_MIRROR_PASSWORD}"; \
+        fi; \
+        curl -fsSL --connect-timeout 15 --max-time 120 "$@" \
+            -o /home/arm/.MakeMKV/sdf.bin "$url" && break; \
+    done \
     && test "$(stat -c %s /home/arm/.MakeMKV/sdf.bin)" -ge 262144 \
     && touch /home/arm/.MakeMKV/.sdf_refreshed \
     && chown -R 1000:1000 /home/arm/.MakeMKV
