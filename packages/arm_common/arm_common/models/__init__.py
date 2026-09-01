@@ -13,7 +13,7 @@ from arm_common.models.session_application import SessionApplication
 from arm_common.models.track import Track
 from arm_common.models.transcode_preset import TranscodePreset
 from arm_common.models.transcode_task import TranscodeTask
-from arm_common.models.user import ADMIN_ROLE, GUEST_ROLE, USER_ROLES, User
+from arm_common.models.user import ADMIN_ROLE, GUEST_ROLE, User
 
 __all__ = [
     "ADMIN_ROLE",
@@ -34,6 +34,5 @@ __all__ = [
     "Track",
     "TranscodePreset",
     "TranscodeTask",
-    "USER_ROLES",
     "User",
 ]
