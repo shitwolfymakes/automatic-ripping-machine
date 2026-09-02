@@ -3,10 +3,24 @@ import { renderComponent, screen, cleanup, fireEvent } from "$lib/test-utils";
 import Layout from "../+layout.svelte";
 import { createRawSnippet } from "svelte";
 
+// Writable, not readable: +layout.svelte's guest bounce keys off
+// $page.url.pathname, so a fixed pathname makes that effect untestable.
 vi.mock("$app/stores", async () => {
-  const { readable } = await import("svelte/store");
-  return { page: readable({ url: { pathname: "/" }, params: {} }) };
+  const { writable } = await import("svelte/store");
+  const _page = writable({ url: { pathname: "/" }, params: {} });
+  return {
+    page: { subscribe: _page.subscribe },
+    // Test-only helper — not part of the real module's public API.
+    __setPathname: (pathname: string) => _page.set({ url: { pathname }, params: {} }),
+  };
 });
+
+async function setPathname(pathname: string) {
+  const stores = (await import("$app/stores")) as unknown as {
+    __setPathname: (p: string) => void;
+  };
+  stores.__setPathname(pathname);
+}
 
 const gotoMock = vi.fn();
 vi.mock("$app/navigation", () => ({
@@ -26,16 +40,24 @@ vi.mock("$lib/api/auth", () => ({
 
 vi.mock("$lib/stores/auth", async () => {
   const { derived, writable } = await import("svelte/store");
+  // Mirrors the real store's split: isAdmin reads the persisted role, but
+  // isGuest is simply "no token" — NOT role === 'guest'. A guest never logs
+  // in, so its role is null; a role-based isGuest would report false for an
+  // anonymous visitor and show them admin chrome.
   const _role = writable<string | null>("admin");
+  const _isAuthenticated = writable<boolean>(true);
   return {
     initAuth: vi.fn(),
     logoutLocal: vi.fn(),
-    applyLogin: vi.fn(() => _role.set("guest")),
     role: { subscribe: _role.subscribe },
     isAdmin: derived(_role, (r) => r === "admin"),
-    isGuest: derived(_role, (r) => r === "guest"),
-    // Test-only helper — not part of the real module's public API.
-    __setRole: (r: string | null) => _role.set(r),
+    isGuest: derived(_isAuthenticated, (a) => !a),
+    // Test-only helper — sets both halves the way a real session would, so a
+    // test can't leave the two in a combination production never produces.
+    __setSession: (kind: "admin" | "guest") => {
+      _role.set(kind === "admin" ? "admin" : null);
+      _isAuthenticated.set(kind === "admin");
+    },
   };
 });
 
@@ -90,40 +112,41 @@ function childSnippet() {
 describe("Layout guest gating", () => {
   afterEach(async () => {
     cleanup();
+    await setPathname("/");
     gotoMock.mockClear();
     apiLogoutMock.mockClear();
     apiLogoutMock.mockResolvedValue(undefined);
     getTokenMock.mockReset();
     getTokenMock.mockReturnValue(null);
     const auth = (await import("$lib/stores/auth")) as unknown as {
-      __setRole: (r: string | null) => void;
+      __setSession: (kind: "admin" | "guest") => void;
     };
-    auth.__setRole("admin");
+    auth.__setSession("admin");
   });
 
   it("hides the Settings nav link for guests", async () => {
     const auth = (await import("$lib/stores/auth")) as unknown as {
-      __setRole: (r: string | null) => void;
+      __setSession: (kind: "admin" | "guest") => void;
     };
-    auth.__setRole("guest");
+    auth.__setSession("guest");
     renderComponent(Layout, { props: { children: childSnippet() } });
     expect(screen.queryByText("Settings")).not.toBeInTheDocument();
   });
 
   it("hides the quick-actions flyout for guests", async () => {
     const auth = (await import("$lib/stores/auth")) as unknown as {
-      __setRole: (r: string | null) => void;
+      __setSession: (kind: "admin" | "guest") => void;
     };
-    auth.__setRole("guest");
+    auth.__setSession("guest");
     renderComponent(Layout, { props: { children: childSnippet() } });
     expect(screen.queryByTitle("Quick actions")).not.toBeInTheDocument();
   });
 
   it("renders Settings link + flyout for admin", async () => {
     const auth = (await import("$lib/stores/auth")) as unknown as {
-      __setRole: (r: string | null) => void;
+      __setSession: (kind: "admin" | "guest") => void;
     };
-    auth.__setRole("admin");
+    auth.__setSession("admin");
     renderComponent(Layout, { props: { children: childSnippet() } });
     expect(screen.getByText("Settings")).toBeInTheDocument();
     expect(screen.getByTitle("Quick actions")).toBeInTheDocument();
@@ -131,9 +154,9 @@ describe("Layout guest gating", () => {
 
   it("guest sees a Login button instead of the sign-out icon", async () => {
     const auth = (await import("$lib/stores/auth")) as unknown as {
-      __setRole: (r: string | null) => void;
+      __setSession: (kind: "admin" | "guest") => void;
     };
-    auth.__setRole("guest");
+    auth.__setSession("guest");
     renderComponent(Layout, { props: { children: childSnippet() } });
     expect(screen.getByText("Login")).toBeInTheDocument();
     expect(screen.queryByTitle("Sign out")).not.toBeInTheDocument();
@@ -141,9 +164,9 @@ describe("Layout guest gating", () => {
 
   it("admin keeps the sign-out icon", async () => {
     const auth = (await import("$lib/stores/auth")) as unknown as {
-      __setRole: (r: string | null) => void;
+      __setSession: (kind: "admin" | "guest") => void;
     };
-    auth.__setRole("admin");
+    auth.__setSession("admin");
     renderComponent(Layout, { props: { children: childSnippet() } });
     expect(screen.getByTitle("Sign out")).toBeInTheDocument();
     expect(screen.queryByText("Login")).not.toBeInTheDocument();
@@ -153,23 +176,24 @@ describe("Layout guest gating", () => {
 describe("Layout tokenless browsing", () => {
   afterEach(async () => {
     cleanup();
+    await setPathname("/");
     gotoMock.mockClear();
     apiLogoutMock.mockClear();
     apiLogoutMock.mockResolvedValue(undefined);
     getTokenMock.mockReset();
     getTokenMock.mockReturnValue(null);
     const auth = (await import("$lib/stores/auth")) as unknown as {
-      __setRole: (r: string | null) => void;
+      __setSession: (kind: "admin" | "guest") => void;
     };
-    auth.__setRole("admin");
+    auth.__setSession("admin");
   });
 
   it("renders as guest (Login button) with no token and no acquisition attempt", async () => {
     getTokenMock.mockReturnValue(null);
     const auth = (await import("$lib/stores/auth")) as unknown as {
-      __setRole: (r: string | null) => void;
+      __setSession: (kind: "admin" | "guest") => void;
     };
-    auth.__setRole("guest");
+    auth.__setSession("guest");
 
     renderComponent(Layout, { props: { children: childSnippet() } });
 
@@ -205,5 +229,48 @@ describe("Layout tokenless browsing", () => {
     };
     expect(logoutLocal).toHaveBeenCalled();
     expect(gotoMock).toHaveBeenCalledWith("/");
+  });
+});
+
+describe("Layout guest bounce off /settings", () => {
+  afterEach(async () => {
+    cleanup();
+    await setPathname("/");
+    gotoMock.mockClear();
+    const auth = (await import("$lib/stores/auth")) as unknown as {
+      __setSession: (kind: "admin" | "guest") => void;
+    };
+    auth.__setSession("admin");
+  });
+
+  async function renderAt(pathname: string, kind: "admin" | "guest") {
+    const auth = (await import("$lib/stores/auth")) as unknown as {
+      __setSession: (k: "admin" | "guest") => void;
+    };
+    auth.__setSession(kind);
+    await setPathname(pathname);
+    renderComponent(Layout, { props: { children: childSnippet() } });
+  }
+
+  it("redirects a guest who lands on /settings to the dashboard", async () => {
+    await renderAt("/settings", "guest");
+    expect(gotoMock).toHaveBeenCalledWith("/");
+  });
+
+  it("redirects a guest who navigates to /settings after mounting", async () => {
+    await renderAt("/", "guest");
+    expect(gotoMock).not.toHaveBeenCalled();
+    await setPathname("/settings");
+    expect(gotoMock).toHaveBeenCalledWith("/");
+  });
+
+  it("leaves an admin on /settings alone", async () => {
+    await renderAt("/settings", "admin");
+    expect(gotoMock).not.toHaveBeenCalled();
+  });
+
+  it("does not bounce a guest off a non-settings route", async () => {
+    await renderAt("/jobs", "guest");
+    expect(gotoMock).not.toHaveBeenCalled();
   });
 });

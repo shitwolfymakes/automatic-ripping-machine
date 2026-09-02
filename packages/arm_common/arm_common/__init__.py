@@ -26,6 +26,7 @@ from arm_common.enums import (
     TrackStatus,
     TranscodeTaskStatus,
     TranscodeTool,
+    UserRole,
     VideoCodec,
 )
 from arm_common.models import (
@@ -47,7 +48,6 @@ from arm_common.models import (
     Track,
     TranscodePreset,
     TranscodeTask,
-    USER_ROLES,
     User,
 )
 from arm_common.ulid import new_id
@@ -94,8 +94,8 @@ __all__ = [
     "TranscodeTask",
     "TranscodeTaskStatus",
     "TranscodeTool",
-    "USER_ROLES",
     "User",
+    "UserRole",
     "VideoCodec",
     "configure_service_logging",
     "new_id",

@@ -9,8 +9,9 @@ NOT get that 403 on the routes intentionally left open to guests (reads,
 The 403 fires in the `require_writer` dependency before the route body or
 request validation runs, so gated-route bodies here are minimal (`{}` or
 omitted) — they never need to be well-formed. Stay-open routes get the
-opposite assertion: any status except the role-403 proves the gate isn't
-over-applied (a 404/422/2xx from hitting real route logic is fine).
+opposite assertion: not the role-403 (the gate isn't over-applied) *and* a
+success status, so a route that 500s before reaching its body can't pass as
+"open" — hence the seeded config singleton in `_app`.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
+from arm_backend.seeders import CONFIG_SINGLETON_ID  # noqa: E402
 from arm_backend.routers import (  # noqa: E402
     auth as auth_router,
     config as config_router,
@@ -41,7 +43,7 @@ from arm_backend.routers import (  # noqa: E402
     transcode_presets as transcode_presets_router,
     transcodes as transcodes_router,
 )
-from arm_common import User  # noqa: E402
+from arm_common import Config, RetentionPolicy, User  # noqa: E402
 from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
@@ -77,6 +79,23 @@ def _app() -> tuple[FastAPI, FakeSession]:
             password_must_change=False,
             role=GUEST_ROLE,
             disabled=False,
+        )
+    ]
+    # `GET /api/config` 500s on a missing singleton, and a 500 satisfies the
+    # stay-open assertion just as well as a 200 — so without this row the sweep
+    # asserted nothing about that route. Seed it so the route reaches its body.
+    db.rows["config"] = [
+        Config(
+            id=CONFIG_SINGLETON_ID,
+            tmdb_api_key=None,
+            omdb_api_key=None,
+            musicbrainz_user_agent=None,
+            auto_transcode_on_idle=False,
+            auto_rip_on_insert=True,
+            block_on_miss=True,
+            default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
+            notification_apprise_urls=[],
+            notifications_enabled=False,
         )
     ]
     app = FastAPI()
@@ -202,6 +221,10 @@ def test_guest_allowed_stay_open_route(method: str, path: str, body: dict[str, o
     assert r.status_code != 403 or r.json().get("detail") != _ROLE_DENIED_DETAIL, (
         f"{method} {path} -> unexpectedly denied by role gate: {r.text}"
     )
+    # A 4xx/5xx also satisfies the role-gate check above, which let a route
+    # that never reached its body (missing fixture row -> 500) pass as "open".
+    # Require a real success so the route is proven reachable by a guest.
+    assert r.status_code < 400, f"{method} {path} -> {r.status_code} (expected 2xx/3xx): {r.text}"
 
 
 def test_guest_denied_theme_upload() -> None:

@@ -10038,8 +10038,7 @@
             "title": "Password Must Change"
           },
           "role": {
-            "type": "string",
-            "title": "Role"
+            "$ref": "#/components/schemas/UserRole"
           }
         },
         "type": "object",
@@ -13822,6 +13821,15 @@
         ],
         "title": "UserPasswordSetRequest"
       },
+      "UserRole": {
+        "type": "string",
+        "enum": [
+          "admin",
+          "guest"
+        ],
+        "title": "UserRole",
+        "description": "Fixed two-account model (spec 2026-07-12-basic-user-management-design).\n\nADMIN \u2014 the single writer; the only account that can hold a session.\nGUEST \u2014 read-everything/write-nothing; acquired by having no token at all\n        rather than by logging in, and gated by the `disabled` flag on its\n        row.\n\nStored as VARCHAR via `enum_column`, never a Postgres CREATE TYPE."
+      },
       "UserView": {
         "properties": {
           "id": {
@@ -13833,8 +13841,7 @@
             "title": "Username"
           },
           "role": {
-            "type": "string",
-            "title": "Role"
+            "$ref": "#/components/schemas/UserRole"
           },
           "disabled": {
             "type": "boolean",
