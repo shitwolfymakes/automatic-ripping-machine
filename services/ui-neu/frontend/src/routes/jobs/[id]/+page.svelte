@@ -23,6 +23,7 @@
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import JsonTree from '$lib/components/JsonTree.svelte';
 	import { startRipperEvents, onRipperEvent } from '$lib/stores/ripperEvents.svelte';
+	import { isAdmin } from '$lib/stores/auth';
 
 	let detail = $state<JobDetailView | null>(null);
 	let jobLoading = $state(true);
@@ -262,7 +263,7 @@
 
 				<!-- Action buttons pushed right -->
 				<div class="flex flex-wrap items-center gap-2 ml-auto">
-					{#if canResolve}
+					{#if canResolve && $isAdmin}
 						<button
 							type="button"
 							data-testid="identify-open"
@@ -272,7 +273,7 @@
 							{identifyLabel}
 						</button>
 					{/if}
-					{#if canApply}
+					{#if canApply && $isAdmin}
 						<button
 							type="button"
 							data-testid="apply-open"
@@ -282,7 +283,9 @@
 							Apply session
 						</button>
 					{/if}
-					<JobActions {job} onaction={loadJob} ondelete={() => goto('/')} />
+					{#if $isAdmin}
+						<JobActions {job} onaction={loadJob} ondelete={() => goto('/')} />
+					{/if}
 				</div>
 			</div>
 
@@ -378,9 +381,9 @@
 									<td class="px-4 py-3" data-label="#">{track.index}</td>
 									<td class="px-4 py-3 text-gray-700 dark:text-gray-300" data-label="Kind">{trackKindLabel(track.kind)}</td>
 									<td
-										class="px-4 py-3 cursor-pointer hover:bg-primary/5 dark:hover:bg-primary/10"
+										class="px-4 py-3 {$isAdmin ? 'cursor-pointer hover:bg-primary/5 dark:hover:bg-primary/10' : ''}"
 										data-label="Title"
-										onclick={() => { editingTrackId = editingTrackId === track.id ? null : track.id; }}
+										onclick={$isAdmin ? () => { editingTrackId = editingTrackId === track.id ? null : track.id; } : undefined}
 									>
 										{#if track.title}
 											<div class="flex items-center gap-1.5">
@@ -440,13 +443,17 @@
 									</td>
 									<td class="px-4 py-3 text-gray-700 dark:text-gray-300" data-label="Size">{trackSizeLabel(track)}</td>
 									<td class="px-4 py-3" data-label="Include">
-										<input
-											type="checkbox"
-											checked={!track.excluded}
-											onchange={(e) => toggleExcluded(track.id, !(e.currentTarget as HTMLInputElement).checked)}
-											title="Include this track in transcode output (the disc still rips in full)"
-											class="h-4 w-4 rounded border-primary/30 text-primary focus:ring-primary"
-										/>
+										{#if $isAdmin}
+											<input
+												type="checkbox"
+												checked={!track.excluded}
+												onchange={(e) => toggleExcluded(track.id, !(e.currentTarget as HTMLInputElement).checked)}
+												title="Include this track in transcode output (the disc still rips in full)"
+												class="h-4 w-4 rounded border-primary/30 text-primary focus:ring-primary"
+											/>
+										{:else}
+											<span class="text-xs text-gray-400">{track.excluded ? 'Excluded' : 'Included'}</span>
+										{/if}
 									</td>
 									<!-- Rip outcome -->
 									<td class="px-4 py-3" data-label="Rip">

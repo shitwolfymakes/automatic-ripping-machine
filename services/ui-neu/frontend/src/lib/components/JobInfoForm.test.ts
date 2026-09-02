@@ -1,6 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/test-utils';
 
+vi.mock('$lib/stores/auth', async () => {
+	const { derived, writable } = await import('svelte/store');
+	const _role = writable<string | null>('admin');
+	return {
+		role: { subscribe: _role.subscribe },
+		isAdmin: derived(_role, (r) => r === 'admin'),
+		// Test-only helper — not part of the real module's public API.
+		__setRole: (r: string | null) => _role.set(r)
+	};
+});
+
 vi.mock('$lib/api/jobs', () => ({
 	resolveJob: vi.fn()
 }));
@@ -108,5 +119,30 @@ describe('JobInfoForm', () => {
 		await fireEvent.input(screen.getByLabelText('Year'), { target: { value: '1986' } });
 		expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
 		expect(screen.queryByRole('button', { name: /start/i })).not.toBeInTheDocument();
+	});
+
+	describe('guest write-control gating', () => {
+		afterEach(async () => {
+			const auth = (await import('$lib/stores/auth')) as unknown as {
+				__setRole: (r: string | null) => void;
+			};
+			auth.__setRole('admin');
+		});
+
+		it('hides the Save button for guests', async () => {
+			const auth = (await import('$lib/stores/auth')) as unknown as {
+				__setRole: (r: string | null) => void;
+			};
+			auth.__setRole('guest');
+			renderComponent(JobInfoForm, { props: { job: job() } });
+			await fireEvent.input(screen.getByLabelText('Year'), { target: { value: '1986' } });
+			expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+		});
+
+		it('shows the Save button for admins', async () => {
+			renderComponent(JobInfoForm, { props: { job: job() } });
+			await fireEvent.input(screen.getByLabelText('Year'), { target: { value: '1986' } });
+			expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+		});
 	});
 });

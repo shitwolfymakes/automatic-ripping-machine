@@ -1,8 +1,7 @@
-import { redirect } from '@sveltejs/kit';
-import type { LayoutLoad } from './$types';
-import { hydrateConfig } from '$lib/stores/config';
-import { getToken } from '$lib/api/client';
-import { features } from '$lib/features';
+import { redirect } from "@sveltejs/kit";
+import type { LayoutLoad } from "./$types";
+import { hydrateConfig } from "$lib/stores/config";
+import { features } from "$lib/features";
 
 export const prerender = false;
 export const ssr = false;
@@ -16,46 +15,38 @@ let setupConfirmedComplete = false;
 let configHydrated = false;
 
 export const load: LayoutLoad = async ({ url, fetch }) => {
-	if (!configHydrated) {
-		await hydrateConfig();
-		configHydrated = true;
-	}
+  if (!configHydrated) {
+    await hydrateConfig();
+    configHydrated = true;
+  }
 
-	const path = url.pathname;
-	const isAuthRoute = path.startsWith('/login') || path.startsWith('/change-password');
+  // Skip setup check if already on /setup
+  if (url.pathname.startsWith("/setup")) return {};
 
-	// Auth guard: unauthenticated users go to /login (except on the auth routes).
-	if (!isAuthRoute && getToken() === null) {
-		redirect(307, '/login');
-	}
+  // Setup wizard backend is MISSING in v3 — skip the first-run redirect until a
+  // setup-status endpoint lands (feature-flagged off). The block below revives
+  // when features.setup flips to true.
+  if (!features.setup) return {};
 
-	// Skip setup check if already on /setup
-	if (url.pathname.startsWith('/setup')) return {};
+  // Skip if we already know setup is done (cached from a previous navigation)
+  if (setupConfirmedComplete) return {};
 
-	// Setup wizard backend is MISSING in v3 — skip the first-run redirect until a
-	// setup-status endpoint lands (feature-flagged off). The block below revives
-	// when features.setup flips to true.
-	if (!features.setup) return {};
+  try {
+    const resp = await fetch("/api/setup/status");
+    if (resp.ok) {
+      const status = await resp.json();
+      if (status.first_run === true) {
+        redirect(307, "/setup");
+      }
+      // Setup is complete - cache this so we don't re-check on every click
+      setupConfirmedComplete = true;
+    }
+    // Non-ok response (503, etc.) - ARM unreachable, don't redirect
+  } catch (e) {
+    // Re-throw SvelteKit redirects (they use throw internally)
+    if (e && typeof e === "object" && "status" in e && "location" in e) throw e;
+    // ARM unreachable - don't redirect, let the normal UI handle it
+  }
 
-	// Skip if we already know setup is done (cached from a previous navigation)
-	if (setupConfirmedComplete) return {};
-
-	try {
-		const resp = await fetch('/api/setup/status');
-		if (resp.ok) {
-			const status = await resp.json();
-			if (status.first_run === true) {
-				redirect(307, '/setup');
-			}
-			// Setup is complete - cache this so we don't re-check on every click
-			setupConfirmedComplete = true;
-		}
-		// Non-ok response (503, etc.) - ARM unreachable, don't redirect
-	} catch (e) {
-		// Re-throw SvelteKit redirects (they use throw internally)
-		if (e && typeof e === 'object' && 'status' in e && 'location' in e) throw e;
-		// ARM unreachable - don't redirect, let the normal UI handle it
-	}
-
-	return {};
+  return {};
 };

@@ -13,6 +13,17 @@ vi.mock('$app/navigation', () => ({
 	goto: vi.fn()
 }));
 
+vi.mock('$lib/stores/auth', async () => {
+	const { derived, writable } = await import('svelte/store');
+	const _role = writable<string | null>('admin');
+	return {
+		role: { subscribe: _role.subscribe },
+		isAdmin: derived(_role, (r) => r === 'admin'),
+		// Test-only helper — not part of the real module's public API.
+		__setRole: (r: string | null) => _role.set(r)
+	};
+});
+
 const { buildDetail } = vi.hoisted(() => {
 	return {
 		buildDetail: (jobOverrides: Partial<JobView> = {}): JobDetailView => ({
@@ -144,6 +155,38 @@ describe('Job Detail Page', () => {
 			await waitFor(() => {
 				expect(goto).toHaveBeenCalledWith('/');
 			});
+		});
+	});
+
+	describe('guest write-control gating', () => {
+		afterEach(async () => {
+			const auth = (await import('$lib/stores/auth')) as unknown as {
+				__setRole: (r: string | null) => void;
+			};
+			auth.__setRole('admin');
+		});
+
+		it('hides Identify, Apply session, and Delete for guests', async () => {
+			const auth = (await import('$lib/stores/auth')) as unknown as {
+				__setRole: (r: string | null) => void;
+			};
+			auth.__setRole('guest');
+			renderComponent(JobDetailPage);
+			await waitFor(() => {
+				expect(screen.getByRole('heading', { name: 'Test Movie' })).toBeInTheDocument();
+			});
+			expect(screen.queryByTestId('identify-open')).not.toBeInTheDocument();
+			expect(screen.queryByTestId('apply-open')).not.toBeInTheDocument();
+			expect(screen.queryByText('Delete')).not.toBeInTheDocument();
+		});
+
+		it('shows Identify, Apply session, and Delete for admins', async () => {
+			renderComponent(JobDetailPage);
+			await waitFor(() => {
+				expect(screen.getByTestId('identify-open')).toBeInTheDocument();
+			});
+			expect(screen.getByTestId('apply-open')).toBeInTheDocument();
+			expect(screen.getByText('Delete')).toBeInTheDocument();
 		});
 	});
 });

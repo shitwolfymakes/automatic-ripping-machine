@@ -16,6 +16,7 @@ from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import notifications as notif_router  # noqa: E402
 from arm_common import NotificationInbox, User  # noqa: E402
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -37,6 +38,16 @@ def _make_app(signing_key: bytes, db: FakeSession):
     app.dependency_overrides[get_session] = _override_session
     db.rows.setdefault("users", []).append(
         User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)
+    )
+    db.rows["users"].append(
+        User(
+            id="usr_guest",
+            username="guest",
+            password_hash="x",
+            password_must_change=False,
+            role=GUEST_ROLE,
+            disabled=False,
+        )
     )
     token, _ = issue_access_token("usr_admin", "admin", signing_key)
     return app, token
@@ -117,12 +128,17 @@ def test_inbox_patch_seen_and_cleared(signing_key: bytes) -> None:
 
 
 def test_inbox_requires_auth(signing_key: bytes) -> None:
+    """No Authorization header falls back to the guest account: read routes
+    (list, count) succeed as guest; the write route (dismiss-all) still 403s
+    on the role gate."""
     db = FakeSession()
     app, _ = _make_app(signing_key, db)
     with TestClient(app) as client:
-        assert client.get("/api/notifications/inbox").status_code == 401
-        assert client.get("/api/notifications/inbox/count").status_code == 401
-        assert client.post("/api/notifications/inbox/dismiss-all").status_code == 401
+        assert client.get("/api/notifications/inbox").status_code == 200
+        assert client.get("/api/notifications/inbox/count").status_code == 200
+        r = client.post("/api/notifications/inbox/dismiss-all")
+        assert r.status_code == 403
+        assert r.json()["detail"] == "read-only role: write access required"
 
 
 def test_app_registers_inbox_route() -> None:

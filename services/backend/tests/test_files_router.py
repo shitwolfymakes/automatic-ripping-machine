@@ -16,6 +16,7 @@ from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import files as files_router  # noqa: E402
 from arm_common import User  # noqa: E402
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 from arm_common.schemas import FileRoot  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
@@ -34,7 +35,17 @@ def app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     }
     monkeypatch.setattr(fb, "ROOTS", registry)
     db = FakeSession()
-    db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
+    db.rows["users"] = [
+        User(id="usr_admin", username="admin", password_hash="x", password_must_change=False),
+        User(
+            id="usr_guest",
+            username="guest",
+            password_hash="x",
+            password_must_change=False,
+            role=GUEST_ROLE,
+            disabled=False,
+        ),
+    ]
     application = FastAPI()
     application.state.signing_key = secrets.token_bytes(32)
     application.include_router(files_router.router)
@@ -102,9 +113,10 @@ def test_fix_permissions(app):
 
 
 def test_requires_jwt(app):
+    """No Authorization header falls back to the guest account (read-only route)."""
     with TestClient(app) as c:
         r = c.get("/api/files/roots")
-    assert r.status_code == 401
+    assert r.status_code == 200
 
 
 def test_rename(app):

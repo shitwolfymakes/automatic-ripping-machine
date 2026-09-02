@@ -235,3 +235,18 @@ class MakemkvSdfState(StrEnum):
     DISABLED = "disabled"
     DOWNLOAD_FAILED = "download_failed"
     PROBE_FAILED = "probe_failed"
+
+
+class UserRole(StrEnum):
+    """Fixed two-account model (spec 2026-07-12-basic-user-management-design).
+
+    ADMIN — the single writer; the only account that can hold a session.
+    GUEST — read-everything/write-nothing; acquired by having no token at all
+            rather than by logging in, and gated by the `disabled` flag on its
+            row.
+
+    Stored as VARCHAR via `enum_column`, never a Postgres CREATE TYPE.
+    """
+
+    ADMIN = "admin"
+    GUEST = "guest"

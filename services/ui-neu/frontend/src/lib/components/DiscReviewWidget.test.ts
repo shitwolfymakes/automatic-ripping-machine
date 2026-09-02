@@ -9,6 +9,17 @@ function detail(jobOverrides: Partial<JobView> = {}, tracks: TrackView[] = []) {
 	return { ...createJobDetail({ tracks }), job: createJob(jobOverrides) };
 }
 
+vi.mock('$lib/stores/auth', async () => {
+	const { derived, writable } = await import('svelte/store');
+	const _role = writable<string | null>('admin');
+	return {
+		role: { subscribe: _role.subscribe },
+		isAdmin: derived(_role, (r) => r === 'admin'),
+		// Test-only helper — not part of the real module's public API.
+		__setRole: (r: string | null) => _role.set(r)
+	};
+});
+
 vi.mock('$lib/api/jobs', () => ({
 	fetchJob: vi.fn(() => Promise.resolve(createJobDetail())),
 	abandonJob: vi.fn(() => Promise.resolve()),

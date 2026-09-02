@@ -17,6 +17,7 @@ from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import system as system_router  # noqa: E402
 from arm_common import Config, DiscType, Drive, DriveStatus, Event, Job, JobStatus, User  # noqa: E402
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -29,7 +30,17 @@ def signing_key() -> bytes:
 
 
 def _seed(db: FakeSession) -> None:
-    db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
+    db.rows["users"] = [
+        User(id="usr_admin", username="admin", password_hash="x", password_must_change=False),
+        User(
+            id="usr_guest",
+            username="guest",
+            password_hash="x",
+            password_must_change=False,
+            role=GUEST_ROLE,
+            disabled=False,
+        ),
+    ]
     db.rows["config"] = [Config(id=1)]
     db.rows["drives"] = [
         Drive(id="drv_on0000000000000000000001", hostname="h1", device_path="/dev/sr0", status=DriveStatus.ONLINE),
@@ -176,9 +187,21 @@ def test_diagnostics_config_missing_is_error(signing_key: bytes, tmp_path) -> No
     assert r.json()["status"] == "error"
 
 
-def test_diagnostics_unauthenticated_401(signing_key: bytes, tmp_path) -> None:
+def test_diagnostics_unauthenticated_reads_as_guest(signing_key: bytes, tmp_path) -> None:
+    """No Authorization header falls back to the guest account (read-only route)."""
     db = FakeSession()
     _seed(db)
+    app, _ = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics")
+    assert r.status_code == 200
+
+
+def test_diagnostics_unauthenticated_401_when_guest_disabled(signing_key: bytes, tmp_path) -> None:
+    """With guest access disabled, an anonymous request is rejected."""
+    db = FakeSession()
+    _seed(db)
+    db.rows["users"][1].disabled = True
     app, _ = _make_app(signing_key, db, tmp=tmp_path)
     with TestClient(app) as c:
         r = c.get("/api/system/diagnostics")
@@ -224,11 +247,12 @@ def test_app_version_reads_version_file(monkeypatch, tmp_path) -> None:
 
 
 def test_system_version_requires_auth(signing_key: bytes, tmp_path) -> None:
+    """No Authorization header falls back to the guest account (read-only route)."""
     db = FakeSession()
     _seed(db)
     app, _ = _make_app(signing_key, db, tmp=tmp_path)
     with TestClient(app) as client:
-        assert client.get("/api/system/version").status_code == 401
+        assert client.get("/api/system/version").status_code == 200
 
 
 def test_app_version_real_fallback(monkeypatch) -> None:

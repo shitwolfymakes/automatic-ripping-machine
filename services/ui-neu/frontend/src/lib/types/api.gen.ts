@@ -1404,6 +1404,7 @@ export type LoginResponse = {
      * Password Must Change
      */
     password_must_change: boolean;
+    role: UserRole;
 };
 
 /**
@@ -3409,6 +3410,63 @@ export type TranscodeWorkerView = {
      * Output Path
      */
     output_path?: string | null;
+};
+
+/**
+ * UserDisabledRequest
+ */
+export type UserDisabledRequest = {
+    /**
+     * Disabled
+     */
+    disabled: boolean;
+};
+
+/**
+ * UserPasswordSetRequest
+ */
+export type UserPasswordSetRequest = {
+    /**
+     * New Password
+     */
+    new_password: string;
+};
+
+/**
+ * UserRole
+ *
+ * Fixed two-account model (spec 2026-07-12-basic-user-management-design).
+ *
+ * ADMIN — the single writer; the only account that can hold a session.
+ * GUEST — read-everything/write-nothing; acquired by having no token at all
+ * rather than by logging in, and gated by the `disabled` flag on its
+ * row.
+ *
+ * Stored as VARCHAR via `enum_column`, never a Postgres CREATE TYPE.
+ */
+export type UserRole = 'admin' | 'guest';
+
+/**
+ * UserView
+ */
+export type UserView = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Username
+     */
+    username: string;
+    role: UserRole;
+    /**
+     * Disabled
+     */
+    disabled: boolean;
+    /**
+     * Last Login At
+     */
+    last_login_at?: string | null;
 };
 
 /**
@@ -7548,3 +7606,112 @@ export type DeleteApiFilesDeleteResponses = {
 };
 
 export type DeleteApiFilesDeleteResponse = DeleteApiFilesDeleteResponses[keyof DeleteApiFilesDeleteResponses];
+
+export type ListUsersApiUsersGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/users';
+};
+
+export type ListUsersApiUsersGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListUsersApiUsersGetError = ListUsersApiUsersGetErrors[keyof ListUsersApiUsersGetErrors];
+
+export type ListUsersApiUsersGetResponses = {
+    /**
+     * Response List Users Api Users Get
+     *
+     * Successful Response
+     */
+    200: Array<UserView>;
+};
+
+export type ListUsersApiUsersGetResponse = ListUsersApiUsersGetResponses[keyof ListUsersApiUsersGetResponses];
+
+export type SetDisabledApiUsersUserIdPatchData = {
+    body: UserDisabledRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/users/{user_id}';
+};
+
+export type SetDisabledApiUsersUserIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SetDisabledApiUsersUserIdPatchError = SetDisabledApiUsersUserIdPatchErrors[keyof SetDisabledApiUsersUserIdPatchErrors];
+
+export type SetDisabledApiUsersUserIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: UserView;
+};
+
+export type SetDisabledApiUsersUserIdPatchResponse = SetDisabledApiUsersUserIdPatchResponses[keyof SetDisabledApiUsersUserIdPatchResponses];
+
+export type SetPasswordApiUsersUserIdPasswordPostData = {
+    body: UserPasswordSetRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/users/{user_id}/password';
+};
+
+export type SetPasswordApiUsersUserIdPasswordPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SetPasswordApiUsersUserIdPasswordPostError = SetPasswordApiUsersUserIdPasswordPostErrors[keyof SetPasswordApiUsersUserIdPasswordPostErrors];
+
+export type SetPasswordApiUsersUserIdPasswordPostResponses = {
+    /**
+     * Response Set Password Api Users  User Id  Password Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: boolean;
+    };
+};
+
+export type SetPasswordApiUsersUserIdPasswordPostResponse = SetPasswordApiUsersUserIdPasswordPostResponses[keyof SetPasswordApiUsersUserIdPasswordPostResponses];

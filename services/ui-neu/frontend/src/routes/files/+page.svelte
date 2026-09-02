@@ -11,6 +11,7 @@
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import FileRow from '$lib/components/FileRow.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
+	import { isAdmin } from '$lib/stores/auth';
 
 	let roots = $state<FileRoot[]>([]);
 	// Current navigation position: root key + subpath within that root
@@ -508,7 +509,7 @@
 			<BreadcrumbNav root={current.root} subpath={current.subpath} {roots} onnavigate={navigate} />
 			<div class="flex shrink-0 items-center gap-1">
 				<!-- Bulk move (visible when items selected) -->
-				{#if selectedKeys.size > 0}
+				{#if selectedKeys.size > 0 && $isAdmin}
 					<button
 						type="button"
 						onclick={openMoveDialog}
@@ -532,41 +533,45 @@
 						Delete {selectedKeys.size}
 					</button>
 				{/if}
-				<!-- Orphan folders -->
-				<button
-					type="button"
-					onclick={openOrphanFoldersModal}
-					class="rounded-lg p-2 text-gray-500 hover:bg-primary/10 dark:text-gray-400 dark:hover:bg-primary/15"
-					title="Orphan folders"
-				>
-					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11v4m-2-2h4" />
-					</svg>
-				</button>
-				<!-- Transcoder cleanup -->
-				<button
-					type="button"
-					onclick={() => (transcoderCleanupOpen = true)}
-					class="rounded-lg p-2 text-gray-500 hover:bg-primary/10 dark:text-gray-400 dark:hover:bg-primary/15"
-					title="Clean up transcoder jobs"
-				>
-					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
-					</svg>
-				</button>
+				{#if $isAdmin}
+					<!-- Orphan folders -->
+					<button
+						type="button"
+						onclick={openOrphanFoldersModal}
+						class="rounded-lg p-2 text-gray-500 hover:bg-primary/10 dark:text-gray-400 dark:hover:bg-primary/15"
+						title="Orphan folders"
+					>
+						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11v4m-2-2h4" />
+						</svg>
+					</button>
+					<!-- Transcoder cleanup -->
+					<button
+						type="button"
+						onclick={() => (transcoderCleanupOpen = true)}
+						class="rounded-lg p-2 text-gray-500 hover:bg-primary/10 dark:text-gray-400 dark:hover:bg-primary/15"
+						title="Clean up transcoder jobs"
+					>
+						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+						</svg>
+					</button>
+				{/if}
 				<!-- New folder -->
-				<button
-					type="button"
-					onclick={startNewFolder}
-					disabled={isReadonly}
-					class="rounded-lg p-2 text-gray-500 hover:bg-primary/10 dark:text-gray-400 dark:hover:bg-primary/15 disabled:opacity-30 disabled:pointer-events-none"
-					title={isReadonly ? 'Read-only mount' : 'New folder'}
-				>
-					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-					</svg>
-				</button>
+				{#if $isAdmin}
+					<button
+						type="button"
+						onclick={startNewFolder}
+						disabled={isReadonly}
+						class="rounded-lg p-2 text-gray-500 hover:bg-primary/10 dark:text-gray-400 dark:hover:bg-primary/15 disabled:opacity-30 disabled:pointer-events-none"
+						title={isReadonly ? 'Read-only mount' : 'New folder'}
+					>
+						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+						</svg>
+					</button>
+				{/if}
 				<!-- Refresh -->
 				<button
 					type="button"
@@ -668,12 +673,14 @@
 						<thead>
 							<tr class="border-b border-gray-200 text-left text-xs font-medium uppercase text-gray-500 dark:border-gray-700 dark:text-gray-400">
 								<th class="w-10 px-3 py-2">
-									<input
-										type="checkbox"
-										checked={allSelected}
-										onchange={toggleSelectAll}
-										class="h-4 w-4 rounded border-gray-300 text-primary accent-primary dark:border-gray-600"
-									/>
+									{#if $isAdmin}
+										<input
+											type="checkbox"
+											checked={allSelected}
+											onchange={toggleSelectAll}
+											class="h-4 w-4 rounded border-gray-300 text-primary accent-primary dark:border-gray-600"
+										/>
+									{/if}
 								</th>
 								<th class="px-3 py-2">
 									<button type="button" onclick={() => toggleSort('name')} class="hover:text-gray-700 dark:hover:text-gray-300">
@@ -701,6 +708,7 @@
 									currentPath={current.subpath}
 									selected={selectedKeys.has(selectionKey(entry.name))}
 									readonly={isReadonly}
+									showActions={$isAdmin}
 									onnavigate={() => navigate(current.root, itemSubpath(entry.name))}
 									onrename={(_, newName) => handleRename(entry.name, newName)}
 									ondelete={(_, name) => handleDeleteRequest(entry.name, name)}

@@ -14,7 +14,7 @@
 	import FlyoutDivider from '$lib/components/FlyoutDivider.svelte';
 	import { onMount } from 'svelte';
 	import { setUnauthorizedHandler } from '$lib/api/client';
-	import { logoutLocal, initAuth } from '$lib/stores/auth';
+	import { logoutLocal, initAuth, isGuest } from '$lib/stores/auth';
 	import { isScreenEnabled } from '$lib/features';
 	import { logout as apiLogout } from '$lib/api/auth';
 	import { countRipping } from '$lib/utils/job-status';
@@ -28,19 +28,12 @@
 	// multiple in-flight requests 401 at once. Reset once the user is back on a
 	// real (non-auth) page, so a future session expiry can redirect again.
 	let redirectingToLogin = false;
+
 	const rippingCount = $derived(countRipping($dashboard.active_jobs ?? []));
 
 	function handleQuickAction(action: string) {
 		if (action === 'import-folder') {
 			showImportWizard.set(true);
-		} else if (action === 'restart-arm') {
-			if (confirm('Restart the ARM ripping service? Active rips will be interrupted.')) {
-				fetch('/api/system/restart', { method: 'POST' });
-			}
-		} else if (action === 'restart-transcoder') {
-			if (confirm('Restart the transcoder service? Active transcodes will be interrupted.')) {
-				fetch('/api/system/restart-transcoder', { method: 'POST' });
-			}
 		} else if (action === 'settings') {
 			goto('/settings');
 		}
@@ -55,6 +48,28 @@
 	$effect(() => {
 		if (!isAuthPage) redirectingToLogin = false;
 	});
+
+	// Guests have no access to /settings (server also enforces this) — bounce
+	// them to the dashboard if they land there via a stale link or back-nav.
+	$effect(() => {
+		if ($isGuest && $page.url.pathname.startsWith('/settings')) {
+			goto('/');
+		}
+	});
+
+	// Deliberate sign-out: best-effort server-side logout, then drop the local
+	// session and land on the dashboard. Landing tokenless is a valid guest
+	// browsing state — if guest access is disabled, the next request's 401
+	// will route to /login on its own.
+	async function handleSignOut(): Promise<void> {
+		try {
+			await apiLogout();
+		} catch {
+			/* ignore */
+		}
+		logoutLocal();
+		goto('/');
+	}
 
 	async function toggleRipping() {
 		if (togglingPause) return;
@@ -100,7 +115,8 @@
 		}
 		// Load themes from API (falls back to built-in if backend unreachable)
 		loadThemesFromApi();
-		// Start dashboard polling (provides sidebar stats on all pages)
+		// Tokenless browsing is a valid state (anonymous requests act as guest
+		// backend-side) — start polling the same as an authenticated session.
 		dashboard.start();
 		return () => dashboard.stop();
 	});
@@ -117,6 +133,7 @@
 		allNavItems
 			.filter(i => isScreenEnabled(i.href))
 			.filter(i => i.href !== '/transcoder' || $transcoderEnabled)
+			.filter(i => i.href !== '/settings' || !$isGuest)
 	);
 
 	function isActive(href: string, pathname: string): boolean {
@@ -230,7 +247,7 @@
 
 			<div class="flex items-center gap-4 ml-auto">
 				<!-- Auto-Start toggle -->
-				{#if $dashboard.db_available}
+				{#if !$isGuest && $dashboard.db_available}
 					<button
 						onclick={toggleRipping}
 						disabled={togglingPause}
@@ -245,6 +262,7 @@
 					</button>
 				{/if}
 				<!-- Quick actions menu -->
+				{#if !$isGuest}
 				<Flyout align="right" width="w-52" label="Quick actions">
 					{#snippet trigger({ toggle })}
 						<button
@@ -268,25 +286,6 @@
 							Import
 						</FlyoutItem>
 						<FlyoutDivider />
-						<FlyoutItem onclick={() => { handleQuickAction('restart-arm'); close(); }}>
-							{#snippet icon()}
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-								</svg>
-							{/snippet}
-							Restart ARM
-						</FlyoutItem>
-						{#if $transcoderEnabled}
-							<FlyoutItem onclick={() => { handleQuickAction('restart-transcoder'); close(); }}>
-								{#snippet icon()}
-									<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-									</svg>
-								{/snippet}
-								Restart Transcoder
-							</FlyoutItem>
-						{/if}
-						<FlyoutDivider />
 						<FlyoutItem onclick={() => { handleQuickAction('settings'); close(); }}>
 							{#snippet icon()}
 								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -297,16 +296,27 @@
 						</FlyoutItem>
 					{/snippet}
 				</Flyout>
-				<button
-					onclick={async () => { try { await apiLogout(); } catch { /* ignore */ } logoutLocal(); goto('/login'); }}
-					class="rounded-lg p-2 text-gray-500 hover:bg-primary/10 dark:text-gray-300 dark:hover:bg-primary/15"
-					title="Sign out"
-					aria-label="Sign out"
-				>
-					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-					</svg>
-				</button>
+				{/if}
+				{#if $isGuest}
+					<button
+						onclick={() => goto('/login')}
+						class="rounded-lg px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 dark:hover:bg-primary/15"
+						title="Log in"
+					>
+						Login
+					</button>
+				{:else}
+					<button
+						onclick={handleSignOut}
+						class="rounded-lg p-2 text-gray-500 hover:bg-primary/10 dark:text-gray-300 dark:hover:bg-primary/15"
+						title="Sign out"
+						aria-label="Sign out"
+					>
+						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+						</svg>
+					</button>
+				{/if}
 				<!-- Dark mode toggle (hidden when theme locks the mode) -->
 				{#if !$schemeLocksMode}
 					<button

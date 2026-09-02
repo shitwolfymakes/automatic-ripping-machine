@@ -12,6 +12,17 @@ import {
   createFolderEntry,
 } from "$lib/components/__fixtures__/files";
 
+vi.mock("$lib/stores/auth", async () => {
+  const { derived, writable } = await import("svelte/store");
+  const _role = writable<string | null>("admin");
+  return {
+    role: { subscribe: _role.subscribe },
+    isAdmin: derived(_role, (r) => r === "admin"),
+    // Test-only helper — not part of the real module's public API.
+    __setRole: (r: string | null) => _role.set(r),
+  };
+});
+
 import { fetchRoots, fetchDirectory } from "$lib/api/files";
 import { fetchOrphanFolders, cleanupTranscoder } from "$lib/api/maintenance";
 
@@ -395,6 +406,49 @@ describe("Files Page", () => {
           ),
         ).toBeInTheDocument();
       });
+    });
+  });
+
+  describe("guest write-control gating", () => {
+    afterEach(async () => {
+      const auth = (await import("$lib/stores/auth")) as unknown as {
+        __setRole: (r: string | null) => void;
+      };
+      auth.__setRole("admin");
+    });
+
+    it("hides New folder button and per-row rename/delete/fix-permissions for guests", async () => {
+      const auth = (await import("$lib/stores/auth")) as unknown as {
+        __setRole: (r: string | null) => void;
+      };
+      auth.__setRole("guest");
+      renderComponent(FilesPage);
+      await waitFor(() => {
+        expect(screen.getByText("movie.mkv")).toBeInTheDocument();
+      });
+      expect(screen.queryByTitle("New folder")).not.toBeInTheDocument();
+      expect(screen.queryByTitle("Rename")).not.toBeInTheDocument();
+      expect(screen.queryByTitle("Delete")).not.toBeInTheDocument();
+      expect(screen.queryByTitle("Fix permissions")).not.toBeInTheDocument();
+      expect(screen.queryByTitle("Orphan folders")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTitle("Clean up transcoder jobs"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows New folder button and per-row rename/delete/fix-permissions for admins", async () => {
+      renderComponent(FilesPage);
+      await waitFor(() => {
+        expect(screen.getByText("movie.mkv")).toBeInTheDocument();
+      });
+      expect(screen.getByTitle("New folder")).toBeInTheDocument();
+      expect(screen.getAllByTitle("Rename").length).toBeGreaterThan(0);
+      expect(screen.getAllByTitle("Delete").length).toBeGreaterThan(0);
+      expect(screen.getAllByTitle("Fix permissions").length).toBeGreaterThan(0);
+      expect(screen.getByTitle("Orphan folders")).toBeInTheDocument();
+      expect(
+        screen.getByTitle("Clean up transcoder jobs"),
+      ).toBeInTheDocument();
     });
   });
 

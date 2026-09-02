@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.auth import require_jwt
+from arm_backend.auth import require_writer
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
 from arm_common import User
@@ -43,6 +43,8 @@ async def login(
         _hasher.verify(user.password_hash, req.password)
     except VerifyMismatchError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials") from exc
+    if user.disabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="account disabled")
 
     if _hasher.check_needs_rehash(user.password_hash):
         user.password_hash = _hasher.hash(req.password)
@@ -58,6 +60,7 @@ async def login(
         access_token=token,
         expires_at=expires_at,
         password_must_change=user.password_must_change,
+        role=user.role,
     )
 
 
@@ -70,7 +73,7 @@ async def logout() -> dict[str, bool]:
 @router.post("/password")
 async def change_password(
     req: PasswordChangeRequest,
-    user: User = Depends(require_jwt),
+    user: User = Depends(require_writer),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, bool]:
     try:

@@ -3,6 +3,17 @@ import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-
 import DashboardPage from '../+page.svelte';
 import { createJob } from '$lib/components/__fixtures__/job';
 
+vi.mock('$lib/stores/auth', async () => {
+	const { derived, writable } = await import('svelte/store');
+	const _role = writable<string | null>('admin');
+	return {
+		role: { subscribe: _role.subscribe },
+		isAdmin: derived(_role, (r) => r === 'admin'),
+		// Test-only helper — not part of the real module's public API.
+		__setRole: (r: string | null) => _role.set(r)
+	};
+});
+
 // --- Shared mock job fixtures (v3 JobView shape) ---
 const ACTIVE_JOB = createJob({
 	id: 'job_1',
@@ -190,5 +201,30 @@ describe('Dashboard Page', () => {
 		expect(call).not.toHaveProperty('page');
 		expect(call).not.toHaveProperty('per_page');
 		expect(call).not.toHaveProperty('sort_by');
+	});
+
+	describe('guest write-control gating', () => {
+		afterEach(async () => {
+			const auth = (await import('$lib/stores/auth')) as unknown as {
+				__setRole: (r: string | null) => void;
+			};
+			auth.__setRole('admin');
+		});
+
+		it('hides the bulk actions menu and selection checkboxes for guests', async () => {
+			const auth = (await import('$lib/stores/auth')) as unknown as {
+				__setRole: (r: string | null) => void;
+			};
+			auth.__setRole('guest');
+			await renderDashboardTable();
+			expect(screen.queryByText(/Actions/)).not.toBeInTheDocument();
+			expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+		});
+
+		it('shows the bulk actions menu and selection checkboxes for admins', async () => {
+			await renderDashboardTable();
+			expect(screen.getByText(/Actions/)).toBeInTheDocument();
+			expect(screen.queryAllByRole('checkbox').length).toBeGreaterThan(0);
+		});
 	});
 });

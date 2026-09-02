@@ -74,11 +74,11 @@ class WSConnection {
 
 	private connect(): void {
 		if (this.stopping) return;
-		const token = getToken();
-		if (!token) {
-			// No auth yet — wait for login. The auth flow calls .start() post-login.
-			return;
-		}
+		// Tokenless requests act as guest backend-side (same as REST) — send
+		// the stored token if present, or an empty string when browsing
+		// anonymously. Either way the socket opens; the backend's auth ack
+		// determines the effective identity.
+		const token = getToken() ?? '';
 		const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 		// Same-origin: nginx proxies /ws to the backend, like /api/*.
 		const url = `${proto}//${window.location.host}/ws`;

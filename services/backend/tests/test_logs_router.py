@@ -25,6 +25,7 @@ from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import logs as logs_router  # noqa: E402
 from arm_common import User  # noqa: E402
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -63,6 +64,16 @@ def _make_app(signing_key: bytes) -> tuple[FastAPI, str]:
     db = FakeSession()
     db.rows.setdefault("users", []).append(
         User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)
+    )
+    db.rows["users"].append(
+        User(
+            id="usr_guest",
+            username="guest",
+            password_hash="x",
+            password_must_change=False,
+            role=GUEST_ROLE,
+            disabled=False,
+        )
     )
 
     async def _override_session() -> FakeSession:
@@ -153,11 +164,12 @@ def test_grep_skips_unparseable_lines(tmp_path: Path, signing_key: bytes, monkey
 
 
 def test_grep_requires_jwt(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No Authorization header falls back to the guest account (read-only route)."""
     monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
     app, _token = _make_app(signing_key)
     with TestClient(app) as client:
         r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001")
-    assert r.status_code in (401, 403)
+    assert r.status_code == 200
 
 
 def test_zip_contains_one_entry_per_service_with_matching_lines(
@@ -203,11 +215,12 @@ def test_zip_per_entry_line_cap(tmp_path: Path, signing_key: bytes, monkeypatch:
 
 
 def test_zip_requires_jwt(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No Authorization header falls back to the guest account (read-only route)."""
     monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
     app, _token = _make_app(signing_key)
     with TestClient(app) as client:
         r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001.zip")
-    assert r.status_code in (401, 403)
+    assert r.status_code == 200
 
 
 def _seed_per_job(log_dir: Path, *, job_id: str, lines: list[dict[str, object]]) -> Path:

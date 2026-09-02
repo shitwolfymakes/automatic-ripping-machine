@@ -10,7 +10,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from arm_common.enums import RetentionPolicy
+from arm_common.enums import RetentionPolicy, UserRole
 from arm_common.schemas.jobs import DiscFingerprintView, JobView, TrackView
 
 
@@ -23,6 +23,7 @@ class LoginResponse(BaseModel):
     access_token: str
     expires_at: datetime
     password_must_change: bool
+    role: UserRole
 
 
 class PasswordChangeRequest(BaseModel):
@@ -88,3 +89,19 @@ class DiagnosticsServiceView(BaseModel):
 
 class DiagnosticsResponse(BaseModel):
     services: list[DiagnosticsServiceView]
+
+
+class UserView(BaseModel):
+    id: str
+    username: str
+    role: UserRole
+    disabled: bool
+    last_login_at: datetime | None = None
+
+
+class UserDisabledRequest(BaseModel):
+    disabled: bool
+
+
+class UserPasswordSetRequest(BaseModel):
+    new_password: str = Field(min_length=8)
