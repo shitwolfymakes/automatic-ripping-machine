@@ -228,3 +228,6 @@ services/ui-neu/nginx.http.conf
 # credentials and host-targeting detail. Removed from the tree; keep it out.
 # (Committed memory under .claude/memory/ is otherwise intentional — see CLAUDE.md.)
 .claude/memory/project_hifi_v3_deploy.md
+
+# Local gh CLI response cache — accidentally committed; must stay untracked.
+/gh-cli-cache/

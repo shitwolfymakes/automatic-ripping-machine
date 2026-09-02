@@ -16,7 +16,6 @@
 	import { fetchDrives, fetchDriveDiagnostic, rescanDrives } from '$lib/api/drives';
 	import { fetchSessions } from '$lib/api/sessions';
 	import DriveCard from '$lib/components/DriveCard.svelte';
-	import { restartArm, restartTranscoder } from '$lib/api/system';
 	import { fetchImageCacheStats, clearImageCache, type ImageCacheStats } from '$lib/api/maintenance';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import SystemHealth from '$lib/components/settings/SystemHealth.svelte';
@@ -31,44 +30,6 @@
 	let settings = $state<SettingsData | null>(null);
 	let settingsLoading = $state(true);
 	let settingsError = $state<Error | null>(null);
-
-	// --- Restart state ---
-	let armRestarting = $state(false);
-	let armRestartFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
-	let tcRestarting = $state(false);
-	let tcRestartFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
-
-	async function handleRestart(service: 'arm' | 'transcoder') {
-		const label = service === 'arm' ? 'ARM ripping service' : 'Transcoder service';
-		const warning = service === 'arm'
-			? 'Restart the ARM ripping service? Active rips will be interrupted.'
-			: 'Restart the transcoder service? Active transcodes will be interrupted.';
-		if (!confirm(warning)) return;
-
-		if (service === 'arm') {
-			armRestarting = true;
-			armRestartFeedback = null;
-		} else {
-			tcRestarting = true;
-			tcRestartFeedback = null;
-		}
-
-		try {
-			const fn = service === 'arm' ? restartArm : restartTranscoder;
-			await fn();
-			const fb = { type: 'success' as const, message: `${label} is restarting` };
-			if (service === 'arm') armRestartFeedback = fb;
-			else tcRestartFeedback = fb;
-			setTimeout(() => {
-				if (service === 'arm') { armRestarting = false; armRestartFeedback = null; }
-				else { tcRestarting = false; tcRestartFeedback = null; }
-			}, 5000);
-		} catch {
-			const fb = { type: 'error' as const, message: `Failed to restart ${label}` };
-			if (service === 'arm') { armRestartFeedback = fb; armRestarting = false; }
-			else { tcRestartFeedback = fb; tcRestarting = false; }
-		}
-	}
 
 	// --- Tab state ---
 	type Tab = string;
@@ -250,33 +211,6 @@
 		} catch (e) {
 			themeFeedback = { type: 'error', message: e instanceof Error ? e.message : 'Delete failed' };
 		}
-	}
-
-	function triggerDownload(blob: Blob, filename: string) {
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = filename;
-		a.click();
-		URL.revokeObjectURL(url);
-	}
-
-	async function handleThemeDownload(id: string) {
-		const enc = encodeURIComponent(id);
-		try {
-			// Download JSON
-			const jsonRes = await fetch(`/api/themes/${enc}/download`);
-			if (jsonRes.ok) {
-				const jsonBlob = await jsonRes.blob();
-				triggerDownload(jsonBlob, `${id}.json`);
-			}
-			// Download CSS if the theme has any
-			const cssRes = await fetch(`/api/themes/${enc}/css`);
-			if (cssRes.ok) {
-				const cssBlob = await cssRes.blob();
-				triggerDownload(cssBlob, `${id}.css`);
-			}
-		} catch { /* download failed silently */ }
 	}
 
 	// Set to true while we are mutating window.location.hash ourselves,
@@ -465,55 +399,6 @@
 				{/if}
 			</div>
 
-			<!-- Service Control -->
-			<section class="mt-6">
-				<h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Service Control</h2>
-				<div class="space-y-3">
-					<!-- ARM Restart -->
-					<div class="rounded-lg border border-red-200 bg-red-50/50 p-4 dark:border-red-800 dark:bg-red-900/10">
-						<div class="flex items-center justify-between">
-							<div>
-								<p class="text-sm font-medium text-gray-900 dark:text-white">Restart ARM Service</p>
-								<p class="text-xs text-gray-500 dark:text-gray-400">Restarts the ARM ripping service. Active rips will be interrupted.</p>
-								{#if armRestartFeedback}
-									<p class="mt-1 text-xs {armRestartFeedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{armRestartFeedback.message}</p>
-								{/if}
-							</div>
-							<button
-								type="button"
-								disabled={armRestarting}
-								onclick={() => handleRestart('arm')}
-								class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-							>
-								{armRestarting ? 'Restarting...' : 'Restart'}
-							</button>
-						</div>
-					</div>
-					<!-- Transcoder Restart -->
-					{#if $transcoderEnabled}
-					<div class="rounded-lg border border-red-200 bg-red-50/50 p-4 dark:border-red-800 dark:bg-red-900/10">
-						<div class="flex items-center justify-between">
-							<div>
-								<p class="text-sm font-medium text-gray-900 dark:text-white">Restart Transcoder Service</p>
-								<p class="text-xs text-gray-500 dark:text-gray-400">Restarts the transcoder service. Active transcodes will be interrupted.</p>
-								{#if tcRestartFeedback}
-									<p class="mt-1 text-xs {tcRestartFeedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{tcRestartFeedback.message}</p>
-								{/if}
-							</div>
-							<button
-								type="button"
-								disabled={tcRestarting}
-								onclick={() => handleRestart('transcoder')}
-								class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-							>
-								{tcRestarting ? 'Restarting...' : 'Restart'}
-							</button>
-						</div>
-					</div>
-					{/if}
-				</div>
-			</section>
-
 			<!-- Diagnostics (moved here from the standalone Diagnostics tab) -->
 			<section class="mt-6">
 				<DiagnosticsSection />
@@ -553,16 +438,6 @@
 							</button>
 						{/each}
 					</div>
-					<div class="mt-3 flex gap-2">
-						<button
-							type="button"
-							onclick={() => handleThemeDownload($colorScheme)}
-							class="inline-flex items-center gap-1 rounded-md bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary-text transition-colors hover:bg-primary/20 dark:text-primary-text-dark"
-						>
-							<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-							Export current theme
-						</button>
-					</div>
 				</div>
 
 				<!-- User Themes -->
@@ -588,14 +463,6 @@
 										{/if}
 									</button>
 									<div class="absolute -right-1 -top-1 flex gap-0.5">
-										<button
-											type="button"
-											onclick={() => handleThemeDownload(scheme.id)}
-											class="rounded-full bg-gray-200 p-0.5 text-gray-500 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600"
-											title="Download"
-										>
-											<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-										</button>
 										<button
 											type="button"
 											onclick={() => handleThemeDelete(scheme.id, scheme.label)}

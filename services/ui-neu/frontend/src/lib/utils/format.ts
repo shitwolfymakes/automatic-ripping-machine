@@ -243,5 +243,14 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function statusLabel(status: string | null | undefined): string {
 	if (!status) return 'Unknown';
-	return STATUS_LABELS[status.toLowerCase()] ?? status;
+	const key = status.toLowerCase();
+	// Unmapped statuses (future additions) humanize instead of leaking raw:
+	// "some_new_state" → "Some New State", never lowercase verbatim.
+	return (
+		STATUS_LABELS[key] ??
+		key
+			.split('_')
+			.map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+			.join(' ')
+	);
 }
