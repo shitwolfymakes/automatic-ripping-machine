@@ -19,17 +19,19 @@ Identity (spec §1):
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from arm_common import Drive, DriveIdentityKind, DriveLifecycle
+from arm_common import Config, Drive, DriveIdentityKind, DriveLifecycle
 
 logger = logging.getLogger("arm_backend.drive_scanner")
 
@@ -224,3 +226,46 @@ async def reconcile_drives(
         absent=sum((not r.present) and r.lifecycle is not DriveLifecycle.ENROLLED for r in rows),
         pruned=pruned,
     )
+
+
+DEFAULT_SCAN_INTERVAL_SECONDS = 30
+DEFAULT_PRUNE_DAYS = 7
+
+
+async def _tunables(session: AsyncSession) -> tuple[int, int]:
+    """(interval_seconds, prune_days) from the Config singleton; defaults when
+    the row is missing or a column is None (in-memory rows predating 0029)."""
+    cfg = (await session.execute(select(Config))).scalars().first()
+    interval = getattr(cfg, "drive_scan_interval_seconds", None) or DEFAULT_SCAN_INTERVAL_SECONDS
+    prune = getattr(cfg, "drive_detected_prune_days", None) or DEFAULT_PRUNE_DAYS
+    return int(interval), int(prune)
+
+
+class DriveScanner:
+    """Periodic + on-demand detection (spec §2). One instance on app.state;
+    POST /api/drives/rescan calls scan_once with the request's session, the
+    background loop opens its own."""
+
+    def __init__(self, session_factory: Callable[[], AsyncSession], *, sysfs_root: Path, disk_root: Path) -> None:
+        self._session_factory = session_factory
+        self._sysfs_root = sysfs_root
+        self._disk_root = disk_root
+
+    async def scan_once(self, session: AsyncSession) -> ScanSummary:
+        _, prune_days = await _tunables(session)
+        scanned = enumerate_optical(sysfs_root=self._sysfs_root, disk_root=self._disk_root)
+        return await reconcile_drives(session, scanned, now=datetime.now(timezone.utc), prune_days=prune_days)
+
+    async def run(self) -> None:
+        logger.info("drive scanner starting: sysfs=%s disk=%s", self._sysfs_root, self._disk_root)
+        while True:
+            interval = DEFAULT_SCAN_INTERVAL_SECONDS
+            try:
+                async with self._session_factory() as session:
+                    interval, _ = await _tunables(session)
+                    await self.scan_once(session)
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001 — a bad tick must never kill the loop
+                logger.exception("drive scan failed; retrying next tick")
+            await asyncio.sleep(interval)
