@@ -193,11 +193,6 @@ async def get_drive(drive_id: str, session: AsyncSession = Depends(get_session))
     drive = (await session.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
     if drive is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {drive_id}")
-    # last_seen_at has no pydantic-level default (only nullable at the DB
-    # column) — a real SELECT always materializes it, but touch it here too
-    # so a row built without an explicit last_seen_at still serializes the
-    # key (Plan 1's client parses this with Drive.model_validate).
-    drive.last_seen_at = drive.last_seen_at
     return drive
 
 
