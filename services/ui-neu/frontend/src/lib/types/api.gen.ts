@@ -709,7 +709,7 @@ export type DriveDiagnosticResponse = {
  * on a heartbeat so the backend can fail manual-trigger requests
  * fast when the user clicks Start without loading a disc.
  */
-export type DriveMediaStatus = 'loaded' | 'no_disc' | 'tray_open' | 'not_ready' | 'unavailable' | 'unknown';
+export type DriveMediaStatus = 'loaded' | 'no_disc' | 'tray_open' | 'not_ready' | 'unavailable' | 'unknown' | 'detached';
 
 /**
  * DriveMode

@@ -12,6 +12,7 @@ from arm_common import DiscType, Job, JobStatus, TrackStatus, with_log_context
 from arm_common.schemas import JobView, RipperConfigView, RipStartResponse, ScanResult, TrackView, WSEnvelope
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.community_keydb import refresh_community_keydb
+from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.makemkv_sdf import refresh_makemkv_sdf
 from arm_ripper.makemkv_key import refresh_makemkv_key
 from arm_ripper.rip import RipResult, rip_all
@@ -102,7 +103,7 @@ class JobController:
         drive_id: str,
         *,
         ws: WSClient | None = None,
-        device_path: str | None = None,
+        device_path: str | DriveHandle | None = None,
         default_min_length_seconds: int = DEFAULT_MIN_LENGTH_SECONDS,
     ) -> None:
         self._client = client
@@ -110,10 +111,17 @@ class JobController:
         self._sdf_tasks: set[asyncio.Task[None]] = set()
         self._drive_id = drive_id
         self._ws = ws
-        # Each ripper container owns exactly one optical drive; storing the
-        # device path here lets `handle_manual_trigger` run without re-reading
-        # settings (which a unit test environment may not have populated).
-        self._device_path = device_path
+        # Each ripper container owns exactly one optical drive. The node it
+        # occupies can change while we run (replug under a new srN), so we
+        # hold the shared DriveHandle rather than a copy of the path — the
+        # poll loop keeps it current and every read here sees the move. A
+        # plain str (ISO source, tests) is wrapped as a fixed handle.
+        if isinstance(device_path, DriveHandle):
+            self._device = device_path
+        elif device_path is None:
+            self._device = DriveHandle()
+        else:
+            self._device = DriveHandle.fixed(device_path)
         # Host-side baseline `--minlength` for `makemkvcon mkv all`. The
         # backend can override per-rip via `RipStartResponse.min_length_seconds`
         # (resolved from the Session's `overrides_json["min_length_seconds"]`);
@@ -134,6 +142,13 @@ class JobController:
         # the raw dir for cleanup. Set inside `_run_pipeline` only.
         self._active_task: asyncio.Task[None] | None = None
         self._active_job_id: str | None = None
+
+    @property
+    def _device_path(self) -> str | None:
+        """Read-only view of the shared DriveHandle. Only the poll loop writes
+        the handle (spec §4) — a controller-side write would let a stale
+        pickup path override the node the loop just resolved."""
+        return self._device.current
 
     @property
     def is_active(self) -> bool:
@@ -158,8 +173,6 @@ class JobController:
         if not self.is_idle():
             logger.debug("pickup ignored: controller already busy")
             return
-        if self._device_path is None and device_path:
-            self._device_path = device_path
         async with self._active_lock:
             self._active_task = asyncio.current_task()
             self._active_job_id = job.id
@@ -684,21 +697,33 @@ class JobController:
         The backend's `/resume` endpoint resets tracks to QUEUED and
         sets `resumed_from_crash=True`; we then run the same rip-loop
         as a fresh disc would.
+
+        Claims the single-flight gate exactly like `recover_held_job`, so a
+        crash-resumed rip is abandonable via `job.abandoned` and makes
+        `is_idle()` False (no double-rip from the heartbeat re-probe or from
+        a reattach boot probe).
         """
-        with with_log_context(job_id=job.id):
-            # Crash-resume skips the scan path, so refresh the key here too —
-            # a rip resumed days after a crash must not run on a stale key.
-            await refresh_makemkv_key(key=await self._configured_makemkv_key())
-            self._spawn_keydb_refresh(enabled=await self._community_keydb_enabled())
-            self._spawn_sdf_refresh(enabled=await self._makemkv_sdf_enabled())
-            rip_start = await self._client.resume(job.id)
-            logger.info("rip-resume job_id=%s tracks=%d", job.id, len(rip_start.tracks))
-            await self._execute_rip(
-                job_id=job.id,
-                disc_type=job.disc_type,
-                device_path=device_path,
-                rip_start=rip_start,
-            )
+        async with self._active_lock:
+            self._active_task = asyncio.current_task()
+            self._active_job_id = job.id
+            try:
+                with with_log_context(job_id=job.id):
+                    # Crash-resume skips the scan path, so refresh the key here too —
+                    # a rip resumed days after a crash must not run on a stale key.
+                    await refresh_makemkv_key(key=await self._configured_makemkv_key())
+                    self._spawn_keydb_refresh(enabled=await self._community_keydb_enabled())
+                    self._spawn_sdf_refresh(enabled=await self._makemkv_sdf_enabled())
+                    rip_start = await self._client.resume(job.id)
+                    logger.info("rip-resume job_id=%s tracks=%d", job.id, len(rip_start.tracks))
+                    await self._execute_rip(
+                        job_id=job.id,
+                        disc_type=job.disc_type,
+                        device_path=device_path,
+                        rip_start=rip_start,
+                    )
+            finally:
+                self._active_task = None
+                self._active_job_id = None
 
     async def _execute_rip(
         self,

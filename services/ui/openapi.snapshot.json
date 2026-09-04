@@ -8641,7 +8641,8 @@
           "tray_open",
           "not_ready",
           "unavailable",
-          "unknown"
+          "unknown",
+          "detached"
         ],
         "title": "DriveMediaStatus",
         "description": "What the drive thinks is in its tray. Reported by each ripper\non a heartbeat so the backend can fail manual-trigger requests\nfast when the user clicks Start without loading a disc."

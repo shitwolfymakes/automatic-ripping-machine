@@ -96,6 +96,13 @@ jobs:
       # ARM_INSTALL_SOURCE_ONLY seam — no docker, no root, <1s.
       - name: Installer walkthrough suite
         run: bash devtools/test-install-walkthrough.sh
+      # Zero-infra unit test that sources docker-entrypoint.sh via its
+      # ARM_ENTRYPOINT_SOURCE_ONLY seam — no docker, no root, <1s.
+      - name: Entrypoint optical-node suite
+        run: bash services/_common/test-entrypoint-optical.sh
+      # Zero-infra unit test for the writability/readability guard, same seam.
+      - name: Entrypoint writability guard suite
+        run: bash services/_common/test-entrypoint-guard.sh
 
   test-python:
     name: test (python — pytest)
