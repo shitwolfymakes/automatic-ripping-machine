@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import subprocess
 from collections.abc import AsyncIterator
@@ -18,6 +19,7 @@ from arm_backend.db import SessionLocal
 from arm_backend.gpu_probe import load_configured_gpus
 from arm_backend import image_cache
 from arm_backend.disk_refresh import DiskRefresher
+from arm_backend.drive_scanner import DriveScanner
 from arm_backend.log_tailer import LogTailer
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.notification_dispatcher import (
@@ -200,6 +202,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     log_tailer_task = asyncio.create_task(log_tailer.run())
     app.state.log_tailer = log_tailer
 
+    # Drive lifecycle Plan 2 — periodic host drive scan (spec §2).
+    drive_scanner = DriveScanner(
+        SessionLocal, sysfs_root=Path(settings.ARM_SYSFS_ROOT), disk_root=Path(settings.ARM_HOST_DISK_ROOT)
+    )
+    drive_scanner_task = asyncio.create_task(drive_scanner.run())
+    app.state.drive_scanner = drive_scanner
+
     _roots_map = getattr(app.state, "system_paths", None) or {
         "MEDIA_ROOT": settings.MEDIA_ROOT,
         "RAW_ROOT": settings.RAW_ROOT,
@@ -223,6 +232,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await asyncio.wait_for(log_tailer_task, timeout=10.0)
         except asyncio.TimeoutError:  # pragma: no cover — only if the tailer hangs >10s on shutdown
             log_tailer_task.cancel()
+        drive_scanner_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await drive_scanner_task
         notification_dispatcher.stop()
         try:
             await asyncio.wait_for(notification_task, timeout=10.0)

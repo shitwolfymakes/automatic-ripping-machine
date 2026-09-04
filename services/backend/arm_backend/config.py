@@ -106,6 +106,12 @@ class Settings(BaseSettings):
     ARM_HOST_LOGS_PATH: str = ""
     ARM_HOST_CERTS_PATH: str = ""
 
+    # Drive scanner roots (spec §2). /sys is the container's own sysfs mount
+    # (host-wide); /host-disk is the read-only bind of the host's /dev/disk —
+    # symlink directories only, never device nodes.
+    ARM_SYSFS_ROOT: str = "/sys"
+    ARM_HOST_DISK_ROOT: str = "/host-disk"
+
     # Docker network the spawned transcoder joins so it can reach
     # `https://arm-backend:8443`. Compose default project network is
     # `<project>_default`.
