@@ -222,7 +222,10 @@ class RipperManager:
         matches ARM_RIPPER_IMAGE is recreated so `docker compose build`
         actually takes effect — unless the drive is mid-rip (`busy`), in
         which case it's adopted as-is and picked up on the next reconcile
-        after the job finishes."""
+        after the job finishes. `busy` is RIPPING-only on purpose: a scan
+        has no job row yet (unknowable) and IDENTIFIED/AWAITING_REVIEW
+        would block upgrades indefinitely behind a review gate; a container
+        replaced mid-scan re-detects the seated disc on its first poll."""
         try:
             containers = self._labelled()
         except Exception as exc:  # noqa: BLE001
@@ -245,7 +248,8 @@ class RipperManager:
             if existing is not None and not self._image_current(existing):
                 if drive.id in busy:
                     logger.info(
-                        "ripper drive_id=%s runs a stale image but is ripping — adopting; recreated after the rip",
+                        "ripper drive_id=%s runs a stale image but is ripping — adopting; recreated at the "
+                        "next backend restart once the drive is idle",
                         drive.id,
                     )
                 else:
