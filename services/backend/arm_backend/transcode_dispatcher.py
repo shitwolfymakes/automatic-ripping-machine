@@ -24,6 +24,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
+import docker.errors  # type: ignore[import-untyped]
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
 
@@ -91,6 +92,9 @@ class TranscodeDispatcher:
         self._hub = hub
         self._stop = asyncio.Event()
         self._tick_interval = settings.ARM_TRANSCODE_DISPATCH_INTERVAL_SECONDS
+        # Surfaced by /api/system/diagnostics so a crash-looping or
+        # un-pullable transcoder is visible in the UI, not only in the log.
+        self.last_spawn_error: str | None = None
 
     def stop(self) -> None:
         self._stop.set()
@@ -289,7 +293,9 @@ class TranscodeDispatcher:
                 try:
                     self._spawn_container(task, assignment=assignment)
                     spawned += 1
+                    self.last_spawn_error = None
                 except Exception as exc:
+                    self.last_spawn_error = f"{type(exc).__name__}: {exc}"[:300]
                     logger.exception("transcode spawn failed task_id=%s: %s", task.id, exc)
                     # Release the GPU claim so the task can retry on a later tick.
                     if assignment.gpu is not None:
@@ -360,6 +366,23 @@ class TranscodeDispatcher:
             and self._settings.ARM_HOST_LOGS_PATH
             and self._settings.ARM_HOST_CERTS_PATH
         )
+
+    def probe(self) -> tuple[bool, str | None]:
+        """Can this dispatcher actually run a transcode right now? Pings the
+        docker host and checks the image exists there. Cheap, synchronous,
+        never raises — the diagnostics endpoint calls it per request."""
+        try:
+            self._docker.ping()
+        except Exception as exc:  # noqa: BLE001 — any transport failure is the same answer
+            return False, f"docker host unreachable: {exc}"
+        image = self._settings.ARM_TRANSCODE_IMAGE
+        try:
+            self._docker.images.get(image)
+        except docker.errors.ImageNotFound:
+            return False, f"image {image} not present on docker host"
+        except Exception as exc:  # noqa: BLE001
+            return False, f"image check failed: {exc}"
+        return True, None
 
     def _spawn_container(self, task: TranscodeTask, *, assignment: GpuAssignment | None = None) -> Any:
         remote = bool(self._settings.ARM_TRANSCODE_DOCKER_HOST)
@@ -466,7 +489,7 @@ class TranscodeDispatcher:
             else:
                 base_kwargs["count"] = 1
             try:
-                import docker  # type: ignore[import-untyped]
+                import docker
 
                 kwargs["runtime"] = "nvidia"
                 kwargs["device_requests"] = [docker.types.DeviceRequest(**base_kwargs)]
