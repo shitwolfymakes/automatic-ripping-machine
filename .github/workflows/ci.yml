@@ -103,6 +103,10 @@ jobs:
       # Zero-infra unit test for the writability/readability guard, same seam.
       - name: Entrypoint writability guard suite
         run: bash services/_common/test-entrypoint-guard.sh
+      # Zero-infra assertions that the dev installer + compose template no
+      # longer enumerate drives (drive lifecycle §5).
+      - name: setup-dev / compose template suite
+        run: bash devtools/test-setup-dev.sh
 
   test-python:
     name: test (python — pytest)
