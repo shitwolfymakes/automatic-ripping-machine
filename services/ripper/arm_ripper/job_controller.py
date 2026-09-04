@@ -700,21 +700,33 @@ class JobController:
         The backend's `/resume` endpoint resets tracks to QUEUED and
         sets `resumed_from_crash=True`; we then run the same rip-loop
         as a fresh disc would.
+
+        Claims the single-flight gate exactly like `recover_held_job`, so a
+        crash-resumed rip is abandonable via `job.abandoned` and makes
+        `is_idle()` False (no double-rip from the heartbeat re-probe or from
+        a reattach boot probe).
         """
-        with with_log_context(job_id=job.id):
-            # Crash-resume skips the scan path, so refresh the key here too —
-            # a rip resumed days after a crash must not run on a stale key.
-            await refresh_makemkv_key(key=await self._configured_makemkv_key())
-            self._spawn_keydb_refresh(enabled=await self._community_keydb_enabled())
-            self._spawn_sdf_refresh(enabled=await self._makemkv_sdf_enabled())
-            rip_start = await self._client.resume(job.id)
-            logger.info("rip-resume job_id=%s tracks=%d", job.id, len(rip_start.tracks))
-            await self._execute_rip(
-                job_id=job.id,
-                disc_type=job.disc_type,
-                device_path=device_path,
-                rip_start=rip_start,
-            )
+        async with self._active_lock:
+            self._active_task = asyncio.current_task()
+            self._active_job_id = job.id
+            try:
+                with with_log_context(job_id=job.id):
+                    # Crash-resume skips the scan path, so refresh the key here too —
+                    # a rip resumed days after a crash must not run on a stale key.
+                    await refresh_makemkv_key(key=await self._configured_makemkv_key())
+                    self._spawn_keydb_refresh(enabled=await self._community_keydb_enabled())
+                    self._spawn_sdf_refresh(enabled=await self._makemkv_sdf_enabled())
+                    rip_start = await self._client.resume(job.id)
+                    logger.info("rip-resume job_id=%s tracks=%d", job.id, len(rip_start.tracks))
+                    await self._execute_rip(
+                        job_id=job.id,
+                        disc_type=job.disc_type,
+                        device_path=device_path,
+                        rip_start=rip_start,
+                    )
+            finally:
+                self._active_task = None
+                self._active_job_id = None
 
     async def _execute_rip(
         self,

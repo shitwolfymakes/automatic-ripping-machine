@@ -23,9 +23,10 @@ from arm_ripper.drive_resolve import ResolvedDevice  # noqa: E402
 class _Controller:
     def __init__(self) -> None:
         self.inserted: list[str] = []
+        self.idle = True
 
     def is_idle(self) -> bool:
-        return True
+        return self.idle
 
     async def handle_disc_inserted(self, device: str) -> None:
         self.inserted.append(device)
@@ -122,6 +123,25 @@ async def test_reattach_resets_detector_and_reruns_boot_probe(monkeypatch, caplo
     assert s.controller.inserted == ["/dev/sr0", "/dev/sr0"]
     assert s.boot_probes == 1
     assert sum("drive present" in r.message for r in caplog.records) == 1
+
+
+async def test_reattach_skips_boot_probe_while_a_rip_is_still_running(monkeypatch, caplog) -> None:
+    """The drive was yanked mid-rip: makemkvcon is still running against the
+    old node when it comes back. boot_probe would resume the same job, wipe
+    the raw dir under the live process and start a second rip."""
+    caplog.set_level(logging.INFO, logger="arm_ripper")
+    s = Script(
+        monkeypatch,
+        [
+            (SR0, DriveState.DISC_OK),  # disc A starts ripping
+            (None, None),  # unplugged mid-rip
+            (SR0, DriveState.DISC_OK),  # back — but the pipeline never stopped
+        ],
+    )
+    s.controller.idle = False
+    await s.run()
+    assert s.boot_probes == 0
+    assert sum("skipping boot probe" in r.message for r in caplog.records) == 1
 
 
 async def test_renumbering_is_followed_and_reported(monkeypatch) -> None:
