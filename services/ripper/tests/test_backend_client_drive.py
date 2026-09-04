@@ -124,6 +124,18 @@ async def test_register_5xx_is_a_plain_http_error() -> None:
         await c.register(drive_id="drv_1", hostname="h", device_path="/dev/sr0", ripper_version="3", by_id_name=None)
 
 
+async def test_register_refusal_falls_back_to_raw_text_on_unparseable_json_body() -> None:
+    """E2: the content-type header claiming JSON doesn't guarantee the body
+    actually parses as JSON — a proxy/gateway error page can carry
+    "content-type: application/json" with an HTML body. Guard on the parse
+    itself (ValueError), not the header."""
+    from arm_ripper.backend_client import RegisterRefused
+
+    c = _client(lambda req: httpx.Response(409, content=b"<html>", headers={"content-type": "application/json"}))
+    with pytest.raises(RegisterRefused, match=r"^<html>$"):
+        await c.register(drive_id="drv_1", hostname="h", device_path="/dev/sr0", ripper_version="3", by_id_name=None)
+
+
 async def test_get_drive_parses_a_drive() -> None:
     # Drive.model_validate (pydantic validation) requires every field that
     # lacks an explicit pydantic-side default, which for a SQLModel table

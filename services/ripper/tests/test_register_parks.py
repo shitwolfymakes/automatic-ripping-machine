@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import os
 
@@ -8,7 +7,6 @@ os.environ.setdefault("ARM_BACKEND_URL", "https://backend")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
 
 import httpx
-import pytest
 
 from arm_ripper import main as ripper_main
 from arm_ripper.backend_client import RegisterRefused
@@ -43,18 +41,24 @@ async def test_register_retries_transport_errors_then_returns_the_id(monkeypatch
     assert client.calls == 2 and sleeps == [1.0]
 
 
-async def test_register_refused_parks_forever(monkeypatch, caplog) -> None:
-    parked = asyncio.Event()
+async def test_register_refused_retries_slowly_and_logs_once(monkeypatch, caplog) -> None:
+    """E1: a register refusal is self-healing, not fatal — retry slowly
+    (REGISTER_REFUSED_RETRY_SECONDS) instead of parking forever. An
+    unchanged refusal is logged once at ERROR (repeats downgrade to DEBUG,
+    so a stuck enrollment doesn't spam the log every minute)."""
+    sleeps: list[float] = []
 
-    class _NeverEvent:
-        async def wait(self):
-            parked.set()
-            raise asyncio.CancelledError  # stand-in for "blocks forever"
+    async def fake_sleep(s):
+        sleeps.append(s)
 
-    monkeypatch.setattr(ripper_main.asyncio, "Event", _NeverEvent)
-    client = _Client([RegisterRefused("identity mismatch: row is bound to A but the ripper resolved B")])
-    with caplog.at_level(logging.ERROR, logger="arm_ripper"):
-        with pytest.raises(asyncio.CancelledError):
-            await ripper_main.register_with_retry(client, "/dev/sr0")
-    assert parked.is_set() and client.calls == 1
-    assert "identity mismatch" in caplog.text and "left running for diagnosis" in caplog.text
+    monkeypatch.setattr(ripper_main.asyncio, "sleep", fake_sleep)
+    same_refusal = RegisterRefused("identity mismatch: A/B")
+    client = _Client([same_refusal, RegisterRefused("identity mismatch: A/B"), _Drive()])
+    with caplog.at_level(logging.DEBUG, logger="arm_ripper"):
+        drive_id = await ripper_main.register_with_retry(client, "/dev/sr0")
+    assert drive_id == "drv_test"
+    assert client.calls == 3
+    assert sleeps == [ripper_main.REGISTER_REFUSED_RETRY_SECONDS, ripper_main.REGISTER_REFUSED_RETRY_SECONDS]
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR and "identity mismatch" in r.getMessage()]
+    assert len(error_records) == 1
+    assert "left running for diagnosis" in error_records[0].getMessage()
