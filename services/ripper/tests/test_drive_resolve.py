@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from arm_ripper.drive_resolve import ResolvedDevice, resolve_drive_device
@@ -56,6 +57,29 @@ def test_by_id_dangling_link_is_absent(tmp_path: Path) -> None:
     t = Tree(tmp_path)
     t.link(BY_ID, "sr9")  # no sr9 node
     assert t.resolve(BY_ID) is None
+
+
+def test_by_id_pointing_above_the_precreated_range_warns(tmp_path: Path, caplog) -> None:
+    """udev knows where the drive is; the entrypoint never made that node.
+    Silence here reads as "drive unplugged" when it is really a too-low
+    ARM_OPTICAL_SR_MAX / ARM_OPTICAL_SG_MAX."""
+    caplog.set_level(logging.WARNING, logger="arm_ripper.drive_resolve")
+    t = Tree(tmp_path)
+    t.link(BY_ID, "sr9")
+    assert t.resolve(BY_ID) is None
+    warns = [r for r in caplog.records if "is not present under" in r.message]
+    assert len(warns) == 1
+    assert "sr9" in warns[0].getMessage()
+    assert "ARM_OPTICAL_SG_MAX" in warns[0].getMessage()
+
+
+def test_a_missing_hint_node_does_not_warn(tmp_path: Path, caplog) -> None:
+    """The hint path has no udev evidence the drive is anywhere, so a missing
+    node there is just "absent" — the poll loop already logs that once."""
+    caplog.set_level(logging.WARNING, logger="arm_ripper.drive_resolve")
+    t = Tree(tmp_path)
+    assert t.resolve(None, hint=str(t.dev / "sr0")) is None
+    assert not [r for r in caplog.records if "is not present under" in r.message]
 
 
 def test_by_id_link_to_a_non_optical_node_is_absent(tmp_path: Path) -> None:
