@@ -32,6 +32,12 @@ RIPPER_VERSION = "0.0.0-skeleton"
 # allowed through to identify (which will fail visibly).
 HEARTBEAT_INTERVAL_SECONDS = 30.0
 
+# A register refusal (unknown drive, not enrolled, identity mismatch) is not
+# retriable in the sense of "try again right now" — but it IS self-healing:
+# the operator can fix the enrollment (re-enroll to rebind identity, etc.)
+# without restarting the container. Poll slowly instead of parking forever.
+REGISTER_REFUSED_RETRY_SECONDS = 60.0
+
 # The backend spawns each ripper container for one Drive row and sets
 # HOSTNAME to arm-ripper-<serial> (or the equivalent stable identity); srN
 # is not stable across a renumbering replug, so the log file is named from
@@ -42,9 +48,12 @@ logger = logging.getLogger("arm_ripper")
 
 async def register_with_retry(client: BackendClient, device_path: str) -> str:
     """Retry transport/5xx failures with backoff. A refusal (unknown drive,
-    not enrolled, identity mismatch) is not retriable: log it and park the
-    process so the container stays up for `docker logs` (spec §3)."""
+    not enrolled, identity mismatch) is self-healing rather than fatal: the
+    operator can fix the enrollment from the UI (e.g. unenroll/re-enroll to
+    rebind identity) without restarting this container, so we log it and
+    keep polling slowly instead of parking forever (spec §3)."""
     delay = 1.0
+    last_refusal: str | None = None
     while True:
         try:
             drive = await client.register(
@@ -57,13 +66,22 @@ async def register_with_retry(client: BackendClient, device_path: str) -> str:
             logger.info("registered drive_id=%s device=%s", drive.id, device_path)
             return drive.id
         except RegisterRefused as exc:
-            logger.error(
+            message = str(exc)
+            # Log at ERROR the first time this refusal is seen and again
+            # whenever its text changes (a new/different problem); an
+            # unchanged repeat is downgraded to DEBUG so a stuck enrollment
+            # doesn't spam the log once a minute forever.
+            level = logging.ERROR if message != last_refusal else logging.DEBUG
+            logger.log(
+                level,
                 "register refused for drive_id=%s: %s — container left running for diagnosis; "
-                "fix the enrollment in the UI and restart this container",
+                "fix the enrollment in the UI; retrying in %.0fs",
                 settings.ARM_DRIVE_ID,
                 exc,
+                REGISTER_REFUSED_RETRY_SECONDS,
             )
-            await asyncio.Event().wait()
+            last_refusal = message
+            await asyncio.sleep(REGISTER_REFUSED_RETRY_SECONDS)
         except (httpx.HTTPError, OSError) as exc:
             logger.warning("register failed (%s); retrying in %.1fs", exc, delay)
             await asyncio.sleep(delay)
