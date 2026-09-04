@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -95,16 +95,17 @@ async def drive_diagnostic(
 
 @router.post("/rescan", response_model=DriveRescanResponse)
 async def rescan_drives(
+    request: Request,
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
 ) -> DriveRescanResponse:
-    """Reconcile drive freshness from heartbeats. Backend-side only: the
-    ripper owns hardware re-enumeration; this surfaces which registered drives
-    are live vs stale based on their last media-status update.
-
-    Kept as POST (not GET) even though it currently only reads: a real rescan
-    triggers ripper-side hardware re-enumeration (a non-idempotent side effect),
-    which a follow-up will add behind this same verb."""
+    """Run the host drive scan now (spec §2) and report the reconciled table.
+    Also keeps the pre-existing heartbeat-freshness counts so the UI's
+    online/stale badge is unchanged."""
+    scanner = getattr(request.app.state, "drive_scanner", None)
+    if scanner is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="drive scanner unavailable")
+    summary = await scanner.scan_once(db)
     drives = list((await db.execute(select(Drive))).scalars().all())
     now = datetime.now(timezone.utc)
     online = 0
@@ -115,7 +116,15 @@ async def rescan_drives(
             online += 1
         else:
             stale += 1
-    return DriveRescanResponse(online=online, stale=stale)
+    return DriveRescanResponse(
+        online=online,
+        stale=stale,
+        detected=summary.detected,
+        ignored=summary.ignored,
+        enrolled=summary.enrolled,
+        absent=summary.absent,
+        pruned=summary.pruned,
+    )
 
 
 @router.patch("/{drive_id}", response_model=DriveView)

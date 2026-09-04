@@ -86,6 +86,10 @@ services:
       # Phase 7 — Backend spawns arm-transcode-* containers via the socket.
       # Acceptable per docs/arch/06-deployment.md (root-equivalent on host).
       - /var/run/docker.sock:/var/run/docker.sock
+      # Drive detection (spec §2): the host's udev by-id symlink directory,
+      # read-only. Symlinks only — no device nodes, no cgroup rule; the
+      # backend can list drives but provably cannot open one.
+      - /dev/disk:/host-disk:ro
     # Uncomment to reach Backend directly from the host for verification curl:
     # ports:
     #   - "8443:8443"
