@@ -194,11 +194,11 @@ Reload with `sudo udevadm control --reload-rules && sudo udevadm trigger`. After
 
 Why `UDISKS_AUTO=0` and not `UDISKS_IGNORE=1`: the latter hides the drive from the udisks2 device tree entirely (no entry in Files, no `udisksctl status` row), which is friendlier to set-it-and-forget-it server installs but breaks the desktop user's expectation that they can still browse the disc manually. `UDISKS_AUTO=0` is the documented per-device "skip auto-mount" toggle. Why a host-side rule instead of bind-mounting the host's DBus into the container: DBus passthrough adds a runtime dependency that fails open on headless hosts (no `udisks2` running) and ties container behaviour to the host's session bus — fragile across distros and reboots. Why not raw SCSI eject through `/dev/sgM`: `udisks2` sets PREVENT MEDIUM REMOVAL on mount, the drive firmware refuses STOP UNIT until ALLOW is sent, and even on success the host's `/media/<label>/` mountpoint stays stale and races the next disc insertion. Multiple containerized rip projects ([jlesage/docker-makemkv #84](https://github.com/jlesage/docker-makemkv/issues/84), [#138](https://github.com/jlesage/docker-makemkv/issues/138), [ARM v2 #1558](https://github.com/automatic-ripping-machine/automatic-ripping-machine/issues/1558)) hit this same wall and none of them solve it in-container — the host-udev approach is the converged industry pattern.
 
-## Why one ripper service per drive
+## Why one ripper container per drive
 
-Ripper-per-drive is explicit and declarative: users see which drives they have by reading compose, device pass-through is one line per service, and a failing ripper doesn't take down its siblings. Each ripper watches its own drive via a 2s `ioctl(CDROM_DRIVE_STATUS)` poll — no udev rules on host or in container, no distro-specific wiring. This is the trade-off we accepted vs. dynamic ripper spawning — one line of config per drive is a small price for "it's all visible in one file."
+One drive is one process is one crash domain: a failing ripper doesn't take down its siblings, and each container holds its own MakeMKV SCSI handle on its own device rather than multiplexing several drives through one process. Logs stay per-drive too — one JSONL stream per container, not an interleaved shared one. Each ripper watches its own drive via a 2s `ioctl(CDROM_DRIVE_STATUS)` poll.
 
-If a user has drives `sr0` and `sr1` they duplicate the ripper block twice. There is no "cluster of interchangeable rippers" — each ripper owns one physical device.
+The container itself isn't declared in compose, though — it's created by the backend when a drive is enrolled, not hand-written per drive. See [§ Rippers are created by the backend, not by compose](#rippers-are-created-by-the-backend-not-by-compose) above.
 
 ## Environment file
 
