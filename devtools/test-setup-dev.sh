@@ -59,4 +59,14 @@ else
     echo "skip - docker compose not available; template checked by grep only"
 fi
 
+# --- iso-smoke.sh: register-by-id -------------------------------------------------
+SMOKE="${ROOT}/devtools/iso-smoke.sh"
+absent  "iso-smoke no longer mounts per-ripper certs" 'arm-ripper-sr0\.(crt|key)' "${SMOKE}"
+absent  "iso-smoke has no arm-ripper-sr0 service"     'RIPPER_SERVICE="arm-ripper-sr0"' "${SMOKE}"
+present "iso-smoke passes ARM_DRIVE_ID"               '-e ARM_DRIVE_ID=' "${SMOKE}"
+present "iso-smoke pauses the managed ripper by label" 'label=arm.drive_id=' "${SMOKE}"
+present "iso-smoke uses the arm/ data dirs"           'ROOT_DIR\}/arm/raw:/raw' "${SMOKE}"
+rc=0; bash -n "${SMOKE}" || rc=$?
+check "iso-smoke parses" 0 "${rc}"
+
 exit "${fail}"
