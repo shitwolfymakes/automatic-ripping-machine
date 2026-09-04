@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 from unittest.mock import MagicMock
@@ -39,6 +40,7 @@ def _settings(**overrides: Any) -> Settings:
 def _manager(**overrides: Any) -> tuple[RipperManager, MagicMock]:
     client = MagicMock()
     client.containers.list.return_value = []
+    client.images.get.return_value.id = "sha256:same"
     return RipperManager(_settings(**overrides), client), client
 
 
@@ -64,6 +66,7 @@ def _container(drive_id: str, status: str = "running", name: str = "arm-ripper-x
     c.status = status
     c.name = name
     c.labels = {DOCKER_LABEL_KEY: drive_id}
+    c.image.id = "sha256:same"
     return c
 
 
@@ -129,6 +132,30 @@ def test_container_spec_omits_by_id_and_ids_when_unset() -> None:
     env = m.container_spec(_drive(by_id_name=None))["environment"]
     assert "ARM_DRIVE_BY_ID" not in env
     assert "PUID" not in env and "PGID" not in env and "CDROM_GID" not in env
+
+
+def test_container_spec_forwards_ripper_tunables_under_their_ripper_names() -> None:
+    m, _ = _manager(
+        ARM_RIPPER_POLL_INTERVAL_SECONDS="1.5",
+        ARM_RIPPER_MIN_LENGTH_SECONDS="300",
+        ARM_RIPPER_MAKEMKV_KEYCHECK_INTERVAL_SECONDS="3600",
+        ARM_RIPPER_NOT_READY_REARM_POLLS="5",
+        ARM_RIPPER_OPTICAL_SR_MAX="15",
+        ARM_RIPPER_OPTICAL_SG_MAX="31",
+    )
+    env = m.container_spec(_drive())["environment"]
+    assert env["POLL_INTERVAL_SECONDS"] == "1.5"
+    assert env["ARM_MIN_LENGTH_SECONDS"] == "300"
+    assert env["MAKEMKV_KEYCHECK_INTERVAL_SECONDS"] == "3600"
+    assert env["ARM_NOT_READY_REARM_POLLS"] == "5"
+    assert env["ARM_OPTICAL_SR_MAX"] == "15"
+    assert env["ARM_OPTICAL_SG_MAX"] == "31"
+
+
+def test_container_spec_omits_unset_tunables() -> None:
+    m, _ = _manager()
+    env = m.container_spec(_drive())["environment"]
+    assert "POLL_INTERVAL_SECONDS" not in env and "ARM_OPTICAL_SR_MAX" not in env
 
 
 def test_host_paths_set_needs_raw_logs_and_certs_only() -> None:
@@ -285,6 +312,70 @@ def test_reconcile_raises_when_the_daemon_cannot_be_listed() -> None:
     client.containers.list.side_effect = docker.errors.DockerException("no socket")
     with pytest.raises(RipperManagerError, match="no socket"):
         m.reconcile([])
+
+
+def _with_image(c: MagicMock, image_id: str) -> MagicMock:
+    c.image.id = image_id
+    return c
+
+
+def test_reconcile_recreates_an_idle_container_on_a_stale_image() -> None:
+    m, client = _manager()
+    client.images.get.return_value.id = "sha256:new"
+    stale = _with_image(_container("drv_a"), "sha256:old")
+    client.containers.list.return_value = [stale]
+    client.containers.run.return_value = _container("drv_a", name="arm-ripper-a")
+    summary = m.reconcile([_drive("drv_a", serial="A")])
+    assert summary.recreated == ["drv_a"] and summary.adopted == [] and summary.failed == {}
+    stale.stop.assert_called_once()
+    stale.remove.assert_called_once()
+    client.containers.run.assert_called_once()
+
+
+def test_reconcile_records_a_failure_when_recreating_a_stale_container_fails() -> None:
+    m, client = _manager()
+    client.images.get.return_value.id = "sha256:new"
+    stale = _with_image(_container("drv_a"), "sha256:old")
+    client.containers.list.return_value = [stale]
+    client.containers.run.side_effect = docker.errors.ImageNotFound("nope")
+    summary = m.reconcile([_drive("drv_a", serial="A")])
+    assert summary.recreated == [] and summary.adopted == []
+    assert "nope" in summary.failed["drv_a"]
+    stale.stop.assert_called_once()
+    stale.remove.assert_called_once()
+
+
+def test_reconcile_adopts_a_stale_image_while_the_drive_is_ripping(caplog) -> None:
+    m, client = _manager()
+    client.images.get.return_value.id = "sha256:new"
+    stale = _with_image(_container("drv_a"), "sha256:old")
+    client.containers.list.return_value = [stale]
+    with caplog.at_level(logging.INFO, logger="arm_backend.ripper_manager"):
+        summary = m.reconcile([_drive("drv_a", serial="A")], busy=frozenset({"drv_a"}))
+    assert summary.adopted == ["drv_a"] and summary.recreated == []
+    stale.remove.assert_not_called()
+    assert "stale image" in caplog.text and "drv_a" in caplog.text
+
+
+def test_reconcile_keeps_a_current_image() -> None:
+    m, client = _manager()
+    client.images.get.return_value.id = "sha256:same"
+    running = _with_image(_container("drv_a"), "sha256:same")
+    client.containers.list.return_value = [running]
+    summary = m.reconcile([_drive("drv_a", serial="A")])
+    assert summary.adopted == ["drv_a"] and summary.recreated == []
+    client.containers.run.assert_not_called()
+
+
+def test_reconcile_does_not_recreate_when_the_image_lookup_fails(caplog) -> None:
+    m, client = _manager()
+    client.images.get.side_effect = docker.errors.ImageNotFound("gone")
+    running = _with_image(_container("drv_a"), "sha256:old")
+    client.containers.list.return_value = [running]
+    with caplog.at_level(logging.WARNING, logger="arm_backend.ripper_manager"):
+        summary = m.reconcile([_drive("drv_a", serial="A")])
+    assert summary.adopted == ["drv_a"]
+    assert "cannot compare image" in caplog.text
 
 
 # --- probe -----------------------------------------------------------------
