@@ -139,6 +139,50 @@ _join_render_gid() {
 # ARM_INSTALL_SOURCE_ONLY). The sourced-ness check makes a leaked env var
 # harmless when the entrypoint is EXECUTED (top-level `return` would abort).
 [[ -n "${ARM_ENTRYPOINT_SOURCE_ONLY:-}" && "${BASH_SOURCE[0]}" != "$0" ]] && return 0
+# ---------------------------------------------------------------- optical nodes
+# The ripper is NOT given its drive via a compose/docker `devices:` bind. Docker
+# resolves those at container-create time, so an absent drive fails creation
+# before the restart policy can engage, and a drive replugged later never
+# appears inside a running container (moby#46608, moby#19763). Instead the
+# container's device cgroup is granted the optical majors (b 11 = sr*, c 21 =
+# sg*) and the nodes are created here.
+#
+# This works for hotplug because the kernel binds names to numbers statically:
+# sr<N> is always block 11:<N> and sg<N> is always char 21:<N>. A node for a
+# minor with no hardware behind it is harmless — open() gets ENXIO — and the
+# same node starts working the moment a drive is enumerated onto that minor.
+# So a fixed range created up front covers drives that come and go, and drives
+# that come back under a different number, with no runtime mknod and no extra
+# privilege: CAP_MKNOD is in Docker's default set and the cgroup rule's `m`
+# bit permits it for exactly these majors.
+#
+# Both sr and sg are required: MakeMKV enumerates drives from real device
+# nodes in the container's own /dev (symlinks and sg-only were both verified
+# to fail) and pairs each sr with its sg itself.
+#
+# Existing nodes are skipped. Defined above the SOURCE_ONLY seam so
+# test-entrypoint-optical.sh can exercise it unprivileged.
+precreate_optical_nodes() {  # <dev_dir> <sr_max> <sg_max> <group>
+    local dev_dir="$1" sr_max="$2" sg_max="$3" group="$4"
+    local n created=0
+    for n in $(seq 0 "${sr_max}"); do
+        [[ -e "${dev_dir}/sr${n}" ]] && continue
+        mknod -m 0660 "${dev_dir}/sr${n}" b 11 "${n}"
+        chgrp "${group}" "${dev_dir}/sr${n}"
+        created=$((created + 1))
+    done
+    for n in $(seq 0 "${sg_max}"); do
+        [[ -e "${dev_dir}/sg${n}" ]] && continue
+        mknod -m 0660 "${dev_dir}/sg${n}" c 21 "${n}"
+        chgrp "${group}" "${dev_dir}/sg${n}"
+        created=$((created + 1))
+    done
+    echo "optical nodes: created ${created} (sr0..sr${sr_max}, sg0..sg${sg_max}) in ${dev_dir}"
+}
+
+# Let the guard test source this file for its function/config without running
+# the entrypoint's setup + exec. No-op in production (var never set there).
+[[ -n "${ARM_ENTRYPOINT_SOURCE_ONLY:-}" ]] && return 0
 
 if [[ -f /etc/ssl/arm/arm-ca.crt ]]; then
     cp /etc/ssl/arm/arm-ca.crt /usr/local/share/ca-certificates/arm-ca.crt
@@ -177,6 +221,28 @@ fi
 # Transcode-only path: VAAPI/QSV render-node access (see setup_render_access
 # above — explicit RENDER_GID wins, else derived from the mounted nodes).
 setup_render_access
+# Ripper-only path: pre-create the optical device nodes (see
+# precreate_optical_nodes above). Gated on ARM_DRIVE_ID so the shared
+# entrypoint does nothing for backend/ui/transcode containers. Group-owned
+# like the host's nodes (root:cdrom 0660) so the gosu-dropped arm user can
+# open them through the cdrom membership set up just above.
+if [[ -n "${ARM_DRIVE_ID:-}" ]]; then
+    precreate_optical_nodes /dev "${ARM_OPTICAL_SR_MAX:-7}" "${ARM_OPTICAL_SG_MAX:-15}" "${cdrom_group:-root}"
+fi
+
+# Transcode-only path: VAAPI/QSV transcoders get the host's /dev/dri render node
+# (root:render 0660) passed in by the dispatcher. The node is group-owned, so the
+# `arm` user must join that group IN /etc/group — `gosu` resets supplementary
+# groups to the user's membership, dropping any docker --group-add. Mirrors the
+# CDROM_GID handling above. No-op when RENDER_GID is unset (CPU / NVENC / ripper).
+if [[ -n "${RENDER_GID:-}" ]]; then
+    render_group="$(getent group "${RENDER_GID}" | cut -d: -f1 || true)"
+    if [[ -z "${render_group}" ]]; then
+        groupadd --gid "${RENDER_GID}" render-host
+        render_group="render-host"
+    fi
+    usermod --append --groups "${render_group}" arm
+fi
 
 # Backend-only path: when /var/run/docker.sock is bind-mounted in so the
 # transcode dispatcher can spawn arm-transcode-* containers, the socket's
