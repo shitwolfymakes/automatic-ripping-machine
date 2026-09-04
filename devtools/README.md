@@ -12,16 +12,26 @@ bash devtools/setup-dev.sh
 
 What it does (idempotent — safe to re-run):
 
-1. Checks that `uv`, `docker`, `docker compose`, `openssl`, and `lsscsi` are available (`lsscsi` is used to enumerate optical drives — `apt-get install lsscsi` / `dnf install lsscsi` / `pacman -S lsscsi`).
+1. Checks that `uv`, `docker`, `docker compose`, and `openssl` are available.
 2. Runs `uv sync` to create `.venv/` with all workspace members.
 3. Calls `bash install.sh --certs-only --no-env --no-compose --no-udev` if `certs/arm-ca.crt` isn't already present.
 4. Creates `.env` from `.env.example` if missing, filling in a random `POSTGRES_PASSWORD` and `ARM_SERVICE_TOKEN`, and detecting `PUID`/`PGID`/`CDROM_GID` from the host. An existing `.env` is left untouched.
-5. Creates `docker-compose.yml` from the committed `docker-compose.yml.example` template if it doesn't exist yet — the generated file is **gitignored**, same split as `.env` / `.env.example`, so you never have to discard host-specific changes. Then writes one `arm-ripper-srN` service per optical drive into its generated region (between the `>>>/<<< arm-ripper services` sentinels), pairing each `/dev/srN` with its matching `/dev/sgM` node via `lsscsi -g`. A drive attached after the initial cert bootstrap gets its leaf cert regenerated automatically. The ripper region is rewritten on every run (a no-op when your drives are unchanged); re-run after attaching/removing a drive. To pull static-service updates from the template, delete `docker-compose.yml` and re-run.
-6. On a Linux host with optical drives, writes a per-drive host udev rule (`/etc/udev/rules.d/99-arm-no-automount.rules`, via `sudo`) so the desktop's `udisks2`/`gvfs` doesn't grab the disc and block the ripper's post-rip `eject`. Skipped if `udevadm` isn't on PATH or no drive is present. See [../docs/arch/06-deployment.md § Host-side auto-mount](../docs/arch/06-deployment.md#host-side-auto-mount-must-be-disabled).
+5. Creates `docker-compose.yml` from the template — no drive enumeration; enroll drives from the UI.
+6. Writes a host-wide udev rule (`KERNEL=="sr[0-9]*"`, `UDISKS_AUTO=0`).
 
 After it finishes: `docker compose up -d --build`.
 
 Cert generation is delegated to [install.sh](../install.sh) — the end-user installer is the single source of truth for the CA + leaves under `certs/`. See [../docs/arch/05-cross-cutting.md § Transport (TLS)](../docs/arch/05-cross-cutting.md#transport-tls) for the full cert design.
+
+## ripper-containers.sh
+
+Manages the `arm-ripper-<serial>` containers the backend creates for enrolled drives — they live outside the compose project, so `docker compose down` leaves them running.
+
+```bash
+bash devtools/ripper-containers.sh {list|stop|remove}
+```
+
+`list` shows name/drive id/image/state; `stop` stops them (the backend restarts them on next boot or `docker start`); `remove` stops and removes them (the backend recreates enrolled ones at next boot).
 
 ## iso-smoke.sh
 
