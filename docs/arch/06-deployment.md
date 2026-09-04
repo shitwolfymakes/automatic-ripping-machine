@@ -131,7 +131,7 @@ services:
       replicas: 0   # built by `docker compose up -d --build`; never started here
 ```
 
-The `armv3-` prefix on container names and `name: armv3` project namespace guarantee zero collision with v2 containers (which use `arm-` names) so `docker compose ls`, `docker compose down`, and `docker volume ls` all show v3 and v2 as distinct projects.
+The `armv3-` prefix on container names and `name: armv3` project namespace guarantee zero collision with v2 containers (which use `arm-` names) so `docker compose ls`, `docker compose down`, and `docker volume ls` all show v3 and v2 as distinct projects. One exception: containers the backend creates for enrolled drives (see below) are named `arm-ripper-<serial>` without the `armv3-` prefix — they're created over the docker socket, not by compose, so they sit outside the `armv3` compose project namespace.
 
 ### Rippers are created by the backend, not by compose
 
@@ -150,7 +150,9 @@ docker socket:
 - env `ARM_DRIVE_ID`, `ARM_DRIVE_BY_ID` (the udev by-id link it follows),
   `ARM_DRIVE_DEV` (current node — a hint), backend URL + service token,
   `PUID/PGID/CDROM_GID`, and any `ARM_RIPPER_*` tunables from `.env`;
-- mounts `./arm/raw`, `./arm/logs`, `arm-ca.crt:ro`, `/dev/disk:/host-disk:ro`.
+- mounts the `ARM_HOST_RAW_PATH` / `ARM_HOST_LOGS_PATH` host paths (which the
+  install layout resolves to `./arm/raw`, `./arm/logs`), `arm-ca.crt:ro`,
+  `/dev/disk:/host-disk:ro`.
 
 Unenroll stops and removes the container. On every backend boot the `drives`
 table is reconciled against the labelled containers: missing → created, exited
@@ -181,7 +183,7 @@ Rippers no longer need this pairing done for them: the `arm-ripper-<serial>` con
 
 Desktop hosts (any with a GNOME / KDE / XFCE session) run `udisks2` + `gvfs` to auto-mount removable media as soon as the kernel sees a new disc. That host-side mount holds `/dev/srN` exclusively — the ripper container can scan and rip (`makemkvcon` opens the SCSI generic node, not the block device), but **post-rip `eject` fails with "Device or resource busy"** because the container can't reach the host's mount namespace to unmount first. The ripper logs `eject /dev/srN failed after 4 attempts; check host auto-mount config` and the disc stays in the drive until the user manually ejects.
 
-Server / headless installs do not have this problem (no `udisks2` running, no `gvfs`). Desktop hosts need a one-time host config change to disable auto-mount for the ARM drive(s) **only** — leaving every other drive untouched. The canonical udisks2 knob for this is `UDISKS_AUTO=0` ([udisks(8)](https://manpages.debian.org/trixie/udisks2/udisks.8.en.html)) — the drive stays visible in Files / Nautilus and the user can still mount it on demand, but the desktop's auto-mounter skips it on insert.
+Server / headless installs do not have this problem (no `udisks2` running, no `gvfs`). Desktop hosts need a one-time host config change to disable auto-mount for optical drives (non-optical media untouched; other optical drives stay visible and manually mountable). The canonical udisks2 knob for this is `UDISKS_AUTO=0` ([udisks(8)](https://manpages.debian.org/trixie/udisks2/udisks.8.en.html)) — the drive stays visible in Files / Nautilus and the user can still mount it on demand, but the desktop's auto-mounter skips it on insert.
 
 The rule is host-wide rather than scoped to a specific drive by `ID_PATH`/`ID_SERIAL`, because drives are hot-plugged and enrolled from the UI *after* install — there is no fixed drive list at install time to scope the rule to. ARM owns the optical drives on its host, so the installer (and `devtools/setup-dev.sh` for contributors) writes one rule that covers every `sr*` node:
 
