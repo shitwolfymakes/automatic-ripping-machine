@@ -221,7 +221,22 @@ def _manager(request: Request) -> RipperManager:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="ripper manager unavailable: docker socket not available",
         )
+    if not manager.host_paths_set():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ripper manager disabled: ARM_HOST_*_PATH not set",
+        )
     return manager
+
+
+def _drive_lock(request: Request, drive_id: str) -> asyncio.Lock:
+    """One `asyncio.Lock` per drive, lazily created and cached on
+    `app.state` for the process lifetime. Guards enroll/unenroll against a
+    concurrent request racing the same row (double-POST, or a retried
+    client): the loser waits for the winner's docker call + commit to
+    finish rather than clobbering it mid-flight."""
+    locks: dict[str, asyncio.Lock] = request.app.state.__dict__.setdefault("drive_locks", {})
+    return locks.setdefault(drive_id, asyncio.Lock())
 
 
 @router.post("/{drive_id}/enroll", response_model=DriveView)
@@ -234,28 +249,35 @@ async def enroll_drive(
     """detected|ignored -> enrolled (spec §1): the operator says "this is
     ARM's". Creates (or adopts) the ripper container (spec §3). A docker
     failure reverts the row and surfaces the error in `last_error` + the
-    response."""
-    manager = _manager(request)
-    drive = await _load_drive(db, drive_id)
-    _require_lifecycle(drive, "enroll", DriveLifecycle.DETECTED, DriveLifecycle.IGNORED)
-    if not drive.present:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="cannot enroll a drive that is not present")
-    previous = drive.lifecycle
-    # Flip first so the ripper's register-by-id (which requires `enrolled`)
-    # cannot race the container start.
-    drive.lifecycle = DriveLifecycle.ENROLLED
-    drive.last_error = None
-    db.add(drive)
-    await db.commit()
-    try:
-        await asyncio.to_thread(manager.ensure_running, drive)
-    except RipperManagerError as exc:
-        drive.lifecycle = previous
-        drive.last_error = str(exc)
+    response.
+
+    Serialized per-drive (see `_drive_lock`): a second enroll/unenroll on the
+    same drive_id while this one is still running its docker call waits for
+    it to finish and commit, instead of reading + clobbering a stale row."""
+    async with _drive_lock(request, drive_id):
+        drive = await _load_drive(db, drive_id)
+        manager = _manager(request)
+        _require_lifecycle(drive, "enroll", DriveLifecycle.DETECTED, DriveLifecycle.IGNORED)
+        if not drive.present:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="cannot enroll a drive that is not present"
+            )
+        previous = drive.lifecycle
+        # Flip first so the ripper's register-by-id (which requires `enrolled`)
+        # cannot race the container start.
+        drive.lifecycle = DriveLifecycle.ENROLLED
+        drive.last_error = None
         db.add(drive)
         await db.commit()
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    return await _view_for(db, drive)
+        try:
+            await asyncio.to_thread(manager.ensure_running, drive)
+        except RipperManagerError as exc:
+            drive.lifecycle = previous
+            drive.last_error = str(exc)
+            db.add(drive)
+            await db.commit()
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        return await _view_for(db, drive)
 
 
 @router.post("/{drive_id}/ignore", response_model=DriveView)
@@ -301,33 +323,39 @@ async def unenroll_drive(
 ) -> DriveView | Response:
     """enrolled -> detected (still plugged in) or gone (row deleted). Refused
     mid-rip. Stops (or removes) the ripper container (spec §3) before the
-    lifecycle changes; a docker failure leaves the row `enrolled`."""
-    manager = _manager(request)
-    drive = await _load_drive(db, drive_id)
-    _require_lifecycle(drive, "unenroll", DriveLifecycle.ENROLLED)
-    ripping = (
-        (
-            await db.execute(
-                select(Job).where(col(Job.drive_id) == drive_id).where(col(Job.status) == JobStatus.RIPPING).limit(1)
+    lifecycle changes; a docker failure leaves the row `enrolled`.
+
+    Serialized per-drive (see `_drive_lock`) for the same reason as enroll."""
+    async with _drive_lock(request, drive_id):
+        drive = await _load_drive(db, drive_id)
+        manager = _manager(request)
+        _require_lifecycle(drive, "unenroll", DriveLifecycle.ENROLLED)
+        ripping = (
+            (
+                await db.execute(
+                    select(Job)
+                    .where(col(Job.drive_id) == drive_id)
+                    .where(col(Job.status) == JobStatus.RIPPING)
+                    .limit(1)
+                )
             )
+            .scalars()
+            .first()
         )
-        .scalars()
-        .first()
-    )
-    if ripping is not None or drive.status is DriveStatus.RIPPING:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="cannot unenroll: a drive is ripping")
-    try:
-        await asyncio.to_thread(manager.remove, drive.id)
-    except RipperManagerError as exc:
-        drive.last_error = str(exc)
+        if ripping is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="cannot unenroll: a drive is ripping")
+        try:
+            await asyncio.to_thread(manager.remove, drive.id)
+        except RipperManagerError as exc:
+            drive.last_error = str(exc)
+            db.add(drive)
+            await db.commit()
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        if not drive.present:
+            await db.delete(drive)
+            await db.commit()
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
+        drive.lifecycle = DriveLifecycle.DETECTED
         db.add(drive)
         await db.commit()
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    if not drive.present:
-        await db.delete(drive)
-        await db.commit()
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    drive.lifecycle = DriveLifecycle.DETECTED
-    db.add(drive)
-    await db.commit()
-    return await _view_for(db, drive)
+        return await _view_for(db, drive)

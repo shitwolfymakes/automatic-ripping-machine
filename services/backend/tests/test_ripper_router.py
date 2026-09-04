@@ -8,6 +8,7 @@ Fake-session + mocked dispatcher/hub, service-token and drive-owner auth.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import secrets
 from datetime import datetime, timezone
@@ -293,6 +294,18 @@ def test_register_refuses_a_drive_that_is_not_enrolled() -> None:
     assert db.rows["drives"][0].status is DriveStatus.ONLINE  # untouched
 
 
+def test_register_not_enrolled_refusal_is_logged(caplog: pytest.LogCaptureFixture) -> None:
+    """D2: the not-enrolled 409 is logged at WARNING (the mismatch 409 is
+    already logged at ERROR by test_register_identity_mismatch...)."""
+    db = FakeSession()
+    db.rows["drives"] = [_enrolled(lifecycle=DriveLifecycle.DETECTED)]
+    with caplog.at_level(logging.WARNING, logger="arm_backend.routers.ripper"):
+        with TestClient(_make_app(db)) as client:
+            r = client.post("/api/ripper/register", json=_register_body(), headers=_SERVICE_AUTH)
+    assert r.status_code == 409
+    assert "register refused drive_id=drv_x" in caplog.text and "not enrolled" in caplog.text
+
+
 def test_register_identity_mismatch_marks_the_row_error() -> None:
     db = FakeSession()
     db.rows["drives"] = [_enrolled()]
@@ -308,15 +321,37 @@ def test_register_identity_mismatch_marks_the_row_error() -> None:
     assert row.hostname == "scan-drv_x"  # not adopted
 
 
-@pytest.mark.parametrize("row_by_id", [None, _BY_ID])
-@pytest.mark.parametrize("req_by_id", [None, _BY_ID])
-def test_register_only_compares_identity_when_both_sides_have_one(row_by_id: str | None, req_by_id: str | None) -> None:
+@pytest.mark.parametrize(
+    ("row_by_id", "req_by_id", "expect_ok"),
+    [
+        (None, None, True),
+        (None, _BY_ID, True),
+        (_BY_ID, _BY_ID, True),
+        # D1: the row has a by-id binding — the ripper reporting no binding
+        # at all counts as a mismatch, not an "unknown, skip the check" case.
+        (_BY_ID, None, False),
+    ],
+)
+def test_register_compares_identity_only_against_a_bound_row(
+    row_by_id: str | None, req_by_id: str | None, expect_ok: bool
+) -> None:
     db = FakeSession()
     db.rows["drives"] = [_enrolled(by_id_name=row_by_id)]
     with TestClient(_make_app(db)) as client:
         r = client.post("/api/ripper/register", json=_register_body(by_id_name=req_by_id), headers=_SERVICE_AUTH)
-    assert r.status_code == 200, r.text
-    assert db.rows["drives"][0].by_id_name == row_by_id  # register never rewrites identity
+    row = db.rows["drives"][0]
+    if expect_ok:
+        assert r.status_code == 200, r.text
+        assert row.by_id_name == row_by_id  # register never rewrites identity
+    else:
+        assert r.status_code == 409, r.text
+        detail = r.json()["detail"]
+        assert "identity mismatch" in detail
+        assert row_by_id in detail  # type: ignore[operator]
+        assert "no by-id binding" in detail
+        assert "unenroll and re-enroll" in detail
+        assert row.status is DriveStatus.ERROR
+        assert row.last_error == detail
 
 
 # --- /identify ---------------------------------------------------------------
