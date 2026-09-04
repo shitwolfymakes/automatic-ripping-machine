@@ -258,6 +258,127 @@
         }
       }
     },
+    "/api/ripper/drives/{drive_id}": {
+      "get": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Get Drive",
+        "description": "This ripper's own row. Port-identity rippers read `device_path` from\nit while their drive is absent \u2014 the scanner keeps that current by port\n(spec \u00a72), and the ripper cannot see a renumbering by itself without a\nby-id link. Returns the table model: the ripper validates it as `Drive`.",
+        "operationId": "get_drive_api_ripper_drives__drive_id__get",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Drive"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ripper/drives/{drive_id}/device-path": {
+      "patch": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Update Device Path",
+        "description": "Ripper \u2192 backend on a node move (replug under a new srN), so the UI\nnever shows a stale node. Identity is untouched \u2014 only where it lives.",
+        "operationId": "update_device_path_api_ripper_drives__drive_id__device_path_patch",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriveDevicePathUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ripper/makemkv-key-status": {
       "post": {
         "tags": [
@@ -2063,7 +2184,7 @@
           "drives"
         ],
         "summary": "Rescan Drives",
-        "description": "Reconcile drive freshness from heartbeats. Backend-side only: the\nripper owns hardware re-enumeration; this surfaces which registered drives\nare live vs stale based on their last media-status update.\n\nKept as POST (not GET) even though it currently only reads: a real rescan\ntriggers ripper-side hardware re-enumeration (a non-idempotent side effect),\nwhich a follow-up will add behind this same verb.",
+        "description": "Run the host drive scan now (spec \u00a72) and report the reconciled table.\nAlso keeps the pre-existing heartbeat-freshness counts so the UI's\nonline/stale badge is unchanged.",
         "operationId": "rescan_drives_api_drives_rescan_post",
         "parameters": [
           {
@@ -2210,6 +2331,244 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drives/{drive_id}/enroll": {
+      "post": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Enroll Drive",
+        "description": "detected|ignored -> enrolled (spec \u00a71). The operator says \"this is ARM's\".\nPlan 3 hooks the ripper manager here to create the container.",
+        "operationId": "enroll_drive_api_drives__drive_id__enroll_post",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drives/{drive_id}/ignore": {
+      "post": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Ignore Drive",
+        "description": "detected -> ignored: \"not ARM's\". Persisted so the scanner never re-nags,\nand never pruned.",
+        "operationId": "ignore_drive_api_drives__drive_id__ignore_post",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drives/{drive_id}/unignore": {
+      "post": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Unignore Drive",
+        "operationId": "unignore_drive_api_drives__drive_id__unignore_post",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drives/{drive_id}/unenroll": {
+      "post": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Unenroll Drive",
+        "description": "enrolled -> detected (still plugged in) or gone (row deleted). Refused\nmid-rip. Plan 3 hooks the ripper manager here to stop the container.",
+        "operationId": "unenroll_drive_api_drives__drive_id__unenroll_post",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveView"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Drive row deleted (detected-origin drive)"
           },
           "422": {
             "description": "Validation Error",
@@ -7918,6 +8277,28 @@
             ],
             "title": "Community Keydb Enabled"
           },
+          "drive_scan_interval_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drive Scan Interval Seconds"
+          },
+          "drive_detected_prune_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drive Detected Prune Days"
+          },
           "makemkv_sdf_enabled": {
             "anyOf": [
               {
@@ -8061,6 +8442,14 @@
             "type": "boolean",
             "title": "Community Keydb Enabled"
           },
+          "drive_scan_interval_seconds": {
+            "type": "integer",
+            "title": "Drive Scan Interval Seconds"
+          },
+          "drive_detected_prune_days": {
+            "type": "integer",
+            "title": "Drive Detected Prune Days"
+          },
           "makemkv_sdf_enabled": {
             "type": "boolean",
             "title": "Makemkv Sdf Enabled"
@@ -8164,6 +8553,8 @@
           "auto_rip_on_insert",
           "block_on_miss",
           "community_keydb_enabled",
+          "drive_scan_interval_seconds",
+          "drive_detected_prune_days",
           "makemkv_sdf_enabled",
           "ripping_paused",
           "hold_for_review",
@@ -8357,6 +8748,80 @@
               }
             ],
             "title": "Serial"
+          },
+          "by_id_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By Id Name"
+          },
+          "sysfs_port": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sysfs Port"
+          },
+          "identity_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveIdentityKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lifecycle": {
+            "$ref": "#/components/schemas/DriveLifecycle",
+            "default": "enrolled"
+          },
+          "present": {
+            "type": "boolean",
+            "title": "Present",
+            "default": true
+          },
+          "vendor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
           },
           "display_name": {
             "anyOf": [
@@ -8567,6 +9032,20 @@
         ],
         "title": "DriveCurrentJobView"
       },
+      "DriveDevicePathUpdateRequest": {
+        "properties": {
+          "device_path": {
+            "type": "string",
+            "title": "Device Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "device_path"
+        ],
+        "title": "DriveDevicePathUpdateRequest",
+        "description": "Ripper \u2192 backend: the drive now occupies this node (replug under a\nnew srN). Keeps the UI's node current without a re-register."
+      },
       "DriveDiagnosticItem": {
         "properties": {
           "id": {
@@ -8633,6 +9112,25 @@
         ],
         "title": "DriveDiagnosticResponse"
       },
+      "DriveIdentityKind": {
+        "type": "string",
+        "enum": [
+          "by_id",
+          "port"
+        ],
+        "title": "DriveIdentityKind",
+        "description": "What a Drive row's identity is keyed on. BY_ID is the udev\n/dev/disk/by-id link name (stable across replug and renumbering); PORT\nis the sysfs device path \u2014 the degraded fallback for drives that expose\nno serial, and the UI says so."
+      },
+      "DriveLifecycle": {
+        "type": "string",
+        "enum": [
+          "detected",
+          "ignored",
+          "enrolled"
+        ],
+        "title": "DriveLifecycle",
+        "description": "Operator-owned state of a physical optical drive the backend has seen.\nPresence (plugged in right now) is a separate, orthogonal fact."
+      },
       "DriveMediaStatus": {
         "type": "string",
         "enum": [
@@ -8664,6 +9162,31 @@
           "stale": {
             "type": "integer",
             "title": "Stale"
+          },
+          "detected": {
+            "type": "integer",
+            "title": "Detected",
+            "default": 0
+          },
+          "ignored": {
+            "type": "integer",
+            "title": "Ignored",
+            "default": 0
+          },
+          "enrolled": {
+            "type": "integer",
+            "title": "Enrolled",
+            "default": 0
+          },
+          "absent": {
+            "type": "integer",
+            "title": "Absent",
+            "default": 0
+          },
+          "pruned": {
+            "type": "integer",
+            "title": "Pruned",
+            "default": 0
           }
         },
         "type": "object",
@@ -8962,6 +9485,78 @@
             ],
             "title": "Updated At"
           },
+          "lifecycle": {
+            "$ref": "#/components/schemas/DriveLifecycle"
+          },
+          "present": {
+            "type": "boolean",
+            "title": "Present"
+          },
+          "identity_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveIdentityKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
+          "by_id_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By Id Name"
+          },
+          "vendor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
           "current_job": {
             "anyOf": [
               {
@@ -8992,7 +9587,15 @@
           "prescan_retries",
           "disc_enum_timeout",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "lifecycle",
+          "present",
+          "identity_kind",
+          "serial",
+          "by_id_name",
+          "vendor",
+          "model",
+          "last_error"
         ],
         "title": "DriveView"
       },
