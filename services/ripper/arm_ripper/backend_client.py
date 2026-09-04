@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 import httpx
@@ -19,6 +20,8 @@ from arm_common.schemas import (
     TrackUpdateRequest,
     TrackView,
 )
+
+logger = logging.getLogger("arm_ripper.backend_client")
 
 
 class BackendClient:
@@ -62,6 +65,7 @@ class BackendClient:
         ships with the backend half of this feature."""
         r = await self._client.patch(f"/api/ripper/drives/{drive_id}/device-path", json={"device_path": device_path})
         if r.status_code == 404:
+            logger.info("device-path endpoint absent (404); node %s not reported", device_path)
             return
         r.raise_for_status()
 
@@ -70,6 +74,7 @@ class BackendClient:
         drives to pick up a refreshed device_path while absent."""
         r = await self._client.get(f"/api/ripper/drives/{drive_id}")
         if r.status_code == 404:
+            logger.debug("drive %s not found (404); keeping the configured hint", drive_id)
             return None
         r.raise_for_status()
         return Drive.model_validate(r.json())
