@@ -22,6 +22,28 @@ if ! declare -p MOUNT_TEST >/dev/null 2>&1; then
     MOUNT_TEST=(mountpoint -q)
 fi
 
+# RO_TEST answers "is $d mounted read-only?" (e.g. the transcode dispatcher
+# mounts /raw ro on purpose — transcoders only read rips). `test -w` on an ro
+# mount is always false, so gating write-ability there would crash-loop every
+# transcoder. Reads /proc/self/mounts directly (no findmnt dependency — slim
+# images may not ship util-linux's findmnt). Array + declare-p seam so the
+# guard test can substitute a stub, same pattern as MOUNT_TEST/WRITE_TEST.
+if ! declare -p RO_TEST >/dev/null 2>&1; then
+    RO_TEST=(mount_is_readonly)
+fi
+
+mount_is_readonly() {  # <dir> -> rc 0 iff the mountpoint at <dir> is ro
+    local d="$1"
+    awk -v d="$d" '$2 == d && $4 ~ /(^|,)ro(,|$)/ { found=1 } END { exit !found }' /proc/self/mounts
+}
+
+# READ_TEST is WRITE_TEST's counterpart for the read-only-mount path: "can the
+# drop-uid read $d?" Same gosu-drop rationale as WRITE_TEST (see above). The
+# guard test pre-declares READ_TEST=(test -r) before sourcing this file.
+if ! declare -p READ_TEST >/dev/null 2>&1; then
+    READ_TEST=(gosu arm test -r)
+fi
+
 # Bounded retry so a TRANSIENT mount-not-ready (NFS server slow, net settling)
 # does not trip the hard exit — which, under `restart: unless-stopped`, would
 # become a crash-loop. A PERSISTENT misconfig still fails fast (~ATTEMPTS*DELAY).
@@ -42,6 +64,31 @@ require_writable() {
     # mountpoint; an incidental image dir is not.
     [[ -d "$d" ]] || return 0                    # absent -> not mounted here -> skip
     "${MOUNT_TEST[@]}" "$d" || return 0          # present but not a mount -> incidental image dir -> skip
+
+    # A read-only mount (e.g. /raw in a transcoder) can never satisfy a write
+    # test by design — gate readability instead, since that is the equivalent
+    # ownership/uid check for a mount the service only ever reads.
+    if "${RO_TEST[@]}" "$d"; then
+        local attempt=1
+        while (( attempt <= WRITE_CHECK_ATTEMPTS )); do
+            if "${READ_TEST[@]}" "$d"; then
+                return 0
+            fi
+            if (( attempt < WRITE_CHECK_ATTEMPTS )); then
+                echo "waiting for ${d} to become readable by arm (attempt ${attempt}/${WRITE_CHECK_ATTEMPTS})..." >&2
+                sleep "${WRITE_CHECK_DELAY}"
+            fi
+            (( attempt++ ))
+        done
+        local ro_owner
+        ro_owner="$(stat -c '%u:%g' "$d" 2>/dev/null || echo '?:?')"
+        echo "FATAL: ${d} is not readable by arm (read-only mount) (PUID:PGID=${PUID}:${PGID}); dir owner is ${ro_owner}." >&2
+        echo "       ARM does not chown user-mounted volumes (docs/arch/06-deployment.md)." >&2
+        echo "       Fix host ownership so it matches PUID:PGID — e.g. a NAS export owned by a" >&2
+        echo "       different uid, or a PUID that doesn't match the mount owner." >&2
+        return 1
+    fi
+
     local attempt=1
     while (( attempt <= WRITE_CHECK_ATTEMPTS )); do
         if "${WRITE_TEST[@]}" "$d"; then
