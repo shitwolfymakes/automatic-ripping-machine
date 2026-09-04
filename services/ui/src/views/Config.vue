@@ -124,6 +124,7 @@ async function save() {
         type="number"
         min="1"
         step="1"
+        required
         v-model.number="form.drive_scan_interval_seconds"
         data-testid="drive-scan-interval"
       />
@@ -135,6 +136,7 @@ async function save() {
         type="number"
         min="1"
         step="1"
+        required
         v-model.number="form.drive_detected_prune_days"
         data-testid="drive-prune-days"
       />
