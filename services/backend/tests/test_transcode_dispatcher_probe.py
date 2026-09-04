@@ -64,6 +64,49 @@ def test_probe_reports_image_check_failure() -> None:
     assert ok is False and detail == "image check failed: boom"
 
 
+def test_probe_result_is_cached_within_ttl() -> None:
+    """/api/system/diagnostics calls probe() on every poll; an unreachable
+    ssh host would otherwise stall docker-py's client timeout on each call.
+    Two probe() calls inside the TTL window must ping only once."""
+    d = _make_dispatcher()
+    d._docker.ping.return_value = True
+    assert d.probe() == (True, None)
+    assert d.probe() == (True, None)
+    assert d._docker.ping.call_count == 1
+    assert d._docker.images.get.call_count == 1
+
+
+def test_probe_cache_expires_after_ttl(monkeypatch) -> None:
+    d = _make_dispatcher()
+    d._docker.ping.return_value = True
+
+    fake_now = {"t": 1000.0}
+    monkeypatch.setattr(
+        "arm_backend.transcode_dispatcher.time.monotonic",
+        lambda: fake_now["t"],
+    )
+
+    assert d.probe() == (True, None)
+    assert d._docker.ping.call_count == 1
+
+    fake_now["t"] += 31.0  # past _PROBE_TTL_SECONDS (30.0)
+    assert d.probe() == (True, None)
+    assert d._docker.ping.call_count == 2
+
+
+def test_probe_order_pins_unreachable_host_detail_before_image_check() -> None:
+    """Both ping and the image lookup are set to fail in the same call — the
+    "unreachable" detail (from ping) must win, proving ping runs first and
+    the image check is never reached when the host itself is down."""
+    d = _make_dispatcher()
+    d._docker.ping.side_effect = docker.errors.DockerException("x")
+    d._docker.images.get.side_effect = docker.errors.ImageNotFound("y")
+    ok, detail = d.probe()
+    assert ok is False
+    assert detail is not None and "unreachable" in detail
+    d._docker.images.get.assert_not_called()
+
+
 def test_last_spawn_error_defaults_none() -> None:
     assert _make_dispatcher().last_spawn_error is None
 
