@@ -31,7 +31,7 @@ from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from arm_common import Config, Drive, DriveIdentityKind, DriveLifecycle
+from arm_common import Config, Drive, DriveIdentityKind, DriveLifecycle, new_id
 
 logger = logging.getLogger("arm_backend.drive_scanner")
 
@@ -95,8 +95,11 @@ def _by_id_links(disk_root: Path) -> dict[str, str]:
             target = Path(os.readlink(link))
         except OSError:
             continue
-        if not (by_id / target).exists():
-            continue  # dangling: the drive is gone or the link is stale
+        # Do not require the target to exist: inside the backend container
+        # the link target ../../srN resolves to /srN, which never exists (no
+        # device node here). Dangling links are harmless — they're keyed by
+        # Path(target).name and only consumed via links.get(entry.name) for
+        # nodes sysfs actually lists.
         out.setdefault(target.name, link.name)
     return out
 
@@ -159,6 +162,21 @@ def _apply_scan(row: Drive, d: ScannedDrive, now: datetime) -> None:
     row.model = d.model
     row.sysfs_port = d.sysfs_port
     if d.by_id_name:
+        if (
+            row.lifecycle is DriveLifecycle.ENROLLED
+            and row.identity_kind is DriveIdentityKind.PORT
+            and row.by_id_name is None
+        ):
+            # An enrolled port-identity row is adopting a by-id identity it
+            # didn't have before — a different physical drive in this port
+            # may be the one actually publishing the link (Plan 3's
+            # register-time identity check is the safety net, not this).
+            logger.warning(
+                "enrolled drive %s in port %s is adopting by-id identity %s",
+                row.id,
+                row.sysfs_port,
+                d.by_id_name,
+            )
         # A drive can gain a by-id link (udev/driver change); never lose one.
         row.by_id_name = d.by_id_name
         row.serial = d.serial
@@ -185,8 +203,14 @@ async def reconcile_drives(
             row = by_port.get(d.sysfs_port)
         is_new = row is None
         if row is None:
+            # A per-row unique id, not d.node: two different physical drives
+            # can land on the same srN across ticks (a swap, or an ignored
+            # row that is never pruned), and hostname is UNIQUE — a
+            # node-keyed placeholder collided and wedged every later tick.
+            drive_id = new_id("drv")
             row = Drive(
-                hostname=f"scan-{d.node}",  # placeholder until Plan 3 names the ripper by drive id
+                id=drive_id,
+                hostname=f"scan-{drive_id}",  # placeholder until Plan 3 names the ripper by drive id
                 device_path=d.device_path,
                 lifecycle=DriveLifecycle.DETECTED,
                 present=True,
@@ -212,7 +236,12 @@ async def reconcile_drives(
         if row.present:
             row.present = False
             logger.info("drive absent: %s (%s)", row.device_path, row.by_id_name or row.sysfs_port)
-        if row.lifecycle is DriveLifecycle.DETECTED and row.last_seen_at is not None and row.last_seen_at < cutoff:
+        last_seen = row.last_seen_at
+        if last_seen is not None and last_seen.tzinfo is None:
+            # SQLite hands back naive datetimes; `now`/`cutoff` are always
+            # aware (UTC) — comparing naive to aware raises TypeError.
+            last_seen = last_seen.replace(tzinfo=timezone.utc)
+        if row.lifecycle is DriveLifecycle.DETECTED and last_seen is not None and last_seen < cutoff:
             await session.delete(row)
             rows.remove(row)
             pruned += 1
@@ -236,8 +265,10 @@ async def _tunables(session: AsyncSession) -> tuple[int, int]:
     """(interval_seconds, prune_days) from the Config singleton; defaults when
     the row is missing or a column is None (in-memory rows predating 0029)."""
     cfg = (await session.execute(select(Config))).scalars().first()
-    interval = getattr(cfg, "drive_scan_interval_seconds", None) or DEFAULT_SCAN_INTERVAL_SECONDS
-    prune = getattr(cfg, "drive_detected_prune_days", None) or DEFAULT_PRUNE_DAYS
+    interval_v = getattr(cfg, "drive_scan_interval_seconds", None)
+    prune_v = getattr(cfg, "drive_detected_prune_days", None)
+    interval = interval_v if interval_v is not None else DEFAULT_SCAN_INTERVAL_SECONDS
+    prune = prune_v if prune_v is not None else DEFAULT_PRUNE_DAYS
     return int(interval), int(prune)
 
 
@@ -250,11 +281,17 @@ class DriveScanner:
         self._session_factory = session_factory
         self._sysfs_root = sysfs_root
         self._disk_root = disk_root
+        # POST /rescan (request session) and the background loop (its own
+        # session) can both call scan_once concurrently; both do an unlocked
+        # select(Drive) then insert, so an overlapping pair can each decide a
+        # row is new and double-INSERT. Serialize reconciliation in-process.
+        self._lock = asyncio.Lock()
 
     async def scan_once(self, session: AsyncSession) -> ScanSummary:
-        _, prune_days = await _tunables(session)
-        scanned = enumerate_optical(sysfs_root=self._sysfs_root, disk_root=self._disk_root)
-        return await reconcile_drives(session, scanned, now=datetime.now(timezone.utc), prune_days=prune_days)
+        async with self._lock:
+            _, prune_days = await _tunables(session)
+            scanned = enumerate_optical(sysfs_root=self._sysfs_root, disk_root=self._disk_root)
+            return await reconcile_drives(session, scanned, now=datetime.now(timezone.utc), prune_days=prune_days)
 
     async def run(self) -> None:
         logger.info("drive scanner starting: sysfs=%s disk=%s", self._sysfs_root, self._disk_root)

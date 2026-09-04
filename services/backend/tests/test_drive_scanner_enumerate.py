@@ -52,8 +52,8 @@ class Tree:
         (blk / "device").symlink_to(Path("..") / "..")
         (self.sysfs / "class" / "block" / node).symlink_to(blk)
         if by_id:
-            # Create the actual device file that the by-id link will point to
-            (self.disk.parent / node).touch()
+            # No dev/srN file created: mirrors the backend container, where
+            # the by-id link target ../../srN never resolves (no device node).
             (self.disk / "by-id" / by_id).symlink_to(Path("..") / ".." / node)
 
     def scan(self) -> list[ScannedDrive]:
