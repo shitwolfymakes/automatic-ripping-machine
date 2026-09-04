@@ -77,7 +77,12 @@ class RipperManager:
 
     def host_paths_set(self) -> bool:
         s = self._settings
-        return bool(s.ARM_HOST_RAW_PATH and s.ARM_HOST_LOGS_PATH and s.ARM_HOST_CERTS_PATH)
+        return bool(s.ARM_HOST_RAW_PATH and s.ARM_HOST_LOGS_PATH and self._certs_path())
+
+    def _certs_path(self) -> str:
+        """Local host certs dir for the rippers' CA mount — ARM_RIPPER_CERTS_PATH
+        when set (remote-transcode installs), else ARM_HOST_CERTS_PATH."""
+        return self._settings.ARM_RIPPER_CERTS_PATH or self._settings.ARM_HOST_CERTS_PATH
 
     def probe(self) -> tuple[bool, str | None]:
         """Daemon reachable and ARM_RIPPER_IMAGE present? Never raises; TTL-cached."""
@@ -118,7 +123,7 @@ class RipperManager:
             value = getattr(s, setting)
             if value:
                 env[env_name] = value
-        certs_root = Path(s.ARM_HOST_CERTS_PATH)
+        certs_root = Path(self._certs_path())
         volumes = {
             s.ARM_HOST_RAW_PATH: {"bind": "/raw", "mode": "rw"},
             s.ARM_HOST_LOGS_PATH: {"bind": "/logs", "mode": "rw"},

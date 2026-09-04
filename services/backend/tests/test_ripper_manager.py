@@ -158,6 +158,16 @@ def test_container_spec_omits_unset_tunables() -> None:
     assert "POLL_INTERVAL_SECONDS" not in env and "ARM_OPTICAL_SR_MAX" not in env
 
 
+def test_container_spec_prefers_the_local_ripper_certs_path() -> None:
+    m, _ = _manager(ARM_RIPPER_CERTS_PATH="/local/certs")
+    volumes = m.container_spec(_drive())["volumes"]
+    assert "/local/certs/arm-ca.crt" in volumes and "/host/certs/arm-ca.crt" not in volumes
+
+
+def test_host_paths_set_accepts_a_ripper_certs_path_alone() -> None:
+    assert _manager(ARM_HOST_CERTS_PATH="", ARM_RIPPER_CERTS_PATH="/local/certs")[0].host_paths_set() is True
+
+
 def test_host_paths_set_needs_raw_logs_and_certs_only() -> None:
     assert _manager()[0].host_paths_set() is True
     assert _manager(ARM_HOST_MEDIA_PATH="")[0].host_paths_set() is True
