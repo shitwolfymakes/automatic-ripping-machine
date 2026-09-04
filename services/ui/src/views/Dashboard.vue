@@ -15,7 +15,7 @@ import type {
 } from '../api/types'
 import { isTerminalJobStatus } from '../utils/jobStatus'
 import { taskOrdinal } from '../utils/transcodeOrdinal'
-import { driveStatusLabel, partitionDrives } from '../utils/drives'
+import { driveStatusLabel, partitionDrives, statusClasses } from '../utils/drives'
 
 const REFRESH_MS = Number(import.meta.env.VITE_DASHBOARD_REFRESH_MS ?? 5000)
 const ACTIVE_JOB_STATUSES: JobStatus[] = ['created', 'awaiting_user_id', 'identified', 'ripping']
@@ -200,7 +200,7 @@ onUnmounted(() => {
           </td>
           <td>{{ d.display_name ?? '—' }}</td>
           <td>
-            <span class="badge">{{ driveStatusLabel(d) }}</span>
+            <span :class="statusClasses(d)">{{ driveStatusLabel(d) }}</span>
           </td>
           <td>{{ d.last_seen_at ?? '—' }}</td>
         </tr>

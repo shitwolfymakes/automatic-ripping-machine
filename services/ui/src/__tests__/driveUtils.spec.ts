@@ -6,6 +6,7 @@ import {
   isRipping,
   partitionDrives,
   serialLabel,
+  statusClasses,
 } from '../utils/drives'
 
 function drive(over: Partial<DriveView> = {}): DriveView {
@@ -79,6 +80,32 @@ describe('driveStatusLabel', () => {
   })
   it('passes other statuses through', () => {
     expect(driveStatusLabel(drive({ status: 'ripping' }))).toBe('ripping')
+  })
+  it('prefers error over detached when both apply', () => {
+    expect(
+      driveStatusLabel(
+        drive({
+          status: 'error',
+          media_status: 'detached',
+          present: false,
+          last_error: 'identity mismatch: x',
+        }),
+      ),
+    ).toBe('error: identity mismatch: x')
+  })
+})
+
+describe('statusClasses', () => {
+  it('is badge+error for an error status', () => {
+    expect(statusClasses(drive({ status: 'error', last_error: 'x' }))).toEqual(['badge', 'error'])
+  })
+  it('is badge+detached for a detached drive', () => {
+    expect(
+      statusClasses(drive({ status: 'offline', media_status: 'detached', present: false })),
+    ).toEqual(['badge', 'detached'])
+  })
+  it('is plain badge otherwise', () => {
+    expect(statusClasses(drive({ status: 'online' }))).toEqual(['badge'])
   })
 })
 
