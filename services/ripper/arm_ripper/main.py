@@ -176,11 +176,27 @@ def _resolve_paths() -> dict[str, Path]:
     }
 
 
-async def _current_hint(client: BackendClient, drive_id: str, handle: DriveHandle) -> str:
+# While the drive is absent the backend is the only source of a fresher
+# node for a port-identity drive, but the scanner only republishes on its
+# own cadence — polling it every POLL_INTERVAL adds nothing. Refresh on the
+# first absent tick, then once per this many ticks. Counted in ticks, not
+# wall-clock, so the tests' patched sleep still drives it.
+def _hint_refresh_every_n_ticks() -> int:
+    return max(1, int(HEARTBEAT_INTERVAL_SECONDS / settings.POLL_INTERVAL_SECONDS))
+
+
+async def _current_hint(client: BackendClient, drive_id: str, *, absent: bool, absent_ticks: int) -> str:
     """The node to try when there is no by-id link. Normally ARM_DRIVE_DEV;
     while such a drive is absent, ask the backend — its scanner tracks the
-    port -> node mapping and may have seen the drive come back renumbered."""
-    if settings.ARM_DRIVE_BY_ID or not handle.absent:
+    port -> node mapping and may have seen the drive come back renumbered.
+
+    `absent` is the PREVIOUS tick's state, not `handle.absent`: a node that
+    resolves but answers ENXIO (Ruling C) is absence too, and it leaves the
+    handle populated, so keying off the handle would never refresh there.
+    """
+    if settings.ARM_DRIVE_BY_ID or not absent:
+        return settings.ARM_DRIVE_DEV
+    if absent_ticks % _hint_refresh_every_n_ticks() != 0:
         return settings.ARM_DRIVE_DEV
     try:
         drive = await client.get_drive(drive_id)
@@ -219,10 +235,15 @@ async def poll_loop(controller: JobController, handle: DriveHandle, *, client: B
     last_state: DriveState | None = None
     active_task: asyncio.Task[None] | None = None
     last_error_kind: DriveErrorKind | None = None
+    # Ticks that have run with the drive already known absent: 0 on the first
+    # such tick, so it refreshes and later ones are throttled.
+    absent_ticks = 0
     while True:
         # Re-resolve every poll: the node behind this drive can change while we
         # run (replug under a new srN). One readlink; cheap.
-        hint = await _current_hint(client, drive_id, handle)
+        was_absent = last_state is DriveState.ABSENT
+        hint = await _current_hint(client, drive_id, absent=was_absent, absent_ticks=absent_ticks)
+        absent_ticks = absent_ticks + 1 if was_absent else 0
         resolved = resolve_drive_device(settings.ARM_DRIVE_BY_ID, hint, **_resolve_paths())
         moved = handle.set(resolved.path if resolved else None)
 

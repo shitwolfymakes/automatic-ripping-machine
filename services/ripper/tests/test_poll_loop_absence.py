@@ -36,6 +36,7 @@ class _Client:
     def __init__(self, order: list[str] | None = None) -> None:
         self.device_path_updates: list[str] = []
         self.drive_device_path: str | None = None
+        self.get_drive_calls = 0
         self.order = order if order is not None else []
 
     async def update_device_path(self, *, drive_id: str, device_path: str) -> None:
@@ -43,6 +44,7 @@ class _Client:
         self.order.append("report_node")
 
     async def get_drive(self, drive_id: str):
+        self.get_drive_calls += 1
         if self.drive_device_path is None:
             return None
 
@@ -186,6 +188,15 @@ async def test_permission_errors_log_once_as_misconfigured(monkeypatch, caplog) 
     assert not any("ioctl failed" in r.message for r in caplog.records)
 
 
+async def test_misconfigured_logs_once_per_transition_not_once_ever(monkeypatch, caplog) -> None:
+    """Once-per-transition: a drive that recovers and breaks again must say so
+    the second time too."""
+    caplog.set_level(logging.INFO, logger="arm_ripper")
+    s = Script(monkeypatch, [(SR0, errno.EPERM), (SR0, DriveState.NO_DISC), (SR0, errno.EPERM)])
+    await s.run()
+    assert sum("misconfigured" in r.message for r in caplog.records) == 2
+
+
 async def test_other_errors_still_log_every_poll(monkeypatch, caplog) -> None:
     caplog.set_level(logging.INFO, logger="arm_ripper")
     s = Script(monkeypatch, [(SR0, errno.EIO)] * 4)
@@ -210,3 +221,29 @@ async def test_port_identity_refreshes_hint_from_backend_while_absent(monkeypatc
     monkeypatch.setattr(ripper_main, "resolve_drive_device", spy)
     await s.run()
     assert "/dev/sr2" in seen_hints  # backend-supplied hint was used
+
+
+async def test_hint_refresh_is_throttled_while_the_drive_stays_absent(monkeypatch) -> None:
+    """The backend's scanner republishes on its own cadence; asking it every
+    POLL_INTERVAL adds nothing. Refresh on the first absent tick, then once per
+    HEARTBEAT_INTERVAL's worth of ticks."""
+    monkeypatch.setattr(ripper_main.settings, "ARM_DRIVE_BY_ID", None)
+    every = ripper_main._hint_refresh_every_n_ticks()
+    assert every > 1  # otherwise this test proves nothing
+    # tick 0 present, then 2*every absent ticks.
+    s = Script(monkeypatch, [(SR0, DriveState.NO_DISC)] + [(None, None)] * (2 * every))
+    await s.run()
+    # Ticks 1..2*every run with the previous state ABSENT: ticks 1 and 1+every
+    # (and 1+2*every, which the script does not reach) consult the backend.
+    assert s.client.get_drive_calls == 2
+
+
+async def test_a_node_that_answers_enxio_still_refreshes_the_hint(monkeypatch) -> None:
+    """Ruling C: the node resolves but open() says ENXIO. That is absence too,
+    and the handle stays populated — so gating on handle.absent would never
+    refresh here. Gate on the previous tick's state instead."""
+    monkeypatch.setattr(ripper_main.settings, "ARM_DRIVE_BY_ID", None)
+    s = Script(monkeypatch, [(SR0, errno.ENXIO), (SR0, errno.ENXIO)])
+    await s.run()
+    assert not s.handle.absent  # the handle kept the node
+    assert s.client.get_drive_calls == 1  # ...and the hint was refreshed anyway
