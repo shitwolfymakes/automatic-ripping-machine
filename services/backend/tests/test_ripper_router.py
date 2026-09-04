@@ -1,15 +1,14 @@
-"""Ripper router endpoint coverage: config, identify, get_job, in-flight-job,
-rip-start, update-track state machine, rip-complete. Fake-session + mocked
-dispatcher/hub, service-token and drive-owner auth.
+"""Ripper router endpoint coverage: config, register, identify, get_job,
+in-flight-job, rip-start, update-track state machine, rip-complete.
+Fake-session + mocked dispatcher/hub, service-token and drive-owner auth.
 
-(register/heartbeat/resume/min-length are covered by their own modules;
-register's pg_insert path is not Fake-session-expressible and is left to the
-real-DB e2e tier.)
+(heartbeat/resume/min-length are covered by their own modules.)
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import secrets
 from datetime import datetime, timezone
@@ -31,6 +30,7 @@ from arm_common import (  # noqa: E402
     DiscFingerprint,
     DiscType,
     Drive,
+    DriveLifecycle,
     DriveStatus,
     Job,
     JobStatus,
@@ -234,86 +234,124 @@ def test_get_config_missing_singleton_500() -> None:
     assert "config singleton missing" in r.json()["detail"]
 
 
-# --- /register ---------------------------------------------------------------
+# --- /register (keyed on drive_id — spec §1, Plan 3) ---------------------------
+
+_BY_ID = "usb-PIONEER_BD-RW_BDR-S12JX_AAAABBBB000E-0:0"
 
 
-class _RegisterSession(FakeSession):
-    """`register` upserts via `pg_insert(...).on_conflict_do_update(...)`,
-    which neither FakeSession nor SQLite can compile. Special-case the
-    non-Select upsert to return the new drive id; the follow-up
-    `select(Drive)` falls through to normal FakeSession behaviour. This
-    covers the handler flow; the ON CONFLICT semantics are a Postgres
-    concern left to the integration tier."""
-
-    async def execute(self, stmt: Any) -> Any:
-        from sqlalchemy.sql import Select
-
-        if not isinstance(stmt, Select):
-            self.rows.setdefault("drives", []).append(
-                Drive(id="drv_new", hostname=_HOSTNAME, device_path="/dev/sr0", status=DriveStatus.ONLINE)
-            )
-
-            class _R:
-                @staticmethod
-                def scalar_one() -> str:
-                    return "drv_new"
-
-            return _R()
-        return await super().execute(stmt)
+def _enrolled(by_id_name: str | None = _BY_ID, **kw: Any) -> Drive:
+    base: dict[str, Any] = dict(
+        id="drv_x",
+        hostname="scan-drv_x",
+        device_path="/dev/sr0",
+        status=DriveStatus.ONLINE,
+        lifecycle=DriveLifecycle.ENROLLED,
+        by_id_name=by_id_name,
+        present=False,
+    )
+    base.update(kw)
+    return Drive(**base)
 
 
-def test_register_upserts_and_returns_drive() -> None:
-    db = _RegisterSession()
-    body = {
+def _register_body(**kw: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "drive_id": "drv_x",
         "hostname": _HOSTNAME,
-        "device_path": "/dev/sr0",
+        "device_path": "/dev/sr1",
         "ripper_version": "3.0.0",
-        "hw_caps": {"makemkv": True},
+        "by_id_name": _BY_ID,
     }
+    body.update(kw)
+    return body
+
+
+def test_register_binds_hostname_and_node_to_the_enrolled_row() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_enrolled(last_error="stale", status=DriveStatus.ERROR)]
     with TestClient(_make_app(db)) as client:
-        r = client.post("/api/ripper/register", json=body, headers=_SERVICE_AUTH)
-    assert r.status_code == 200
-    assert r.json()["id"] == "drv_new"
-    assert r.json()["hostname"] == _HOSTNAME
+        r = client.post("/api/ripper/register", json=_register_body(), headers=_SERVICE_AUTH)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["id"] == "drv_x" and body["hostname"] == _HOSTNAME and body["device_path"] == "/dev/sr1"
+    row = db.rows["drives"][0]
+    assert row.status is DriveStatus.ONLINE and row.present is True
+    assert row.last_error is None and row.last_seen_at is not None
 
 
-def test_register_serial_mismatch_logs_warning(caplog: Any) -> None:
-    """A previously-registered hostname re-registering with a different
-    serial means the physical drive behind that srN slot changed (replug,
-    reboot with different enumeration order) — worth a warning even though
-    the upsert still proceeds."""
-    db = _RegisterSession()
-    db.rows["drives"] = [
-        Drive(id="drv_x", hostname=_HOSTNAME, device_path="/dev/sr0", serial="OLD123", status=DriveStatus.ONLINE)
-    ]
-    body = {
-        "hostname": _HOSTNAME,
-        "device_path": "/dev/sr0",
-        "ripper_version": "3.0.0",
-        "serial": "NEW456",
-    }
-    with caplog.at_level("WARNING", logger="arm_backend.routers.ripper"):
+def test_register_unknown_drive_id_is_404() -> None:
+    db = FakeSession()
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/register", json=_register_body(drive_id="drv_nope"), headers=_SERVICE_AUTH)
+    assert r.status_code == 404
+
+
+def test_register_refuses_a_drive_that_is_not_enrolled() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_enrolled(lifecycle=DriveLifecycle.DETECTED)]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/register", json=_register_body(), headers=_SERVICE_AUTH)
+    assert r.status_code == 409 and "not enrolled" in r.json()["detail"]
+    assert db.rows["drives"][0].status is DriveStatus.ONLINE  # untouched
+
+
+def test_register_not_enrolled_refusal_is_logged(caplog: pytest.LogCaptureFixture) -> None:
+    """D2: the not-enrolled 409 is logged at WARNING (the mismatch 409 is
+    already logged at ERROR by test_register_identity_mismatch...)."""
+    db = FakeSession()
+    db.rows["drives"] = [_enrolled(lifecycle=DriveLifecycle.DETECTED)]
+    with caplog.at_level(logging.WARNING, logger="arm_backend.routers.ripper"):
         with TestClient(_make_app(db)) as client:
-            r = client.post("/api/ripper/register", json=body, headers=_SERVICE_AUTH)
-    assert r.status_code == 200
-    assert "serial mismatch" in caplog.text
-    assert "OLD123" in caplog.text and "NEW456" in caplog.text
+            r = client.post("/api/ripper/register", json=_register_body(), headers=_SERVICE_AUTH)
+    assert r.status_code == 409
+    assert "register refused drive_id=drv_x" in caplog.text and "not enrolled" in caplog.text
 
 
-def test_register_no_serial_from_ripper_does_not_warn(caplog: Any) -> None:
-    """A ripper that fails to resolve a serial (transient udev hiccup, or a
-    drive that never exposes one) sends serial=None — that's not evidence
-    of a swap, so no warning."""
-    db = _RegisterSession()
-    db.rows["drives"] = [
-        Drive(id="drv_x", hostname=_HOSTNAME, device_path="/dev/sr0", serial="OLD123", status=DriveStatus.ONLINE)
-    ]
-    body = {"hostname": _HOSTNAME, "device_path": "/dev/sr0", "ripper_version": "3.0.0"}
-    with caplog.at_level("WARNING", logger="arm_backend.routers.ripper"):
-        with TestClient(_make_app(db)) as client:
-            r = client.post("/api/ripper/register", json=body, headers=_SERVICE_AUTH)
-    assert r.status_code == 200
-    assert "serial mismatch" not in caplog.text
+def test_register_identity_mismatch_marks_the_row_error() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_enrolled()]
+    with TestClient(_make_app(db)) as client:
+        r = client.post(
+            "/api/ripper/register", json=_register_body(by_id_name="usb-OTHER_DRIVE_ZZZ-0:0"), headers=_SERVICE_AUTH
+        )
+    assert r.status_code == 409, r.text
+    assert "identity mismatch" in r.json()["detail"]
+    row = db.rows["drives"][0]
+    assert row.status is DriveStatus.ERROR
+    assert row.last_error is not None and _BY_ID in row.last_error and "usb-OTHER_DRIVE_ZZZ-0:0" in row.last_error
+    assert row.hostname == "scan-drv_x"  # not adopted
+
+
+@pytest.mark.parametrize(
+    ("row_by_id", "req_by_id", "expect_ok"),
+    [
+        (None, None, True),
+        (None, _BY_ID, True),
+        (_BY_ID, _BY_ID, True),
+        # D1: the row has a by-id binding — the ripper reporting no binding
+        # at all counts as a mismatch, not an "unknown, skip the check" case.
+        (_BY_ID, None, False),
+    ],
+)
+def test_register_compares_identity_only_against_a_bound_row(
+    row_by_id: str | None, req_by_id: str | None, expect_ok: bool
+) -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_enrolled(by_id_name=row_by_id)]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/register", json=_register_body(by_id_name=req_by_id), headers=_SERVICE_AUTH)
+    row = db.rows["drives"][0]
+    if expect_ok:
+        assert r.status_code == 200, r.text
+        assert row.by_id_name == row_by_id  # register never rewrites identity
+    else:
+        assert r.status_code == 409, r.text
+        detail = r.json()["detail"]
+        assert "identity mismatch" in detail
+        assert row_by_id in detail  # type: ignore[operator]
+        assert "no by-id binding" in detail
+        assert "unenroll and re-enroll" in detail
+        assert row.status is DriveStatus.ERROR
+        assert row.last_error == detail
 
 
 # --- /identify ---------------------------------------------------------------

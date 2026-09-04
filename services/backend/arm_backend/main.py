@@ -28,6 +28,7 @@ from arm_backend.notification_dispatcher import (
 )
 from arm_backend.notifications.apprise_listener import AppriseListener
 from arm_backend.notifications.inbox_listener import InboxListener
+from arm_backend.ripper_manager import RipperManager, reconcile_enrolled_rippers
 from arm_backend.routers import (
     auth,
     config as config_router,
@@ -112,20 +113,21 @@ async def _refresh_gpu_inventory(hub: WSHub) -> None:
         await session.commit()
 
 
-def _build_docker_client(docker_host: str = "") -> object | None:
+def _build_docker_client(docker_host: str = "", *, purpose: str = "transcode dispatcher") -> object | None:
     """Construct a docker-py client. When `docker_host` is set (e.g.
     "ssh://sam@transcoder-server"), target that remote daemon so transcode
     containers spawn on a remote GPU host; otherwise use the local socket.
     Returns None if the client can't be built (dev without the socket, or an
-    unreachable/misconfigured remote host) so the dispatcher stays disabled
-    rather than crashing the backend."""
+    unreachable/misconfigured remote host) so the caller's docker-backed
+    feature (named by `purpose`, e.g. "ripper manager") stays disabled rather
+    than crashing the backend."""
     try:
         import docker  # type: ignore[import-untyped]
 
         client: object = docker.DockerClient(base_url=docker_host) if docker_host else docker.from_env()
         return client
     except Exception as exc:
-        logger.warning("docker-py client unavailable: %s — transcode dispatcher disabled", exc)
+        logger.warning("docker-py client unavailable: %s — %s disabled", exc, purpose)
         return None
 
 
@@ -183,6 +185,28 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.exception("startup .arm-inprogress sweep failed: %s", exc)
         dispatcher_task = asyncio.create_task(transcode_dispatcher.run())
     app.state.transcode_dispatcher = transcode_dispatcher
+
+    # Drive lifecycle Plan 3 — ripper manager (spec §3). Always the LOCAL
+    # daemon and always its OWN client: the drives are plugged into this
+    # host, whatever ARM_TRANSCODE_DOCKER_HOST says about transcoders, and a
+    # client isn't safe to share across two independent docker-py callers
+    # (each has its own connection pool / lifecycle expectations).
+    ripper_manager: RipperManager | None = None
+    local_docker = _build_docker_client(purpose="ripper manager")
+    if local_docker is not None:  # pragma: no cover — needs a real docker socket; integration tier
+        ripper_manager = RipperManager(settings=settings, docker_client=local_docker)
+        if not ripper_manager.host_paths_set():
+            # Keep the manager on app.state even though it's disabled: the
+            # diagnostics endpoint distinguishes "no docker socket" (manager
+            # is None) from "docker is fine but ARM_HOST_*_PATH isn't set"
+            # (manager present, host_paths_set() False) — see routers/system.py.
+            logger.warning("ripper manager disabled: ARM_HOST_*_PATH not set (set them via .env)")
+        else:
+            try:
+                await reconcile_enrolled_rippers(ripper_manager, SessionLocal)
+            except Exception as exc:
+                logger.exception("startup ripper reconcile failed: %s", exc)
+    app.state.ripper_manager = ripper_manager
 
     # Phase 11 — outbound Apprise notifications. Off out of the box; the
     # dispatcher polls but no-ops until the user enables notifications in

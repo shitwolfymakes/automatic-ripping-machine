@@ -20,16 +20,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
-import docker.errors  # type: ignore[import-untyped]
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
 
 from arm_backend.config import Settings
+from arm_backend.docker_probe import TtlProbe, probe_docker
 from arm_common import (
     Gpu,
     GpuStatus,
@@ -53,11 +52,6 @@ logger = logging.getLogger("arm_backend.transcode_dispatcher")
 # gracefully before falling back to `docker stop`.
 _CANCEL_GRACE_SECONDS = 10
 _DOCKER_LABEL_KEY = "arm.task_id"
-# How long a probe() result is reused before re-pinging the docker host. An
-# unreachable ssh host (ARM_TRANSCODE_DOCKER_HOST) stalls each uncached call
-# for docker-py's client timeout; /api/system/diagnostics calls probe() on
-# every poll, so an unbounded host stays slow on every request.
-_PROBE_TTL_SECONDS = 30.0
 
 
 class GpuAssignment(NamedTuple):
@@ -101,9 +95,7 @@ class TranscodeDispatcher:
         # Surfaced by /api/system/diagnostics so a crash-looping or
         # un-pullable transcoder is visible in the UI, not only in the log.
         self.last_spawn_error: str | None = None
-        # (monotonic timestamp, result) of the last probe() run. TTL cache —
-        # see _PROBE_TTL_SECONDS.
-        self._probe_cache: tuple[float, tuple[bool, str | None]] | None = None
+        self._probe = TtlProbe(lambda: probe_docker(self._docker, self._settings.ARM_TRANSCODE_IMAGE))
 
     def stop(self) -> None:
         self._stop.set()
@@ -378,35 +370,9 @@ class TranscodeDispatcher:
 
     def probe(self) -> tuple[bool, str | None]:
         """Can this dispatcher actually run a transcode right now? Pings the
-        docker host and checks the image exists there. Cheap, synchronous,
-        never raises — the diagnostics endpoint calls it per request.
-
-        Result is cached for _PROBE_TTL_SECONDS: an unreachable ssh host
-        (ARM_TRANSCODE_DOCKER_HOST) stalls an uncached call for docker-py's
-        client timeout, and diagnostics polls this on every request.
-        """
-        now = time.monotonic()
-        if self._probe_cache is not None:
-            ts, result = self._probe_cache
-            if now - ts < _PROBE_TTL_SECONDS:
-                return result
-        result = self._probe_uncached()
-        self._probe_cache = (now, result)
-        return result
-
-    def _probe_uncached(self) -> tuple[bool, str | None]:
-        try:
-            self._docker.ping()
-        except Exception as exc:  # noqa: BLE001 — any transport failure is the same answer
-            return False, f"docker host unreachable: {exc}"
-        image = self._settings.ARM_TRANSCODE_IMAGE
-        try:
-            self._docker.images.get(image)
-        except docker.errors.ImageNotFound:
-            return False, f"image {image} not present on docker host"
-        except Exception as exc:  # noqa: BLE001
-            return False, f"image check failed: {exc}"
-        return True, None
+        docker host and checks the image exists there. Never raises; cached
+        for docker_probe.PROBE_TTL_SECONDS (see there for why)."""
+        return self._probe()
 
     def _spawn_container(self, task: TranscodeTask, *, assignment: GpuAssignment | None = None) -> Any:
         remote = bool(self._settings.ARM_TRANSCODE_DOCKER_HOST)
@@ -513,7 +479,7 @@ class TranscodeDispatcher:
             else:
                 base_kwargs["count"] = 1
             try:
-                import docker
+                import docker  # type: ignore[import-untyped]
 
                 kwargs["runtime"] = "nvidia"
                 kwargs["device_requests"] = [docker.types.DeviceRequest(**base_kwargs)]

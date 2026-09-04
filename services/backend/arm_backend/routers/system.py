@@ -165,6 +165,19 @@ async def diagnostics(
             tc_status, tc_detail = "ok", None
     checks.append(SystemDiagnosticCheck(name="transcoder", status=tc_status, detail=tc_detail))
 
+    manager = getattr(request.app.state, "ripper_manager", None)
+    if manager is None:
+        rm_status, rm_detail = "warning", "ripper manager disabled: docker socket unavailable"
+    elif not manager.host_paths_set():
+        rm_status, rm_detail = "warning", "ripper manager disabled: ARM_HOST_*_PATH not set"
+    else:
+        ok, detail = await asyncio.to_thread(manager.probe)
+        if not ok:
+            rm_status, rm_detail = "warning", detail
+        else:
+            rm_status, rm_detail = "ok", None
+    checks.append(SystemDiagnosticCheck(name="ripper_manager", status=rm_status, detail=rm_detail))
+
     overall = "ok"
     for ch in checks:
         if _WORST[ch.status] > _WORST[overall]:

@@ -544,6 +544,7 @@
           "ripper"
         ],
         "summary": "Register",
+        "description": "A ripper container announcing itself for the row the backend spawned\nit for (ARM_DRIVE_ID). Keyed on the id \u2014 hostname is written as the\nownership token every X-ARM-Hostname check compares, never used to look\nthe row up. Identity is checked, never rewritten: a by-id mismatch means\nthe container is bound to a different physical drive than the row, so\nthe row goes ERROR and the container is left running for diagnosis\n(spec \u00a71, \u00a73).",
         "operationId": "register_api_ripper_register_post",
         "parameters": [
           {
@@ -2351,7 +2352,7 @@
           "drives"
         ],
         "summary": "Enroll Drive",
-        "description": "detected|ignored -> enrolled (spec \u00a71). The operator says \"this is ARM's\".\nPlan 3 hooks the ripper manager here to create the container.",
+        "description": "detected|ignored -> enrolled (spec \u00a71): the operator says \"this is\nARM's\". Creates (or adopts) the ripper container (spec \u00a73). A docker\nfailure reverts the row and surfaces the error in `last_error` + the\nresponse.\n\nSerialized per-drive (see `_drive_lock`): a second enroll/unenroll on the\nsame drive_id while this one is still running its docker call waits for\nit to finish and commit, instead of reading + clobbering a stale row.",
         "operationId": "enroll_drive_api_drives__drive_id__enroll_post",
         "parameters": [
           {
@@ -2527,7 +2528,7 @@
           "drives"
         ],
         "summary": "Unenroll Drive",
-        "description": "enrolled -> detected (still plugged in) or gone (row deleted). Refused\nmid-rip. Plan 3 hooks the ripper manager here to stop the container.",
+        "description": "enrolled -> detected (still plugged in) or gone (row deleted). Refused\nmid-rip. Stops (or removes) the ripper container (spec \u00a73) before the\nlifecycle changes; a docker failure leaves the row `enrolled`.\n\nSerialized per-drive (see `_drive_lock`) for the same reason as enroll.",
         "operationId": "unenroll_drive_api_drives__drive_id__unenroll_post",
         "parameters": [
           {
@@ -11943,6 +11944,10 @@
       },
       "RegisterRequest": {
         "properties": {
+          "drive_id": {
+            "type": "string",
+            "title": "Drive Id"
+          },
           "hostname": {
             "type": "string",
             "title": "Hostname"
@@ -11960,7 +11965,7 @@
             "type": "object",
             "title": "Hw Caps"
           },
-          "serial": {
+          "by_id_name": {
             "anyOf": [
               {
                 "type": "string"
@@ -11969,16 +11974,18 @@
                 "type": "null"
               }
             ],
-            "title": "Serial"
+            "title": "By Id Name"
           }
         },
         "type": "object",
         "required": [
+          "drive_id",
           "hostname",
           "device_path",
           "ripper_version"
         ],
-        "title": "RegisterRequest"
+        "title": "RegisterRequest",
+        "description": "POST /api/ripper/register. Keyed on the Drive row the backend handed\nthis container (ARM_DRIVE_ID); `by_id_name` is the udev link the ripper\nis bound to (None for a port-identity drive) and must match the row."
       },
       "RegisterTranscoderRequest": {
         "properties": {
