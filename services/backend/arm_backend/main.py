@@ -28,6 +28,7 @@ from arm_backend.notification_dispatcher import (
 )
 from arm_backend.notifications.apprise_listener import AppriseListener
 from arm_backend.notifications.inbox_listener import InboxListener
+from arm_backend.ripper_manager import RipperManager, reconcile_enrolled_rippers
 from arm_backend.routers import (
     auth,
     config as config_router,
@@ -183,6 +184,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.exception("startup .arm-inprogress sweep failed: %s", exc)
         dispatcher_task = asyncio.create_task(transcode_dispatcher.run())
     app.state.transcode_dispatcher = transcode_dispatcher
+
+    # Drive lifecycle Plan 3 — ripper manager (spec §3). Always the LOCAL
+    # daemon: the drives are plugged into this host, whatever
+    # ARM_TRANSCODE_DOCKER_HOST says about transcoders.
+    ripper_manager: RipperManager | None = None
+    local_docker = docker_client if not settings.ARM_TRANSCODE_DOCKER_HOST else _build_docker_client()
+    if local_docker is not None:  # pragma: no cover — needs a real docker socket; integration tier
+        ripper_manager = RipperManager(settings=settings, docker_client=local_docker)
+        if not ripper_manager.host_paths_set():
+            logger.warning("ripper manager disabled: ARM_HOST_*_PATH not set (set them via .env)")
+            ripper_manager = None
+        else:
+            try:
+                await reconcile_enrolled_rippers(ripper_manager, SessionLocal)
+            except Exception as exc:
+                logger.exception("startup ripper reconcile failed: %s", exc)
+    app.state.ripper_manager = ripper_manager
 
     # Phase 11 — outbound Apprise notifications. Off out of the box; the
     # dispatcher polls but no-ops until the user enables notifications in
