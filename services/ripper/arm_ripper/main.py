@@ -7,7 +7,7 @@ from pathlib import Path
 import httpx
 
 from arm_common import DriveMediaStatus, JobStatus, configure_service_logging
-from arm_ripper.backend_client import BackendClient, JobView
+from arm_ripper.backend_client import BackendClient, JobView, RegisterRefused
 from arm_ripper.config import settings
 from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.drive_poll import DriveErrorKind, DriveState, InsertDetector, classify_drive_error, read_drive_status
@@ -32,25 +32,38 @@ RIPPER_VERSION = "0.0.0-skeleton"
 # allowed through to identify (which will fail visibly).
 HEARTBEAT_INTERVAL_SECONDS = 30.0
 
-# Each ripper container owns one optical drive — name the log file by the
-# device basename so multiple ripper containers (sr0, sr1, ...) don't
-# collide on the shared `./logs` host volume.
-configure_service_logging(f"arm-ripper-{Path(settings.ARM_DRIVE_DEV).name}", level=settings.ARM_LOG_LEVEL)
+# The backend spawns each ripper container for one Drive row and sets
+# HOSTNAME to arm-ripper-<serial> (or the equivalent stable identity); srN
+# is not stable across a renumbering replug, so the log file is named from
+# the identity the manager assigned rather than the current device node.
+configure_service_logging(settings.HOSTNAME, level=settings.ARM_LOG_LEVEL)
 logger = logging.getLogger("arm_ripper")
 
 
 async def register_with_retry(client: BackendClient, device_path: str) -> str:
+    """Retry transport/5xx failures with backoff. A refusal (unknown drive,
+    not enrolled, identity mismatch) is not retriable: log it and park the
+    process so the container stays up for `docker logs` (spec §3)."""
     delay = 1.0
     while True:
         try:
             drive = await client.register(
+                drive_id=settings.ARM_DRIVE_ID,
                 hostname=settings.HOSTNAME,
                 device_path=device_path,
                 ripper_version=RIPPER_VERSION,
-                serial=settings.ARM_DRIVE_SERIAL or None,
+                by_id_name=settings.ARM_DRIVE_BY_ID,
             )
             logger.info("registered drive_id=%s device=%s", drive.id, device_path)
             return drive.id
+        except RegisterRefused as exc:
+            logger.error(
+                "register refused for drive_id=%s: %s — container left running for diagnosis; "
+                "fix the enrollment in the UI and restart this container",
+                settings.ARM_DRIVE_ID,
+                exc,
+            )
+            await asyncio.Event().wait()
         except (httpx.HTTPError, OSError) as exc:
             logger.warning("register failed (%s); retrying in %.1fs", exc, delay)
             await asyncio.sleep(delay)

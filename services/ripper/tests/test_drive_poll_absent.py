@@ -3,6 +3,7 @@ import os
 
 # Set up placeholders before importing arm_ripper modules
 os.environ.setdefault("ARM_DRIVE_DEV", "/dev/sr0")
+os.environ.setdefault("ARM_DRIVE_ID", "drv_test")
 os.environ.setdefault("ARM_BACKEND_URL", "https://backend.invalid")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "test-token")
 
