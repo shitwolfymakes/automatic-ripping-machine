@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -127,6 +128,20 @@ async def test_stale_detected_rows_are_pruned_ignored_never() -> None:
     assert summary.pruned == 1
 
 
+async def test_naive_last_seen_at_is_treated_as_utc_for_pruning() -> None:
+    """SQLite hands back naive datetimes for TIMESTAMP columns; comparing a
+    naive last_seen_at against the (always aware) cutoff must not raise
+    TypeError, and a naive-but-stale row must still be pruned."""
+    db = FakeSession()
+    naive_old = (NOW - timedelta(days=8)).replace(tzinfo=None)
+    db.rows["drives"] = [
+        _row(id="stale-naive", lifecycle=DriveLifecycle.DETECTED, present=False, last_seen_at=naive_old),
+    ]
+    summary = await reconcile_drives(db, [], now=NOW, prune_days=7)
+    assert db.rows["drives"] == []
+    assert summary.pruned == 1
+
+
 async def test_port_match_when_by_id_absent_on_both_sides() -> None:
     db = FakeSession()
     db.rows["drives"] = [
@@ -144,3 +159,55 @@ async def test_a_drive_that_gains_a_by_id_link_upgrades_its_identity() -> None:
     await reconcile_drives(db, [_scanned()], now=NOW, prune_days=7)
     [row] = db.rows["drives"]
     assert row.identity_kind is DriveIdentityKind.BY_ID and row.by_id_name == BY_ID
+
+
+async def test_enrolled_port_row_adopting_by_id_logs_warning(caplog) -> None:
+    """A different physical drive in an enrolled port's slot starts
+    publishing a by-id link the enrolled row didn't have — the row silently
+    adopts a new identity. That's surprising enough (a possible drive swap
+    under an active enrollment) to warrant a log line naming the drive,
+    port, and new by-id name; Plan 3's register-time identity check is the
+    actual safety net."""
+    db = FakeSession()
+    db.rows["drives"] = [
+        _row(
+            id="drv_enrolled",
+            lifecycle=DriveLifecycle.ENROLLED,
+            by_id_name=None,
+            identity_kind=DriveIdentityKind.PORT,
+            sysfs_port=PORT,
+        )
+    ]
+    with caplog.at_level(logging.WARNING, logger="arm_backend.drive_scanner"):
+        await reconcile_drives(db, [_scanned(port=PORT)], now=NOW, prune_days=7)
+    [row] = db.rows["drives"]
+    assert row.identity_kind is DriveIdentityKind.BY_ID and row.by_id_name == BY_ID
+    messages = [r.message for r in caplog.records]
+    assert any("drv_enrolled" in m and PORT in m and BY_ID in m for m in messages)
+
+
+async def test_two_new_rows_on_the_same_node_across_ticks_get_distinct_hostnames() -> None:
+    """A node-keyed placeholder (scan-{node}) collides across ticks: a swap on
+    sr0 (or an ignored row that's never pruned, so the old by-id stays out of
+    `seen`) inserts a second new row for the same srN. hostname is UNIQUE —
+    the placeholder must be per-row unique, not node-keyed."""
+    db = FakeSession()
+    by_id_a = "usb-A_1-0:0"
+    by_id_b = "usb-B_2-0:0"
+
+    # Tick 1: drive A detected on sr0.
+    await reconcile_drives(db, [_scanned("sr0", by_id=by_id_a)], now=NOW, prune_days=7)
+    [row_a] = db.rows["drives"]
+    assert row_a.by_id_name == by_id_a
+
+    # Tick 2: drive A is gone, drive B now on sr0 — a different by-id, so a
+    # new row is inserted; A's old row is left behind (not pruned same-tick).
+    later = NOW + timedelta(minutes=1)
+    await reconcile_drives(db, [_scanned("sr0", by_id=by_id_b)], now=later, prune_days=7)
+
+    rows = db.rows["drives"]
+    assert len(rows) == 2
+    hostnames = {r.hostname for r in rows}
+    by_ids = {r.by_id_name for r in rows}
+    assert len(hostnames) == 2  # distinct — no UNIQUE collision
+    assert by_ids == {by_id_a, by_id_b}
