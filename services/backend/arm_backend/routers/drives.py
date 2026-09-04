@@ -208,7 +208,7 @@ def _require_lifecycle(drive: Drive, op: str, *allowed: DriveLifecycle) -> None:
 
 
 async def _view_for(db: AsyncSession, drive: Drive) -> DriveView:
-    jobs = [j for j in (await db.execute(select(Job))).scalars().all() if j.drive_id == drive.id]
+    jobs = list((await db.execute(select(Job).where(col(Job.drive_id) == drive.id))).scalars().all())
     return _to_view(drive, jobs)
 
 
@@ -261,7 +261,11 @@ async def unignore_drive(
     return await _view_for(db, drive)
 
 
-@router.post("/{drive_id}/unenroll", response_model=DriveView)
+@router.post(
+    "/{drive_id}/unenroll",
+    response_model=DriveView,
+    responses={204: {"description": "Drive row deleted (detected-origin drive)"}},
+)
 async def unenroll_drive(
     drive_id: str,
     _: User = Depends(require_writer),
@@ -271,12 +275,16 @@ async def unenroll_drive(
     mid-rip. Plan 3 hooks the ripper manager here to stop the container."""
     drive = await _load_drive(db, drive_id)
     _require_lifecycle(drive, "unenroll", DriveLifecycle.ENROLLED)
-    ripping = [
-        j
-        for j in (await db.execute(select(Job).where(col(Job.drive_id) == drive_id))).scalars().all()
-        if j.status == JobStatus.RIPPING
-    ]
-    if ripping:
+    ripping = (
+        (
+            await db.execute(
+                select(Job).where(col(Job.drive_id) == drive_id).where(col(Job.status) == JobStatus.RIPPING).limit(1)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if ripping is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="cannot unenroll: a drive is ripping")
     if not drive.present:
         await db.delete(drive)

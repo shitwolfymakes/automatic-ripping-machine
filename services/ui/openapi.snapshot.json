@@ -2567,6 +2567,9 @@
               }
             }
           },
+          "204": {
+            "description": "Drive row deleted (detected-origin drive)"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
