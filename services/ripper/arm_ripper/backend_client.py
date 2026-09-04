@@ -55,6 +55,25 @@ class BackendClient:
         r = await self._client.post("/api/ripper/heartbeat", json=req.model_dump(mode="json"))
         r.raise_for_status()
 
+    async def update_device_path(self, *, drive_id: str, device_path: str) -> None:
+        """Tell the backend which node this drive currently occupies. Called
+        by the poll loop when resolution moves (replug under a new srN) so
+        the UI never shows a stale node. 404 is tolerated: the endpoint
+        ships with the backend half of this feature."""
+        r = await self._client.patch(f"/api/ripper/drives/{drive_id}/device-path", json={"device_path": device_path})
+        if r.status_code == 404:
+            return
+        r.raise_for_status()
+
+    async def get_drive(self, drive_id: str) -> Drive | None:
+        """This ripper's Drive row, or None on 404. Used by port-identity
+        drives to pick up a refreshed device_path while absent."""
+        r = await self._client.get(f"/api/ripper/drives/{drive_id}")
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        return Drive.model_validate(r.json())
+
     async def identify(
         self,
         *,
