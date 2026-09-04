@@ -25,8 +25,15 @@ class DriveMediaStatus(StrEnum):
     NO_DISC = "no_disc"  # CDS_NO_DISC
     TRAY_OPEN = "tray_open"  # CDS_TRAY_OPEN
     NOT_READY = "not_ready"  # CDS_DRIVE_NOT_READY (medium spinning up)
-    UNAVAILABLE = "unavailable"  # open() failed — kernel ENODEV / device file gone
+    # The device node exists but open() was refused (EPERM/EACCES — cgroup
+    # rule not honoured, wrong group). Present-but-misconfigured; distinct
+    # from DETACHED so the UI can say "fix permissions", not "plug it in".
+    UNAVAILABLE = "unavailable"
     UNKNOWN = "unknown"  # CDS_NO_INFO, or ioctl unsupported on a probed device
+    # No hardware behind this drive's identity right now (ENOENT/ENXIO/ENODEV):
+    # unplugged, or not yet enumerated. The ripper keeps heartbeating so the
+    # row stays visible; the backend derives DriveStatus.OFFLINE from this.
+    DETACHED = "detached"
 
 
 class DriveMode(StrEnum):
