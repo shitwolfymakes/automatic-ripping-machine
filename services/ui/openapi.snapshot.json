@@ -11943,6 +11943,10 @@
       },
       "RegisterRequest": {
         "properties": {
+          "drive_id": {
+            "type": "string",
+            "title": "Drive Id"
+          },
           "hostname": {
             "type": "string",
             "title": "Hostname"
@@ -11960,7 +11964,7 @@
             "type": "object",
             "title": "Hw Caps"
           },
-          "serial": {
+          "by_id_name": {
             "anyOf": [
               {
                 "type": "string"
@@ -11969,16 +11973,18 @@
                 "type": "null"
               }
             ],
-            "title": "Serial"
+            "title": "By Id Name"
           }
         },
         "type": "object",
         "required": [
+          "drive_id",
           "hostname",
           "device_path",
           "ripper_version"
         ],
-        "title": "RegisterRequest"
+        "title": "RegisterRequest",
+        "description": "POST /api/ripper/register. Keyed on the Drive row the backend handed\nthis container (ARM_DRIVE_ID); `by_id_name` is the udev link the ripper\nis bound to (None for a port-identity drive) and must match the row."
       },
       "RegisterTranscoderRequest": {
         "properties": {
