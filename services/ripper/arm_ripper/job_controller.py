@@ -145,11 +145,10 @@ class JobController:
 
     @property
     def _device_path(self) -> str | None:
+        """Read-only view of the shared DriveHandle. Only the poll loop writes
+        the handle (spec §4) — a controller-side write would let a stale
+        pickup path override the node the loop just resolved."""
         return self._device.current
-
-    @_device_path.setter
-    def _device_path(self, value: str | None) -> None:
-        self._device.set(value)
 
     @property
     def is_active(self) -> bool:
@@ -174,8 +173,6 @@ class JobController:
         if not self.is_idle():
             logger.debug("pickup ignored: controller already busy")
             return
-        if self._device_path is None and device_path:
-            self._device_path = device_path
         async with self._active_lock:
             self._active_task = asyncio.current_task()
             self._active_job_id = job.id
