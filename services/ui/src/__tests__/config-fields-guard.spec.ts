@@ -16,6 +16,8 @@ const EXPECTED_EDITABLE = [
   'block_on_miss',
   'ripping_paused',
   'notifications_enabled',
+  'drive_scan_interval_seconds',
+  'drive_detected_prune_days',
 ]
 const FORBIDDEN = ['default_retention_policy', 'notification_apprise_urls']
 

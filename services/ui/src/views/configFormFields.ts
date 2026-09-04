@@ -17,4 +17,6 @@ export const CONFIG_FORM_KEYS = [
   'block_on_miss',
   'ripping_paused',
   'notifications_enabled',
+  'drive_scan_interval_seconds',
+  'drive_detected_prune_days',
 ] as const satisfies readonly (keyof ConfigUpdateRequest)[]
