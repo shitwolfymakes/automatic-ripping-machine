@@ -22,10 +22,13 @@ fixture tree instead of real device nodes.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
+
+logger = logging.getLogger("arm_ripper.drive_resolve")
 
 # <linux/major.h>: SCSI CD-ROM block devices.
 SCSI_CDROM_MAJOR = 11
@@ -45,9 +48,20 @@ def _is_optical(name: str, sysfs_root: Path) -> bool:
     return major == str(SCSI_CDROM_MAJOR)
 
 
-def _optical_node(name: str, *, dev_root: Path, sysfs_root: Path) -> str | None:
+def _optical_node(name: str, *, dev_root: Path, sysfs_root: Path, warn_if_missing: bool = False) -> str | None:
     node = dev_root / name
-    if not node.exists() or not _is_optical(name, sysfs_root):
+    if not node.exists():
+        if warn_if_missing:
+            # udev says the drive is at <name>, but the entrypoint never
+            # pre-created that node — so nothing in this container can open it.
+            # Almost always a too-low ARM_OPTICAL_SR_MAX / ARM_OPTICAL_SG_MAX.
+            logger.warning(
+                "drive node %s is not present under %s — is it outside ARM_OPTICAL_SR_MAX/ARM_OPTICAL_SG_MAX?",
+                name,
+                dev_root,
+            )
+        return None
+    if not _is_optical(name, sysfs_root):
         return None
     return str(node)
 
@@ -67,7 +81,7 @@ def resolve_drive_device(
             target = os.readlink(link)
         except OSError:
             return None
-        path = _optical_node(Path(target).name, dev_root=dev_root, sysfs_root=sysfs_root)
+        path = _optical_node(Path(target).name, dev_root=dev_root, sysfs_root=sysfs_root, warn_if_missing=True)
         return ResolvedDevice(path=path, via="by_id") if path else None
 
     hint_path = Path(hint)
