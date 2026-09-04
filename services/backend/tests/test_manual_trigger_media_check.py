@@ -117,7 +117,8 @@ def test_loaded_disc_passes_through(signing_key: bytes) -> None:
         (DriveMediaStatus.NO_DISC, "no disc"),
         (DriveMediaStatus.TRAY_OPEN, "tray is open"),
         (DriveMediaStatus.NOT_READY, "spinning up"),
-        (DriveMediaStatus.UNAVAILABLE, "device node is gone"),
+        (DriveMediaStatus.DETACHED, "detached"),
+        (DriveMediaStatus.UNAVAILABLE, "could not be opened"),
     ],
 )
 def test_not_loaded_returns_400(
