@@ -318,6 +318,17 @@ ensure_udev_rule() {
         return 0
     fi
 
+    if ! sudo -n true 2>/dev/null; then
+        echo "==> sudo needs a password; to install the udev rule run:"
+        echo "    printf '%s' \"\$(cat <<'RULE'"
+        printf '%s\n' "${desired}"
+        echo "RULE"
+        echo "    )\" | sudo tee ${UDEV_RULE_PATH}"
+        echo "    sudo udevadm control --reload-rules"
+        echo "    sudo udevadm trigger --subsystem-match=block"
+        return 0
+    fi
+
     echo "==> writing host udev rule at ${UDEV_RULE_PATH} (sudo)"
     printf '%s' "${desired}" | sudo tee "${UDEV_RULE_PATH}" >/dev/null
     sudo udevadm control --reload-rules
