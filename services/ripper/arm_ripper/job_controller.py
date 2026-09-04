@@ -17,7 +17,7 @@ from arm_ripper.makemkv_sdf import refresh_makemkv_sdf
 from arm_ripper.makemkv_key import refresh_makemkv_key
 from arm_ripper.rip import RipResult, rip_all
 from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS
-from arm_ripper.drive_poll import DriveState, read_drive_status
+from arm_ripper.drive_poll import _ABSENT_ERRNOS, DriveState, read_drive_status
 from arm_ripper.scan import ScanError, scan as scan_disc
 from arm_ripper.source import is_iso_source
 from arm_ripper.ws_client import WSClient
@@ -292,6 +292,11 @@ class JobController:
                     scan_result = await self._scan_with_ready_retry(device_path)
                 except ScanError as e:
                     logger.error("scan failed device=%s err=%s", device_path, e)
+                    return
+                except OSError as e:
+                    if e.errno not in _ABSENT_ERRNOS:
+                        raise
+                    logger.warning("drive went absent during scan device=%s — pipeline abandoned", device_path)
                     return
 
                 try:
@@ -821,6 +826,14 @@ class JobController:
         container or the ripper's own scan-poster path mounted the
         device internally.
         """
+        # The drive vanished (unplugged / powered off) between rip-complete
+        # and here — there's no live node to umount/eject, and retrying just
+        # produces a misleading "failed after N attempts" for a drive that
+        # was never coming back. The poll loop's absence handling owns
+        # recovery once it reattaches.
+        if self._device_path is None:
+            logger.info("eject skipped: drive is absent")
+            return
         # ISO sources have no tray to eject. probe_disc reads the file
         # directly via PyCdlib and makemkvcon opens it read-only; nothing
         # mounts it, so there's nothing to umount or eject.

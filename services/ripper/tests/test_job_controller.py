@@ -1,6 +1,8 @@
 """JobController behaviour with a fake BackendClient and stubbed scan."""
 
 import asyncio
+import errno
+import logging
 from collections import deque
 from datetime import datetime, timedelta, timezone
 
@@ -201,6 +203,41 @@ async def test_awaiting_polls_until_resolved_then_rips(stub_scan, stub_eject):
 
     assert client.rip_start_calls == ["job_test"]
     assert client.rip_complete_calls == ["job_test"]
+
+
+async def test_drive_vanishing_mid_scan_is_abandoned_cleanly(monkeypatch, caplog):
+    """Power-off mid-scan raises OSError(ENXIO, …) from scan_disc. The pipeline
+    must not propagate it — the poll loop's absence handling owns recovery —
+    and must log exactly one warning about it."""
+
+    async def _scan(_device_path: str) -> ScanResult:
+        raise OSError(errno.ENXIO, "No such device or address")
+
+    monkeypatch.setattr(jc_module, "scan_disc", _scan)
+    client = FakeClient()
+    controller = JobController(client, "drv_test")
+
+    with caplog.at_level(logging.WARNING, logger="arm_ripper.job_controller"):
+        await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert client.identify_calls == []
+    went_absent_records = [r for r in caplog.records if "went absent during scan" in r.message]
+    assert len(went_absent_records) == 1
+
+
+async def test_non_absent_oserror_during_scan_still_raises(monkeypatch):
+    """Only the absence errnos (ENOENT/ENXIO/ENODEV) are swallowed. A genuine
+    I/O error must keep propagating so it isn't silently lost."""
+
+    async def _scan(_device_path: str) -> ScanResult:
+        raise OSError(errno.EIO, "io")
+
+    monkeypatch.setattr(jc_module, "scan_disc", _scan)
+    client = FakeClient()
+    controller = JobController(client, "drv_test")
+
+    with pytest.raises(OSError):
+        await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
 
 
 async def test_unexpected_status_stops_without_rip(stub_scan, stub_eject):
@@ -506,7 +543,7 @@ async def test_eject_runs_umount_then_eject_until_success(monkeypatch):
         return next(rc_sequence), "Device or resource busy"
 
     monkeypatch.setattr(JobController, "_run_command", staticmethod(_fake_run))
-    controller = JobController(FakeClient(), "drv_test")
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
     await controller._eject_with_retry("/dev/sr0")
 
     assert invocations[0] == ("umount", "/dev/sr0")
@@ -521,7 +558,7 @@ async def test_eject_gives_up_after_all_attempts(monkeypatch, caplog):
         return 1, "Device or resource busy"
 
     monkeypatch.setattr(JobController, "_run_command", staticmethod(_always_busy))
-    controller = JobController(FakeClient(), "drv_test")
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
     with caplog.at_level("ERROR", logger="arm_ripper.job_controller"):
         await controller._eject_with_retry("/dev/sr0")
 
