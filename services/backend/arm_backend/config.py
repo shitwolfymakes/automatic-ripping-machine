@@ -136,6 +136,18 @@ class Settings(BaseSettings):
     ARM_TRANSCODE_PUID: str = ""
     ARM_TRANSCODE_PGID: str = ""
 
+    # --- Drive lifecycle Plan 3: ripper manager (spec §3) --------------------
+    # Image for the durable per-drive ripper containers the backend creates on
+    # enroll. Defaults like ARM_TRANSCODE_IMAGE: built locally by compose (the
+    # arm-ripper service is deploy.replicas:0 — built, never run).
+    ARM_RIPPER_IMAGE: str = "arm-ripper:latest"
+    # The uid/gid the rippers drop to and the host cdrom group they need to
+    # open the optical nodes. Compose passes the same PUID/PGID/CDROM_GID it
+    # gives every service; empty = leave the ripper entrypoint's defaults.
+    PUID: str = ""
+    PGID: str = ""
+    CDROM_GID: str = ""
+
     # --- Phase 7b: GPU inventory --------------------------------------------
     # JSON array of GPUs detected host-side at install time (install.sh /
     # setup-dev.sh enumerate /dev/dri + nvidia-smi and write this). The backend
