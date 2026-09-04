@@ -12,8 +12,8 @@ Rules:
   * by_id set and anything else (no link, dangling, non-optical) -> ABSENT
     (None). Never fall back to the hint: on a multi-drive host the hint may
     now be someone else's drive.
-  * by_id unset (port-identity drive, no by-id link on the host) -> the hint,
-    if it exists and is optical.
+  * by_id unset (port-identity drive, no by-id link on the host) -> the node
+    named by the hint's basename under dev_root, if it exists and is optical.
 
 "Optical" is checked through sysfs (`/sys/class/block/<name>/dev` major 11)
 rather than stat(): readable unprivileged, and it works in tests with a
@@ -71,5 +71,5 @@ def resolve_drive_device(
         return ResolvedDevice(path=path, via="by_id") if path else None
 
     hint_path = Path(hint)
-    path = _optical_node(hint_path.name, dev_root=hint_path.parent, sysfs_root=sysfs_root)
+    path = _optical_node(hint_path.name, dev_root=dev_root, sysfs_root=sysfs_root)
     return ResolvedDevice(path=path, via="hint") if path else None

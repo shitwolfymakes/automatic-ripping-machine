@@ -93,3 +93,11 @@ def test_missing_by_id_directory_is_absent_not_an_exception(tmp_path: Path) -> N
     t = Tree(tmp_path)
     (t.disk / "by-id").rmdir()
     assert t.resolve(BY_ID) is None
+
+
+def test_hint_is_rerooted_under_dev_root(tmp_path: Path) -> None:
+    """Only the hint's basename matters; the node is always looked up under dev_root."""
+    t = Tree(tmp_path)
+    t.node("sr0", 11)
+    elsewhere = tmp_path / "elsewhere" / "sr0"  # a hint whose parent is NOT dev_root
+    assert t.resolve(None, hint=str(elsewhere)) == ResolvedDevice(path=str(t.dev / "sr0"), via="hint")
