@@ -50,16 +50,24 @@ async def test_boot_reconcile_passes_only_enrolled_rows_and_writes_last_error() 
     ok = _row("drv_ok", DriveLifecycle.ENROLLED, last_error="stale error from last boot")
     bad = _row("drv_bad", DriveLifecycle.ENROLLED)
     detected = _row("drv_det", DriveLifecycle.DETECTED, last_error="untouched")
-    db.rows["drives"] = [ok, bad, detected]
-    manager = _StubManager(ReconcileSummary(adopted=["drv_ok"], failed={"drv_bad": "ImageNotFound: nope"}))
+    error_row = _row("drv_err", DriveLifecycle.ENROLLED, last_error="identity mismatch: row is bound to A but B")
+    error_row.status = DriveStatus.ERROR
+    db.rows["drives"] = [ok, bad, detected, error_row]
+    manager = _StubManager(ReconcileSummary(adopted=["drv_ok", "drv_err"], failed={"drv_bad": "ImageNotFound: nope"}))
 
     summary = await reconcile_enrolled_rippers(manager, _factory(db))  # type: ignore[arg-type]
 
-    assert summary is not None and summary.adopted == ["drv_ok"]
-    assert manager.seen == [["drv_ok", "drv_bad"]]
+    assert summary is not None and summary.adopted == ["drv_ok", "drv_err"]
+    assert manager.seen == [["drv_ok", "drv_bad", "drv_err"]]
     assert ok.last_error is None  # success clears a stale error
     assert bad.last_error == "ImageNotFound: nope"
     assert detected.last_error == "untouched"
+    # B2: an ENROLLED row sitting in ERROR (e.g. a register-time identity
+    # mismatch) that reconcile successfully adopts keeps its diagnostic
+    # reason — reconcile succeeding at the docker level doesn't mean the
+    # identity problem is fixed; only a fresh register (or a fixed
+    # enrollment) clears it.
+    assert error_row.last_error == "identity mismatch: row is bound to A but B"
     assert db.committed >= 1
 
 
