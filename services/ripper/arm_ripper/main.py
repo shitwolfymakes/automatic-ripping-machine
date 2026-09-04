@@ -193,6 +193,14 @@ async def _current_hint(client: BackendClient, drive_id: str, handle: DriveHandl
 async def _on_reattached(client: BackendClient, drive_id: str, handle: DriveHandle, controller: JobController) -> None:
     """The drive came back after an ABSENT run. Whatever is seated now may be
     a different disc, and a rip may have been in flight when it left."""
+    if not controller.is_idle():
+        # A rip pipeline is still running against the old node (the drive was
+        # yanked mid-rip and makemkvcon has not given up yet). boot_probe would
+        # resume the same job, wiping the raw dir under the live process and
+        # starting a second rip. Leave it to the running pipeline to fail out.
+        logger.info("reattach: previous rip pipeline still active on %s; skipping boot probe", handle.current)
+        return
+    logger.info("boot probe after reattach on %s", handle.current)
     try:
         await boot_probe(client, drive_id, handle.current or "", controller)
     except Exception as exc:  # noqa: BLE001 — recovery is best-effort, never blocks polling
