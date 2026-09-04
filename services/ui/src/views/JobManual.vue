@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import { api, ApiError } from '../api/client'
 import { useJobsStore } from '../stores/jobs'
+import { partitionDrives } from '../utils/drives'
 import type { DriveView, SessionView } from '../api/types'
 
 const router = useRouter()
@@ -15,7 +16,8 @@ const sessionId = ref<string | ''>('')
 const error = ref<string | null>(null)
 const submitting = ref(false)
 
-const onlineDrives = computed(() => drives.value.filter((d) => d.status !== 'offline'))
+const enrolledDrives = computed(() => partitionDrives(drives.value).enrolled)
+const onlineDrives = computed(() => enrolledDrives.value.filter((d) => d.status !== 'offline'))
 
 onMounted(async () => {
   try {
@@ -66,12 +68,12 @@ function driveLabel(d: DriveView): string {
       <label for="drive">Drive</label>
       <select id="drive" v-model="driveId" required>
         <option value="" disabled>Choose a drive…</option>
-        <option v-for="d in drives" :key="d.id" :value="d.id">
+        <option v-for="d in enrolledDrives" :key="d.id" :value="d.id">
           {{ driveLabel(d) }}
         </option>
       </select>
-      <p v-if="!drives.length" class="muted" style="font-size: 12px; margin-top: 4px">
-        No drives registered yet — start a ripper container first.
+      <p v-if="!enrolledDrives.length" class="muted" style="font-size: 12px; margin-top: 4px">
+        No enrolled drives — enroll one on the Drives page.
       </p>
     </div>
 
