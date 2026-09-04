@@ -89,7 +89,7 @@ def test_probe_cache_expires_after_ttl(monkeypatch) -> None:
     assert d.probe() == (True, None)
     assert d._docker.ping.call_count == 1
 
-    fake_now["t"] += 31.0  # past _PROBE_TTL_SECONDS (30.0)
+    fake_now["t"] += 31.0  # past PROBE_TTL_SECONDS (30.0)
     assert d.probe() == (True, None)
     assert d._docker.ping.call_count == 2
 
