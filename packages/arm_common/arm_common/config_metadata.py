@@ -217,6 +217,26 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         type="string",
         editable=False,
     ),
+    # Drive-lifecycle scanner tunables (spec 2026-09-03 §2) — exposed while the
+    # cadence is being dialled in on real hardware.
+    ConfigFieldMeta(
+        key="drive_scan_interval_seconds",
+        group="System",
+        tier="operator",
+        label="Drive scan interval (seconds)",
+        help="How often the backend re-enumerates optical drives from sysfs.",
+        type="int",
+        editable=True,
+    ),
+    ConfigFieldMeta(
+        key="drive_detected_prune_days",
+        group="System",
+        tier="operator",
+        label="Forget unseen drives after (days)",
+        help="Detected-but-never-enrolled drives absent this long are dropped from the list.",
+        type="int",
+        editable=True,
+    ),
     ConfigFieldMeta(
         key="ARM_DOCKER_NETWORK",
         group="System",
