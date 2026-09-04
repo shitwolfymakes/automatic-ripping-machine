@@ -84,18 +84,12 @@ def _by_id_links(disk_root: Path) -> dict[str, str]:
         return out
     for link in entries:
         try:
-            target_rel = Path(os.readlink(link))
+            target = Path(os.readlink(link))
         except OSError:
             continue
-        # Resolve relative to the link's parent directory
-        try:
-            target_real = (link.parent / target_rel).resolve()
-        except OSError, ValueError:
-            continue
-        # Check if the resolved target exists
-        if not target_real.exists():
+        if not (by_id / target).exists():
             continue  # dangling: the drive is gone or the link is stale
-        out.setdefault(target_real.name, link.name)
+        out.setdefault(target.name, link.name)
     return out
 
 
