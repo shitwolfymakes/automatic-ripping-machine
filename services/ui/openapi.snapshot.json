@@ -544,6 +544,7 @@
           "ripper"
         ],
         "summary": "Register",
+        "description": "A ripper container announcing itself for the row the backend spawned\nit for (ARM_DRIVE_ID). Keyed on the id \u2014 hostname is written as the\nownership token every X-ARM-Hostname check compares, never used to look\nthe row up. Identity is checked, never rewritten: a by-id mismatch means\nthe container is bound to a different physical drive than the row, so\nthe row goes ERROR and the container is left running for diagnosis\n(spec \u00a71, \u00a73).",
         "operationId": "register_api_ripper_register_post",
         "parameters": [
           {

@@ -3,8 +3,6 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import func
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -28,6 +26,7 @@ from arm_common import (
     DiscFingerprint,
     DiscType,
     Drive,
+    DriveLifecycle,
     DriveMediaStatus,
     DriveStatus,
     Job,
@@ -292,49 +291,38 @@ async def sdf_status(
 
 @router.post("/register", response_model=Drive, dependencies=[Depends(require_service_token)])
 async def register(req: RegisterRequest, session: AsyncSession = Depends(get_session)) -> Drive:
-    existing = (await session.execute(select(Drive).where(col(Drive.hostname) == req.hostname))).scalar_one_or_none()
-    # hostname is keyed to the srN slot baked into the compose file at
-    # generation time, not to the physical drive. If a previously-seen
-    # serial doesn't match what's registering now, the kernel/udev
-    # reassigned that slot to a different physical unit (replug, reboot
-    # with a different enumeration order, drive swap) — surface it instead
-    # of silently overwriting device_path as if nothing changed.
-    if (
-        existing is not None
-        and existing.serial is not None
-        and req.serial is not None
-        and existing.serial != req.serial
-    ):
-        logger.warning(
-            "drive serial mismatch on register: hostname=%s previous_serial=%s new_serial=%s "
-            "— the physical drive behind this slot appears to have changed",
-            req.hostname,
-            existing.serial,
-            req.serial,
+    """A ripper container announcing itself for the row the backend spawned
+    it for (ARM_DRIVE_ID). Keyed on the id — hostname is written as the
+    ownership token every X-ARM-Hostname check compares, never used to look
+    the row up. Identity is checked, never rewritten: a by-id mismatch means
+    the container is bound to a different physical drive than the row, so
+    the row goes ERROR and the container is left running for diagnosis
+    (spec §1, §3)."""
+    drive = (await session.execute(select(Drive).where(col(Drive.id) == req.drive_id))).scalar_one_or_none()
+    if drive is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
+    if drive.lifecycle is not DriveLifecycle.ENROLLED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"drive is not enrolled (lifecycle '{drive.lifecycle.value}')",
         )
-
-    insert_stmt = pg_insert(Drive).values(
-        hostname=req.hostname,
-        device_path=req.device_path,
-        serial=req.serial,
-        status=DriveStatus.ONLINE.value,
-    )
-    stmt = insert_stmt.on_conflict_do_update(
-        index_elements=[col(Drive.hostname)],
-        set_={
-            "device_path": req.device_path,
-            # A transient resolution failure on the ripper side (serial=None)
-            # shouldn't clobber a previously known-good serial — only a real
-            # new value replaces it.
-            "serial": func.coalesce(insert_stmt.excluded.serial, col(Drive.serial)),
-            "status": DriveStatus.ONLINE.value,
-        },
-    ).returning(col(Drive.id))
-    result = await session.execute(stmt)
-    drive_id = result.scalar_one()
+    if drive.by_id_name and req.by_id_name and drive.by_id_name != req.by_id_name:
+        detail = f"identity mismatch: row is bound to {drive.by_id_name} but the ripper resolved {req.by_id_name}"
+        logger.error("register refused drive_id=%s: %s", drive.id, detail)
+        drive.status = DriveStatus.ERROR
+        drive.last_error = detail
+        session.add(drive)
+        await session.commit()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+    drive.hostname = req.hostname
+    drive.device_path = req.device_path
+    drive.status = DriveStatus.ONLINE
+    drive.present = True
+    drive.last_seen_at = datetime.now(timezone.utc)
+    drive.last_error = None
+    session.add(drive)
     await session.commit()
-
-    drive = (await session.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one()
+    logger.info("ripper registered drive_id=%s hostname=%s device=%s", drive.id, req.hostname, req.device_path)
     return drive
 
 
