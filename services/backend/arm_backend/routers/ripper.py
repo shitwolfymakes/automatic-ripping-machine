@@ -28,6 +28,7 @@ from arm_common import (
     DiscFingerprint,
     DiscType,
     Drive,
+    DriveMediaStatus,
     DriveStatus,
     Job,
     JobStatus,
@@ -40,6 +41,7 @@ from arm_common.enums import NON_TERMINAL_JOB_STATUSES
 from arm_common.models import Track
 from arm_common.models._columns import enum_value_str
 from arm_common.schemas import (
+    DriveDevicePathUpdateRequest,
     HeldJobView,
     IdentifyRequest,
     JobCompleteRequest,
@@ -167,6 +169,52 @@ async def heartbeat(req: RipperHeartbeatRequest, session: AsyncSession = Depends
     drive.media_status = req.media_status
     drive.media_status_at = now
     drive.last_seen_at = now
+    # Spec §1: for an enrolled drive the ripper is authoritative on presence.
+    # DETACHED = the node has no hardware behind it right now. ERROR (identity
+    # mismatch, Plan 3) is an operator problem and is never auto-cleared.
+    if req.media_status is DriveMediaStatus.DETACHED:
+        drive.present = False
+        if drive.status is not DriveStatus.ERROR:
+            drive.status = DriveStatus.OFFLINE
+    else:
+        drive.present = True
+        if drive.status is DriveStatus.OFFLINE:
+            drive.status = DriveStatus.ONLINE
+    session.add(drive)
+    await session.commit()
+
+
+@router.get("/drives/{drive_id}", response_model=Drive, dependencies=[Depends(require_service_token)])
+async def get_drive(drive_id: str, session: AsyncSession = Depends(get_session)) -> Drive:
+    """This ripper's own row. Port-identity rippers read `device_path` from
+    it while their drive is absent — the scanner keeps that current by port
+    (spec §2), and the ripper cannot see a renumbering by itself without a
+    by-id link. Returns the table model: the ripper validates it as `Drive`."""
+    drive = (await session.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
+    if drive is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {drive_id}")
+    # last_seen_at has no pydantic-level default (only nullable at the DB
+    # column) — a real SELECT always materializes it, but touch it here too
+    # so a row built without an explicit last_seen_at still serializes the
+    # key (Plan 1's client parses this with Drive.model_validate).
+    drive.last_seen_at = drive.last_seen_at
+    return drive
+
+
+@router.patch(
+    "/drives/{drive_id}/device-path",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_service_token)],
+)
+async def update_device_path(
+    drive_id: str, req: DriveDevicePathUpdateRequest, session: AsyncSession = Depends(get_session)
+) -> None:
+    """Ripper → backend on a node move (replug under a new srN), so the UI
+    never shows a stale node. Identity is untouched — only where it lives."""
+    drive = (await session.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
+    if drive is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {drive_id}")
+    drive.device_path = req.device_path
     session.add(drive)
     await session.commit()
 
