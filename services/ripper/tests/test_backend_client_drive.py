@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 
 os.environ.setdefault("ARM_DRIVE_DEV", "/dev/sr0")
@@ -35,9 +36,12 @@ async def test_update_device_path_patches_the_ripper_endpoint() -> None:
     }
 
 
-async def test_update_device_path_swallows_404_until_the_backend_side_lands() -> None:
+async def test_update_device_path_swallows_404_until_the_backend_side_lands(caplog) -> None:
+    caplog.set_level(logging.INFO, logger="arm_ripper.backend_client")
     c = _client(lambda req: httpx.Response(404))
     await c.update_device_path(drive_id="drv_1", device_path="/dev/sr2")  # must not raise
+    # The drill reads this line: a 404 here is a missing endpoint, not a fault.
+    assert any("device-path endpoint absent (404)" in r.message for r in caplog.records)
 
 
 async def test_update_device_path_raises_on_server_error() -> None:
@@ -46,9 +50,13 @@ async def test_update_device_path_raises_on_server_error() -> None:
         await c.update_device_path(drive_id="drv_1", device_path="/dev/sr2")
 
 
-async def test_get_drive_returns_none_on_404() -> None:
+async def test_get_drive_returns_none_on_404(caplog) -> None:
+    # Debug, not info: while the drive is absent this is polled every tick.
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.backend_client")
     c = _client(lambda req: httpx.Response(404))
     assert await c.get_drive("drv_1") is None
+    rec = [r for r in caplog.records if "not found (404)" in r.message]
+    assert len(rec) == 1 and rec[0].levelno == logging.DEBUG
 
 
 async def test_get_drive_parses_a_drive() -> None:
