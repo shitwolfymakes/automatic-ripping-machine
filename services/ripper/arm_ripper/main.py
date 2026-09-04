@@ -259,12 +259,17 @@ async def poll_loop(controller: JobController, handle: DriveHandle, *, client: B
         if state is DriveState.ABSENT and last_state is not DriveState.ABSENT:
             logger.warning("drive absent (by_id=%s) — polling until it returns", settings.ARM_DRIVE_BY_ID)
         elif last_state is DriveState.ABSENT and state is not DriveState.ABSENT:
-            logger.info("drive present at %s (reattached)", handle.current)
+            if resolved is not None:
+                logger.info("drive present at %s via %s (reattached)", resolved.path, resolved.via)
             detector.reset()
-            await _on_reattached(client, drive_id, handle, controller)
+            # Report the node BEFORE the probe: _on_reattached can run a whole
+            # resumed rip, and the UI must not sit on the stale node for its
+            # entire duration.
             await _report_node(client, drive_id, handle.current or "")
+            await _on_reattached(client, drive_id, handle, controller)
         elif moved and not handle.absent:
-            logger.info("drive node moved to %s", handle.current)
+            if resolved is not None:
+                logger.info("drive node moved to %s via %s", resolved.path, resolved.via)
             await _report_node(client, drive_id, handle.current or "")
 
         if state != last_state:
@@ -308,6 +313,8 @@ async def amain() -> None:
     else:
         first = resolve_drive_device(settings.ARM_DRIVE_BY_ID, settings.ARM_DRIVE_DEV, **_resolve_paths())
         handle = DriveHandle(first.path if first else None)
+        if first is not None:
+            logger.info("drive present at %s via %s", first.path, first.via)
         if handle.absent:
             logger.warning("starting with the drive absent (by_id=%s); will poll for it", settings.ARM_DRIVE_BY_ID)
     # The backend's register payload needs a device path; the configured
