@@ -69,6 +69,7 @@ class FakeClient:
         self.get_job_calls: list[str] = []
         self.rip_start_calls: list[str] = []
         self.rip_complete_calls: list[str] = []
+        self.resume_calls: list[str] = []
         self.auto_rip_on_insert: bool = True
         self.makemkv_key: str | None = None
         self.get_ripper_config_error: Exception | None = None
@@ -105,6 +106,14 @@ class FakeClient:
 
     async def update_track(self, track_id: str, **fields: object) -> TrackView:  # pragma: no cover
         raise AssertionError("update_track should not be called when track list is empty")
+
+    async def resume(self, job_id: str) -> RipStartResponse:
+        self.resume_calls.append(job_id)
+        return RipStartResponse(
+            job_id=job_id,
+            rip_preset_id="rpr_builtin_movie_archive",
+            tracks=[],
+        )
 
     async def rip_complete(self, job_id: str) -> JobView:
         self.rip_complete_calls.append(job_id)
