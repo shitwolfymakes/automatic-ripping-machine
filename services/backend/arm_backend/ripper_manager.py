@@ -13,6 +13,7 @@ RipperManagerError for docker/transport failures.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from collections.abc import Sequence
@@ -20,9 +21,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from sqlmodel import col, select
+
 from arm_backend.config import Settings
 from arm_backend.docker_probe import TtlProbe, probe_docker
-from arm_common import Drive
+from arm_common import Drive, DriveLifecycle
 
 logger = logging.getLogger("arm_backend.ripper_manager")
 
@@ -202,3 +205,24 @@ class RipperManager:
             len(summary.failed),
         )
         return summary
+
+
+async def reconcile_enrolled_rippers(manager: RipperManager, session_factory: Any) -> ReconcileSummary | None:
+    """Lifespan hook: reconcile containers against the `enrolled` rows and
+    persist per-drive outcomes in `last_error` (cleared on success). Returns
+    None — after logging — when the daemon itself cannot be listed; boot
+    must not fail because docker is down."""
+    async with session_factory() as db:
+        enrolled = list(
+            (await db.execute(select(Drive).where(col(Drive.lifecycle) == DriveLifecycle.ENROLLED))).scalars().all()
+        )
+        try:
+            summary = await asyncio.to_thread(manager.reconcile, enrolled)
+        except RipperManagerError as exc:
+            logger.error("ripper reconcile skipped: %s", exc)
+            return None
+        for drive in enrolled:
+            drive.last_error = summary.failed.get(drive.id)
+            db.add(drive)
+        await db.commit()
+    return summary

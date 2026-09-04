@@ -114,6 +114,8 @@ def test_diagnostics_ok(signing_key: bytes, tmp_path) -> None:
     app, token = _make_app(signing_key, db, tmp=tmp_path)
     # An absent transcode dispatcher also degrades to "warning" — stub a live one.
     app.state.transcode_dispatcher = _StubDispatcher(host_paths=True)
+    # Likewise an absent ripper manager — stub a live one.
+    app.state.ripper_manager = _StubRipperManager()
     r = _get(app, token)
     assert r.status_code == 200, r.text
     body = r.json()
@@ -354,6 +356,65 @@ class _StubDispatcher:
 
     def probe(self) -> tuple[bool, str | None]:
         return self._probe
+
+
+class _StubRipperManager:
+    def __init__(self, *, host_paths: bool = True, probe=(True, None)) -> None:
+        self._host_paths = host_paths
+        self._probe = probe
+
+    def host_paths_set(self) -> bool:
+        return self._host_paths
+
+    def probe(self) -> tuple[bool, str | None]:
+        return self._probe
+
+
+def _ripper_check(body: dict) -> dict:
+    return next(ch for ch in body["checks"] if ch["name"] == "ripper_manager")
+
+
+def test_diagnostics_ripper_manager_warning_when_absent(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    check = _ripper_check(r.json())
+    assert check["status"] == "warning" and "docker" in check["detail"]
+
+
+def test_diagnostics_ripper_manager_warning_when_host_paths_unset(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.ripper_manager = _StubRipperManager(host_paths=False)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    check = _ripper_check(r.json())
+    assert check["status"] == "warning" and "ARM_HOST" in check["detail"]
+
+
+def test_diagnostics_ripper_manager_warning_when_probe_fails(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.ripper_manager = _StubRipperManager(probe=(False, "image arm-ripper:latest not present on docker host"))
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    check = _ripper_check(r.json())
+    assert check["status"] == "warning" and "not present" in check["detail"]
+
+
+def test_diagnostics_ripper_manager_ok(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.ripper_manager = _StubRipperManager()
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    check = _ripper_check(r.json())
+    assert check["status"] == "ok" and check["detail"] is None
 
 
 def test_diagnostics_transcoder_warning_when_no_dispatcher(signing_key: bytes, tmp_path) -> None:
