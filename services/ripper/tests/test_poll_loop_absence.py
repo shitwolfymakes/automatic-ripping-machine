@@ -33,12 +33,14 @@ class _Controller:
 
 
 class _Client:
-    def __init__(self) -> None:
+    def __init__(self, order: list[str] | None = None) -> None:
         self.device_path_updates: list[str] = []
         self.drive_device_path: str | None = None
+        self.order = order if order is not None else []
 
     async def update_device_path(self, *, drive_id: str, device_path: str) -> None:
         self.device_path_updates.append(device_path)
+        self.order.append("report_node")
 
     async def get_drive(self, drive_id: str):
         if self.drive_device_path is None:
@@ -57,7 +59,8 @@ class Script:
         self.ticks = ticks
         self.i = 0
         self.boot_probes = 0
-        self.client = _Client()
+        self.order: list[str] = []
+        self.client = _Client(self.order)
         self.controller = _Controller()
         # Ruling B: amain pre-resolves the handle before the loop starts, so
         # present-at-start is the realistic initial state.
@@ -77,6 +80,7 @@ class Script:
 
         async def fake_boot_probe(client, drive_id, device_path, controller) -> None:
             self.boot_probes += 1
+            self.order.append("boot_probe")
 
         real_sleep = asyncio.sleep
 
@@ -123,6 +127,18 @@ async def test_reattach_resets_detector_and_reruns_boot_probe(monkeypatch, caplo
     assert s.controller.inserted == ["/dev/sr0", "/dev/sr0"]
     assert s.boot_probes == 1
     assert sum("drive present" in r.message for r in caplog.records) == 1
+    # The hint that found the drive is logged as such (spec §4), and the node
+    # is reported to the backend BEFORE the probe — _on_reattached can run a
+    # whole resumed rip, and the UI must not sit on the stale node meanwhile.
+    assert any("drive present at /dev/sr0 via by_id (reattached)" in r.message for r in caplog.records)
+    assert s.order == ["report_node", "boot_probe"]
+
+
+async def test_a_move_logs_the_resolution_hint(monkeypatch, caplog) -> None:
+    caplog.set_level(logging.INFO, logger="arm_ripper")
+    s = Script(monkeypatch, [(SR0, DriveState.NO_DISC), (SR2, DriveState.NO_DISC)])
+    await s.run()
+    assert any("drive node moved to /dev/sr2 via by_id" in r.message for r in caplog.records)
 
 
 async def test_reattach_skips_boot_probe_while_a_rip_is_still_running(monkeypatch, caplog) -> None:
