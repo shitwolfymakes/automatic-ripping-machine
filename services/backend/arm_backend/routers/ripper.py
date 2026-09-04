@@ -331,6 +331,9 @@ async def register(req: RegisterRequest, session: AsyncSession = Depends(get_ses
     drive.last_error = None
     session.add(drive)
     await session.commit()
+    # updated_at is server-generated (onupdate) and expired after the flush;
+    # the ripper validates the body as Drive, which requires it.
+    await session.refresh(drive)
     logger.info("ripper registered drive_id=%s hostname=%s device=%s", drive.id, req.hostname, req.device_path)
     return drive
 

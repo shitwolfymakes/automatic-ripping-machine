@@ -277,6 +277,9 @@ async def enroll_drive(
             db.add(drive)
             await db.commit()
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        # The row was committed before the docker call; register may have
+        # rewritten hostname/device_path meanwhile and updated_at is expired.
+        await db.refresh(drive)
         return await _view_for(db, drive)
 
 
@@ -293,6 +296,7 @@ async def ignore_drive(
     drive.lifecycle = DriveLifecycle.IGNORED
     db.add(drive)
     await db.commit()
+    await db.refresh(drive)  # updated_at is server-generated (onupdate) and expired after the flush
     return await _view_for(db, drive)
 
 
@@ -307,6 +311,7 @@ async def unignore_drive(
     drive.lifecycle = DriveLifecycle.DETECTED
     db.add(drive)
     await db.commit()
+    await db.refresh(drive)  # updated_at is server-generated (onupdate) and expired after the flush
     return await _view_for(db, drive)
 
 
@@ -358,4 +363,5 @@ async def unenroll_drive(
         drive.lifecycle = DriveLifecycle.DETECTED
         db.add(drive)
         await db.commit()
+        await db.refresh(drive)  # updated_at is server-generated (onupdate) and expired after the flush
         return await _view_for(db, drive)
