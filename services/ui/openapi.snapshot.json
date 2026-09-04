@@ -2351,7 +2351,7 @@
           "drives"
         ],
         "summary": "Enroll Drive",
-        "description": "detected|ignored -> enrolled (spec \u00a71). The operator says \"this is ARM's\".\nPlan 3 hooks the ripper manager here to create the container.",
+        "description": "detected|ignored -> enrolled (spec \u00a71): the operator says \"this is\nARM's\". Creates (or adopts) the ripper container (spec \u00a73). A docker\nfailure reverts the row and surfaces the error in `last_error` + the\nresponse.",
         "operationId": "enroll_drive_api_drives__drive_id__enroll_post",
         "parameters": [
           {
@@ -2527,7 +2527,7 @@
           "drives"
         ],
         "summary": "Unenroll Drive",
-        "description": "enrolled -> detected (still plugged in) or gone (row deleted). Refused\nmid-rip. Plan 3 hooks the ripper manager here to stop the container.",
+        "description": "enrolled -> detected (still plugged in) or gone (row deleted). Refused\nmid-rip. Stops (or removes) the ripper container (spec \u00a73) before the\nlifecycle changes; a docker failure leaves the row `enrolled`.",
         "operationId": "unenroll_drive_api_drives__drive_id__unenroll_post",
         "parameters": [
           {

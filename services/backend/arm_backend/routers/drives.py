@@ -1,5 +1,6 @@
 """Drive listing + PATCH for `default_session_id` / `display_name` (Phase 8)."""
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -8,6 +9,7 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.db import get_session
+from arm_backend.ripper_manager import RipperManager, RipperManagerError
 from arm_common import Drive, DriveLifecycle, DriveStatus, Job, JobStatus, Session, User
 from arm_common.enums import TERMINAL_JOB_STATUSES
 from arm_common.schemas import (
@@ -212,22 +214,47 @@ async def _view_for(db: AsyncSession, drive: Drive) -> DriveView:
     return _to_view(drive, jobs)
 
 
+def _manager(request: Request) -> RipperManager:
+    manager: RipperManager | None = getattr(request.app.state, "ripper_manager", None)
+    if manager is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ripper manager unavailable: docker socket not available",
+        )
+    return manager
+
+
 @router.post("/{drive_id}/enroll", response_model=DriveView)
 async def enroll_drive(
     drive_id: str,
+    request: Request,
     _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> DriveView:
-    """detected|ignored -> enrolled (spec §1). The operator says "this is ARM's".
-    Plan 3 hooks the ripper manager here to create the container."""
+    """detected|ignored -> enrolled (spec §1): the operator says "this is
+    ARM's". Creates (or adopts) the ripper container (spec §3). A docker
+    failure reverts the row and surfaces the error in `last_error` + the
+    response."""
+    manager = _manager(request)
     drive = await _load_drive(db, drive_id)
     _require_lifecycle(drive, "enroll", DriveLifecycle.DETECTED, DriveLifecycle.IGNORED)
     if not drive.present:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="cannot enroll a drive that is not present")
+    previous = drive.lifecycle
+    # Flip first so the ripper's register-by-id (which requires `enrolled`)
+    # cannot race the container start.
     drive.lifecycle = DriveLifecycle.ENROLLED
     drive.last_error = None
     db.add(drive)
     await db.commit()
+    try:
+        await asyncio.to_thread(manager.ensure_running, drive)
+    except RipperManagerError as exc:
+        drive.lifecycle = previous
+        drive.last_error = str(exc)
+        db.add(drive)
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     return await _view_for(db, drive)
 
 
@@ -268,11 +295,14 @@ async def unignore_drive(
 )
 async def unenroll_drive(
     drive_id: str,
+    request: Request,
     _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> DriveView | Response:
     """enrolled -> detected (still plugged in) or gone (row deleted). Refused
-    mid-rip. Plan 3 hooks the ripper manager here to stop the container."""
+    mid-rip. Stops (or removes) the ripper container (spec §3) before the
+    lifecycle changes; a docker failure leaves the row `enrolled`."""
+    manager = _manager(request)
     drive = await _load_drive(db, drive_id)
     _require_lifecycle(drive, "unenroll", DriveLifecycle.ENROLLED)
     ripping = (
@@ -284,8 +314,15 @@ async def unenroll_drive(
         .scalars()
         .first()
     )
-    if ripping is not None:
+    if ripping is not None or drive.status is DriveStatus.RIPPING:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="cannot unenroll: a drive is ripping")
+    try:
+        await asyncio.to_thread(manager.remove, drive.id)
+    except RipperManagerError as exc:
+        drive.last_error = str(exc)
+        db.add(drive)
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     if not drive.present:
         await db.delete(drive)
         await db.commit()
