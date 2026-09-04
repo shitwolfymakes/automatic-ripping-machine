@@ -2289,8 +2289,16 @@ export type PathStatus = {
 
 /**
  * RegisterRequest
+ *
+ * POST /api/ripper/register. Keyed on the Drive row the backend handed
+ * this container (ARM_DRIVE_ID); `by_id_name` is the udev link the ripper
+ * is bound to (None for a port-identity drive) and must match the row.
  */
 export type RegisterRequest = {
+    /**
+     * Drive Id
+     */
+    drive_id: string;
     /**
      * Hostname
      */
@@ -2310,9 +2318,9 @@ export type RegisterRequest = {
         [key: string]: unknown;
     };
     /**
-     * Serial
+     * By Id Name
      */
-    serial?: string | null;
+    by_id_name?: string | null;
 };
 
 /**
