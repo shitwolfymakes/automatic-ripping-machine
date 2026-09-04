@@ -62,11 +62,10 @@ class BackendClient:
         )
         r = await self._client.post("/api/ripper/register", json=req.model_dump())
         if r.status_code in (404, 409):
-            detail = (
-                r.json().get("detail", r.text)
-                if r.headers.get("content-type", "").startswith("application/json")
-                else r.text
-            )
+            try:
+                detail = r.json().get("detail", r.text)
+            except ValueError:
+                detail = r.text
             raise RegisterRefused(str(detail))
         r.raise_for_status()
         return Drive.model_validate(r.json())
