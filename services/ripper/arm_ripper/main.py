@@ -329,8 +329,10 @@ async def amain() -> None:
     # Boot probe is also skipped — there's no crashed rip to recover.
     iso_path = settings.ARM_MANUAL_TRIGGER_ISO
     iso_mode = iso_path is not None
-    if iso_mode:
-        handle = DriveHandle.fixed(iso_path)  # type: ignore[arg-type]
+    # Narrow on `iso_path` itself rather than the `iso_mode` alias, so mypy
+    # can see the str inside the branch without an ignore.
+    if iso_path is not None:
+        handle = DriveHandle.fixed(iso_path)
     else:
         first = resolve_drive_device(settings.ARM_DRIVE_BY_ID, settings.ARM_DRIVE_DEV, **_resolve_paths())
         handle = DriveHandle(first.path if first else None)
