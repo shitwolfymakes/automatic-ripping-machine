@@ -23,7 +23,13 @@ import logging
 import os
 import re
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
+
+from arm_common import Drive, DriveIdentityKind, DriveLifecycle
 
 logger = logging.getLogger("arm_backend.drive_scanner")
 
@@ -131,3 +137,90 @@ def enumerate_optical(*, sysfs_root: Path, disk_root: Path) -> list[ScannedDrive
             )
         )
     return drives
+
+
+@dataclass(frozen=True)
+class ScanSummary:
+    detected: int
+    ignored: int
+    enrolled: int
+    absent: int
+    pruned: int
+
+
+def _apply_scan(row: Drive, d: ScannedDrive, now: datetime) -> None:
+    """Refresh the host facts a scan can see. Applies to every lifecycle —
+    a port-identity drive that renumbers is followed only because this
+    updates device_path on enrolled rows too (spec §2)."""
+    row.device_path = d.device_path
+    row.vendor = d.vendor
+    row.model = d.model
+    row.sysfs_port = d.sysfs_port
+    if d.by_id_name:
+        # A drive can gain a by-id link (udev/driver change); never lose one.
+        row.by_id_name = d.by_id_name
+        row.serial = d.serial
+        row.identity_kind = DriveIdentityKind.BY_ID
+    elif row.identity_kind is None:
+        row.identity_kind = DriveIdentityKind.PORT
+
+
+async def reconcile_drives(
+    session: AsyncSession,
+    scanned: list[ScannedDrive],
+    *,
+    now: datetime,
+    prune_days: int,
+) -> ScanSummary:
+    rows = list((await session.execute(select(Drive))).scalars().all())
+    by_id = {r.by_id_name: r for r in rows if r.by_id_name}
+    by_port = {r.sysfs_port: r for r in rows if r.sysfs_port and not r.by_id_name}
+    seen: set[int] = set()
+
+    for d in scanned:
+        row = by_id.get(d.by_id_name) if d.by_id_name else None
+        if row is None:
+            row = by_port.get(d.sysfs_port)
+        is_new = row is None
+        if row is None:
+            row = Drive(
+                hostname=f"scan-{d.node}",  # placeholder until Plan 3 names the ripper by drive id
+                device_path=d.device_path,
+                lifecycle=DriveLifecycle.DETECTED,
+                present=True,
+            )
+            rows.append(row)
+            logger.info("drive detected: %s %s %s (%s)", d.node, d.vendor, d.model, d.by_id_name or d.sysfs_port)
+        _apply_scan(row, d, now)
+        # Presence is scanner-owned only for rows without a ripper (spec §1).
+        if row.lifecycle is not DriveLifecycle.ENROLLED:
+            row.present = True
+            row.last_seen_at = now
+        seen.add(id(row))
+        if is_new:
+            # Only genuinely new rows need session.add(); adding an
+            # already-tracked row would register it a second time.
+            session.add(row)
+
+    pruned = 0
+    cutoff = now - timedelta(days=prune_days)
+    for row in list(rows):
+        if id(row) in seen or row.lifecycle is DriveLifecycle.ENROLLED:
+            continue
+        if row.present:
+            row.present = False
+            logger.info("drive absent: %s (%s)", row.device_path, row.by_id_name or row.sysfs_port)
+        if row.lifecycle is DriveLifecycle.DETECTED and row.last_seen_at is not None and row.last_seen_at < cutoff:
+            await session.delete(row)
+            rows.remove(row)
+            pruned += 1
+            logger.info("drive pruned after %dd absent: %s", prune_days, row.by_id_name or row.sysfs_port)
+
+    await session.commit()
+    return ScanSummary(
+        detected=sum(r.lifecycle is DriveLifecycle.DETECTED for r in rows),
+        ignored=sum(r.lifecycle is DriveLifecycle.IGNORED for r in rows),
+        enrolled=sum(r.lifecycle is DriveLifecycle.ENROLLED for r in rows),
+        absent=sum((not r.present) and r.lifecycle is not DriveLifecycle.ENROLLED for r in rows),
+        pruned=pruned,
+    )
