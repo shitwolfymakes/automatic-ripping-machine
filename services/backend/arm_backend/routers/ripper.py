@@ -302,12 +302,21 @@ async def register(req: RegisterRequest, session: AsyncSession = Depends(get_ses
     if drive is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
     if drive.lifecycle is not DriveLifecycle.ENROLLED:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"drive is not enrolled (lifecycle '{drive.lifecycle.value}')",
-        )
-    if drive.by_id_name and req.by_id_name and drive.by_id_name != req.by_id_name:
-        detail = f"identity mismatch: row is bound to {drive.by_id_name} but the ripper resolved {req.by_id_name}"
+        detail = f"drive is not enrolled (lifecycle '{drive.lifecycle.value}')"
+        logger.warning("register refused drive_id=%s: %s", drive.id, detail)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+    if drive.by_id_name and drive.by_id_name != req.by_id_name:
+        # The row has a by-id binding — the ripper must report the same one.
+        # None on the ripper's side counts as different (spec §1): a
+        # port-identity container registering against a by-id-bound row is
+        # exactly the identity mismatch this check exists to catch.
+        if req.by_id_name is None:
+            detail = (
+                f"identity mismatch: row is bound to {drive.by_id_name} but the ripper has no by-id binding — "
+                "unenroll and re-enroll to recreate the container"
+            )
+        else:
+            detail = f"identity mismatch: row is bound to {drive.by_id_name} but the ripper resolved {req.by_id_name}"
         logger.error("register refused drive_id=%s: %s", drive.id, detail)
         drive.status = DriveStatus.ERROR
         drive.last_error = detail
