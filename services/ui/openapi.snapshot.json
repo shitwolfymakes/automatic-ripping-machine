@@ -7918,6 +7918,28 @@
             ],
             "title": "Community Keydb Enabled"
           },
+          "drive_scan_interval_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drive Scan Interval Seconds"
+          },
+          "drive_detected_prune_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drive Detected Prune Days"
+          },
           "makemkv_sdf_enabled": {
             "anyOf": [
               {
@@ -8061,6 +8083,14 @@
             "type": "boolean",
             "title": "Community Keydb Enabled"
           },
+          "drive_scan_interval_seconds": {
+            "type": "integer",
+            "title": "Drive Scan Interval Seconds"
+          },
+          "drive_detected_prune_days": {
+            "type": "integer",
+            "title": "Drive Detected Prune Days"
+          },
           "makemkv_sdf_enabled": {
             "type": "boolean",
             "title": "Makemkv Sdf Enabled"
@@ -8164,6 +8194,8 @@
           "auto_rip_on_insert",
           "block_on_miss",
           "community_keydb_enabled",
+          "drive_scan_interval_seconds",
+          "drive_detected_prune_days",
           "makemkv_sdf_enabled",
           "ripping_paused",
           "hold_for_review",
@@ -8633,6 +8665,25 @@
         ],
         "title": "DriveDiagnosticResponse"
       },
+      "DriveIdentityKind": {
+        "type": "string",
+        "enum": [
+          "by_id",
+          "port"
+        ],
+        "title": "DriveIdentityKind",
+        "description": "What a Drive row's identity is keyed on. BY_ID is the udev\n/dev/disk/by-id link name (stable across replug and renumbering); PORT\nis the sysfs device path \u2014 the degraded fallback for drives that expose\nno serial, and the UI says so."
+      },
+      "DriveLifecycle": {
+        "type": "string",
+        "enum": [
+          "detected",
+          "ignored",
+          "enrolled"
+        ],
+        "title": "DriveLifecycle",
+        "description": "Operator-owned state of a physical optical drive the backend has seen.\nPresence (plugged in right now) is a separate, orthogonal fact."
+      },
       "DriveMediaStatus": {
         "type": "string",
         "enum": [
@@ -8664,6 +8715,31 @@
           "stale": {
             "type": "integer",
             "title": "Stale"
+          },
+          "detected": {
+            "type": "integer",
+            "title": "Detected",
+            "default": 0
+          },
+          "ignored": {
+            "type": "integer",
+            "title": "Ignored",
+            "default": 0
+          },
+          "enrolled": {
+            "type": "integer",
+            "title": "Enrolled",
+            "default": 0
+          },
+          "absent": {
+            "type": "integer",
+            "title": "Absent",
+            "default": 0
+          },
+          "pruned": {
+            "type": "integer",
+            "title": "Pruned",
+            "default": 0
           }
         },
         "type": "object",
@@ -8962,6 +9038,78 @@
             ],
             "title": "Updated At"
           },
+          "lifecycle": {
+            "$ref": "#/components/schemas/DriveLifecycle"
+          },
+          "present": {
+            "type": "boolean",
+            "title": "Present"
+          },
+          "identity_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveIdentityKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
+          "by_id_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By Id Name"
+          },
+          "vendor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
           "current_job": {
             "anyOf": [
               {
@@ -8992,7 +9140,15 @@
           "prescan_retries",
           "disc_enum_timeout",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "lifecycle",
+          "present",
+          "identity_kind",
+          "serial",
+          "by_id_name",
+          "vendor",
+          "model",
+          "last_error"
         ],
         "title": "DriveView"
       },
