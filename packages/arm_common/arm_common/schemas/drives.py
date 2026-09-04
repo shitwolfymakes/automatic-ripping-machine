@@ -9,7 +9,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from arm_common.enums import DriveMediaStatus, DriveMode, DriveStatus, JobStatus
+from arm_common.enums import DriveIdentityKind, DriveLifecycle, DriveMediaStatus, DriveMode, DriveStatus, JobStatus
 
 
 class DriveCurrentJobView(BaseModel):
@@ -39,6 +39,16 @@ class DriveView(BaseModel):
     disc_enum_timeout: int | None
     created_at: datetime | None
     updated_at: datetime | None
+    # Lifecycle (spec §1). `lifecycle` is the operator's decision; `present`
+    # is whether the hardware is here right now — orthogonal.
+    lifecycle: DriveLifecycle
+    present: bool
+    identity_kind: DriveIdentityKind | None
+    serial: str | None
+    by_id_name: str | None
+    vendor: str | None
+    model: str | None
+    last_error: str | None
     current_job: DriveCurrentJobView | None = None
 
 
@@ -80,3 +90,15 @@ class DriveDiagnosticResponse(BaseModel):
 class DriveRescanResponse(BaseModel):
     online: int
     stale: int
+    detected: int = 0
+    ignored: int = 0
+    enrolled: int = 0
+    absent: int = 0
+    pruned: int = 0
+
+
+class DriveDevicePathUpdateRequest(BaseModel):
+    """Ripper → backend: the drive now occupies this node (replug under a
+    new srN). Keeps the UI's node current without a re-register."""
+
+    device_path: str
