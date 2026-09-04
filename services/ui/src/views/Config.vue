@@ -118,6 +118,31 @@ async function save() {
         Enable notifications (Apprise)
       </label>
     </div>
+    <div class="field">
+      <label>Drive scan interval (seconds)</label>
+      <input
+        type="number"
+        min="1"
+        step="1"
+        v-model.number="form.drive_scan_interval_seconds"
+        data-testid="drive-scan-interval"
+      />
+      <span class="hint">How often the backend re-enumerates optical drives from the host.</span>
+    </div>
+    <div class="field">
+      <label>Forget unseen drives after (days)</label>
+      <input
+        type="number"
+        min="1"
+        step="1"
+        v-model.number="form.drive_detected_prune_days"
+        data-testid="drive-prune-days"
+      />
+      <span class="hint"
+        >Detected-but-never-enrolled drives absent this long drop off the list. Ignored drives are
+        kept.</span
+      >
+    </div>
     <div class="row">
       <button :disabled="submitting" type="submit">{{ submitting ? 'Saving…' : 'Save' }}</button>
       <span v-if="saved" class="muted">Saved.</span>
