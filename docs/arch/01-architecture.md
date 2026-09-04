@@ -30,19 +30,19 @@
     │                                              │                          │
     │                                     docker-py ▼ /var/run/docker.sock    │
     │                                     spawns arm-transcode                │
-    └──────┬────────────────────────┬────────────────────────┬────────────────┘
-           │                        │                        │
-           │                        │                        │ (ephemeral)
-           │ HTTPS + WSS            │ HTTPS + WSS            ▼
-    ┌──────▼─────────┐       ┌──────▼─────────┐       ┌──────────────────┐
-    │ arm-ripper-<id>│       │ arm-ripper-<id>│       │ arm-transcode-*  │
-    │  Python        │       │  Python        │       │  Python wrapper  │
-    │  MakeMKV       │       │  MakeMKV       │       │  around HandBrake│
-    │  /dev/sr0      │       │  /dev/sr1      │       │  (GPU optional)  │
-    └──────┬─────────┘       └──────┬─────────┘       └──────┬───────────┘
-           │                        │                        │
-           │        writes raw      │                        │ reads raw, writes transcoded
-           ▼                        ▼                        ▼
+    └─────┬──────────────────────────────┬──────────────────────────────┬─────┘
+          │                              │                              │
+          │                              │                              │ (ephemeral)
+          │ HTTPS + WSS                  │ HTTPS + WSS                  ▼
+    ┌─────▼───────────────┐        ┌─────▼───────────────┐        ┌──────────────────┐
+    │ arm-ripper-<serial> │        │ arm-ripper-<serial> │        │ arm-transcode-*  │
+    │  Python             │        │  Python             │        │  Python wrapper  │
+    │  MakeMKV            │        │  MakeMKV            │        │  around HandBrake│
+    │  /dev/sr0           │        │  /dev/sr1           │        │  (GPU optional)  │
+    └─────┬───────────────┘        └─────┬───────────────┘        └─────┬────────────┘
+          │                              │                              │
+          │ writes raw                   │                              │ reads raw, writes transcoded
+          ▼                              ▼                              ▼
     ┌─────────────────────────────────────────────────────────────────────┐
     │                 /raw   (shared volume, flat tree)                    │
     │                 /media (shared volume, Plex-friendly tree)           │
