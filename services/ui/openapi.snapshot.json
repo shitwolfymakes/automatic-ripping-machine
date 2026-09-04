@@ -258,6 +258,127 @@
         }
       }
     },
+    "/api/ripper/drives/{drive_id}": {
+      "get": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Get Drive",
+        "description": "This ripper's own row. Port-identity rippers read `device_path` from\nit while their drive is absent \u2014 the scanner keeps that current by port\n(spec \u00a72), and the ripper cannot see a renumbering by itself without a\nby-id link. Returns the table model: the ripper validates it as `Drive`.",
+        "operationId": "get_drive_api_ripper_drives__drive_id__get",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Drive"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ripper/drives/{drive_id}/device-path": {
+      "patch": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Update Device Path",
+        "description": "Ripper \u2192 backend on a node move (replug under a new srN), so the UI\nnever shows a stale node. Identity is untouched \u2014 only where it lives.",
+        "operationId": "update_device_path_api_ripper_drives__drive_id__device_path_patch",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriveDevicePathUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ripper/makemkv-key-status": {
       "post": {
         "tags": [
@@ -8907,6 +9028,20 @@
           "status"
         ],
         "title": "DriveCurrentJobView"
+      },
+      "DriveDevicePathUpdateRequest": {
+        "properties": {
+          "device_path": {
+            "type": "string",
+            "title": "Device Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "device_path"
+        ],
+        "title": "DriveDevicePathUpdateRequest",
+        "description": "Ripper \u2192 backend: the drive now occupies this node (replug under a\nnew srN). Keeps the UI's node current without a re-register."
       },
       "DriveDiagnosticItem": {
         "properties": {
