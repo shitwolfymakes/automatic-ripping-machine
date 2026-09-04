@@ -12,6 +12,7 @@ from arm_common import DiscType, Job, JobStatus, TrackStatus, with_log_context
 from arm_common.schemas import JobView, RipperConfigView, RipStartResponse, ScanResult, TrackView, WSEnvelope
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.community_keydb import refresh_community_keydb
+from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.makemkv_sdf import refresh_makemkv_sdf
 from arm_ripper.makemkv_key import refresh_makemkv_key
 from arm_ripper.rip import RipResult, rip_all
@@ -102,7 +103,7 @@ class JobController:
         drive_id: str,
         *,
         ws: WSClient | None = None,
-        device_path: str | None = None,
+        device_path: str | DriveHandle | None = None,
         default_min_length_seconds: int = DEFAULT_MIN_LENGTH_SECONDS,
     ) -> None:
         self._client = client
@@ -110,10 +111,17 @@ class JobController:
         self._sdf_tasks: set[asyncio.Task[None]] = set()
         self._drive_id = drive_id
         self._ws = ws
-        # Each ripper container owns exactly one optical drive; storing the
-        # device path here lets `handle_manual_trigger` run without re-reading
-        # settings (which a unit test environment may not have populated).
-        self._device_path = device_path
+        # Each ripper container owns exactly one optical drive. The node it
+        # occupies can change while we run (replug under a new srN), so we
+        # hold the shared DriveHandle rather than a copy of the path — the
+        # poll loop keeps it current and every read here sees the move. A
+        # plain str (ISO source, tests) is wrapped as a fixed handle.
+        if isinstance(device_path, DriveHandle):
+            self._device = device_path
+        elif device_path is None:
+            self._device = DriveHandle()
+        else:
+            self._device = DriveHandle.fixed(device_path)
         # Host-side baseline `--minlength` for `makemkvcon mkv all`. The
         # backend can override per-rip via `RipStartResponse.min_length_seconds`
         # (resolved from the Session's `overrides_json["min_length_seconds"]`);
@@ -134,6 +142,14 @@ class JobController:
         # the raw dir for cleanup. Set inside `_run_pipeline` only.
         self._active_task: asyncio.Task[None] | None = None
         self._active_job_id: str | None = None
+
+    @property
+    def _device_path(self) -> str | None:
+        return self._device.current
+
+    @_device_path.setter
+    def _device_path(self, value: str | None) -> None:
+        self._device.set(value)
 
     @property
     def is_active(self) -> bool:
