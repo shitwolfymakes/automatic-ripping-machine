@@ -17,12 +17,12 @@ import type {
   SessionView,
 } from '../api/types'
 import {
-  DETACHED_LABEL,
   driveStatusLabel,
   identityLine,
   isRipping,
   partitionDrives,
   serialLabel,
+  statusClasses,
 } from '../utils/drives'
 
 // The backend emits no drive events over the WebSocket; a slow poll keeps the
@@ -50,7 +50,8 @@ async function reload(): Promise<void> {
   drives.value = await listDrives()
 }
 
-// Best-effort: /api/config is admin-only; a guest sees the fallback wording.
+// Best-effort: GET /api/config needs any logged-in user (require_jwt); the
+// fallback wording covers a network error or a 5xx, not an auth failure.
 async function loadScanInterval(): Promise<void> {
   try {
     const cfg = await api.get<ConfigView>('/api/config')
@@ -62,6 +63,15 @@ async function loadScanInterval(): Promise<void> {
 }
 
 onMounted(async () => {
+  // Start the poll timer synchronously, before the initial await below, so
+  // an immediate unmount (e.g. route nav away while the first load is still
+  // in flight) still finds a timer to clear — onUnmounted must never race
+  // onMounted's own async continuation.
+  timer = window.setInterval(() => {
+    reload().catch(() => {
+      /* transient; the next tick retries */
+    })
+  }, POLL_MS)
   try {
     const [d, s] = await Promise.all([listDrives(), api.get<SessionView[]>('/api/sessions')])
     drives.value = d
@@ -70,11 +80,6 @@ onMounted(async () => {
   } catch (e) {
     error.value = describe(e, 'Failed to load')
   }
-  timer = window.setInterval(() => {
-    reload().catch(() => {
-      /* transient; the next tick retries */
-    })
-  }, POLL_MS)
 })
 
 onUnmounted(() => {
@@ -147,12 +152,6 @@ async function onDefaultSessionChange(drive: DriveView, event: Event) {
     target.value = drive.default_session_id ?? ''
   }
 }
-
-function statusClass(d: DriveView): string[] {
-  if (driveStatusLabel(d) === DETACHED_LABEL) return ['badge', 'detached']
-  if (d.status === 'error') return ['badge', 'error']
-  return ['badge']
-}
 </script>
 
 <template>
@@ -183,7 +182,7 @@ function statusClass(d: DriveView): string[] {
           v-for="d in parts.enrolled"
           :key="d.id"
           :data-testid="`enrolled-row-${d.id}`"
-          :class="{ detached: statusClass(d).includes('detached') }"
+          :class="{ detached: statusClasses(d).includes('detached') }"
         >
           <td :data-testid="`identity-${d.id}`">{{ identityLine(d) }}</td>
           <td>
@@ -197,7 +196,7 @@ function statusClass(d: DriveView): string[] {
             </select>
           </td>
           <td>
-            <span :class="statusClass(d)" :data-testid="`status-${d.id}`">{{
+            <span :class="statusClasses(d)" :data-testid="`status-${d.id}`">{{
               driveStatusLabel(d)
             }}</span>
           </td>
@@ -263,7 +262,12 @@ function statusClass(d: DriveView): string[] {
   </div>
 
   <div v-if="parts.ignored.length" class="card">
-    <button class="secondary" data-testid="ignored-toggle" @click="ignoredOpen = !ignoredOpen">
+    <button
+      class="secondary"
+      data-testid="ignored-toggle"
+      :aria-expanded="ignoredOpen"
+      @click="ignoredOpen = !ignoredOpen"
+    >
       Ignored ({{ parts.ignored.length }}) {{ ignoredOpen ? '▾' : '▸' }}
     </button>
     <table v-if="ignoredOpen" style="margin-top: 12px">
