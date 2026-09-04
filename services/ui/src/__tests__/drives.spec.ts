@@ -201,6 +201,24 @@ describe('Drives.vue', () => {
     expect(wrapper.find('[data-testid="enrolled-row-drv_x"]').exists()).toBe(true)
   })
 
+  it('clears the poll timer on an immediate unmount, even mid-initial-load', async () => {
+    const calls: { url: string; method: string }[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((input: RequestInfo, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.url
+        calls.push({ url, method: init?.method ?? 'GET' })
+        if (url.endsWith('/api/drives')) return new Promise(() => {}) // never resolves
+        return Promise.resolve(jsonResponse({}, 404))
+      }),
+    )
+    const wrapper = mount(Drives)
+    wrapper.unmount()
+    const before = calls.filter((c) => c.url.endsWith('/api/drives')).length
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(calls.filter((c) => c.url.endsWith('/api/drives')).length).toBe(before)
+  })
+
   it('re-polls /api/drives every 10 s and stops on unmount', async () => {
     const calls = stubFetch({ drives: [enrolled] })
     const wrapper = mount(Drives)
@@ -318,9 +336,11 @@ describe('Drives.vue', () => {
     await flushPromises()
     const toggle = wrapper.find('[data-testid="ignored-toggle"]')
     expect(toggle.text()).toBe('Ignored (1) ▸')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
     expect(wrapper.find('[data-testid="ignored-row-drv_d"]').exists()).toBe(false) // collapsed
     await toggle.trigger('click')
     expect(wrapper.find('[data-testid="ignored-toggle"]').text()).toBe('Ignored (1) ▾')
+    expect(wrapper.find('[data-testid="ignored-toggle"]').attributes('aria-expanded')).toBe('true')
     expect(wrapper.find('[data-testid="ignored-row-drv_d"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="unignore-drv_d"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="enroll-drv_d"]').exists()).toBe(true)
