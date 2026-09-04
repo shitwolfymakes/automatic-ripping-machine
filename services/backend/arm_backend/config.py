@@ -148,6 +148,22 @@ class Settings(BaseSettings):
     PGID: str = ""
     CDROM_GID: str = ""
 
+    # Optional ripper tunables forwarded verbatim into every ripper container
+    # the manager creates (empty = the ripper's own default). Named with the
+    # ARM_RIPPER_ prefix here so they cannot collide with backend settings;
+    # container_spec maps them to the ripper's env names.
+    ARM_RIPPER_POLL_INTERVAL_SECONDS: str = ""
+    ARM_RIPPER_MIN_LENGTH_SECONDS: str = ""
+    ARM_RIPPER_MAKEMKV_KEYCHECK_INTERVAL_SECONDS: str = ""
+    ARM_RIPPER_NOT_READY_REARM_POLLS: str = ""
+    ARM_RIPPER_OPTICAL_SR_MAX: str = ""
+    ARM_RIPPER_OPTICAL_SG_MAX: str = ""
+    # Host path of the certs dir the rippers' CA mount comes from. Rippers run
+    # on the LOCAL daemon, so on a remote-transcode install (ARM_TRANSCODE_
+    # DOCKER_HOST set) ARM_HOST_CERTS_PATH points at the transcode host's certs
+    # and this must name the local one. Empty = same as ARM_HOST_CERTS_PATH.
+    ARM_RIPPER_CERTS_PATH: str = ""
+
     # --- Phase 7b: GPU inventory --------------------------------------------
     # JSON array of GPUs detected host-side at install time (install.sh /
     # setup-dev.sh enumerate /dev/dri + nvidia-smi and write this). The backend
