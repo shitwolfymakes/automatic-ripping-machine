@@ -800,7 +800,9 @@ class JobController:
         completed = await self._rip_complete_with_retry(job_id)
         logger.info("rip-complete job_id=%s status=%s", job_id, completed.status.value)
 
-        await self._eject_with_retry(device_path)
+        # Eject the node the drive is at NOW — it may have renumbered during
+        # the rip (USB replug); the path captured at rip start is a hint only.
+        await self._eject_with_retry(self._device_path or device_path)
         await asyncio.sleep(EJECT_GRACE_SECONDS)
 
     async def _eject_with_retry(self, device_path: str) -> None:
