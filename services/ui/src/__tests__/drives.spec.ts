@@ -213,4 +213,173 @@ describe('Drives.vue', () => {
     await vi.advanceTimersByTimeAsync(20_000)
     expect(calls.filter((c) => c.url.endsWith('/api/drives')).length).toBe(before + 1)
   })
+
+  const detected = drive({
+    id: 'drv_d',
+    lifecycle: 'detected',
+    hostname: 'scan-drv_d',
+    status: 'online',
+  })
+  const portDrive = drive({
+    id: 'drv_p',
+    lifecycle: 'detected',
+    hostname: 'scan-drv_p',
+    serial: null,
+    by_id_name: null,
+    identity_kind: 'port',
+    model: 'OLD-ATAPI',
+  })
+  const ignored = drive({ id: 'drv_i', lifecycle: 'ignored', hostname: 'scan-drv_i' })
+
+  it('lists detected drives with model, serial, node, last seen and actions', async () => {
+    stubFetch({ drives: [enrolled, detected] })
+    const wrapper = mount(Drives)
+    await flushPromises()
+    const row = wrapper.find('[data-testid="detected-row-drv_d"]')
+    expect(row.exists()).toBe(true)
+    expect(row.text()).toContain('BD-RW BDR-S12JX')
+    expect(row.text()).toContain('AAAABBBB000E')
+    expect(row.text()).toContain('/dev/sr0')
+    expect(wrapper.find('[data-testid="enroll-drv_d"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="ignore-drv_d"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="enrolled-row-drv_d"]').exists()).toBe(false)
+  })
+
+  it('flags a port-identity drive in amber', async () => {
+    stubFetch({ drives: [portDrive] })
+    const wrapper = mount(Drives)
+    await flushPromises()
+    const cell = wrapper.find('[data-testid="serial-drv_p"]')
+    expect(cell.text()).toBe('no serial — identified by port')
+    expect(cell.classes()).toContain('warn')
+  })
+
+  it('shows the empty state with the scan interval when nothing is detected', async () => {
+    stubFetch({ drives: [enrolled] })
+    const wrapper = mount(Drives)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="detected-empty"]').text()).toBe(
+      'No unenrolled drives. Plug one in — it appears here within 30s.',
+    )
+  })
+
+  it('falls back to "a minute" when the config is not readable', async () => {
+    stubFetch({ drives: [enrolled] }, (url) =>
+      url.endsWith('/api/config') ? jsonResponse({}, 403) : null,
+    )
+    const wrapper = mount(Drives)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="detected-empty"]').text()).toContain('within a minute.')
+  })
+
+  it('Enroll POSTs and moves the drive to the enrolled table', async () => {
+    const state = { drives: [detected] }
+    stubFetch(state, (url, init) => {
+      if (url.endsWith('/api/drives/drv_d/enroll') && init?.method === 'POST') {
+        state.drives = [drive({ id: 'drv_d', lifecycle: 'enrolled' })]
+        return jsonResponse(state.drives[0])
+      }
+      return null
+    })
+    const wrapper = mount(Drives)
+    await flushPromises()
+    await wrapper.find('[data-testid="enroll-drv_d"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="enrolled-row-drv_d"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="detected-row-drv_d"]').exists()).toBe(false)
+  })
+
+  it('a failed Enroll shows the backend detail and leaves the drive detected', async () => {
+    stubFetch({ drives: [detected] }, (url, init) =>
+      url.endsWith('/enroll') && init?.method === 'POST'
+        ? jsonResponse({ detail: 'ImageNotFound: arm-ripper:latest' }, 502)
+        : null,
+    )
+    const wrapper = mount(Drives)
+    await flushPromises()
+    await wrapper.find('[data-testid="enroll-drv_d"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="drives-error"]').text()).toContain('ImageNotFound')
+    expect(wrapper.find('[data-testid="detected-row-drv_d"]').exists()).toBe(true)
+  })
+
+  it('Ignore moves the drive into the collapsed Ignored section', async () => {
+    const state = { drives: [detected] }
+    stubFetch(state, (url, init) => {
+      if (url.endsWith('/api/drives/drv_d/ignore') && init?.method === 'POST') {
+        state.drives = [drive({ id: 'drv_d', lifecycle: 'ignored' })]
+        return jsonResponse(state.drives[0])
+      }
+      return null
+    })
+    const wrapper = mount(Drives)
+    await flushPromises()
+    await wrapper.find('[data-testid="ignore-drv_d"]').trigger('click')
+    await flushPromises()
+    const toggle = wrapper.find('[data-testid="ignored-toggle"]')
+    expect(toggle.text()).toBe('Ignored (1) ▸')
+    expect(wrapper.find('[data-testid="ignored-row-drv_d"]').exists()).toBe(false) // collapsed
+    await toggle.trigger('click')
+    expect(wrapper.find('[data-testid="ignored-toggle"]').text()).toBe('Ignored (1) ▾')
+    expect(wrapper.find('[data-testid="ignored-row-drv_d"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="unignore-drv_d"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="enroll-drv_d"]').exists()).toBe(true)
+  })
+
+  it('Un-ignore POSTs and the drive returns to the detected list', async () => {
+    const state = { drives: [ignored] }
+    const calls = stubFetch(state, (url, init) => {
+      if (url.endsWith('/api/drives/drv_i/unignore') && init?.method === 'POST') {
+        state.drives = [drive({ id: 'drv_i', lifecycle: 'detected' })]
+        return jsonResponse(state.drives[0])
+      }
+      return null
+    })
+    const wrapper = mount(Drives)
+    await flushPromises()
+    await wrapper.find('[data-testid="ignored-toggle"]').trigger('click')
+    await wrapper.find('[data-testid="unignore-drv_i"]').trigger('click')
+    await flushPromises()
+    expect(
+      calls.some((c) => c.url.endsWith('/api/drives/drv_i/unignore') && c.method === 'POST'),
+    ).toBe(true)
+    expect(wrapper.find('[data-testid="detected-row-drv_i"]').exists()).toBe(true)
+  })
+
+  it('hides the Ignored section when there is nothing ignored', async () => {
+    stubFetch({ drives: [enrolled] })
+    const wrapper = mount(Drives)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="ignored-toggle"]').exists()).toBe(false)
+  })
+
+  it('Rescan POSTs, shows the counts, and refetches both lists', async () => {
+    const state = { drives: [enrolled] }
+    const calls = stubFetch(state, (url, init) => {
+      if (url.endsWith('/api/drives/rescan') && init?.method === 'POST') {
+        state.drives = [enrolled, detected]
+        return jsonResponse({
+          online: 1,
+          stale: 0,
+          detected: 1,
+          ignored: 0,
+          enrolled: 1,
+          absent: 0,
+          pruned: 0,
+        })
+      }
+      return null
+    })
+    const wrapper = mount(Drives)
+    await flushPromises()
+    await wrapper.find('[data-testid="rescan"]').trigger('click')
+    await flushPromises()
+    expect(calls.some((c) => c.url.endsWith('/api/drives/rescan') && c.method === 'POST')).toBe(
+      true,
+    )
+    expect(wrapper.find('[data-testid="rescan-summary"]').text()).toBe(
+      '1 detected · 1 enrolled · 0 ignored',
+    )
+    expect(wrapper.find('[data-testid="detected-row-drv_d"]').exists()).toBe(true)
+  })
 })
