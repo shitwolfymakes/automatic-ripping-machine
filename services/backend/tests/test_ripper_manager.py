@@ -80,6 +80,14 @@ def test_container_name_falls_back_to_the_drive_id_suffix() -> None:
     assert m.container_name(_drive(serial=None)) == "arm-ripper-" + "drv_01JABCDEFGHJKMNPQ"[-12:].lower()
 
 
+def test_container_name_falls_back_to_the_drive_id_suffix_for_an_empty_serial() -> None:
+    """B3: an empty-string serial sanitises to "" (not None), so the `or`
+    fallback in `container_name` must trigger on the sanitised-empty case
+    too, not just serial is None."""
+    m, _ = _manager()
+    assert m.container_name(_drive(serial="")) == "arm-ripper-" + "drv_01JABCDEFGHJKMNPQ"[-12:].lower()
+
+
 def test_container_name_sanitises_hostname_unsafe_characters() -> None:
     m, _ = _manager()
     assert m.container_name(_drive(serial="S/N 12_3.")) == "arm-ripper-s-n-12-3"
@@ -172,6 +180,39 @@ def test_ensure_running_wraps_transport_errors_too() -> None:
     client.containers.list.side_effect = ConnectionError("socket gone")
     with pytest.raises(RipperManagerError, match="socket gone"):
         m.ensure_running(_drive())
+
+
+def test_ensure_running_adopts_on_a_409_name_conflict_from_a_concurrent_creator() -> None:
+    """B1: a concurrent creator can win the create race between our
+    `_labelled` lookup and `containers.run` — docker answers 409 for the
+    name collision. Re-list and adopt the winner's container instead of
+    failing the whole call."""
+    m, client = _manager()
+    winner = _container("drv_01JABCDEFGHJKMNPQ", status="running", name="arm-ripper-aaaabbbb000e")
+    conflict = docker.errors.APIError("Conflict", response=MagicMock(status_code=409))
+    client.containers.run.side_effect = conflict
+    client.containers.list.side_effect = [[], [winner]]
+    assert m.ensure_running(_drive()) == "arm-ripper-aaaabbbb000e"
+    assert client.containers.list.call_count == 2
+
+
+def test_ensure_running_reraises_a_409_when_no_container_shows_up() -> None:
+    """B1: if the re-list after a 409 finds nothing, it wasn't a name-conflict
+    adopt after all — the original error must propagate."""
+    m, client = _manager()
+    conflict = docker.errors.APIError("Conflict", response=MagicMock(status_code=409))
+    client.containers.run.side_effect = conflict
+    client.containers.list.side_effect = [[], []]
+    with pytest.raises(RipperManagerError, match="409"):
+        m.ensure_running(_drive())
+
+
+def test_ensure_running_does_not_treat_a_non_409_api_error_as_adopt() -> None:
+    m, client = _manager()
+    client.containers.run.side_effect = docker.errors.APIError("busy", response=MagicMock(status_code=500))
+    with pytest.raises(RipperManagerError, match="500"):
+        m.ensure_running(_drive())
+    assert client.containers.list.call_count == 1  # no re-list attempted
 
 
 # --- remove ----------------------------------------------------------------

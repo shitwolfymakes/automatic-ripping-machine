@@ -21,11 +21,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import docker.errors  # type: ignore[import-untyped]
 from sqlmodel import col, select
 
 from arm_backend.config import Settings
 from arm_backend.docker_probe import TtlProbe, probe_docker
-from arm_common import Drive, DriveLifecycle
+from arm_common import Drive, DriveLifecycle, DriveStatus
 
 logger = logging.getLogger("arm_backend.ripper_manager")
 
@@ -34,7 +35,7 @@ DOCKER_LABEL_KEY = "arm.drive_id"
 # A rip in flight is refused at the router (unenroll while RIPPING), so
 # this only ever interrupts idle polling.
 _STOP_TIMEOUT_SECONDS = 30
-_DEVICE_CGROUP_RULES = ["b 11:* rmw", "c 21:* rmw"]  # sr* block + sg* char majors (spec §4)
+_DEVICE_CGROUP_RULES = ["b 11:* rmw", "c 21:* rmw"]  # sr* block + sg* char majors (spec §3)
 _HOST_DISK_MOUNT = "/host-disk"
 
 
@@ -131,9 +132,30 @@ class RipperManager:
     def _start_or_create(self, drive: Drive, existing: Any | None) -> str:
         """Returns "created" | "adopted" | "restarted"."""
         if existing is None:
-            self._docker.containers.run(**self.container_spec(drive))
+            try:
+                self._docker.containers.run(**self.container_spec(drive))
+            except docker.errors.APIError as exc:
+                # A concurrent creator can win the name race between our
+                # `_labelled` lookup and `containers.run` (two callers
+                # reconciling/enrolling the same drive at once) — docker
+                # answers 409 "Conflict" for the name collision. Re-list and
+                # adopt whatever is there now instead of failing outright;
+                # if nothing shows up it wasn't a name conflict after all and
+                # the original error stands.
+                if exc.status_code == 409:
+                    winner = next(iter(self._labelled(drive.id)), None)
+                    if winner is not None:
+                        return self._start_or_create(drive, winner)
+                raise
             return "created"
         if existing.status != "running":
+            # "running" / "exited" / "paused" / … are docker's own
+            # `ContainerState.Status` values from the daemon, not ours. A
+            # `paused` container's `.start()` answers 409 (only `unpause`
+            # resumes a paused container) — that is not swallowed here: it
+            # propagates as a docker-py APIError and is recorded as a
+            # per-drive failure by the caller (`ensure_running` wraps it as
+            # RipperManagerError; `reconcile` puts it in `summary.failed`).
             existing.start()
             return "restarted"
         return "adopted"
@@ -222,7 +244,10 @@ async def reconcile_enrolled_rippers(manager: RipperManager, session_factory: An
             logger.error("ripper reconcile skipped: %s", exc)
             return None
         for drive in enrolled:
-            drive.last_error = summary.failed.get(drive.id)
+            if drive.id in summary.failed:
+                drive.last_error = summary.failed[drive.id]
+            elif drive.status is not DriveStatus.ERROR:
+                drive.last_error = None  # a stale reason from a previous boot; ERROR rows keep theirs
             db.add(drive)
         await db.commit()
     return summary
