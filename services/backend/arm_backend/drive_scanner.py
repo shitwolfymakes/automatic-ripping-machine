@@ -83,7 +83,7 @@ def _sysfs_port(class_entry: Path) -> str:
 
 
 def _by_id_links(disk_root: Path) -> dict[str, str]:
-    """node name -> by-id link name, for links that resolve to an existing target."""
+    """node name -> by-id link name. Dangling links are harmless: only nodes sysfs lists are ever looked up."""
     out: dict[str, str] = {}
     by_id = disk_root / "by-id"
     try:
