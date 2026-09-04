@@ -50,6 +50,9 @@ def _seed(db: FakeSession) -> Drive:
         default_session_id=None,
         media_status=None,
         media_status_at=None,
+        # explicit None: a hand-built Drive only serialises fields that were set
+        # (a real SELECT sets every column); get_drive's body must carry this key
+        last_seen_at=None,
     )
     db.rows["drives"] = [drive]
     return drive
