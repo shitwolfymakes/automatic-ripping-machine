@@ -2063,7 +2063,7 @@
           "drives"
         ],
         "summary": "Rescan Drives",
-        "description": "Reconcile drive freshness from heartbeats. Backend-side only: the\nripper owns hardware re-enumeration; this surfaces which registered drives\nare live vs stale based on their last media-status update.\n\nKept as POST (not GET) even though it currently only reads: a real rescan\ntriggers ripper-side hardware re-enumeration (a non-idempotent side effect),\nwhich a follow-up will add behind this same verb.",
+        "description": "Run the host drive scan now (spec \u00a72) and report the reconciled table.\nAlso keeps the pre-existing heartbeat-freshness counts so the UI's\nonline/stale badge is unchanged.",
         "operationId": "rescan_drives_api_drives_rescan_post",
         "parameters": [
           {
@@ -2210,6 +2210,241 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drives/{drive_id}/enroll": {
+      "post": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Enroll Drive",
+        "description": "detected|ignored -> enrolled (spec \u00a71). The operator says \"this is ARM's\".\nPlan 3 hooks the ripper manager here to create the container.",
+        "operationId": "enroll_drive_api_drives__drive_id__enroll_post",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drives/{drive_id}/ignore": {
+      "post": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Ignore Drive",
+        "description": "detected -> ignored: \"not ARM's\". Persisted so the scanner never re-nags,\nand never pruned.",
+        "operationId": "ignore_drive_api_drives__drive_id__ignore_post",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drives/{drive_id}/unignore": {
+      "post": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Unignore Drive",
+        "operationId": "unignore_drive_api_drives__drive_id__unignore_post",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drives/{drive_id}/unenroll": {
+      "post": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Unenroll Drive",
+        "description": "enrolled -> detected (still plugged in) or gone (row deleted). Refused\nmid-rip. Plan 3 hooks the ripper manager here to stop the container.",
+        "operationId": "unenroll_drive_api_drives__drive_id__unenroll_post",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveView"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -8389,6 +8624,80 @@
               }
             ],
             "title": "Serial"
+          },
+          "by_id_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By Id Name"
+          },
+          "sysfs_port": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sysfs Port"
+          },
+          "identity_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveIdentityKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lifecycle": {
+            "$ref": "#/components/schemas/DriveLifecycle",
+            "default": "enrolled"
+          },
+          "present": {
+            "type": "boolean",
+            "title": "Present",
+            "default": true
+          },
+          "vendor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
           },
           "display_name": {
             "anyOf": [

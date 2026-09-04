@@ -2,13 +2,13 @@
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.db import get_session
-from arm_common import Drive, DriveStatus, Job, JobStatus, Session, User
+from arm_common import Drive, DriveLifecycle, DriveStatus, Job, JobStatus, Session, User
 from arm_common.enums import TERMINAL_JOB_STATUSES
 from arm_common.schemas import (
     DriveDiagnosticItem,
@@ -190,3 +190,99 @@ async def delete_drive(
         )
     await db.delete(drive)
     await db.commit()
+
+
+async def _load_drive(db: AsyncSession, drive_id: str) -> Drive:
+    drive = (await db.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
+    if drive is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {drive_id}")
+    return drive
+
+
+def _require_lifecycle(drive: Drive, op: str, *allowed: DriveLifecycle) -> None:
+    if drive.lifecycle not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"cannot {op} a drive in lifecycle '{drive.lifecycle.value}'",
+        )
+
+
+async def _view_for(db: AsyncSession, drive: Drive) -> DriveView:
+    jobs = [j for j in (await db.execute(select(Job))).scalars().all() if j.drive_id == drive.id]
+    return _to_view(drive, jobs)
+
+
+@router.post("/{drive_id}/enroll", response_model=DriveView)
+async def enroll_drive(
+    drive_id: str,
+    _: User = Depends(require_writer),
+    db: AsyncSession = Depends(get_session),
+) -> DriveView:
+    """detected|ignored -> enrolled (spec §1). The operator says "this is ARM's".
+    Plan 3 hooks the ripper manager here to create the container."""
+    drive = await _load_drive(db, drive_id)
+    _require_lifecycle(drive, "enroll", DriveLifecycle.DETECTED, DriveLifecycle.IGNORED)
+    if not drive.present:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="cannot enroll a drive that is not present")
+    drive.lifecycle = DriveLifecycle.ENROLLED
+    drive.last_error = None
+    db.add(drive)
+    await db.commit()
+    return await _view_for(db, drive)
+
+
+@router.post("/{drive_id}/ignore", response_model=DriveView)
+async def ignore_drive(
+    drive_id: str,
+    _: User = Depends(require_writer),
+    db: AsyncSession = Depends(get_session),
+) -> DriveView:
+    """detected -> ignored: "not ARM's". Persisted so the scanner never re-nags,
+    and never pruned."""
+    drive = await _load_drive(db, drive_id)
+    _require_lifecycle(drive, "ignore", DriveLifecycle.DETECTED)
+    drive.lifecycle = DriveLifecycle.IGNORED
+    db.add(drive)
+    await db.commit()
+    return await _view_for(db, drive)
+
+
+@router.post("/{drive_id}/unignore", response_model=DriveView)
+async def unignore_drive(
+    drive_id: str,
+    _: User = Depends(require_writer),
+    db: AsyncSession = Depends(get_session),
+) -> DriveView:
+    drive = await _load_drive(db, drive_id)
+    _require_lifecycle(drive, "unignore", DriveLifecycle.IGNORED)
+    drive.lifecycle = DriveLifecycle.DETECTED
+    db.add(drive)
+    await db.commit()
+    return await _view_for(db, drive)
+
+
+@router.post("/{drive_id}/unenroll", response_model=DriveView)
+async def unenroll_drive(
+    drive_id: str,
+    _: User = Depends(require_writer),
+    db: AsyncSession = Depends(get_session),
+) -> DriveView | Response:
+    """enrolled -> detected (still plugged in) or gone (row deleted). Refused
+    mid-rip. Plan 3 hooks the ripper manager here to stop the container."""
+    drive = await _load_drive(db, drive_id)
+    _require_lifecycle(drive, "unenroll", DriveLifecycle.ENROLLED)
+    ripping = [
+        j
+        for j in (await db.execute(select(Job).where(col(Job.drive_id) == drive_id))).scalars().all()
+        if j.status == JobStatus.RIPPING
+    ]
+    if ripping:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="cannot unenroll: a drive is ripping")
+    if not drive.present:
+        await db.delete(drive)
+        await db.commit()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    drive.lifecycle = DriveLifecycle.DETECTED
+    db.add(drive)
+    await db.commit()
+    return await _view_for(db, drive)
