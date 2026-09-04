@@ -6,6 +6,8 @@
 #   bash devtools/ripper-containers.sh list     # name, drive id, image, state
 #   bash devtools/ripper-containers.sh stop     # stop all (they restart on `docker start` / backend boot)
 #   bash devtools/ripper-containers.sh remove   # stop + remove all (the backend recreates enrolled ones at next boot)
+#
+# Do not run `remove` while a drive is ripping — `docker rm -f` SIGKILLs makemkvcon.
 set -euo pipefail
 
 LABEL="arm.drive_id"
@@ -28,6 +30,7 @@ case "${cmd}" in
         if (( ${#targets[@]} == 0 )); then echo "no ripper containers"; exit 0; fi
         docker rm -f "${targets[@]}"
         echo "removed ${#targets[@]} container(s); enrolled drives are recreated when arm-backend next starts"
+        echo "run \`docker compose restart arm-backend\` to recreate enrolled drives now"
         ;;
     *)
         echo "usage: $0 {list|stop|remove}" >&2
