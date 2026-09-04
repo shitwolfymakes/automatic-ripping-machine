@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import pytest
+
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
@@ -207,3 +209,51 @@ def test_by_id_links_with_broken_readlink(tmp_path: Path) -> None:
     t.drive()
     [d] = t.scan()
     assert d.node == "sr0"
+
+
+def test_sysfs_port_fallback_when_no_block_component(tmp_path: Path) -> None:
+    """sysfs_port fallback: return str(real) when no hostN and no block."""
+    t = Tree(tmp_path)
+    # Create a path with neither hostN nor block component
+    dev_dir = t.sysfs / "devices" / "simple_device"
+    dev_dir.mkdir(parents=True)
+    (dev_dir / "dev").write_text("11:0\n")
+    (dev_dir / "device").symlink_to(Path("."))
+    (dev_dir / "vendor").write_text("VENDOR\n")
+    (dev_dir / "model").write_text("MODEL\n")
+    (t.sysfs / "class" / "block" / "sr0").symlink_to(dev_dir)
+    [d] = t.scan()
+    # Should return the realpath since neither hostN nor block found
+    assert d.sysfs_port == str(dev_dir.resolve())
+
+
+def test_by_id_iterdir_permission_error(tmp_path: Path) -> None:
+    """by-id directory with permission error is handled gracefully."""
+    if os.geteuid() == 0:
+        pytest.skip("Cannot test permission errors as root")
+
+    t = Tree(tmp_path)
+    t.drive()
+    by_id = t.disk / "by-id"
+    old_mode = by_id.stat().st_mode
+    try:
+        # Revoke read permission on by-id directory
+        os.chmod(by_id, 0o000)
+        # enumerate_optical should still find the drive, but by_id_name will be None
+        drives = enumerate_optical(sysfs_root=t.sysfs, disk_root=t.disk)
+        assert len(drives) == 1 and drives[0].by_id_name is None
+    finally:
+        # Restore permissions
+        os.chmod(by_id, old_mode)
+
+
+def test_by_id_readlink_returns_regular_file(tmp_path: Path) -> None:
+    """readlink on a regular file raises OSError; link is skipped."""
+    t = Tree(tmp_path)
+    t.drive()
+    by_id = t.disk / "by-id"
+    # Create a regular file (not a symlink) in by-id
+    (by_id / "regular-file").write_text("not a symlink")
+    # enumerate_optical should skip it and find the valid drive
+    drives = t.scan()
+    assert len(drives) == 1 and drives[0].node == "sr0"
