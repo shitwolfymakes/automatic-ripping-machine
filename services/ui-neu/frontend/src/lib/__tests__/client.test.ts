@@ -6,6 +6,7 @@ import {
 	post,
 	patch,
 	del,
+	postVoid,
 	buildQuery,
 	setToken,
 	clearToken,
@@ -214,6 +215,42 @@ describe('verb helpers', () => {
 		});
 		await expect(del('/api/x')).resolves.toBeUndefined();
 		expect(mockFetch.mock.calls[0][1].method).toBe('DELETE');
+	});
+});
+
+describe('postVoid', () => {
+	it('issues a POST and never reads the body on success (200 or 204)', async () => {
+		mockFetch.mockResolvedValue({
+			ok: true,
+			status: 204,
+			statusText: 'No Content',
+			json: () => Promise.reject(new Error('should not be called'))
+		});
+		await expect(postVoid('/api/x')).resolves.toBeUndefined();
+		expect(mockFetch.mock.calls[0][1].method).toBe('POST');
+	});
+
+	it('invokes the unauthorized handler and throws on 401', async () => {
+		const on401 = vi.fn();
+		setUnauthorizedHandler(on401);
+		mockFetch.mockResolvedValue({ ok: false, status: 401, statusText: 'Unauthorized' });
+		await expect(postVoid('/api/x')).rejects.toThrow('API 401: Unauthorized');
+		expect(on401).toHaveBeenCalledTimes(1);
+	});
+
+	it('throws ApiError with a string detail message on non-2xx', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ detail: 'nope' }, false, 400, 'Bad Request'));
+		await expect(postVoid('/api/x')).rejects.toThrow('nope');
+	});
+
+	it('falls back to a status-text message when the error body is not JSON', async () => {
+		mockFetch.mockResolvedValue({
+			ok: false,
+			status: 502,
+			statusText: 'Bad Gateway',
+			json: () => Promise.reject(new Error('x'))
+		});
+		await expect(postVoid('/api/x')).rejects.toThrow('API 502: Bad Gateway');
 	});
 });
 

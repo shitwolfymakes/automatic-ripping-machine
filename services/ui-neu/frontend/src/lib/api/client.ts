@@ -116,6 +116,30 @@ export function del<T = void>(path: string): Promise<T> {
 	return apiFetch<T>(path, { method: 'DELETE' });
 }
 
+/** A POST whose response body is never parsed — for endpoints that may answer
+ *  200 or 204 with no meaningful body. Mirrors `del`'s no-body-parse shape. */
+export async function postVoid(path: string): Promise<void> {
+	const res = await fetch(path, { method: 'POST', headers: authHeaders() });
+	if (res.status === 401) {
+		on401();
+		throw new ApiError(401, 'API 401: Unauthorized', null);
+	}
+	if (!res.ok) {
+		let message = `API ${res.status}: ${res.statusText}`;
+		let body: unknown = null;
+		try {
+			body = await res.json();
+			const detail = (body as { detail?: unknown } | null)?.detail;
+			if (typeof detail === 'string') {
+				message = detail;
+			}
+		} catch {
+			/* use default message */
+		}
+		throw new ApiError(res.status, message, body);
+	}
+}
+
 export function buildQuery(params: Record<string, string | number | boolean | null | undefined>): string {
 	const parts: string[] = [];
 	for (const [k, v] of Object.entries(params)) {
