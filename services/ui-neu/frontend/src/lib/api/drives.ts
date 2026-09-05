@@ -1,5 +1,5 @@
 import type { DriveView, DriveUpdateRequest, DriveDiagnosticResponse, DriveRescanResponse } from '$lib/types/api.gen';
-import { get, patch, del, post, postVoid, buildQuery } from './client';
+import { get, patch, del, post, buildQuery } from './client';
 
 export function fetchDrives(): Promise<DriveView[]> {
 	return get<DriveView[]>('/api/drives');
@@ -35,5 +35,5 @@ export function unignoreDrive(driveId: string): Promise<DriveView> {
 
 /** May answer 204 (row deleted — the drive was absent) or 200. Callers refetch. */
 export function unenrollDrive(driveId: string): Promise<void> {
-	return postVoid(`/api/drives/${driveId}/unenroll`);
+	return post<void>(`/api/drives/${driveId}/unenroll`);
 }
