@@ -397,7 +397,33 @@ def test_makemkv_check_missing_no_stored_key(signing_key: bytes) -> None:
         r = c.post("/api/config/keys/makemkv/check", json={}, headers=_auth(token))
     body = r.json()
     assert body["status"] == "missing"
-    assert body["detail"] == "no key set"
+    assert body["detail"].startswith("no key set")
+
+
+def test_makemkv_beta_key_verdict_wins_over_empty_stored_key(signing_key: bytes) -> None:
+    """No purchased key in Config, but the ripper fetched the monthly beta key
+    and reported it valid: that verdict is the answer, not "no key set"."""
+    db = FakeSession()
+    _seed(db, makemkv_key_valid=True, makemkv_key_state="valid")
+    db.rows["config"][0].makemkv_key_checked_at = datetime.now(timezone.utc)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.post("/api/config/keys/makemkv/check", json={}, headers=_auth(token))
+    body = r.json()
+    assert body["status"] == "ok"
+    assert body["detail"] == "using the monthly beta key"
+
+
+def test_makemkv_empty_stored_key_but_checked_is_unknown_not_missing(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db, makemkv_key_state="probe_failed")
+    db.rows["config"][0].makemkv_key_checked_at = datetime.now(timezone.utc)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.post("/api/config/keys/makemkv/check", json={}, headers=_auth(token))
+    body = r.json()
+    assert body["status"] == "unknown"
+    assert body["detail"] == "probe failed"
 
 
 # ---------------------------------------------------------------------------

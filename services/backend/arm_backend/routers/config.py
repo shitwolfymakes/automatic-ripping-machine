@@ -239,16 +239,25 @@ async def check_key(
                 detail="save the key; the ripper verifies it before the next rip",
                 checked_at=None,
             )
-        if not stored_key:
-            return KeyCheckResponse(name=name, status="missing", detail="no key set", checked_at=None)
+        # The ripper's verdict wins: with no purchased key stored it fetches the
+        # monthly beta key itself, so "valid" is real even when Config holds
+        # nothing. "no key set" only applies when there is no verdict either.
         if cfg.makemkv_key_valid is True:
-            return KeyCheckResponse(name=name, status="ok", detail=None, checked_at=cfg.makemkv_key_checked_at)
+            detail = None if stored_key else "using the monthly beta key"
+            return KeyCheckResponse(name=name, status="ok", detail=detail, checked_at=cfg.makemkv_key_checked_at)
         if cfg.makemkv_key_valid is False:
             return KeyCheckResponse(
                 name=name,
                 status="invalid",
                 detail=makemkv_state_detail(cfg.makemkv_key_state),
                 checked_at=cfg.makemkv_key_checked_at,
+            )
+        if not stored_key and cfg.makemkv_key_checked_at is None:
+            return KeyCheckResponse(
+                name=name,
+                status="missing",
+                detail="no key set; the ripper fetches the monthly beta key when it starts",
+                checked_at=None,
             )
         detail = "probe failed" if cfg.makemkv_key_state == "probe_failed" else "not checked yet"
         return KeyCheckResponse(name=name, status="unknown", detail=detail, checked_at=cfg.makemkv_key_checked_at)
