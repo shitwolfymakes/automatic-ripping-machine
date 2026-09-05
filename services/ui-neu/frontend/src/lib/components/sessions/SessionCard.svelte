@@ -18,7 +18,7 @@
 			case 'all_tracks': return 'All tracks';
 			case 'archive': return 'Archive';
 			case 'custom': return 'Custom';
-			default: return v ?? '—';
+			default: return v ?? '-';
 		}
 	}
 
@@ -27,7 +27,7 @@
 			case 'tracks': return 'Tracks';
 			case 'iso': return 'ISO image';
 			case 'data_copy': return 'File copy';
-			default: return v ?? '—';
+			default: return v ?? '-';
 		}
 	}
 
@@ -38,19 +38,19 @@
 			case 'music': return 'Music';
 			case 'data': return 'Data';
 			case 'iso': return 'ISO';
-			default: return v ?? '—';
+			default: return v ?? '-';
 		}
 	}
 
 	let ripSummary = $derived(
 		session.ripPreset
 			? `${humanizeTrackSelection(session.ripPreset.track_selection)} · ${humanizeOutputMode(session.ripPreset.output_mode)}`
-			: '—'
+			: '-'
 	);
 
 	let transcodeSummary = $derived(
 		session.transcodePreset
-			? `${session.transcodePreset.container} · ${session.transcodePreset.codec ?? '—'} · ${session.transcodePreset.hw_preference ?? ''}`
+			? `${session.transcodePreset.container} · ${session.transcodePreset.codec ?? '-'} · ${session.transcodePreset.hw_preference ?? ''}`
 			: null
 	);
 
