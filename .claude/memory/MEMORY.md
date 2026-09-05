@@ -16,3 +16,4 @@
 - [No em-dashes in UI copy](feedback_no_em_dashes_in_ui_copy.md) — owner never wants `—` in anything a user sees (UI strings, backend notes/messages the UI renders); use `:`/`,`/`and`, `-` for empty cells, `(none)` for empty selects.
 - [install.sh is legacy](feedback_install_sh_legacy.md) — no PR touches `install.sh` unless load-bearing; park installer fixes in `../arm-ai/arm-v3/docs/installer-rewrite-carryover.md` until the rewrite (setup-dev.sh is the model).
 - [No Claude session links](feedback_no_session_links.md) — never add `Claude-Session:` trailers or session URLs to commits, PR bodies or comments.
+- [Glyph icons, not emoji](feedback_glyph_icons_not_emoji.md) — status/action indicators are inline SVG glyphs, never emoji or unicode symbols.
