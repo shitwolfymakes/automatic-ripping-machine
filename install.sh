@@ -7,6 +7,11 @@
 # (on desktop hosts) installs a host-side udev rule disabling auto-mount
 # for ARM-managed drives.
 #
+# Run as your regular user, never via sudo/root: containers gosu-drop to the
+# invoking uid:gid (PUID/PGID), and a root run would seed the unusable 0:0
+# and root-own the prefix. The installer refuses to run as root (unattended
+# root installs: pass explicit non-root PUID=/PGID= env vars).
+#
 # Usage:
 #   curl -fsSL .../install.sh | bash
 #   bash install.sh                       # local checkout, default prefix
@@ -149,6 +154,55 @@ confirm() {
     [[ "$reply" =~ ^[yY]([eE][sS])?$ ]]
 }
 
+# ------------------------------------------------ runtime uid/gid resolution
+
+# PUID/PGID are the uid:gid every container drops to via gosu, and the owner
+# the entrypoints expect on the media mounts. 0 is never valid (uid/gid 0 is
+# root in the image; the entrypoint refuses it), leading zeros would be
+# re-parsed as a different id by useradd/groupadd, and anything past the
+# 32-bit id space is rejected by useradd anyway.
+is_ugid() { [[ "${1:-}" =~ ^[1-9][0-9]{0,9}$ ]] && (( $1 <= 4294967294 )); }
+
+# Refuse root runs. Under sudo the whole install is poisoned, not just the
+# uid derivation: HOME=/root moves the default prefix to /root/arm, and every
+# generated file (certs, .env, compose, media dirs) ends up root-owned, which
+# the PUID-dropped container processes then fail their writability guard on.
+# Escape hatch for unattended installs on root-only hosts: pass explicit
+# non-root PUID/PGID env vars (and own the prefix accordingly).
+require_unprivileged() {
+    local euid="$EUID"
+    # Test seam — honored ONLY under the source-only test mode, so a stray
+    # ARM_INSTALL_EUID in a real environment can't bypass the root guard.
+    [[ -n "${ARM_INSTALL_SOURCE_ONLY:-}" ]] && euid="${ARM_INSTALL_EUID:-$EUID}"
+    (( euid == 0 )) || return 0
+    if is_ugid "${PUID:-}" && is_ugid "${PGID:-}"; then
+        warn "running as root with explicit PUID=${PUID} PGID=${PGID}; generated files under $PREFIX will be chowned to ${PUID}:${PGID} at the end of the run."
+        return 0
+    fi
+    err "do not run install.sh as root/sudo. Containers drop privileges to your uid:gid (PUID/PGID), and a root run seeds the unusable 0:0 — services then crash-loop in the entrypoint's groupadd. Re-run as the regular user that owns the media; if docker requires sudo, join the docker group first: sudo usermod -aG docker \$USER && newgrp docker. (Unattended root installs: pass explicit non-root PUID= and PGID= env vars.)"
+}
+
+# Resolve the PUID/PGID this run seeds: explicit env override > invoking user.
+# Sets ARM_PUID/ARM_PGID plus ARM_UGID_EXPLICIT=1 when the operator passed an
+# override — an explicit override is the one thing that outranks values already
+# persisted in .env (see seed_env's preserve-on-rerun rule).
+resolve_puid_pgid() {
+    ARM_UGID_EXPLICIT=0
+    if [[ -n "${PUID:-}" || -n "${PGID:-}" ]]; then
+        if ! is_ugid "${PUID:-}" || ! is_ugid "${PGID:-}"; then
+            err "invalid PUID/PGID override '${PUID:-}:${PGID:-}' — both must be numeric and non-zero."
+        fi
+        ARM_PUID="$PUID"; ARM_PGID="$PGID"; ARM_UGID_EXPLICIT=1
+        return 0
+    fi
+    ARM_PUID="$(id -u)"; ARM_PGID="$(id -g)"
+    # A non-root user can still carry primary gid 0 (wheel-ish setups on some
+    # NAS/admin accounts) — that seeds a PGID the entrypoint's groupadd rejects.
+    if ! is_ugid "$ARM_PUID" || ! is_ugid "$ARM_PGID"; then
+        err "your uid:gid resolves to ${ARM_PUID}:${ARM_PGID}, which containers cannot run as (uid/gid 0 collides with root in the image). Pass explicit non-root PUID= and PGID= env vars — e.g. the owner of your media directory."
+    fi
+}
+
 # Extract the bare host from a URL: strip scheme://, any user@, :port, and /path.
 # https://192.168.0.68:8080/api -> 192.168.0.68 ; https://h.example -> h.example
 url_host() {
@@ -176,11 +230,6 @@ offload_image_ref() {
 }
 
 # ------------------------------------------------ offload input validation
-
-# Validate numeric UID/GID (non-zero).
-is_ugid() {
-    [[ "$1" =~ ^[1-9][0-9]*$ ]]
-}
 
 # ssh://[user@]host[:port] — host is a DNS name or IPv4; port numeric.
 valid_ssh_endpoint() {
@@ -254,6 +303,8 @@ resolve_image_tag() {
 check_prereqs() {
     log "checking prereqs"
 
+    require_unprivileged
+
     require docker  "install: https://docs.docker.com/engine/install/"
     require openssl "openssl should be present on any modern Linux system"
     require sed     "sed should be present on any modern Linux system"
@@ -309,6 +360,27 @@ ensure_prefix() {
     # 2775 = setgid + group-writable. Per docs/arch/06-deployment.md: lets
     # ARM-created subdirs inherit the parent group automatically.
     chmod 2775 "$PREFIX/raw" "$PREFIX/media" "$PREFIX/logs"
+}
+
+# Root escape-hatch runs (EUID 0 + explicit PUID/PGID) generate root-owned
+# files the gosu-dropped containers can't use: 0400 cert keys become
+# unreadable and the data dirs fail the entrypoint's writability guard.
+# Hand everything this run generated to the target uid:gid. db/ is
+# deliberately excluded — the Postgres image manages its data dir's
+# ownership itself, and chowning a live cluster would break it.
+fix_prefix_ownership() {
+    (( EUID == 0 )) || return 0
+    (( ${ARM_UGID_EXPLICIT:-0} )) || return 0
+    log "root install: chowning generated files under $PREFIX to ${ARM_PUID}:${ARM_PGID} (db/ untouched)"
+    chown "${ARM_PUID}:${ARM_PGID}" "$PREFIX"
+    local p
+    for p in certs raw media logs ssh; do
+        [[ -d "$PREFIX/$p" ]] && chown -R "${ARM_PUID}:${ARM_PGID}" "$PREFIX/$p"
+    done
+    for p in .env docker-compose.yml; do
+        [[ -f "$PREFIX/$p" ]] && chown "${ARM_PUID}:${ARM_PGID}" "$PREFIX/$p"
+    done
+    return 0
 }
 
 # ---------------------------------------------------------- cert generation
@@ -1059,9 +1131,7 @@ setup_remote_offload() {
 seed_env() {
     local env_file="$PREFIX/.env"
 
-    local puid pgid cdrom_gid
-    puid="$(id -u)"
-    pgid="$(id -g)"
+    local puid="$ARM_PUID" pgid="$ARM_PGID" cdrom_gid
     cdrom_gid="$(stat -c '%g' /dev/sr0 2>/dev/null || echo 44)"
 
     local arm_gpus render_gid
@@ -1079,12 +1149,44 @@ seed_env() {
     fi
 
     if [[ -f "$env_file" ]]; then
-        log ".env exists; preserving secrets, re-deriving PUID/PGID/CDROM_GID/ARM_GPUS/ARM_RENDER_GID"
+        # PUID/PGID are operator policy (e.g. NFS uid mappings hand-tuned after
+        # install), not re-derivable host facts — never clobber a usable existing
+        # value on re-run. Precedence: explicit PUID/PGID env override > existing
+        # non-zero .env value > this run's derivation (which heals the 0:0 a
+        # pre-guard sudo run seeded).
+        local cur_puid cur_pgid
+        # tr strips CR/whitespace so a CRLF-edited .env (Windows editor, WSL)
+        # doesn't read as garbage and get its valid value clobbered.
+        cur_puid="$(sed -nE 's/^PUID=(.*)$/\1/p' "$env_file" | head -n1 | tr -d '[:space:]')"
+        cur_pgid="$(sed -nE 's/^PGID=(.*)$/\1/p' "$env_file" | head -n1 | tr -d '[:space:]')"
+        if (( ARM_UGID_EXPLICIT )); then
+            if [[ "${cur_puid}:${cur_pgid}" != "${puid}:${pgid}" ]]; then
+                log "explicit override: PUID/PGID ${cur_puid:-unset}:${cur_pgid:-unset} -> ${puid}:${pgid}"
+            fi
+        else
+            # Preserve each value independently: a half-edited .env (one key
+            # valid, the other missing/0) keeps its good half and heals only
+            # the broken one.
+            if is_ugid "$cur_puid"; then
+                puid="$cur_puid"
+            elif [[ -n "$cur_puid" ]]; then
+                warn "healing unusable PUID '${cur_puid}' in .env -> ${puid} (must be a non-zero numeric uid)"
+            fi
+            if is_ugid "$cur_pgid"; then
+                pgid="$cur_pgid"
+            elif [[ -n "$cur_pgid" ]]; then
+                warn "healing unusable PGID '${cur_pgid}' in .env -> ${pgid} (must be a non-zero numeric gid)"
+            fi
+        fi
+        log ".env exists; preserving secrets + PUID/PGID ${puid}:${pgid}, re-deriving CDROM_GID/ARM_GPUS/ARM_RENDER_GID"
         sed -i \
             -e "s|^PUID=.*|PUID=${puid}|" \
             -e "s|^PGID=.*|PGID=${pgid}|" \
             -e "s|^CDROM_GID=.*|CDROM_GID=${cdrom_gid}|" \
             "$env_file"
+        grep -q '^PUID=' "$env_file" || printf 'PUID=%s\n' "$puid" >> "$env_file"
+        grep -q '^PGID=' "$env_file" || printf 'PGID=%s\n' "$pgid" >> "$env_file"
+        grep -q '^CDROM_GID=' "$env_file" || printf 'CDROM_GID=%s\n' "$cdrom_gid" >> "$env_file"
         if grep -q '^ARM_GPUS=' "$env_file"; then
             sed -i "s|^ARM_GPUS=.*|ARM_GPUS=${arm_gpus}|" "$env_file"
         else
@@ -1126,7 +1228,7 @@ seed_env() {
         return 0
     fi
 
-    log "generating .env with random secrets"
+    log "generating .env with random secrets (containers run as PUID:PGID ${puid}:${pgid})"
     local pg_pass arm_tok
     pg_pass="$(openssl rand -hex 24)"
     arm_tok="$(openssl rand -hex 32)"
@@ -1539,7 +1641,8 @@ First-boot admin credentials (you'll be forced to change the password):
 EOF
 }
 
-# Test seam: lets devtools/test-install-walkthrough.sh source the functions
+# Test seam: lets devtools/test-install-walkthrough.sh and
+# devtools/test-install-env.sh source the functions
 # above without executing the install. Sourced-ness check makes a leaked env
 # var harmless when executed (mirrors the entrypoint seam from PR #56).
 [[ -n "${ARM_INSTALL_SOURCE_ONLY:-}" && "${BASH_SOURCE[0]}" != "$0" ]] && return 0
@@ -1549,6 +1652,7 @@ EOF
 main() {
     section 1 6 "Prerequisites"
     check_prereqs
+    resolve_puid_pgid
     ensure_prefix
 
     local REMOTE_OFFLOAD=0 REMOTE_DOCKER_HOST="" REMOTE_BACKEND_URL="" \
@@ -1596,6 +1700,7 @@ main() {
 
     if [[ $CERTS_ONLY -eq 1 ]]; then
         log "certs-only mode; skipping env/compose/udev"
+        fix_prefix_ownership
         return 0
     fi
 
@@ -1618,6 +1723,7 @@ main() {
             "$PREFIX/ssh/id_ed25519" "$PREFIX/ssh/known_hosts"
         offload_completion_report
     fi
+    fix_prefix_ownership
     print_next_steps
 
     if [[ $START -eq 1 ]]; then
