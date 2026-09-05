@@ -49,6 +49,15 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 	Transcoding: [{ title: 'Scheduling', keys: ['auto_transcode_on_idle'] }]
 };
 
+/** Maps the four API-key field keys (from the "API keys" section above) to
+ *  the endpoint name POST /api/config/keys/{name}/check expects. */
+export const KEY_CHECK_NAMES: Record<string, 'tmdb' | 'omdb' | 'tvdb' | 'makemkv'> = {
+	tmdb_api_key: 'tmdb',
+	omdb_api_key: 'omdb',
+	tvdb_api_key: 'tvdb',
+	makemkv_key: 'makemkv'
+};
+
 export function groupBlurb(group: string): string | undefined {
 	return GROUP_BLURBS[group];
 }

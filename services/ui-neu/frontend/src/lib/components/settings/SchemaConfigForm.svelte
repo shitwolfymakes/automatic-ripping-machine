@@ -1,7 +1,9 @@
 <script lang="ts">
-	import type { SettingsGroup, ConfigFieldMeta } from '$lib/types/api.gen';
-	import { saveArmConfig } from '$lib/api/settings';
-	import { groupBlurb, sectionFields } from '$lib/utils/settings-sections';
+	import { onMount } from 'svelte';
+	import type { SettingsGroup, ConfigFieldMeta, KeyCheckResponse } from '$lib/types/api.gen';
+	import { saveArmConfig, checkApiKey } from '$lib/api/settings';
+	import { groupBlurb, sectionFields, KEY_CHECK_NAMES } from '$lib/utils/settings-sections';
+	import { formatDateTime } from '$lib/utils/format';
 	import ConfigSchemaField from './ConfigSchemaField.svelte';
 
 	let {
@@ -54,6 +56,50 @@
 			saving = false;
 		}
 	}
+
+	// -------------------------------------------------------------------
+	// Per-key API key check (Settings > Metadata > API keys). Fields in
+	// KEY_CHECK_NAMES get a Check/Status button + inline result line.
+	// -------------------------------------------------------------------
+	let keyCheckRunning = $state<Record<string, boolean>>({});
+	let keyCheckResult = $state<Record<string, KeyCheckResponse | null>>({});
+
+	function unsavedValueFor(fieldKey: string): string | undefined {
+		const v = values[fieldKey];
+		if (typeof v !== 'string' || v === '' || v === HIDDEN) return undefined;
+		if (v === config[fieldKey]) return undefined;
+		return v;
+	}
+
+	async function runKeyCheck(fieldKey: string) {
+		const name = KEY_CHECK_NAMES[fieldKey];
+		if (!name) return;
+		keyCheckRunning = { ...keyCheckRunning, [fieldKey]: true };
+		try {
+			const result = await checkApiKey(name, unsavedValueFor(fieldKey));
+			keyCheckResult = { ...keyCheckResult, [fieldKey]: result };
+		} catch (e) {
+			keyCheckResult = {
+				...keyCheckResult,
+				[fieldKey]: {
+					name,
+					status: 'error',
+					detail: e instanceof Error ? e.message : 'check failed',
+					checked_at: null
+				}
+			};
+		} finally {
+			keyCheckRunning = { ...keyCheckRunning, [fieldKey]: false };
+		}
+	}
+
+	// The makemkv row reports the ripper's last verdict rather than probing a
+	// live service, so it runs once on mount with no user action needed.
+	onMount(() => {
+		if (group.fields.some((f) => f.key === 'makemkv_key')) {
+			runKeyCheck('makemkv_key');
+		}
+	});
 </script>
 
 <div class="flex flex-col gap-6">
@@ -78,7 +124,88 @@
 				{/if}
 				<div class="space-y-4">
 					{#each section.fields as field (field.key)}
-						<ConfigSchemaField {field} bind:value={values[field.key]} />
+						{#if field.key in KEY_CHECK_NAMES}
+							<div class="flex items-end gap-2">
+								<div class="flex-1">
+									<ConfigSchemaField {field} bind:value={values[field.key]} />
+								</div>
+								<button
+									type="button"
+									onclick={() => runKeyCheck(field.key)}
+									disabled={keyCheckRunning[field.key]}
+									class="rounded-lg border border-primary/20 px-3 py-2 text-sm text-gray-700 hover:bg-primary/5 disabled:opacity-50 dark:border-primary/20 dark:text-gray-300 dark:hover:bg-primary/10"
+								>
+									{keyCheckRunning[field.key]
+										? 'Checking...'
+										: field.key === 'makemkv_key'
+											? 'Status'
+											: 'Check'}
+								</button>
+							</div>
+							<div class="text-sm" data-testid="key-check-{field.key}">
+								{#if keyCheckResult[field.key]}
+									{@const result = keyCheckResult[field.key]}
+									{#if result?.status === 'ok'}
+										<span class="flex items-center gap-1.5 text-green-600 dark:text-green-400">
+											<svg class="h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+												<path
+													fill-rule="evenodd"
+													d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+													clip-rule="evenodd"
+												/>
+											</svg>
+											Valid{#if result.checked_at} &middot; checked {formatDateTime(result.checked_at)}{/if}
+										</span>
+									{:else if result?.status === 'invalid'}
+										<span class="flex items-center gap-1.5 text-red-600 dark:text-red-400">
+											<svg class="h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+												<path
+													fill-rule="evenodd"
+													d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+													clip-rule="evenodd"
+												/>
+											</svg>
+											{result.detail}
+										</span>
+									{:else if result?.status === 'missing'}
+										<span class="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+											<svg class="h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+												<path
+													fill-rule="evenodd"
+													d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+													clip-rule="evenodd"
+												/>
+											</svg>
+											No key set
+										</span>
+									{:else if result?.status === 'unknown'}
+										<span class="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+											<svg class="h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+												<path
+													fill-rule="evenodd"
+													d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+													clip-rule="evenodd"
+												/>
+											</svg>
+											{result.detail}
+										</span>
+									{:else if result}
+										<span class="flex items-center gap-1.5 text-red-600 dark:text-red-400">
+											<svg class="h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+												<path
+													fill-rule="evenodd"
+													d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+													clip-rule="evenodd"
+												/>
+											</svg>
+											{result.detail}
+										</span>
+									{/if}
+								{/if}
+							</div>
+						{:else}
+							<ConfigSchemaField {field} bind:value={values[field.key]} />
+						{/if}
 					{/each}
 				</div>
 			</div>

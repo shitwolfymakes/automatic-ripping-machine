@@ -15,6 +15,7 @@ import type {
 	ConfigUpdateRequest,
 	SettingsSchemaResponse,
 	MetadataKeyTestResponse,
+	KeyCheckResponse,
 	TranscodePresetView,
 	TranscodePresetCreateRequest
 } from '$lib/types/api.gen';
@@ -112,6 +113,19 @@ export async function testMetadataKey(
 		message: res.detail ?? (res.valid ? 'Key is valid' : 'Key is invalid'),
 		provider: res.provider
 	};
+}
+
+// ---------------------------------------------------------------------------
+// Per-key API key check — EXISTS in v3 (POST /api/config/keys/{name}/check).
+// Distinct from testMetadataKey above: this probes a specific provider's key,
+// optionally an unsaved candidate value, and returns the richer tri-state
+// KeyCheckResponse (ok/invalid/missing/error/unknown) SchemaConfigForm renders.
+// ---------------------------------------------------------------------------
+export function checkApiKey(
+	name: 'tmdb' | 'omdb' | 'tvdb' | 'makemkv',
+	value?: string
+): Promise<KeyCheckResponse> {
+	return post<KeyCheckResponse>(`/api/config/keys/${name}/check`, { value });
 }
 
 // ---------------------------------------------------------------------------
