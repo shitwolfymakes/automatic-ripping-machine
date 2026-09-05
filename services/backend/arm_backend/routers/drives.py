@@ -10,7 +10,7 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.db import get_session
-from arm_backend.drive_scanner import _tunables
+from arm_backend.drive_scanner import PruneUnavailable, _tunables
 from arm_backend.ripper_manager import RipperManager, RipperManagerError
 from arm_common import Drive, DriveIdentityKind, DriveLifecycle, DriveStatus, Job, JobStatus, Session, User
 from arm_common.enums import TERMINAL_JOB_STATUSES
@@ -90,6 +90,11 @@ async def drive_diagnostic(
     scanner = getattr(request.app.state, "drive_scanner", None)
     manager = getattr(request.app.state, "ripper_manager", None)
 
+    statuses: dict[str, tuple[str, bool | None]] = {}
+    if manager is not None:
+        enrolled_ids = [d.id for d in drives if d.lifecycle is DriveLifecycle.ENROLLED]
+        statuses = await asyncio.to_thread(manager.container_statuses, enrolled_ids)
+
     items: list[DriveDiagnosticItem] = []
     for d in drives:
         notes: list[str] = []
@@ -104,7 +109,7 @@ async def drive_diagnostic(
             elif d.status is DriveStatus.ERROR:
                 notes.append(f"error: {d.last_error or 'unknown'}")
             if manager is not None:
-                state, current = await asyncio.to_thread(manager.container_status, d.id)
+                state, current = statuses[d.id]
                 if state == "missing":
                     container = "missing"
                     notes.append("no ripper container — restart the backend or re-enroll")
@@ -191,7 +196,12 @@ async def rescan_drives(
     scanner = getattr(request.app.state, "drive_scanner", None)
     if scanner is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="drive scanner unavailable")
-    summary = await scanner.scan_once(db, prune_now=force)
+    try:
+        summary = await scanner.scan_once(db, prune_now=force)
+    except PruneUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=f"cannot remove missing drives: {exc}"
+        ) from exc
     drives = list((await db.execute(select(Drive))).scalars().all())
     now = datetime.now(timezone.utc)
     online = 0

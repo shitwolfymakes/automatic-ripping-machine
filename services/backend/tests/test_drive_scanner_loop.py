@@ -12,7 +12,7 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 import pytest  # noqa: E402
 
 from arm_backend import drive_scanner as mod  # noqa: E402
-from arm_backend.drive_scanner import DriveScanner, ScanSummary  # noqa: E402
+from arm_backend.drive_scanner import DriveScanner, PruneUnavailable, ScanSummary  # noqa: E402
 from arm_common import Config, DriveLifecycle  # noqa: E402
 
 from tests._fakes import FakeSession, _table_for_stmt  # noqa: E402
@@ -167,7 +167,68 @@ async def test_scan_once_prune_now_uses_a_zero_day_window(monkeypatch, tmp_path:
 
     monkeypatch.setattr(mod, "reconcile_drives", fake_reconcile)
     db = _db(prune=7)
-    scanner = DriveScanner(lambda: db, sysfs_root=tmp_path, disk_root=tmp_path)
+    t = Tree(tmp_path)
+    t.drive()
+    scanner = DriveScanner(lambda: db, sysfs_root=t.sysfs, disk_root=t.disk)
     await scanner.scan_once(db, prune_now=True)
     assert seen["prune_days"] == 0
     assert scanner.last_scan_at is not None and scanner.last_error is None
+
+
+# --- enumeration_problem / prune refusal ------------------------------------
+
+
+def test_enumeration_problem_none_when_both_dirs_readable(tmp_path: Path) -> None:
+    t = Tree(tmp_path)
+    scanner = DriveScanner(lambda: _db(), sysfs_root=t.sysfs, disk_root=t.disk)
+    assert scanner.enumeration_problem() is None
+
+
+def test_enumeration_problem_reports_missing_sysfs(tmp_path: Path) -> None:
+    t = Tree(tmp_path)
+    missing_sysfs = tmp_path / "no-sys"
+    scanner = DriveScanner(lambda: _db(), sysfs_root=missing_sysfs, disk_root=t.disk)
+    problem = scanner.enumeration_problem()
+    assert problem == f"host sysfs is not mounted ({missing_sysfs / 'class' / 'block'})"
+
+
+def test_enumeration_problem_reports_missing_by_id(tmp_path: Path) -> None:
+    t = Tree(tmp_path)
+    missing_disk = tmp_path / "no-disk"
+    scanner = DriveScanner(lambda: _db(), sysfs_root=t.sysfs, disk_root=missing_disk)
+    problem = scanner.enumeration_problem()
+    assert problem == f"host by-id directory is not mounted ({missing_disk / 'by-id'})"
+
+
+async def test_scan_once_prune_now_refuses_when_sysfs_is_not_mounted(tmp_path: Path) -> None:
+    """A degraded host enumeration (class/block unreadable) must never be
+    read as "nothing plugged in" and prune every DETECTED row — scan_once
+    must raise before touching the DB at all."""
+    missing_sysfs = tmp_path / "no-sys"
+    disk_root = tmp_path / "disk"
+    (disk_root / "by-id").mkdir(parents=True)
+    db = _db()
+    scanner = DriveScanner(lambda: db, sysfs_root=missing_sysfs, disk_root=disk_root)
+    with pytest.raises(PruneUnavailable, match="host sysfs is not mounted"):
+        await scanner.scan_once(db, prune_now=True)
+    assert db.rows.get("drives", []) == []  # no DB work was attempted
+
+
+async def test_scan_once_prune_now_refuses_when_by_id_is_not_mounted(tmp_path: Path) -> None:
+    t = Tree(tmp_path)
+    missing_disk = tmp_path / "no-disk"
+    db = _db()
+    scanner = DriveScanner(lambda: db, sysfs_root=t.sysfs, disk_root=missing_disk)
+    with pytest.raises(PruneUnavailable, match="host by-id directory is not mounted"):
+        await scanner.scan_once(db, prune_now=True)
+
+
+async def test_scan_once_prune_now_proceeds_when_readable_but_empty(tmp_path: Path) -> None:
+    """Readable-but-empty sysfs/by-id dirs are a legitimate "nothing plugged
+    in" — prune_now must proceed normally, not be refused."""
+    t = Tree(tmp_path)  # no drives added: readable dirs, empty enumeration
+    db = _db()
+    scanner = DriveScanner(lambda: db, sysfs_root=t.sysfs, disk_root=t.disk)
+    summary = await scanner.scan_once(db, prune_now=True)
+    assert summary.detected == 0
+    assert scanner.last_error is None

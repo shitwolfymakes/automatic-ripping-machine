@@ -466,6 +466,18 @@ class _StubScanner:
         return self.summary
 
 
+class _PruneUnavailableStubScanner:
+    """scan_once raises PruneUnavailable when prune_now, as the real
+    DriveScanner does on a degraded host enumeration."""
+
+    async def scan_once(self, session, *, prune_now: bool = False):
+        if prune_now:
+            from arm_backend.drive_scanner import PruneUnavailable
+
+            raise PruneUnavailable("x")
+        raise AssertionError("not exercised by this test")
+
+
 def test_rescan_runs_the_scanner_and_reports_counts(signing_key: bytes) -> None:
     from arm_backend.drive_scanner import ScanSummary
 
@@ -519,6 +531,17 @@ def test_rescan_without_force_keeps_the_window(signing_key: bytes) -> None:
         r = client.post("/api/drives/rescan", headers=_auth(token))
     assert r.status_code == 200, r.text
     assert stub.prune_now is False
+
+
+def test_rescan_force_prune_unavailable_is_409(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    app.state.drive_scanner = _PruneUnavailableStubScanner()
+    with TestClient(app) as client:
+        r = client.post("/api/drives/rescan?force=true", headers=_auth(token))
+    assert r.status_code == 409
+    assert "cannot remove missing drives: x" in r.json()["detail"]
 
 
 def test_rescan_force_is_403_for_a_read_only_role(signing_key: bytes) -> None:
