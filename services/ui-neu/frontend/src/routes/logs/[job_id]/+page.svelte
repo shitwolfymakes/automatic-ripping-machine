@@ -1,16 +1,24 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { page } from '$app/stores';
-	import { fetchJobLog, jobLogDownloadUrl, type LogEntry } from '$lib/api/logs';
+	import { jobLogDownloadUrl } from '$lib/api/logs';
+	import { createJobLog } from '$lib/stores/jobLog.svelte';
 
 	const DEFAULT_LIMIT = 1000;
 
 	const jobId = $derived($page.params.job_id ?? '');
 
-	let entries = $state<LogEntry[]>([]);
-	let loading = $state(true);
-	let error = $state<Error | null>(null);
+	// One store instance per mounted page; SvelteKit reuses this component
+	// across /logs/:id -> /logs/:other navigations, so the jobId effect below
+	// tears down the old subscription and starts a fresh one for the new id.
+	let log = $state(createJobLog(jobId, { limit: DEFAULT_LIMIT }));
+
 	let levelFilter = $state('');
 	let search = $state('');
+
+	const entries = $derived(log.entries);
+	const loading = $derived(log.loading);
+	const error = $derived(log.error);
 
 	const truncated = $derived(entries.length >= DEFAULT_LIMIT);
 
@@ -24,15 +32,7 @@
 	);
 
 	async function load() {
-		loading = true;
-		error = null;
-		try {
-			entries = await fetchJobLog(jobId, DEFAULT_LIMIT);
-		} catch (e) {
-			error = e instanceof Error ? e : new Error(String(e));
-		} finally {
-			loading = false;
-		}
+		await log.load();
 	}
 
 	function levelClass(level: string): string {
@@ -55,11 +55,24 @@
 		}
 	}
 
+	let liveJobId: string | null = null;
 	$effect(() => {
-		// re-fetch whenever the route param changes (SvelteKit reuses this
-		// component across /logs/:id → /logs/:other navigations).
-		void jobId; // read so the effect re-runs on param change
-		load();
+		// Rebuild the store whenever the route param changes (SvelteKit reuses
+		// this component across /logs/:id -> /logs/:other navigations): tear
+		// down the old live subscription before starting the new job's feed.
+		// Guarded on jobId (read explicitly, tracked) rather than on `log`
+		// itself, so writing `log` here doesn't re-trigger this same effect.
+		if (jobId === liveJobId) return;
+		liveJobId = jobId;
+		log.stop();
+		const next = createJobLog(jobId, { limit: DEFAULT_LIMIT });
+		log = next;
+		next.load();
+		next.start(); // live-tail while this page is open; harmless once the job goes terminal (no more lines emitted)
+	});
+
+	onDestroy(() => {
+		log.stop();
 	});
 </script>
 
