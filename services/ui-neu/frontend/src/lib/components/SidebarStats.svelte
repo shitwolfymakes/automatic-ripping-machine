@@ -10,7 +10,7 @@
 	import { barColor, filesHref } from '$lib/utils/resource-bars';
 </script>
 
-<div data-sidebar-stats class="border-t border-primary/20 px-3 py-3 dark:border-primary/20">
+<div data-sidebar-stats class="border-t border-primary/20 px-3 py-3 tabular-nums dark:border-primary/20">
 	<div class="space-y-2">
 		<!-- CPU -->
 		<div>

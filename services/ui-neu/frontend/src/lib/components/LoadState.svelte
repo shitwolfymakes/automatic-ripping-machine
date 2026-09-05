@@ -1,6 +1,7 @@
 <script lang="ts" generics="T">
     import type { Snippet } from 'svelte';
-    import { send, receive } from '$lib/transitions';
+    import { fade } from 'svelte/transition';
+    import { fadeIn } from '$lib/transitions';
 
     interface Props {
         data: T | null | undefined;
@@ -12,7 +13,8 @@
         ready: Snippet<[T]>;
         empty?: Snippet;
         errorSlot?: Snippet<[Error]>;
-        transitionKey: string;
+        // Kept for call-site compatibility; phases used to crossfade by key.
+        transitionKey?: string;
     }
 
     let {
@@ -24,8 +26,7 @@
         loadingSlot,
         ready,
         empty,
-        errorSlot,
-        transitionKey
+        errorSlot
     }: Props = $props();
 
     function defaultIsEmpty(d: T): boolean {
@@ -67,19 +68,26 @@
 </script>
 
 {#if phase === 'error'}
-    <div in:receive={{ key: transitionKey }} out:send={{ key: transitionKey }}>
+    <div in:fade|local={fadeIn}>
         {#if errorSlot}
             {@render errorSlot(error!)}
         {:else}
             <p class="text-red-600 dark:text-red-400">Failed to load: {error!.message}</p>
         {/if}
     </div>
+{:else if phase === 'waiting'}
+    <!-- Anti-flicker window: the skeleton is already in flow (space reserved)
+         but invisible, so a fast load fades content in without a jump and a
+         slow one reveals the skeleton without one either. -->
+    <div class="invisible" aria-hidden="true">
+        {@render loadingSlot()}
+    </div>
 {:else if phase === 'loading'}
-    <div in:receive={{ key: transitionKey }} out:send={{ key: transitionKey }}>
+    <div in:fade|local={fadeIn}>
         {@render loadingSlot()}
     </div>
 {:else if phase === 'empty'}
-    <div in:receive={{ key: transitionKey }} out:send={{ key: transitionKey }}>
+    <div in:fade|local={fadeIn}>
         {#if empty}
             {@render empty()}
         {:else}
@@ -87,7 +95,7 @@
         {/if}
     </div>
 {:else if phase === 'ready'}
-    <div in:receive={{ key: transitionKey }} out:send={{ key: transitionKey }}>
+    <div in:fade|local={fadeIn}>
         {@render ready(data!)}
     </div>
 {/if}
