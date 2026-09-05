@@ -52,8 +52,8 @@ class _StubManager:
     def probe(self):
         return self._probe
 
-    def container_status(self, drive_id: str):
-        return self._statuses.get(drive_id, ("missing", None))
+    def container_statuses(self, drive_ids):
+        return {d: self._statuses.get(d, ("missing", None)) for d in drive_ids}
 
 
 def _app(
