@@ -54,7 +54,6 @@ from arm_common.schemas.jobs import (
 )
 from arm_common.schemas.metadata import (
     MetadataCandidate,
-    MetadataKeyTestResponse,
     MetadataProvider,
     MetadataReleaseDetail,
     MetadataReleaseTrack,
@@ -170,7 +169,6 @@ __all__ = [
     "ComposeUrlRequest",
     "ComposeUrlResult",
     "MetadataCandidate",
-    "MetadataKeyTestResponse",
     "MetadataProvider",
     "MetadataReleaseDetail",
     "MetadataReleaseTrack",

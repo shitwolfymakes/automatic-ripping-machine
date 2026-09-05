@@ -1462,7 +1462,7 @@ export type LoginResponse = {
  * MakemkvKeyState
  *
  * Outcome of the ripper's disc-free `makemkvcon info disc:9999` probe.
- * Stored on the Config singleton and read by test-key / preflight / config view.
+ * Stored on the Config singleton and read by the key check, preflight and config view.
  *
  * VALID                   — clean probe, key accepted.
  * UNREGISTERED_OR_EXPIRED — MSG:5052/5055 (evaluation expired / no valid key).
@@ -1605,28 +1605,6 @@ export type MetadataCandidate = {
      * Track Count
      */
     track_count?: number | null;
-};
-
-/**
- * MetadataKeyTestResponse
- */
-export type MetadataKeyTestResponse = {
-    /**
-     * Provider
-     */
-    provider: 'omdb' | 'tmdb' | 'tvdb' | 'makemkv';
-    /**
-     * Valid
-     */
-    valid: boolean | null;
-    /**
-     * Detail
-     */
-    detail?: string | null;
-    /**
-     * Checked At
-     */
-    checked_at?: string | null;
 };
 
 /**
@@ -5985,42 +5963,6 @@ export type GetDiagnosticsApiDiagnosticsGetResponses = {
 };
 
 export type GetDiagnosticsApiDiagnosticsGetResponse = GetDiagnosticsApiDiagnosticsGetResponses[keyof GetDiagnosticsApiDiagnosticsGetResponses];
-
-export type TestKeyApiMetadataTestKeyGetData = {
-    body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
-    path?: never;
-    query: {
-        /**
-         * Provider
-         */
-        provider: 'omdb' | 'tmdb' | 'tvdb' | 'makemkv';
-    };
-    url: '/api/metadata/test-key';
-};
-
-export type TestKeyApiMetadataTestKeyGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type TestKeyApiMetadataTestKeyGetError = TestKeyApiMetadataTestKeyGetErrors[keyof TestKeyApiMetadataTestKeyGetErrors];
-
-export type TestKeyApiMetadataTestKeyGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: MetadataKeyTestResponse;
-};
-
-export type TestKeyApiMetadataTestKeyGetResponse = TestKeyApiMetadataTestKeyGetResponses[keyof TestKeyApiMetadataTestKeyGetResponses];
 
 export type SearchMetadataApiMetadataSearchGetData = {
     body?: never;
