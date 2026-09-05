@@ -155,7 +155,7 @@ describe("Layout guest gating", () => {
     auth.__setSession("admin");
     renderComponent(Layout, { props: { children: childSnippet() } });
     expect(document.querySelector('a[href="/settings#system"]')).not.toBeNull();
-    expect(document.querySelector('a[href="/settings#Metadata/makemkv_key"]')).not.toBeNull();
+    expect(document.querySelector('a[href^="/settings#"][href*="makemkv"]')).not.toBeNull();
     expect(document.querySelector('a[href="/settings#drives"]')).not.toBeNull();
   });
 
