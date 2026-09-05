@@ -2,13 +2,17 @@ import asyncio
 import contextlib
 import logging
 import shutil
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
 
 from arm_common import DiscType, Job, JobStatus, TrackStatus, with_log_context
-from arm_common.schemas import JobView, RipStartResponse, ScanResult, TrackView, WSEnvelope
+from arm_common.schemas import JobView, RipperConfigView, RipStartResponse, ScanResult, TrackView, WSEnvelope
 from arm_ripper.backend_client import BackendClient
+from arm_ripper.community_keydb import refresh_community_keydb
+from arm_ripper.makemkv_sdf import refresh_makemkv_sdf
 from arm_ripper.makemkv_key import refresh_makemkv_key
 from arm_ripper.rip import RipResult, rip_all
 from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS
@@ -32,6 +36,45 @@ EJECT_GRACE_SECONDS = 3.0
 # and return — the next disc-insert event re-triggers identify.
 RESOLUTION_WAIT_TIMEOUT_SECONDS = 30 * 60.0
 RESOLUTION_WS_FIRST_WAIT_SECONDS = 5.0
+
+
+@dataclass(frozen=True)
+class _WaitSpec:
+    """Parameterizes the park-and-wait machine for a held job.
+
+    `parked` is the status the job sits in while waiting; `success` is the set of
+    statuses that mean "stop waiting, proceed to rip". Any other status means the
+    job left the gate some other way (abandoned, failed, …) → give up. This lets
+    one wait loop serve both the identify gate (park awaiting_user_id, succeed on
+    identified) and the review gate (park awaiting_review, succeed on
+    identified/ripping).
+
+    `timed` enables the review-gate countdown: while parked, the loop computes a
+    deadline from `wait_start_time + manual_wait_seconds` and, on expiry while NOT
+    paused (global `ripping_paused` OR per-job pause), self-starts the rip. Pause
+    suspends the countdown; the deadline is only honoured while unpaused."""
+
+    parked: JobStatus
+    success: frozenset[JobStatus]
+    label: str
+    timed: bool = False
+
+
+# Identify gate: disc couldn't auto-ID; wait for the operator to resolve identity.
+_IDENTIFY_WAIT = _WaitSpec(
+    parked=JobStatus.AWAITING_USER_ID,
+    success=frozenset({JobStatus.IDENTIFIED}),
+    label="awaiting_user_id",
+)
+# Review gate (timed): disc identified but held for review; wait for Start (which
+# transitions to ripping), the auto-start countdown (ripper self-starts → ripping),
+# or the operator otherwise leaving the gate.
+_REVIEW_WAIT = _WaitSpec(
+    parked=JobStatus.AWAITING_REVIEW,
+    success=frozenset({JobStatus.IDENTIFIED, JobStatus.RIPPING}),
+    label="awaiting_review",
+    timed=True,
+)
 # After makemkvcon exits, the kernel takes up to ~5s to release exclusive
 # access on the optical drive — `eject` then sees EBUSY on open(). The
 # delay schedule below is "best-effort with growing patience"; a healthy
@@ -63,6 +106,8 @@ class JobController:
         default_min_length_seconds: int = DEFAULT_MIN_LENGTH_SECONDS,
     ) -> None:
         self._client = client
+        self._keydb_tasks: set[asyncio.Task[None]] = set()
+        self._sdf_tasks: set[asyncio.Task[None]] = set()
         self._drive_id = drive_id
         self._ws = ws
         # Each ripper container owns exactly one optical drive; storing the
@@ -94,19 +139,55 @@ class JobController:
     def is_active(self) -> bool:
         return self._active_lock.locked()
 
+    def is_idle(self) -> bool:
+        """True when no rip pipeline is running (no active task claimed the lock).
+
+        Used by the heartbeat idle re-probe to decide whether to attempt pickup.
+        """
+        return self._active_task is None
+
+    async def pickup(self, job: JobView, device_path: str) -> None:
+        """Re-acquire a rip-ready job from a heartbeat reprobe.
+
+        Claims _active_task before starting so is_idle() returns False from the
+        moment we enter, preventing a double-rip if heartbeat fires again while
+        the pipeline is starting up. The actual rip runs via _run_rip, which
+        follows the same path as a normal pipeline (rip-start → execute → complete
+        → eject) but skips scan/identify since the job already exists.
+        """
+        if not self.is_idle():
+            logger.debug("pickup ignored: controller already busy")
+            return
+        if self._device_path is None and device_path:
+            self._device_path = device_path
+        async with self._active_lock:
+            self._active_task = asyncio.current_task()
+            self._active_job_id = job.id
+            try:
+                with with_log_context(job_id=job.id):
+                    logger.info("pickup: re-acquiring job %s status=%s", job.id, job.status.value)
+                    await self._run_rip(job, device_path)
+            finally:
+                self._active_task = None
+                self._active_job_id = None
+
     async def on_ws_command(self, envelope: WSEnvelope) -> None:
         """Handler registered for `ripper.commands.{drive_id}` topic."""
-        if envelope.event_type == "identify.resolved":
+        if envelope.event_type in ("identify.resolved", "rip.start", "review.pause"):
+            # All wake the per-job wait Event; the waiter re-fetches the job and
+            # re-evaluates (identify.resolved -> identified; rip.start -> ripping;
+            # review.pause -> re-read manual_pause/wait_start_time so a per-job
+            # pause/resume applies promptly instead of on the next periodic poll).
             job_id = envelope.payload.get("job_id") if isinstance(envelope.payload, dict) else None
             if not isinstance(job_id, str):
-                logger.warning("identify.resolved without job_id payload: %s", envelope.payload)
+                logger.warning("%s without job_id payload: %s", envelope.event_type, envelope.payload)
                 return
             event = self._resolution_events.get(job_id)
             if event is not None:
                 event.set()
-                logger.info("ws identify.resolved received for job_id=%s", job_id)
+                logger.info("ws %s received for job_id=%s", envelope.event_type, job_id)
             else:
-                logger.debug("identify.resolved for job_id=%s but no waiter registered", job_id)
+                logger.debug("%s for job_id=%s but no waiter registered", envelope.event_type, job_id)
         elif envelope.event_type == "manual.trigger":
             payload = envelope.payload if isinstance(envelope.payload, dict) else {}
             session_id = payload.get("session_id")
@@ -192,6 +273,8 @@ class JobController:
                 # container up across a beta-key rotation doesn't scan/rip
                 # protected discs with a stale key.
                 await refresh_makemkv_key(key=await self._configured_makemkv_key())
+                self._spawn_keydb_refresh(enabled=await self._community_keydb_enabled())
+                self._spawn_sdf_refresh(enabled=await self._makemkv_sdf_enabled())
                 try:
                     scan_result = await self._scan_with_ready_retry(device_path)
                 except ScanError as e:
@@ -214,12 +297,24 @@ class JobController:
                 # Phase 12 — every log line below carries job_id once identify lands.
                 with with_log_context(job_id=job.id):
                     if job.status == JobStatus.AWAITING_USER_ID:
-                        resolved = await self._await_resolution(job.id)
+                        resolved = await self._await_resolution(job.id, _IDENTIFY_WAIT)
                         if resolved is None:
                             return
                         job.status = resolved.status
 
-                    if job.status != JobStatus.IDENTIFIED:
+                    # Timed review gate: the backend parks an identified disc here
+                    # when hold_for_review is on. Wait for Start (-> ripping) or the
+                    # auto-start path (-> identified); either proceeds to the rip.
+                    if job.status == JobStatus.AWAITING_REVIEW:
+                        resolved = await self._await_resolution(job.id, _REVIEW_WAIT)
+                        if resolved is None:
+                            return
+                        job.status = resolved.status
+
+                    # Proceed for: identified (normal / operator Start landed),
+                    # ripping (operator Start already transitioned), or
+                    # awaiting_review (timed auto-start — rip-start transitions it).
+                    if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING, JobStatus.AWAITING_REVIEW):
                         logger.info("job %s in unexpected status %s; not ripping", job.id, job.status.value)
                         return
 
@@ -346,92 +441,116 @@ class JobController:
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, IDENTIFY_RETRY_MAX_SECONDS)
 
-    async def _await_resolution(self, job_id: str) -> JobView | None:
-        """Wait for the user to resolve identity.
+    async def _await_resolution(self, job_id: str, spec: _WaitSpec = _IDENTIFY_WAIT) -> JobView | None:
+        """Park a held job on an Event and wait for it to leave the gate.
 
-        Primary path: the resolution arrives via WS (`identify.resolved`
-        on `ripper.commands.{drive_id}`); we park on an asyncio.Event
-        keyed by job_id and the WS handler sets it.
+        Primary path: a WS command on `ripper.commands.{drive_id}`
+        (`identify.resolved` for the identify gate, `rip.start` for the review
+        gate) sets the per-job Event. Fallback path: if no WS event arrives within
+        RESOLUTION_WS_FIRST_WAIT_SECONDS, do one REST get_job to cover the
+        boot-race where the disc left the gate before WSClient finished its
+        handshake; then slow-poll so a WS outage doesn't strand the job.
 
-        Fallback path: if no WS event arrives within
-        RESOLUTION_WS_FIRST_WAIT_SECONDS, do one REST get_job to cover
-        the boot-race case where the disc landed `awaiting_user_id`
-        before WSClient finished its handshake. After that, fall back
-        to slow polling so an extended WS outage doesn't strand a job.
+        `spec` selects which gate (parked status + success statuses). Defaults to
+        the identify gate so existing callers are unchanged.
         """
-        logger.info("job %s awaiting_user_id; waiting for resolve", job_id)
+        logger.info("job %s %s; waiting", job_id, spec.label)
         event = asyncio.Event()
         self._resolution_events[job_id] = event
         try:
-            return await self._wait_for_resolution(job_id, event)
+            return await self._wait_for_resolution(job_id, event, spec)
         finally:
             self._resolution_events.pop(job_id, None)
 
-    async def _wait_for_resolution(self, job_id: str, event: asyncio.Event) -> JobView | None:
+    def _classify_wait(self, view: JobView | None, job_id: str, spec: _WaitSpec) -> tuple[str, JobView | None]:
+        """Decide the wait outcome from a freshly-fetched job view.
+
+        Returns ("proceed", view) on a success status, ("wait", None) while still
+        parked (keep waiting), or ("abandon", None) when the job left the gate any
+        other way (abandoned/failed/…). A None view (transient REST failure during
+        the long poll) maps to "wait" so a blip doesn't abandon the job."""
+        if view is None:
+            return ("wait", None)
+        if view.status in spec.success:
+            logger.info("job %s left %s -> %s title=%s", job_id, spec.label, view.status.value, view.title)
+            return ("proceed", view)
+        if view.status == spec.parked:
+            return ("wait", None)
+        logger.info("job %s left %s with status=%s; abandoning", job_id, spec.label, view.status.value)
+        return ("abandon", None)
+
+    async def _wait_for_resolution(self, job_id: str, event: asyncio.Event, spec: _WaitSpec) -> JobView | None:
         # First-wait window: covers the boot race where we missed the
-        # resolve-event broadcast before subscribing.
+        # gate-leaving broadcast before subscribing.
         try:
             await asyncio.wait_for(event.wait(), timeout=RESOLUTION_WS_FIRST_WAIT_SECONDS)
         except asyncio.TimeoutError:
-            view = await self._safe_get_job(job_id)
-            if view is not None:
-                if view.status == JobStatus.IDENTIFIED:
-                    logger.info("job %s resolved (REST fallback) title=%s", job_id, view.title)
-                    return view
-                if view.status != JobStatus.AWAITING_USER_ID:
-                    logger.info(
-                        "job %s left awaiting_user_id with status=%s; abandoning",
-                        job_id,
-                        view.status.value,
-                    )
-                    return None
+            outcome, view = self._classify_wait(await self._safe_get_job(job_id), job_id, spec)
+            if outcome == "proceed":
+                return view
+            if outcome == "abandon":
+                return None
 
         # Long wait: WS-driven, with periodic REST sanity polls so we
         # don't hang forever on a torn WS connection.
         deadline = asyncio.get_event_loop().time() + RESOLUTION_WAIT_TIMEOUT_SECONDS
         while asyncio.get_event_loop().time() < deadline:
+            woke_via_ws = True
             try:
                 await asyncio.wait_for(event.wait(), timeout=POLL_MAX_SECONDS)
-                # WS event fired — confirm via REST.
-                view = await self._safe_get_job(job_id)
-                if view is None:
-                    return None
-                if view.status == JobStatus.IDENTIFIED:
-                    logger.info("job %s resolved -> identified title=%s", job_id, view.title)
-                    return view
-                if view.status != JobStatus.AWAITING_USER_ID:
-                    logger.info(
-                        "job %s left awaiting_user_id with status=%s; abandoning",
-                        job_id,
-                        view.status.value,
-                    )
-                    return None
-                # Spurious WS wake — clear and re-arm.
-                event.clear()
             except asyncio.TimeoutError:
-                # Periodic sanity poll — handles torn WS connections.
-                view = await self._safe_get_job(job_id)
-                if view is None:
-                    continue
-                if view.status == JobStatus.IDENTIFIED:
-                    logger.info("job %s resolved (poll catch-up) title=%s", job_id, view.title)
-                    return view
-                if view.status != JobStatus.AWAITING_USER_ID:
-                    logger.info(
-                        "job %s left awaiting_user_id with status=%s; abandoning",
-                        job_id,
-                        view.status.value,
-                    )
-                    return None
+                woke_via_ws = False  # periodic sanity poll — handles torn WS connections
+            view = await self._safe_get_job(job_id)
+            outcome, proceed_view = self._classify_wait(view, job_id, spec)
+            if outcome == "proceed":
+                return proceed_view
+            if outcome == "abandon":
+                return None
+            # Still parked. Timed review gate: if the countdown has elapsed and the
+            # disc is not paused, auto-start — return the parked view so the
+            # pipeline proceeds to _run_rip (rip-start transitions the status).
+            if spec.timed and view is not None and await self._review_countdown_expired(view):
+                logger.info("job %s review countdown elapsed; auto-starting rip", job_id)
+                return view
+            # If a WS wake was spurious, clear+re-arm the Event.
+            if woke_via_ws:
+                event.clear()
 
-        logger.warning("job %s resolution timed out after %.0fs", job_id, RESOLUTION_WAIT_TIMEOUT_SECONDS)
+        logger.warning("job %s %s wait timed out after %.0fs", job_id, spec.label, RESOLUTION_WAIT_TIMEOUT_SECONDS)
         return None
+
+    async def _review_countdown_expired(self, view: JobView) -> bool:
+        """True when a held disc's auto-start countdown has elapsed AND it is not
+        paused. Paused — global `ripping_paused` OR this disc's per-job
+        `manual_pause` — keeps the countdown suspended, so it returns False and the
+        wait continues. The job view + config are re-read each poll so a mid-wait
+        pause / resume / duration change applies on the next cycle.
+        """
+        if view.manual_pause:
+            return False
+        cfg = await self._safe_get_ripper_config()
+        if cfg is None or cfg.ripping_paused:
+            return False
+        if view.wait_start_time is None:
+            return False
+        elapsed = (datetime.now(timezone.utc) - view.wait_start_time).total_seconds()
+        return elapsed >= cfg.manual_wait_seconds
 
     async def _safe_get_job(self, job_id: str) -> JobView | None:
         try:
             return await self._client.get_job(job_id)
         except httpx.HTTPError as e:
             logger.warning("get_job %s failed (%s); will retry on next signal", job_id, e)
+            return None
+
+    async def _safe_get_ripper_config(self) -> RipperConfigView | None:
+        """Ripper config (ripping_paused + manual_wait_seconds) for the review
+        countdown. None on transport error → the caller treats it as 'can't tell;
+        keep waiting' (fail-safe: never auto-rip on a config blip)."""
+        try:
+            return await self._client.get_ripper_config()
+        except httpx.HTTPError as e:
+            logger.warning("get_ripper_config failed (%s); keeping countdown suspended", e)
             return None
 
     async def _configured_makemkv_key(self) -> str | None:
@@ -449,7 +568,76 @@ class JobController:
             return None
         return cfg.makemkv_key
 
-    async def _run_rip(self, job: Job, device_path: str) -> None:
+    async def _community_keydb_enabled(self) -> bool:
+        """Whether the operator has the community-keydb auto-fetch enabled.
+        Fail-open to True (the default) so a flapping backend doesn't silently
+        disable the feature."""
+        try:
+            cfg = await self._client.get_ripper_config()
+        except httpx.HTTPError as e:
+            logger.warning("community keydb toggle lookup failed (%s); defaulting enabled", e)
+            return True
+        return cfg.community_keydb_enabled
+
+    def _spawn_keydb_refresh(self, *, enabled: bool) -> None:
+        """Fire-and-forget community-keydb refresh. The rip proceeds immediately
+        with the on-disk keydb; a fresh keydb benefits the next rip. Errors are
+        swallowed — a keydb hiccup must never abort a rip."""
+        task = asyncio.create_task(self._keydb_refresh_and_report(enabled=enabled))
+        self._keydb_tasks.add(task)
+        task.add_done_callback(self._keydb_tasks.discard)
+
+    async def _keydb_refresh_and_report(self, *, enabled: bool) -> None:
+        try:
+            result = await refresh_community_keydb(enabled=enabled)
+            if result is not None:
+                await self._client.report_keydb_status(
+                    state=result.state, vuk_count=result.vuk_count, age_days=result.age_days
+                )
+        except Exception as exc:  # noqa: BLE001 — fire-and-forget, never propagate
+            logger.warning("community keydb refresh failed (non-fatal): %s", exc)
+
+    async def _drain_keydb_tasks(self) -> None:
+        """Await any outstanding keydb refreshes. Used by tests to synchronise
+        on the fire-and-forget tasks. Not wired into production shutdown by
+        design: a keydb refresh is best-effort, so on SIGTERM the tasks are
+        abandoned (their bodies swallow Exception, and CancelledError —
+        BaseException — propagates cleanly to the event loop)."""
+        if self._keydb_tasks:
+            await asyncio.gather(*self._keydb_tasks, return_exceptions=True)
+
+    async def _makemkv_sdf_enabled(self) -> bool:
+        """Whether the operator has the MakeMKV SDF auto-refresh enabled.
+        Fail-open to True so a flapping backend doesn't silently disable it."""
+        try:
+            cfg = await self._client.get_ripper_config()
+        except httpx.HTTPError as e:
+            logger.warning("makemkv sdf toggle lookup failed (%s); defaulting enabled", e)
+            return True
+        return cfg.makemkv_sdf_enabled
+
+    def _spawn_sdf_refresh(self, *, enabled: bool) -> None:
+        """Fire-and-forget MakeMKV SDF refresh. The rip proceeds immediately
+        with the on-disk SDF; a fresh SDF benefits the next rip. Errors are
+        swallowed — an SDF hiccup must never abort a rip."""
+        task = asyncio.create_task(self._sdf_refresh_and_report(enabled=enabled))
+        self._sdf_tasks.add(task)
+        task.add_done_callback(self._sdf_tasks.discard)
+
+    async def _sdf_refresh_and_report(self, *, enabled: bool) -> None:
+        try:
+            result = await refresh_makemkv_sdf(enabled=enabled)
+            if result is not None:
+                await self._client.report_sdf_status(state=result.state, age_days=result.age_days)
+        except Exception as exc:  # noqa: BLE001 — fire-and-forget, never propagate
+            logger.warning("makemkv sdf refresh failed (non-fatal): %s", exc)
+
+    async def _drain_sdf_tasks(self) -> None:
+        """Await any outstanding SDF refreshes. Test-only synchronisation."""
+        while self._sdf_tasks:
+            await asyncio.gather(*list(self._sdf_tasks), return_exceptions=True)
+
+    async def _run_rip(self, job: Job | JobView, device_path: str) -> None:
         rip_start = await self._rip_start_with_retry(job.id)
         logger.info(
             "rip-start job_id=%s preset=%s tracks=%d",
@@ -464,6 +652,32 @@ class JobController:
             rip_start=rip_start,
         )
 
+    async def recover_held_job(self, job: JobView, device_path: str) -> None:
+        """Reboot recovery for a disc that was PAUSED in the review gate
+        (timed review gate §6.3). Re-park the review wait so the operator can
+        still Start it; on Start (-> ripping) or auto-start (-> identified), run
+        the rip. Unlike resume_inflight_job this does NOT wipe /raw or re-rip —
+        the disc never ripped. A re-parked disc waits for an explicit Start; it
+        does not auto-rip on boot even if its countdown had expired.
+        """
+        async with self._active_lock:
+            self._active_task = asyncio.current_task()
+            self._active_job_id = job.id
+            try:
+                with with_log_context(job_id=job.id):
+                    logger.info("reboot recovery: re-parking held job %s", job.id)
+                    resolved = await self._await_resolution(job.id, _REVIEW_WAIT)
+                    if resolved is None:
+                        return
+                    job = resolved
+                    if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING):
+                        logger.info("recovered job %s in status %s; not ripping", job.id, job.status.value)
+                        return
+                    await self._run_rip(job, device_path)
+            finally:
+                self._active_task = None
+                self._active_job_id = None
+
     async def resume_inflight_job(self, job: JobView, device_path: str) -> None:
         """Phase 9 — drive a crash-recovered rip from the boot probe.
 
@@ -475,6 +689,8 @@ class JobController:
             # Crash-resume skips the scan path, so refresh the key here too —
             # a rip resumed days after a crash must not run on a stale key.
             await refresh_makemkv_key(key=await self._configured_makemkv_key())
+            self._spawn_keydb_refresh(enabled=await self._community_keydb_enabled())
+            self._spawn_sdf_refresh(enabled=await self._makemkv_sdf_enabled())
             rip_start = await self._client.resume(job.id)
             logger.info("rip-resume job_id=%s tracks=%d", job.id, len(rip_start.tracks))
             await self._execute_rip(

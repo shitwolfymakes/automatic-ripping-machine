@@ -6,13 +6,20 @@ import Config from '../views/Config.vue'
 const baseConfig = {
   tmdb_api_key: null,
   omdb_api_key: null,
+  tvdb_api_key: null,
   makemkv_key: null,
   musicbrainz_user_agent: null,
   auto_transcode_on_idle: false,
+  auto_rip_on_insert: true,
   block_on_miss: true,
+  ripping_paused: false,
   default_retention_policy: 'prune_after_session',
   notification_apprise_urls: [],
   notifications_enabled: false,
+  metadata_provider: 'tmdb',
+  makemkv_key_valid: null,
+  makemkv_key_state: null,
+  makemkv_key_checked_at: null,
   updated_by_user_id: null,
   updated_at: null,
 }
@@ -87,24 +94,76 @@ describe('Config.vue notifications', () => {
     expect(body.makemkv_key).toBe('T-abc123')
   })
 
-  it('renders backend 400 detail when invalid apprise URL is rejected', async () => {
+  it('sends metadata_provider in the PATCH body when changed', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(baseConfig))
-      .mockResolvedValueOnce(jsonResponse({ detail: 'invalid apprise URL: discord://****' }, 400))
+      .mockResolvedValueOnce(jsonResponse({ ...baseConfig, metadata_provider: 'omdb' }))
     vi.stubGlobal('fetch', fetchMock)
-
     const wrapper = mount(Config)
     await flushPromises()
-
-    const textarea = wrapper.find('textarea')
-    await textarea.setValue('discord://AAA/BBB')
+    const select = wrapper.find('[data-testid="metadata-provider"]')
+    expect(select.exists()).toBe(true)
+    await select.setValue('omdb')
     await wrapper.find('form').trigger('submit')
     await flushPromises()
+    const patchCall = fetchMock.mock.calls.find((c) => c[1]?.method === 'PATCH')
+    const body = JSON.parse(patchCall![1].body as string)
+    expect(body.metadata_provider).toBe('omdb')
+  })
 
-    const errorEl = wrapper.find('p.error')
-    expect(errorEl.exists()).toBe(true)
-    expect(errorEl.text()).toContain('invalid apprise URL: discord://****')
-    expect(wrapper.text()).not.toContain('Saved.')
+  it('sends tvdb_api_key in the PATCH body when set', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(baseConfig))
+      .mockResolvedValueOnce(jsonResponse({ ...baseConfig, tvdb_api_key: 'tvdb-xyz' }))
+    vi.stubGlobal('fetch', fetchMock)
+    const wrapper = mount(Config)
+    await flushPromises()
+    const field = wrapper.find('[data-testid="tvdb-key"]')
+    expect(field.exists()).toBe(true)
+    await field.setValue('tvdb-xyz')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    const patchCall = fetchMock.mock.calls.find((c) => c[1]?.method === 'PATCH')
+    const body = JSON.parse(patchCall![1].body as string)
+    expect(body.tvdb_api_key).toBe('tvdb-xyz')
+  })
+
+  it('sends ripping_paused in the PATCH body when toggled', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(baseConfig))
+      .mockResolvedValueOnce(jsonResponse({ ...baseConfig, ripping_paused: true }))
+    vi.stubGlobal('fetch', fetchMock)
+    const wrapper = mount(Config)
+    await flushPromises()
+    const checkbox = wrapper.find('[data-testid="ripping-paused"]')
+    expect(checkbox.exists()).toBe(true)
+    await checkbox.setValue(true)
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    const patchCall = fetchMock.mock.calls.find((c) => c[1]?.method === 'PATCH')
+    const body = JSON.parse(patchCall![1].body as string)
+    expect(body.ripping_paused).toBe(true)
+  })
+
+  it('loads existing metadata_provider and ripping_paused from GET', async () => {
+    const loaded = { ...baseConfig, metadata_provider: 'omdb', ripping_paused: true }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(loaded)))
+    const wrapper = mount(Config)
+    await flushPromises()
+    const select = wrapper.find('[data-testid="metadata-provider"]')
+    expect((select.element as HTMLSelectElement).value).toBe('omdb')
+    const paused = wrapper.find('[data-testid="ripping-paused"]')
+    expect((paused.element as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('does not render the retention or legacy-apprise controls', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(baseConfig)))
+    const wrapper = mount(Config)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="retention"]').exists()).toBe(false)
+    expect(wrapper.find('textarea').exists()).toBe(false)
   })
 })

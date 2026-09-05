@@ -1,1 +1,0 @@
-export { default as component } from "../../../../src/routes/logs/[job_id]/+page.svelte";
