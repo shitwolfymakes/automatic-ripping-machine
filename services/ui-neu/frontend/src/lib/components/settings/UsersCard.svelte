@@ -109,22 +109,18 @@
 				</div>
 			{/if}
 
-			<!-- Guest row -->
+			<!-- Guest access: guests never sign in (sessions are anonymous), so there
+			     is no username, status or last-login to show, just the switch. -->
 			{#if guest}
-				<div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/10 px-3 py-2.5 dark:border-primary/10">
-					<div class="flex min-w-0 flex-1 items-center gap-2">
-						<span class="truncate font-medium text-sm text-gray-900 dark:text-white">{guest.username}</span>
-						<span class="shrink-0 rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-widest {roleBadgeClass(guest.role)}">
-							{guest.role}
-						</span>
-						<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">
-							{guest.disabled ? 'Disabled' : 'Active'}
-						</span>
-						<span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">
-							Last login: <TimeAgo date={guest.last_login_at ?? null} />
-						</span>
+				<div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/10 px-3 py-2.5 dark:border-primary/10" data-testid="guest-access-row">
+					<div class="min-w-0 flex-1">
+						<span class="text-sm font-medium text-gray-900 dark:text-white">Guest access</span>
+						<p class="text-xs text-gray-500 dark:text-gray-400">
+							Let anyone on the network browse without signing in. Guests can view but not change anything.
+						</p>
 					</div>
 					<div class="flex shrink-0 items-center gap-2">
+						<span class="text-xs text-gray-500 dark:text-gray-400">{guest.disabled ? 'Off' : 'On'}</span>
 						<Toggle checked={!guest.disabled} label="guest" onchange={handleGuestToggle} />
 					</div>
 				</div>
