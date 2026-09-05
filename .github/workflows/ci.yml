@@ -63,6 +63,10 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run format:check
+      # Generate src/api/generated.ts (gitignored) from the snapshot before
+      # vue-tsc — types.ts imports it, so typecheck fails on a fresh checkout
+      # without it.
+      - run: npm run openapi-types
       - run: npm run typecheck
 
   lint-shell:
@@ -88,6 +92,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      # Zero-infra unit test that sources install.sh via its
+      # ARM_INSTALL_SOURCE_ONLY seam — no docker, no root, <1s.
+      - name: Installer walkthrough suite
+        run: bash devtools/test-install-walkthrough.sh
+
       # Zero-infra unit test that sources docker-entrypoint.sh via its
       # ARM_ENTRYPOINT_SOURCE_ONLY seam — no docker, no root, <1s.
       - name: Entrypoint render-access suite
@@ -124,6 +133,60 @@ jobs:
           cache-dependency-path: services/ui/package-lock.json
       - run: npm ci
       - run: npm test
+
+  check-ui-neu:
+    name: lint (ui-neu — svelte-check)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/ui-neu/frontend
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: services/ui-neu/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run check
+
+  test-ui-neu:
+    name: test (ui-neu — vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/ui-neu/frontend
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: services/ui-neu/frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  codegen-ui-neu:
+    name: ui-neu openapi codegen drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: services/ui-neu/frontend/package-lock.json
+      - name: Install frontend deps
+        working-directory: services/ui-neu/frontend
+        run: npm ci
+      - name: Regenerate api.gen.ts from the committed OpenAPI snapshot
+        run: bash services/ui-neu/scripts/codegen.sh
+      - name: Fail if api.gen.ts drifted from the snapshot
+        run: |
+          if ! git diff --exit-code services/ui-neu/frontend/src/lib/types/api.gen.ts; then
+            echo "::error::ui-neu api.gen.ts is out of sync with services/ui/openapi.snapshot.json — run bash services/ui-neu/scripts/codegen.sh and commit."
+            exit 1
+          fi
 
   openapi-drift:
     # Live OpenAPI from the FastAPI app must match the committed snapshot
@@ -167,7 +230,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [backend, ripper, transcode, ui]
+        service: [backend, ripper, transcode, ui, ui-neu]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0

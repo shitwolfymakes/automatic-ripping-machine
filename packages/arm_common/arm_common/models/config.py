@@ -1,11 +1,18 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, LargeBinary, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, LargeBinary, String
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlmodel import Field, SQLModel
 
 from arm_common.models._columns import enum_column, updated_at_column
 from arm_common.enums import RetentionPolicy
+
+# MusicBrainz 403s any User-Agent that doesn't follow their etiquette guide's
+# `AppName/version ( contact )` shape — a bare token like `armv3` is rejected.
+# This well-formed default keeps the first audio-CD rip working on a fresh
+# install; it is the single source of truth for the model default AND the
+# router fallback when an operator hasn't set their own.
+DEFAULT_MUSICBRAINZ_USER_AGENT = "ARM/3.0.0 ( https://github.com/automatic-ripping-machine/automatic-ripping-machine )"
 
 
 class Config(SQLModel, table=True):
@@ -22,12 +29,28 @@ class Config(SQLModel, table=True):
     # var and then to the monthly forum beta-key scrape. See
     # services/ripper/arm_ripper/makemkv_key.py.
     makemkv_key: str | None = Field(default=None)
-    # MusicBrainz requires a non-empty User-Agent (they 403 blank UAs); `armv3`
-    # is a reasonable shared default that won't blow up the first audio-CD rip
-    # on a fresh install. Operators are still encouraged to override with an
-    # app-name-plus-contact-info string per MB's etiquette guide — see the UI
-    # form's placeholder hint.
-    musicbrainz_user_agent: str | None = Field(default="armv3")
+    # Disc-free makemkv key-validity, reported by the ripper's probe (see
+    # services/ripper/arm_ripper/scan/makemkv.py probe_makemkv_key + the
+    # /api/ripper/makemkv-key-status endpoint). All null until a ripper reports.
+    makemkv_key_valid: bool | None = Field(sa_column=Column(Boolean, nullable=True))
+    makemkv_key_state: str | None = Field(sa_column=Column(String, nullable=True))
+    makemkv_key_checked_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
+    # Community-keydb (FindVUK) auto-fetch: operator toggle + ripper-reported
+    # status. The ripper downloads/filters/installs ~/.MakeMKV/keydb.cfg per rip
+    # (fire-and-forget) when enabled; see services/ripper/arm_ripper/community_keydb.py.
+    community_keydb_enabled: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
+    community_keydb_state: str | None = Field(sa_column=Column(String, nullable=True))
+    community_keydb_vuk_count: int | None = Field(sa_column=Column(Integer, nullable=True))
+    community_keydb_checked_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
+    # MakeMKV SDF (decryption data file) auto-fetch: operator toggle + ripper-
+    # reported status. The ripper downloads/installs ~/.MakeMKV/sdf.bin per rip
+    # (fire-and-forget) when enabled; see services/ripper/arm_ripper/makemkv_sdf.py.
+    makemkv_sdf_enabled: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
+    makemkv_sdf_state: str | None = Field(sa_column=Column(String, nullable=True))
+    makemkv_sdf_checked_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
+    # See DEFAULT_MUSICBRAINZ_USER_AGENT above — a bare token 403s; operators are
+    # still encouraged to override with their own contact info (UI placeholder hint).
+    musicbrainz_user_agent: str | None = Field(default=DEFAULT_MUSICBRAINZ_USER_AGENT)
     # Persisted metadata provider for the identify flow (search + detail).
     # Default `tmdb` — free, effectively unlimited, richer than OMDb. Validated
     # app-side to {tmdb, omdb}; tvdb/makemkv are key-test-only, not search providers.
@@ -39,6 +62,11 @@ class Config(SQLModel, table=True):
     auto_rip_on_insert: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
     block_on_miss: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
     ripping_paused: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
+    # Timed pre-rip review gate: when on, an inserted disc scans + identifies then
+    # parks in AWAITING_REVIEW for `manual_wait_seconds` before auto-starting the
+    # rip (suppressed while `ripping_paused`). Off = today's auto-rip behavior.
+    hold_for_review: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
+    manual_wait_seconds: int = Field(sa_column=Column(Integer, nullable=False, server_default="60"))
     default_retention_policy: RetentionPolicy = Field(
         sa_column=enum_column(
             RetentionPolicy,

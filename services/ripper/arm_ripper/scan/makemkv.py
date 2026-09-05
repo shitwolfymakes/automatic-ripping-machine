@@ -3,7 +3,7 @@ import logging
 import re
 from typing import Iterable
 
-from arm_common import DiscType
+from arm_common import DiscType, MakemkvKeyState
 from arm_common.schemas import DiscFingerprintInput, ScanResult, ScanTitle
 from arm_ripper.scan.disc_probe import probe_disc
 from arm_ripper.source import makemkv_source_url
@@ -20,6 +20,10 @@ _MAKEMKV_EXPIRED_PREFIX = b"MSG:5021,"
 
 _DURATION_RE = re.compile(r"^(\d+):(\d{1,2}):(\d{1,2})$")
 _QUOTED_RE = re.compile(r'^"(.*)"$')
+
+_MAKEMKV_EVAL_PREFIXES = (b"MSG:5052,", b"MSG:5055,")
+_MAKEMKV_SERIAL_RE = re.compile(r"^[A-Z]-.+$")
+PROBE_TIMEOUT_SECONDS = 30.0
 
 
 class ScanError(Exception):
@@ -207,6 +211,65 @@ async def _read_makemkvcon_stream(proc: asyncio.subprocess.Process) -> tuple[byt
     await stdout_task
     stderr_bytes = await stderr_task
     return b"".join(stdout_chunks), stderr_bytes, expired
+
+
+async def probe_makemkv_key(key: str | None) -> tuple[MakemkvKeyState, str | None]:
+    """Disc-free makemkv key probe. Runs `makemkvcon -r --cache=1 info disc:9999`
+    (no disc, no hardware) and classifies the startup MSG codes. NEVER raises —
+    every failure maps to a state. See the 2026-06-12 makemkv-key-validity spec."""
+    if key and key.strip() and not _MAKEMKV_SERIAL_RE.match(key.strip()):
+        return MakemkvKeyState.FORMAT_INVALID, "configured key is not a MakeMKV serial (expected M-…/T-…)"
+
+    cmd = ["makemkvcon", "-r", "--cache=1", "info", "disc:9999"]
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+    except FileNotFoundError:
+        return MakemkvKeyState.PROBE_FAILED, "makemkvcon binary not found on PATH"
+    except OSError as exc:
+        return MakemkvKeyState.PROBE_FAILED, f"could not start makemkvcon: {exc}"
+
+    state = MakemkvKeyState.VALID
+
+    async def _scan_stdout() -> None:
+        nonlocal state
+        assert proc.stdout is not None
+        async for raw in proc.stdout:
+            if raw.startswith(_MAKEMKV_EXPIRED_PREFIX):
+                state = MakemkvKeyState.BINARY_EXPIRED
+                proc.kill()
+                continue
+            # BINARY_EXPIRED wins: real MakeMKV never emits both, but guard
+            # the assignment so a pathological stream can't downgrade it.
+            if any(raw.startswith(p) for p in _MAKEMKV_EVAL_PREFIXES) and state != MakemkvKeyState.BINARY_EXPIRED:
+                state = MakemkvKeyState.UNREGISTERED_OR_EXPIRED
+                proc.kill()
+                continue
+
+    async def _drain_stderr() -> None:
+        assert proc.stderr is not None
+        async for _ in proc.stderr:
+            pass
+
+    try:
+        await asyncio.wait_for(asyncio.gather(_scan_stdout(), _drain_stderr()), timeout=PROBE_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return MakemkvKeyState.PROBE_FAILED, f"makemkvcon probe timed out after {PROBE_TIMEOUT_SECONDS:.0f}s"
+
+    await proc.wait()
+
+    if state == MakemkvKeyState.VALID and proc.returncode not in (0, None):
+        return MakemkvKeyState.PROBE_FAILED, f"makemkvcon exited {proc.returncode} with no key message"
+
+    details = {
+        MakemkvKeyState.VALID: "makemkv key accepted",
+        MakemkvKeyState.BINARY_EXPIRED: "makemkvcon binary expired (MSG:5021); no key overrides — rebuild the ripper image",
+        MakemkvKeyState.UNREGISTERED_OR_EXPIRED: "no valid makemkv key in effect (MSG:5052/5055)",
+    }
+    return state, details.get(state)
 
 
 async def scan_disc(device_path: str) -> ScanResult:

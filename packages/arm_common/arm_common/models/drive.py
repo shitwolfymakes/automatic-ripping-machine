@@ -5,7 +5,7 @@ from sqlalchemy import JSON, Column, DateTime, ForeignKey, String
 from sqlmodel import Field, SQLModel
 
 from arm_common.models._columns import created_at_column, enum_column, updated_at_column
-from arm_common.enums import DriveMediaStatus, DriveStatus
+from arm_common.enums import DriveMediaStatus, DriveMode, DriveStatus
 from arm_common.ulid import new_id
 
 
@@ -45,6 +45,13 @@ class Drive(SQLModel, table=True):
         default_factory=dict,
         sa_column=Column(JSON, nullable=False, server_default="{}"),
     )
+    rip_speed: int | None = Field(default=None)
+    drive_mode: DriveMode | None = Field(sa_column=enum_column(DriveMode, "drive_mode", nullable=True))
+    uhd_capable: bool | None = Field(default=None)
+    prescan_cache_mb: int | None = Field(default=None)
+    prescan_timeout: int | None = Field(default=None)
+    prescan_retries: int | None = Field(default=None)
+    disc_enum_timeout: int | None = Field(default=None)
     default_session_id: str | None = Field(
         sa_column=Column(String, ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True)
     )

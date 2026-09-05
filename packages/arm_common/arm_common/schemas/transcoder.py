@@ -6,6 +6,8 @@ spawns one container per `transcode_tasks` row, the container runs the
 encoder, and these schemas carry the state-machine transitions.
 """
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 from arm_common.schemas.jobs import TrackView
@@ -69,3 +71,21 @@ class CompleteTaskRequest(BaseModel):
 
 class FailTaskRequest(BaseModel):
     last_error: str = Field(min_length=1)
+
+
+class TranscodeStatsView(BaseModel):
+    tasks_by_status: dict[str, int]
+    total_tasks: int
+    gpus_total: int
+    gpus_available: int
+    max_parallel: int
+
+
+class TranscodeWorkerView(BaseModel):
+    task_id: str
+    claimed_by: str | None = None
+    progress_pct: int
+    claim_heartbeat_at: datetime | None = None
+    gpu_id: str | None = None
+    source_track_id: str
+    output_path: str | None = None

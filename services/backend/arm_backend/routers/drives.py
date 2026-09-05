@@ -6,10 +6,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.auth import require_jwt
+from arm_backend.auth import require_jwt, require_writer
 from arm_backend.db import get_session
 from arm_common import Drive, DriveStatus, Job, JobStatus, Session, User
-from arm_common.schemas import DriveDiagnosticItem, DriveDiagnosticResponse, DriveRescanResponse, DriveUpdateRequest
+from arm_common.enums import TERMINAL_JOB_STATUSES
+from arm_common.schemas import (
+    DriveDiagnosticItem,
+    DriveDiagnosticResponse,
+    DriveCurrentJobView,
+    DriveRescanResponse,
+    DriveUpdateRequest,
+    DriveView,
+)
 
 router = APIRouter(prefix="/api/drives", tags=["drives"])
 
@@ -21,13 +29,36 @@ router = APIRouter(prefix="/api/drives", tags=["drives"])
 _STALE_AFTER = timedelta(minutes=5)
 
 
-@router.get("", response_model=list[Drive])
+def _current_job(jobs_for_drive: list[Job]) -> DriveCurrentJobView | None:
+    active = [j for j in jobs_for_drive if j.status not in TERMINAL_JOB_STATUSES]
+    if not active:
+        return None
+    latest = max(active, key=lambda j: j.created_at or datetime.min.replace(tzinfo=timezone.utc))
+    return DriveCurrentJobView(id=latest.id, title=latest.title, status=latest.status)
+
+
+def _to_view(drive: Drive, jobs_for_drive: list[Job]) -> DriveView:
+    view = DriveView.model_validate(drive)
+    view.current_job = _current_job(jobs_for_drive)
+    return view
+
+
+@router.get("", response_model=list[DriveView])
 async def list_drives(
     _: User = Depends(require_jwt),
     session: AsyncSession = Depends(get_session),
-) -> list[Drive]:
+) -> list[DriveView]:
     result = await session.execute(select(Drive).order_by(col(Drive.created_at).asc()))
-    return list(result.scalars().all())
+    drives = list(result.scalars().all())
+    # Fetch all jobs and group in Python — FakeSession cannot evaluate SQL GROUP BY.
+    jobs = list((await session.execute(select(Job))).scalars().all())
+    jobs_by_drive: dict[str, list[Job]] = {}
+    for j in jobs:
+        if j.drive_id is None:
+            # Drive deleted after the fact (SET NULL) — belongs to no drive's view.
+            continue
+        jobs_by_drive.setdefault(j.drive_id, []).append(j)
+    return [_to_view(d, jobs_by_drive.get(d.id, [])) for d in drives]
 
 
 @router.get("/diagnostic", response_model=DriveDiagnosticResponse)
@@ -87,13 +118,13 @@ async def rescan_drives(
     return DriveRescanResponse(online=online, stale=stale)
 
 
-@router.patch("/{drive_id}", response_model=Drive)
+@router.patch("/{drive_id}", response_model=DriveView)
 async def update_drive(
     drive_id: str,
     req: DriveUpdateRequest,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
-) -> Drive:
+) -> DriveView:
     drive = (await db.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
     if drive is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {drive_id}")
@@ -115,13 +146,14 @@ async def update_drive(
     db.add(drive)
     await db.commit()
     await db.refresh(drive)
-    return drive
+    jobs = list((await db.execute(select(Job).where(col(Job.drive_id) == drive.id))).scalars().all())
+    return _to_view(drive, jobs)
 
 
 @router.delete("/{drive_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_drive(
     drive_id: str,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> None:
     drive = (await db.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
