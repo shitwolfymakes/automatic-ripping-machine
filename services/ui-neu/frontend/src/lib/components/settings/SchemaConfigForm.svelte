@@ -125,23 +125,22 @@
 				<div class="space-y-4">
 					{#each section.fields as field (field.key)}
 						{#if field.key in KEY_CHECK_NAMES}
-							<div class="flex items-end gap-2">
-								<div class="flex-1">
-									<ConfigSchemaField {field} bind:value={values[field.key]} />
-								</div>
-								<button
-									type="button"
-									onclick={() => runKeyCheck(field.key)}
-									disabled={keyCheckRunning[field.key]}
-									class="rounded-lg border border-primary/20 px-3 py-2 text-sm text-gray-700 hover:bg-primary/5 disabled:opacity-50 dark:border-primary/20 dark:text-gray-300 dark:hover:bg-primary/10"
-								>
-									{keyCheckRunning[field.key]
-										? 'Checking...'
-										: field.key === 'makemkv_key'
-											? 'Status'
-											: 'Check'}
-								</button>
-							</div>
+							<ConfigSchemaField {field} bind:value={values[field.key]}>
+								{#snippet action()}
+									<button
+										type="button"
+										onclick={() => runKeyCheck(field.key)}
+										disabled={keyCheckRunning[field.key]}
+										class="shrink-0 rounded-lg border border-primary/20 px-3 py-2 text-sm text-gray-700 hover:bg-primary/5 disabled:opacity-50 dark:border-primary/20 dark:text-gray-300 dark:hover:bg-primary/10"
+									>
+										{keyCheckRunning[field.key]
+											? 'Checking...'
+											: field.key === 'makemkv_key'
+												? 'Status'
+												: 'Check'}
+									</button>
+								{/snippet}
+							</ConfigSchemaField>
 							<div class="text-sm" data-testid="key-check-{field.key}">
 								{#if keyCheckResult[field.key]}
 									{@const result = keyCheckResult[field.key]}
