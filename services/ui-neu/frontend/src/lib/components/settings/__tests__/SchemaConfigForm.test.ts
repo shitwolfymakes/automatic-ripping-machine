@@ -162,17 +162,17 @@ describe('SchemaConfigForm key-check button', () => {
     await waitFor(() => expect(screen.getByTestId('key-check-tmdb_api_key')).toHaveTextContent(/checked/i));
   });
 
-  it('auto-runs the makemkv check on mount', async () => {
-    checkApiKey.mockImplementation((name: string) =>
-      Promise.resolve(
-        name === 'makemkv'
-          ? { name: 'makemkv', status: 'ok', detail: null, checked_at: '2026-09-05T00:00:00Z' }
-          : { name, status: 'ok', detail: null, checked_at: null }
-      )
-    );
+  it('does not run any check on mount', async () => {
     renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
-    await waitFor(() => expect(checkApiKey).toHaveBeenCalledWith('makemkv', undefined));
-    await waitFor(() => expect(screen.getByTestId('key-check-makemkv_key')).toHaveTextContent(/valid/i));
-    expect(screen.getAllByRole('button', { name: /check api key/i }).length).toBeGreaterThan(0);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(checkApiKey).not.toHaveBeenCalled();
+    expect(screen.getByTestId('key-check-makemkv_key')).toHaveTextContent('');
+  });
+
+  it('shows the detail beside Valid when the backend sends one', async () => {
+    checkApiKey.mockResolvedValue({ name: 'makemkv', status: 'ok', detail: 'using the monthly beta key', checked_at: null });
+    renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
+    await fireEvent.click(screen.getAllByRole('button', { name: /check api key/i })[1]);
+    await waitFor(() => expect(screen.getByTestId('key-check-makemkv_key')).toHaveTextContent('Valid, using the monthly beta key'));
   });
 });
