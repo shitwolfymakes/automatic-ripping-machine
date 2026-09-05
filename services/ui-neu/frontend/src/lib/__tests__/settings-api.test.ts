@@ -13,6 +13,7 @@ import {
 	fetchSettings,
 	saveArmConfig,
 	testMetadataKey,
+	checkApiKey,
 	fetchTranscoderPresets,
 	createCustomPreset,
 	fetchTranscoderScheme,
@@ -74,6 +75,21 @@ describe('testMetadataKey (v3 GET /api/metadata/test-key)', () => {
 		const result = await testMetadataKey(undefined, 'omdb');
 		expect(result.success).toBe(false);
 		expect(result.message).toBe('Key is invalid');
+	});
+});
+
+describe('checkApiKey (v3 POST /api/config/keys/{name}/check)', () => {
+	it('POSTs the unsaved value when given', async () => {
+		mockPost.mockResolvedValue({ name: 'tmdb', status: 'ok', detail: null, checked_at: null });
+		const result = await checkApiKey('tmdb', 'unsaved-value');
+		expect(mockPost).toHaveBeenCalledWith('/api/config/keys/tmdb/check', { value: 'unsaved-value' });
+		expect(result.status).toBe('ok');
+	});
+
+	it('POSTs with no value when omitted (probes the stored key)', async () => {
+		mockPost.mockResolvedValue({ name: 'makemkv', status: 'unknown', detail: 'not checked yet', checked_at: null });
+		await checkApiKey('makemkv');
+		expect(mockPost).toHaveBeenCalledWith('/api/config/keys/makemkv/check', { value: undefined });
 	});
 });
 
