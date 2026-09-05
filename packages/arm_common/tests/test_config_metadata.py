@@ -22,9 +22,20 @@ def test_registry_entries_are_well_formed():
         assert (m.enum_values is not None) == (m.type == "enum"), m.key
 
 
+# musicbrainz_user_agent is intentionally absent from CONFIG_FIELD_META (the UI
+# no longer renders it — the backend now hardcodes MUSICBRAINZ_USER_AGENT next to
+# its use). It stays on ConfigUpdateRequest/ConfigView because dropping it would
+# be a wire (OpenAPI) change, out of scope for this pass; the field is simply
+# dormant. See packages/arm_common/arm_common/config_metadata.py.
+_DORMANT_EDITABLE_FIELDS = {"musicbrainz_user_agent"}
+
+
 def test_every_editable_config_field_has_metadata():
     meta = _by_key()
     for field in ConfigUpdateRequest.model_fields:
+        if field in _DORMANT_EDITABLE_FIELDS:
+            assert field not in meta, f"{field} is marked dormant but still in CONFIG_FIELD_META"
+            continue
         assert field in meta, f"{field} editable but missing from CONFIG_FIELD_META"
         assert meta[field].tier in {"operator", "secret"}, field
         assert meta[field].editable is True, field

@@ -4,6 +4,7 @@
 	import { abandonJob, fetchJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { readJobMetadata, videoTypeLabel } from '$lib/utils/job-fields';
+	import { driveLabel } from '$lib/utils/drive-name';
 	import { reviewPhaseBadge } from '$lib/utils/job-status';
 	import CountdownTimer from './CountdownTimer.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
@@ -29,7 +30,6 @@
 	}
 
 	let { job, driveNames, paused = false, manualWaitSeconds = 60, onrefresh, ondismiss }: Props = $props();
-	let driveName = $derived(job?.drive_id ? (driveNames?.[job.drive_id] ?? null) : null);
 
 	// awaiting_review = the timed review gate (Start / countdown); other waiting
 	// statuses (awaiting_user_id / ripped_awaiting_identify) are identify-only.
@@ -264,7 +264,7 @@
 				</h3>
 			</div>
 			<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-				<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{driveName ?? displayJob.drive_id}</span>
+				<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{driveLabel(displayJob.drive_id, driveNames)}</span>
 				<span class="inline-flex items-center gap-1 rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">
 					<DiscTypeIcon disctype={displayJob.disc_type} size="h-3.5 w-3.5" />
 					{discTypeLabel(displayJob.disc_type)}
