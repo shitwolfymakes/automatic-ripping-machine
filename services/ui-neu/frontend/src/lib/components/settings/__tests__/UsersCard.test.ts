@@ -40,15 +40,18 @@ afterEach(() => {
 });
 
 describe('UsersCard', () => {
-	it('renders both fixed rows with role badges', async () => {
+	it('renders the admin row with its badge and the guest access switch', async () => {
 		fetchUsers.mockResolvedValue([admin, guest]);
 		renderComponent(UsersCard, { props: {} });
 
 		expect((await screen.findAllByText('admin')).length).toBeGreaterThan(0);
-		expect(screen.getAllByText('guest').length).toBeGreaterThan(0);
-		// Role badges specifically (uppercase-styled role text)
 		expect(screen.getByRole('button', { name: /change password/i })).toBeInTheDocument();
+		// Guests never sign in, so the guest row is just the access switch: no
+		// username, role badge, status or last-login line.
+		expect(screen.getByText('Guest access')).toBeInTheDocument();
 		expect(screen.getByRole('switch', { name: /guest/i })).toBeInTheDocument();
+		expect(screen.queryByText('Last login: N/A')).toBeNull();
+		expect(screen.getAllByText(/last login/i)).toHaveLength(1);
 	});
 
 	it('admin row opens the change-password slide-over', async () => {
@@ -66,7 +69,7 @@ describe('UsersCard', () => {
 		setUserDisabled.mockResolvedValue({ ...guest, disabled: false });
 		renderComponent(UsersCard, { props: {} });
 
-		await screen.findAllByText('guest');
+		await screen.findByText('Guest access');
 		await fireEvent.click(screen.getByRole('switch', { name: /guest/i }));
 
 		await waitFor(() => expect(setUserDisabled).toHaveBeenCalledWith('guest-1', false));
@@ -80,7 +83,7 @@ describe('UsersCard', () => {
 		setUserDisabled.mockResolvedValue({ ...enabledGuest, disabled: true });
 		renderComponent(UsersCard, { props: {} });
 
-		await screen.findAllByText('guest');
+		await screen.findByText('Guest access');
 		await fireEvent.click(screen.getByRole('switch', { name: /guest/i }));
 
 		await waitFor(() => expect(setUserDisabled).toHaveBeenCalledWith('guest-1', true));
@@ -91,7 +94,7 @@ describe('UsersCard', () => {
 		fetchUsers.mockResolvedValue([admin, guest]);
 		renderComponent(UsersCard, { props: {} });
 
-		await screen.findAllByText('guest');
+		await screen.findByText('Guest access');
 		expect(screen.queryByRole('button', { name: /set password/i })).not.toBeInTheDocument();
 	});
 
@@ -138,12 +141,13 @@ describe('UsersCard', () => {
 		setUserDisabled.mockRejectedValue(new Error('backend unreachable'));
 		renderComponent(UsersCard, { props: {} });
 
-		await screen.findAllByText('guest');
+		await screen.findByText('Guest access');
 		await fireEvent.click(screen.getByRole('switch', { name: /guest/i }));
 
 		expect(await screen.findByText(/backend unreachable/i)).toBeInTheDocument();
-		// The row still reads Disabled — a failed PATCH must not look like a win.
-		expect(screen.getByText('Disabled')).toBeInTheDocument();
+		// The switch still reads Off: a failed PATCH must not look like a win.
+		expect(screen.getByTestId('guest-access-row')).toHaveTextContent('Off');
+		expect(screen.getByRole('switch', { name: /guest/i })).toHaveAttribute('aria-checked', 'false');
 	});
 
 	it('falls back to a generic message when the toggle rejects a non-Error', async () => {
@@ -151,7 +155,7 @@ describe('UsersCard', () => {
 		setUserDisabled.mockRejectedValue('boom');
 		renderComponent(UsersCard, { props: {} });
 
-		await screen.findAllByText('guest');
+		await screen.findByText('Guest access');
 		await fireEvent.click(screen.getByRole('switch', { name: /guest/i }));
 
 		expect(await screen.findByText(/failed to update guest access/i)).toBeInTheDocument();
