@@ -87,10 +87,10 @@ describe('JobRow', () => {
 			expect(getAllByText('Transcode failed').length).toBe(1);             // Transcode column (red, not green)
 		});
 
-		it('shows an em-dash in Transcode when no session', async () => {
+		it('shows a dash in Transcode when no session', async () => {
 			const job = { id: 'job_y', status: 'ripped', title: 'M', disc_type: 'dvd', drive_id: 'd', metadata_json: {}, transcode_progress: null } as any;
 			const { getByText } = renderInTable({ job });
-			expect(getByText('—')).toBeInTheDocument();
+			expect(getByText('-')).toBeInTheDocument();
 		});
 	});
 });

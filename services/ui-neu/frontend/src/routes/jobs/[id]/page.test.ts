@@ -439,11 +439,11 @@ describe('Job detail page (v3)', () => {
 			fingerprints: []
 		} as any);
 		renderComponent(Page);
-		// The track's Transcode cell shows an em-dash (no transcode task yet).
+		// The track's Transcode cell shows a dash (no transcode task yet).
 		// Scope to the Transcode <td> (data-label="Transcode") — other cells also
-		// render "—", so a global getByText('—') is ambiguous.
+		// render "-", so a global getByText('—') is ambiguous.
 		await waitFor(() => expect(screen.getByText('Done')).toBeInTheDocument());
 		const transcodeCell = document.querySelector('td[data-label="Transcode"]');
-		expect(transcodeCell?.textContent?.trim()).toBe('—');
+		expect(transcodeCell?.textContent?.trim()).toBe('-');
 	});
 });

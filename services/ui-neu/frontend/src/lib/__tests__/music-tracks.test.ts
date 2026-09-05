@@ -18,7 +18,7 @@ describe('extractMusicTracks', () => {
 		});
 		expect(out).toEqual([
 			{ number: 1, title: 'Intro', durationLabel: '1:05' },
-			{ number: 2, title: 'Outro', durationLabel: '—' }
+			{ number: 2, title: 'Outro', durationLabel: '-' }
 		]);
 	});
 
@@ -27,8 +27,8 @@ describe('extractMusicTracks', () => {
 		expect(out).toEqual([{ number: 1, title: 'Track 1', durationLabel: '0:01' }]);
 	});
 
-	it('renders sub-second durations as an em-dash, not 0:00', () => {
+	it('renders sub-second durations as a dash, not 0:00', () => {
 		const out = extractMusicTracks({ tracks: [{ title: 'Blip', duration_ms: 0.4 }] });
-		expect(out[0].durationLabel).toBe('—');
+		expect(out[0].durationLabel).toBe('-');
 	});
 });
