@@ -16,12 +16,34 @@ set -euo pipefail
 makemkv_serial_url="https://forum.makemkv.com/forum/viewtopic.php?f=5&t=1053"
 SUPPLIED_KEY="${MAKEMKV_KEY:-${1:-}}"
 
+# Optional internal mirror: when MAKEMKV_MIRROR_URL is set, try
+# $MAKEMKV_MIRROR_URL/beta-key.txt before scraping the forum.
+# MAKEMKV_MIRROR_PASSWORD (optional) is sent as an X-SHARE-PASSWORD header
+# (Filebrowser password-protected shares).
+mirror_key() {
+    local args=(-fsSL)
+    if [[ -n "${MAKEMKV_MIRROR_PASSWORD:-}" ]]; then
+        args+=(-H "X-SHARE-PASSWORD: ${MAKEMKV_MIRROR_PASSWORD}")
+    fi
+    curl "${args[@]}" "${MAKEMKV_MIRROR_URL}/beta-key.txt" | grep -oP 'T-[\w\d@]{66}' | head -n1
+}
+
 if [[ -n "$SUPPLIED_KEY" ]]; then
     echo "update_key: using MAKEMKV_KEY from env"
     KEY="$SUPPLIED_KEY"
 else
-    echo "update_key: scraping monthly beta key from forum"
-    KEY="$(curl -fsSL "$makemkv_serial_url" | grep -oP 'T-[\w\d@]{66}' | head -n1 || true)"
+    KEY=""
+    if [[ -n "${MAKEMKV_MIRROR_URL:-}" ]]; then
+        echo "update_key: fetching monthly beta key from mirror"
+        KEY="$(mirror_key || true)"
+        if [[ -z "$KEY" ]]; then
+            echo "update_key: mirror fetch failed; falling back to forum scrape" >&2
+        fi
+    fi
+    if [[ -z "$KEY" ]]; then
+        echo "update_key: scraping monthly beta key from forum"
+        KEY="$(curl -fsSL "$makemkv_serial_url" | grep -oP 'T-[\w\d@]{66}' | head -n1 || true)"
+    fi
     if [[ -z "$KEY" ]]; then
         echo "update_key: no beta key found in scrape; leaving settings.conf untouched" >&2
         exit 0
