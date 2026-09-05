@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import type { SettingsGroup, ConfigFieldMeta, KeyCheckResponse } from '$lib/types/api.gen';
+		import type { SettingsGroup, ConfigFieldMeta, KeyCheckResponse } from '$lib/types/api.gen';
 	import { saveArmConfig, checkApiKey } from '$lib/api/settings';
 	import { groupBlurb, sectionFields, KEY_CHECK_NAMES } from '$lib/utils/settings-sections';
 	import { formatDateTime } from '$lib/utils/format';
@@ -93,13 +92,6 @@
 		}
 	}
 
-	// The makemkv row reports the ripper's last verdict rather than probing a
-	// live service, so it runs once on mount with no user action needed.
-	onMount(() => {
-		if (group.fields.some((f) => f.key === 'makemkv_key')) {
-			runKeyCheck('makemkv_key');
-		}
-	});
 </script>
 
 <div class="flex flex-col gap-6">
@@ -149,7 +141,7 @@
 													clip-rule="evenodd"
 												/>
 											</svg>
-											Valid{#if result.checked_at} &middot; checked {formatDateTime(result.checked_at)}{/if}
+											Valid{#if result.detail}, {result.detail}{/if}{#if result.checked_at}<span class="mx-1">&middot;</span>checked {formatDateTime(result.checked_at)}{/if}
 										</span>
 									{:else if result?.status === 'invalid'}
 										<span class="flex items-center gap-1.5 text-red-600 dark:text-red-400">
