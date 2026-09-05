@@ -5,6 +5,16 @@
 // caller gets its own subscription lifecycle.
 
 import { fetchJobLog, toLogEntry, type LogEntry } from '$lib/api/logs';
+
+export function sortByTime(list: LogEntry[]): LogEntry[] {
+	return list
+		.map((e, i) => ({ e, i, t: e.timestamp ? Date.parse(e.timestamp) : Number.NaN }))
+		.sort((a, b) => {
+			if (Number.isNaN(a.t) || Number.isNaN(b.t) || a.t === b.t) return a.i - b.i;
+			return a.t - b.t;
+		})
+		.map((x) => x.e);
+}
 import { wsClient, type WSEnvelope } from '$lib/api/ws';
 
 const MAX_LIVE_ENTRIES = 2000;
@@ -30,7 +40,11 @@ export function createJobLog(jobId: string, { limit = 200 }: JobLogOptions = {})
 		error = null;
 		liveArrivedDuringLoad = false;
 		try {
-			const fetched = await fetchJobLog(jobId, limit);
+			// The per-job file is appended in tailer arrival order across the
+			// backend, ripper and transcoder files, so a snapshot interleaves
+			// services out of time order. Sort by timestamp (stable; undated
+			// lines keep their place). Live lines arrive in real time already.
+			const fetched = sortByTime(await fetchJobLog(jobId, limit));
 			entries = liveArrivedDuringLoad ? [...fetched, ...entries] : fetched;
 		} catch (e) {
 			error = e instanceof Error ? e : new Error(String(e));
