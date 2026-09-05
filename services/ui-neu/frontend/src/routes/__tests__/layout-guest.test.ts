@@ -133,6 +133,32 @@ describe("Layout guest gating", () => {
     expect(screen.queryByText("Settings")).not.toBeInTheDocument();
   });
 
+  it("header health dots and the drives count are not links to Settings for guests", async () => {
+    const auth = (await import("$lib/stores/auth")) as unknown as {
+      __setSession: (kind: "admin" | "guest") => void;
+    };
+    auth.__setSession("guest");
+    renderComponent(Layout, { props: { children: childSnippet() } });
+    const settingsLinks = Array.from(document.querySelectorAll('a[href^="/settings"]'));
+    expect(settingsLinks).toHaveLength(0);
+    // The health labels still render, as plain text.
+    expect(screen.getByText("ARM")).toBeInTheDocument();
+    expect(screen.getByText("Key")).toBeInTheDocument();
+    // Transcode is a public page and stays a link.
+    expect(document.querySelector('a[href="/transcoder"]')).not.toBeNull();
+  });
+
+  it("header health dots link to Settings for admin", async () => {
+    const auth = (await import("$lib/stores/auth")) as unknown as {
+      __setSession: (kind: "admin" | "guest") => void;
+    };
+    auth.__setSession("admin");
+    renderComponent(Layout, { props: { children: childSnippet() } });
+    expect(document.querySelector('a[href="/settings#system"]')).not.toBeNull();
+    expect(document.querySelector('a[href^="/settings#"][href*="makemkv"]')).not.toBeNull();
+    expect(document.querySelector('a[href="/settings#drives"]')).not.toBeNull();
+  });
+
   it("hides the quick-actions flyout for guests", async () => {
     const auth = (await import("$lib/stores/auth")) as unknown as {
       __setSession: (kind: "admin" | "guest") => void;
