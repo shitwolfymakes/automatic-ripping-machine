@@ -1,5 +1,5 @@
 """Shared human-readable detail strings for the makemkv key-validity state.
-Read by the test-key endpoint and the system preflight check — keep it in one
+Read by the key-check endpoint and the system preflight check — keep it in one
 place so both surfaces describe a given MakemkvKeyState identically."""
 
 _MAKEMKV_STATE_DETAIL: dict[str, str] = {
