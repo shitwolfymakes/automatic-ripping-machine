@@ -75,6 +75,13 @@
             <p class="text-red-600 dark:text-red-400">Failed to load: {error!.message}</p>
         {/if}
     </div>
+{:else if phase === 'waiting'}
+    <!-- Anti-flicker window: the skeleton is already in flow (space reserved)
+         but invisible, so a fast load fades content in without a jump and a
+         slow one reveals the skeleton without one either. -->
+    <div class="invisible" aria-hidden="true">
+        {@render loadingSlot()}
+    </div>
 {:else if phase === 'loading'}
     <div in:fade|local={fadeIn}>
         {@render loadingSlot()}
