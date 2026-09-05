@@ -764,8 +764,6 @@
 								}} />
 							{/each}
 						</div>
-					{:else if $drives.length === 0}
-						<p class="py-8 text-center text-gray-400">No drives detected.</p>
 					{/if}
 					<DriveLifecycleLists detected={parts.detected} ignored={parts.ignored} onchanged={() => drives.refresh()} />
 				{/if}

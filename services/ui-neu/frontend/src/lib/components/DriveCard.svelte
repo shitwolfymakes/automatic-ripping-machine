@@ -9,7 +9,7 @@
 
 	interface Props {
 		drive?: Drive;
-		onupdate?: () => void;
+		onupdate?: () => void | Promise<void>;
 		sessions?: SessionView[];
 		globalDefaults?: {
 			prescan_cache_mb?: number;
@@ -127,6 +127,9 @@
 	let statusText = $derived(drive ? driveStatusLabel(drive) : '');
 	let isDetached = $derived(statusText === DETACHED_LABEL);
 	let isError = $derived(drive?.status === 'error');
+	let isOfflinePresent = $derived(
+		!isError && !isDetached && drive?.status === 'offline' && drive?.present === true
+	);
 
 	async function startManualRip() {
 		if (!drive || triggering) return;
@@ -158,15 +161,19 @@
 	}
 
 	let unenrolling = $state(false);
+	let unenrollError = $state<string | null>(null);
 	async function handleUnenroll() {
 		if (!drive) return;
+		unenrollError = null;
 		const name = drive.display_name || drive.model || drive.hostname;
-		if (!confirm(`Unenroll ${name}? Its ripper container is stopped and removed; the drive will reappear under Detected on the next rescan.`)) return;
+		if (!confirm(`Unenroll ${name}? Its ripper container is stopped and removed. If the drive is still connected it reappears under Detected on the next scan.`)) return;
 		unenrolling = true;
 		try {
 			await unenrollDrive(drive.id);
-			onupdate?.();
-		} catch {
+			await onupdate?.();
+		} catch (e) {
+			unenrollError = e instanceof Error ? e.message : 'Unenroll failed';
+		} finally {
 			unenrolling = false;
 		}
 	}
@@ -238,10 +245,12 @@
 			<h3 class="truncate font-semibold text-gray-900 dark:text-white">
 				{drive.display_name || drive.device_path || `Drive ${drive.id}`}
 			</h3>
-			{#if isDetached}
-				<span class="flex-shrink-0 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">{statusText}</span>
-			{:else if isError}
+			{#if isError}
 				<span class="flex-shrink-0 text-[10px] font-medium text-red-600 dark:text-red-400" title={statusText}>{statusText}</span>
+			{:else if isDetached}
+				<span class="flex-shrink-0 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">{statusText}</span>
+			{:else if isOfflinePresent}
+				<span class="flex-shrink-0 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400" data-testid="drive-status-label">{statusText}</span>
 			{:else if !editing}
 				<button
 					onclick={startEdit}
@@ -391,6 +400,10 @@
 
 	{#if manualError}
 		<p class="mt-1 text-[11px] text-red-600 dark:text-red-400" data-testid="drive-manual-error">{manualError}</p>
+	{/if}
+
+	{#if unenrollError}
+		<p class="mt-1 text-[11px] text-red-600 dark:text-red-400" data-testid="drive-unenroll-error">{unenrollError}</p>
 	{/if}
 
 	<!-- Current rip -->
