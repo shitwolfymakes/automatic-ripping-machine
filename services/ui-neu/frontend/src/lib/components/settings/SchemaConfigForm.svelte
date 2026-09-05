@@ -136,7 +136,7 @@
 										{keyCheckRunning[field.key]
 											? 'Checking...'
 											: field.key === 'makemkv_key'
-												? 'Status'
+												? 'Check MakeMKV key'
 												: 'Check'}
 									</button>
 								{/snippet}
