@@ -1522,6 +1522,41 @@ export type JobView = {
 };
 
 /**
+ * KeyCheckRequest
+ *
+ * Body for POST /api/config/keys/{name}/check. `value` is an unsaved
+ * candidate key to probe; when omitted (None), the stored key is used.
+ */
+export type KeyCheckRequest = {
+    /**
+     * Value
+     */
+    value?: string | null;
+};
+
+/**
+ * KeyCheckResponse
+ */
+export type KeyCheckResponse = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Status
+     */
+    status: 'ok' | 'invalid' | 'missing' | 'error' | 'unknown';
+    /**
+     * Detail
+     */
+    detail?: string | null;
+    /**
+     * Checked At
+     */
+    checked_at?: string | null;
+};
+
+/**
  * KeydbState
  *
  * Outcome of the ripper's community-keydb fetch (`update_keydb.sh`),
@@ -6287,6 +6322,42 @@ export type UpdateConfigApiConfigPatchResponses = {
 };
 
 export type UpdateConfigApiConfigPatchResponse = UpdateConfigApiConfigPatchResponses[keyof UpdateConfigApiConfigPatchResponses];
+
+export type CheckKeyApiConfigKeysNameCheckPostData = {
+    body: KeyCheckRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Name
+         */
+        name: 'tmdb' | 'omdb' | 'tvdb' | 'makemkv';
+    };
+    query?: never;
+    url: '/api/config/keys/{name}/check';
+};
+
+export type CheckKeyApiConfigKeysNameCheckPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CheckKeyApiConfigKeysNameCheckPostError = CheckKeyApiConfigKeysNameCheckPostErrors[keyof CheckKeyApiConfigKeysNameCheckPostErrors];
+
+export type CheckKeyApiConfigKeysNameCheckPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: KeyCheckResponse;
+};
+
+export type CheckKeyApiConfigKeysNameCheckPostResponse = CheckKeyApiConfigKeysNameCheckPostResponses[keyof CheckKeyApiConfigKeysNameCheckPostResponses];
 
 export type GetDiagnosticsApiDiagnosticsGetData = {
     body?: never;
