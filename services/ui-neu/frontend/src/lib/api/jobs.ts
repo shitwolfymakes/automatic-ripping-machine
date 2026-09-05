@@ -215,8 +215,9 @@ export function fetchMusicDetail(releaseId: string): Promise<MetadataReleaseDeta
 // ---------------------------------------------------------------------------
 
 // v3 per-job naming preview: { job_output_dir, job_output_name, items[] }.
-export function fetchNamingPreview(jobId: string): Promise<JobNamingPreviewResponse> {
-	return apiFetch<JobNamingPreviewResponse>(`/api/jobs/${jobId}/naming-preview`, {
+export function fetchNamingPreview(jobId: string, sessionId?: string): Promise<JobNamingPreviewResponse> {
+	const qs = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : '';
+	return apiFetch<JobNamingPreviewResponse>(`/api/jobs/${jobId}/naming-preview${qs}`, {
 		signal: AbortSignal.timeout(5000)
 	});
 }
