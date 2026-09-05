@@ -4876,7 +4876,14 @@ export type RescanDrivesApiDrivesRescanPostData = {
         authorization?: string | null;
     };
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Force
+         *
+         * Prune detected drives that are not present right now (admin only).
+         */
+        force?: boolean;
+    };
     url: '/api/drives/rescan';
 };
 

@@ -12,7 +12,7 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 import pytest  # noqa: E402
 
 from arm_backend import drive_scanner as mod  # noqa: E402
-from arm_backend.drive_scanner import DriveScanner  # noqa: E402
+from arm_backend.drive_scanner import DriveScanner, ScanSummary  # noqa: E402
 from arm_common import Config, DriveLifecycle  # noqa: E402
 
 from tests._fakes import FakeSession, _table_for_stmt  # noqa: E402
@@ -61,6 +61,7 @@ async def test_run_reads_interval_from_config_each_tick_and_survives_errors(monk
     scanner = DriveScanner(lambda: db, sysfs_root=t.sysfs, disk_root=t.disk)
     sleeps: list[float] = []
     calls = {"n": 0}
+    last_error_after_sleep: list[str | None] = []
 
     async def fake_sleep(s: float) -> None:
         sleeps.append(s)
@@ -81,6 +82,7 @@ async def test_run_reads_interval_from_config_each_tick_and_survives_errors(monk
     async def sleep_then_retune(s: float) -> None:
         if len(sleeps) == 1:
             db.rows["config"][0].drive_scan_interval_seconds = 9
+        last_error_after_sleep.append(scanner.last_error)
         await orig(s)
 
     monkeypatch.setattr(mod.asyncio, "sleep", sleep_then_retune)
@@ -92,6 +94,13 @@ async def test_run_reads_interval_from_config_each_tick_and_survives_errors(monk
     # tick2 reads 5, scan raises, sleep#2 retunes to 9 THEN appends 5;
     # tick3 reads 9, sleep#3 appends 9 and raises Cancelled.
     assert sleeps == [5, 5, 9]
+    # Ruling B: the failing tick (#2) sets last_error to the exception text;
+    # sleep is called right after run()'s except block, so
+    # last_error_after_sleep[1] captures that state.
+    assert last_error_after_sleep[1] is not None and "boom" in last_error_after_sleep[1]
+    # The next good tick (#3) clears last_error and sets last_scan_at.
+    assert scanner.last_error is None
+    assert scanner.last_scan_at is not None
 
 
 async def test_concurrent_scan_once_calls_serialize_to_one_row(monkeypatch, tmp_path: Path) -> None:
@@ -144,3 +153,20 @@ async def test_run_propagates_cancellederror_raised_inside_the_scan(monkeypatch,
     monkeypatch.setattr(scanner, "scan_once", cancelled_scan)
     with pytest.raises(asyncio.CancelledError):
         await scanner.run()
+
+
+async def test_scan_once_prune_now_uses_a_zero_day_window(monkeypatch, tmp_path: Path) -> None:
+    """Force Rescan (POST /rescan?force=true) drops the prune window to 0
+    days regardless of the configured drive_detected_prune_days."""
+    seen = {}
+
+    async def fake_reconcile(session, scanned, *, now, prune_days):
+        seen["prune_days"] = prune_days
+        return ScanSummary(0, 0, 0, 0, 0)
+
+    monkeypatch.setattr(mod, "reconcile_drives", fake_reconcile)
+    db = _db(prune=7)
+    scanner = DriveScanner(lambda: db, sysfs_root=tmp_path, disk_root=tmp_path)
+    await scanner.scan_once(db, prune_now=True)
+    assert seen["prune_days"] == 0
+    assert scanner.last_scan_at is not None and scanner.last_error is None
