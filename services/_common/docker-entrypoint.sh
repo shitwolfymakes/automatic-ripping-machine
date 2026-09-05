@@ -159,10 +159,18 @@ if [[ -f /etc/ssl/arm/arm-ca.crt ]]; then
     update-ca-certificates >/dev/null
 fi
 
-if ! getent group arm >/dev/null; then
-    groupadd --gid "${PGID}" arm
-else
-    groupmod --gid "${PGID}" arm
+# Give the arm user primary gid PGID. If that gid ALREADY exists in the image
+# (gid 100 `users` — a common primary gid on SUSE/Synology hosts — or any
+# Debian system gid), adopt the existing group instead: groupadd/groupmod
+# refuse a duplicate gid and the service would crash-loop. useradd/usermod
+# below take the numeric gid directly, whatever group name owns it. Mirrors
+# the CDROM_GID/RENDER_GID adopt-by-gid handling further down.
+if ! getent group "${PGID}" >/dev/null; then
+    if getent group arm >/dev/null; then
+        groupmod --gid "${PGID}" arm
+    else
+        groupadd --gid "${PGID}" arm
+    fi
 fi
 
 if ! id -u arm >/dev/null 2>&1; then
