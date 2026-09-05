@@ -191,7 +191,7 @@ async def makemkv_key_status(
 ) -> None:
     """A ripper reports its disc-free makemkv probe outcome. Global fact —
     written to the Config singleton (last writer wins across multiple rippers,
-    by design). test-key / preflight / config-view read it back."""
+    by design). the key check, preflight and config view read it back."""
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     if cfg is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="config singleton missing")

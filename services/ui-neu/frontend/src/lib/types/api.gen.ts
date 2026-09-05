@@ -1356,6 +1356,41 @@ export type JobView = {
 };
 
 /**
+ * KeyCheckRequest
+ *
+ * Body for POST /api/config/keys/{name}/check. `value` is an unsaved
+ * candidate key to probe; when omitted (None), the stored key is used.
+ */
+export type KeyCheckRequest = {
+    /**
+     * Value
+     */
+    value?: string | null;
+};
+
+/**
+ * KeyCheckResponse
+ */
+export type KeyCheckResponse = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Status
+     */
+    status: 'ok' | 'invalid' | 'missing' | 'error' | 'unknown';
+    /**
+     * Detail
+     */
+    detail?: string | null;
+    /**
+     * Checked At
+     */
+    checked_at?: string | null;
+};
+
+/**
  * KeydbState
  *
  * Outcome of the ripper's community-keydb fetch (`update_keydb.sh`),
@@ -1427,7 +1462,7 @@ export type LoginResponse = {
  * MakemkvKeyState
  *
  * Outcome of the ripper's disc-free `makemkvcon info disc:9999` probe.
- * Stored on the Config singleton and read by test-key / preflight / config view.
+ * Stored on the Config singleton and read by the key check, preflight and config view.
  *
  * VALID                   — clean probe, key accepted.
  * UNREGISTERED_OR_EXPIRED — MSG:5052/5055 (evaluation expired / no valid key).
@@ -1570,28 +1605,6 @@ export type MetadataCandidate = {
      * Track Count
      */
     track_count?: number | null;
-};
-
-/**
- * MetadataKeyTestResponse
- */
-export type MetadataKeyTestResponse = {
-    /**
-     * Provider
-     */
-    provider: 'omdb' | 'tmdb' | 'tvdb' | 'makemkv';
-    /**
-     * Valid
-     */
-    valid: boolean | null;
-    /**
-     * Detail
-     */
-    detail?: string | null;
-    /**
-     * Checked At
-     */
-    checked_at?: string | null;
 };
 
 /**
@@ -5884,6 +5897,42 @@ export type UpdateConfigApiConfigPatchResponses = {
 
 export type UpdateConfigApiConfigPatchResponse = UpdateConfigApiConfigPatchResponses[keyof UpdateConfigApiConfigPatchResponses];
 
+export type CheckKeyApiConfigKeysNameCheckPostData = {
+    body: KeyCheckRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Name
+         */
+        name: 'tmdb' | 'omdb' | 'tvdb' | 'makemkv';
+    };
+    query?: never;
+    url: '/api/config/keys/{name}/check';
+};
+
+export type CheckKeyApiConfigKeysNameCheckPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CheckKeyApiConfigKeysNameCheckPostError = CheckKeyApiConfigKeysNameCheckPostErrors[keyof CheckKeyApiConfigKeysNameCheckPostErrors];
+
+export type CheckKeyApiConfigKeysNameCheckPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: KeyCheckResponse;
+};
+
+export type CheckKeyApiConfigKeysNameCheckPostResponse = CheckKeyApiConfigKeysNameCheckPostResponses[keyof CheckKeyApiConfigKeysNameCheckPostResponses];
+
 export type GetDiagnosticsApiDiagnosticsGetData = {
     body?: never;
     headers?: {
@@ -5914,42 +5963,6 @@ export type GetDiagnosticsApiDiagnosticsGetResponses = {
 };
 
 export type GetDiagnosticsApiDiagnosticsGetResponse = GetDiagnosticsApiDiagnosticsGetResponses[keyof GetDiagnosticsApiDiagnosticsGetResponses];
-
-export type TestKeyApiMetadataTestKeyGetData = {
-    body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
-    path?: never;
-    query: {
-        /**
-         * Provider
-         */
-        provider: 'omdb' | 'tmdb' | 'tvdb' | 'makemkv';
-    };
-    url: '/api/metadata/test-key';
-};
-
-export type TestKeyApiMetadataTestKeyGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type TestKeyApiMetadataTestKeyGetError = TestKeyApiMetadataTestKeyGetErrors[keyof TestKeyApiMetadataTestKeyGetErrors];
-
-export type TestKeyApiMetadataTestKeyGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: MetadataKeyTestResponse;
-};
-
-export type TestKeyApiMetadataTestKeyGetResponse = TestKeyApiMetadataTestKeyGetResponses[keyof TestKeyApiMetadataTestKeyGetResponses];
 
 export type SearchMetadataApiMetadataSearchGetData = {
     body?: never;

@@ -87,6 +87,28 @@
 
 	let activeTab = $state<Tab>(parseHash());
 
+	// Deep link: `#<tab>/<field key>` (e.g. the header's Key dot points at
+	// #Metadata/makemkv_key). The field is scrolled into view, focused and
+	// briefly highlighted once its tab has rendered.
+	function parseHashField(): string | null {
+		if (typeof window === 'undefined') return null;
+		const part = window.location.hash.replace('#', '').split('/')[1];
+		return part ? decodeURIComponent(part) : null;
+	}
+	let pendingField = $state<string | null>(parseHashField());
+
+	$effect(() => {
+		const key = pendingField;
+		if (!key || !settings) return;
+		const el = document.getElementById(`setting-${key}`);
+		if (!el) return;
+		pendingField = null;
+		el.scrollIntoView({ block: 'center' });
+		el.querySelector<HTMLElement>('input, select, textarea')?.focus({ preventScroll: true });
+		el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+		setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 1600);
+	});
+
 	// --- Drives polling store ---
 	const drives = createPollingStore(fetchDrives, [] as Drive[], 10000);
 	const driveError = drives.error;
@@ -201,6 +223,7 @@
 			}
 			const tab = parseHash();
 			activeTab = tab;
+			pendingField = parseHashField();
 			if (tab === 'appearance') loadCacheStats();
 			if (tab === 'drives') loadDriveSessions();
 			// Reset scroll to top when switching tabs

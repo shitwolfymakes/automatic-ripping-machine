@@ -12,7 +12,7 @@ import { get, post, patch } from '$lib/api/client';
 import {
 	fetchSettings,
 	saveArmConfig,
-	testMetadataKey,
+	checkApiKey,
 	fetchTranscoderPresets,
 	createCustomPreset,
 	fetchTranscoderScheme,
@@ -61,19 +61,18 @@ describe('saveArmConfig', () => {
 	});
 });
 
-describe('testMetadataKey (v3 GET /api/metadata/test-key)', () => {
-	it('GETs test-key with the provider query and adapts the response', async () => {
-		mockGet.mockResolvedValue({ provider: 'tmdb', valid: true, detail: 'ok' });
-		const result = await testMetadataKey('ignored-inline-key', 'tmdb');
-		expect(mockGet).toHaveBeenCalledWith('/api/metadata/test-key?provider=tmdb');
-		expect(result).toEqual({ success: true, message: 'ok', provider: 'tmdb' });
+describe('checkApiKey (v3 POST /api/config/keys/{name}/check)', () => {
+	it('POSTs the unsaved value when given', async () => {
+		mockPost.mockResolvedValue({ name: 'tmdb', status: 'ok', detail: null, checked_at: null });
+		const result = await checkApiKey('tmdb', 'unsaved-value');
+		expect(mockPost).toHaveBeenCalledWith('/api/config/keys/tmdb/check', { value: 'unsaved-value' });
+		expect(result.status).toBe('ok');
 	});
 
-	it('maps valid=false to success=false', async () => {
-		mockGet.mockResolvedValue({ provider: 'omdb', valid: false, detail: null });
-		const result = await testMetadataKey(undefined, 'omdb');
-		expect(result.success).toBe(false);
-		expect(result.message).toBe('Key is invalid');
+	it('POSTs with no value when omitted (probes the stored key)', async () => {
+		mockPost.mockResolvedValue({ name: 'makemkv', status: 'unknown', detail: 'not checked yet', checked_at: null });
+		await checkApiKey('makemkv');
+		expect(mockPost).toHaveBeenCalledWith('/api/config/keys/makemkv/check', { value: undefined });
 	});
 });
 
