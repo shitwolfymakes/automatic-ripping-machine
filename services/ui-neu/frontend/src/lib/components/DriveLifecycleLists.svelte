@@ -32,7 +32,7 @@
 		<span class="font-medium text-gray-900 dark:text-white">{d.model ?? d.hostname}</span>
 		<span class={serial.warn ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'}>{serial.text}</span>
 		<code class="text-xs text-gray-500 dark:text-gray-400">{d.device_path}</code>
-		<span class="text-xs text-gray-400">{d.last_seen_at ? formatDateTime(d.last_seen_at) : '—'}</span>
+		<span class="text-xs text-gray-400">{d.last_seen_at ? formatDateTime(d.last_seen_at) : '-'}</span>
 		<span class="ml-auto flex gap-2">
 			{#if ignoredRow}
 				<button data-testid={`unignore-${d.id}`} disabled={busy === d.id} onclick={() => run(d.id, () => unignoreDrive(d.id))} class="{rowBtn} border border-primary/20 text-primary-text hover:bg-primary/10 dark:text-primary-text-dark">Un-ignore</button>
@@ -44,13 +44,13 @@
 	</div>
 {/snippet}
 
-<div class="space-y-3">
+<div class="space-y-3 rounded-lg border border-primary/20 bg-surface p-3 shadow-xs dark:border-primary/20 dark:bg-surface-dark" data-testid="drive-lifecycle-panel">
 	<h3 class="text-sm font-semibold text-gray-900 dark:text-white">Detected</h3>
 	{#if error}
 		<p data-testid="lifecycle-error" class="text-xs text-red-600 dark:text-red-400">{error}</p>
 	{/if}
 	{#if detected.length === 0}
-		<p data-testid="detected-empty" class="text-sm text-gray-400">No unenrolled drives. Plug one in — it appears here on the next scan.</p>
+		<p data-testid="detected-empty" class="text-sm text-gray-400">No unenrolled drives. Plug one in and it appears here on the next scan.</p>
 	{:else}
 		<div class="space-y-2">
 			{#each detected as d (d.id)}{@render row(d, false)}{/each}

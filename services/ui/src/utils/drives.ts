@@ -19,8 +19,8 @@ export function isRipping(d: DriveView): boolean {
   return d.status === 'ripping' || d.current_job?.status === 'ripping'
 }
 
-export const DETACHED_LABEL = '○ detached — reconnect the drive'
-export const NO_SERIAL_LABEL = 'no serial — identified by port'
+export const DETACHED_LABEL = '○ detached: reconnect the drive'
+export const NO_SERIAL_LABEL = 'no serial, identified by port'
 
 export function driveStatusLabel(d: DriveView): string {
   if (d.status === 'error') return d.last_error ? `error: ${d.last_error}` : 'error'

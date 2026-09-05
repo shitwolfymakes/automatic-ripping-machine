@@ -108,7 +108,7 @@ def test_diagnostic_reports_drives(signing_key: bytes) -> None:
     assert by_id["drv_stal000000000000000000002"]["healthy"] is False
     assert by_id["drv_stal000000000000000000002"]["notes"]
     assert "drive scanner is not running" in body["system"]
-    assert "ripper manager is not running — enroll is unavailable" in body["system"]
+    assert "ripper manager is not running: enroll is unavailable" in body["system"]
 
 
 def test_rescan_counts_online_and_stale(signing_key: bytes) -> None:

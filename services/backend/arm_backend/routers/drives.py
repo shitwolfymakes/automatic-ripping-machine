@@ -33,7 +33,7 @@ router = APIRouter(prefix="/api/drives", tags=["drives"])
 # operator-facing health view that shouldn't flap on a single missed heartbeat.
 _STALE_AFTER = timedelta(minutes=5)
 
-_PORT_NOTE = "no by-id link — identified by port; a replug on another port creates a new drive"
+_PORT_NOTE = "no by-id link, identified by port: a replug on another port creates a new drive"
 
 
 def _aware(dt: datetime) -> datetime:
@@ -105,14 +105,14 @@ async def drive_diagnostic(
             elif now - _aware(d.media_status_at) > _STALE_AFTER:
                 notes.append("media-status heartbeat is stale")
             if d.status is DriveStatus.OFFLINE:
-                notes.append("drive is detached — reconnect it" if not d.present else "ripper heartbeat is stale")
+                notes.append("drive is detached: reconnect it" if not d.present else "ripper heartbeat is stale")
             elif d.status is DriveStatus.ERROR:
                 notes.append(f"error: {d.last_error or 'unknown'}")
             if manager is not None:
                 state, current = statuses[d.id]
                 if state == "missing":
                     container = "missing"
-                    notes.append("no ripper container — restart the backend or re-enroll")
+                    notes.append("no ripper container: restart the backend or re-enroll")
                 elif state == "unknown":
                     container = "unknown"
                     notes.append("cannot inspect the ripper container")
@@ -121,7 +121,7 @@ async def drive_diagnostic(
                     notes.append("ripper container is not running")
                 elif current is False:
                     container = "stale-image"
-                    notes.append("ripper runs an older image — it is recreated at the next backend restart while idle")
+                    notes.append("ripper runs an older image: it is recreated at the next backend restart while idle")
                 else:
                     container = "running"
             healthy = not notes
@@ -129,7 +129,7 @@ async def drive_diagnostic(
             if not d.present:
                 seen = f"since {_aware(d.last_seen_at):%Y-%m-%d %H:%M} UTC" if d.last_seen_at else ""
                 notes.append(f"not connected {seen}".rstrip())
-            notes.append("not enrolled — enroll it on the Drives page to rip with it")
+            notes.append("not enrolled: enroll it on the Drives page to rip with it")
             healthy = d.present
         else:
             notes.append("ignored")
@@ -165,11 +165,11 @@ async def drive_diagnostic(
         if scanner.last_scan_at is not None:
             age = int((now - _aware(scanner.last_scan_at)).total_seconds())
             if age > 3 * interval:
-                system.append(f"last scan was {age}s ago — the scanner may be stuck")
+                system.append(f"last scan was {age}s ago: the scanner may be stuck")
         if not (Path(scanner.disk_root) / "by-id").is_dir():
-            system.append("/host-disk/by-id is not mounted — drives cannot be identified")
+            system.append("/host-disk/by-id is not mounted: drives cannot be identified")
     if manager is None:
-        system.append("ripper manager is not running — enroll is unavailable")
+        system.append("ripper manager is not running: enroll is unavailable")
     elif not manager.host_paths_set():
         system.append("ripper manager disabled: ARM_HOST_*_PATH not set")
     else:
