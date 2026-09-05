@@ -12,7 +12,6 @@ import { get, post, patch } from '$lib/api/client';
 import {
 	fetchSettings,
 	saveArmConfig,
-	testMetadataKey,
 	checkApiKey,
 	fetchTranscoderPresets,
 	createCustomPreset,
@@ -59,22 +58,6 @@ describe('saveArmConfig', () => {
 		const result = await saveArmConfig({ tmdb_api_key: 'xyz' });
 		expect(mockPatch).toHaveBeenCalledWith('/api/config', { tmdb_api_key: 'xyz' });
 		expect(result.success).toBe(true);
-	});
-});
-
-describe('testMetadataKey (v3 GET /api/metadata/test-key)', () => {
-	it('GETs test-key with the provider query and adapts the response', async () => {
-		mockGet.mockResolvedValue({ provider: 'tmdb', valid: true, detail: 'ok' });
-		const result = await testMetadataKey('ignored-inline-key', 'tmdb');
-		expect(mockGet).toHaveBeenCalledWith('/api/metadata/test-key?provider=tmdb');
-		expect(result).toEqual({ success: true, message: 'ok', provider: 'tmdb' });
-	});
-
-	it('maps valid=false to success=false', async () => {
-		mockGet.mockResolvedValue({ provider: 'omdb', valid: false, detail: null });
-		const result = await testMetadataKey(undefined, 'omdb');
-		expect(result.success).toBe(false);
-		expect(result.message).toBe('Key is invalid');
 	});
 });
 

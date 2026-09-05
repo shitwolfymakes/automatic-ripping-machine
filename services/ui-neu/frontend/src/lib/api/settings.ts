@@ -14,8 +14,7 @@ import type {
 	ConfigView,
 	ConfigUpdateRequest,
 	SettingsSchemaResponse,
-	MetadataKeyTestResponse,
-	KeyCheckResponse,
+		KeyCheckResponse,
 	TranscodePresetView,
 	TranscodePresetCreateRequest
 } from '$lib/types/api.gen';
@@ -96,30 +95,10 @@ export async function saveArmConfig(
 }
 
 // ---------------------------------------------------------------------------
-// Metadata key test — EXISTS in v3 (GET /api/metadata/test-key).
-// v3 tests the STORED key for a provider; it takes only `provider` (no inline
-// key). The `key` arg is kept in the signature for call-site stability but is
-// not sent. The BFF returned { success, message, provider }; adapt the v3
-// MetadataKeyTestResponse ({ provider, valid, detail }) to that shape.
-// ---------------------------------------------------------------------------
-export async function testMetadataKey(
-	_key?: string,
-	provider?: string
-): Promise<{ success: boolean; message: string; provider: string }> {
-	const prov = provider ?? '';
-	const res = await get<MetadataKeyTestResponse>(`/api/metadata/test-key?provider=${encodeURIComponent(prov)}`);
-	return {
-		success: res.valid === true,
-		message: res.detail ?? (res.valid ? 'Key is valid' : 'Key is invalid'),
-		provider: res.provider
-	};
-}
-
-// ---------------------------------------------------------------------------
-// Per-key API key check — EXISTS in v3 (POST /api/config/keys/{name}/check).
-// Distinct from testMetadataKey above: this probes a specific provider's key,
-// optionally an unsaved candidate value, and returns the richer tri-state
-// KeyCheckResponse (ok/invalid/missing/error/unknown) SchemaConfigForm renders.
+// Per-key API key check (POST /api/config/keys/{name}/check): probes one
+// provider's key, optionally an unsaved candidate value, and returns the
+// tri-state KeyCheckResponse (ok/invalid/missing/error/unknown) that
+// SchemaConfigForm renders.
 // ---------------------------------------------------------------------------
 export function checkApiKey(
 	name: 'tmdb' | 'omdb' | 'tvdb' | 'makemkv',
