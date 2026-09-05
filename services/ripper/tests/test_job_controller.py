@@ -382,6 +382,7 @@ async def test_rip_start_ws_command_wakes_review_waiter():
 
     assert event.is_set()
 
+
 # --- abandon gives the disc back (user report: abandon left the disc seated) ----
 
 
