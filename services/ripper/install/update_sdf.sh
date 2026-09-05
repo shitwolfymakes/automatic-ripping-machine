@@ -18,6 +18,18 @@
 # by arm_ripper/makemkv_sdf.py.
 set -euo pipefail
 
+# Optional internal-mirror seam (see mirror_fetch.sh). Sourced from the script's
+# own directory so it works from any cwd; absent file → no mirror, upstream only.
+_mirror_seam="$(dirname "${BASH_SOURCE[0]}")/mirror_fetch.sh"
+if [[ -r "$_mirror_seam" ]]; then
+    # shellcheck disable=SC1090,SC1091  # resolved at runtime, next to this script
+    source "$_mirror_seam"
+else
+    mirror_url_for() { :; }
+    mirror_curl_args() { :; }
+    mirror_is_mirror_url() { return 1; }
+fi
+
 SDF_URL_PRIMARY="https://www.makemkv.com/svq/sdf.bin"
 SDF_URL_MIRROR="https://www.makemkv.info/svq/sdf.bin"
 MAKEMKV_DIR="${HOME:-/home/arm}/.MakeMKV"
@@ -56,7 +68,13 @@ trap 'rm -f "$TMP"' EXIT
 
 download_one() {
     local url="$1"
-    curl -fsSL --connect-timeout "$CURL_CONNECT_TIMEOUT" --max-time "$CURL_MAX_TIME" -o "$TMP" "$url"
+    local args=(-fsSL --connect-timeout "$CURL_CONNECT_TIMEOUT" --max-time "$CURL_MAX_TIME")
+    # Share password goes to the mirror only — never to an upstream host.
+    if mirror_is_mirror_url "$url"; then
+        local extra
+        while IFS= read -r extra; do args+=("$extra"); done < <(mirror_curl_args)
+    fi
+    curl "${args[@]}" -o "$TMP" "$url"
 }
 
 valid_sdf() {
@@ -70,8 +88,13 @@ valid_sdf() {
     return 0
 }
 
+# Upstream first; the internal mirror (when configured) is the last resort.
+SDF_URLS=("$SDF_URL_PRIMARY" "$SDF_URL_MIRROR")
+sdf_internal_mirror="$(mirror_url_for sdf.bin)"
+[[ -n "$sdf_internal_mirror" ]] && SDF_URLS+=("$sdf_internal_mirror")
+
 downloaded=false
-for url in "$SDF_URL_PRIMARY" "$SDF_URL_MIRROR"; do
+for url in "${SDF_URLS[@]}"; do
     if download_one "$url" && valid_sdf; then
         downloaded=true
         break
