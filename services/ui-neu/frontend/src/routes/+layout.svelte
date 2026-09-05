@@ -223,7 +223,7 @@
 						<div class="h-2 w-2 shrink-0 rounded-full {$dashboard.transcoder_online && ($dashboard.transcoder_stats?.worker_running ?? true) ? 'bg-green-500' : $dashboard.transcoder_online ? 'bg-yellow-500' : 'bg-gray-400'}"></div>
 						<span class="text-gray-700 dark:text-gray-200">Transcode</span>
 					</a>
-					<a href="/settings#ripping/makemkv" class="flex items-center gap-1.5 hover:opacity-75 transition-opacity"
+					<a href="/settings#Metadata/makemkv_key" class="flex items-center gap-1.5 hover:opacity-75 transition-opacity"
 						title={$dashboard.makemkv_key_valid === true
 							? `MakeMKV key valid${$dashboard.makemkv_key_checked_at ? ' - checked ' + new Date($dashboard.makemkv_key_checked_at).toLocaleString() : ''}`
 							: $dashboard.makemkv_key_valid === false

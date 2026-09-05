@@ -46,7 +46,7 @@
 		},
 		{
 			label: 'Key',
-			href: '/settings#ripping/makemkv',
+			href: '/settings#Metadata/makemkv_key',
 			ok: $dashboard.makemkv_key_valid === true,
 			dot: $dashboard.makemkv_key_valid === true ? 'bg-green-500' : 'bg-red-500'
 		}
