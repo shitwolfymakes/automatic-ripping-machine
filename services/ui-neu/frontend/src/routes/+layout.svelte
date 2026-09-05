@@ -214,19 +214,19 @@
 			<div class="hidden lg:flex items-center gap-3 text-sm">
 				<!-- Service health dots -->
 				<div class="flex items-center gap-3">
-					<a href="/settings#system" class="flex items-center gap-1.5 hover:opacity-75 transition-opacity">
+					<svelte:element this={$isGuest ? 'span' : 'a'} href={$isGuest ? undefined : '/settings#system'} class="flex items-center gap-1.5 transition-opacity {$isGuest ? '' : 'hover:opacity-75'}">
 						<div class="h-2 w-2 shrink-0 rounded-full {$dashboard.arm_online ? 'bg-green-500' : 'bg-red-500'}"></div>
 						<span class="text-gray-700 dark:text-gray-200">ARM</span>
-					</a>
-					<a href="/settings#system" class="flex items-center gap-1.5 hover:opacity-75 transition-opacity">
+					</svelte:element>
+					<svelte:element this={$isGuest ? 'span' : 'a'} href={$isGuest ? undefined : '/settings#system'} class="flex items-center gap-1.5 transition-opacity {$isGuest ? '' : 'hover:opacity-75'}">
 						<div class="h-2 w-2 shrink-0 rounded-full {$dashboard.db_available ? 'bg-green-500' : 'bg-yellow-500'}"></div>
 						<span class="text-gray-700 dark:text-gray-200">DB</span>
-					</a>
-					<a href="/transcoder" class="flex items-center gap-1.5 hover:opacity-75 transition-opacity">
+					</svelte:element>
+					<a href="/transcoder" class="flex items-center gap-1.5 transition-opacity {$isGuest ? '' : 'hover:opacity-75'}">
 						<div class="h-2 w-2 shrink-0 rounded-full {$dashboard.transcoder_online && ($dashboard.transcoder_stats?.worker_running ?? true) ? 'bg-green-500' : $dashboard.transcoder_online ? 'bg-yellow-500' : 'bg-gray-400'}"></div>
 						<span class="text-gray-700 dark:text-gray-200">Transcode</span>
 					</a>
-					<a href="/settings#ripping/makemkv" class="flex items-center gap-1.5 hover:opacity-75 transition-opacity"
+					<svelte:element this={$isGuest ? 'span' : 'a'} href={$isGuest ? undefined : '/settings#ripping/makemkv'} class="flex items-center gap-1.5 transition-opacity {$isGuest ? '' : 'hover:opacity-75'}"
 						title={$dashboard.makemkv_key_valid === true
 							? `MakeMKV key valid${$dashboard.makemkv_key_checked_at ? ' - checked ' + new Date($dashboard.makemkv_key_checked_at).toLocaleString() : ''}`
 							: $dashboard.makemkv_key_valid === false
@@ -235,13 +235,13 @@
 					>
 						<div class="h-2 w-2 shrink-0 rounded-full {$dashboard.makemkv_key_valid === true ? 'bg-green-500' : 'bg-red-500'}"></div>
 						<span class="text-gray-700 dark:text-gray-200">Key</span>
-					</a>
+					</svelte:element>
 				</div>
 				<!-- Divider -->
 				<div class="h-6 w-px bg-black dark:bg-white/30"></div>
 				<!-- Live activity -->
 				<div class="flex items-center gap-3 text-xs">
-					<a href="/settings#drives" class="text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary transition-colors">{$dashboard.db_available ? $dashboard.drives_online : '--'} drive{$dashboard.drives_online !== 1 ? 's' : ''}</a>
+					<svelte:element this={$isGuest ? 'span' : 'a'} href={$isGuest ? undefined : '/settings#drives'} class="text-gray-600 dark:text-gray-300 transition-colors {$isGuest ? '' : 'hover:text-primary dark:hover:text-primary'}">{$dashboard.db_available ? $dashboard.drives_online : '--'} drive{$dashboard.drives_online !== 1 ? 's' : ''}</svelte:element>
 					{#if rippingCount > 0}
 						<span class="font-semibold text-blue-600 dark:text-blue-400">{rippingCount} ripping</span>
 					{/if}

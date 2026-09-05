@@ -26,6 +26,15 @@ vi.mock('$lib/stores/dashboard', async () => {
 	};
 });
 
+vi.mock('$lib/stores/auth', async () => {
+	const { writable, derived } = await import('svelte/store');
+	const _authed = writable(true);
+	return {
+		isGuest: derived(_authed, (a) => !a),
+		__setAuthed: (v: boolean) => _authed.set(v)
+	};
+});
+
 vi.mock('$lib/stores/resources.svelte', async () => {
 	const { readable } = await import('svelte/store');
 	return {
@@ -58,6 +67,16 @@ describe('MobileStatsPanel', () => {
 		expect(screen.getByText('DB')).toBeInTheDocument();
 		expect(screen.getByText('Transcode')).toBeInTheDocument();
 		expect(screen.getByText('Key')).toBeInTheDocument();
+	});
+
+	it('Settings-bound rows are plain text for guests; Transcode stays a link', async () => {
+		const auth = (await import('$lib/stores/auth')) as unknown as { __setAuthed: (v: boolean) => void };
+		auth.__setAuthed(false);
+		renderComponent(MobileStatsPanel, { props: { onnavigate: vi.fn() } });
+		expect(document.querySelector('[data-mobile-stats] a[href^="/settings"]')).toBeNull();
+		expect(screen.getByText('Key')).toBeInTheDocument();
+		expect(screen.getByRole('link', { name: /transcode/i })).toHaveAttribute('href', '/transcoder');
+		auth.__setAuthed(true);
 	});
 
 	it('renders live activity counts from the dashboard store', () => {
