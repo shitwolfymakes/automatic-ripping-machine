@@ -96,6 +96,21 @@ jobs:
       # ARM_INSTALL_SOURCE_ONLY seam — no docker, no root, <1s.
       - name: Installer walkthrough suite
         run: bash devtools/test-install-walkthrough.sh
+      # Zero-infra unit test that sources docker-entrypoint.sh via its
+      # ARM_ENTRYPOINT_SOURCE_ONLY seam — no docker, no root, <1s.
+      - name: Entrypoint optical-node suite
+        run: bash services/_common/test-entrypoint-optical.sh
+      # Zero-infra unit test for the writability/readability guard, same seam.
+      - name: Entrypoint writability guard suite
+        run: bash services/_common/test-entrypoint-guard.sh
+      # Zero-infra assertions that the dev installer + compose template no
+      # longer enumerate drives (drive lifecycle §5).
+      - name: setup-dev / compose template suite
+        run: bash devtools/test-setup-dev.sh
+      # Zero-infra unit test that sources docker-entrypoint.sh via its
+      # ARM_ENTRYPOINT_SOURCE_ONLY seam — no docker, no root, <1s.
+      - name: Entrypoint render-access suite
+        run: bash services/_common/test-entrypoint-render.sh
 
   test-python:
     name: test (python — pytest)
@@ -237,3 +252,9 @@ jobs:
           load: false
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          # Optional MakeMKV mirror (ripper build; ignored by the others).
+          # Unset repo var/secret => empty values => official makemkv.com.
+          build-args: |
+            MAKEMKV_MIRROR_URL=${{ vars.MAKEMKV_MIRROR_URL }}
+          secrets: |
+            makemkv_mirror_password=${{ secrets.MAKEMKV_MIRROR_PASSWORD }}

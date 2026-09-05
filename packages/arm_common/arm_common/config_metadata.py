@@ -24,7 +24,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         key="metadata_provider",
         group="Metadata",
         tier="operator",
-        label="Metadata provider",
+        label="Default metadata provider",
         help="Provider for title identify (search + detail).",
         type="enum",
         editable=True,
@@ -67,14 +67,28 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         editable=True,
     ),
     ConfigFieldMeta(
-        key="musicbrainz_user_agent",
+        key="thediscdb_enabled",
         group="Metadata",
         tier="operator",
-        label="MusicBrainz User-Agent",
-        help="Identifies ARM to MusicBrainz (app/version + contact).",
-        type="string",
+        label="TheDiscDB disc matching",
+        help="Match discs against the local TheDiscDB snapshot to label titles, pick the main feature, and name extras/episodes.",
+        type="bool",
         editable=True,
     ),
+    ConfigFieldMeta(
+        key="thediscdb_refresh_days",
+        group="Metadata",
+        tier="operator",
+        label="TheDiscDB refresh interval (days)",
+        help="How often the backend refreshes its TheDiscDB snapshot from GitHub.",
+        type="int",
+        editable=True,
+    ),
+    # NOTE: musicbrainz_user_agent is intentionally NOT registered — the column
+    # + ConfigView/ConfigUpdateRequest wire fields persist (dropping them would be
+    # an OpenAPI change), but the value is no longer read: the backend hardcodes
+    # MUSICBRAINZ_USER_AGENT next to its use (arm_backend.metadata.dispatcher).
+    # See tests/test_config_metadata.py::_DORMANT_EDITABLE_FIELDS.
     # --- Ripping ---
     ConfigFieldMeta(
         key="auto_rip_on_insert",
@@ -216,6 +230,26 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         help="Concurrent transcode containers (deploy-time; UI-editable later).",
         type="string",
         editable=False,
+    ),
+    # Drive-lifecycle scanner tunables (spec 2026-09-03 §2) — exposed while the
+    # cadence is being dialled in on real hardware.
+    ConfigFieldMeta(
+        key="drive_scan_interval_seconds",
+        group="System",
+        tier="operator",
+        label="Drive scan interval (seconds)",
+        help="How often the backend re-enumerates optical drives from sysfs.",
+        type="int",
+        editable=True,
+    ),
+    ConfigFieldMeta(
+        key="drive_detected_prune_days",
+        group="System",
+        tier="operator",
+        label="Forget unseen drives after (days)",
+        help="Detected-but-never-enrolled drives absent this long are dropped from the list.",
+        type="int",
+        editable=True,
     ),
     ConfigFieldMeta(
         key="ARM_DOCKER_NETWORK",

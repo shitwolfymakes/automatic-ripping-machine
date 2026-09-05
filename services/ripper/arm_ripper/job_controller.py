@@ -12,11 +12,12 @@ from arm_common import DiscType, Job, JobStatus, TrackStatus, with_log_context
 from arm_common.schemas import JobView, RipperConfigView, RipStartResponse, ScanResult, TrackView, WSEnvelope
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.community_keydb import refresh_community_keydb
+from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.makemkv_sdf import refresh_makemkv_sdf
 from arm_ripper.makemkv_key import refresh_makemkv_key
 from arm_ripper.rip import RipResult, rip_all
 from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS
-from arm_ripper.drive_poll import DriveState, read_drive_status
+from arm_ripper.drive_poll import _ABSENT_ERRNOS, DriveState, read_drive_status
 from arm_ripper.scan import ScanError, scan as scan_disc
 from arm_ripper.source import is_iso_source
 from arm_ripper.ws_client import WSClient
@@ -102,7 +103,7 @@ class JobController:
         drive_id: str,
         *,
         ws: WSClient | None = None,
-        device_path: str | None = None,
+        device_path: str | DriveHandle | None = None,
         default_min_length_seconds: int = DEFAULT_MIN_LENGTH_SECONDS,
     ) -> None:
         self._client = client
@@ -110,10 +111,17 @@ class JobController:
         self._sdf_tasks: set[asyncio.Task[None]] = set()
         self._drive_id = drive_id
         self._ws = ws
-        # Each ripper container owns exactly one optical drive; storing the
-        # device path here lets `handle_manual_trigger` run without re-reading
-        # settings (which a unit test environment may not have populated).
-        self._device_path = device_path
+        # Each ripper container owns exactly one optical drive. The node it
+        # occupies can change while we run (replug under a new srN), so we
+        # hold the shared DriveHandle rather than a copy of the path — the
+        # poll loop keeps it current and every read here sees the move. A
+        # plain str (ISO source, tests) is wrapped as a fixed handle.
+        if isinstance(device_path, DriveHandle):
+            self._device = device_path
+        elif device_path is None:
+            self._device = DriveHandle()
+        else:
+            self._device = DriveHandle.fixed(device_path)
         # Host-side baseline `--minlength` for `makemkvcon mkv all`. The
         # backend can override per-rip via `RipStartResponse.min_length_seconds`
         # (resolved from the Session's `overrides_json["min_length_seconds"]`);
@@ -134,6 +142,17 @@ class JobController:
         # the raw dir for cleanup. Set inside `_run_pipeline` only.
         self._active_task: asyncio.Task[None] | None = None
         self._active_job_id: str | None = None
+        # Abandon-triggered eject runs fire-and-forget (the WS handler is
+        # sync); kept here so overlapping abandon signals don't stack
+        # umount/eject subprocess retries. Set inside `_spawn_eject` only.
+        self._eject_task: asyncio.Task[None] | None = None
+
+    @property
+    def _device_path(self) -> str | None:
+        """Read-only view of the shared DriveHandle. Only the poll loop writes
+        the handle (spec §4) — a controller-side write would let a stale
+        pickup path override the node the loop just resolved."""
+        return self._device.current
 
     @property
     def is_active(self) -> bool:
@@ -158,8 +177,6 @@ class JobController:
         if not self.is_idle():
             logger.debug("pickup ignored: controller already busy")
             return
-        if self._device_path is None and device_path:
-            self._device_path = device_path
         async with self._active_lock:
             self._active_task = asyncio.current_task()
             self._active_job_id = job.id
@@ -213,17 +230,20 @@ class JobController:
             logger.debug("ws command ignored: type=%s", envelope.event_type)
 
     def _handle_abandon(self, job_id: str, *, delete_raw: bool) -> None:
-        """Cancel the active pipeline if it owns this job, then optionally
-        wipe `/raw/<job_id>/`. Runs synchronously from the WS handler;
-        cancel + rmtree are both fast and don't need awaitable plumbing.
+        """Cancel the active pipeline if it owns this job, optionally wipe
+        `/raw/<job_id>/`, then give the disc back. Runs synchronously from
+        the WS handler; cancel + rmtree are both fast and don't need
+        awaitable plumbing (eject spawns as a task).
 
         rmtree on Linux is safe even if makemkvcon still has file handles
         open: the directory entries are removed, existing fds keep working
         (writing to nowhere) until the cancelled subprocess dies.
         """
-        if self._active_job_id == job_id and self._active_task is not None and not self._active_task.done():
+        active = self._active_task
+        owns = self._active_job_id == job_id and active is not None and not active.done()
+        if active is not None and owns:
             logger.info("job.abandoned: cancelling active task for job_id=%s", job_id)
-            self._active_task.cancel()
+            active.cancel()
         if delete_raw:
             target = RAW_ROOT / job_id
             try:
@@ -233,6 +253,37 @@ class JobController:
                 logger.info("raw dir already absent job_id=%s path=%s", job_id, target)
             except OSError as exc:
                 logger.warning("raw-dir cleanup failed job_id=%s path=%s: %s", job_id, target, exc)
+        # Abandon means "done with this disc — give it back". The lifecycle's
+        # post-rip eject (end of _run_rip) never runs on an abandon exit, so
+        # eject here: when this job owns the drive's pipeline (ripping or
+        # parked — _eject_with_retry's EBUSY retries absorb the cancelled
+        # makemkvcon's teardown), or when the drive is idle with a disc still
+        # seated (pipeline already exited, e.g. after a rip-start abort). A
+        # stale abandon while a DIFFERENT job's rip owns the drive must not
+        # pop the tray mid-rip.
+        idle = active is None or active.done()
+        if owns or (idle and self._disc_seated()):
+            self._spawn_eject()
+
+    def _disc_seated(self) -> bool:
+        """True when the drive currently reports a seated disc (DISC_OK) —
+        guards abandon-eject so abandoning an old job from history with an
+        empty (or already-ejected) drive doesn't pop the tray."""
+        if self._device_path is None or is_iso_source(self._device_path):
+            return False
+        try:
+            return read_drive_status(self._device_path) == DriveState.DISC_OK
+        except OSError:
+            return False
+
+    def _spawn_eject(self) -> None:
+        """Fire-and-forget eject for the sync abandon handler; deduped so
+        overlapping abandon signals don't stack umount/eject retries."""
+        if self._device_path is None:
+            return
+        if self._eject_task is not None and not self._eject_task.done():
+            return
+        self._eject_task = asyncio.create_task(self._eject_with_retry(self._device_path))
 
     async def handle_manual_trigger(self, session_id: str | None) -> None:
         """Run the normal scan→identify→rip flow on demand, threading
@@ -279,6 +330,11 @@ class JobController:
                     scan_result = await self._scan_with_ready_retry(device_path)
                 except ScanError as e:
                     logger.error("scan failed device=%s err=%s", device_path, e)
+                    return
+                except OSError as e:
+                    if e.errno not in _ABSENT_ERRNOS:
+                        raise
+                    logger.warning("drive went absent during scan device=%s — pipeline abandoned", device_path)
                     return
 
                 try:
@@ -684,21 +740,33 @@ class JobController:
         The backend's `/resume` endpoint resets tracks to QUEUED and
         sets `resumed_from_crash=True`; we then run the same rip-loop
         as a fresh disc would.
+
+        Claims the single-flight gate exactly like `recover_held_job`, so a
+        crash-resumed rip is abandonable via `job.abandoned` and makes
+        `is_idle()` False (no double-rip from the heartbeat re-probe or from
+        a reattach boot probe).
         """
-        with with_log_context(job_id=job.id):
-            # Crash-resume skips the scan path, so refresh the key here too —
-            # a rip resumed days after a crash must not run on a stale key.
-            await refresh_makemkv_key(key=await self._configured_makemkv_key())
-            self._spawn_keydb_refresh(enabled=await self._community_keydb_enabled())
-            self._spawn_sdf_refresh(enabled=await self._makemkv_sdf_enabled())
-            rip_start = await self._client.resume(job.id)
-            logger.info("rip-resume job_id=%s tracks=%d", job.id, len(rip_start.tracks))
-            await self._execute_rip(
-                job_id=job.id,
-                disc_type=job.disc_type,
-                device_path=device_path,
-                rip_start=rip_start,
-            )
+        async with self._active_lock:
+            self._active_task = asyncio.current_task()
+            self._active_job_id = job.id
+            try:
+                with with_log_context(job_id=job.id):
+                    # Crash-resume skips the scan path, so refresh the key here too —
+                    # a rip resumed days after a crash must not run on a stale key.
+                    await refresh_makemkv_key(key=await self._configured_makemkv_key())
+                    self._spawn_keydb_refresh(enabled=await self._community_keydb_enabled())
+                    self._spawn_sdf_refresh(enabled=await self._makemkv_sdf_enabled())
+                    rip_start = await self._client.resume(job.id)
+                    logger.info("rip-resume job_id=%s tracks=%d", job.id, len(rip_start.tracks))
+                    await self._execute_rip(
+                        job_id=job.id,
+                        disc_type=job.disc_type,
+                        device_path=device_path,
+                        rip_start=rip_start,
+                    )
+            finally:
+                self._active_task = None
+                self._active_job_id = None
 
     async def _execute_rip(
         self,
@@ -775,7 +843,9 @@ class JobController:
         completed = await self._rip_complete_with_retry(job_id)
         logger.info("rip-complete job_id=%s status=%s", job_id, completed.status.value)
 
-        await self._eject_with_retry(device_path)
+        # Eject the node the drive is at NOW — it may have renumbered during
+        # the rip (USB replug); the path captured at rip start is a hint only.
+        await self._eject_with_retry(self._device_path or device_path)
         await asyncio.sleep(EJECT_GRACE_SECONDS)
 
     async def _eject_with_retry(self, device_path: str) -> None:
@@ -794,6 +864,14 @@ class JobController:
         container or the ripper's own scan-poster path mounted the
         device internally.
         """
+        # The drive vanished (unplugged / powered off) between rip-complete
+        # and here — there's no live node to umount/eject, and retrying just
+        # produces a misleading "failed after N attempts" for a drive that
+        # was never coming back. The poll loop's absence handling owns
+        # recovery once it reattaches.
+        if self._device_path is None:
+            logger.info("eject skipped: drive is absent")
+            return
         # ISO sources have no tray to eject. probe_disc reads the file
         # directly via PyCdlib and makemkvcon opens it read-only; nothing
         # mounts it, so there's nothing to umount or eject.

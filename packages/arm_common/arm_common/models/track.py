@@ -34,6 +34,7 @@ class Track(SQLModel, table=True):
     video_type: str | None = Field(default=None)
     episode_number: int | None = Field(default=None)
     episode_name: str | None = Field(default=None)
+    season: int | None = Field(default=None)
     # Operator control. `excluded` omits this ripped title from transcode OUTPUT
     # (the disc still rips whole — makemkvcon `mkv all` invariant). `custom_filename`
     # overrides the pattern-rendered name for this track.

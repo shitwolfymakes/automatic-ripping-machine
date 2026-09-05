@@ -2,6 +2,19 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-utils';
 import SettingsPage from '../+page.svelte';
 import { fetchSettings } from '$lib/api/settings';
+import { fetchDrives, fetchDriveDiagnostic } from '$lib/api/drives';
+import type { DriveView } from '$lib/types/api.gen';
+
+function drive(over: Partial<DriveView> = {}): DriveView {
+	return {
+		id: 'drv_1', hostname: 'arm-ripper-abc', device_path: '/dev/sr0', display_name: null, status: 'online',
+		last_seen_at: null, media_status: null, media_status_at: null, default_session_id: null, rip_speed: null,
+		drive_mode: null, uhd_capable: null, prescan_cache_mb: null, prescan_timeout: null, prescan_retries: null,
+		disc_enum_timeout: null, created_at: null, updated_at: null, lifecycle: 'enrolled', present: true,
+		identity_kind: 'by_id', serial: 'AAAABBBB000E', by_id_name: 'usb-X_AAAABBBB000E-0:0', vendor: 'PIONEER',
+		model: 'BD-RW BDR-S12JX', last_error: null, current_job: null, ...over
+	} as DriveView;
+}
 
 // Per-test override of the fetchSettings mock with a custom config patch.
 function withConfig(patch: Record<string, unknown>) {
@@ -81,9 +94,12 @@ vi.mock('$lib/api/settings', () => ({
 vi.mock('$lib/api/drives', () => ({
 	fetchDrives: vi.fn(() => Promise.resolve([])),
 	updateDrive: vi.fn(() => Promise.resolve()),
-	deleteDrive: vi.fn(() => Promise.resolve()),
-	fetchDriveDiagnostic: vi.fn(() => Promise.resolve({ success: true, drives: [], issues: [], udevd_running: true, kernel_drives: [] })),
-	rescanDrives: vi.fn(() => Promise.resolve({ success: true }))
+	unenrollDrive: vi.fn(() => Promise.resolve()),
+	enrollDrive: vi.fn(() => Promise.resolve()),
+	ignoreDrive: vi.fn(() => Promise.resolve()),
+	unignoreDrive: vi.fn(() => Promise.resolve()),
+	fetchDriveDiagnostic: vi.fn(() => Promise.resolve({ drives: [], system: [] })),
+	rescanDrives: vi.fn(() => Promise.resolve({ online: 0, stale: 0, detected: 0, enrolled: 0, ignored: 0, absent: 0, pruned: 0 }))
 }));
 
 vi.mock('$lib/api/sessions', () => ({
@@ -130,11 +146,6 @@ vi.mock('$lib/stores/colorScheme', async () => {
 		loadThemesFromApi: vi.fn()
 	};
 });
-
-vi.mock('$lib/api/system', () => ({
-	restartArm: vi.fn(() => Promise.resolve()),
-	restartTranscoder: vi.fn(() => Promise.resolve())
-}));
 
 vi.mock('$lib/api/maintenance', () => ({
 	fetchImageCacheStats: vi.fn(() => Promise.resolve({ count: 5, size_bytes: 5242880, size_mb: '5.0' })),
@@ -187,16 +198,28 @@ vi.mock('$lib/api/channels', () => ({
 vi.mock('$lib/stores/polling', async () => {
 	const { writable } = await import('svelte/store');
 	return {
-		createPollingStore: vi.fn(() => ({
-			subscribe: writable([]).subscribe,
-			data: writable([]),
-			loading: writable(false),
-			error: writable(null),
-			initialized: writable(true),
-			refresh: vi.fn(),
-			start: vi.fn(),
-			stop: vi.fn()
-		}))
+		// A minimal fake that actually calls the fetcher on start()/refresh(),
+		// so tests can assert on data that flows from e.g. fetchDrives.
+		createPollingStore: vi.fn((fetcher: () => Promise<unknown>, initialValue: unknown) => {
+			const data = writable(initialValue);
+			async function load() {
+				try {
+					data.set(await fetcher());
+				} catch {
+					// ignore — tests that care about errors use the error store directly
+				}
+			}
+			return {
+				subscribe: data.subscribe,
+				data,
+				loading: writable(false),
+				error: writable(null),
+				initialized: writable(true),
+				refresh: vi.fn(load),
+				start: vi.fn(load),
+				stop: vi.fn()
+			};
+		})
 	};
 });
 
@@ -227,9 +250,36 @@ describe('Settings Page', () => {
 	}
 
 	describe('rendering', () => {
+		it('renders the Interface tab with the stats toggle and dashboard layout', async () => {
+			await renderAndOpenTab('Interface');
+			expect(screen.getByRole('switch', { name: /show resource stats/i })).toBeInTheDocument();
+			expect(screen.getByRole('radio', { name: /cards/i })).toBeInTheDocument();
+			expect(screen.getByRole('radio', { name: /table/i })).toBeInTheDocument();
+		});
+
+		it('maps a legacy #appearance hash to the Themes tab', async () => {
+			window.location.hash = '#appearance';
+			renderComponent(SettingsPage);
+			await waitFor(() => {
+				expect(screen.getByText('Image Cache')).toBeInTheDocument();
+			});
+		});
+
 		it('renders page title', () => {
 			renderComponent(SettingsPage);
 			expect(screen.getByText('Settings')).toBeInTheDocument();
+		});
+
+		it('deep-links #<tab>/<field> to the field: scrolls, focuses and highlights it', async () => {
+			window.location.hash = '#Metadata/tmdb_api_key';
+			const scrollIntoView = vi.fn();
+			Element.prototype.scrollIntoView = scrollIntoView;
+			await renderAndWait();
+			await waitFor(() => {
+				expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus();
+			});
+			expect(scrollIntoView).toHaveBeenCalled();
+			expect(screen.getByTestId('setting-tmdb_api_key').className).toContain('ring-2');
 		});
 
 		it('renders the Metadata config tab with the provider select', async () => {
@@ -264,14 +314,14 @@ describe('Settings Page', () => {
 			expect(screen.queryByRole('button', { name: 'Transcode Presets' })).not.toBeInTheDocument();
 		});
 
-		it('shows Appearance tab', async () => {
+		it('shows Themes tab', async () => {
 			await renderAndWait();
-			const matches = screen.getAllByText('Appearance');
+			const matches = screen.getAllByText('Themes');
 			expect(matches.length).toBeGreaterThanOrEqual(1);
 		});
 
-		it('image cache section loads when Appearance tab active', async () => {
-			await renderAndOpenTab('Appearance');
+		it('image cache section loads when Themes tab active', async () => {
+			await renderAndOpenTab('Themes');
 			await waitFor(() => {
 				expect(screen.getByText('Image Cache')).toBeInTheDocument();
 			});
@@ -285,7 +335,7 @@ describe('Settings Page', () => {
 		});
 
 		it('shows cache feedback after clearing image cache', async () => {
-			await renderAndOpenTab('Appearance');
+			await renderAndOpenTab('Themes');
 			await waitFor(() => {
 				expect(screen.getByText('Clear Cache')).toBeInTheDocument();
 			});
@@ -304,7 +354,7 @@ describe('Settings Page', () => {
 		});
 
 		it('shows dark mode toggle when scheme does not lock mode', async () => {
-			await renderAndOpenTab('Appearance');
+			await renderAndOpenTab('Themes');
 			await waitFor(() => {
 				expect(screen.getByText('Dark Mode')).toBeInTheDocument();
 			});
@@ -314,7 +364,7 @@ describe('Settings Page', () => {
 
 		it('calls toggleTheme when dark mode switch is clicked', async () => {
 			const { toggleTheme } = await import('$lib/stores/theme');
-			await renderAndOpenTab('Appearance');
+			await renderAndOpenTab('Themes');
 			await waitFor(() => {
 				expect(screen.getByLabelText('Dark mode')).toBeInTheDocument();
 			});
@@ -328,7 +378,7 @@ describe('Settings Page', () => {
 			const locked = writable(true);
 			Object.assign(schemeLocksMode, { set: locked.set, subscribe: locked.subscribe, update: locked.update });
 
-			await renderAndOpenTab('Appearance');
+			await renderAndOpenTab('Themes');
 			await waitFor(() => {
 				expect(screen.getByText('Locked by theme')).toBeInTheDocument();
 			});
@@ -376,6 +426,91 @@ describe('Settings Page', () => {
 			});
 			// Run Check button should not be visible when collapsed
 			expect(screen.queryByText('Run Check')).not.toBeInTheDocument();
+		});
+
+		it('renders enrolled cards, detected/ignored lists, and maintenance buttons', async () => {
+			vi.mocked(fetchDrives).mockResolvedValueOnce([
+				drive({ id: 'drv_enrolled', lifecycle: 'enrolled', display_name: 'Main Drive' }),
+				drive({ id: 'drv_detected', lifecycle: 'detected' }),
+				drive({ id: 'drv_ignored', lifecycle: 'ignored' })
+			]);
+			await renderAndOpenTab('Drives');
+			await waitFor(() => expect(screen.getByText('Main Drive')).toBeInTheDocument());
+			expect(screen.getByTestId('detected-row-drv_detected')).toBeInTheDocument();
+			expect(screen.getByTestId('ignored-toggle')).toBeInTheDocument();
+			expect(screen.getByTestId('drive-rescan')).toBeInTheDocument();
+			expect(screen.getByTestId('drive-force-rescan')).toBeInTheDocument();
+		});
+
+		it('diagnostics panel renders system notes and per-drive fields, with Issues Found', async () => {
+			vi.mocked(fetchDriveDiagnostic).mockResolvedValueOnce({
+				drives: [
+					{
+						id: 'drv_1',
+						lifecycle: 'enrolled',
+						present: false,
+						identity_kind: 'by_id',
+						device_path: '/dev/sr0',
+						status: 'offline',
+						media_status: 'detached',
+						media_status_at: null,
+						container: 'running',
+						last_error: null,
+						healthy: false,
+						notes: ['drive is detached: reconnect it']
+					}
+				],
+				system: ['ripper manager is not running: enroll is unavailable']
+			});
+			await renderAndOpenTab('Drives');
+			await waitFor(() => {
+				expect(screen.getByText('Udev & Drive Diagnostics')).toBeInTheDocument();
+			});
+			await fireEvent.click(screen.getByText('Udev & Drive Diagnostics'));
+			await fireEvent.click(screen.getByText('Run Check'));
+			await waitFor(() => {
+				expect(screen.getByText('ripper manager is not running: enroll is unavailable')).toBeInTheDocument();
+			});
+			expect(screen.getByText(/drive is detached: reconnect it/)).toBeInTheDocument();
+			expect(screen.getByText('Issues Found')).toBeInTheDocument();
+		});
+
+		it('diagnostics panel lists a healthy drive with its details and All OK', async () => {
+			vi.mocked(fetchDriveDiagnostic).mockResolvedValueOnce({
+				drives: [
+					{
+						id: 'drv_ok',
+						lifecycle: 'enrolled',
+						present: true,
+						identity_kind: 'by_id',
+						device_path: '/dev/sr2',
+						status: 'online',
+						media_status: 'tray_open',
+						media_status_at: '2026-09-05T01:36:29Z',
+						container: 'running',
+						last_error: null,
+						healthy: true,
+						notes: []
+					}
+				],
+				system: []
+			});
+			await renderAndOpenTab('Drives');
+			await waitFor(() => {
+				expect(screen.getByText('Udev & Drive Diagnostics')).toBeInTheDocument();
+			});
+			await fireEvent.click(screen.getByText('Udev & Drive Diagnostics'));
+			await fireEvent.click(screen.getByText('Run Check'));
+			await waitFor(() => {
+				expect(screen.getByText('All OK')).toBeInTheDocument();
+			});
+			const row = screen.getByTestId('diag-drive-drv_ok');
+			expect(row).toHaveTextContent('/dev/sr2');
+			expect(row).toHaveTextContent('enrolled');
+			expect(row).toHaveTextContent('connected');
+			expect(row).toHaveTextContent('container: running');
+			expect(row).toHaveTextContent('media: tray open');
+			expect(row).toHaveTextContent('OK');
 		});
 	});
 });

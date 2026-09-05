@@ -129,6 +129,11 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           provenance: true
           sbom: false
+          # Optional MakeMKV mirror (ripper build; ignored by the others).
+          build-args: |
+            MAKEMKV_MIRROR_URL=${{ vars.MAKEMKV_MIRROR_URL }}
+          secrets: |
+            makemkv_mirror_password=${{ secrets.MAKEMKV_MIRROR_PASSWORD }}
 
       - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
         with:

@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
 
 from arm_backend.config import Settings
+from arm_backend.docker_probe import TtlProbe, probe_docker
 from arm_common import (
     Gpu,
     GpuStatus,
@@ -35,6 +36,7 @@ from arm_common import (
     HwPreference,
     Session,
     SessionApplication,
+    SessionApplicationStatus,
     TranscodePreset,
     TranscodeTask,
     TranscodeTaskStatus,
@@ -91,6 +93,10 @@ class TranscodeDispatcher:
         self._hub = hub
         self._stop = asyncio.Event()
         self._tick_interval = settings.ARM_TRANSCODE_DISPATCH_INTERVAL_SECONDS
+        # Surfaced by /api/system/diagnostics so a crash-looping or
+        # un-pullable transcoder is visible in the UI, not only in the log.
+        self.last_spawn_error: str | None = None
+        self._probe = TtlProbe(lambda: probe_docker(self._docker, self._settings.ARM_TRANSCODE_IMAGE))
 
     def stop(self) -> None:
         self._stop.set()
@@ -116,6 +122,8 @@ class TranscodeDispatcher:
     async def _tick(self) -> None:
         async with self._db_factory() as db:
             await self.sweep_stale_claims(db)
+            await self.sweep_orphaned_applications(db)
+            await db.commit()
             await self.spawn_pending(db)
 
     # --- stale claim sweep ---------------------------------------------------
@@ -205,6 +213,106 @@ class TranscodeDispatcher:
         await db.commit()
         return touched
 
+    # --- orphaned application sweep -------------------------------------------
+
+    async def sweep_orphaned_applications(self, db: AsyncSession) -> int:
+        """Resolve non-terminal session_applications that have no live task.
+
+        A `queued`/`running` application older than the grace window with zero
+        live tasks is an orphan (crash between fan-out and dispatch, or its
+        tasks were evicted by another application's overwrite). Settle
+        terminal-only ones via `aggregate_session_application`; mark true husks
+        (zero tasks) `failed`. `waiting_identify` is out of scope by design.
+
+        Acts only on apps with zero or only-terminal tasks — disjoint from every
+        live writer, so it cannot race fan-out/claim/aggregate. Does NOT commit;
+        the caller commits. Returns the number of applications acted on.
+        """
+        from arm_backend.transcode_apply import aggregate_session_application
+
+        threshold = datetime.now(UTC) - timedelta(seconds=self._settings.ARM_TRANSCODE_STALE_THRESHOLD_SECONDS)
+        candidates = (
+            (
+                await db.execute(
+                    select(SessionApplication)
+                    .where(
+                        col(SessionApplication.status).in_(
+                            [SessionApplicationStatus.QUEUED, SessionApplicationStatus.RUNNING]
+                        )
+                    )
+                    .where(col(SessionApplication.created_at) < threshold)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not candidates:
+            return 0
+
+        acted = 0
+        for application in candidates:
+            tasks = (
+                (
+                    await db.execute(
+                        select(TranscodeTask).where(col(TranscodeTask.session_application_id) == application.id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            statuses = [t.status for t in tasks]
+            has_live = any(s in (TranscodeTaskStatus.QUEUED, TranscodeTaskStatus.IN_PROGRESS) for s in statuses)
+            if has_live:
+                # Not an orphan — a live task will drive aggregate on completion.
+                continue
+
+            with with_log_context(
+                job_id=application.job_id,
+                session_application_id=application.id,
+            ):
+                if statuses:
+                    # Only-terminal tasks: settle via the shared aggregate logic.
+                    outcome = await aggregate_session_application(db, application)
+                    if outcome.event_type is None:  # pragma: no cover
+                        # Reached only if a live task reappears mid-sweep (a
+                        # concurrent auto-retry re-queues a task between our task
+                        # read and aggregate's re-read); declining to settle is
+                        # then correct. Hard to hit deterministically in tests.
+                        continue
+                    event_type = outcome.event_type
+                else:
+                    # True husk: no tasks at all. Mark failed; reason lives in the
+                    # log line + WS event (no error column on the model).
+                    created_at = application.created_at or datetime.now(UTC)
+                    age_s = int((datetime.now(UTC) - created_at).total_seconds())
+                    application.status = SessionApplicationStatus.FAILED
+                    application.completed_at = datetime.now(UTC)
+                    logger.warning(
+                        "session_application orphaned: no tasks (crash/eviction) sap=%s job=%s age=%ds",
+                        application.id,
+                        application.job_id,
+                        age_s,
+                    )
+                    event_type = "session.failed"
+
+                try:
+                    await self._hub.emit(
+                        topic="transcode.events",
+                        event_type=event_type,
+                        payload={
+                            "session_application_id": application.id,
+                            "session_id": application.session_id,
+                            "job_id": application.job_id,
+                            "status": application.status.value,
+                        },
+                        job_id=application.job_id,
+                        session=db,
+                    )
+                except Exception as exc:  # WS is best-effort; status already set
+                    logger.warning("orphan sweep ws emit failed sap=%s: %s", application.id, exc)
+                acted += 1
+        return acted
+
     async def _emit_task_failed(self, db: AsyncSession, task: TranscodeTask) -> None:
         application = (
             await db.execute(
@@ -289,7 +397,9 @@ class TranscodeDispatcher:
                 try:
                     self._spawn_container(task, assignment=assignment)
                     spawned += 1
+                    self.last_spawn_error = None
                 except Exception as exc:
+                    self.last_spawn_error = f"{type(exc).__name__}: {exc}"[:300]
                     logger.exception("transcode spawn failed task_id=%s: %s", task.id, exc)
                     # Release the GPU claim so the task can retry on a later tick.
                     if assignment.gpu is not None:
@@ -361,6 +471,12 @@ class TranscodeDispatcher:
             and self._settings.ARM_HOST_CERTS_PATH
         )
 
+    def probe(self) -> tuple[bool, str | None]:
+        """Can this dispatcher actually run a transcode right now? Pings the
+        docker host and checks the image exists there. Never raises; cached
+        for docker_probe.PROBE_TTL_SECONDS (see there for why)."""
+        return self._probe()
+
     def _spawn_container(self, task: TranscodeTask, *, assignment: GpuAssignment | None = None) -> Any:
         remote = bool(self._settings.ARM_TRANSCODE_DOCKER_HOST)
         if remote and not self._settings.ARM_TRANSCODE_BACKEND_URL:
@@ -403,10 +519,9 @@ class TranscodeDispatcher:
             env["ARM_GPU_DEVICE"] = assignment.gpu.device_path
             if assignment.codec is not None:
                 env["ARM_GPU_CODEC"] = assignment.codec
-            # VAAPI/QSV need the render-node group inside the container; the
-            # entrypoint adds `arm` to RENDER_GID before gosu (a docker
-            # --group-add wouldn't survive the gosu group reset). NVENC's device
-            # access comes via the nvidia runtime, so it doesn't need this.
+            # VAAPI/QSV: the entrypoint self-derives the render gid from the
+            # mounted node; an explicit ARM_RENDER_GID is a forced OVERRIDE
+            # (passed through as RENDER_GID, which wins in the entrypoint).
             if assignment.gpu.vendor in (GpuVendor.VAAPI, GpuVendor.QSV) and self._settings.ARM_RENDER_GID:
                 env["RENDER_GID"] = self._settings.ARM_RENDER_GID
             self._inject_gpu_run_kwargs(extra_run_kwargs, assignment.gpu)

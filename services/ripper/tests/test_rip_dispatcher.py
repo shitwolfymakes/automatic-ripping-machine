@@ -85,15 +85,40 @@ def test_probe_returns_loaded_when_disc_ok(monkeypatch):
     assert "loaded" in reason
 
 
-def test_probe_returns_unavailable_when_open_fails(monkeypatch):
+def test_probe_returns_detached_when_open_says_the_drive_is_gone(monkeypatch):
+    """ENODEV/ENOENT/ENXIO mean the drive is unplugged, not misconfigured —
+    the heartbeat must carry DETACHED so the backend can derive OFFLINE."""
     _patch_open_close_ioctl(
         monkeypatch,
         open_result=OSError(errno.ENODEV, "No such device"),
         ioctl_result=4,
     )
     status, reason = probe_drive_media("/dev/sr0")
-    assert status is DriveMediaStatus.UNAVAILABLE
+    assert status is DriveMediaStatus.DETACHED
     assert "errno=19" in reason
+
+
+def test_probe_returns_detached_when_the_node_has_no_hardware_behind_it(monkeypatch):
+    _patch_open_close_ioctl(
+        monkeypatch,
+        open_result=OSError(errno.ENXIO, "No such device or address"),
+        ioctl_result=4,
+    )
+    status, _ = probe_drive_media("/dev/sr0")
+    assert status is DriveMediaStatus.DETACHED
+
+
+def test_probe_returns_unavailable_when_open_is_denied(monkeypatch):
+    """EACCES: the node exists but the cgroup rule / CDROM_GID is wrong.
+    That is an operator misconfiguration, not a detached drive."""
+    _patch_open_close_ioctl(
+        monkeypatch,
+        open_result=OSError(errno.EACCES, "Permission denied"),
+        ioctl_result=4,
+    )
+    status, reason = probe_drive_media("/dev/sr0")
+    assert status is DriveMediaStatus.UNAVAILABLE
+    assert "errno=13" in reason
 
 
 def test_probe_returns_not_ready_when_disc_becoming_ready(monkeypatch):
