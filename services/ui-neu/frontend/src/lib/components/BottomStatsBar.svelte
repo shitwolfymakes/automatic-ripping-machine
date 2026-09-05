@@ -10,7 +10,7 @@
 </script>
 
 <!-- Fixed bottom bar, hidden below lg (1024px) — matches neu placement. -->
-<div class="fixed bottom-0 left-0 right-0 z-30 hidden h-10 items-center gap-3 border-t border-primary/20 bg-surface px-4 lg:flex 2xl:hidden dark:border-primary/20 dark:bg-surface-dark">
+<div data-testid="bottom-stats-bar" class="fixed bottom-0 left-0 right-0 z-30 hidden h-10 items-center gap-3 border-t border-primary/20 bg-surface px-4 lg:flex 2xl:hidden dark:border-primary/20 dark:bg-surface-dark">
 	<!-- CPU -->
 	<div class="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
 		<span class="shrink-0">CPU</span>
