@@ -394,3 +394,15 @@ async def test_concurrent_unenroll_waits_for_an_in_flight_enrolls_docker_call(si
     # The whole point of the lock: remove must not start until ensure_running
     # (enroll's docker call) has fully finished.
     assert events["remove"] >= events["ensure_running exit"], manager.timeline
+
+
+def test_delete_refuses_an_enrolled_drive(signing_key: bytes) -> None:
+    """DELETE must not silently orphan an enrolled drive's ripper container —
+    the operator has to unenroll first (which stops/removes it)."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive(DriveLifecycle.ENROLLED)]
+    client, auth = _app(db, signing_key)
+    with client:
+        r = client.delete("/api/drives/drv_1", headers=auth)
+    assert r.status_code == 409 and "unenroll" in r.json()["detail"]
+    assert db.rows["drives"] != []

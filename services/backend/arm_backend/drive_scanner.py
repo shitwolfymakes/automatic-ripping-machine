@@ -286,12 +286,24 @@ class DriveScanner:
         # select(Drive) then insert, so an overlapping pair can each decide a
         # row is new and double-INSERT. Serialize reconciliation in-process.
         self._lock = asyncio.Lock()
+        # Surfaced by GET /api/drives/diagnostic so a dead or failing scanner
+        # is visible in the UI, not only in the log.
+        self.last_scan_at: datetime | None = None
+        self.last_error: str | None = None
 
-    async def scan_once(self, session: AsyncSession) -> ScanSummary:
+    async def scan_once(self, session: AsyncSession, *, prune_now: bool = False) -> ScanSummary:
+        """One reconcile. `prune_now` (Force Rescan) drops the prune window to
+        zero days: every detected row that is not present right now is deleted
+        — enrolled and ignored rows are never pruned (reconcile_drives)."""
         async with self._lock:
             _, prune_days = await _tunables(session)
             scanned = enumerate_optical(sysfs_root=self._sysfs_root, disk_root=self._disk_root)
-            return await reconcile_drives(session, scanned, now=datetime.now(timezone.utc), prune_days=prune_days)
+            summary = await reconcile_drives(
+                session, scanned, now=datetime.now(timezone.utc), prune_days=0 if prune_now else prune_days
+            )
+            self.last_scan_at = datetime.now(timezone.utc)
+            self.last_error = None
+            return summary
 
     async def run(self) -> None:
         logger.info("drive scanner starting: sysfs=%s disk=%s", self._sysfs_root, self._disk_root)
@@ -303,6 +315,7 @@ class DriveScanner:
                     await self.scan_once(session)
             except asyncio.CancelledError:
                 raise
-            except Exception:  # noqa: BLE001 — a bad tick must never kill the loop
+            except Exception as exc:  # noqa: BLE001 — a bad tick must never kill the loop
                 logger.exception("drive scan failed; retrying next tick")
+                self.last_error = f"{type(exc).__name__}: {exc}"[:300]
             await asyncio.sleep(interval)

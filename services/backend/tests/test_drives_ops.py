@@ -87,7 +87,7 @@ class _StubScanner:
         self.summary = summary
         self.calls = 0
 
-    async def scan_once(self, session):
+    async def scan_once(self, session, *, prune_now: bool = False):
         self.calls += 1
         return self.summary
 
