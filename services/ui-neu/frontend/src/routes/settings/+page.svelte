@@ -743,7 +743,7 @@
 		{/if}
 
 		{#if activeTab === 'drives'}
-			<div class="mb-4 flex items-center justify-between gap-3">
+			<div class="mb-4 flex items-start justify-between gap-3">
 				<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Drives</h2>
 				<DriveMaintenance onrescanned={() => drives.refresh()} />
 			</div>
