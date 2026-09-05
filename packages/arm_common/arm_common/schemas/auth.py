@@ -49,6 +49,9 @@ class ConfigView(BaseModel):
     auto_rip_on_insert: bool
     block_on_miss: bool
     community_keydb_enabled: bool
+    # Drive scanner tunables (spec §2) — operator-editable, read every tick.
+    drive_scan_interval_seconds: int
+    drive_detected_prune_days: int
     makemkv_sdf_enabled: bool
     thediscdb_enabled: bool
     thediscdb_refresh_days: int
@@ -76,6 +79,8 @@ class ConfigUpdateRequest(BaseModel):
     auto_rip_on_insert: bool | None = None
     block_on_miss: bool | None = None
     community_keydb_enabled: bool | None = None
+    drive_scan_interval_seconds: int | None = None
+    drive_detected_prune_days: int | None = None
     makemkv_sdf_enabled: bool | None = None
     thediscdb_enabled: bool | None = None
     thediscdb_refresh_days: int | None = None

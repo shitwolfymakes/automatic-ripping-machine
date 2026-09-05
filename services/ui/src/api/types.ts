@@ -112,15 +112,12 @@ export interface ManualTriggerResponse {
   session_id: string | null
 }
 
-export interface DriveView {
-  id: string
-  hostname: string
-  device_path: string
-  display_name: string | null
-  status: string
-  last_seen_at: string | null
-  default_session_id: string | null
-}
+// Drive shapes come straight from the OpenAPI schema: the lifecycle feature
+// added a dozen fields and the UI reads most of them.
+export type DriveView = components['schemas']['DriveView']
+export type DriveRescanResponse = components['schemas']['DriveRescanResponse']
+export type DriveLifecycle = components['schemas']['DriveLifecycle']
+export type DriveStatus = components['schemas']['DriveStatus']
 
 export interface DriveUpdateRequest {
   display_name?: string | null

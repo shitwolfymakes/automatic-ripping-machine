@@ -109,6 +109,12 @@ class Settings(BaseSettings):
     ARM_HOST_LOGS_PATH: str = ""
     ARM_HOST_CERTS_PATH: str = ""
 
+    # Drive scanner roots (spec §2). /sys is the container's own sysfs mount
+    # (host-wide); /host-disk is the read-only bind of the host's /dev/disk —
+    # symlink directories only, never device nodes.
+    ARM_SYSFS_ROOT: str = "/sys"
+    ARM_HOST_DISK_ROOT: str = "/host-disk"
+
     # Docker network the spawned transcoder joins so it can reach
     # `https://arm-backend:8443`. Compose default project network is
     # `<project>_default`.
@@ -132,6 +138,34 @@ class Settings(BaseSettings):
     # default uid every run, which can revert externally-set ownership.
     ARM_TRANSCODE_PUID: str = ""
     ARM_TRANSCODE_PGID: str = ""
+
+    # --- Drive lifecycle Plan 3: ripper manager (spec §3) --------------------
+    # Image for the durable per-drive ripper containers the backend creates on
+    # enroll. Defaults like ARM_TRANSCODE_IMAGE: built locally by compose (the
+    # arm-ripper service is deploy.replicas:0 — built, never run).
+    ARM_RIPPER_IMAGE: str = "arm-ripper:latest"
+    # The uid/gid the rippers drop to and the host cdrom group they need to
+    # open the optical nodes. Compose passes the same PUID/PGID/CDROM_GID it
+    # gives every service; empty = leave the ripper entrypoint's defaults.
+    PUID: str = ""
+    PGID: str = ""
+    CDROM_GID: str = ""
+
+    # Optional ripper tunables forwarded verbatim into every ripper container
+    # the manager creates (empty = the ripper's own default). Named with the
+    # ARM_RIPPER_ prefix here so they cannot collide with backend settings;
+    # container_spec maps them to the ripper's env names.
+    ARM_RIPPER_POLL_INTERVAL_SECONDS: str = ""
+    ARM_RIPPER_MIN_LENGTH_SECONDS: str = ""
+    ARM_RIPPER_MAKEMKV_KEYCHECK_INTERVAL_SECONDS: str = ""
+    ARM_RIPPER_NOT_READY_REARM_POLLS: str = ""
+    ARM_RIPPER_OPTICAL_SR_MAX: str = ""
+    ARM_RIPPER_OPTICAL_SG_MAX: str = ""
+    # Host path of the certs dir the rippers' CA mount comes from. Rippers run
+    # on the LOCAL daemon, so on a remote-transcode install (ARM_TRANSCODE_
+    # DOCKER_HOST set) ARM_HOST_CERTS_PATH points at the transcode host's certs
+    # and this must name the local one. Empty = same as ARM_HOST_CERTS_PATH.
+    ARM_RIPPER_CERTS_PATH: str = ""
 
     # --- Phase 7b: GPU inventory --------------------------------------------
     # JSON array of GPUs detected host-side at install time (install.sh /

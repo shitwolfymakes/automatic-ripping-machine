@@ -355,6 +355,14 @@ export type ConfigUpdateRequest = {
      */
     community_keydb_enabled?: boolean | null;
     /**
+     * Drive Scan Interval Seconds
+     */
+    drive_scan_interval_seconds?: number | null;
+    /**
+     * Drive Detected Prune Days
+     */
+    drive_detected_prune_days?: number | null;
+    /**
      * Makemkv Sdf Enabled
      */
     makemkv_sdf_enabled?: boolean | null;
@@ -430,6 +438,14 @@ export type ConfigView = {
      * Community Keydb Enabled
      */
     community_keydb_enabled: boolean;
+    /**
+     * Drive Scan Interval Seconds
+     */
+    drive_scan_interval_seconds: number;
+    /**
+     * Drive Detected Prune Days
+     */
+    drive_detected_prune_days: number;
     /**
      * Makemkv Sdf Enabled
      */
@@ -612,6 +628,32 @@ export type Drive = {
      */
     serial?: string | null;
     /**
+     * By Id Name
+     */
+    by_id_name?: string | null;
+    /**
+     * Sysfs Port
+     */
+    sysfs_port?: string | null;
+    identity_kind?: DriveIdentityKind | null;
+    lifecycle?: DriveLifecycle;
+    /**
+     * Present
+     */
+    present?: boolean;
+    /**
+     * Vendor
+     */
+    vendor?: string | null;
+    /**
+     * Model
+     */
+    model?: string | null;
+    /**
+     * Last Error
+     */
+    last_error?: string | null;
+    /**
      * Display Name
      */
     display_name?: string | null;
@@ -686,18 +728,53 @@ export type DriveCurrentJobView = {
 };
 
 /**
+ * DriveDevicePathUpdateRequest
+ *
+ * Ripper → backend: the drive now occupies this node (replug under a
+ * new srN). Keeps the UI's node current without a re-register.
+ */
+export type DriveDevicePathUpdateRequest = {
+    /**
+     * Device Path
+     */
+    device_path: string;
+};
+
+/**
  * DriveDiagnosticItem
+ *
+ * One row of GET /api/drives/diagnostic's "Look for issues" panel: the
+ * lifecycle model's own verdict on a drive, not just heartbeat staleness.
  */
 export type DriveDiagnosticItem = {
     /**
      * Id
      */
     id: string;
+    lifecycle: DriveLifecycle;
+    /**
+     * Present
+     */
+    present: boolean;
+    identity_kind: DriveIdentityKind | null;
+    /**
+     * Device Path
+     */
+    device_path: string;
+    status: DriveStatus;
     media_status: DriveMediaStatus | null;
     /**
      * Media Status At
      */
     media_status_at: string | null;
+    /**
+     * Container
+     */
+    container: string | null;
+    /**
+     * Last Error
+     */
+    last_error: string | null;
     /**
      * Healthy
      */
@@ -716,7 +793,29 @@ export type DriveDiagnosticResponse = {
      * Drives
      */
     drives: Array<DriveDiagnosticItem>;
+    /**
+     * System
+     */
+    system?: Array<string>;
 };
+
+/**
+ * DriveIdentityKind
+ *
+ * What a Drive row's identity is keyed on. BY_ID is the udev
+ * /dev/disk/by-id link name (stable across replug and renumbering); PORT
+ * is the sysfs device path — the degraded fallback for drives that expose
+ * no serial, and the UI says so.
+ */
+export type DriveIdentityKind = 'by_id' | 'port';
+
+/**
+ * DriveLifecycle
+ *
+ * Operator-owned state of a physical optical drive the backend has seen.
+ * Presence (plugged in right now) is a separate, orthogonal fact.
+ */
+export type DriveLifecycle = 'detected' | 'ignored' | 'enrolled';
 
 /**
  * DriveMediaStatus
@@ -725,7 +824,7 @@ export type DriveDiagnosticResponse = {
  * on a heartbeat so the backend can fail manual-trigger requests
  * fast when the user clicks Start without loading a disc.
  */
-export type DriveMediaStatus = 'loaded' | 'no_disc' | 'tray_open' | 'not_ready' | 'unavailable' | 'unknown';
+export type DriveMediaStatus = 'loaded' | 'no_disc' | 'tray_open' | 'not_ready' | 'unavailable' | 'unknown' | 'detached';
 
 /**
  * DriveMode
@@ -744,6 +843,26 @@ export type DriveRescanResponse = {
      * Stale
      */
     stale: number;
+    /**
+     * Detected
+     */
+    detected?: number;
+    /**
+     * Ignored
+     */
+    ignored?: number;
+    /**
+     * Enrolled
+     */
+    enrolled?: number;
+    /**
+     * Absent
+     */
+    absent?: number;
+    /**
+     * Pruned
+     */
+    pruned?: number;
 };
 
 /**
@@ -863,6 +982,32 @@ export type DriveView = {
      * Updated At
      */
     updated_at: string | null;
+    lifecycle: DriveLifecycle;
+    /**
+     * Present
+     */
+    present: boolean;
+    identity_kind: DriveIdentityKind | null;
+    /**
+     * Serial
+     */
+    serial: string | null;
+    /**
+     * By Id Name
+     */
+    by_id_name: string | null;
+    /**
+     * Vendor
+     */
+    vendor: string | null;
+    /**
+     * Model
+     */
+    model: string | null;
+    /**
+     * Last Error
+     */
+    last_error: string | null;
     current_job?: DriveCurrentJobView | null;
 };
 
@@ -2186,8 +2331,16 @@ export type PathStatus = {
 
 /**
  * RegisterRequest
+ *
+ * POST /api/ripper/register. Keyed on the Drive row the backend handed
+ * this container (ARM_DRIVE_ID); `by_id_name` is the udev link the ripper
+ * is bound to (None for a port-identity drive) and must match the row.
  */
 export type RegisterRequest = {
+    /**
+     * Drive Id
+     */
+    drive_id: string;
     /**
      * Hostname
      */
@@ -2207,9 +2360,9 @@ export type RegisterRequest = {
         [key: string]: unknown;
     };
     /**
-     * Serial
+     * By Id Name
      */
-    serial?: string | null;
+    by_id_name?: string | null;
 };
 
 /**
@@ -3676,6 +3829,78 @@ export type HeartbeatApiRipperHeartbeatPostResponses = {
 
 export type HeartbeatApiRipperHeartbeatPostResponse = HeartbeatApiRipperHeartbeatPostResponses[keyof HeartbeatApiRipperHeartbeatPostResponses];
 
+export type GetDriveApiRipperDrivesDriveIdGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Drive Id
+         */
+        drive_id: string;
+    };
+    query?: never;
+    url: '/api/ripper/drives/{drive_id}';
+};
+
+export type GetDriveApiRipperDrivesDriveIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetDriveApiRipperDrivesDriveIdGetError = GetDriveApiRipperDrivesDriveIdGetErrors[keyof GetDriveApiRipperDrivesDriveIdGetErrors];
+
+export type GetDriveApiRipperDrivesDriveIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Drive;
+};
+
+export type GetDriveApiRipperDrivesDriveIdGetResponse = GetDriveApiRipperDrivesDriveIdGetResponses[keyof GetDriveApiRipperDrivesDriveIdGetResponses];
+
+export type UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchData = {
+    body: DriveDevicePathUpdateRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Drive Id
+         */
+        drive_id: string;
+    };
+    query?: never;
+    url: '/api/ripper/drives/{drive_id}/device-path';
+};
+
+export type UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchError = UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchErrors[keyof UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchErrors];
+
+export type UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchResponse = UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchResponses[keyof UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchResponses];
+
 export type MakemkvKeyStatusApiRipperMakemkvKeyStatusPostData = {
     body: MakemkvKeyStatusReport;
     headers?: {
@@ -4693,7 +4918,14 @@ export type RescanDrivesApiDrivesRescanPostData = {
         authorization?: string | null;
     };
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Force
+         *
+         * Prune detected drives that are not present right now (admin only).
+         */
+        force?: boolean;
+    };
     url: '/api/drives/rescan';
 };
 
@@ -4786,6 +5018,154 @@ export type UpdateDriveApiDrivesDriveIdPatchResponses = {
 };
 
 export type UpdateDriveApiDrivesDriveIdPatchResponse = UpdateDriveApiDrivesDriveIdPatchResponses[keyof UpdateDriveApiDrivesDriveIdPatchResponses];
+
+export type EnrollDriveApiDrivesDriveIdEnrollPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Drive Id
+         */
+        drive_id: string;
+    };
+    query?: never;
+    url: '/api/drives/{drive_id}/enroll';
+};
+
+export type EnrollDriveApiDrivesDriveIdEnrollPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EnrollDriveApiDrivesDriveIdEnrollPostError = EnrollDriveApiDrivesDriveIdEnrollPostErrors[keyof EnrollDriveApiDrivesDriveIdEnrollPostErrors];
+
+export type EnrollDriveApiDrivesDriveIdEnrollPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DriveView;
+};
+
+export type EnrollDriveApiDrivesDriveIdEnrollPostResponse = EnrollDriveApiDrivesDriveIdEnrollPostResponses[keyof EnrollDriveApiDrivesDriveIdEnrollPostResponses];
+
+export type IgnoreDriveApiDrivesDriveIdIgnorePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Drive Id
+         */
+        drive_id: string;
+    };
+    query?: never;
+    url: '/api/drives/{drive_id}/ignore';
+};
+
+export type IgnoreDriveApiDrivesDriveIdIgnorePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type IgnoreDriveApiDrivesDriveIdIgnorePostError = IgnoreDriveApiDrivesDriveIdIgnorePostErrors[keyof IgnoreDriveApiDrivesDriveIdIgnorePostErrors];
+
+export type IgnoreDriveApiDrivesDriveIdIgnorePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DriveView;
+};
+
+export type IgnoreDriveApiDrivesDriveIdIgnorePostResponse = IgnoreDriveApiDrivesDriveIdIgnorePostResponses[keyof IgnoreDriveApiDrivesDriveIdIgnorePostResponses];
+
+export type UnignoreDriveApiDrivesDriveIdUnignorePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Drive Id
+         */
+        drive_id: string;
+    };
+    query?: never;
+    url: '/api/drives/{drive_id}/unignore';
+};
+
+export type UnignoreDriveApiDrivesDriveIdUnignorePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UnignoreDriveApiDrivesDriveIdUnignorePostError = UnignoreDriveApiDrivesDriveIdUnignorePostErrors[keyof UnignoreDriveApiDrivesDriveIdUnignorePostErrors];
+
+export type UnignoreDriveApiDrivesDriveIdUnignorePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DriveView;
+};
+
+export type UnignoreDriveApiDrivesDriveIdUnignorePostResponse = UnignoreDriveApiDrivesDriveIdUnignorePostResponses[keyof UnignoreDriveApiDrivesDriveIdUnignorePostResponses];
+
+export type UnenrollDriveApiDrivesDriveIdUnenrollPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Drive Id
+         */
+        drive_id: string;
+    };
+    query?: never;
+    url: '/api/drives/{drive_id}/unenroll';
+};
+
+export type UnenrollDriveApiDrivesDriveIdUnenrollPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UnenrollDriveApiDrivesDriveIdUnenrollPostError = UnenrollDriveApiDrivesDriveIdUnenrollPostErrors[keyof UnenrollDriveApiDrivesDriveIdUnenrollPostErrors];
+
+export type UnenrollDriveApiDrivesDriveIdUnenrollPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DriveView;
+    /**
+     * Drive row deleted (detected-origin drive)
+     */
+    204: void;
+};
+
+export type UnenrollDriveApiDrivesDriveIdUnenrollPostResponse = UnenrollDriveApiDrivesDriveIdUnenrollPostResponses[keyof UnenrollDriveApiDrivesDriveIdUnenrollPostResponses];
 
 export type ListSessionsApiSessionsGetData = {
     body?: never;

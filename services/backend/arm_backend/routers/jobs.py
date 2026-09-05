@@ -83,7 +83,10 @@ _MEDIA_STATUS_DETAIL: dict[DriveMediaStatus, str] = {
     DriveMediaStatus.NO_DISC: "no disc loaded in the drive",
     DriveMediaStatus.TRAY_OPEN: "drive tray is open — close it before starting a rip",
     DriveMediaStatus.NOT_READY: "drive is busy / spinning up — try again in a moment",
-    DriveMediaStatus.UNAVAILABLE: "drive device node is gone — check the host /dev mount",
+    DriveMediaStatus.DETACHED: "drive is detached — reconnect it before starting a rip",
+    DriveMediaStatus.UNAVAILABLE: (
+        "drive node exists but could not be opened — check the device cgroup rule and CDROM_GID"
+    ),
 }
 
 

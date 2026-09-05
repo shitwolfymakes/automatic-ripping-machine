@@ -1,7 +1,8 @@
 <script lang="ts">
 	import type { DriveView as Drive, SessionView } from '$lib/types/api.gen';
-	import { updateDrive, deleteDrive } from '$lib/api/drives';
+	import { updateDrive, unenrollDrive } from '$lib/api/drives';
 	import { triggerManual } from '$lib/api/jobs';
+	import { driveStatusLabel, isRipping, DETACHED_LABEL } from '$lib/utils/drives';
 	import StatusBadge from './StatusBadge.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import SlideOver from './SlideOver.svelte';
@@ -9,7 +10,7 @@
 
 	interface Props {
 		drive?: Drive;
-		onupdate?: () => void;
+		onupdate?: () => void | Promise<void>;
 		sessions?: SessionView[];
 		globalDefaults?: {
 			prescan_cache_mb?: number;
@@ -25,7 +26,6 @@
 	let editName = $state('');
 	let saving = $state(false);
 	let togglingUhd = $state(false);
-	let removing = $state(false);
 	let togglingMode = $state(false);
 	let selectedSessionId = $state('');
 	let triggering = $state(false);
@@ -125,7 +125,12 @@
 		}
 	}
 
-	let isStale = $derived(drive?.status === 'offline');
+	let statusText = $derived(drive ? driveStatusLabel(drive) : '');
+	let isDetached = $derived(statusText === DETACHED_LABEL);
+	let isError = $derived(drive?.status === 'error');
+	let isOfflinePresent = $derived(
+		!isError && !isDetached && drive?.status === 'offline' && drive?.present === true
+	);
 
 	async function startManualRip() {
 		if (!drive || triggering) return;
@@ -156,15 +161,21 @@
 		}
 	}
 
-	async function handleRemove() {
+	let unenrolling = $state(false);
+	let unenrollError = $state<string | null>(null);
+	async function handleUnenroll() {
 		if (!drive) return;
-		if (!confirm(`Remove "${drive.display_name || drive.device_path || `Drive ${drive.id}`}" from the database? This drive will reappear on the next rescan if it's still connected.`)) return;
-		removing = true;
+		unenrollError = null;
+		const name = drive.display_name || drive.model || drive.hostname;
+		if (!confirm(`Unenroll ${name}? Its ripper container is stopped and removed. If the drive is still connected it reappears under Detected on the next scan.`)) return;
+		unenrolling = true;
 		try {
-			await deleteDrive(drive.id);
-			onupdate?.();
-		} catch {
-			removing = false;
+			await unenrollDrive(drive.id);
+			await onupdate?.();
+		} catch (e) {
+			unenrollError = e instanceof Error ? e.message : 'Unenroll failed';
+		} finally {
+			unenrolling = false;
 		}
 	}
 
@@ -228,15 +239,19 @@
 {#if !drive}
 	<SkeletonCard />
 {:else}
-<div class="rounded-lg border border-primary/20 bg-surface p-2.5 shadow-xs dark:border-primary/20 dark:bg-surface-dark {isStale ? 'opacity-60' : ''}">
+<div class="rounded-lg border border-primary/20 bg-surface p-2.5 shadow-xs dark:border-primary/20 dark:bg-surface-dark {isDetached ? 'opacity-60' : ''}">
 	<!-- Header: name + rename + status -->
 	<div class="mb-1 flex items-center justify-between">
 		<div class="flex min-w-0 items-center gap-1.5">
 			<h3 class="truncate font-semibold text-gray-900 dark:text-white">
 				{drive.display_name || drive.device_path || `Drive ${drive.id}`}
 			</h3>
-			{#if isStale}
-				<span class="flex-shrink-0 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">Stale</span>
+			{#if isError}
+				<span class="flex-shrink-0 text-[10px] font-medium text-red-600 dark:text-red-400" title={statusText}>{statusText}</span>
+			{:else if isDetached}
+				<span class="flex-shrink-0 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">{statusText}</span>
+			{:else if isOfflinePresent}
+				<span class="flex-shrink-0 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400" data-testid="drive-status-label">{statusText}</span>
 			{:else if !editing}
 				<button
 					onclick={startEdit}
@@ -384,19 +399,21 @@
 			</svg>
 		</button>
 
-		{#if isStale && !drive.current_job}
-			<button
-				onclick={handleRemove}
-				disabled={removing}
-				class="rounded-md bg-red-500/15 px-2 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-500/25 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-500/30"
-			>
-				{removing ? 'Removing...' : 'Remove'}
-			</button>
-		{/if}
+		<button
+			data-testid="drive-unenroll"
+			onclick={handleUnenroll}
+			disabled={unenrolling || isRipping(drive)}
+			title={isRipping(drive) ? 'Cannot unenroll while ripping' : 'Stop and remove this drive\'s ripper'}
+			class="rounded-md bg-red-500/15 px-2 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-500/25 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-500/30"
+		>{unenrolling ? 'Unenrolling...' : 'Unenroll'}</button>
 	</div>
 
 	{#if manualError}
 		<p class="mt-1 text-[11px] text-red-600 dark:text-red-400" data-testid="drive-manual-error">{manualError}</p>
+	{/if}
+
+	{#if unenrollError}
+		<p class="mt-1 text-[11px] text-red-600 dark:text-red-400" data-testid="drive-unenroll-error">{unenrollError}</p>
 	{/if}
 
 	<!-- Current rip -->

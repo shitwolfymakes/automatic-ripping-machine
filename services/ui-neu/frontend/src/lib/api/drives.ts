@@ -20,3 +20,20 @@ export function rescanDrives(force = false): Promise<DriveRescanResponse> {
 export function fetchDriveDiagnostic(): Promise<DriveDiagnosticResponse> {
 	return get<DriveDiagnosticResponse>('/api/drives/diagnostic');
 }
+
+export function enrollDrive(driveId: string): Promise<DriveView> {
+	return post<DriveView>(`/api/drives/${driveId}/enroll`);
+}
+
+export function ignoreDrive(driveId: string): Promise<DriveView> {
+	return post<DriveView>(`/api/drives/${driveId}/ignore`);
+}
+
+export function unignoreDrive(driveId: string): Promise<DriveView> {
+	return post<DriveView>(`/api/drives/${driveId}/unignore`);
+}
+
+/** May answer 204 (row deleted — the drive was absent) or 200. Callers refetch. */
+export function unenrollDrive(driveId: string): Promise<void> {
+	return post<void>(`/api/drives/${driveId}/unenroll`);
+}

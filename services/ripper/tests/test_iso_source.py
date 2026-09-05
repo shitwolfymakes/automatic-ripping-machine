@@ -23,6 +23,7 @@ import pytest
 # to load without these vars. Set placeholders before any arm_ripper.*
 # import so importing main.py (for the heartbeat test) doesn't blow up.
 os.environ.setdefault("ARM_DRIVE_DEV", "/dev/sr0")
+os.environ.setdefault("ARM_DRIVE_ID", "drv_test")
 os.environ.setdefault("ARM_BACKEND_URL", "https://backend.invalid")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "test-token")
 
@@ -31,6 +32,7 @@ import arm_ripper.rip.makemkv_rip as makemkv_rip  # noqa: E402
 import arm_ripper.scan.disc_probe as disc_probe  # noqa: E402
 import arm_ripper.scan.makemkv as scan_makemkv  # noqa: E402
 from arm_common import DriveMediaStatus  # noqa: E402
+from arm_ripper.drive_handle import DriveHandle  # noqa: E402
 from arm_ripper.source import is_iso_source, makemkv_source_url  # noqa: E402
 
 
@@ -317,7 +319,7 @@ async def test_heartbeat_short_circuits_probe_for_iso_source(monkeypatch, tmp_pa
         await asyncio.sleep(0)
         task.cancel()
 
-    task = asyncio.create_task(ripper_main.heartbeat_loop(client, "drv_iso", str(iso), controller))
+    task = asyncio.create_task(ripper_main.heartbeat_loop(client, "drv_iso", DriveHandle.fixed(str(iso)), controller))
     asyncio.create_task(cancel_after_one_tick())
     with pytest.raises(asyncio.CancelledError):
         await task
