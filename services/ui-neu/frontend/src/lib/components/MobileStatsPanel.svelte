@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isGuest } from '$lib/stores/auth';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { countRipping } from '$lib/utils/job-status';
 	import SidebarStats from './SidebarStats.svelte';
@@ -61,13 +62,15 @@
 		</p>
 		<div class="space-y-1">
 			{#each services as s (s.label)}
-				<a
-					href={s.href}
-					class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-primary/10 dark:text-gray-300 dark:hover:bg-primary/15"
+				{@const linked = !$isGuest || !s.href.startsWith('/settings')}
+				<svelte:element
+					this={linked ? 'a' : 'span'}
+					href={linked ? s.href : undefined}
+					class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition-colors dark:text-gray-300 {linked ? 'hover:bg-primary/10 dark:hover:bg-primary/15' : ''}"
 				>
 					<div class="h-2.5 w-2.5 shrink-0 rounded-full {s.dot}"></div>
 					{s.label}
-				</a>
+				</svelte:element>
 			{/each}
 		</div>
 	</div>
@@ -79,12 +82,13 @@
 			Activity
 		</p>
 		<div class="space-y-1 text-sm">
-			<a
-				href="/settings#drives"
-				class="block rounded-lg px-3 py-2 text-gray-700 transition-colors hover:bg-primary/10 dark:text-gray-300 dark:hover:bg-primary/15"
+			<svelte:element
+				this={$isGuest ? 'span' : 'a'}
+				href={$isGuest ? undefined : '/settings#drives'}
+				class="block rounded-lg px-3 py-2 text-gray-700 transition-colors dark:text-gray-300 {$isGuest ? '' : 'hover:bg-primary/10 dark:hover:bg-primary/15'}"
 			>
 				{$dashboard.db_available ? $dashboard.drives_online : '--'} drive{$dashboard.drives_online !== 1 ? 's' : ''}
-			</a>
+			</svelte:element>
 			{#if rippingCount > 0}
 				<p class="px-3 py-2 font-semibold text-blue-600 dark:text-blue-400">{rippingCount} ripping</p>
 			{/if}
