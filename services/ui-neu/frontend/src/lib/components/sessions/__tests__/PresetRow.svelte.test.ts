@@ -259,7 +259,7 @@ describe('PresetRow — transcode preset', () => {
 		expect(screen.getByText(/handbrake.*mkv.*h\.?265.*any/i)).toBeInTheDocument();
 	});
 
-	it('shows — for null codec', () => {
+	it('shows a dash for null codec', () => {
 		renderComponent(PresetRow, {
 			kind: 'transcode',
 			preset: transcodePreset({ codec: null }),
@@ -269,8 +269,8 @@ describe('PresetRow — transcode preset', () => {
 			onclone: vi.fn(),
 			ondelete: vi.fn(),
 		});
-		// Summary must contain em-dash for null codec
-		expect(screen.getByText(/—/)).toBeInTheDocument();
+		// Summary shows a dash for the null codec
+		expect(screen.getByText(/ - /)).toBeInTheDocument();
 	});
 
 	it('shows Used by N chip for transcode', () => {

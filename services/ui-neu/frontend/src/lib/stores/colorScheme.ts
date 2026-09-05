@@ -726,7 +726,7 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		swatch: '#00ff00',
 		mode: 'dark',
 		author: 'Gemini',
-		description: 'Classic Winamp chassis — steel panels, equalizer titlebars, hardware buttons, LED meters, Silkscreen bitmap type',
+		description: 'Classic Winamp chassis: steel panels, equalizer titlebars, hardware buttons, LED meters, Silkscreen bitmap type',
 		tokens: {
 			'--color-primary': 'rgb(0, 255, 0)',
 			'--color-primary-hover': 'rgb(51, 255, 51)',
