@@ -34,7 +34,7 @@
 	);
 </script>
 
-<div class="flex flex-wrap items-center gap-2">
+<div class="flex flex-wrap items-center justify-end gap-2">
 	<button
 		data-testid="drive-rescan"
 		onclick={() => run(false)}
@@ -50,10 +50,10 @@
 		title="Remove detected drives that aren't connected, then scan"
 	>{scanning ? 'Scanning...' : 'Remove Missing Drives'}</button>
 	{#if summaryText}
-		<span data-testid="drive-rescan-summary" class="basis-full text-xs text-gray-500 dark:text-gray-400">{summaryText}</span>
+		<span data-testid="drive-rescan-summary" class="basis-full text-right text-xs text-gray-500 dark:text-gray-400">{summaryText}</span>
 	{/if}
 	{#if error}
-		<span data-testid="drive-rescan-error" class="basis-full text-xs text-red-600 dark:text-red-400">{error}</span>
+		<span data-testid="drive-rescan-error" class="basis-full text-right text-xs text-red-600 dark:text-red-400">{error}</span>
 	{/if}
 </div>
 
