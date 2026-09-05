@@ -100,7 +100,17 @@
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
 		text-rendering: optimizeLegibility;
+		/* --font-family: optional theme token; falls back to the Tailwind sans stack */
+		font-family: var(--font-family, var(--font-sans));
 		@apply bg-page text-gray-900 dark:bg-page-dark dark:text-gray-100;
+	}
+
+	/* Site logo — themeable via optional tokens. --logo-filter tints the stock
+	   image; --logo-url (Chromium/Safari) swaps it entirely via content
+	   replacement. Both default to no-ops when a theme doesn't set them. */
+	[data-logo] img {
+		content: var(--logo-url, normal);
+		filter: var(--logo-filter, none);
 	}
 
 	select option,
@@ -121,7 +131,10 @@
 
 @layer components {
 	.section-frame {
-		--_accent: var(--frame-accent, var(--color-primary, #3b82f6));
+		/* Accent precedence: per-instance prop (inline --frame-accent) beats the
+		   theme-level --frame-accent token (inherited from :root), beats the
+		   historical #f90 default that applies when neither is set. */
+		--_accent: var(--frame-accent, #f90);
 		border-radius: var(--radius);
 		overflow: hidden;
 	}
