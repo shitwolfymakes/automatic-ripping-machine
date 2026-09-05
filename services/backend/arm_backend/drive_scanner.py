@@ -144,6 +144,10 @@ def enumerate_optical(*, sysfs_root: Path, disk_root: Path) -> list[ScannedDrive
     return drives
 
 
+class PruneUnavailable(RuntimeError):
+    """Raised by scan_once(prune_now=True) when the host enumeration cannot be trusted."""
+
+
 @dataclass(frozen=True)
 class ScanSummary:
     detected: int
@@ -297,11 +301,30 @@ class DriveScanner:
         surfaced read-only for GET /api/drives/diagnostic's by-id check."""
         return self._disk_root
 
+    def enumeration_problem(self) -> str | None:
+        """None when the host enumeration can be trusted; otherwise a reason
+        an empty (or partial) `enumerate_optical` result is not legitimate —
+        the sysfs or by-id mount itself is missing, not "nothing plugged
+        in". Checked before a prune_now scan (Force Rescan) so a degraded
+        host mount can never be read as "prune everything absent"."""
+        if not (self._sysfs_root / "class" / "block").is_dir():
+            return f"host sysfs is not mounted ({self._sysfs_root / 'class' / 'block'})"
+        if not (self._disk_root / "by-id").is_dir():
+            return f"host by-id directory is not mounted ({self._disk_root / 'by-id'})"
+        return None
+
     async def scan_once(self, session: AsyncSession, *, prune_now: bool = False) -> ScanSummary:
         """One reconcile. `prune_now` (Force Rescan) drops the prune window to
         zero days: every detected row that is not present right now is deleted
-        — enrolled and ignored rows are never pruned (reconcile_drives)."""
+        — enrolled and ignored rows are never pruned (reconcile_drives). Refuses
+        (raises PruneUnavailable) rather than pruning when the host enumeration
+        cannot be trusted — an unreadable sysfs/by-id mount looks exactly like
+        "no drives" otherwise, and prune_now would wipe every DETECTED row."""
         async with self._lock:
+            if prune_now:
+                problem = self.enumeration_problem()
+                if problem is not None:
+                    raise PruneUnavailable(problem)
             _, prune_days = await _tunables(session)
             scanned = enumerate_optical(sysfs_root=self._sysfs_root, disk_root=self._disk_root)
             summary = await reconcile_drives(
