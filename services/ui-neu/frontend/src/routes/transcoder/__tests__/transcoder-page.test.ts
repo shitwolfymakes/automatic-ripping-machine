@@ -25,13 +25,13 @@ vi.mock('$lib/api/transcoder', () => ({
 	// v3 bare TranscodeTaskView[].
 	fetchTranscoderJobs: vi.fn(() => Promise.resolve([
 		{
-			id: 't-1', session_application_id: 'job-1', source_track_id: 'track-1',
+			id: 't-1', session_application_id: 'sap_1', job_id: 'job_abc', source_track_id: 'track-1',
 			status: 'in_progress', output_path: '/media/transcode/movie1.mkv', progress_pct: 50,
 			attempts: 0, claimed_by: 'gpu-0', claim_heartbeat_at: '2025-06-15T10:05:00Z',
 			last_error: null, created_at: '2025-06-15T10:00:00Z', updated_at: '2025-06-15T10:05:00Z'
 		},
 		{
-			id: 't-2', session_application_id: 'job-2', source_track_id: 'track-2',
+			id: 't-2', session_application_id: 'sap_2', job_id: null, source_track_id: 'track-2',
 			status: 'failed', output_path: '/media/transcode/movie2.mkv', progress_pct: 0,
 			attempts: 1, claimed_by: null, claim_heartbeat_at: null,
 			last_error: 'boom', created_at: '2025-06-15T10:00:00Z', updated_at: '2025-06-15T10:05:00Z'
@@ -107,6 +107,16 @@ describe('Transcoder Page', () => {
 			await waitFor(() => expect(screen.getByText('movie1.mkv')).toBeInTheDocument());
 			expect(screen.getByText('Retry')).toBeInTheDocument();
 			expect(screen.getAllByText('Delete').length).toBeGreaterThan(0);
+		});
+
+		it('links the card to the resolved job id, not the session application id', async () => {
+			renderComponent(TranscoderPage);
+			await waitFor(() => expect(screen.getByText('movie1.mkv')).toBeInTheDocument());
+			const links = screen.getAllByTestId('transcode-job-link');
+			expect(links).toHaveLength(1);
+			expect(links[0]).toHaveAttribute('href', '/jobs/job_abc');
+			expect(document.querySelector('a[href="/jobs/sap_1"]')).toBeNull();
+			expect(screen.getByText('No job')).toBeInTheDocument();
 		});
 	});
 });
