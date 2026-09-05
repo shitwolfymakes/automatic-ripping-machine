@@ -274,6 +274,20 @@ describe('ApplySessionDialog', () => {
 		expect(fetchNamingPreviewMock).toHaveBeenCalledWith('job_1', 'ses_movie');
 	});
 
+	it('does not refetch the preview when the parent re-renders with a fresh job object (poll tick)', async () => {
+		fetchSessionsMock.mockResolvedValue([createSession({ id: 'ses_movie', name: 'Movie MKV', media_type: 'movie' })]);
+		const { rerender } = renderComponent(ApplySessionDialog, {
+			props: { job: createJob({ id: 'job_1', disc_type: 'dvd' }), onclose: vi.fn(), onapplied: vi.fn() }
+		});
+		await waitFor(() => expect(screen.getByText(/Movie MKV/)).toBeInTheDocument());
+		await fireEvent.change(screen.getByTestId('apply-session-select'), { target: { value: 'ses_movie' } });
+		await waitFor(() => expect(fetchNamingPreviewMock).toHaveBeenCalledTimes(1));
+		await rerender({ job: createJob({ id: 'job_1', disc_type: 'dvd' }), onclose: vi.fn(), onapplied: vi.fn() });
+		await new Promise((r) => setTimeout(r, 30));
+		expect(fetchNamingPreviewMock).toHaveBeenCalledTimes(1);
+		expect(screen.getByTestId('recipe-output-path')).toHaveTextContent('MysterySuspense');
+	});
+
 	it('explains a missing token in plain words and blocks Apply', async () => {
 		fetchSessionsMock.mockResolvedValue([
 			createSession({ id: 'ses_movie', name: 'Movie MKV', media_type: 'movie', output_path_template: '{title} ({year})/{title}.mkv' })

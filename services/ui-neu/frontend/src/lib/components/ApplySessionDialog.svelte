@@ -109,15 +109,21 @@
 		}
 	}
 
+	// Only the job's id matters here. The parent hands us a fresh `job` object
+	// on every dashboard poll; depending on the object would re-run this and
+	// flash "Resolving..." every tick.
+	const jobId = $derived(job.id);
+
 	$effect(() => {
 		const sessionId = selected;
+		const id = jobId;
 		preview = null;
 		previewProblem = null;
 		previewToken = null;
 		if (!sessionId) return;
 		previewLoading = true;
 		let cancelled = false;
-		fetchNamingPreview(job.id, sessionId)
+		fetchNamingPreview(id, sessionId)
 			.then((p) => {
 				if (!cancelled) preview = p;
 			})
