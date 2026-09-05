@@ -3,14 +3,14 @@ import os
 import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.auth import require_jwt
+from arm_backend.auth import require_jwt, require_writer
 from arm_backend.auto_session import (
     SessionNotFoundError,
     apply_session_internal,
@@ -21,18 +21,24 @@ from arm_backend.db import get_session
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.routers._params import JobIdParam
 from arm_backend.routers.logs import per_job_log_path
+from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_backend.ws import WSHub
 from arm_common import (
+    Config,
     DiscFingerprint,
     Drive,
     DriveMediaStatus,
     Job,
     JobStatus,
     Session,
+    SessionApplication,
+    SessionApplicationStatus,
     TrackStatus,
+    TranscodeTaskStatus,
     User,
 )
 from arm_common.models import Track, TranscodeTask
+from arm_common.models._columns import enum_value_str
 from arm_common.schemas import (
     AbandonJobRequest,
     ApplySessionRequest,
@@ -40,6 +46,7 @@ from arm_common.schemas import (
     BulkDeleteJobsResponse,
     DiscFingerprintView,
     JobDetailView,
+    JobStatsResponse,
     JobUpdateRequest,
     JobView,
     ManualTriggerRequest,
@@ -50,8 +57,10 @@ from arm_common.schemas import (
     RipProgressSummary,
     SessionApplicationView,
     TrackView,
+    TranscodeProgressSummary,
     TranscodeTaskView,
 )
+from arm_common.enums import NON_TERMINAL_JOB_STATUSES, TERMINAL_JOB_STATUSES
 from arm_common.ulid import is_valid_id
 
 logger = logging.getLogger("arm_backend.routers.jobs")
@@ -106,6 +115,71 @@ def _summarize_rip_progress(tracks: list[Track]) -> RipProgressSummary:
     )
 
 
+# A session_application counts as "terminal" for the job-done rollup when its
+# own status is terminal, OR it fanned out 0 tasks and isn't genuinely waiting
+# to be identified (the rip-only / all-excluded 0-task QUEUED deadlock — see
+# the design doc; absorbed here in the read layer).
+_TERMINAL_SESSION_STATUSES: frozenset[SessionApplicationStatus] = frozenset(
+    {
+        SessionApplicationStatus.DONE,
+        SessionApplicationStatus.DONE_PARTIAL,
+        SessionApplicationStatus.FAILED,
+        SessionApplicationStatus.CANCELLED,
+    }
+)
+
+
+def _session_app_is_terminal(sa: SessionApplicationStatus, task_count: int) -> bool:
+    if sa in _TERMINAL_SESSION_STATUSES:
+        return True
+    return task_count == 0 and sa != SessionApplicationStatus.WAITING_IDENTIFY
+
+
+def _summarize_transcode_progress(
+    session_apps: list[SessionApplication],
+    tasks: list[TranscodeTask],
+) -> TranscodeProgressSummary | None:
+    """Roll a job's session_applications (+ their tasks) into one job-level
+    transcode state. Returns None when no session has been applied.
+
+    Aggregates ALL applications, not the latest: a job can hold a DONE app
+    plus a newer QUEUED app (non-colliding outputs), and is "transcoding"
+    until every application is terminal.
+    """
+    if not session_apps:
+        return None
+
+    tasks_by_app: dict[str, list[TranscodeTask]] = {}
+    for t in tasks:
+        tasks_by_app.setdefault(t.session_application_id, []).append(t)
+
+    all_terminal = all(_session_app_is_terminal(sa.status, len(tasks_by_app.get(sa.id, []))) for sa in session_apps)
+
+    tasks_total = len(tasks)
+    tasks_done = sum(1 for t in tasks if t.status == TranscodeTaskStatus.DONE)
+    tasks_failed = sum(1 for t in tasks if t.status == TranscodeTaskStatus.FAILED)
+    percent = (sum(t.progress_pct for t in tasks) / tasks_total) if tasks_total else 100.0
+
+    state: Literal["transcoding", "done", "done_partial", "failed"]
+    if not all_terminal:
+        state = "transcoding"
+    elif tasks_failed and tasks_done:
+        state = "done_partial"
+    elif tasks_failed and not tasks_done:
+        state = "failed"
+    else:
+        # all terminal, no failures (incl. the 0-task absorbed case)
+        state = "done"
+
+    return TranscodeProgressSummary(
+        state=state,
+        tasks_total=tasks_total,
+        tasks_done=tasks_done,
+        tasks_failed=tasks_failed,
+        percent=round(percent, 1),
+    )
+
+
 @router.get("", response_model=list[JobView])
 async def list_jobs(
     _: User = Depends(require_jwt),
@@ -144,13 +218,68 @@ async def list_jobs(
         for tr in track_rows:
             tracks_by_job.setdefault(tr.job_id, []).append(tr)
 
+    # Batched session_application + transcode_task lookup keyed on ALL job ids
+    # in the page (any job can have a session, not just ripping jobs).
+    job_ids = [j.id for j in jobs]
+    sas_by_job: dict[str, list[SessionApplication]] = {}
+    transcode_tasks_by_job: dict[str, list[TranscodeTask]] = {}
+    if job_ids:
+        sa_rows = (
+            (await session.execute(select(SessionApplication).where(col(SessionApplication.job_id).in_(job_ids))))
+            .scalars()
+            .all()
+        )
+        sa_id_to_job: dict[str, str] = {}
+        for sa in sa_rows:
+            sas_by_job.setdefault(sa.job_id, []).append(sa)
+            sa_id_to_job[sa.id] = sa.job_id
+        if sa_id_to_job:
+            task_rows = (
+                (
+                    await session.execute(
+                        select(TranscodeTask).where(
+                            col(TranscodeTask.session_application_id).in_(list(sa_id_to_job.keys()))
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for t in task_rows:
+                # The task query filters on sa_id_to_job's keys, so every
+                # returned task's session_application_id is in the map.
+                owning_job = sa_id_to_job[t.session_application_id]
+                transcode_tasks_by_job.setdefault(owning_job, []).append(t)
+
     views: list[JobView] = []
     for j in jobs:
         view = JobView.model_validate(j)
         if j.status == JobStatus.RIPPING:
             view.rip_progress = _summarize_rip_progress(tracks_by_job.get(j.id, []))
+        view.transcode_progress = _summarize_transcode_progress(
+            sas_by_job.get(j.id, []), transcode_tasks_by_job.get(j.id, [])
+        )
         views.append(view)
     return views
+
+
+@router.get("/stats", response_model=JobStatsResponse)
+async def job_stats(
+    _: User = Depends(require_jwt),
+    session: AsyncSession = Depends(get_session),
+) -> JobStatsResponse:
+    """Dashboard aggregates. Full-scan + count in Python (mirrors the
+    dispatcher pattern) so the in-memory FakeSession stays sufficient;
+    job counts are small at the hobbyist scale this serves."""
+    jobs = list((await session.execute(select(Job))).scalars().all())
+    by_status: dict[str, int] = {}
+    by_type: dict[str, int] = {}
+    for j in jobs:
+        skey = j.status.value if hasattr(j.status, "value") else str(j.status)
+        by_status[skey] = by_status.get(skey, 0) + 1
+        tkey = j.disc_type.value if hasattr(j.disc_type, "value") else str(j.disc_type)
+        by_type[tkey] = by_type.get(tkey, 0) + 1
+    return JobStatsResponse(total=len(jobs), by_status=by_status, by_type=by_type)
 
 
 @router.get("/{job_id}", response_model=JobDetailView)
@@ -176,28 +305,50 @@ async def get_job_detail(
         .scalars()
         .all()
     )
+    sas = (
+        (await session.execute(select(SessionApplication).where(col(SessionApplication.job_id) == job_id)))
+        .scalars()
+        .all()
+    )
+    sa_ids = [sa.id for sa in sas]
+    job_tasks: list[TranscodeTask] = []
+    if sa_ids:
+        job_tasks = list(
+            (await session.execute(select(TranscodeTask).where(col(TranscodeTask.session_application_id).in_(sa_ids))))
+            .scalars()
+            .all()
+        )
+    job_view = JobView.model_validate(job)
+    job_view.transcode_progress = _summarize_transcode_progress(list(sas), job_tasks)
+
+    # Most-recent transcode task status per source track (ULID ids are
+    # monotonic, so the greatest id is the newest task). Built from the
+    # already-loaded job_tasks — no extra query.
+    latest_task_status: dict[str, TranscodeTaskStatus] = {}
+    latest_task_id: dict[str, str] = {}
+    for task in job_tasks:
+        prev = latest_task_id.get(task.source_track_id)
+        if prev is None or task.id > prev:
+            latest_task_id[task.source_track_id] = task.id
+            latest_task_status[task.source_track_id] = task.status
+
+    def _track_view(t: Track) -> TrackView:
+        tv = TrackView.model_validate(t)
+        tv.transcode_status = latest_task_status.get(t.id)
+        return tv
+
     return JobDetailView(
-        job=JobView.model_validate(job),
-        tracks=[TrackView.model_validate(t) for t in tracks],
+        job=job_view,
+        tracks=[_track_view(t) for t in tracks],
         fingerprints=[DiscFingerprintView.model_validate(fp) for fp in fingerprints],
     )
-
-
-_NON_TERMINAL_STATUSES: frozenset[JobStatus] = frozenset(
-    {
-        JobStatus.CREATED,
-        JobStatus.AWAITING_USER_ID,
-        JobStatus.IDENTIFIED,
-        JobStatus.RIPPING,
-    }
-)
 
 
 @router.post("/{job_id}/abandon", response_model=JobView)
 async def abandon_job(
     job_id: JobIdParam,
     req: AbandonJobRequest | None = None,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> Job:
@@ -218,7 +369,7 @@ async def abandon_job(
     job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
-    if job.status not in _NON_TERMINAL_STATUSES:
+    if job.status not in NON_TERMINAL_JOB_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"job already in terminal status {job.status.value}",
@@ -260,14 +411,102 @@ async def abandon_job(
     return job
 
 
-_TERMINAL_STATUSES: frozenset[JobStatus] = frozenset(
-    {
-        JobStatus.RIPPED,
-        JobStatus.RIPPED_PARTIAL,
-        JobStatus.ABANDONED,
-        JobStatus.FAILED,
-    }
-)
+@router.post("/{job_id}/rip-start-review", response_model=JobView)
+async def rip_start_review(
+    job_id: JobIdParam,
+    _: User = Depends(require_writer),
+    db: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
+) -> Job:
+    """Operator Start for a disc held in the timed review gate (spec §5.2).
+
+    Transitions AWAITING_REVIEW -> RIPPING here (the backend owns the transition;
+    rip-start then tolerates already-RIPPING) and emits the `rip.start` WS command
+    so the parked ripper unblocks. Operator-initiated, so JWT-authed on the jobs
+    router — NOT the ripper's service-token rip-start path. Pre-flight: at least
+    one kept (non-excluded) track, else 422 (don't let it fail deep in the ripper).
+    """
+    job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
+    if job.status != JobStatus.AWAITING_REVIEW:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"rip-start-review only valid for awaiting_review, got {enum_value_str(job.status)}",
+        )
+    tracks = list((await db.execute(select(Track).where(col(Track.job_id) == job_id))).scalars().all())
+    if tracks and all(t.excluded for t in tracks):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="at least one track must be kept (not excluded) to start the rip",
+        )
+
+    job.status = JobStatus.RIPPING
+    job.started_at = datetime.now(timezone.utc)
+    db.add(job)
+    await db.flush()
+
+    payload = {"job_id": job.id, "drive_id": job.drive_id}
+    await hub.emit(
+        topic=f"ripper.commands.{job.drive_id}",
+        event_type="rip.start",
+        payload=payload,
+        job_id=job.id,
+        session=db,
+    )
+    await hub.emit(
+        topic="ripper.events",
+        event_type="rip.started",
+        payload=payload,
+        job_id=job.id,
+        session=db,
+    )
+    await db.commit()
+    await db.refresh(job)
+    logger.info("rip-start-review job_id=%s -> ripping", job.id)
+    return job
+
+
+@router.post("/{job_id}/review-pause", response_model=JobView)
+async def review_pause(
+    job_id: JobIdParam,
+    paused: bool = True,
+    _: User = Depends(require_writer),
+    db: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
+) -> Job:
+    """Pause/resume ONE held disc's review countdown (per-job pause, spec §11).
+
+    `?paused=true` freezes this disc's auto-start countdown (waits indefinitely
+    for Start) while other discs keep counting; `?paused=false` resumes with a
+    FRESH countdown (new wait_start_time) so it doesn't auto-rip instantly on a
+    long-paused disc. Only valid for AWAITING_REVIEW. Emits a WS command so the
+    parked ripper re-evaluates the countdown on its next poll.
+    """
+    job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
+    if job.status != JobStatus.AWAITING_REVIEW:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"review-pause only valid for awaiting_review, got {enum_value_str(job.status)}",
+        )
+    job.manual_pause = paused
+    if not paused:
+        job.wait_start_time = datetime.now(timezone.utc)  # fresh countdown on resume
+    db.add(job)
+    await db.flush()
+    await hub.emit(
+        topic=f"ripper.commands.{job.drive_id}",
+        event_type="review.pause",
+        payload={"job_id": job.id, "drive_id": job.drive_id, "paused": paused},
+        job_id=job.id,
+        session=db,
+    )
+    await db.commit()
+    await db.refresh(job)
+    logger.info("review-pause job_id=%s paused=%s", job.id, paused)
+    return job
 
 
 async def _resolve_media_outputs(db: AsyncSession, job_id: str) -> list[Path]:
@@ -380,7 +619,7 @@ def _delete_per_job_log(job_id: str) -> None:
 async def delete_job(
     job_id: JobIdParam,
     delete_raw: bool = Query(default=False),
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> None:
     """Hard-delete a Job. Tracks, fingerprints, session_applications,
@@ -400,7 +639,7 @@ async def delete_job(
     job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
-    if job.status not in _TERMINAL_STATUSES:
+    if job.status not in TERMINAL_JOB_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"job in non-terminal status {job.status.value}; abandon it first",
@@ -434,7 +673,7 @@ async def delete_job(
 @router.delete("", response_model=BulkDeleteJobsResponse)
 async def delete_all_jobs(
     delete_raw: bool = Query(default=False),
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> BulkDeleteJobsResponse:
     """Hard-delete every job in a terminal status. Non-terminal jobs are
@@ -453,7 +692,7 @@ async def delete_all_jobs(
     skipped: list[str] = []
     totals = {"raw_dir_removed": 0, "media_files_removed": 0, "media_dirs_pruned": 0}
     for job in rows:
-        if job.status not in _TERMINAL_STATUSES:
+        if job.status not in TERMINAL_JOB_STATUSES:
             skipped.append(job.id)
             continue
         if delete_raw:
@@ -489,7 +728,7 @@ async def delete_all_jobs(
 @router.post("/manual", response_model=ManualTriggerResponse, status_code=status.HTTP_202_ACCEPTED)
 async def manual_trigger(
     req: ManualTriggerRequest,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> ManualTriggerResponse:
@@ -501,6 +740,13 @@ async def manual_trigger(
     drive = (await db.execute(select(Drive).where(col(Drive.id) == req.drive_id))).scalar_one_or_none()
     if drive is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
+
+    cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    if cfg is not None and cfg.ripping_paused:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="ripping is paused; no new jobs accepted",
+        )
 
     in_flight = (
         await db.execute(
@@ -548,20 +794,50 @@ async def manual_trigger(
 async def update_job(
     job_id: JobIdParam,
     req: JobUpdateRequest,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
 ) -> Job:
-    """Edit user-controlled fields on a Job. Currently `poster_url_manual`
-    only — title/year are owned by the identify/resolve flow.
-    """
+    """Edit user-controlled fields on a Job + optional per-track operator edits.
+    Job title/year stay behind identify/resolve; track `status` stays ripper-owned
+    (not in TrackEditRequest)."""
     job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
 
-    fields = req.model_dump(exclude_unset=True)
-    for key, value in fields.items():
+    job_fields = req.model_dump(exclude_unset=True, exclude={"tracks"})
+    for key, value in job_fields.items():
         setattr(job, key, value)
     db.add(job)
+
+    edited_track_ids: list[str] = []
+    if req.tracks is not None:
+        rows = list((await db.execute(select(Track).where(col(Track.job_id) == job_id))).scalars().all())
+        by_id = {t.id: t for t in rows}
+        # Duplicate track_ids in req.tracks → last-wins (idempotent setattr); a
+        # repeated track.updated event is benign. Callers needn't deduplicate.
+        for edit in req.tracks:
+            track = by_id.get(edit.track_id)
+            if track is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"unknown track_id {edit.track_id} for job {job_id}",
+                )
+            for key, value in edit.model_dump(exclude_unset=True, exclude={"track_id"}).items():
+                setattr(track, key, value)
+            db.add(track)
+            edited_track_ids.append(track.id)
+
+    await db.flush()
+    for tid in edited_track_ids:
+        await hub.emit(
+            topic="ripper.events",
+            event_type="track.updated",
+            payload={"track_id": tid, "job_id": job_id},
+            job_id=job_id,
+            track_id=tid,
+            session=db,
+        )
     await db.commit()
     await db.refresh(job)
     return job
@@ -578,7 +854,15 @@ _RESOLVABLE_STATUSES_PROMOTE: frozenset[JobStatus] = frozenset(
     {JobStatus.AWAITING_USER_ID, JobStatus.RIPPED_AWAITING_IDENTIFY}
 )
 _RESOLVABLE_STATUSES_PRESERVE: frozenset[JobStatus] = frozenset(
-    {JobStatus.IDENTIFIED, JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL}
+    {
+        JobStatus.IDENTIFIED,
+        JobStatus.RIPPED,
+        JobStatus.RIPPED_PARTIAL,
+        # A held review-gate disc accepts identity edits WITHOUT flipping status —
+        # resolve = "I've identified it"; the separate Start = "begin ripping".
+        # PRESERVE (not PROMOTE) keeps it in AWAITING_REVIEW after an edit.
+        JobStatus.AWAITING_REVIEW,
+    }
 )
 _RESOLVABLE_STATUSES: frozenset[JobStatus] = _RESOLVABLE_STATUSES_PROMOTE | _RESOLVABLE_STATUSES_PRESERVE
 
@@ -587,7 +871,7 @@ _RESOLVABLE_STATUSES: frozenset[JobStatus] = _RESOLVABLE_STATUSES_PROMOTE | _RES
 async def resolve(
     job_id: JobIdParam,
     req: ResolveRequest,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     session: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> ResolveResponse:
@@ -609,6 +893,8 @@ async def resolve(
 
     job.title = req.title
     job.year = req.year
+    job.disc_number = req.disc_number
+    job.disc_total = req.disc_total
     job.metadata_json = new_metadata
     if job.status in _RESOLVABLE_STATUSES_PROMOTE:
         job.status = JobStatus.IDENTIFIED
@@ -672,7 +958,7 @@ async def resolve(
 async def apply_session(
     job_id: JobIdParam,
     req: ApplySessionRequest,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> ApplySessionResponse:

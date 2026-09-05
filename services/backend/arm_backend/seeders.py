@@ -21,11 +21,13 @@ from arm_common.models import (
     TranscodePreset,
     User,
 )
+from arm_common.models.user import ADMIN_ROLE, GUEST_ROLE
 from arm_common import (
     ContainerFormat,
     HwPreference,
     IdentificationMode,
     MediaType,
+    NotificationChannel,
     OutputMode,
     RetentionPolicy,
     TrackSelection,
@@ -42,6 +44,7 @@ FIRST_BOOT_LOG = Path("/logs/first-boot.log")
 
 ADMIN_USERNAME = "admin"
 ADMIN_DEFAULT_PASSWORD = "admin"
+GUEST_USERNAME = "guest"
 
 
 async def _seed_admin_user(session: AsyncSession) -> None:
@@ -54,6 +57,7 @@ async def _seed_admin_user(session: AsyncSession) -> None:
         username=ADMIN_USERNAME,
         password_hash=hasher.hash(ADMIN_DEFAULT_PASSWORD),
         password_must_change=True,
+        role=ADMIN_ROLE,
     )
     session.add(user)
     await session.flush()
@@ -74,6 +78,24 @@ async def _seed_admin_user(session: AsyncSession) -> None:
             f.write(banner)
     except OSError as exc:
         logger.warning("could not write %s: %s", FIRST_BOOT_LOG, exc)
+
+
+async def _seed_guest_user(session: AsyncSession) -> None:
+    existing = (await session.execute(select(User).where(col(User.username) == GUEST_USERNAME))).scalar_one_or_none()
+    if existing is not None:
+        return
+    hasher = PasswordHasher()
+    session.add(
+        User(
+            username=GUEST_USERNAME,
+            # Unusable until an admin sets a real one via /api/users/{id}/password.
+            password_hash=hasher.hash(secrets.token_urlsafe(32)),
+            password_must_change=False,
+            role=GUEST_ROLE,
+            disabled=True,
+        )
+    )
+    await session.flush()
 
 
 # --- Config singleton ---------------------------------------------------------
@@ -103,6 +125,35 @@ async def _seed_config_singleton(session: AsyncSession) -> None:
         existing.session_signing_key = secrets.token_bytes(32)
         session.add(existing)
         await session.flush()
+
+
+# --- In-app notification channel ----------------------------------------------
+
+
+async def _seed_inapp_channel(session: AsyncSession) -> None:
+    # Local imports to avoid the seeders ↔ notification_dispatcher cycle
+    # (notification_dispatcher imports CONFIG_SINGLETON_ID from seeders at
+    # module level; a top-level import here would be circular).
+    from arm_backend.notification_dispatcher import DEFAULT_INBOX_EVENT_TYPES  # noqa: PLC0415
+    from arm_backend.notifications.inbox_listener import INBOX_CHANNEL_ID  # noqa: PLC0415
+
+    existing = (
+        await session.execute(select(NotificationChannel).where(col(NotificationChannel.id) == INBOX_CHANNEL_ID))
+    ).scalar_one_or_none()
+    if existing is not None:
+        return
+    session.add(
+        NotificationChannel(
+            id=INBOX_CHANNEL_ID,
+            type="inapp",
+            name="In-app notifications",
+            enabled=True,
+            config={"type": "inapp"},
+            subscribed_events=sorted(DEFAULT_INBOX_EVENT_TYPES),
+            templates={},
+        )
+    )
+    await session.flush()
 
 
 # --- Built-in rip presets -----------------------------------------------------
@@ -383,7 +434,9 @@ async def _insert_missing(
 
 async def run_seeders(session: AsyncSession) -> None:
     await _seed_admin_user(session)
+    await _seed_guest_user(session)
     await _seed_config_singleton(session)
+    await _seed_inapp_channel(session)
     await _insert_missing(session, RipPreset, RIP_PRESETS)
     await _insert_missing(session, TranscodePreset, TRANSCODE_PRESETS)
     await _insert_missing(session, Session, SESSIONS)

@@ -138,6 +138,9 @@ class _Scalars:
     def all(self) -> list[Any]:
         return self.rows
 
+    def first(self) -> Any | None:
+        return self.rows[0] if self.rows else None
+
 
 class FakeSession:
     """In-memory async session keyed by (table_name, id).

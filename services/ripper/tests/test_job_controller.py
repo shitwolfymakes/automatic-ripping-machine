@@ -2,7 +2,7 @@
 
 import asyncio
 from collections import deque
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -39,7 +39,13 @@ def _job(status: JobStatus, *, title: str | None = None) -> Job:
     )
 
 
-def _view(status: JobStatus, *, title: str | None = None) -> JobView:
+def _view(
+    status: JobStatus,
+    *,
+    title: str | None = None,
+    wait_start_time: datetime | None = None,
+    manual_pause: bool = False,
+) -> JobView:
     return JobView(
         id="job_test",
         drive_id="drv_test",
@@ -49,6 +55,8 @@ def _view(status: JobStatus, *, title: str | None = None) -> JobView:
         year=None,
         metadata_json={},
         resumed_from_crash=False,
+        wait_start_time=wait_start_time,
+        manual_pause=manual_pause,
     )
 
 
@@ -65,6 +73,12 @@ class FakeClient:
         self.makemkv_key: str | None = None
         self.get_ripper_config_error: Exception | None = None
         self.get_ripper_config_calls: int = 0
+        self.community_keydb_enabled: bool = True
+        self.ripping_paused: bool = False
+        self.manual_wait_seconds: int = 60
+        self.keydb_reports: list = []
+        self.sdf_reports: list = []
+        self.makemkv_sdf_enabled: bool = True
 
     async def identify(
         self,
@@ -100,7 +114,20 @@ class FakeClient:
         self.get_ripper_config_calls += 1
         if self.get_ripper_config_error is not None:
             raise self.get_ripper_config_error
-        return RipperConfigView(auto_rip_on_insert=self.auto_rip_on_insert, makemkv_key=self.makemkv_key)
+        return RipperConfigView(
+            auto_rip_on_insert=self.auto_rip_on_insert,
+            makemkv_key=self.makemkv_key,
+            community_keydb_enabled=self.community_keydb_enabled,
+            ripping_paused=self.ripping_paused,
+            manual_wait_seconds=self.manual_wait_seconds,
+            makemkv_sdf_enabled=self.makemkv_sdf_enabled,
+        )
+
+    async def report_keydb_status(self, *, state, vuk_count=None, age_days=None) -> None:
+        self.keydb_reports.append((state, vuk_count, age_days))
+
+    async def report_sdf_status(self, *, state, age_days=None) -> None:
+        self.sdf_reports.append((state, age_days))
 
 
 @pytest.fixture(autouse=True)
@@ -177,6 +204,137 @@ async def test_unexpected_status_stops_without_rip(stub_scan, stub_eject):
 
     assert client.rip_start_calls == []
     assert client.rip_complete_calls == []
+
+
+# --- timed review gate: park on awaiting_review, resume on Start / auto-start ---
+
+
+async def test_review_gate_parks_then_rips_on_start(stub_scan, stub_eject):
+    """Identify lands the disc in awaiting_review (hold_for_review on). The
+    controller parks; once the operator Starts, the job transitions to RIPPING
+    and the rip proceeds — it is NOT self-abandoned while parked."""
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.AWAITING_REVIEW, title="Held Movie"))
+    client.get_job_responses.extend(
+        [
+            _view(JobStatus.AWAITING_REVIEW),  # still parked on the first poll
+            _view(JobStatus.AWAITING_REVIEW),  # still parked
+            _view(JobStatus.RIPPING, title="Held Movie"),  # operator pressed Start
+        ]
+    )
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert client.rip_start_calls == ["job_test"]
+    assert client.rip_complete_calls == ["job_test"]
+
+
+async def test_review_gate_auto_start_path_identified_rips(stub_scan, stub_eject):
+    """Auto-start at countdown expiry transitions the held job back to IDENTIFIED
+    (the rip then proceeds) — also a success status for the review gate."""
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.AWAITING_REVIEW, title="Held Movie"))
+    client.get_job_responses.append(_view(JobStatus.IDENTIFIED, title="Held Movie"))
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert client.rip_start_calls == ["job_test"]
+    assert client.rip_complete_calls == ["job_test"]
+
+
+async def test_review_gate_cancel_abandons_without_rip(stub_scan, stub_eject):
+    """Cancel (abandon) while held leaves the gate as a terminal status; the
+    controller gives up and does not rip."""
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.AWAITING_REVIEW, title="Held Movie"))
+    client.get_job_responses.append(_view(JobStatus.ABANDONED))
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert client.rip_start_calls == []
+    assert client.rip_complete_calls == []
+
+
+async def test_review_gate_auto_starts_when_countdown_elapsed(stub_scan, stub_eject):
+    """With the countdown elapsed (wait_start_time in the past, short
+    manual_wait_seconds) and not paused, the parked ripper auto-starts the rip
+    even though the operator never pressed Start (status stays awaiting_review)."""
+    client = FakeClient()
+    client.manual_wait_seconds = 1
+    past = datetime.now(timezone.utc) - timedelta(seconds=10)
+    client.identify_responses.append(_job(JobStatus.AWAITING_REVIEW, title="Held Movie"))
+    # Every poll returns AWAITING_REVIEW with an already-elapsed countdown.
+    client.get_job_responses.extend([_view(JobStatus.AWAITING_REVIEW, wait_start_time=past) for _ in range(4)])
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert client.rip_start_calls == ["job_test"]
+    assert client.rip_complete_calls == ["job_test"]
+
+
+async def test_review_gate_paused_does_not_auto_start(stub_scan, stub_eject, monkeypatch):
+    """Countdown elapsed BUT globally paused -> no auto-start; the ripper keeps
+    waiting (the wait times out in the test harness without ripping)."""
+    monkeypatch.setattr(jc_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 0.05)
+    client = FakeClient()
+    client.manual_wait_seconds = 1
+    client.ripping_paused = True
+    past = datetime.now(timezone.utc) - timedelta(seconds=10)
+    client.identify_responses.append(_job(JobStatus.AWAITING_REVIEW, title="Held Movie"))
+    client.get_job_responses.extend([_view(JobStatus.AWAITING_REVIEW, wait_start_time=past) for _ in range(6)])
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    # Paused suppresses auto-start: the wait expired without ripping.
+    assert client.rip_start_calls == []
+    assert client.rip_complete_calls == []
+
+
+async def test_review_gate_per_job_pause_does_not_auto_start(stub_scan, stub_eject, monkeypatch):
+    """Per-job manual_pause freezes THIS disc's countdown even when the machine is
+    not globally paused — countdown elapsed but no auto-start."""
+    monkeypatch.setattr(jc_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 0.05)
+    client = FakeClient()
+    client.manual_wait_seconds = 1
+    client.ripping_paused = False  # global NOT paused
+    past = datetime.now(timezone.utc) - timedelta(seconds=10)
+    client.identify_responses.append(_job(JobStatus.AWAITING_REVIEW, title="Held Movie"))
+    # The held views carry manual_pause=True -> countdown stays frozen.
+    client.get_job_responses.extend(
+        [_view(JobStatus.AWAITING_REVIEW, wait_start_time=past, manual_pause=True) for _ in range(6)]
+    )
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert client.rip_start_calls == []
+    assert client.rip_complete_calls == []
+
+
+async def test_rip_start_ws_command_wakes_review_waiter():
+    """A `rip.start` WS command sets the per-job wait Event (the review-gate
+    analogue of identify.resolved)."""
+    client = FakeClient()
+    controller = JobController(client, "drv_test")
+    event = asyncio.Event()
+    controller._resolution_events["job_test"] = event
+
+    await controller.on_ws_command(
+        WSEnvelope(
+            event_id="evt_1",
+            event_type="rip.start",
+            emitted_at=datetime.now(timezone.utc),
+            topic="ripper.commands.drv_test",
+            payload={"job_id": "job_test"},
+        )
+    )
+
+    assert event.is_set()
 
 
 # --- abandon gives the disc back (user report: abandon left the disc seated) ----
@@ -354,8 +512,9 @@ async def test_manual_trigger_runs_even_when_auto_rip_disabled(stub_scan, stub_e
     await asyncio.wait_for(controller.handle_manual_trigger("sess_test"), timeout=2.0)
 
     # The manual path bypasses the auto_rip gate (user already opted in) but
-    # still does one config lookup inside the pipeline to fetch the MakeMKV key.
-    assert client.get_ripper_config_calls == 1
+    # still does config lookups inside the pipeline: one for the MakeMKV key,
+    # one for the community-keydb toggle, and one for the SDF toggle.
+    assert client.get_ripper_config_calls == 3
     assert client.identify_pending_session_ids == ["sess_test"]
     assert client.rip_start_calls == ["job_test"]
     assert client.rip_complete_calls == ["job_test"]
@@ -401,6 +560,41 @@ async def test_makemkv_key_lookup_failure_falls_back_to_none(monkeypatch, stub_s
 
     assert keys == [None]
     assert client.rip_start_calls == ["job_test"]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_spawns_keydb_refresh_nonfatal(monkeypatch, stub_scan, stub_eject):
+    # The keydb refresh is fire-and-forget and must not abort the rip even if it raises.
+    calls = []
+
+    async def _boom(*, script_path="/usr/local/bin/update_keydb.sh", enabled=True):
+        calls.append(enabled)
+        raise RuntimeError("keydb boom")
+
+    monkeypatch.setattr(jc_module, "refresh_community_keydb", _boom)
+
+    client = FakeClient()
+    client.community_keydb_enabled = True
+    controller = JobController(client, "drv_test")
+    controller._spawn_keydb_refresh(enabled=True)
+    await controller._drain_keydb_tasks()
+    assert calls == [True]  # ran once; the RuntimeError was swallowed (this line proves no propagation)
+
+
+@pytest.mark.asyncio
+async def test_keydb_refresh_reports_result(monkeypatch):
+    from arm_common import KeydbState
+    from arm_ripper.community_keydb import KeydbResult
+
+    async def _ok(*, script_path="/usr/local/bin/update_keydb.sh", enabled=True):
+        return KeydbResult(state=KeydbState.OK, vuk_count=42, age_days=None)
+
+    monkeypatch.setattr(jc_module, "refresh_community_keydb", _ok)
+    client = FakeClient()
+    controller = JobController(client, "drv_test")
+    controller._spawn_keydb_refresh(enabled=True)
+    await controller._drain_keydb_tasks()
+    assert client.keydb_reports == [(KeydbState.OK, 42, None)]
 
 
 async def test_eject_runs_umount_then_eject_until_success(monkeypatch):
@@ -500,6 +694,41 @@ async def test_rip_start_5xx_keeps_retrying(monkeypatch, stub_scan, stub_eject):
 
     assert call_count == 3
     assert client.rip_complete_calls == ["job_test"]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_spawns_sdf_refresh_nonfatal(monkeypatch, stub_scan, stub_eject):
+    # Fire-and-forget: an SDF refresh that raises must not abort the rip.
+    calls = []
+
+    async def _boom(*, script_path="/usr/local/bin/update_sdf.sh", enabled=True):
+        calls.append(enabled)
+        raise RuntimeError("sdf boom")
+
+    monkeypatch.setattr(jc_module, "refresh_makemkv_sdf", _boom)
+
+    client = FakeClient()
+    client.makemkv_sdf_enabled = True
+    controller = JobController(client, "drv_test")
+    controller._spawn_sdf_refresh(enabled=True)
+    await controller._drain_sdf_tasks()
+    assert calls == [True]  # ran once; RuntimeError swallowed (no propagation)
+
+
+@pytest.mark.asyncio
+async def test_sdf_refresh_reports_result(monkeypatch):
+    from arm_common import MakemkvSdfState
+    from arm_ripper.makemkv_sdf import SdfResult
+
+    async def _ok(*, script_path="/usr/local/bin/update_sdf.sh", enabled=True):
+        return SdfResult(state=MakemkvSdfState.UPDATED, age_days=None)
+
+    monkeypatch.setattr(jc_module, "refresh_makemkv_sdf", _ok)
+    client = FakeClient()
+    controller = JobController(client, "drv_test")
+    controller._spawn_sdf_refresh(enabled=True)
+    await controller._drain_sdf_tasks()
+    assert client.sdf_reports == [(MakemkvSdfState.UPDATED, None)]
 
 
 # ---------------------------------------------------------------------------

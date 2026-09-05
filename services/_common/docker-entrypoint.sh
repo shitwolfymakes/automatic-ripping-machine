@@ -4,6 +4,68 @@ set -euo pipefail
 PUID="${PUID:-1000}"
 PGID="${PGID:-1000}"
 
+# WRITE_TEST answers "can the drop-uid write $d?". Production drops to `arm` via
+# gosu so the result reflects NFSv4-ACL enforcement server-side (a root test
+# lies under root_squash). `test -w` is a faccessat — read-only, no atime bump,
+# no NFS write side-effect. Array form so it word-splits cleanly (SC2086-safe).
+# The guard test pre-declares WRITE_TEST=(test -w) before sourcing this file;
+# the `declare -p` check means "default it only if the caller hasn't set it".
+if ! declare -p WRITE_TEST >/dev/null 2>&1; then
+    WRITE_TEST=(gosu arm test -w)
+fi
+
+# MOUNT_TEST answers "is $d an actual mounted volume?" (vs an incidental
+# root-owned dir baked into the base image, e.g. the ripper's /media, which
+# this service never mounts and must not be gated). Array + declare-p seam so
+# the guard test can substitute a stub; production uses `mountpoint -q`.
+if ! declare -p MOUNT_TEST >/dev/null 2>&1; then
+    MOUNT_TEST=(mountpoint -q)
+fi
+
+# Bounded retry so a TRANSIENT mount-not-ready (NFS server slow, net settling)
+# does not trip the hard exit — which, under `restart: unless-stopped`, would
+# become a crash-loop. A PERSISTENT misconfig still fails fast (~ATTEMPTS*DELAY).
+WRITE_CHECK_ATTEMPTS="${WRITE_CHECK_ATTEMPTS:-5}"
+WRITE_CHECK_DELAY="${WRITE_CHECK_DELAY:-2}"
+
+# v3 invariant (docs/arch/06-deployment.md): never chown a user-mounted volume.
+# Ownership + setgid are host-prep (install.sh: `chmod 2775`). Here we only
+# VERIFY the drop-uid can write each mounted data dir and fail fast with a clear
+# diagnostic if not — instead of silently corrupting ownership (which bricks
+# NFSv4-ACL exports for every uid) or dying later with an opaque [Errno 13].
+require_writable() {
+    local d="$1"
+    # Only gate dirs that are actually mounted volumes for THIS service. A bare
+    # `-d` test is not enough: some base images ship an incidental root-owned
+    # /media (or similar) that this service never mounts — gating it would fail
+    # fast on a dir the service doesn't use. A mounted data volume is always a
+    # mountpoint; an incidental image dir is not.
+    [[ -d "$d" ]] || return 0                    # absent -> not mounted here -> skip
+    "${MOUNT_TEST[@]}" "$d" || return 0          # present but not a mount -> incidental image dir -> skip
+    local attempt=1
+    while (( attempt <= WRITE_CHECK_ATTEMPTS )); do
+        if "${WRITE_TEST[@]}" "$d"; then
+            return 0
+        fi
+        if (( attempt < WRITE_CHECK_ATTEMPTS )); then
+            echo "waiting for ${d} to become writable by arm (attempt ${attempt}/${WRITE_CHECK_ATTEMPTS})..." >&2
+            sleep "${WRITE_CHECK_DELAY}"
+        fi
+        (( attempt++ ))
+    done
+    local owner
+    owner="$(stat -c '%u:%g' "$d" 2>/dev/null || echo '?:?')"
+    echo "FATAL: ${d} is not writable by arm (PUID:PGID=${PUID}:${PGID}); dir owner is ${owner}." >&2
+    echo "       ARM does not chown user-mounted volumes (docs/arch/06-deployment.md)." >&2
+    echo "       Fix host ownership so it matches PUID:PGID — e.g. a NAS export owned by a" >&2
+    echo "       different uid, or a PUID that doesn't match the mount owner." >&2
+    return 1
+}
+
+# Let the guard test source this file for its function/config without running
+# the entrypoint's setup + exec. No-op in production (var never set there).
+[[ -n "${ARM_ENTRYPOINT_SOURCE_ONLY:-}" ]] && return 0
+
 if [[ -f /etc/ssl/arm/arm-ca.crt ]]; then
     cp /etc/ssl/arm/arm-ca.crt /usr/local/share/ca-certificates/arm-ca.crt
     update-ca-certificates >/dev/null
@@ -74,8 +136,7 @@ if [[ -S /var/run/docker.sock ]]; then
 fi
 
 for d in /logs /raw /media; do
-    [[ -d "$d" ]] || continue
-    chown arm:arm "$d" 2>/dev/null || true
+    require_writable "$d" || exit 1
 done
 
 # Ripper-only: ensure the arm user owns its home + MakeMKV config dir so the
@@ -90,4 +151,11 @@ if [[ -x /usr/local/bin/update_key.sh ]] && command -v makemkvcon >/dev/null 2>&
 fi
 
 umask 002
+# gosu switches UID but preserves the inherited environment — including
+# HOME=/root from the root-owned parent. Processes running as `arm` must see
+# HOME=/home/arm so `~` resolves to the arm user's dotfiles: paramiko (via the
+# transcode dispatcher's docker-py ssh:// client) reads ~/.ssh/known_hosts, and
+# with HOME=/root it looks in the nonexistent /root/.ssh and the remote
+# transcode host key is "not found in known_hosts" → dispatcher disabled.
+export HOME=/home/arm
 exec /usr/bin/tini -- gosu arm "$@"

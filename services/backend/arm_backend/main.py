@@ -16,29 +16,43 @@ from arm_backend.config import settings
 from arm_backend.crash_recovery import sweep_in_flight_jobs
 from arm_backend.db import SessionLocal
 from arm_backend.gpu_probe import load_configured_gpus
+from arm_backend import image_cache
+from arm_backend.disk_refresh import DiskRefresher
 from arm_backend.log_tailer import LogTailer
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.notification_dispatcher import (
-    NotificationDispatcher,
+    MessageDispatcher,
     _RealAppriseNotifier,
 )
+from arm_backend.notifications.apprise_listener import AppriseListener
+from arm_backend.notifications.inbox_listener import InboxListener
 from arm_backend.routers import (
     auth,
     config as config_router,
     diagnostics,
     drives,
+    files as files_router,
     health,
+    images as images_router,
     jobs,
     logs as logs_router,
+    metadata as metadata_router,
+    naming as naming_router,
+    notifications as notifications_router,
     rip_presets,
     ripper,
     sessions,
+    settings as settings_router,
+    system as system_router,
+    themes as themes_router,
     transcode_presets,
     transcoder,
     transcodes,
+    users as users_router,
 )
 from arm_backend.seeders import CONFIG_SINGLETON_ID, run_seeders
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
+from arm_backend.utils import ensure_roots, default_roots
 from arm_backend.ws import WSHub
 from arm_backend.ws.router import router as ws_router
 from arm_common import Config, Gpu, GpuStatus, configure_service_logging
@@ -96,13 +110,17 @@ async def _refresh_gpu_inventory(hub: WSHub) -> None:
         await session.commit()
 
 
-def _build_docker_client() -> object | None:
-    """Construct a docker-py client. Returns None if the socket isn't reachable
-    (dev environments without `/var/run/docker.sock` mounted)."""
+def _build_docker_client(docker_host: str = "") -> object | None:
+    """Construct a docker-py client. When `docker_host` is set (e.g.
+    "ssh://sam@transcoder-server"), target that remote daemon so transcode
+    containers spawn on a remote GPU host; otherwise use the local socket.
+    Returns None if the client can't be built (dev without the socket, or an
+    unreachable/misconfigured remote host) so the dispatcher stays disabled
+    rather than crashing the backend."""
     try:
         import docker  # type: ignore[import-untyped]
 
-        client: object = docker.from_env()
+        client: object = docker.DockerClient(base_url=docker_host) if docker_host else docker.from_env()
         return client
     except Exception as exc:
         logger.warning("docker-py client unavailable: %s — transcode dispatcher disabled", exc)
@@ -113,12 +131,21 @@ def _build_docker_client() -> object | None:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _run_migrations()
     await _run_seeders()
+    # Rebuild the image-proxy disk-cache index from disk (LRU/TTL). Sync, fast,
+    # no DB — safe to run before the session/dispatchers come up.
+    image_cache.startup_scan()
     async with SessionLocal() as session:
         cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
         if cfg.session_signing_key is None:  # pragma: no cover — _run_seeders always populates this; defensive only
             raise RuntimeError("session_signing_key missing — seeders should have populated it")
         app.state.signing_key = cfg.session_signing_key
+    # Silently create any missing data root (never chown, never raise —
+    # the entrypoint's writability guard owns the fatal cases). Diagnostics
+    # re-ensures on every read.
+    ensure_roots(default_roots())
     http = httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=10.0))
+    app.state.http = http
+    app.state.started_at = datetime.now(UTC)
     app.state.dispatcher = MetadataDispatcher(http, omdb_api_key_override=settings.OMDB_API_KEY)
     app.state.ws_hub = WSHub()
 
@@ -135,7 +162,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception as exc:  # pragma: no cover — startup-degradation guard; sweep failing is real-DB-only
         logger.exception("startup crash-recovery sweep failed: %s", exc)
 
-    docker_client = _build_docker_client()
+    docker_client = _build_docker_client(settings.ARM_TRANSCODE_DOCKER_HOST)
     transcode_dispatcher: TranscodeDispatcher | None = None
     dispatcher_task: asyncio.Task[None] | None = None
     if docker_client is not None:  # pragma: no cover — needs a real docker socket; integration tier, not the SQLite e2e
@@ -158,10 +185,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Phase 11 — outbound Apprise notifications. Off out of the box; the
     # dispatcher polls but no-ops until the user enables notifications in
     # the UI and saves at least one valid Apprise URL.
-    notification_dispatcher = NotificationDispatcher(
+    notifier = _RealAppriseNotifier(settings.ARM_NOTIFY_IMAGE_URL)
+    app.state.notifier = notifier
+    notification_dispatcher = MessageDispatcher(
         settings=settings,
         db_factory=SessionLocal,
-        notifier=_RealAppriseNotifier(),
+        listeners=[AppriseListener(notifier), InboxListener()],
     )
     notification_task = asyncio.create_task(notification_dispatcher.run())
     app.state.notification_dispatcher = notification_dispatcher
@@ -171,9 +200,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     log_tailer_task = asyncio.create_task(log_tailer.run())
     app.state.log_tailer = log_tailer
 
+    _roots_map = getattr(app.state, "system_paths", None) or {
+        "MEDIA_ROOT": settings.MEDIA_ROOT,
+        "RAW_ROOT": settings.RAW_ROOT,
+        "ISO_INGRESS_ROOT": settings.ISO_INGRESS_ROOT,
+        "LOG_DIR": "/logs",
+    }
+    disk_refresher = DiskRefresher(list(_roots_map.values()))
+    disk_refresher_task = asyncio.create_task(disk_refresher.run())
+    app.state.disk_refresher = disk_refresher
+
     try:
         yield
     finally:
+        disk_refresher.stop()
+        try:
+            await asyncio.wait_for(disk_refresher_task, timeout=10.0)
+        except TimeoutError, asyncio.CancelledError:
+            disk_refresher_task.cancel()
         log_tailer.stop()
         try:
             await asyncio.wait_for(log_tailer_task, timeout=10.0)
@@ -207,7 +251,16 @@ app.include_router(transcoder.router)
 app.include_router(transcodes.router)
 app.include_router(config_router.router)
 app.include_router(diagnostics.router)
+app.include_router(metadata_router.router)
+app.include_router(naming_router.router)
+app.include_router(notifications_router.router)
 app.include_router(logs_router.router)
+app.include_router(images_router.router)
+app.include_router(themes_router.router)
+app.include_router(settings_router.router)
+app.include_router(system_router.router)
+app.include_router(files_router.router)
+app.include_router(users_router.router)
 app.include_router(ws_router)
 
 
