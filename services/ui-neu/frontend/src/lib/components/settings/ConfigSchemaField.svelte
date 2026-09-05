@@ -14,7 +14,7 @@
 		'w-full rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-sm dark:border-primary/30 dark:bg-primary/10 dark:text-white';
 </script>
 
-<div class="space-y-1">
+<div class="space-y-1 scroll-mt-24 rounded-lg transition-shadow" id="setting-{field.key}" data-testid="setting-{field.key}">
 	{#if field.type === 'bool'}
 		<label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
 			<input

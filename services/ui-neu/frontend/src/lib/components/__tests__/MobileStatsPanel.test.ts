@@ -60,6 +60,11 @@ describe('MobileStatsPanel', () => {
 		expect(screen.getByText('Key')).toBeInTheDocument();
 	});
 
+	it('Key row deep-links to the MakeMKV key field', () => {
+		renderComponent(MobileStatsPanel, { props: { onnavigate: vi.fn() } });
+		expect(screen.getByRole('link', { name: /key/i })).toHaveAttribute('href', '/settings#Metadata/makemkv_key');
+	});
+
 	it('renders live activity counts from the dashboard store', () => {
 		renderComponent(MobileStatsPanel);
 		expect(screen.getByText(/2 drives/)).toBeInTheDocument();
