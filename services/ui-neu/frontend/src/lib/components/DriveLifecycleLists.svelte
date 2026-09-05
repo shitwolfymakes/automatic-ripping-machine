@@ -2,6 +2,7 @@
 	import type { DriveView } from '$lib/types/api.gen';
 	import { enrollDrive, ignoreDrive, unignoreDrive } from '$lib/api/drives';
 	import { serialLabel } from '$lib/utils/drives';
+	import { formatDateTime } from '$lib/utils/format';
 
 	interface Props { detected: DriveView[]; ignored: DriveView[]; onchanged: () => void }
 	let { detected, ignored, onchanged }: Props = $props();
@@ -31,7 +32,7 @@
 		<span class="font-medium text-gray-900 dark:text-white">{d.model ?? d.hostname}</span>
 		<span class={serial.warn ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'}>{serial.text}</span>
 		<code class="text-xs text-gray-500 dark:text-gray-400">{d.device_path}</code>
-		<span class="text-xs text-gray-400">{d.last_seen_at ?? '—'}</span>
+		<span class="text-xs text-gray-400">{d.last_seen_at ? formatDateTime(d.last_seen_at) : '—'}</span>
 		<span class="ml-auto flex gap-2">
 			{#if ignoredRow}
 				<button data-testid={`unignore-${d.id}`} disabled={busy === d.id} onclick={() => run(d.id, () => unignoreDrive(d.id))} class="{rowBtn} border border-primary/20 text-primary-text hover:bg-primary/10 dark:text-primary-text-dark">Un-ignore</button>

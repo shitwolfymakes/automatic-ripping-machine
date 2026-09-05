@@ -34,6 +34,22 @@ describe('DriveLifecycleLists', () => {
 		expect(screen.queryByTestId('ignored-toggle')).not.toBeInTheDocument();
 	});
 
+	it('renders last_seen_at as a localized date/time, not the raw ISO string', () => {
+		renderComponent(DriveLifecycleLists, {
+			props: { detected: [drive({ id: 'drv_d', last_seen_at: '2026-01-02T03:04:05Z' })], ignored: [], onchanged: vi.fn() }
+		});
+		const row = screen.getByTestId('detected-row-drv_d');
+		expect(row).not.toHaveTextContent('2026-01-02T03:04:05Z');
+		expect(row).toHaveTextContent(new Date('2026-01-02T03:04:05Z').toLocaleString());
+	});
+
+	it('shows — when last_seen_at is null', () => {
+		renderComponent(DriveLifecycleLists, {
+			props: { detected: [drive({ id: 'drv_d', last_seen_at: null })], ignored: [], onchanged: vi.fn() }
+		});
+		expect(screen.getByTestId('detected-row-drv_d')).toHaveTextContent('—');
+	});
+
 	it('flags a port-identity drive', () => {
 		renderComponent(DriveLifecycleLists, { props: { detected: [drive({ id: 'drv_p', serial: null, identity_kind: 'port' })], ignored: [], onchanged: vi.fn() } });
 		expect(screen.getByTestId('detected-row-drv_p')).toHaveTextContent('no serial — identified by port');

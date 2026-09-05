@@ -106,6 +106,13 @@ describe('DriveCard', () => {
 			renderDrive({ status: 'error', last_error: 'identity mismatch: row is bound to X' });
 			expect(screen.getByText(/identity mismatch: row is bound to X/)).toBeInTheDocument();
 		});
+
+		it('shows an amber offline label when enrolled, offline, and still present', () => {
+			renderDrive({ status: 'offline', present: true, media_status: null });
+			const badge = screen.getByTestId('drive-status-label');
+			expect(badge).toHaveTextContent('offline');
+			expect(badge.className).toContain('bg-amber-500/20');
+		});
 	});
 
 	describe('prescan overrides badge', () => {
@@ -189,7 +196,9 @@ describe('DriveCard', () => {
 			renderComponent(DriveCard, { props: { drive: createDrive(), sessions: [], onupdate } });
 			await fireEvent.click(screen.getByTestId('drive-unenroll'));
 			await waitFor(() => expect(onupdate).toHaveBeenCalled());
-			expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('reappear under Detected'));
+			expect(window.confirm).toHaveBeenCalledWith(
+				"Unenroll Main Drive? Its ripper container is stopped and removed. If the drive is still connected it reappears under Detected on the next scan."
+			);
 			expect(unenrollDriveMock).toHaveBeenCalledWith('drv_1');
 		});
 
@@ -201,6 +210,19 @@ describe('DriveCard', () => {
 		it('never shows Remove', () => {
 			renderDrive({ status: 'offline' });
 			expect(screen.queryByText('Remove')).not.toBeInTheDocument();
+		});
+
+		it('surfaces an unenroll failure inline instead of swallowing it', async () => {
+			vi.spyOn(window, 'confirm').mockReturnValue(true);
+			unenrollDriveMock.mockRejectedValueOnce(new Error('cannot unenroll: a drive is ripping'));
+			renderDrive();
+			await fireEvent.click(screen.getByTestId('drive-unenroll'));
+			await waitFor(() =>
+				expect(screen.getByTestId('drive-unenroll-error')).toHaveTextContent(
+					'cannot unenroll: a drive is ripping'
+				)
+			);
+			expect(screen.getByTestId('drive-unenroll')).not.toBeDisabled();
 		});
 	});
 
