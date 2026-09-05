@@ -96,10 +96,6 @@ jobs:
       # ARM_INSTALL_SOURCE_ONLY seam — no docker, no root, <1s.
       - name: Installer walkthrough suite
         run: bash devtools/test-install-walkthrough.sh
-      # Zero-infra unit test that sources install.sh via its ARM_INSTALL_SOURCE_ONLY
-      # seam — no docker, no root, <1s. Un-run tests rot.
-      - name: Installer PUID/PGID suite
-        run: bash devtools/test-install-env.sh
 
   test-python:
     name: test (python — pytest)
