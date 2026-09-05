@@ -250,6 +250,21 @@ describe('Settings Page', () => {
 	}
 
 	describe('rendering', () => {
+		it('renders the Interface tab with the stats toggle and dashboard layout', async () => {
+			await renderAndOpenTab('Interface');
+			expect(screen.getByRole('switch', { name: /show resource stats/i })).toBeInTheDocument();
+			expect(screen.getByRole('radio', { name: /cards/i })).toBeInTheDocument();
+			expect(screen.getByRole('radio', { name: /table/i })).toBeInTheDocument();
+		});
+
+		it('maps a legacy #appearance hash to the Themes tab', async () => {
+			window.location.hash = '#appearance';
+			renderComponent(SettingsPage);
+			await waitFor(() => {
+				expect(screen.getByText('Image Cache')).toBeInTheDocument();
+			});
+		});
+
 		it('renders page title', () => {
 			renderComponent(SettingsPage);
 			expect(screen.getByText('Settings')).toBeInTheDocument();
@@ -299,14 +314,14 @@ describe('Settings Page', () => {
 			expect(screen.queryByRole('button', { name: 'Transcode Presets' })).not.toBeInTheDocument();
 		});
 
-		it('shows Appearance tab', async () => {
+		it('shows Themes tab', async () => {
 			await renderAndWait();
-			const matches = screen.getAllByText('Appearance');
+			const matches = screen.getAllByText('Themes');
 			expect(matches.length).toBeGreaterThanOrEqual(1);
 		});
 
-		it('image cache section loads when Appearance tab active', async () => {
-			await renderAndOpenTab('Appearance');
+		it('image cache section loads when Themes tab active', async () => {
+			await renderAndOpenTab('Themes');
 			await waitFor(() => {
 				expect(screen.getByText('Image Cache')).toBeInTheDocument();
 			});
@@ -320,7 +335,7 @@ describe('Settings Page', () => {
 		});
 
 		it('shows cache feedback after clearing image cache', async () => {
-			await renderAndOpenTab('Appearance');
+			await renderAndOpenTab('Themes');
 			await waitFor(() => {
 				expect(screen.getByText('Clear Cache')).toBeInTheDocument();
 			});
@@ -339,7 +354,7 @@ describe('Settings Page', () => {
 		});
 
 		it('shows dark mode toggle when scheme does not lock mode', async () => {
-			await renderAndOpenTab('Appearance');
+			await renderAndOpenTab('Themes');
 			await waitFor(() => {
 				expect(screen.getByText('Dark Mode')).toBeInTheDocument();
 			});
@@ -349,7 +364,7 @@ describe('Settings Page', () => {
 
 		it('calls toggleTheme when dark mode switch is clicked', async () => {
 			const { toggleTheme } = await import('$lib/stores/theme');
-			await renderAndOpenTab('Appearance');
+			await renderAndOpenTab('Themes');
 			await waitFor(() => {
 				expect(screen.getByLabelText('Dark mode')).toBeInTheDocument();
 			});
@@ -363,7 +378,7 @@ describe('Settings Page', () => {
 			const locked = writable(true);
 			Object.assign(schemeLocksMode, { set: locked.set, subscribe: locked.subscribe, update: locked.update });
 
-			await renderAndOpenTab('Appearance');
+			await renderAndOpenTab('Themes');
 			await waitFor(() => {
 				expect(screen.getByText('Locked by theme')).toBeInTheDocument();
 			});

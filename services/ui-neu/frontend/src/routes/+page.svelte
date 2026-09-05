@@ -21,6 +21,7 @@
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { get } from 'svelte/store';
+	import { uiPrefs, setUiPref } from '$lib/stores/uiPrefs';
 	import { startRipperEvents, onRipperEvent } from '$lib/stores/ripperEvents.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 
@@ -121,7 +122,11 @@
 	let pageReady = $derived(!dashLoading && !jobsLoading);
 
 	let statusFilter = $state('');
-	let viewMode = $state<'card' | 'table'>('card');
+	// Opens with the Settings > Interface default; the buttons write it back.
+	let viewMode = $state<'card' | 'table'>(get(uiPrefs).dashboardView);
+	$effect(() => {
+		if (viewMode !== get(uiPrefs).dashboardView) setUiPref('dashboardView', viewMode);
+	});
 
 	// Selection
 	let selectedJobs = $state<Set<string>>(new Set());
