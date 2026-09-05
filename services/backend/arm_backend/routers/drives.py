@@ -3,7 +3,7 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -12,6 +12,7 @@ from arm_backend.db import get_session
 from arm_backend.ripper_manager import RipperManager, RipperManagerError
 from arm_common import Drive, DriveLifecycle, DriveStatus, Job, JobStatus, Session, User
 from arm_common.enums import TERMINAL_JOB_STATUSES
+from arm_common.models.user import ADMIN_ROLE
 from arm_common.schemas import (
     DriveDiagnosticItem,
     DriveDiagnosticResponse,
@@ -98,16 +99,21 @@ async def drive_diagnostic(
 @router.post("/rescan", response_model=DriveRescanResponse)
 async def rescan_drives(
     request: Request,
-    _: User = Depends(require_jwt),
+    force: bool = Query(False, description="Prune detected drives that are not present right now (admin only)."),
+    user: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
 ) -> DriveRescanResponse:
     """Run the host drive scan now (spec §2) and report the reconciled table.
     Also keeps the pre-existing heartbeat-freshness counts so the UI's
-    online/stale badge is unchanged."""
+    online/stale badge is unchanged. `force` = Force Rescan: the prune window
+    is zero, so absent detected rows are removed immediately; enrolled and
+    ignored rows are untouched."""
+    if force and user.role != ADMIN_ROLE:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="force rescan needs write access")
     scanner = getattr(request.app.state, "drive_scanner", None)
     if scanner is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="drive scanner unavailable")
-    summary = await scanner.scan_once(db)
+    summary = await scanner.scan_once(db, prune_now=force)
     drives = list((await db.execute(select(Drive))).scalars().all())
     now = datetime.now(timezone.utc)
     online = 0
@@ -170,6 +176,11 @@ async def delete_drive(
     drive = (await db.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
     if drive is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {drive_id}")
+    if drive.lifecycle is DriveLifecycle.ENROLLED:
+        # An enrolled row owns a ripper container; deleting it here would
+        # silently orphan that container. unenroll (which stops/removes it)
+        # is the only legal path off ENROLLED.
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="unenroll the drive first")
     # Refuse to delete a drive with an in-flight (RIPPING) job — same predicate
     # the ripper boot-probe uses. A live ripper re-registers the row on its next
     # startup (hostname upsert), so this only guards the active-rip case; job
