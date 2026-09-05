@@ -54,7 +54,7 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div data-mobile-stats class="flex-1 overflow-y-auto" onclick={handleClick}>
+<div data-mobile-stats class="flex-1 overflow-y-auto tabular-nums" onclick={handleClick}>
 	<div class="px-3 py-4">
 		<p class="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
 			Services
