@@ -12,7 +12,7 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 import pytest  # noqa: E402
 
 from arm_backend import drive_scanner as mod  # noqa: E402
-from arm_backend.drive_scanner import DriveScanner  # noqa: E402
+from arm_backend.drive_scanner import DriveScanner, PruneUnavailable, ScanSummary  # noqa: E402
 from arm_common import Config, DriveLifecycle  # noqa: E402
 
 from tests._fakes import FakeSession, _table_for_stmt  # noqa: E402
@@ -40,6 +40,7 @@ async def test_scan_once_detects_and_uses_config_prune_days(tmp_path: Path) -> N
     t.drive()
     db = _db(prune=1)
     scanner = DriveScanner(lambda: db, sysfs_root=t.sysfs, disk_root=t.disk)
+    assert scanner.disk_root == t.disk
     summary = await scanner.scan_once(db)
     assert summary.detected == 1
     [row] = db.rows["drives"]
@@ -61,6 +62,7 @@ async def test_run_reads_interval_from_config_each_tick_and_survives_errors(monk
     scanner = DriveScanner(lambda: db, sysfs_root=t.sysfs, disk_root=t.disk)
     sleeps: list[float] = []
     calls = {"n": 0}
+    last_error_after_sleep: list[str | None] = []
 
     async def fake_sleep(s: float) -> None:
         sleeps.append(s)
@@ -81,6 +83,7 @@ async def test_run_reads_interval_from_config_each_tick_and_survives_errors(monk
     async def sleep_then_retune(s: float) -> None:
         if len(sleeps) == 1:
             db.rows["config"][0].drive_scan_interval_seconds = 9
+        last_error_after_sleep.append(scanner.last_error)
         await orig(s)
 
     monkeypatch.setattr(mod.asyncio, "sleep", sleep_then_retune)
@@ -92,6 +95,13 @@ async def test_run_reads_interval_from_config_each_tick_and_survives_errors(monk
     # tick2 reads 5, scan raises, sleep#2 retunes to 9 THEN appends 5;
     # tick3 reads 9, sleep#3 appends 9 and raises Cancelled.
     assert sleeps == [5, 5, 9]
+    # Ruling B: the failing tick (#2) sets last_error to the exception text;
+    # sleep is called right after run()'s except block, so
+    # last_error_after_sleep[1] captures that state.
+    assert last_error_after_sleep[1] is not None and "boom" in last_error_after_sleep[1]
+    # The next good tick (#3) clears last_error and sets last_scan_at.
+    assert scanner.last_error is None
+    assert scanner.last_scan_at is not None
 
 
 async def test_concurrent_scan_once_calls_serialize_to_one_row(monkeypatch, tmp_path: Path) -> None:
@@ -144,3 +154,81 @@ async def test_run_propagates_cancellederror_raised_inside_the_scan(monkeypatch,
     monkeypatch.setattr(scanner, "scan_once", cancelled_scan)
     with pytest.raises(asyncio.CancelledError):
         await scanner.run()
+
+
+async def test_scan_once_prune_now_uses_a_zero_day_window(monkeypatch, tmp_path: Path) -> None:
+    """Force Rescan (POST /rescan?force=true) drops the prune window to 0
+    days regardless of the configured drive_detected_prune_days."""
+    seen = {}
+
+    async def fake_reconcile(session, scanned, *, now, prune_days):
+        seen["prune_days"] = prune_days
+        return ScanSummary(0, 0, 0, 0, 0)
+
+    monkeypatch.setattr(mod, "reconcile_drives", fake_reconcile)
+    db = _db(prune=7)
+    t = Tree(tmp_path)
+    t.drive()
+    scanner = DriveScanner(lambda: db, sysfs_root=t.sysfs, disk_root=t.disk)
+    await scanner.scan_once(db, prune_now=True)
+    assert seen["prune_days"] == 0
+    assert scanner.last_scan_at is not None and scanner.last_error is None
+
+
+# --- enumeration_problem / prune refusal ------------------------------------
+
+
+def test_enumeration_problem_none_when_both_dirs_readable(tmp_path: Path) -> None:
+    t = Tree(tmp_path)
+    scanner = DriveScanner(lambda: _db(), sysfs_root=t.sysfs, disk_root=t.disk)
+    assert scanner.enumeration_problem() is None
+
+
+def test_enumeration_problem_reports_missing_sysfs(tmp_path: Path) -> None:
+    t = Tree(tmp_path)
+    missing_sysfs = tmp_path / "no-sys"
+    scanner = DriveScanner(lambda: _db(), sysfs_root=missing_sysfs, disk_root=t.disk)
+    problem = scanner.enumeration_problem()
+    assert problem == f"host sysfs is not mounted ({missing_sysfs / 'class' / 'block'})"
+
+
+def test_enumeration_problem_reports_missing_by_id(tmp_path: Path) -> None:
+    t = Tree(tmp_path)
+    missing_disk = tmp_path / "no-disk"
+    scanner = DriveScanner(lambda: _db(), sysfs_root=t.sysfs, disk_root=missing_disk)
+    problem = scanner.enumeration_problem()
+    assert problem == f"host by-id directory is not mounted ({missing_disk / 'by-id'})"
+
+
+async def test_scan_once_prune_now_refuses_when_sysfs_is_not_mounted(tmp_path: Path) -> None:
+    """A degraded host enumeration (class/block unreadable) must never be
+    read as "nothing plugged in" and prune every DETECTED row — scan_once
+    must raise before touching the DB at all."""
+    missing_sysfs = tmp_path / "no-sys"
+    disk_root = tmp_path / "disk"
+    (disk_root / "by-id").mkdir(parents=True)
+    db = _db()
+    scanner = DriveScanner(lambda: db, sysfs_root=missing_sysfs, disk_root=disk_root)
+    with pytest.raises(PruneUnavailable, match="host sysfs is not mounted"):
+        await scanner.scan_once(db, prune_now=True)
+    assert db.rows.get("drives", []) == []  # no DB work was attempted
+
+
+async def test_scan_once_prune_now_refuses_when_by_id_is_not_mounted(tmp_path: Path) -> None:
+    t = Tree(tmp_path)
+    missing_disk = tmp_path / "no-disk"
+    db = _db()
+    scanner = DriveScanner(lambda: db, sysfs_root=t.sysfs, disk_root=missing_disk)
+    with pytest.raises(PruneUnavailable, match="host by-id directory is not mounted"):
+        await scanner.scan_once(db, prune_now=True)
+
+
+async def test_scan_once_prune_now_proceeds_when_readable_but_empty(tmp_path: Path) -> None:
+    """Readable-but-empty sysfs/by-id dirs are a legitimate "nothing plugged
+    in" — prune_now must proceed normally, not be refused."""
+    t = Tree(tmp_path)  # no drives added: readable dirs, empty enumeration
+    db = _db()
+    scanner = DriveScanner(lambda: db, sysfs_root=t.sysfs, disk_root=t.disk)
+    summary = await scanner.scan_once(db, prune_now=True)
+    assert summary.detected == 0
+    assert scanner.last_error is None

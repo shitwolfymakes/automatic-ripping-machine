@@ -52,7 +52,7 @@ async function submit(): Promise<void> {
 
 function driveLabel(d: DriveView): string {
   const name = d.display_name ?? d.hostname
-  return `${name} (${d.device_path}) — ${d.status}`
+  return `${name} (${d.device_path}): ${d.status}`
 }
 </script>
 
@@ -73,14 +73,14 @@ function driveLabel(d: DriveView): string {
         </option>
       </select>
       <p v-if="!enrolledDrives.length" class="muted" style="font-size: 12px; margin-top: 4px">
-        No enrolled drives — enroll one on the Drives page.
+        No enrolled drives: enroll one on the Drives page.
       </p>
     </div>
 
     <div class="field">
       <label for="session">Session (optional)</label>
       <select id="session" v-model="sessionId">
-        <option value="">— none —</option>
+        <option value="">(none)</option>
         <option v-for="s in sessions" :key="s.id" :value="s.id">
           {{ s.name }}{{ s.is_builtin ? ' (built-in)' : '' }}
         </option>

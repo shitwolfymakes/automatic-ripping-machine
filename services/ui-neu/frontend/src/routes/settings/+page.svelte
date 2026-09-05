@@ -14,8 +14,12 @@
 	import { uploadTheme, deleteTheme as deleteThemeApi } from '$lib/api/themes';
 	import { createPollingStore } from '$lib/stores/polling';
 	import { fetchDrives, fetchDriveDiagnostic, rescanDrives } from '$lib/api/drives';
+	import { partitionDrives } from '$lib/utils/drives';
+	import { formatDateTime } from '$lib/utils/format';
 	import { fetchSessions } from '$lib/api/sessions';
 	import DriveCard from '$lib/components/DriveCard.svelte';
+	import DriveMaintenance from '$lib/components/DriveMaintenance.svelte';
+	import DriveLifecycleLists from '$lib/components/DriveLifecycleLists.svelte';
 	import { restartArm, restartTranscoder } from '$lib/api/system';
 	import { fetchImageCacheStats, clearImageCache, type ImageCacheStats } from '$lib/api/maintenance';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
@@ -129,6 +133,7 @@
 	// --- Drives polling store ---
 	const drives = createPollingStore(fetchDrives, [] as Drive[], 10000);
 	const driveError = drives.error;
+	let parts = $derived(partitionDrives($drives));
 
 	let driveSessions = $state<SessionView[]>([]);
 
@@ -146,7 +151,6 @@
 	let diagResult = $state<DriveDiagnosticResponse | null>(null);
 	let diagError = $state<string | null>(null);
 	let diagOpen = $state(false);
-	let rescanning = $state(false);
 	let diagLastRun = $state<string | null>(null);
 
 	async function runDiagnostic() {
@@ -740,44 +744,33 @@
 		{/if}
 
 		{#if activeTab === 'drives'}
-			<h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Drives</h2>
+			<div class="mb-4 flex items-start justify-between gap-3">
+				<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Drives</h2>
+				<DriveMaintenance onrescanned={() => drives.refresh()} />
+			</div>
 			<section class="space-y-6">
 				{#if $driveError}
 					<div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
 						{$driveError}
 					</div>
-				{:else if $drives.length === 0}
-					<p class="py-8 text-center text-gray-400">No drives detected.</p>
 				{:else}
-					<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-						{#each $drives as drive (drive.id)}
-							<DriveCard {drive} sessions={driveSessions} onupdate={() => drives.refresh()} globalDefaults={{
-								prescan_cache_mb: Number(settings?.arm_config?.PRESCAN_CACHE_MB) || 1,
-								prescan_timeout: Number(settings?.arm_config?.PRESCAN_TIMEOUT) || 300,
-								prescan_retries: Number(settings?.arm_config?.PRESCAN_RETRIES) || 3,
-								disc_enum_timeout: Number(settings?.arm_config?.DISC_ENUM_TIMEOUT) || 60,
-							}} />
-						{/each}
-					</div>
+					{#if parts.enrolled.length > 0}
+						<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+							{#each parts.enrolled as drive (drive.id)}
+								<DriveCard {drive} sessions={driveSessions} onupdate={() => drives.refresh()} globalDefaults={{
+									prescan_cache_mb: Number(settings?.arm_config?.PRESCAN_CACHE_MB) || 1,
+									prescan_timeout: Number(settings?.arm_config?.PRESCAN_TIMEOUT) || 300,
+									prescan_retries: Number(settings?.arm_config?.PRESCAN_RETRIES) || 3,
+									disc_enum_timeout: Number(settings?.arm_config?.DISC_ENUM_TIMEOUT) || 60,
+								}} />
+							{/each}
+						</div>
+					{/if}
+					<DriveLifecycleLists detected={parts.detected} ignored={parts.ignored} onchanged={() => drives.refresh()} />
 				{/if}
 
-				<!-- Maintenance & Diagnostics -->
+				<!-- Diagnostics -->
 				<hr class="my-2 opacity-20" />
-				<div class="flex flex-wrap items-center gap-2">
-					<span class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Maintenance</span>
-					<button
-						onclick={async () => { rescanning = true; await rescanDrives(); await drives.refresh(); rescanning = false; }}
-						disabled={rescanning}
-						class="ml-auto rounded-lg border border-primary/20 px-3 py-1.5 text-xs font-medium text-primary-text transition-colors hover:bg-primary/10 disabled:opacity-50 dark:border-primary/20 dark:text-primary-text-dark dark:hover:bg-primary/15"
-						title="Re-detect optical drives and refresh database records"
-					>{rescanning ? 'Scanning...' : 'Rescan'}</button>
-					<button
-						onclick={async () => { rescanning = true; await rescanDrives(true); await drives.refresh(); rescanning = false; }}
-						disabled={rescanning}
-						class="rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-50 disabled:opacity-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/20"
-						title="Delete all stale drive records and re-detect from hardware"
-					>{rescanning ? 'Scanning...' : 'Force Rescan'}</button>
-				</div>
 				<div data-diag>
 					<button
 						onclick={() => { diagOpen = !diagOpen; }}
@@ -814,37 +807,60 @@
 							</div>
 
 							{#if diagResult}
-								{@const unhealthy = diagResult.drives.filter(d => !d.healthy || d.notes.length > 0)}
+								{@const system = diagResult.system ?? []}
+								{@const unhealthy = diagResult.drives.filter(d => !d.healthy || (d.notes.length > 0 && !(d.notes.length === 1 && d.notes[0] === 'ignored')))}
+								{#if system.length > 0}
+									<div class="mb-2 rounded-lg border border-amber-500/15 bg-amber-500/5 p-2.5" data-testid="diag-system">
+										{#each system as note}
+											<div class="text-xs text-amber-700 dark:text-amber-400">{note}</div>
+										{/each}
+									</div>
+								{/if}
+
 								<!-- Status bar -->
 								<div class="mb-2 flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 text-xs
-									{unhealthy.length > 0
+									{unhealthy.length > 0 || system.length > 0
 										? 'border-amber-500/15 bg-amber-500/5'
 										: 'border-green-500/15 bg-green-500/5'}">
 									<span class="text-gray-500 dark:text-gray-400">
 										{diagResult.drives.length} drive{diagResult.drives.length !== 1 ? 's' : ''}
 									</span>
-									<span class="font-medium {unhealthy.length > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}">
-										{unhealthy.length > 0 ? 'Issues Found' : 'All OK'}
+									<span class="font-medium {unhealthy.length > 0 || system.length > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}">
+										{unhealthy.length > 0 || system.length > 0 ? 'Issues Found' : 'All OK'}
 									</span>
 								</div>
 
-								<!-- Per-drive issues only -->
-								{#each unhealthy as diag}
-									<div class="mb-1.5 rounded-lg border border-amber-500/15 bg-amber-500/5 p-2.5">
+								<!-- Every drive, healthy or not -->
+								{#each diagResult.drives as diag (diag.id)}
+									{@const flagged = unhealthy.includes(diag)}
+									<div data-testid="diag-drive-{diag.id}" class="mb-1.5 rounded-lg border p-2.5 {flagged ? 'border-amber-500/15 bg-amber-500/5' : 'border-primary/10'}">
+										<div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
+											<code class="font-medium text-gray-900 dark:text-white">{diag.device_path}</code>
+											<span class="rounded-full bg-primary/10 px-1.5 text-[10px] uppercase">{diag.lifecycle}</span>
+											<span class={diag.present ? '' : 'text-amber-600 dark:text-amber-400'}>{diag.present ? 'connected' : 'not connected'}</span>
+											{#if diag.container}<span>container: {diag.container}</span>{/if}
+											{#if diag.status}<span>ripper: {diag.status}</span>{/if}
+											{#if diag.media_status}<span>media: {diag.media_status.replace('_', ' ')}</span>{/if}
+											{#if diag.media_status_at}<span class="text-gray-400">heartbeat {formatDateTime(diag.media_status_at)}</span>{/if}
+											{#if !flagged}<span class="ml-auto font-medium text-green-600 dark:text-green-400">OK</span>{/if}
+										</div>
+										{#if diag.last_error}
+											<div class="mt-1 text-xs text-red-600 dark:text-red-400">{diag.last_error}</div>
+										{/if}
 										{#each diag.notes as note}
-											<div class="flex items-start gap-1.5 text-xs">
-												<svg class="mt-0.5 h-3 w-3 flex-shrink-0 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-												</svg>
-												<span class="text-amber-700 dark:text-amber-400">
-													<span class="font-medium">{diag.id}</span> - {note}
-												</span>
+											<div class="mt-1 flex items-start gap-1.5 text-xs">
+												{#if note === 'ignored'}
+													<span class="text-gray-400">ignored</span>
+												{:else}
+													<svg class="mt-0.5 h-3 w-3 flex-shrink-0 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+													</svg>
+													<span class="text-amber-700 dark:text-amber-400">{note}</span>
+												{/if}
 											</div>
 										{/each}
 										{#if diag.notes.length === 0 && !diag.healthy}
-											<div class="text-xs text-amber-700 dark:text-amber-400">
-												<span class="font-medium">{diag.id}</span> - unhealthy
-											</div>
+											<div class="mt-1 text-xs text-amber-700 dark:text-amber-400">unhealthy</div>
 										{/if}
 									</div>
 								{/each}

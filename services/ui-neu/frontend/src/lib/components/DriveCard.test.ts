@@ -4,15 +4,16 @@ import DriveCard from './DriveCard.svelte';
 import type { DriveView as Drive, SessionView } from '$lib/types/api.gen';
 vi.mock('$lib/api/drives', () => ({
 	updateDrive: vi.fn(() => Promise.resolve()),
-	deleteDrive: vi.fn(() => Promise.resolve())
+	unenrollDrive: vi.fn(() => Promise.resolve())
 }));
 vi.mock('$lib/api/jobs', () => ({
 	triggerManual: vi.fn(() => Promise.resolve({ drive_id: 'drv_1', session_id: null }))
 }));
 import { triggerManual } from '$lib/api/jobs';
 const triggerManualMock = vi.mocked(triggerManual);
-import { updateDrive } from '$lib/api/drives';
+import { updateDrive, unenrollDrive } from '$lib/api/drives';
 const updateDriveMock = vi.mocked(updateDrive);
+const unenrollDriveMock = vi.mocked(unenrollDrive);
 
 function createDrive(overrides: Partial<Drive> = {}): Drive {
 	return {
@@ -96,10 +97,21 @@ describe('DriveCard', () => {
 			expect(screen.getByText('Drive drv_1')).toBeInTheDocument();
 		});
 
-		it('shows Stale badge and Remove button for offline drives', () => {
-			renderDrive({ status: 'offline' });
-			expect(screen.getByText('Stale')).toBeInTheDocument();
-			expect(screen.getByText('Remove')).toBeInTheDocument();
+		it('renders the detached copy and dims the card when offline and absent', () => {
+			renderDrive({ status: 'offline', present: false, media_status: 'detached' });
+			expect(screen.getByText('○ detached: reconnect the drive')).toBeInTheDocument();
+		});
+
+		it('shows the error reason', () => {
+			renderDrive({ status: 'error', last_error: 'identity mismatch: row is bound to X' });
+			expect(screen.getByText(/identity mismatch: row is bound to X/)).toBeInTheDocument();
+		});
+
+		it('shows an amber offline label when enrolled, offline, and still present', () => {
+			renderDrive({ status: 'offline', present: true, media_status: null });
+			const badge = screen.getByTestId('drive-status-label');
+			expect(badge).toHaveTextContent('offline');
+			expect(badge.className).toContain('bg-amber-500/20');
 		});
 	});
 
@@ -174,6 +186,43 @@ describe('DriveCard', () => {
 			expect(screen.getByText('Save')).toBeInTheDocument();
 			await fireEvent.click(screen.getByText('Cancel'));
 			expect(screen.getByText('Rename')).toBeInTheDocument();
+		});
+	});
+
+	describe('unenroll', () => {
+		it('Unenroll confirms, calls the API and notifies', async () => {
+			vi.spyOn(window, 'confirm').mockReturnValue(true);
+			const onupdate = vi.fn();
+			renderComponent(DriveCard, { props: { drive: createDrive(), sessions: [], onupdate } });
+			await fireEvent.click(screen.getByTestId('drive-unenroll'));
+			await waitFor(() => expect(onupdate).toHaveBeenCalled());
+			expect(window.confirm).toHaveBeenCalledWith(
+				"Unenroll Main Drive? Its ripper container is stopped and removed. If the drive is still connected it reappears under Detected on the next scan."
+			);
+			expect(unenrollDriveMock).toHaveBeenCalledWith('drv_1');
+		});
+
+		it('Unenroll is disabled while ripping', () => {
+			renderDrive({ status: 'ripping' });
+			expect(screen.getByTestId('drive-unenroll')).toBeDisabled();
+		});
+
+		it('never shows Remove', () => {
+			renderDrive({ status: 'offline' });
+			expect(screen.queryByText('Remove')).not.toBeInTheDocument();
+		});
+
+		it('surfaces an unenroll failure inline instead of swallowing it', async () => {
+			vi.spyOn(window, 'confirm').mockReturnValue(true);
+			unenrollDriveMock.mockRejectedValueOnce(new Error('cannot unenroll: a drive is ripping'));
+			renderDrive();
+			await fireEvent.click(screen.getByTestId('drive-unenroll'));
+			await waitFor(() =>
+				expect(screen.getByTestId('drive-unenroll-error')).toHaveTextContent(
+					'cannot unenroll: a drive is ripping'
+				)
+			);
+			expect(screen.getByTestId('drive-unenroll')).not.toBeDisabled();
 		});
 	});
 
