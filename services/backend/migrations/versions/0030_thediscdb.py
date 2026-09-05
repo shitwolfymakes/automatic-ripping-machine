@@ -2,8 +2,8 @@
 
 Pure additive, reversible. Mirrors 0026's config-columns pattern.
 
-Revision ID: 0029_thediscdb
-Revises: 0028_user_role_disabled
+Revision ID: 0030_thediscdb
+Revises: 0029_drive_lifecycle
 Create Date: 2026-08-06
 
 """
@@ -13,8 +13,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0029_thediscdb"
-down_revision: Union[str, None] = "0028_user_role_disabled"
+revision: str = "0030_thediscdb"
+down_revision: Union[str, None] = "0029_drive_lifecycle"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
