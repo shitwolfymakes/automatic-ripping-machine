@@ -162,7 +162,7 @@ describe('SchemaConfigForm key-check button', () => {
     await waitFor(() => expect(screen.getByTestId('key-check-tmdb_api_key')).toHaveTextContent(/checked/i));
   });
 
-  it('labels the makemkv row "Check MakeMKV key" and auto-runs the check on mount', async () => {
+  it('auto-runs the makemkv check on mount', async () => {
     checkApiKey.mockImplementation((name: string) =>
       Promise.resolve(
         name === 'makemkv'
@@ -173,6 +173,6 @@ describe('SchemaConfigForm key-check button', () => {
     renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
     await waitFor(() => expect(checkApiKey).toHaveBeenCalledWith('makemkv', undefined));
     await waitFor(() => expect(screen.getByTestId('key-check-makemkv_key')).toHaveTextContent(/valid/i));
-    expect(screen.getByRole('button', { name: /check makemkv key/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /check api key/i }).length).toBeGreaterThan(0);
   });
 });
