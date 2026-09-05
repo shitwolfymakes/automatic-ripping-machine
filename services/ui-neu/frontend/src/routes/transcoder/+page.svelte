@@ -329,10 +329,15 @@
 
 							<!-- Row 2: ARM job link, attempts -->
 							<div class="mt-0.5 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-								<a
-									href="/jobs/{job.session_application_id}"
-									class="inline-flex items-center rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary-text hover:bg-primary/20 dark:bg-primary/15 dark:text-primary-text-dark dark:hover:bg-primary/25"
-								>Job #{job.session_application_id}</a>
+								{#if job.job_id}
+									<a
+										href="/jobs/{job.job_id}"
+										data-testid="transcode-job-link"
+										class="inline-flex items-center rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary-text hover:bg-primary/20 dark:bg-primary/15 dark:text-primary-text-dark dark:hover:bg-primary/25"
+									>Job {job.job_id}</a>
+								{:else}
+									<span class="inline-flex items-center rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-gray-500 dark:bg-primary/15 dark:text-gray-400">No job</span>
+								{/if}
 								{#if job.attempts > 0}
 									<span class="text-xs">Attempt {job.attempts}</span>
 								{/if}
