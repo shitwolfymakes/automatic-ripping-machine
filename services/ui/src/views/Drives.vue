@@ -191,7 +191,7 @@ async function onDefaultSessionChange(drive: DriveView, event: Event) {
               :data-testid="`default-session-${d.id}`"
               @change="onDefaultSessionChange(d, $event)"
             >
-              <option value="">— none —</option>
+              <option value="">(none)</option>
               <option v-for="s in sessions" :key="s.id" :value="s.id">{{ s.name }}</option>
             </select>
           </td>
@@ -200,7 +200,7 @@ async function onDefaultSessionChange(drive: DriveView, event: Event) {
               driveStatusLabel(d)
             }}</span>
           </td>
-          <td>{{ d.last_seen_at ?? '—' }}</td>
+          <td>{{ d.last_seen_at ?? '-' }}</td>
           <td>
             <button
               class="secondary"
@@ -239,7 +239,7 @@ async function onDefaultSessionChange(drive: DriveView, event: Event) {
           <td>
             <code>{{ d.device_path }}</code>
           </td>
-          <td>{{ d.last_seen_at ?? '—' }}</td>
+          <td>{{ d.last_seen_at ?? '-' }}</td>
           <td>
             <button :data-testid="`enroll-${d.id}`" :disabled="busy === d.id" @click="onEnroll(d)">
               Enroll
@@ -257,7 +257,7 @@ async function onDefaultSessionChange(drive: DriveView, event: Event) {
       </tbody>
     </table>
     <p v-else class="muted" data-testid="detected-empty">
-      No unenrolled drives. Plug one in — it appears here within {{ scanInterval }}.
+      No unenrolled drives. Plug one in and it appears here within {{ scanInterval }}.
     </p>
   </div>
 
@@ -289,7 +289,7 @@ async function onDefaultSessionChange(drive: DriveView, event: Event) {
           <td>
             <code>{{ d.device_path }}</code>
           </td>
-          <td>{{ d.last_seen_at ?? '—' }}</td>
+          <td>{{ d.last_seen_at ?? '-' }}</td>
           <td>
             <button
               class="secondary"
