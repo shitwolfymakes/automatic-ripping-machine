@@ -6598,7 +6598,14 @@ export type JobNamingPreviewApiJobsJobIdNamingPreviewGetData = {
          */
         job_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Session Id
+         *
+         * Preview this session instead of the job's effective one
+         */
+        session_id?: string | null;
+    };
     url: '/api/jobs/{job_id}/naming-preview';
 };
 

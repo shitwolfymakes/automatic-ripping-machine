@@ -5130,6 +5130,24 @@
             }
           },
           {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Preview this session instead of the job's effective one",
+              "title": "Session Id"
+            },
+            "description": "Preview this session instead of the job's effective one"
+          },
+          {
             "name": "authorization",
             "in": "header",
             "required": false,

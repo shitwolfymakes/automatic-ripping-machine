@@ -4,7 +4,7 @@ output. Ports neu's naming/variables + jobs/{id}/naming-preview."""
 
 from pathlib import PurePosixPath
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -50,6 +50,7 @@ async def naming_variables(
 @router.get("/api/jobs/{job_id}/naming-preview", response_model=JobNamingPreviewResponse)
 async def job_naming_preview(
     job_id: JobIdParam,
+    session_id: str | None = Query(default=None, description="Preview this session instead of the job's effective one"),
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
 ) -> JobNamingPreviewResponse:
@@ -57,13 +58,20 @@ async def job_naming_preview(
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
 
-    # Same resolution the apply path uses (pending_session_id, else the
-    # drive default when auto_transcode_on_idle is on) — via the shared
-    # auto_session helper so previews cannot drift from apply.
-    session_id: str | None = await resolve_effective_session_id(db, job)
     sess: Session | None = None
     if session_id is not None:
+        # The Apply dialog previews the session the operator is about to pick,
+        # which is not the job's effective one until it is applied.
         sess = (await db.execute(select(Session).where(col(Session.id) == session_id))).scalar_one_or_none()
+        if sess is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown session_id: {session_id}")
+    else:
+        # Same resolution the apply path uses (pending_session_id, else the
+        # drive default when auto_transcode_on_idle is on) — via the shared
+        # auto_session helper so previews cannot drift from apply.
+        effective: str | None = await resolve_effective_session_id(db, job)
+        if effective is not None:
+            sess = (await db.execute(select(Session).where(col(Session.id) == effective))).scalar_one_or_none()
     if sess is None or not sess.output_path_template:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="job has no output template")
 
