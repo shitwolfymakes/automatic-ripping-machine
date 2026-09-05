@@ -60,23 +60,32 @@ describe('Logs single-job viewer', () => {
 		});
 	});
 
+	it('shows the service filter row', async () => {
+		fetchJobLog.mockResolvedValue(ENTRIES);
+		renderComponent(LogDetailPage);
+		await waitFor(() => {
+			expect(screen.getByTestId('job-log-filter-backend')).toBeInTheDocument();
+			expect(screen.getByTestId('job-log-filter-ripper')).toBeInTheDocument();
+			expect(screen.getByTestId('job-log-filter-transcode')).toBeInTheDocument();
+		});
+	});
+
 	it('filters by level', async () => {
 		fetchJobLog.mockResolvedValue(ENTRIES);
 		renderComponent(LogDetailPage);
 		await waitFor(() => expect(screen.getByText('started ripping')).toBeInTheDocument());
-		const sel = screen.getByLabelText(/level/i);
-		await fireEvent.change(sel, { target: { value: 'error' } });
+		await fireEvent.click(screen.getByTestId('job-log-level-error'));
 		await waitFor(() => {
 			expect(screen.queryByText('started ripping')).not.toBeInTheDocument();
 			expect(screen.getByText('makemkv failed')).toBeInTheDocument();
 		});
 	});
 
-	it('filters by free text', async () => {
+	it('filters by free text search', async () => {
 		fetchJobLog.mockResolvedValue(ENTRIES);
 		renderComponent(LogDetailPage);
 		await waitFor(() => expect(screen.getByText('started ripping')).toBeInTheDocument());
-		const search = screen.getByPlaceholderText(/filter/i);
+		const search = screen.getByTestId('job-log-search');
 		await fireEvent.input(search, { target: { value: 'makemkv' } });
 		await waitFor(() => {
 			expect(screen.queryByText('started ripping')).not.toBeInTheDocument();
@@ -87,7 +96,30 @@ describe('Logs single-job viewer', () => {
 	it('shows the empty state when a job has no log lines', async () => {
 		fetchJobLog.mockResolvedValue([]);
 		renderComponent(LogDetailPage);
-		await waitFor(() => expect(screen.getByText(/no log entries/i)).toBeInTheDocument());
+		await waitFor(() => expect(screen.getByText(/no log lines for this job yet/i)).toBeInTheDocument());
+	});
+
+	it('shows a truncated note when the fetch returns the full limit', async () => {
+		const many = Array.from({ length: 1000 }, (_, i) => ({
+			level: 'info',
+			logger: 'arm',
+			event: `line ${i}`,
+			service: 'arm-backend'
+		}));
+		fetchJobLog.mockResolvedValue(many);
+		renderComponent(LogDetailPage);
+		await waitFor(() => {
+			expect(
+				screen.getByText('Showing the last 1000 lines. Download the .zip for the full log.')
+			).toBeInTheDocument();
+		});
+	});
+
+	it('does not show a truncated note when under the limit', async () => {
+		fetchJobLog.mockResolvedValue(ENTRIES);
+		renderComponent(LogDetailPage);
+		await waitFor(() => expect(screen.getByText('started ripping')).toBeInTheDocument());
+		expect(screen.queryByText(/showing the last/i)).not.toBeInTheDocument();
 	});
 
 	it('shows a download link to the per-job zip', async () => {
@@ -111,7 +143,7 @@ describe('Logs single-job viewer', () => {
 	it('shows an error message when the fetch fails', async () => {
 		fetchJobLog.mockRejectedValueOnce(new Error('boom'));
 		renderComponent(LogDetailPage);
-		await waitFor(() => expect(screen.getByText(/could not load log/i)).toBeInTheDocument());
+		await waitFor(() => expect(screen.getByText(/boom/)).toBeInTheDocument());
 	});
 
 	it('subscribes to the live feed for this job on mount', async () => {
