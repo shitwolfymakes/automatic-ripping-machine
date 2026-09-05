@@ -15,6 +15,7 @@
 	import { onMount } from 'svelte';
 	import { setUnauthorizedHandler } from '$lib/api/client';
 	import { logoutLocal, initAuth, isGuest } from '$lib/stores/auth';
+	import { uiPrefs } from '$lib/stores/uiPrefs';
 	import { isScreenEnabled } from '$lib/features';
 	import { logout as apiLogout } from '$lib/api/auth';
 	import { countRipping } from '$lib/utils/job-status';
@@ -187,9 +188,11 @@
 			</nav>
 			<!-- Sidebar stats only at 2xl+, where the bottom bar (lg:flex 2xl:hidden)
 			     is hidden — the two surfaces never show at the same viewport width. -->
-			<div class="hidden 2xl:block">
-				<SidebarStats />
-			</div>
+			{#if $uiPrefs.showStats}
+				<div class="hidden 2xl:block">
+					<SidebarStats />
+				</div>
+			{/if}
 		</div>
 	</aside>
 
@@ -406,7 +409,9 @@
 	</div>
 </div>
 {/if}
-<BottomStatsBar />
+{#if $uiPrefs.showStats}
+	<BottomStatsBar />
+{/if}
 
 <!-- Folder import wizard (global, triggered from gear menu) -->
 <ImportWizard

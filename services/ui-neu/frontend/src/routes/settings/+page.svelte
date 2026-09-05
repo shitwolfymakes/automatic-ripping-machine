@@ -20,6 +20,7 @@
 	import DriveCard from '$lib/components/DriveCard.svelte';
 	import DriveMaintenance from '$lib/components/DriveMaintenance.svelte';
 	import DriveLifecycleLists from '$lib/components/DriveLifecycleLists.svelte';
+	import InterfaceSettings from '$lib/components/settings/InterfaceSettings.svelte';
 	import { fetchImageCacheStats, clearImageCache, type ImageCacheStats } from '$lib/api/maintenance';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import SystemHealth from '$lib/components/settings/SystemHealth.svelte';
@@ -38,7 +39,7 @@
 	// --- Tab state ---
 	type Tab = string;
 	// Non-config screen-tabs (their own bespoke UI).
-	const screenTabs = ['sessions', 'transcoding', 'notifications', 'appearance', 'drives', 'users', 'system'] as const;
+	const screenTabs = ['sessions', 'transcoding', 'notifications', 'interface', 'themes', 'drives', 'users', 'system'] as const;
 	// Config-group tabs derived from the backend schema. Metadata + Ripping have
 	// no bespoke screen-tab home → render as their own tabs. (Transcoding/
 	// Notifications single toggles fold into the existing transcoding/notifications
@@ -67,7 +68,8 @@
 		sessions: 'Sessions',
 		transcoding: 'Transcoding',
 		notifications: 'Notifications',
-		appearance: 'Appearance',
+		interface: 'Interface',
+		themes: 'Themes',
 		drives: 'Drives',
 		users: 'Users',
 		system: 'System',
@@ -86,6 +88,7 @@
 		// legacy hash (e.g. an old #music/#ripping bookmark) falls back to
 		// 'Metadata' instead of leaving the content pane blank.
 		const allowed = [...configGroupNames, ...screenTabs] as readonly string[];
+		if (tabPart === 'appearance') return 'themes'; // pre-rename bookmarks and links
 		return allowed.includes(tabPart) ? tabPart : 'Metadata';
 	}
 
@@ -206,7 +209,7 @@
 		activeTab = tab;
 		programmaticHashChange = true;
 		window.location.hash = tab;
-		if (tab === 'appearance') loadCacheStats();
+		if (tab === 'themes') loadCacheStats();
 		if (tab === 'drives') loadDriveSessions();
 		// Reset scroll to top when switching tabs
 		document.querySelector('main')?.scrollTo(0, 0);
@@ -218,7 +221,7 @@
 		rescanDrives().catch(() => {}).then(() => drives.start());
 		loadSettings();
 		// Handle initial hash tab (trigger side effects)
-		if (activeTab === 'appearance') loadCacheStats();
+		if (activeTab === 'themes') loadCacheStats();
 		if (activeTab === 'drives') loadDriveSessions();
 		function onHashChange() {
 			if (programmaticHashChange) {
@@ -228,7 +231,7 @@
 			const tab = parseHash();
 			activeTab = tab;
 			pendingField = parseHashField();
-			if (tab === 'appearance') loadCacheStats();
+			if (tab === 'themes') loadCacheStats();
 			if (tab === 'drives') loadDriveSessions();
 			// Reset scroll to top when switching tabs
 			document.querySelector('main')?.scrollTo(0, 0);
@@ -391,8 +394,12 @@
 		{/if}
 
 		<!-- Appearance Tab -->
-		{#if activeTab === 'appearance'}
-			<h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Appearance</h2>
+		{#if activeTab === 'interface'}
+			<InterfaceSettings />
+		{/if}
+
+		{#if activeTab === 'themes'}
+			<h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Themes</h2>
 			<section class="space-y-6">
 				<!-- Feedback toast -->
 				{#if themeFeedback}
