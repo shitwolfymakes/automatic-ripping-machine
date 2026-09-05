@@ -291,6 +291,12 @@ class DriveScanner:
         self.last_scan_at: datetime | None = None
         self.last_error: str | None = None
 
+    @property
+    def disk_root(self) -> Path:
+        """The host `/dev/disk`-style mount this scanner enumerates —
+        surfaced read-only for GET /api/drives/diagnostic's by-id check."""
+        return self._disk_root
+
     async def scan_once(self, session: AsyncSession, *, prune_now: bool = False) -> ScanSummary:
         """One reconcile. `prune_now` (Force Rescan) drops the prune window to
         zero days: every detected row that is not present right now is deleted

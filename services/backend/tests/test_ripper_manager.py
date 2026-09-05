@@ -395,3 +395,24 @@ def test_probe_checks_the_ripper_image() -> None:
     m, client = _manager()
     client.images.get.side_effect = docker.errors.ImageNotFound("x")
     assert m.probe() == (False, "image arm-ripper:test not present on docker host")
+
+
+# --- container_status -------------------------------------------------------
+
+
+def test_container_status_reports_missing_running_exited_and_stale() -> None:
+    m, client = _manager()
+    client.images.get.return_value.id = "sha256:same"
+    assert m.container_status("drv_none") == ("missing", None)
+    client.containers.list.return_value = [_container("drv_a")]
+    assert m.container_status("drv_a") == ("running", True)
+    client.containers.list.return_value = [_container("drv_a", status="exited")]
+    assert m.container_status("drv_a") == ("exited", True)
+    client.containers.list.return_value = [_with_image(_container("drv_a"), "sha256:old")]
+    assert m.container_status("drv_a") == ("running", False)
+
+
+def test_container_status_never_raises() -> None:
+    m, client = _manager()
+    client.containers.list.side_effect = docker.errors.DockerException("socket gone")
+    assert m.container_status("drv_a") == ("unknown", None)

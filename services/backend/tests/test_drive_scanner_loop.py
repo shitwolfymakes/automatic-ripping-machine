@@ -40,6 +40,7 @@ async def test_scan_once_detects_and_uses_config_prune_days(tmp_path: Path) -> N
     t.drive()
     db = _db(prune=1)
     scanner = DriveScanner(lambda: db, sysfs_root=t.sysfs, disk_root=t.disk)
+    assert scanner.disk_root == t.disk
     summary = await scanner.scan_once(db)
     assert summary.detected == 1
     [row] = db.rows["drives"]
