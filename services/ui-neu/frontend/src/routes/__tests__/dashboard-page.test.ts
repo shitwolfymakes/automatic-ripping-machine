@@ -160,14 +160,16 @@ describe('Dashboard Page', () => {
 	describe('view mode toggle', () => {
 		afterEach(() => cleanup());
 
-		it('opens in the layout saved under Settings > Interface and writes changes back', async () => {
+		it('opens in the default layout from Settings > Interface; toggling on the page does not change it', async () => {
 			const { setUiPref, uiPrefs } = await import('$lib/stores/uiPrefs');
 			const { get } = await import('svelte/store');
 			setUiPref('dashboardView', 'table');
 			await renderDashboard();
 			await waitFor(() => expect(screen.getByText('Title')).toBeInTheDocument());
 			await fireEvent.click(screen.getByText('Cards'));
-			await waitFor(() => expect(get(uiPrefs).dashboardView).toBe('card'));
+			await waitFor(() => expect(screen.queryByText('Title')).toBeNull());
+			expect(get(uiPrefs).dashboardView).toBe('table');
+			setUiPref('dashboardView', 'card');
 		});
 
 		it('renders Cards and Table toggle buttons', async () => {

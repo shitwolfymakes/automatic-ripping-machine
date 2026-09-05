@@ -7,7 +7,7 @@ import { browser } from '$app/environment';
 export interface UiPrefs {
 	/** Resource stats surface: sidebar panel (2xl) / bottom bar (lg). */
 	showStats: boolean;
-	/** Dashboard job list layout the page opens with. */
+	/** Dashboard job list layout the page opens with (a default, not the live state). */
 	dashboardView: 'card' | 'table';
 }
 
