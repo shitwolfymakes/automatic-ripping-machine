@@ -97,6 +97,11 @@ jobs:
       - name: Installer walkthrough suite
         run: bash devtools/test-install-walkthrough.sh
 
+      # Zero-infra unit test that sources docker-entrypoint.sh via its
+      # ARM_ENTRYPOINT_SOURCE_ONLY seam — no docker, no root, <1s.
+      - name: Entrypoint render-access suite
+        run: bash services/_common/test-entrypoint-render.sh
+
   test-python:
     name: test (python — pytest)
     runs-on: ubuntu-latest

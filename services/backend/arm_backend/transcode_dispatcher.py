@@ -403,10 +403,9 @@ class TranscodeDispatcher:
             env["ARM_GPU_DEVICE"] = assignment.gpu.device_path
             if assignment.codec is not None:
                 env["ARM_GPU_CODEC"] = assignment.codec
-            # VAAPI/QSV need the render-node group inside the container; the
-            # entrypoint adds `arm` to RENDER_GID before gosu (a docker
-            # --group-add wouldn't survive the gosu group reset). NVENC's device
-            # access comes via the nvidia runtime, so it doesn't need this.
+            # VAAPI/QSV: the entrypoint self-derives the render gid from the
+            # mounted node; an explicit ARM_RENDER_GID is a forced OVERRIDE
+            # (passed through as RENDER_GID, which wins in the entrypoint).
             if assignment.gpu.vendor in (GpuVendor.VAAPI, GpuVendor.QSV) and self._settings.ARM_RENDER_GID:
                 env["RENDER_GID"] = self._settings.ARM_RENDER_GID
             self._inject_gpu_run_kwargs(extra_run_kwargs, assignment.gpu)
