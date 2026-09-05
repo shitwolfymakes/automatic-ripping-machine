@@ -220,6 +220,19 @@ class RipperManager:
             logger.warning("cannot compare image for container %s: %s", getattr(container, "name", "?"), _err(exc))
             return True
 
+    def container_status(self, drive_id: str) -> tuple[str, bool | None]:
+        """(docker state, image current?) for the drive's container — for
+        /api/drives/diagnostic. ("missing", None) when there is none;
+        ("unknown", None) when docker cannot be asked. Never raises."""
+        try:
+            existing = next(iter(self._labelled(drive_id)), None)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("cannot list containers for drive_id=%s: %s", drive_id, _err(exc))
+            return "unknown", None
+        if existing is None:
+            return "missing", None
+        return str(existing.status), self._image_current(existing)
+
     def reconcile(self, enrolled: Sequence[Drive], *, busy: frozenset[str] = frozenset()) -> ReconcileSummary:
         """Boot-time: the Drive table is the source of truth (spec §3).
         Per-drive failures are recorded, not raised; only an un-listable

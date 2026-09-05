@@ -2136,6 +2136,7 @@
           "drives"
         ],
         "summary": "Drive Diagnostic",
+        "description": "\"Look for issues\": every drive row judged against the lifecycle model,\nplus the health of the parts that make the model work (scanner, ripper\nmanager, the host's by-id mount). Never 503s \u2014 a missing subsystem is\nitself a finding.",
         "operationId": "drive_diagnostic_api_drives_diagnostic_get",
         "parameters": [
           {
@@ -9065,6 +9066,30 @@
             "type": "string",
             "title": "Id"
           },
+          "lifecycle": {
+            "$ref": "#/components/schemas/DriveLifecycle"
+          },
+          "present": {
+            "type": "boolean",
+            "title": "Present"
+          },
+          "identity_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveIdentityKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "device_path": {
+            "type": "string",
+            "title": "Device Path"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DriveStatus"
+          },
           "media_status": {
             "anyOf": [
               {
@@ -9087,6 +9112,28 @@
             ],
             "title": "Media Status At"
           },
+          "container": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Container"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
           "healthy": {
             "type": "boolean",
             "title": "Healthy"
@@ -9102,12 +9149,20 @@
         "type": "object",
         "required": [
           "id",
+          "lifecycle",
+          "present",
+          "identity_kind",
+          "device_path",
+          "status",
           "media_status",
           "media_status_at",
+          "container",
+          "last_error",
           "healthy",
           "notes"
         ],
-        "title": "DriveDiagnosticItem"
+        "title": "DriveDiagnosticItem",
+        "description": "One row of GET /api/drives/diagnostic's \"Look for issues\" panel: the\nlifecycle model's own verdict on a drive, not just heartbeat staleness."
       },
       "DriveDiagnosticResponse": {
         "properties": {
@@ -9117,6 +9172,13 @@
             },
             "type": "array",
             "title": "Drives"
+          },
+          "system": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "System"
           }
         },
         "type": "object",

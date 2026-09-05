@@ -726,17 +726,39 @@ export type DriveDevicePathUpdateRequest = {
 
 /**
  * DriveDiagnosticItem
+ *
+ * One row of GET /api/drives/diagnostic's "Look for issues" panel: the
+ * lifecycle model's own verdict on a drive, not just heartbeat staleness.
  */
 export type DriveDiagnosticItem = {
     /**
      * Id
      */
     id: string;
+    lifecycle: DriveLifecycle;
+    /**
+     * Present
+     */
+    present: boolean;
+    identity_kind: DriveIdentityKind | null;
+    /**
+     * Device Path
+     */
+    device_path: string;
+    status: DriveStatus;
     media_status: DriveMediaStatus | null;
     /**
      * Media Status At
      */
     media_status_at: string | null;
+    /**
+     * Container
+     */
+    container: string | null;
+    /**
+     * Last Error
+     */
+    last_error: string | null;
     /**
      * Healthy
      */
@@ -755,6 +777,10 @@ export type DriveDiagnosticResponse = {
      * Drives
      */
     drives: Array<DriveDiagnosticItem>;
+    /**
+     * System
+     */
+    system?: Array<string>;
 };
 
 /**
