@@ -121,7 +121,7 @@ describe('Drives.vue', () => {
     const wrapper = mount(Drives)
     await flushPromises()
     const badge = wrapper.find('[data-testid="status-drv_x"]')
-    expect(badge.text()).toBe('○ detached — reconnect the drive')
+    expect(badge.text()).toBe('○ detached: reconnect the drive')
     expect(badge.classes()).toContain('detached')
     expect(wrapper.find('[data-testid="enrolled-row-drv_x"]').classes()).toContain('detached')
   })
@@ -268,7 +268,7 @@ describe('Drives.vue', () => {
     const wrapper = mount(Drives)
     await flushPromises()
     const cell = wrapper.find('[data-testid="serial-drv_p"]')
-    expect(cell.text()).toBe('no serial — identified by port')
+    expect(cell.text()).toBe('no serial, identified by port')
     expect(cell.classes()).toContain('warn')
   })
 
@@ -277,7 +277,7 @@ describe('Drives.vue', () => {
     const wrapper = mount(Drives)
     await flushPromises()
     expect(wrapper.find('[data-testid="detected-empty"]').text()).toBe(
-      'No unenrolled drives. Plug one in — it appears here within 30s.',
+      'No unenrolled drives. Plug one in and it appears here within 30s.',
     )
   })
 

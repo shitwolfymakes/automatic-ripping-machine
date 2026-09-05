@@ -15,6 +15,7 @@
 	import { createPollingStore } from '$lib/stores/polling';
 	import { fetchDrives, fetchDriveDiagnostic, rescanDrives } from '$lib/api/drives';
 	import { partitionDrives } from '$lib/utils/drives';
+	import { formatDateTime } from '$lib/utils/format';
 	import { fetchSessions } from '$lib/api/sessions';
 	import DriveCard from '$lib/components/DriveCard.svelte';
 	import DriveMaintenance from '$lib/components/DriveMaintenance.svelte';
@@ -829,29 +830,37 @@
 									</span>
 								</div>
 
-								<!-- Per-drive issues only -->
-								{#each unhealthy as diag}
-									<div class="mb-1.5 rounded-lg border border-amber-500/15 bg-amber-500/5 p-2.5">
-										<div class="mb-1 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-											<span class="font-medium">{diag.id}</span>
+								<!-- Every drive, healthy or not -->
+								{#each diagResult.drives as diag (diag.id)}
+									{@const flagged = unhealthy.includes(diag)}
+									<div data-testid="diag-drive-{diag.id}" class="mb-1.5 rounded-lg border p-2.5 {flagged ? 'border-amber-500/15 bg-amber-500/5' : 'border-primary/10'}">
+										<div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
+											<code class="font-medium text-gray-900 dark:text-white">{diag.device_path}</code>
 											<span class="rounded-full bg-primary/10 px-1.5 text-[10px] uppercase">{diag.lifecycle}</span>
-											<code class="text-[10px]">{diag.device_path}</code>
-											{#if diag.container} · {diag.container}{/if}
+											<span class={diag.present ? '' : 'text-amber-600 dark:text-amber-400'}>{diag.present ? 'connected' : 'not connected'}</span>
+											{#if diag.container}<span>container: {diag.container}</span>{/if}
+											{#if diag.status}<span>ripper: {diag.status}</span>{/if}
+											{#if diag.media_status}<span>media: {diag.media_status.replace('_', ' ')}</span>{/if}
+											{#if diag.media_status_at}<span class="text-gray-400">heartbeat {formatDateTime(diag.media_status_at)}</span>{/if}
+											{#if !flagged}<span class="ml-auto font-medium text-green-600 dark:text-green-400">OK</span>{/if}
 										</div>
+										{#if diag.last_error}
+											<div class="mt-1 text-xs text-red-600 dark:text-red-400">{diag.last_error}</div>
+										{/if}
 										{#each diag.notes as note}
-											<div class="flex items-start gap-1.5 text-xs">
-												<svg class="mt-0.5 h-3 w-3 flex-shrink-0 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-												</svg>
-												<span class="text-amber-700 dark:text-amber-400">
-													<span class="font-medium">{diag.id}</span> - {note}
-												</span>
+											<div class="mt-1 flex items-start gap-1.5 text-xs">
+												{#if note === 'ignored'}
+													<span class="text-gray-400">ignored</span>
+												{:else}
+													<svg class="mt-0.5 h-3 w-3 flex-shrink-0 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+													</svg>
+													<span class="text-amber-700 dark:text-amber-400">{note}</span>
+												{/if}
 											</div>
 										{/each}
 										{#if diag.notes.length === 0 && !diag.healthy}
-											<div class="text-xs text-amber-700 dark:text-amber-400">
-												<span class="font-medium">{diag.id}</span> - unhealthy
-											</div>
+											<div class="mt-1 text-xs text-amber-700 dark:text-amber-400">unhealthy</div>
 										{/if}
 									</div>
 								{/each}

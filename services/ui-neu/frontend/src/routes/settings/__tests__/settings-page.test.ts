@@ -435,10 +435,10 @@ describe('Settings Page', () => {
 						container: 'running',
 						last_error: null,
 						healthy: false,
-						notes: ['drive is detached — reconnect it']
+						notes: ['drive is detached: reconnect it']
 					}
 				],
-				system: ['ripper manager is not running — enroll is unavailable']
+				system: ['ripper manager is not running: enroll is unavailable']
 			});
 			await renderAndOpenTab('Drives');
 			await waitFor(() => {
@@ -447,10 +447,48 @@ describe('Settings Page', () => {
 			await fireEvent.click(screen.getByText('Udev & Drive Diagnostics'));
 			await fireEvent.click(screen.getByText('Run Check'));
 			await waitFor(() => {
-				expect(screen.getByText('ripper manager is not running — enroll is unavailable')).toBeInTheDocument();
+				expect(screen.getByText('ripper manager is not running: enroll is unavailable')).toBeInTheDocument();
 			});
-			expect(screen.getByText(/drive is detached — reconnect it/)).toBeInTheDocument();
+			expect(screen.getByText(/drive is detached: reconnect it/)).toBeInTheDocument();
 			expect(screen.getByText('Issues Found')).toBeInTheDocument();
+		});
+
+		it('diagnostics panel lists a healthy drive with its details and All OK', async () => {
+			vi.mocked(fetchDriveDiagnostic).mockResolvedValueOnce({
+				drives: [
+					{
+						id: 'drv_ok',
+						lifecycle: 'enrolled',
+						present: true,
+						identity_kind: 'by_id',
+						device_path: '/dev/sr2',
+						status: 'online',
+						media_status: 'tray_open',
+						media_status_at: '2026-09-05T01:36:29Z',
+						container: 'running',
+						last_error: null,
+						healthy: true,
+						notes: []
+					}
+				],
+				system: []
+			});
+			await renderAndOpenTab('Drives');
+			await waitFor(() => {
+				expect(screen.getByText('Udev & Drive Diagnostics')).toBeInTheDocument();
+			});
+			await fireEvent.click(screen.getByText('Udev & Drive Diagnostics'));
+			await fireEvent.click(screen.getByText('Run Check'));
+			await waitFor(() => {
+				expect(screen.getByText('All OK')).toBeInTheDocument();
+			});
+			const row = screen.getByTestId('diag-drive-drv_ok');
+			expect(row).toHaveTextContent('/dev/sr2');
+			expect(row).toHaveTextContent('enrolled');
+			expect(row).toHaveTextContent('connected');
+			expect(row).toHaveTextContent('container: running');
+			expect(row).toHaveTextContent('media: tray open');
+			expect(row).toHaveTextContent('OK');
 		});
 	});
 });

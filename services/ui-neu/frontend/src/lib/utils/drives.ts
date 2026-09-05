@@ -1,7 +1,7 @@
 import type { DriveView } from '$lib/types/api.gen';
 
-export const DETACHED_LABEL = '○ detached — reconnect the drive';
-export const NO_SERIAL_LABEL = 'no serial — identified by port';
+export const DETACHED_LABEL = '○ detached: reconnect the drive';
+export const NO_SERIAL_LABEL = 'no serial, identified by port';
 
 export function partitionDrives(drives: DriveView[]): {
 	enrolled: DriveView[];

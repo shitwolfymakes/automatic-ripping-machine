@@ -99,7 +99,7 @@ describe('DriveCard', () => {
 
 		it('renders the detached copy and dims the card when offline and absent', () => {
 			renderDrive({ status: 'offline', present: false, media_status: 'detached' });
-			expect(screen.getByText('○ detached — reconnect the drive')).toBeInTheDocument();
+			expect(screen.getByText('○ detached: reconnect the drive')).toBeInTheDocument();
 		});
 
 		it('shows the error reason', () => {

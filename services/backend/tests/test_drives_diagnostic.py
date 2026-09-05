@@ -137,7 +137,7 @@ def test_enrolled_healthy_drive_has_no_notes(signing_key, tmp_path) -> None:
         (
             dict(status=DriveStatus.OFFLINE, present=False, media_status=DriveMediaStatus.DETACHED),
             ("running", True),
-            "drive is detached — reconnect it",
+            "drive is detached: reconnect it",
         ),
         (dict(status=DriveStatus.OFFLINE, present=True), ("running", True), "ripper heartbeat is stale"),
         (
@@ -145,18 +145,18 @@ def test_enrolled_healthy_drive_has_no_notes(signing_key, tmp_path) -> None:
             ("running", True),
             "error: identity mismatch: x",
         ),
-        (dict(), ("missing", None), "no ripper container — restart the backend or re-enroll"),
+        (dict(), ("missing", None), "no ripper container: restart the backend or re-enroll"),
         (dict(), ("exited", True), "ripper container is not running"),
         (
             dict(),
             ("running", False),
-            "ripper runs an older image — it is recreated at the next backend restart while idle",
+            "ripper runs an older image: it is recreated at the next backend restart while idle",
         ),
         (dict(), ("unknown", None), "cannot inspect the ripper container"),
         (
             dict(identity_kind=DriveIdentityKind.PORT, serial=None, by_id_name=None),
             ("running", True),
-            "no by-id link — identified by port; a replug on another port creates a new drive",
+            "no by-id link, identified by port: a replug on another port creates a new drive",
         ),
     ],
 )
@@ -196,7 +196,7 @@ def test_detected_and_ignored_rows(signing_key, tmp_path) -> None:
         n.startswith("not connected since") for n in by_id["drv_d"]["notes"]
     )
     assert by_id["drv_p"]["healthy"] is True
-    assert "not enrolled — enroll it on the Drives page to rip with it" in by_id["drv_p"]["notes"]
+    assert "not enrolled: enroll it on the Drives page to rip with it" in by_id["drv_p"]["notes"]
     assert by_id["drv_i"] == {**by_id["drv_i"], "healthy": True, "notes": ["ignored"], "container": None}
 
 
@@ -229,7 +229,7 @@ def test_system_notes(signing_key, tmp_path) -> None:
     with client:
         body = _get(client, auth)
     assert "drive scanner is not running" in body["system"]
-    assert "ripper manager is not running — enroll is unavailable" in body["system"]
+    assert "ripper manager is not running: enroll is unavailable" in body["system"]
 
     old = datetime.now(timezone.utc) - timedelta(seconds=120)
     client, auth = _app(
@@ -240,11 +240,9 @@ def test_system_notes(signing_key, tmp_path) -> None:
     )
     with client:
         body = _get(client, auth)
-    assert any(
-        s.startswith("last scan was ") and s.endswith("s ago — the scanner may be stuck") for s in body["system"]
-    )
+    assert any(s.startswith("last scan was ") and s.endswith("s ago: the scanner may be stuck") for s in body["system"])
     assert "last scan failed: OSError: boom" in body["system"]
-    assert "/host-disk/by-id is not mounted — drives cannot be identified" in body["system"]
+    assert "/host-disk/by-id is not mounted: drives cannot be identified" in body["system"]
     assert "ripper manager disabled: ARM_HOST_*_PATH not set" in body["system"]
 
     client, auth = _app(
