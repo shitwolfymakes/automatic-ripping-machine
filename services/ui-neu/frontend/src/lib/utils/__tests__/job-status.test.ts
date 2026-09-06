@@ -69,11 +69,11 @@ describe('reviewPhaseBadge', () => {
 		expect(b.label).toBe('READY');
 		expect(b.accent).toContain('--color-primary');
 	});
-	it('ripped + no title -> RIPPED · NEEDS SESSION (session wins)', () => {
-		expect(reviewPhaseBadge(badgeJob('ripped', null)).label).toBe('RIPPED · NEEDS SESSION');
+	it('ripped + no title -> RIPPED | NEEDS SESSION (session wins)', () => {
+		expect(reviewPhaseBadge(badgeJob('ripped', null)).label).toBe('RIPPED | NEEDS SESSION');
 	});
-	it('ripped + has title -> RIPPED · NEEDS SESSION', () => {
-		expect(reviewPhaseBadge(badgeJob('ripped', 'MysterySuspense')).label).toBe('RIPPED · NEEDS SESSION');
+	it('ripped + has title -> RIPPED | NEEDS SESSION', () => {
+		expect(reviewPhaseBadge(badgeJob('ripped', 'MysterySuspense')).label).toBe('RIPPED | NEEDS SESSION');
 	});
 	it('ripped violet accent', () => {
 		expect(reviewPhaseBadge(badgeJob('ripped', null)).accent).toContain('#8b5cf6');

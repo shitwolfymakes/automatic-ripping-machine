@@ -156,8 +156,8 @@
 			disabled={isBuiltin}
 			class={inputClass}
 		>
-			<option value="main_feature">Main feature (longest ≥ 45 min)</option>
-			<option value="all_tracks">All tracks (≥ 60 s)</option>
+			<option value="main_feature">Main feature (longest >= 45 min)</option>
+			<option value="all_tracks">All tracks (>= 60 s)</option>
 			<option value="archive">Archive (every track)</option>
 			<option value="custom">Custom</option>
 		</select>

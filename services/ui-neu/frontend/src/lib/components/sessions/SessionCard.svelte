@@ -44,13 +44,13 @@
 
 	let ripSummary = $derived(
 		session.ripPreset
-			? `${humanizeTrackSelection(session.ripPreset.track_selection)} · ${humanizeOutputMode(session.ripPreset.output_mode)}`
+			? `${humanizeTrackSelection(session.ripPreset.track_selection)} | ${humanizeOutputMode(session.ripPreset.output_mode)}`
 			: '-'
 	);
 
 	let transcodeSummary = $derived(
 		session.transcodePreset
-			? `${session.transcodePreset.container} · ${session.transcodePreset.codec ?? '-'} · ${session.transcodePreset.hw_preference ?? ''}`
+			? `${session.transcodePreset.container} | ${session.transcodePreset.codec ?? '-'} | ${session.transcodePreset.hw_preference ?? ''}`
 			: null
 	);
 

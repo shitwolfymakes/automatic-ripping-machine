@@ -6,7 +6,7 @@ describe('classifyJsonValue', () => {
 		const c = classifyJsonValue({ a: 1, b: 'x' });
 		expect(c.kind).toBe('object');
 		expect(c.isContainer).toBe(true);
-		expect(c.preview).toBe('{…}');
+		expect(c.preview).toBe('{...}');
 		expect(c.entries).toEqual([
 			{ key: 'a', value: 1 },
 			{ key: 'b', value: 'x' }

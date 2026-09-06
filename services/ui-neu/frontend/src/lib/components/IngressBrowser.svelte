@@ -83,9 +83,9 @@
 		else { sortKey = key; sortDir = key === 'modified' ? 'desc' : 'asc'; }
 	}
 
-	function sortIcon(key: string): string {
-		if (sortKey !== key) return '';
-		return sortDir === 'asc' ? ' ▴' : ' ▾';
+	function sortIconDir(key: string): 'asc' | 'desc' | null {
+		if (sortKey !== key) return null;
+		return sortDir;
 	}
 
 	function formatSize(bytes: number): string {
@@ -191,6 +191,14 @@
 	onMount(() => { init(); });
 </script>
 
+{#snippet sortIcon(key: string)}
+	{#if sortIconDir(key) === 'asc'}
+		<svg class="inline h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /></svg>
+	{:else if sortIconDir(key) === 'desc'}
+		<svg class="inline h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+	{/if}
+{/snippet}
+
 <div class="flex min-h-0 flex-1 flex-col">
 	{#if needsConfig}
 		<div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400">
@@ -257,13 +265,13 @@
 					<thead class="bg-page text-gray-600 dark:bg-primary/5 dark:text-gray-400">
 						<tr>
 							<th class="px-4 py-2 font-medium">
-								<button type="button" onclick={() => toggleSort('name')} class="hover:text-gray-700 dark:hover:text-gray-300">Name{sortIcon('name')}</button>
+								<button type="button" onclick={() => toggleSort('name')} class="hover:text-gray-700 dark:hover:text-gray-300">Name {@render sortIcon('name')}</button>
 							</th>
 							<th class="px-4 py-2 font-medium">
-								<button type="button" onclick={() => toggleSort('size')} class="hover:text-gray-700 dark:hover:text-gray-300">Size{sortIcon('size')}</button>
+								<button type="button" onclick={() => toggleSort('size')} class="hover:text-gray-700 dark:hover:text-gray-300">Size {@render sortIcon('size')}</button>
 							</th>
 							<th class="px-4 py-2 font-medium">
-								<button type="button" onclick={() => toggleSort('modified')} class="hover:text-gray-700 dark:hover:text-gray-300">Modified{sortIcon('modified')}</button>
+								<button type="button" onclick={() => toggleSort('modified')} class="hover:text-gray-700 dark:hover:text-gray-300">Modified {@render sortIcon('modified')}</button>
 							</th>
 						</tr>
 					</thead>

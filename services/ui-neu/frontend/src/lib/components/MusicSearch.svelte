@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { JobView, TrackView, MetadataCandidate, MetadataReleaseDetail } from '$lib/types/api.gen';
 	import { searchMusicMetadata, fetchMusicDetail, resolveJob, patchJob } from '$lib/api/jobs';
-	import { matchIndicator } from '$lib/utils/track-match';
+	import { matchIndicator, type MatchKind } from '$lib/utils/track-match';
 	import PosterImage from './PosterImage.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 
@@ -160,7 +160,6 @@
 		return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 	}
 
-	const MATCH_GLYPH = { match: '✓', close: '~', mismatch: '✗', unknown: '-' };
 	const MATCH_CLASS = {
 		match: 'text-green-600 dark:text-green-400',
 		close: 'text-amber-600 dark:text-amber-400',
@@ -256,6 +255,18 @@
 	const inputBase = 'rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary dark:border-primary/30 dark:bg-primary/10 dark:text-white';
 	const selectBase = 'rounded-lg border border-primary/25 bg-primary/5 px-2 py-1.5 text-xs text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary dark:border-primary/30 dark:bg-primary/10 dark:text-white';
 </script>
+
+{#snippet matchGlyph(kind: MatchKind)}
+	{#if kind === 'match'}
+		<svg class="mx-auto h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+	{:else if kind === 'mismatch'}
+		<svg class="mx-auto h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+	{:else if kind === 'close'}
+		~
+	{:else}
+		-
+	{/if}
+{/snippet}
 
 <div class="space-y-3">
 	<!-- Search panel -->
@@ -425,7 +436,7 @@
 													<td class="w-6 py-0.5 pl-1.5 pr-1 text-right font-mono text-gray-400 dark:text-gray-500">{track.position}</td>
 													<td class="max-w-0 truncate py-0.5 pr-1 text-gray-700 dark:text-gray-300">{track.title}</td>
 													<td class="w-10 whitespace-nowrap py-0.5 pr-1 text-right font-mono text-gray-400 dark:text-gray-500">{fmtMs(track.length_ms)}</td>
-													{#if kind}<td class="w-4 py-0.5 pr-1 text-center {MATCH_CLASS[kind]}" title={kind}>{MATCH_GLYPH[kind]}</td>{/if}
+													{#if kind}<td class="w-4 py-0.5 pr-1 text-center {MATCH_CLASS[kind]}" title={kind}>{@render matchGlyph(kind)}</td>{/if}
 												</tr>
 											{/each}
 										</tbody>
@@ -457,7 +468,7 @@
 		<p class="text-xs text-gray-400">Loading...</p>
 	{:else if detail}
 		<div class="space-y-3 rounded-md border border-primary/15 bg-primary/5 p-3 dark:border-primary/20 dark:bg-primary/10">
-			<button onclick={() => (detail = null)} class="{btnBase} text-gray-500 hover:text-gray-700 dark:text-gray-400">← Back to results</button>
+			<button onclick={() => (detail = null)} class="{btnBase} flex items-center gap-1 text-gray-500 hover:text-gray-700 dark:text-gray-400"><svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg> Back to results</button>
 			<div class="flex items-start gap-3">
 				<PosterImage url={detail.poster_url} class="h-24 w-24 rounded object-cover" />
 				<div class="min-w-0 text-xs text-gray-600 dark:text-gray-400">
@@ -471,7 +482,7 @@
 					</p>
 					<p class="mt-0.5 font-mono text-[10px]">
 						{#if detail.catalog_number}Cat# {detail.catalog_number}{/if}
-						{#if detail.barcode}· {detail.barcode}{/if}
+						{#if detail.barcode}| {detail.barcode}{/if}
 					</p>
 				</div>
 			</div>
@@ -490,7 +501,7 @@
 								<td class="px-2 py-1">{t.title}</td>
 								{#if discTracks.length > 0}<td class="px-2 py-1 text-right font-mono text-gray-500 dark:text-gray-400">{fmtSec(discTracks[i]?.expected_duration_seconds)}</td>{/if}
 								<td class="px-2 py-1 text-right">{fmtMs(t.length_ms)}</td>
-								{#if discTracks.length > 0}<td class="px-2 py-1 text-center {MATCH_CLASS[kind]}" title={kind}>{MATCH_GLYPH[kind]}</td>{/if}
+								{#if discTracks.length > 0}<td class="px-2 py-1 text-center {MATCH_CLASS[kind]}" title={kind}>{@render matchGlyph(kind)}</td>{/if}
 							</tr>
 						{/each}
 					</tbody>
@@ -502,7 +513,7 @@
 								<td class="px-2 py-1"></td>
 								<td class="px-2 py-1 text-right font-mono">{fmtSec(discTotalSec)}</td>
 								<td class="px-2 py-1 text-right font-mono">{fmtMs(mbTotalMs)}</td>
-								<td class="px-2 py-1 text-center {MATCH_CLASS[totalKind]}" title={totalKind}>{MATCH_GLYPH[totalKind]}</td>
+								<td class="px-2 py-1 text-center {MATCH_CLASS[totalKind]}" title={totalKind}>{@render matchGlyph(totalKind)}</td>
 							</tr>
 						</tfoot>
 					{/if}
@@ -520,7 +531,7 @@
 
 			{#if confirmMismatch}
 				<div class="flex flex-wrap items-center gap-2 rounded-md border border-red-300 bg-red-50 p-2 text-xs text-red-700 dark:border-red-700 dark:bg-red-900/20 dark:text-red-400">
-					<span class="flex-1">⚠ Total length differs, likely the wrong release</span>
+					<span class="flex flex-1 items-center gap-1"><svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg> Total length differs, likely the wrong release</span>
 					<button
 						onclick={() => {
 							mismatchConfirmed = true;
@@ -546,10 +557,10 @@
 								{#each trackMapping as p}
 									<tr>
 										<td class="px-2 py-1 whitespace-nowrap font-mono text-gray-500 dark:text-gray-400">Disc #{p.disc.index} ({fmtSec(p.disc.expected_duration_seconds)})</td>
-										<td class="px-2 py-1 text-center text-gray-400">→</td>
+										<td class="px-2 py-1 text-center text-gray-400"><svg class="mx-auto h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg></td>
 										<td class="px-2 py-1 text-gray-700 dark:text-gray-300">{p.mb.title}</td>
 										<td class="px-2 py-1 text-right font-mono text-gray-500 dark:text-gray-400">{fmtMs(p.mb.length_ms)}</td>
-										<td class="px-2 py-1 text-center {MATCH_CLASS[p.match]}" title={p.match}>{MATCH_GLYPH[p.match]}</td>
+										<td class="px-2 py-1 text-center {MATCH_CLASS[p.match]}" title={p.match}>{@render matchGlyph(p.match)}</td>
 									</tr>
 								{/each}
 							</tbody>
