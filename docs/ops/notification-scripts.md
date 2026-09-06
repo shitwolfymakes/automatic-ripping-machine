@@ -18,7 +18,7 @@ picked.
 
 ## Calling convention
 
-    bash /scripts/<script> "<title>" "<body>"
+    /usr/bin/env bash /scripts/<script> "<title>" "<body>"
 
 `$1` is the rendered title and `$2` the rendered body after the channel's
 per-event overrides. That is exactly what v2 passed.
@@ -53,7 +53,10 @@ The UI renders one field per `arm-input` line, and the value reaches the
 script as an environment variable with that exact name (`$TO`, `$SUBJECT`).
 
 - `KEY` must be upper-case letters, digits, and underscores, and must not
-  start with `ARM_` (reserved).
+  start with `ARM_` (reserved). A few shell-sensitive names are refused too
+  (`PATH`, `HOME`, `LANG`, `LC_ALL`, `BASH_ENV`, `ENV`, `LD_PRELOAD`,
+  `LD_LIBRARY_PATH`, `SHELLOPTS`, `BASHOPTS`, `IFS`, `PS4`, `CDPATH`,
+  `GLOBIGNORE`); a line declaring one of them is ignored.
 - `label="..."` is the field label (defaults to the key).
 - `default="..."` is used when the field is left blank. Values may use the
   same `{variables}` as title and body.
@@ -62,8 +65,9 @@ script as an environment variable with that exact name (`$TO`, `$SUBJECT`).
 - `secret` renders a password field, stores the value masked, and cannot be
   overridden per event.
 
-A script with no `arm-input` lines still works and gets `$1`, `$2`, and the
-`ARM_*` variables.
+Only declared inputs reach the script. A stored or per-event value whose key
+no script header declares is ignored, so a script with no `arm-input` lines
+still works and gets `$1`, `$2`, and the `ARM_*` variables, and nothing else.
 
 ## Per-event overrides
 
@@ -101,8 +105,9 @@ The script must exit 0 within the channel's timeout (default 30 seconds,
 maximum 600). A non-zero exit, a timeout, a missing file, a missing execute
 bit, a missing required input, or a template error is recorded on the
 channel and in the dispatch log with the reason and the first 200 characters
-of stderr. There is no retry. The Test panel shows the full stdout and stderr
-(up to 4 KB each) of a test run.
+of stderr, with any secret input value replaced by `<hidden>`. There is no
+retry. The Test panel shows the full stdout and stderr (up to 4 KB each) of a
+test run.
 
 ## Examples
 
