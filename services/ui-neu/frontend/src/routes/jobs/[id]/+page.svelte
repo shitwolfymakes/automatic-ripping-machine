@@ -462,7 +462,7 @@
 										<span class="flex items-center gap-1">
 											<StatusBadge status={track.status} />
 											{#if track.attempts > 1}
-												<span class="text-[10px] text-gray-400" title="Rip attempts">×{track.attempts}</span>
+												<span class="text-[10px] text-gray-400" title="Rip attempts">x{track.attempts}</span>
 											{/if}
 										</span>
 									</td>

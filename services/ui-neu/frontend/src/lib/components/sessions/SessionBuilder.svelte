@@ -217,7 +217,7 @@
 				{#each ripOptions as rp (rp.id)}
 					<option value={rp.id}>{rp.name}</option>
 				{/each}
-				<option value="__create_rip__">+ Create new rip preset…</option>
+				<option value="__create_rip__">+ Create new rip preset...</option>
 			</select>
 		</div>
 
@@ -238,7 +238,7 @@
 				{#each tcOptions as tc (tc.id)}
 					<option value={tc.id}>{tc.name}</option>
 				{/each}
-				<option value="__create_tc__">+ Create new transcode preset…</option>
+				<option value="__create_tc__">+ Create new transcode preset...</option>
 			</select>
 		</div>
 
