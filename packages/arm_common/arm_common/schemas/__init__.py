@@ -147,6 +147,12 @@ from arm_common.schemas.settings import (
 )
 from arm_common.schemas.notifications import (
     AppriseChannelConfig,
+    BashChannelConfig,
+    BashPreviewRequest,
+    BashPreviewResult,
+    BashRunResult,
+    BashScriptInfo,
+    BashScriptSummary,
     CatalogField,
     CatalogService,
     ChannelTemplate,
@@ -164,6 +170,7 @@ from arm_common.schemas.notifications import (
     NotificationInboxView,
     NotificationTestRequest,
     NotificationTestResult,
+    ScriptInput,
     ServiceCatalog,
 )
 from arm_common.schemas.ws import (
@@ -180,6 +187,12 @@ from arm_common.schemas.ws import (
 __all__ = [
     "AbandonJobRequest",
     "AppriseChannelConfig",
+    "BashChannelConfig",
+    "BashPreviewRequest",
+    "BashPreviewResult",
+    "BashRunResult",
+    "BashScriptInfo",
+    "BashScriptSummary",
     "CatalogField",
     "CatalogService",
     "ChannelTemplate",
@@ -289,6 +302,7 @@ __all__ = [
     "RipStartResponse",
     "ScanResult",
     "ScanTitle",
+    "ScriptInput",
     "ServiceCatalog",
     "SessionApplicationView",
     "SessionCloneRequest",

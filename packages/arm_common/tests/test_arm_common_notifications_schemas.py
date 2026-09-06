@@ -1,5 +1,14 @@
+import pytest
+from pydantic import ValidationError
+
 from arm_common.schemas import (
     AppriseChannelConfig,
+    BashChannelConfig,
+    BashPreviewRequest,
+    BashPreviewResult,
+    BashRunResult,
+    BashScriptInfo,
+    BashScriptSummary,
     ChannelTemplate,
     ComposeUrlRequest,
     ComposeUrlResult,
@@ -9,6 +18,7 @@ from arm_common.schemas import (
     NotificationChannelUpdateRequest,
     NotificationTestRequest,
     NotificationTestResult,
+    ScriptInput,
     ServiceCatalog,
 )
 
@@ -90,3 +100,59 @@ def test_notification_channel_test_request_defaults():
 def test_service_catalog_shape():
     catalog = ServiceCatalog(featured=["discord"], services=[])
     assert catalog.featured == ["discord"]
+
+
+def test_bash_config_defaults() -> None:
+    cfg = BashChannelConfig(script="send-email.sh")
+    assert (cfg.type, cfg.timeout_seconds, cfg.inputs, cfg.secret_keys) == ("bash", 30, {}, [])
+
+
+@pytest.mark.parametrize("timeout", [0, 601])
+def test_bash_config_timeout_bounds(timeout: int) -> None:
+    with pytest.raises(ValidationError):
+        BashChannelConfig(script="x.sh", timeout_seconds=timeout)
+
+
+def test_channel_template_inputs_optional() -> None:
+    assert ChannelTemplate().inputs is None
+    assert ChannelTemplate(inputs={"TO": "x"}).inputs == {"TO": "x"}
+
+
+def test_requests_accept_bash() -> None:
+    body = {"type": "bash", "script": "p.sh", "inputs": {"TO": "a@b"}}
+    c = NotificationChannelCreateRequest.model_validate(
+        {"type": "bash", "name": "P", "config": body, "subscribed_events": []}
+    )
+    u = NotificationChannelUpdateRequest.model_validate({"config": body})
+    t = NotificationTestRequest.model_validate({"config": body})
+    assert all(isinstance(r.config, BashChannelConfig) for r in (c, u, t))
+
+
+def test_script_shapes() -> None:
+    inp = ScriptInput(key="TO", label="Recipient", required=True)
+    assert (inp.secret, inp.default, inp.values) == (False, "", None)
+    assert BashScriptSummary(name="a.sh", executable=True).description == ""
+    info = BashScriptInfo(
+        name="a.sh",
+        executable=True,
+        description="",
+        size_bytes=1,
+        modified_at="2026-09-06T00:00:00Z",
+        inputs=[inp],
+        preview="#!",
+    )
+    assert info.inputs[0].key == "TO"
+
+
+def test_preview_shapes() -> None:
+    req = BashPreviewRequest(config=BashChannelConfig(script="a.sh"), event_type="rip.completed")
+    assert req.run is False and req.template is None and req.channel_id is None
+    res = BashPreviewResult(
+        title="t",
+        body="b",
+        inputs={},
+        env={},
+        argv=["bash"],
+        result=BashRunResult(ok=True, exit_code=0, duration_ms=1, stdout="", stderr="", error=None),
+    )
+    assert res.error is None and res.result is not None and res.result.ok
