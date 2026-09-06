@@ -38,7 +38,12 @@
 	let enabled = $state(channel.enabled);
 	let config = $state<Record<string, unknown>>({ ...channel.config });
 	let events = $state<string[]>([...channel.subscribed_events]);
-	let templates = $state<Record<string, ChannelTemplate>>({ ...channel.templates });
+	// Deep copy: a shallow spread shares the per-event objects with the prop, so
+	// editing a title/body/input would mutate `channel.templates` too and the
+	// dirty check below would never fire.
+	let templates = $state<Record<string, ChannelTemplate>>(
+		structuredClone($state.snapshot(channel.templates)) as Record<string, ChannelTemplate>
+	);
 	let scriptInputs = $state<ScriptInput[]>([]);
 
 	// Apprise channels store config.service_id, so resolve the service from the
