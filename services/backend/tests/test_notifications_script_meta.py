@@ -21,7 +21,7 @@ HEADER = """#!/usr/bin/env bash
 # arm-input: SMTP_PASS label="SMTP password" secret
 # arm-input: bad-key   label="ignored"
 # arm-input: ARM_X     label="ignored, reserved prefix"
-# arm-input: TO        label="Recipient (last wins)"
+# arm-input: TO        label="Recipient (last wins)" required
 set -euo pipefail
 """
 
