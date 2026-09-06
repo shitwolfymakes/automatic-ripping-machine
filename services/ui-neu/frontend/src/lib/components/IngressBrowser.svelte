@@ -5,6 +5,7 @@
 	import { showImportWizard } from '$lib/stores/importWizard';
 	import type { FileEntry } from '$lib/api/files';
 	import { Folder, FolderArchive, Disc, File as FileIcon } from 'lucide-svelte';
+	import SortIndicator from '$lib/components/SortIndicator.svelte';
 
 	// NOTE: kind/importable are computed client-side until the BFF (arm-neu PR #333)
 	// emits them per entry. Once the BFF lands those fields and api.gen.ts picks
@@ -192,11 +193,7 @@
 </script>
 
 {#snippet sortIcon(key: string)}
-	{#if sortIconDir(key) === 'asc'}
-		<svg class="inline h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /></svg>
-	{:else if sortIconDir(key) === 'desc'}
-		<svg class="inline h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
-	{/if}
+	<SortIndicator dir={sortIconDir(key)} />
 {/snippet}
 
 <div class="flex min-h-0 flex-1 flex-col">

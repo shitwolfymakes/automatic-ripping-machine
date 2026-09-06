@@ -7,6 +7,7 @@
 	import EventsSection from './sections/EventsSection.svelte';
 	import ServiceDropdown from './ServiceDropdown.svelte';
 	import { missingRequirements } from './channelHelpers';
+	import Glyph from '$lib/components/Glyph.svelte';
 
 	export interface AddChannelBody {
 		type: ChannelType;
@@ -70,7 +71,7 @@
 <div class="rounded-xl border border-primary/25 bg-surface shadow-xl dark:border-primary/30 dark:bg-surface-dark">
 	<div class="flex items-center justify-between border-b border-primary/20 px-5 py-4">
 		<h3 class="text-sm font-semibold text-primary">Add notification channel</h3>
-		<button type="button" onclick={oncancel} class="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"><svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg> Cancel</button>
+		<button type="button" onclick={oncancel} class="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"><Glyph name="x" /> Cancel</button>
 	</div>
 
 	<div class="space-y-5 p-5">
@@ -99,7 +100,7 @@
 
 	<div class="flex items-center justify-between border-t border-primary/20 px-5 py-3.5">
 		<span class="flex items-center gap-1 text-xs {ready ? 'text-status-success' : 'text-gray-500 dark:text-gray-400'}">
-			{#if ready}<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> Ready to save{:else}Needs: {missing.join(', ')}{/if}
+			{#if ready}<Glyph name="check" class="h-3.5 w-3.5" /> Ready to save{:else}Needs: {missing.join(', ')}{/if}
 		</span>
 		<div class="flex gap-2">
 			<button type="button" onclick={oncancel} class="rounded-md px-4 py-2 text-sm text-gray-600 hover:bg-primary/10 dark:text-gray-300">Cancel</button>
