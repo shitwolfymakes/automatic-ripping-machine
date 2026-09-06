@@ -304,7 +304,7 @@ check_prereqs() {
 
 ensure_prefix() {
     log "ensuring install prefix at $PREFIX"
-    mkdir -p "$PREFIX"/{certs,raw,media,logs,db,scripts}
+    mkdir -p "$PREFIX"/{certs,raw,media,logs,db}
     chmod 700 "$PREFIX/certs"
     # 2775 = setgid + group-writable. Per docs/arch/06-deployment.md: lets
     # ARM-created subdirs inherit the parent group automatically.
@@ -1393,7 +1393,6 @@ services:
       - ./raw:/raw
       - ./media:/media
       - ./logs:/logs
-      - ./scripts:/scripts:ro
       - ./certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
       - ./certs/arm-backend.crt:/etc/ssl/arm/tls.crt:ro
       - ./certs/arm-backend.key:/etc/ssl/arm/tls.key:ro
