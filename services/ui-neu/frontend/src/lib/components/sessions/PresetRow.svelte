@@ -25,7 +25,7 @@
 			case 'music': return 'Music';
 			case 'data': return 'Data';
 			case 'iso': return 'ISO';
-			default: return v ?? '—';
+			default: return v ?? '-';
 		}
 	}
 
@@ -35,7 +35,7 @@
 			case 'all_tracks': return 'All tracks';
 			case 'archive': return 'Archive';
 			case 'custom': return 'Custom';
-			default: return v ?? '—';
+			default: return v ?? '-';
 		}
 	}
 
@@ -44,7 +44,7 @@
 			case 'required': return 'ID required';
 			case 'skip': return 'ID skip';
 			case 'deferred_placeholder': return 'ID deferred';
-			default: return v ?? '—';
+			default: return v ?? '-';
 		}
 	}
 
@@ -53,7 +53,7 @@
 			case 'tracks': return 'Tracks';
 			case 'iso': return 'ISO image';
 			case 'data_copy': return 'File copy';
-			default: return v ?? '—';
+			default: return v ?? '-';
 		}
 	}
 
@@ -62,7 +62,7 @@
 			case 'handbrake': return 'HandBrake';
 			case 'abcde': return 'abcde';
 			case 'none': return 'None';
-			default: return v ?? '—';
+			default: return v ?? '-';
 		}
 	}
 
@@ -76,7 +76,7 @@
 			case 'ogg': return 'OGG';
 			case 'iso': return 'ISO';
 			case 'none': return 'None';
-			default: return v ?? '—';
+			default: return v ?? '-';
 		}
 	}
 
@@ -85,7 +85,7 @@
 			case 'h264': return 'H.264';
 			case 'h265': return 'H.265';
 			case 'av1': return 'AV1';
-			default: return v ?? '—';
+			default: return v ?? '-';
 		}
 	}
 
@@ -93,7 +93,7 @@
 		switch (v) {
 			case 'cpu_only': return 'CPU only';
 			case 'any': return 'Any (HW)';
-			default: return v ?? '—';
+			default: return v ?? '-';
 		}
 	}
 
@@ -107,7 +107,7 @@
 			})()
 			: (() => {
 				const p = preset as TranscodePresetView;
-				return `${humanizeTool(p.tool)} · ${humanizeContainer(p.container)} · ${p.codec ? humanizeCodec(p.codec) : '—'} · ${humanizeHw(p.hw_preference)}`;
+				return `${humanizeTool(p.tool)} · ${humanizeContainer(p.container)} · ${p.codec ? humanizeCodec(p.codec) : '-'} · ${humanizeHw(p.hw_preference)}`;
 			})()
 	);
 
@@ -115,9 +115,9 @@
 
 	let deleteTitle = $derived(
 		preset.is_builtin
-			? 'Built-in preset — clone to edit/remove'
+			? 'Built-in preset: clone to edit or remove'
 			: usedBy > 0
-				? `Used by ${usedBy} session(s) — repoint them first`
+				? `Used by ${usedBy} session(s): repoint them first`
 				: undefined
 	);
 
