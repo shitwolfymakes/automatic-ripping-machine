@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { ChevronRight } from 'lucide-svelte';
-	import { previewBash, type BashPreviewResult, type EventTypeInfo } from '$lib/api/channels';
+	import { previewBash, type BashPreviewResult, type EventTypeInfo, type ScriptInput } from '$lib/api/channels';
 	import { FIELD_INPUT_CLASS } from '$lib/types/notifications';
 	import type { ChannelTemplate } from '$lib/types/notifications';
 
@@ -9,8 +9,17 @@
 		templates,
 		events,
 		eventTypes = [],
-		channelId = null
-	}: { config: Record<string, unknown>; templates: Record<string, ChannelTemplate>; events: string[]; eventTypes?: EventTypeInfo[]; channelId?: string | null } = $props();
+		channelId = null,
+		inputs = []
+	}: { config: Record<string, unknown>; templates: Record<string, ChannelTemplate>; events: string[]; eventTypes?: EventTypeInfo[]; channelId?: string | null; inputs?: ScriptInput[] } = $props();
+
+	// A missing required input is a form-completion hint, not a failure:
+	// name the field the way the Inputs block labels it.
+	const incomplete = $derived.by(() => {
+		const m = preview?.error?.match(/^input ([A-Z][A-Z0-9_]*) is required$/);
+		if (!m) return null;
+		return inputs.find((i) => i.key === m[1])?.label ?? m[1];
+	});
 
 	let open = $state(false);
 	let eventType = $state('');
@@ -91,11 +100,13 @@
 						{/each}
 					</select>
 				</label>
-				<button type="button" disabled={running || !eventType} onclick={runTest} class="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-hover disabled:opacity-40">{running ? 'Running...' : 'Run test'}</button>
+				<button type="button" disabled={running || !eventType || !!preview?.error} onclick={runTest} class="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-hover disabled:opacity-40">{running ? 'Running...' : 'Run test'}</button>
 			</div>
 			<p class="text-xs text-gray-500 dark:text-gray-400">Runs the script now with sample values for the chosen event, using the form as it is, including unsaved changes.</p>
 
-			{#if preview?.error}
+			{#if incomplete}
+				<p class="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-300">Fill in {incomplete} above to preview this hook.</p>
+			{:else if preview?.error}
 				<p class="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/40 dark:bg-red-900/20 dark:text-red-300">{preview.error}</p>
 			{:else if preview}
 				<div class="overflow-hidden rounded-md border border-primary/15 dark:border-primary/20">

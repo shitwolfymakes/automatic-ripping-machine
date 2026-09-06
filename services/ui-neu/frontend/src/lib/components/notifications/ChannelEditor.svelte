@@ -106,7 +106,7 @@
 	{/if}
 	<EventsSection bind:selected={events} bind:templates {eventTypes} inputs={scriptInputs} />
 	{#if channel.type === 'bash'}
-		<BashTestPanel {config} {templates} {events} {eventTypes} channelId={String(channel.id)} />
+		<BashTestPanel {config} {templates} {events} {eventTypes} channelId={String(channel.id)} inputs={scriptInputs} />
 	{/if}
 
 	<div class="flex flex-wrap items-center gap-2">

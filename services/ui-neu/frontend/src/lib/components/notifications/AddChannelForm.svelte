@@ -98,7 +98,7 @@
 		<ConfigureSection {type} bind:name bind:enabled bind:config {service} showLabelRow={false} onscript={(i: BashScriptInfo | null) => (scriptInputs = i?.inputs ?? [])} />
 		<EventsSection bind:selected={events} bind:templates {eventTypes} inputs={scriptInputs} />
 		{#if type === 'bash'}
-			<BashTestPanel {config} {templates} {events} {eventTypes} />
+			<BashTestPanel {config} {templates} {events} {eventTypes} inputs={scriptInputs} />
 		{/if}
 	</div>
 
