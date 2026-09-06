@@ -88,7 +88,7 @@ async def test_dispatch_routes_to_subscribed_channels() -> None:
     d = MessageDispatcher(settings=_settings(), db_factory=_db_factory(db), listeners=[AppriseListener(notifier)])
     await d._tick()
     # only channel A (subscribed + enabled) gets the event
-    assert notifier.calls == [(["json://a/x"], "ARM: rip completed — ", " finished ripping on drive  (/ tracks).")]
+    assert notifier.calls == [(["json://a/x"], "ARM: rip completed - ", " finished ripping on drive  (/ tracks).")]
     assert db.rows["events"][0].notified_at is not None
     assert db.rows["notification_channels"][0].last_success_at is not None
     # one dispatch-log row, success

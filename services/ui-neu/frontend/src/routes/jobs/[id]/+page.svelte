@@ -422,7 +422,7 @@
 													<span class="ml-1.5 text-xs text-gray-500 dark:text-gray-400">{track.episode_name}</span>
 												{/if}
 											{:else}
-												<span class="text-gray-400">—</span>
+												<span class="text-gray-400">-</span>
 											{/if}
 										</td>
 									{/if}
@@ -433,7 +433,7 @@
 												<span class="ml-1 rounded-sm bg-amber-100 px-1 py-0.5 text-[9px] font-semibold uppercase text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">custom</span>
 											{/if}
 										{:else}
-											<span class="text-gray-400">{track.excluded ? 'excluded' : '—'}</span>
+											<span class="text-gray-400">{track.excluded ? 'excluded' : '-'}</span>
 										{/if}
 									</td>
 									<td class="px-4 py-3" data-label="Length">
@@ -441,7 +441,7 @@
 											{formatDuration(track.duration_seconds)}
 										{:else if track.expected_duration_seconds != null}
 											<span class="text-gray-400">~{formatDuration(track.expected_duration_seconds)}</span>
-										{:else}—{/if}
+										{:else}-{/if}
 									</td>
 									<td class="px-4 py-3 text-gray-700 dark:text-gray-300" data-label="Size">{trackSizeLabel(track)}</td>
 									<td class="px-4 py-3" data-label="Include">
@@ -462,7 +462,7 @@
 										<span class="flex items-center gap-1">
 											<StatusBadge status={track.status} />
 											{#if track.attempts > 1}
-												<span class="text-[10px] text-gray-400" title="Rip attempts">×{track.attempts}</span>
+												<span class="text-[10px] text-gray-400" title="Rip attempts">x{track.attempts}</span>
 											{/if}
 										</span>
 									</td>
@@ -471,7 +471,7 @@
 										{#if track.transcode_status}
 											<StatusBadge status={track.transcode_status} />
 										{:else}
-											<span class="text-gray-400 dark:text-gray-500">—</span>
+											<span class="text-gray-400 dark:text-gray-500">-</span>
 										{/if}
 									</td>
 								</tr>

@@ -76,3 +76,23 @@ async def test_run_seeders_idempotent(tmp_path: Path, monkeypatch: pytest.Monkey
     await run_seeders(db)
     assert len(db.rows["users"]) == first_users
     assert len(db.rows["rip_presets"]) == first_presets
+
+
+async def test_run_seeders_corrects_builtin_names(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Built-ins are clone-to-edit, so the seeder owns their names: a row that
+    still carries an older shipped name (e.g. the pre-cleanup em-dash form) is
+    renamed on the next boot, without a migration. Custom rows are untouched."""
+    monkeypatch.setattr(seeders, "FIRST_BOOT_LOG", tmp_path / "fb.log")
+    db = FakeSession()
+    await run_seeders(db)
+    preset = next(p for p in db.rows["rip_presets"] if p.id == "rpr_builtin_data_copy")
+    session_row = next(s for s in db.rows["sessions"] if s.id == "ses_builtin_movie_plex_1080p")
+    preset.name = "Data — Copy"
+    session_row.name = "Movie → Plex 1080p H.265"
+
+    await run_seeders(db)
+
+    assert preset.name == "Data: Copy"
+    assert session_row.name == "Movie to Plex 1080p H.265"
+    assert "—" not in "".join(r.name for r in db.rows["rip_presets"] + db.rows["sessions"])
+    assert "→" not in "".join(r.name for r in db.rows["rip_presets"] + db.rows["sessions"])

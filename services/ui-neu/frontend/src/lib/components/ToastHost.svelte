@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { toasts, dismissToast, type ToastTone } from '$lib/stores/toast.svelte';
+	import Glyph from './Glyph.svelte';
 
 	function toneClass(tone: ToastTone): string {
 		if (tone === 'success') return 'border-status-success/40 text-status-success';
@@ -23,7 +24,7 @@
 				aria-label="Dismiss notification"
 				onclick={() => dismissToast(t.id)}
 				class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-			>×</button>
+			><Glyph name="x" /></button>
 		</div>
 	{/each}
 </div>

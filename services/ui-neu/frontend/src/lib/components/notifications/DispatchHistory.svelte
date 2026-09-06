@@ -1,13 +1,8 @@
 <script lang="ts">
 	import type { DispatchRow } from '$lib/types/notifications';
+	import Glyph from '$lib/components/Glyph.svelte';
 
 	let { rows }: { rows: DispatchRow[] } = $props();
-
-	function statusIcon(status: DispatchRow['status']): string {
-		if (status === 'success') return '✓';
-		if (status === 'failed') return '⚠';
-		return '⏱';
-	}
 </script>
 
 {#if rows.length === 0}
@@ -20,7 +15,15 @@
 					class:text-status-success={row.status === 'success'}
 					class:text-status-error={row.status === 'failed'}
 					class:text-gray-400={row.status !== 'success' && row.status !== 'failed'}
-				>{statusIcon(row.status)}</span>
+				>
+					{#if row.status === 'success'}
+						<Glyph name="check" />
+					{:else if row.status === 'failed'}
+						<Glyph name="warning" />
+					{:else}
+						<Glyph name="clock" />
+					{/if}
+				</span>
 				<span class="font-medium">{row.event_key}</span>
 				<span class="text-gray-400">{row.created_at ?? ''}</span>
 				{#if row.last_error}

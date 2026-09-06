@@ -100,7 +100,7 @@ def _build_db(
     db.rows["sessions"] = [
         Session(
             id="ses_x",
-            name="Movie → Plex",
+            name="Movie to Plex",
             media_type=MediaType.MOVIE,
             is_builtin=True,
             rip_preset_id="rpr_x",

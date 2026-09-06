@@ -4,7 +4,7 @@ import PresetRow from '../PresetRow.svelte';
 
 const ripPreset = (over = {}) => ({
 	id: 'r1',
-	name: 'Movie — Main Feature',
+	name: 'Movie: Main Feature',
 	media_type: 'movie' as const,
 	is_builtin: false,
 	track_selection: 'main_feature' as const,
@@ -48,7 +48,7 @@ describe('PresetRow — rip preset (custom)', () => {
 			onclone: vi.fn(),
 			ondelete: vi.fn(),
 		});
-		expect(screen.getByText('Movie — Main Feature')).toBeInTheDocument();
+		expect(screen.getByText('Movie: Main Feature')).toBeInTheDocument();
 		expect(screen.getByText('r1')).toBeInTheDocument();
 		// Summary: track_selection · identification_mode · output_mode
 		expect(screen.getByText(/main feature.*id required.*tracks/i)).toBeInTheDocument();
@@ -259,18 +259,21 @@ describe('PresetRow — transcode preset', () => {
 		expect(screen.getByText(/handbrake.*mkv.*h\.?265.*any/i)).toBeInTheDocument();
 	});
 
-	it('shows a dash for null codec', () => {
+	it('omits the codec and hardware parts when the preset has none', () => {
 		renderComponent(PresetRow, {
 			kind: 'transcode',
-			preset: transcodePreset({ codec: null }),
+			preset: transcodePreset({ codec: null, hw_preference: null }),
 			usedBy: 0,
 			onview: vi.fn(),
 			onedit: vi.fn(),
 			onclone: vi.fn(),
 			ondelete: vi.fn(),
 		});
-		// Summary shows a dash for the null codec
-		expect(screen.getByText(/ - /)).toBeInTheDocument();
+		// A passthrough preset reads as tool and container only: no dangling separators.
+		expect(screen.queryByText(/\| - \|/)).toBeNull();
+		expect(screen.queryByText(/\|\s*$/)).toBeNull();
+		// and the two set parts are still there, joined once
+		expect(screen.getByText(/^[\w ]+ \| [\w ]+$/)).toBeInTheDocument();
 	});
 
 	it('shows Used by N chip for transcode', () => {
