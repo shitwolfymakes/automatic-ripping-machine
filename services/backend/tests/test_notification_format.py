@@ -41,7 +41,7 @@ def test_rip_completed_title_and_body() -> None:
     )
     title, body = format_event(event, _job())
     # New vocab default: title includes job_title; body is a rendered sentence.
-    assert title == "ARM: rip completed — Iron Man"
+    assert title == "ARM: rip completed - Iron Man"
     assert "Iron Man" in body
     assert "drv_x" in body
     assert "3/3" in body
@@ -54,7 +54,7 @@ def test_rip_partial_lists_failed_count() -> None:
     )
     title, body = format_event(event, _job())
     # New vocab default: title includes job_title.
-    assert title == "ARM: rip partial — Iron Man"
+    assert title == "ARM: rip partial - Iron Man"
     assert "2/3" in body and "1 failed" in body
 
 
@@ -70,7 +70,7 @@ def test_session_completed_includes_session_id_and_status() -> None:
     )
     title, body = format_event(event, _job())
     # New vocab default: title includes job_title; body contains status.
-    assert title == "ARM: session completed — Iron Man"
+    assert title == "ARM: session completed - Iron Man"
     assert "done" in body
 
 
@@ -81,7 +81,7 @@ def test_falls_back_to_payload_when_job_is_none() -> None:
     )
     title, body = format_event(event, None)
     # New vocab default: job_title is "" when no job, title ends with " — ".
-    assert title == "ARM: rip completed — "
+    assert title == "ARM: rip completed - "
     # No job title in body, but drive is still present.
     assert "drv_x" in body
     assert "1/1" in body
@@ -94,7 +94,7 @@ def test_year_omitted_when_none() -> None:
     )
     title, body = format_event(event, _job(title="My Home Movie", year=None))
     # New vocab default: title includes job_title without year.
-    assert title == "ARM: rip completed — My Home Movie"
+    assert title == "ARM: rip completed - My Home Movie"
     assert "My Home Movie" in body
     assert "(None)" not in body
 
