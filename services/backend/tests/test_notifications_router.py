@@ -412,6 +412,19 @@ def test_test_adhoc_config_success(signing_key: bytes) -> None:
     assert any(r.channel_id is None for r in db.rows.get("notification_dispatch_log", []))
 
 
+def test_test_adhoc_config_without_type_is_apprise(signing_key: bytes) -> None:
+    """Pre-bash clients POST a config with no discriminator; it still means apprise."""
+    db = FakeSession()
+    notifier = _FakeNotifier()
+    app, token = _make_app(signing_key, db, notifier)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/notifications/test", json={"config": {"url": "json://localhost/x"}}, headers=_auth(token)
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["ok"] is True and notifier.calls[0][0] == ["json://localhost/x"]
+
+
 def test_test_adhoc_no_url_returns_ok_false(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
@@ -1308,9 +1321,12 @@ def test_preview_fills_hidden_secret_from_channel_and_reports_hook_error(
 
 
 def test_preview_and_scripts_require_roles(signing_key: bytes, scripts_root: Path) -> None:
+    _bash_script(scripts_root, "a.sh", "exit 0\n")
     app, _ = _make_app(signing_key, FakeSession())
     with TestClient(app) as client:
-        assert client.get("/api/notifications/scripts").status_code == 200  # guest may read
+        # Script source is writer-only: a guest may not list or read it.
+        assert client.get("/api/notifications/scripts").status_code == 403
+        assert client.get("/api/notifications/scripts/a.sh").status_code == 403
         assert (
             client.post(
                 "/api/notifications/scripts/preview",
@@ -1318,3 +1334,101 @@ def test_preview_and_scripts_require_roles(signing_key: bytes, scripts_root: Pat
             ).status_code
             == 403
         )
+
+
+def test_preview_ignores_client_supplied_secret_keys(signing_key: bytes, scripts_root: Path) -> None:
+    """secret_keys is server-owned: a preview can neither name nor swap its way to a stored secret."""
+    _bash_script(scripts_root, "ok.sh", 'echo "$SMTP_PASS"\n')
+    db = FakeSession()
+    db.rows["notification_channels"] = [_bash_channel()]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        swapped = client.post(
+            "/api/notifications/scripts/preview",
+            json={
+                "channel_id": "ncl_b",
+                "config": {
+                    "type": "bash",
+                    "script": "gone.sh",
+                    "inputs": {"TO": "a", "SMTP_PASS": "<hidden>"},
+                    "secret_keys": [],
+                },
+                "event_type": "rip.failed",
+            },
+            headers=_auth(token),
+        )
+        stored = client.post(
+            "/api/notifications/scripts/preview",
+            json={
+                "channel_id": "ncl_b",
+                "config": {
+                    "type": "bash",
+                    "script": "ok.sh",
+                    "inputs": {"TO": "a", "SMTP_PASS": "<hidden>"},
+                    "secret_keys": [],
+                },
+                "event_type": "rip.failed",
+            },
+            headers=_auth(token),
+        )
+        ran = client.post(
+            "/api/notifications/scripts/preview",
+            json={
+                "channel_id": "ncl_b",
+                "config": {
+                    "type": "bash",
+                    "script": "ok.sh",
+                    "inputs": {"TO": "a", "SMTP_PASS": "<hidden>"},
+                    "secret_keys": [],
+                },
+                "event_type": "rip.failed",
+                "run": True,
+            },
+            headers=_auth(token),
+        )
+    assert swapped.status_code == 422 and "stored script" in swapped.json()["detail"]
+    assert stored.status_code == 200, stored.text
+    assert stored.json()["inputs"]["SMTP_PASS"] == "<hidden>" and stored.json()["env"]["SMTP_PASS"] == "<hidden>"
+    # The operator's own script may print its own secret; only inputs/env are masked.
+    assert ran.json()["result"]["stdout"].strip() == "pw"
+    assert ran.json()["inputs"]["SMTP_PASS"] == "<hidden>" and ran.json()["env"]["SMTP_PASS"] == "<hidden>"
+
+
+def test_apprise_test_error_is_generic_bash_error_is_detailed(signing_key: bytes, scripts_root: Path) -> None:
+    db = FakeSession()
+    notifier = _FakeNotifier()
+    notifier.raise_on_notify = True
+    db.rows["notification_channels"] = [
+        NotificationChannel(
+            id="ncl_1", type="apprise", name="D", config={"type": "apprise", "url": "json://localhost/x"}
+        ),
+        _bash_channel(config={"script": "missing.sh"}),
+    ]
+    app, token = _make_app(signing_key, db, notifier)
+    with TestClient(app) as client:
+        apprise = client.post("/api/notifications/channels/ncl_1/test", json={}, headers=_auth(token))
+        bash = client.post("/api/notifications/channels/ncl_b/test", json={}, headers=_auth(token))
+    assert apprise.json() == {"ok": False, "error": "test send failed"}
+    assert bash.json() == {"ok": False, "error": "script not found: missing.sh"}
+
+
+def test_patch_bash_validates_event_inputs_against_the_new_script(signing_key: bytes, scripts_root: Path) -> None:
+    """A PATCH that swaps the script re-stamps secret_keys before the template check."""
+    _bash_script(scripts_root, "ok.sh", "exit 0\n")
+    new_script = scripts_root / "new.sh"
+    new_script.write_text("#!/usr/bin/env bash\n# arm-input: NEWSEC secret\nexit 0\n")
+    new_script.chmod(new_script.stat().st_mode | stat.S_IXUSR)
+    ch = _bash_channel()
+    db = FakeSession()
+    db.rows["notification_channels"] = [ch]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/notifications/channels/ncl_b",
+            json={
+                "config": {"type": "bash", "script": "new.sh", "inputs": {}},
+                "templates": {"rip.failed": {"inputs": {"NEWSEC": "leak"}}},
+            },
+            headers=_auth(token),
+        )
+    assert r.status_code == 422 and "NEWSEC" in r.json()["detail"]
