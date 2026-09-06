@@ -1,7 +1,5 @@
-"""Metadata API-key tester. Validates omdb/tmdb/tvdb keys against the upstream
-service; makemkv is a structural/presence check only (the ripper owns the
-update-key script, so true validity is confirmed at rip time). Ports neu's
-GET /api/v1/metadata/test-key."""
+"""Metadata search / lookup / music endpoints. Per-key validity checks live at
+POST /api/config/keys/{name}/check (routers/config.py)."""
 
 import logging
 from typing import Literal
@@ -13,20 +11,16 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
-from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.metadata.arm_server import ArmServerClient
 from arm_backend.metadata.base import LookupError as MetaLookupError
 from arm_backend.metadata.base import LookupTimeout, MetadataResult, extract_poster_url
 from arm_backend.metadata.musicbrainz import MusicBrainzClient
 from arm_backend.metadata.omdb import OMDBClient
 from arm_backend.metadata.tmdb import TMDBClient
-from arm_backend.metadata.tvdb import TVDBClient
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_common import Config, User
 from arm_common.schemas import (
     MetadataCandidate,
-    MetadataKeyTestResponse,
-    MetadataProvider,
     MetadataReleaseDetail,
     MetadataReleaseTrack,
     MetadataSearchResponse,
@@ -36,79 +30,10 @@ logger = logging.getLogger("arm_backend.routers.metadata")
 
 router = APIRouter(prefix="/api/metadata", tags=["metadata"])
 
-_TMDB_CONFIG_URL = "https://api.themoviedb.org/3/configuration"
-_OMDB_URL = "https://www.omdbapi.com/"
 # MusicBrainz 403s any User-Agent that doesn't follow their etiquette guide's
 # `AppName/version ( contact )` shape. No longer operator-configurable (Config.
 # musicbrainz_user_agent is dormant — see config_metadata.py); hardcoded here.
 MUSICBRAINZ_USER_AGENT = "ARM/3.0.0 ( https://github.com/automatic-ripping-machine/automatic-ripping-machine )"
-_TIMEOUT_SECONDS = 8.0
-
-
-@router.get("/test-key", response_model=MetadataKeyTestResponse)
-async def test_key(
-    request: Request,
-    provider: MetadataProvider,
-    _: User = Depends(require_jwt),
-    db: AsyncSession = Depends(get_session),
-) -> MetadataKeyTestResponse:
-    cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-    if cfg is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="config not initialised")
-
-    http: httpx.AsyncClient = request.app.state.http
-
-    if provider == "makemkv":
-        if cfg.makemkv_key_checked_at is None and cfg.makemkv_key_state is None:
-            return MetadataKeyTestResponse(
-                provider=provider,
-                valid=None,
-                detail="not yet validated — no ripper has checked this key",
-                checked_at=None,
-            )
-        return MetadataKeyTestResponse(
-            provider=provider,
-            valid=cfg.makemkv_key_valid,
-            detail=makemkv_state_detail(cfg.makemkv_key_state),
-            checked_at=cfg.makemkv_key_checked_at,
-        )
-
-    key_attr = {"omdb": "omdb_api_key", "tmdb": "tmdb_api_key", "tvdb": "tvdb_api_key"}[provider]
-    key = (getattr(cfg, key_attr) or "").strip()
-    if not key:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"no {provider} key configured")
-
-    try:
-        if provider == "tvdb":
-            await TVDBClient(key, http).validate_key()
-        elif provider == "tmdb":
-            r = await http.get(
-                _TMDB_CONFIG_URL,
-                headers={"Authorization": f"Bearer {key}", "Accept": "application/json"},
-                timeout=_TIMEOUT_SECONDS,
-            )
-            if r.status_code != 200:
-                raise MetaLookupError(f"tmdb status={r.status_code}")
-        else:  # omdb
-            r = await http.get(_OMDB_URL, params={"apikey": key, "t": "the matrix"}, timeout=_TIMEOUT_SECONDS)
-            if r.status_code != 200:
-                raise MetaLookupError(f"omdb status={r.status_code}")
-            try:
-                body = r.json()
-            except ValueError as exc:  # JSONDecodeError — proxy/outage page with a 200 status
-                raise MetaLookupError(f"omdb returned a non-JSON response: {exc}") from exc
-            # OMDB returns 200 + {"Response":"False","Error":"Invalid API key!"} on a bad key.
-            if body.get("Response") != "True" and "API key" in (body.get("Error") or ""):
-                raise MetaLookupError(body.get("Error", "omdb auth failed"))
-    except MetaLookupError as exc:
-        logger.warning("test-key invalid provider=%s", provider)
-        return MetadataKeyTestResponse(provider=provider, valid=False, detail=str(exc))
-    except httpx.TimeoutException:
-        return MetadataKeyTestResponse(provider=provider, valid=False, detail="request timed out")
-    except httpx.HTTPError as exc:
-        return MetadataKeyTestResponse(provider=provider, valid=False, detail=f"transport error: {exc}")
-
-    return MetadataKeyTestResponse(provider=provider, valid=True, detail=None)
 
 
 # ---------------------------------------------------------------------------

@@ -264,7 +264,7 @@
           "ripper"
         ],
         "summary": "Makemkv Key Status",
-        "description": "A ripper reports its disc-free makemkv probe outcome. Global fact \u2014\nwritten to the Config singleton (last writer wins across multiple rippers,\nby design). test-key / preflight / config-view read it back.",
+        "description": "A ripper reports its disc-free makemkv probe outcome. Global fact \u2014\nwritten to the Config singleton (last writer wins across multiple rippers,\nby design). the key check, preflight and config view read it back.",
         "operationId": "makemkv_key_status_api_ripper_makemkv_key_status_post",
         "parameters": [
           {
@@ -4148,6 +4148,80 @@
         }
       }
     },
+    "/api/config/keys/{name}/check": {
+      "post": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Check Key",
+        "operationId": "check_key_api_config_keys__name__check_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "tmdb",
+                "omdb",
+                "tvdb",
+                "makemkv"
+              ],
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyCheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyCheckResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/diagnostics": {
       "get": {
         "tags": [
@@ -4180,70 +4254,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DiagnosticsResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/metadata/test-key": {
-      "get": {
-        "tags": [
-          "metadata"
-        ],
-        "summary": "Test Key",
-        "operationId": "test_key_api_metadata_test_key_get",
-        "parameters": [
-          {
-            "name": "provider",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "enum": [
-                "omdb",
-                "tmdb",
-                "tvdb",
-                "makemkv"
-              ],
-              "type": "string",
-              "title": "Provider"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MetadataKeyTestResponse"
                 }
               }
             }
@@ -4728,6 +4738,24 @@
               "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
             }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Preview this session instead of the job's effective one",
+              "title": "Session Id"
+            },
+            "description": "Preview this session instead of the job's effective one"
           },
           {
             "name": "authorization",
@@ -9956,6 +9984,72 @@
         ],
         "title": "JobView"
       },
+      "KeyCheckRequest": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "title": "KeyCheckRequest",
+        "description": "Body for POST /api/config/keys/{name}/check. `value` is an unsaved\ncandidate key to probe; when omitted (None), the stored key is used."
+      },
+      "KeyCheckResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "invalid",
+              "missing",
+              "error",
+              "unknown"
+            ],
+            "title": "Status"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "status"
+        ],
+        "title": "KeyCheckResponse"
+      },
       "KeydbState": {
         "type": "string",
         "enum": [
@@ -10060,7 +10154,7 @@
           "probe_failed"
         ],
         "title": "MakemkvKeyState",
-        "description": "Outcome of the ripper's disc-free `makemkvcon info disc:9999` probe.\nStored on the Config singleton and read by test-key / preflight / config view.\n\nVALID                   \u2014 clean probe, key accepted.\nUNREGISTERED_OR_EXPIRED \u2014 MSG:5052/5055 (evaluation expired / no valid key).\nBINARY_EXPIRED          \u2014 MSG:5021 (60-day kill-switch; no key overrides it).\nFORMAT_INVALID          \u2014 configured key fails the M-/T- serial regex (pre-probe).\nPROBE_FAILED            \u2014 binary missing / timeout / undeterminable (\u2192 valid=null)."
+        "description": "Outcome of the ripper's disc-free `makemkvcon info disc:9999` probe.\nStored on the Config singleton and read by the key check, preflight and config view.\n\nVALID                   \u2014 clean probe, key accepted.\nUNREGISTERED_OR_EXPIRED \u2014 MSG:5052/5055 (evaluation expired / no valid key).\nBINARY_EXPIRED          \u2014 MSG:5021 (60-day kill-switch; no key overrides it).\nFORMAT_INVALID          \u2014 configured key fails the M-/T- serial regex (pre-probe).\nPROBE_FAILED            \u2014 binary missing / timeout / undeterminable (\u2192 valid=null)."
       },
       "MakemkvKeyStatusReport": {
         "properties": {
@@ -10292,60 +10386,6 @@
           "kind"
         ],
         "title": "MetadataCandidate"
-      },
-      "MetadataKeyTestResponse": {
-        "properties": {
-          "provider": {
-            "type": "string",
-            "enum": [
-              "omdb",
-              "tmdb",
-              "tvdb",
-              "makemkv"
-            ],
-            "title": "Provider"
-          },
-          "valid": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Valid"
-          },
-          "detail": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Detail"
-          },
-          "checked_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Checked At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "provider",
-          "valid"
-        ],
-        "title": "MetadataKeyTestResponse"
       },
       "MetadataReleaseDetail": {
         "properties": {
