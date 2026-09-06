@@ -149,18 +149,18 @@
 	}
 
 	function fmtMs(ms: number | null | undefined): string {
-		if (ms == null) return '—';
+		if (ms == null) return '-';
 		const total = Math.round(ms / 1000);
 		return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 	}
 
 	function fmtSec(secs: number | null | undefined): string {
-		if (secs == null) return '—';
+		if (secs == null) return '-';
 		const total = Math.round(secs);
 		return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 	}
 
-	const MATCH_GLYPH = { match: '✓', close: '~', mismatch: '✗', unknown: '—' };
+	const MATCH_GLYPH = { match: '✓', close: '~', mismatch: '✗', unknown: '-' };
 	const MATCH_CLASS = {
 		match: 'text-green-600 dark:text-green-400',
 		close: 'text-amber-600 dark:text-amber-400',
@@ -514,13 +514,13 @@
 				<label class="col-span-2"><span class="mb-0.5 block text-[10px] text-gray-500">Album</span><input bind:value={editAlbum} class="w-full {inputBase}" /></label>
 				<label><span class="mb-0.5 block text-[10px] text-gray-500">Artist</span><input bind:value={editArtist} class="w-full {inputBase}" /></label>
 				<label><span class="mb-0.5 block text-[10px] text-gray-500">Year</span><input bind:value={editYear} class="w-full {inputBase}" /></label>
-				<label><span class="mb-0.5 block text-[10px] text-gray-500">Disc #</span><input bind:value={discNumber} placeholder="—" class="w-full {inputBase}" /></label>
-				<label><span class="mb-0.5 block text-[10px] text-gray-500">Disc total</span><input bind:value={discTotal} placeholder="—" class="w-full {inputBase}" /></label>
+				<label><span class="mb-0.5 block text-[10px] text-gray-500">Disc #</span><input bind:value={discNumber} placeholder="-" class="w-full {inputBase}" /></label>
+				<label><span class="mb-0.5 block text-[10px] text-gray-500">Disc total</span><input bind:value={discTotal} placeholder="-" class="w-full {inputBase}" /></label>
 			</div>
 
 			{#if confirmMismatch}
 				<div class="flex flex-wrap items-center gap-2 rounded-md border border-red-300 bg-red-50 p-2 text-xs text-red-700 dark:border-red-700 dark:bg-red-900/20 dark:text-red-400">
-					<span class="flex-1">⚠ Total length differs — likely the wrong release</span>
+					<span class="flex-1">⚠ Total length differs, likely the wrong release</span>
 					<button
 						onclick={() => {
 							mismatchConfirmed = true;

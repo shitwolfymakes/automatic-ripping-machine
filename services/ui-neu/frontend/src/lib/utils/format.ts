@@ -201,7 +201,7 @@ const STATUS_LABELS: Record<string, string> = {
 	// v3 JobStatus values (packages/arm_common enums.py)
 	created: 'Created',
 	awaiting_user_id: 'Awaiting ID',
-	awaiting_review: 'Ready — review',
+	awaiting_review: 'Ready: review',
 	identified: 'Identified',
 	ripped: 'Ripped',
 	ripped_partial: 'Ripped (partial)',

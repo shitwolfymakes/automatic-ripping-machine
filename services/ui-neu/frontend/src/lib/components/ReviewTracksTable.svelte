@@ -109,7 +109,7 @@
 									{:else if row.trackId}
 										<span class="text-gray-400">{job.title || 'Untitled'}{#if job.year} ({job.year}){/if}</span>
 									{:else}
-										<span class="text-gray-400">—</span>
+										<span class="text-gray-400">-</span>
 									{/if}
 								</td>
 								{#if isVideo}
@@ -124,7 +124,7 @@
 												class="w-10 rounded-sm border border-primary/25 bg-primary/5 px-1 py-0.5 text-center text-xs text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary disabled:opacity-30 dark:border-primary/30 dark:bg-primary/10 dark:text-white"
 											/>
 										{:else}
-											<span class="text-gray-400">—</span>
+											<span class="text-gray-400">-</span>
 										{/if}
 									</td>
 								{/if}
