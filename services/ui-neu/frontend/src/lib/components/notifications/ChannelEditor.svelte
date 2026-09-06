@@ -1,9 +1,10 @@
 <script lang="ts">
 	import type { Channel, Catalog, CatalogService, AppriseConfig } from '$lib/types/notifications';
 	import type { ChannelTemplate } from '$lib/types/notifications';
-	import type { EventTypeInfo } from '$lib/api/channels';
+	import type { EventTypeInfo, ScriptInput, BashScriptInfo } from '$lib/api/channels';
 	import ConfigureSection from './sections/ConfigureSection.svelte';
 	import EventsSection from './sections/EventsSection.svelte';
+	import BashTestPanel from './BashTestPanel.svelte';
 
 	export interface EditorBody {
 		name: string;
@@ -38,6 +39,7 @@
 	let config = $state<Record<string, unknown>>({ ...channel.config });
 	let events = $state<string[]>([...channel.subscribed_events]);
 	let templates = $state<Record<string, ChannelTemplate>>({ ...channel.templates });
+	let scriptInputs = $state<ScriptInput[]>([]);
 
 	// Apprise channels store config.service_id, so resolve the service from the
 	// loaded catalog to render the per-service re-entry fields.
@@ -95,13 +97,18 @@
 			<ConfigureSection type="apprise" bind:name bind:enabled bind:config={appriseFields} {service} preserveExisting />
 		{/if}
 	{:else}
-		<ConfigureSection type={channel.type} bind:name bind:enabled bind:config {service} />
+		<ConfigureSection type={channel.type} bind:name bind:enabled bind:config {service} preserveExisting onscript={(i: BashScriptInfo | null) => (scriptInputs = i?.inputs ?? [])} />
 	{/if}
-	<EventsSection bind:selected={events} bind:templates {eventTypes} />
+	<EventsSection bind:selected={events} bind:templates {eventTypes} inputs={scriptInputs} />
+	{#if channel.type === 'bash'}
+		<BashTestPanel {config} {templates} {events} {eventTypes} channelId={String(channel.id)} />
+	{/if}
 
 	<div class="flex flex-wrap items-center gap-2">
 		<button type="button" disabled={!dirty} onclick={() => onsave(body())} class="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-hover disabled:opacity-40">Save changes</button>
-		<button type="button" onclick={() => ontest(body())} class="rounded-md border border-primary/25 px-4 py-2 text-sm text-primary-text hover:bg-primary/10 dark:border-primary/30 dark:text-primary-text-dark">Send test</button>
+		{#if channel.type !== 'bash'}
+			<button type="button" onclick={() => ontest(body())} class="rounded-md border border-primary/25 px-4 py-2 text-sm text-primary-text hover:bg-primary/10 dark:border-primary/30 dark:text-primary-text-dark">Send test</button>
+		{/if}
 		<button type="button" onclick={onclose} class="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-primary/10 dark:border-gray-600 dark:text-gray-300">Close</button>
 		<button type="button" onclick={ondelete} class="ml-auto rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-500/40 dark:text-red-400 dark:hover:bg-red-900/20">Delete</button>
 	</div>
