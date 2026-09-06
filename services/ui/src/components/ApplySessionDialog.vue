@@ -105,7 +105,7 @@ async function applyOnce(overwrite: boolean): Promise<void> {
       <p v-if="hasDuplicateInRequest" class="muted">
         Two or more tracks resolve to the same output path — the session's template doesn't
         differentiate per track. Pick a session whose template includes <code>{track}</code> (e.g.
-        <em>Movie → Archive MKV</em>), or rip with a single-track preset.
+        <em>Movie to Archive MKV</em>), or rip with a single-track preset.
         <strong>Overwrite</strong> won't help here.
       </p>
       <p v-else class="muted">

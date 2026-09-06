@@ -4,7 +4,7 @@ import PresetRow from '../PresetRow.svelte';
 
 const ripPreset = (over = {}) => ({
 	id: 'r1',
-	name: 'Movie — Main Feature',
+	name: 'Movie: Main Feature',
 	media_type: 'movie' as const,
 	is_builtin: false,
 	track_selection: 'main_feature' as const,
@@ -48,7 +48,7 @@ describe('PresetRow — rip preset (custom)', () => {
 			onclone: vi.fn(),
 			ondelete: vi.fn(),
 		});
-		expect(screen.getByText('Movie — Main Feature')).toBeInTheDocument();
+		expect(screen.getByText('Movie: Main Feature')).toBeInTheDocument();
 		expect(screen.getByText('r1')).toBeInTheDocument();
 		// Summary: track_selection · identification_mode · output_mode
 		expect(screen.getByText(/main feature.*id required.*tracks/i)).toBeInTheDocument();
