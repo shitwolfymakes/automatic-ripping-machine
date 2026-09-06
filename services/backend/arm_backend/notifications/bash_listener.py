@@ -58,7 +58,9 @@ class BashListener:
                     raw_root=self._raw_root,
                 )
                 title, body = run.title, run.body
-                result = await run_script(run.path, title=title, body=body, env=run.env, timeout_seconds=run.timeout_seconds)
+                result = await run_script(
+                    run.path, title=title, body=body, env=run.env, timeout_seconds=run.timeout_seconds
+                )
                 if not result.ok:
                     err = result.error
             except HookError as exc:
@@ -73,7 +75,12 @@ class BashListener:
                 channel.last_error = err
             db.add(
                 NotificationDispatchLog(
-                    channel_id=channel.id, event_id=message.event_id, event_type=message.event_type,
-                    title=title, body=body, success=err is None, error=err,
+                    channel_id=channel.id,
+                    event_id=message.event_id,
+                    event_type=message.event_type,
+                    title=title,
+                    body=body,
+                    success=err is None,
+                    error=err,
                 )
             )
