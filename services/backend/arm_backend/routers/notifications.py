@@ -43,6 +43,7 @@ from arm_backend.notification_format import TemplateRenderError, resolve_title_b
 from arm_backend.notifications import catalog as catalog_module
 from arm_backend.notifications.bash_hook import (
     HookError,
+    PreparedRun,
     mask_bash_config,
     masked,
     merge_bash_config,
@@ -329,7 +330,7 @@ async def get_scripts(_: User = Depends(require_jwt)) -> list[BashScriptSummary]
     return list_scripts(settings.ARM_SCRIPTS_ROOT)
 
 
-def _prepare_sample(config: dict[str, Any], template: dict[str, Any] | None, event_type: str):
+def _prepare_sample(config: dict[str, Any], template: dict[str, Any] | None, event_type: str) -> PreparedRun:
     spec = EVENT_VOCAB.get(event_type)
     return prepare_run(
         config=config,
