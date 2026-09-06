@@ -83,7 +83,7 @@
 	let jobMeta = $derived(readJobMetadata(displayJob.metadata_json));
 
 	function shortId(id: string): string {
-		return id.length > 15 ? `${id.slice(0, 15)}…` : id;
+		return id.length > 15 ? `${id.slice(0, 15)}...` : id;
 	}
 	let appliedSession = $derived(
 		jobMeta.pending_session_id
@@ -97,7 +97,7 @@
 	let phaseBadge = $derived.by(() => {
 		const b = reviewPhaseBadge(displayJob);
 		if (isPostRip && jobMeta.pending_session_id && !(displayJob.title?.trim())) {
-			return { ...b, label: 'RIPPED · NEEDS TITLE' };
+			return { ...b, label: 'RIPPED | NEEDS TITLE' };
 		}
 		return b;
 	});
