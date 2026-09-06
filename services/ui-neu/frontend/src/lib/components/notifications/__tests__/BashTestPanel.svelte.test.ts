@@ -34,10 +34,21 @@ describe('BashTestPanel', () => {
 		expect(screen.getByText(/Login denied/)).toBeTruthy();
 	});
 
-	it('shows a hook error instead of the grid', async () => {
-		previewBash.mockResolvedValue({ ...preview, argv: [], inputs: {}, env: {}, error: 'input TO is required' });
+	it('turns a missing required input into a labelled hint and disables Run test', async () => {
+		previewBash.mockResolvedValue({ ...preview, argv: [], inputs: {}, env: {}, error: 'input SECTION is required' });
+		const inputs = [{ key: 'SECTION', label: 'Library section id', required: true, secret: false, default: '', values: null }];
+		renderComponent(BashTestPanel, { props: { config: { type: 'bash', script: 'a.sh' }, templates: {}, events: ['rip.completed'], eventTypes, inputs } });
+		await fireEvent.click(screen.getByText('Test'));
+		expect(await screen.findByText('Fill in Library section id above to preview this hook.')).toBeTruthy();
+		expect(screen.queryByText('input SECTION is required')).toBeNull();
+		expect((screen.getByRole('button', { name: 'Run test' }) as HTMLButtonElement).disabled).toBe(true);
+	});
+
+	it('shows other hook errors instead of the grid', async () => {
+		previewBash.mockResolvedValue({ ...preview, argv: [], inputs: {}, env: {}, error: 'script must be a file name inside the scripts directory, not a path' });
 		renderComponent(BashTestPanel, { props: { config: { type: 'bash', script: 'a.sh' }, templates: {}, events: ['rip.completed'], eventTypes } });
 		await fireEvent.click(screen.getByText('Test'));
-		expect(await screen.findByText('input TO is required')).toBeTruthy();
+		expect(await screen.findByText(/file name inside the scripts directory/)).toBeTruthy();
+		expect((screen.getByRole('button', { name: 'Run test' }) as HTMLButtonElement).disabled).toBe(true);
 	});
 });
