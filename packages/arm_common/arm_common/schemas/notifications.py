@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class AppriseChannelConfig(BaseModel):
@@ -35,7 +35,8 @@ class BashChannelConfig(BaseModel):
     """A script under the backend's ``/scripts`` mount (bare file name), run as
     ``bash <script> "<title>" "<body>"`` with ``ARM_*`` env vars plus one env
     var per declared input. ``secret_keys`` is server-written from the script
-    header so masking does not depend on the file still existing."""
+    header so masking does not depend on the file still existing; it is
+    ignored on input (the field stays on the wire for round-tripping)."""
 
     model_config = ConfigDict(extra="ignore")
     type: Literal["bash"] = "bash"
@@ -126,6 +127,16 @@ class NotificationTestRequest(BaseModel):
 
     config: AppriseChannelConfig | BashChannelConfig = Field(discriminator="type")
     event_type: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _default_config_type(cls, data: Any) -> Any:
+        """A config without ``type`` is an apprise config (pre-bash clients)."""
+        if isinstance(data, dict):
+            config = data.get("config")
+            if isinstance(config, dict) and "type" not in config:
+                data = {**data, "config": {**config, "type": "apprise"}}
+        return data
 
 
 class NotificationChannelTestRequest(BaseModel):
