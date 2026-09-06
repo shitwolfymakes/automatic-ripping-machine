@@ -418,9 +418,7 @@ def test_test_adhoc_config_without_type_is_apprise(signing_key: bytes) -> None:
     notifier = _FakeNotifier()
     app, token = _make_app(signing_key, db, notifier)
     with TestClient(app) as client:
-        r = client.post(
-            "/api/notifications/test", json={"config": {"url": "json://localhost/x"}}, headers=_auth(token)
-        )
+        r = client.post("/api/notifications/test", json={"config": {"url": "json://localhost/x"}}, headers=_auth(token))
     assert r.status_code == 200, r.text
     assert r.json()["ok"] is True and notifier.calls[0][0] == ["json://localhost/x"]
 
