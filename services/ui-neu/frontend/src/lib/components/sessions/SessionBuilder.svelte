@@ -172,7 +172,7 @@
 				type="text"
 				class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
 				bind:value={name}
-				placeholder="e.g. Movies — Archive"
+				placeholder="e.g. Movies: Archive"
 				disabled={readOnly}
 				required
 			/>
@@ -213,7 +213,7 @@
 				disabled={readOnly}
 				required
 			>
-				<option value="">— select a rip preset —</option>
+				<option value="">Select a rip preset</option>
 				{#each ripOptions as rp (rp.id)}
 					<option value={rp.id}>{rp.name}</option>
 				{/each}
@@ -234,7 +234,7 @@
 				onchange={handleTcChange}
 				disabled={readOnly}
 			>
-				<option value="">No transcode — rip only</option>
+				<option value="">No transcode, rip only</option>
 				{#each tcOptions as tc (tc.id)}
 					<option value={tc.id}>{tc.name}</option>
 				{/each}
@@ -289,7 +289,7 @@
 		<div class="flex items-center justify-between gap-3 border-t border-gray-200 pt-4 dark:border-gray-700">
 			<div class="text-xs text-gray-400 dark:text-gray-500">
 				{#if !tcId}
-					Rips only — no transcode step.
+					Rips only, no transcode step.
 				{/if}
 			</div>
 			<div class="flex gap-2">

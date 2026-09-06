@@ -111,7 +111,7 @@ export function transcodeColumnStatus(
 			return { label: 'Transcode failed', badgeStatus: 'transcode_failed' };
 		case 'transcoding':
 			return tasks_failed > 0
-				? { label: `Failed — retrying ${tasks_done}/${tasks_total}`, badgeStatus: 'transcode_failed' }
+				? { label: `Failed, retrying ${tasks_done}/${tasks_total}`, badgeStatus: 'transcode_failed' }
 				: { label: `Transcoding ${tasks_done}/${tasks_total}`, badgeStatus: 'transcoding' };
 		default:
 			return null;

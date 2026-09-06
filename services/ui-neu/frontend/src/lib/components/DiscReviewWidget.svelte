@@ -154,7 +154,7 @@
 		const j = data?.job ?? job;
 		const startTitle = (j.title ?? '').trim();
 		if (!startTitle) {
-			errorMessage = 'A title is required to start — open Info or Search to set one.';
+			errorMessage = 'A title is required to start. Open Info or Search to set one.';
 			return;
 		}
 		starting = true;
@@ -229,7 +229,7 @@
 		<div class="flex items-center gap-2">
 			<div class="h-2 w-2 animate-pulse rounded-full bg-white/80"></div>
 			<span class="text-sm font-semibold text-on-primary">
-				{isReviewGate ? 'Ready — Review & Start' : isPostRip ? 'Ripped — Apply Session' : 'Awaiting Review'}
+				{isReviewGate ? 'Ready: Review & Start' : isPostRip ? 'Ripped: Apply Session' : 'Awaiting Review'}
 			</span>
 		</div>
 		<!-- Timed review gate: cosmetic countdown to auto-start (the ripper owns the
