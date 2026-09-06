@@ -205,7 +205,7 @@ fi
 # the group). Idempotent; pre-creating avoids docker bind-mounting root-owned
 # source dirs into the PUID-dropped containers.
 echo "==> ensuring data dirs under ${ARM_DIR}"
-mkdir -p "${ARM_DIR}"/{certs,raw,media,logs,db}
+mkdir -p "${ARM_DIR}"/{certs,raw,media,logs,db,scripts}
 chmod 700 "${ARM_DIR}/certs"
 chmod 2775 "${ARM_DIR}/raw" "${ARM_DIR}/media" "${ARM_DIR}/logs"
 
