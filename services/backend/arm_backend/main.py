@@ -25,6 +25,7 @@ from arm_backend.notification_dispatcher import (
     _RealAppriseNotifier,
 )
 from arm_backend.notifications.apprise_listener import AppriseListener
+from arm_backend.notifications.bash_listener import BashListener
 from arm_backend.notifications.inbox_listener import InboxListener
 from arm_backend.routers import (
     auth,
@@ -182,15 +183,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         dispatcher_task = asyncio.create_task(transcode_dispatcher.run())
     app.state.transcode_dispatcher = transcode_dispatcher
 
-    # Phase 11 — outbound Apprise notifications. Off out of the box; the
-    # dispatcher polls but no-ops until the user enables notifications in
+    # Phase 11 - outbound notifications (Apprise + bash hooks). Off out of the box;
+    # the dispatcher polls but no-ops until the user enables notifications in
     # the UI and saves at least one valid Apprise URL.
     notifier = _RealAppriseNotifier(settings.ARM_NOTIFY_IMAGE_URL)
     app.state.notifier = notifier
     notification_dispatcher = MessageDispatcher(
         settings=settings,
         db_factory=SessionLocal,
-        listeners=[AppriseListener(notifier), InboxListener()],
+        listeners=[
+            AppriseListener(notifier),
+            BashListener(
+                scripts_root=settings.ARM_SCRIPTS_ROOT, media_root=settings.MEDIA_ROOT, raw_root=settings.RAW_ROOT
+            ),
+            InboxListener(),
+        ],
     )
     notification_task = asyncio.create_task(notification_dispatcher.run())
     app.state.notification_dispatcher = notification_dispatcher
