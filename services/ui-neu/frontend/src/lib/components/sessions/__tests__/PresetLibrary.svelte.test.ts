@@ -135,3 +135,19 @@ it('includes the reusable-note text', () => {
 	renderComponent(PresetLibrary, defaultProps({ kind: 'rip' }));
 	expect(screen.getByText(/reusable|preset.*reused|used by multiple/i)).toBeInTheDocument();
 });
+
+it('has the same action bar as the Sessions root: search, source refine, type chips, New button', async () => {
+	renderComponent(PresetLibrary, defaultProps({ kind: 'rip' }));
+	const bar = screen.getByTestId('preset-action-bar');
+	expect(bar).toBeInTheDocument();
+	expect(screen.getByRole('searchbox', { name: /search rip presets/i })).toBeInTheDocument();
+	expect(screen.getByRole('combobox', { name: /filter by source/i })).toBeInTheDocument();
+	expect(screen.getByRole('button', { name: /^\+ new rip preset/i })).toBeInTheDocument();
+});
+
+it('search narrows presets by name', async () => {
+	renderComponent(PresetLibrary, defaultProps({ kind: 'rip' }));
+	await fireEvent.input(screen.getByRole('searchbox', { name: /search rip presets/i }), { target: { value: 'movie' } });
+	expect(screen.getByText('Movie Rip')).toBeInTheDocument();
+	expect(screen.queryByText('TV Rip')).toBeNull();
+});
