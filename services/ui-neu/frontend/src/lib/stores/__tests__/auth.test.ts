@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import {
 	isAuthenticated,
@@ -71,5 +71,17 @@ describe('auth store', () => {
 		expect(get(role)).toBeNull();
 		expect(get(isAdmin)).toBe(false);
 		expect(get(isGuest)).toBe(true);
+	});
+
+	it('is authenticated at module load when a token is persisted (no initAuth needed)', async () => {
+		// A hard refresh of /settings renders the layout, and its guest guard,
+		// before onMount runs initAuth(); the store must already know the session.
+		localStorage.setItem('arm_token', 'tok-persisted');
+		localStorage.setItem('arm_role', 'admin');
+		vi.resetModules();
+		const fresh = await import('../auth');
+		expect(get(fresh.isAuthenticated)).toBe(true);
+		expect(get(fresh.isGuest)).toBe(false);
+		expect(get(fresh.isAdmin)).toBe(true);
 	});
 });

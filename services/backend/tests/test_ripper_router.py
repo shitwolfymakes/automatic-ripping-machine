@@ -1,15 +1,14 @@
-"""Ripper router endpoint coverage: config, identify, get_job, in-flight-job,
-rip-start, update-track state machine, rip-complete. Fake-session + mocked
-dispatcher/hub, service-token and drive-owner auth.
+"""Ripper router endpoint coverage: config, register, identify, get_job,
+in-flight-job, rip-start, update-track state machine, rip-complete.
+Fake-session + mocked dispatcher/hub, service-token and drive-owner auth.
 
-(register/heartbeat/resume/min-length are covered by their own modules;
-register's pg_insert path is not Fake-session-expressible and is left to the
-real-DB e2e tier.)
+(heartbeat/resume/min-length are covered by their own modules.)
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import secrets
 from datetime import datetime, timezone
@@ -26,11 +25,13 @@ import pytest  # noqa: E402
 from arm_backend.db import get_session  # noqa: E402
 from arm_backend.metadata.base import MetadataResult  # noqa: E402
 from arm_backend.routers import ripper as ripper_router  # noqa: E402
+from arm_backend.thediscdb.snapshot import DiscMatch  # noqa: E402
 from arm_common import (  # noqa: E402
     Config,
     DiscFingerprint,
     DiscType,
     Drive,
+    DriveLifecycle,
     DriveStatus,
     Job,
     JobStatus,
@@ -112,6 +113,7 @@ def _config(
     makemkv_sdf_enabled: bool = True,
     hold_for_review: bool = False,
     ripping_paused: bool = False,
+    thediscdb_enabled: bool = False,
 ) -> Config:
     return Config(
         id=1,
@@ -122,6 +124,7 @@ def _config(
         makemkv_sdf_enabled=makemkv_sdf_enabled,
         hold_for_review=hold_for_review,
         ripping_paused=ripping_paused,
+        thediscdb_enabled=thediscdb_enabled,
         manual_wait_seconds=60,
         default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
     )
@@ -234,86 +237,124 @@ def test_get_config_missing_singleton_500() -> None:
     assert "config singleton missing" in r.json()["detail"]
 
 
-# --- /register ---------------------------------------------------------------
+# --- /register (keyed on drive_id — spec §1, Plan 3) ---------------------------
+
+_BY_ID = "usb-PIONEER_BD-RW_BDR-S12JX_AAAABBBB000E-0:0"
 
 
-class _RegisterSession(FakeSession):
-    """`register` upserts via `pg_insert(...).on_conflict_do_update(...)`,
-    which neither FakeSession nor SQLite can compile. Special-case the
-    non-Select upsert to return the new drive id; the follow-up
-    `select(Drive)` falls through to normal FakeSession behaviour. This
-    covers the handler flow; the ON CONFLICT semantics are a Postgres
-    concern left to the integration tier."""
-
-    async def execute(self, stmt: Any) -> Any:
-        from sqlalchemy.sql import Select
-
-        if not isinstance(stmt, Select):
-            self.rows.setdefault("drives", []).append(
-                Drive(id="drv_new", hostname=_HOSTNAME, device_path="/dev/sr0", status=DriveStatus.ONLINE)
-            )
-
-            class _R:
-                @staticmethod
-                def scalar_one() -> str:
-                    return "drv_new"
-
-            return _R()
-        return await super().execute(stmt)
+def _enrolled(by_id_name: str | None = _BY_ID, **kw: Any) -> Drive:
+    base: dict[str, Any] = dict(
+        id="drv_x",
+        hostname="scan-drv_x",
+        device_path="/dev/sr0",
+        status=DriveStatus.ONLINE,
+        lifecycle=DriveLifecycle.ENROLLED,
+        by_id_name=by_id_name,
+        present=False,
+    )
+    base.update(kw)
+    return Drive(**base)
 
 
-def test_register_upserts_and_returns_drive() -> None:
-    db = _RegisterSession()
-    body = {
+def _register_body(**kw: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "drive_id": "drv_x",
         "hostname": _HOSTNAME,
-        "device_path": "/dev/sr0",
+        "device_path": "/dev/sr1",
         "ripper_version": "3.0.0",
-        "hw_caps": {"makemkv": True},
+        "by_id_name": _BY_ID,
     }
+    body.update(kw)
+    return body
+
+
+def test_register_binds_hostname_and_node_to_the_enrolled_row() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_enrolled(last_error="stale", status=DriveStatus.ERROR)]
     with TestClient(_make_app(db)) as client:
-        r = client.post("/api/ripper/register", json=body, headers=_SERVICE_AUTH)
-    assert r.status_code == 200
-    assert r.json()["id"] == "drv_new"
-    assert r.json()["hostname"] == _HOSTNAME
+        r = client.post("/api/ripper/register", json=_register_body(), headers=_SERVICE_AUTH)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["id"] == "drv_x" and body["hostname"] == _HOSTNAME and body["device_path"] == "/dev/sr1"
+    row = db.rows["drives"][0]
+    assert row.status is DriveStatus.ONLINE and row.present is True
+    assert row.last_error is None and row.last_seen_at is not None
 
 
-def test_register_serial_mismatch_logs_warning(caplog: Any) -> None:
-    """A previously-registered hostname re-registering with a different
-    serial means the physical drive behind that srN slot changed (replug,
-    reboot with different enumeration order) — worth a warning even though
-    the upsert still proceeds."""
-    db = _RegisterSession()
-    db.rows["drives"] = [
-        Drive(id="drv_x", hostname=_HOSTNAME, device_path="/dev/sr0", serial="OLD123", status=DriveStatus.ONLINE)
-    ]
-    body = {
-        "hostname": _HOSTNAME,
-        "device_path": "/dev/sr0",
-        "ripper_version": "3.0.0",
-        "serial": "NEW456",
-    }
-    with caplog.at_level("WARNING", logger="arm_backend.routers.ripper"):
+def test_register_unknown_drive_id_is_404() -> None:
+    db = FakeSession()
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/register", json=_register_body(drive_id="drv_nope"), headers=_SERVICE_AUTH)
+    assert r.status_code == 404
+
+
+def test_register_refuses_a_drive_that_is_not_enrolled() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_enrolled(lifecycle=DriveLifecycle.DETECTED)]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/register", json=_register_body(), headers=_SERVICE_AUTH)
+    assert r.status_code == 409 and "not enrolled" in r.json()["detail"]
+    assert db.rows["drives"][0].status is DriveStatus.ONLINE  # untouched
+
+
+def test_register_not_enrolled_refusal_is_logged(caplog: pytest.LogCaptureFixture) -> None:
+    """D2: the not-enrolled 409 is logged at WARNING (the mismatch 409 is
+    already logged at ERROR by test_register_identity_mismatch...)."""
+    db = FakeSession()
+    db.rows["drives"] = [_enrolled(lifecycle=DriveLifecycle.DETECTED)]
+    with caplog.at_level(logging.WARNING, logger="arm_backend.routers.ripper"):
         with TestClient(_make_app(db)) as client:
-            r = client.post("/api/ripper/register", json=body, headers=_SERVICE_AUTH)
-    assert r.status_code == 200
-    assert "serial mismatch" in caplog.text
-    assert "OLD123" in caplog.text and "NEW456" in caplog.text
+            r = client.post("/api/ripper/register", json=_register_body(), headers=_SERVICE_AUTH)
+    assert r.status_code == 409
+    assert "register refused drive_id=drv_x" in caplog.text and "not enrolled" in caplog.text
 
 
-def test_register_no_serial_from_ripper_does_not_warn(caplog: Any) -> None:
-    """A ripper that fails to resolve a serial (transient udev hiccup, or a
-    drive that never exposes one) sends serial=None — that's not evidence
-    of a swap, so no warning."""
-    db = _RegisterSession()
-    db.rows["drives"] = [
-        Drive(id="drv_x", hostname=_HOSTNAME, device_path="/dev/sr0", serial="OLD123", status=DriveStatus.ONLINE)
-    ]
-    body = {"hostname": _HOSTNAME, "device_path": "/dev/sr0", "ripper_version": "3.0.0"}
-    with caplog.at_level("WARNING", logger="arm_backend.routers.ripper"):
-        with TestClient(_make_app(db)) as client:
-            r = client.post("/api/ripper/register", json=body, headers=_SERVICE_AUTH)
-    assert r.status_code == 200
-    assert "serial mismatch" not in caplog.text
+def test_register_identity_mismatch_marks_the_row_error() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_enrolled()]
+    with TestClient(_make_app(db)) as client:
+        r = client.post(
+            "/api/ripper/register", json=_register_body(by_id_name="usb-OTHER_DRIVE_ZZZ-0:0"), headers=_SERVICE_AUTH
+        )
+    assert r.status_code == 409, r.text
+    assert "identity mismatch" in r.json()["detail"]
+    row = db.rows["drives"][0]
+    assert row.status is DriveStatus.ERROR
+    assert row.last_error is not None and _BY_ID in row.last_error and "usb-OTHER_DRIVE_ZZZ-0:0" in row.last_error
+    assert row.hostname == "scan-drv_x"  # not adopted
+
+
+@pytest.mark.parametrize(
+    ("row_by_id", "req_by_id", "expect_ok"),
+    [
+        (None, None, True),
+        (None, _BY_ID, True),
+        (_BY_ID, _BY_ID, True),
+        # D1: the row has a by-id binding — the ripper reporting no binding
+        # at all counts as a mismatch, not an "unknown, skip the check" case.
+        (_BY_ID, None, False),
+    ],
+)
+def test_register_compares_identity_only_against_a_bound_row(
+    row_by_id: str | None, req_by_id: str | None, expect_ok: bool
+) -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_enrolled(by_id_name=row_by_id)]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/register", json=_register_body(by_id_name=req_by_id), headers=_SERVICE_AUTH)
+    row = db.rows["drives"][0]
+    if expect_ok:
+        assert r.status_code == 200, r.text
+        assert row.by_id_name == row_by_id  # register never rewrites identity
+    else:
+        assert r.status_code == 409, r.text
+        detail = r.json()["detail"]
+        assert "identity mismatch" in detail
+        assert row_by_id in detail  # type: ignore[operator]
+        assert "no by-id binding" in detail
+        assert "unenroll and re-enroll" in detail
+        assert row.status is DriveStatus.ERROR
+        assert row.last_error == detail
 
 
 # --- /identify ---------------------------------------------------------------
@@ -551,6 +592,198 @@ def test_identify_timeout_records_diagnostic() -> None:
     assert r.status_code == 200
     assert r.json()["status"] == "awaiting_user_id"
     assert r.json()["metadata_json"]["dispatch_timeout"] is True
+
+
+# --- /identify (TheDiscDB match) ----------------------------------------------
+
+
+class _ImdbExactDispatcher:
+    """Fake dispatcher for the TheDiscDB exact-identity path: identify_from_imdb
+    returns a hit and identify(...) must NEVER be called (exact path wins)."""
+
+    def __init__(self, result: MetadataResult | None) -> None:
+        self.result = result
+        self.identify_from_imdb_calls: list[str] = []
+
+    async def identify_from_imdb(self, imdb_id: str, _cfg: Any) -> MetadataResult | None:
+        self.identify_from_imdb_calls.append(imdb_id)
+        return self.result
+
+    async def identify(self, _scan: Any, _cfg: Any) -> MetadataResult | None:
+        pytest.fail("dispatcher.identify must not be called when the exact TheDiscDB identity succeeds")
+
+
+def _thediscdb_match() -> DiscMatch:
+    return DiscMatch(
+        kind="movie",
+        title_slug="round-midnight-1986",
+        release_slug="2022-criterion-blu-ray",
+        disc={
+            "Titles": [
+                {
+                    "SourceFile": "00001.mpls",
+                    "Duration": "2:11:34",
+                    "Comment": "Main.mkv",
+                    "Item": {"Title": "Round Midnight", "Type": "MainMovie"},
+                }
+            ]
+        },
+        metadata={"ExternalIds": {"Imdb": "tt0090557"}},
+        release={},
+    )
+
+
+class _FakeStore:
+    def __init__(self, match: DiscMatch | None) -> None:
+        self.match = match
+        self.called_with: list[str] = []
+
+    def lookup(self, content_hash: str) -> DiscMatch | None:
+        self.called_with.append(content_hash)
+        return self.match
+
+
+def test_identify_thediscdb_match_stamps_map_and_uses_exact_identity() -> None:
+    """A TheDiscDB content-hash match on a new job: the exact-identity path
+    (identify_from_imdb) wins over fuzzy identify, the match is stored in
+    job.metadata_json["thediscdb"], and it is applied onto the review Track
+    row persisted by the hold_for_review path."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(hold_for_review=True, thediscdb_enabled=True)]
+    db.rows["rip_presets"] = [_movie_preset()]
+    dispatcher = _ImdbExactDispatcher(MetadataResult(title="Round Midnight", year=1986, kind="movie"))
+    app = _make_app(db, dispatcher=dispatcher)  # type: ignore[arg-type]
+    app.state.thediscdb = _FakeStore(_thediscdb_match())
+
+    scan = _scan_dict("bluray")
+    scan["titles"] = [{"index": 0, "duration_seconds": 7894, "source_file": "00001.mpls"}]
+    scan["fingerprints"] = [{"algo": "thediscdb", "value": "2D61282D8DA5EAC2CA87B451BCE9A055"}]
+
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    out = r.json()
+    assert out["title"] == "Round Midnight"
+    assert out["metadata_json"]["thediscdb"]["matched"]["0"]["type"] == "MainMovie"
+    assert app.state.thediscdb.called_with == ["2D61282D8DA5EAC2CA87B451BCE9A055"]
+    assert dispatcher.identify_from_imdb_calls == ["tt0090557"]
+
+    tracks = [row for row in db.added if type(row).__name__ == "Track"]
+    by_ref = {t.source_ref: t for t in tracks}
+    assert by_ref["0"].role == "MainMovie"
+    assert by_ref["0"].role_source == "thediscdb"
+    assert by_ref["0"].custom_filename == "Main.mkv"
+    assert by_ref["0"].excluded is False
+
+
+def test_identify_thediscdb_disabled_store_not_consulted() -> None:
+    """thediscdb_enabled=False -> the store must never be queried and normal
+    fuzzy-identify behavior is unchanged."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(thediscdb_enabled=False)]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    app.state.thediscdb = _FakeStore(_thediscdb_match())
+
+    scan = _scan_dict("bluray")
+    scan["fingerprints"] = [{"algo": "thediscdb", "value": "2D61282D8DA5EAC2CA87B451BCE9A055"}]
+
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    out = r.json()
+    assert out["title"] == "Iron Man"
+    assert "thediscdb" not in (out["metadata_json"] or {})
+    assert app.state.thediscdb.called_with == []  # store never consulted
+
+
+class _RaisingStore:
+    """Simulates a corrupt sqlite index / any lookup failure."""
+
+    def __init__(self, exc: Exception) -> None:
+        self.exc = exc
+        self.called_with: list[str] = []
+
+    def lookup(self, content_hash: str) -> DiscMatch | None:
+        self.called_with.append(content_hash)
+        raise self.exc
+
+
+def test_identify_thediscdb_lookup_raises_behaves_as_no_match() -> None:
+    """A TheDiscDB failure (e.g. corrupt sqlite index) must never block
+    identify: the endpoint still returns 200 and behaves exactly as if the
+    store had no match — normal fuzzy identify proceeds and no "thediscdb"
+    key is stamped onto metadata_json."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(thediscdb_enabled=True)]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    app.state.thediscdb = _RaisingStore(RuntimeError("index corrupt"))
+
+    scan = _scan_dict("bluray")
+    scan["fingerprints"] = [{"algo": "thediscdb", "value": "2D61282D8DA5EAC2CA87B451BCE9A055"}]
+
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    out = r.json()
+    assert out["title"] == "Iron Man"
+    assert "thediscdb" not in (out["metadata_json"] or {})
+    assert app.state.thediscdb.called_with == ["2D61282D8DA5EAC2CA87B451BCE9A055"]
+
+
+class _AllMissDispatcher:
+    """Both the exact-identity and fuzzy paths miss — the total-miss branch."""
+
+    async def identify_from_imdb(self, _imdb_id: str, _cfg: Any) -> MetadataResult | None:
+        return None
+
+    async def identify(self, _scan: Any, _cfg: Any) -> MetadataResult | None:
+        return None
+
+
+def test_identify_thediscdb_match_survives_total_identify_miss() -> None:
+    """A TheDiscDB match was found, but BOTH identify_from_imdb and the fuzzy
+    fallback miss (block_on_miss=False -> synthetic unidentified IDENTIFIED).
+    The stamped "thediscdb" record must survive the miss-path's metadata_json
+    assignment (a full overwrite here would silently orphan the map, making
+    rip_start's apply_map a no-op even though good disc-map data exists)."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=False, thediscdb_enabled=True)]
+    app = _make_app(db, dispatcher=_AllMissDispatcher())  # type: ignore[arg-type]
+    app.state.thediscdb = _FakeStore(_thediscdb_match())
+
+    scan = _scan_dict("bluray")
+    scan["titles"] = [{"index": 0, "duration_seconds": 7894, "source_file": "00001.mpls"}]
+    scan["fingerprints"] = [{"algo": "thediscdb", "value": "2D61282D8DA5EAC2CA87B451BCE9A055"}]
+
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    out = r.json()
+    assert out["status"] == "identified"  # unchanged synthetic-miss behavior
+    assert out["metadata_json"]["unidentified"] is True
+    assert out["metadata_json"]["thediscdb"]["matched"]  # map survived the overwrite
 
 
 # --- /jobs/{id} & in-flight --------------------------------------------------
@@ -879,6 +1112,34 @@ def test_rip_start_success_creates_tracks_and_emits() -> None:
     assert r.status_code == 200
     assert [t["id"] for t in r.json()["tracks"]] == ["trk_new"]
     assert any(e["event_type"] == "rip.started" for e in hub.events)
+
+
+def test_rip_start_applies_stored_thediscdb_map_to_new_tracks() -> None:
+    """A job whose identify run stored a TheDiscDB map must have that map
+    applied (apply_map) onto the freshly-created rip-start Track rows."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    thediscdb_meta = {
+        "release_slug": "2022-criterion-blu-ray",
+        "title_slug": "round-midnight-1986",
+        "kind": "movie",
+        "contributors": [],
+        "matched": {"1": {"type": "MainMovie", "title": "Round Midnight", "filename": "Main.mkv"}},
+    }
+    db.rows["jobs"] = [
+        _job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict(), "thediscdb": thediscdb_meta})
+    ]
+    db.rows["tracks"] = []
+    db.rows["rip_presets"] = [_movie_preset()]
+    new = [_track("trk_new", status=TrackStatus.QUEUED, index=1)]
+    with TestClient(_make_app(db)) as client, _patch_select_tracks(new):
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    out_track = r.json()["tracks"][0]
+    assert out_track["role"] == "MainMovie"
+    assert out_track["custom_filename"] == "Main.mkv"
+    assert out_track["excluded"] is False
+    assert new[0].role_source == "thediscdb"
 
 
 # --- /resume (no-default-preset branch; happy path is in test_ripper_resume) --

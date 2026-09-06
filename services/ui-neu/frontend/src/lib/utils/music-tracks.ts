@@ -5,7 +5,7 @@ export interface MusicTrackRow {
 }
 
 function msToLabel(ms: unknown): string {
-	if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 1) return '—';
+	if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 1) return '-';
 	const total = Math.round(ms / 1000);
 	const m = Math.floor(total / 60);
 	const s = total % 60;

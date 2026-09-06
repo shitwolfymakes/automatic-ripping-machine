@@ -8,7 +8,7 @@ const ripCompleted: EventTypeInfo = {
 	key: 'rip.completed',
 	label: 'Rip completed',
 	variables: ['job_title', 'drive_id', 'tracks_done', 'tracks_total', 'status', 'job_id', 'job_year', 'job_disc_type', 'event_type', 'occurred_at', 'tracks_failed'],
-	default_title: 'ARM: rip completed — {job_title}',
+	default_title: 'ARM: rip completed - {job_title}',
 	default_body: '{job_title} finished ripping on drive {drive_id} ({tracks_done}/{tracks_total} tracks).'
 };
 
@@ -74,5 +74,20 @@ describe('EventSubscriptions', () => {
 	it('renders no checkboxes when eventTypes is empty', () => {
 		renderComponent(EventSubscriptions, { props: { selected: [], templates: {}, eventTypes: [] } });
 		expect(screen.queryByRole('checkbox')).toBeNull();
+	});
+
+	it('renders non-secret inputs per subscribed event and writes overrides into templates', async () => {
+		const inputs = [
+			{ key: 'TO', label: 'Recipient', required: true, secret: false, default: '', values: null },
+			{ key: 'SMTP_PASS', label: 'SMTP password', required: false, secret: true, default: '', values: null }
+		];
+		const props = $state({ selected: ['rip.completed'], templates: {} as Record<string, ChannelTemplate>, eventTypes: catalogEventTypes, inputs });
+		renderComponent(EventSubscriptions, { props });
+		const field = screen.getByLabelText('rip.completed Recipient') as HTMLInputElement;
+		expect(field.placeholder).toBe('inherit');
+		expect(screen.getByText('Recipient *')).toBeTruthy();
+		expect(screen.queryByLabelText('rip.completed SMTP password')).toBeNull();
+		await fireEvent.input(field, { target: { value: 'oncall@x' } });
+		expect(props.templates['rip.completed'].inputs).toEqual({ TO: 'oncall@x' });
 	});
 });

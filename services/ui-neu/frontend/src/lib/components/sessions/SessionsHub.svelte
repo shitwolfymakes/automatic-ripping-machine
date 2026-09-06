@@ -63,7 +63,7 @@
 		<div class="flex flex-wrap items-center gap-3">
 			<input
 				type="search"
-				placeholder="Search sessions by name…"
+				placeholder="Search sessions by name..."
 				class="min-w-0 flex-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 shadow-xs placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-500"
 				value={search}
 				oninput={(e) => { search = (e.currentTarget as HTMLInputElement).value; }}

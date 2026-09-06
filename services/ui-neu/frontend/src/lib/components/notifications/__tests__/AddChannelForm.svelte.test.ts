@@ -4,6 +4,13 @@ import AddChannelForm from '../AddChannelForm.svelte';
 import type { Catalog } from '$lib/types/notifications';
 import type { EventTypeInfo } from '$lib/api/channels';
 
+vi.mock('$lib/api/channels', async (orig) => ({
+	...(await orig<typeof import('$lib/api/channels')>()),
+	fetchScripts: vi.fn().mockResolvedValue([]),
+	fetchScript: vi.fn().mockRejectedValue(new Error('no script selected')),
+	previewBash: vi.fn().mockResolvedValue({ title: '', body: '', inputs: {}, env: {}, argv: [], error: null, result: null })
+}));
+
 const catalog: Catalog = {
 	featured: ['discord'],
 	services: [{ id: 'discord', name: 'Discord', docs_url: '', url_scheme: 'discord',
@@ -16,7 +23,7 @@ const eventTypes: EventTypeInfo[] = [
 		key: 'rip.completed',
 		label: 'Rip completed',
 		variables: ['job_title', 'drive_id'],
-		default_title: 'ARM: rip completed — {job_title}',
+		default_title: 'ARM: rip completed - {job_title}',
 		default_body: '{job_title} finished ripping on drive {drive_id}.'
 	},
 	{
@@ -65,6 +72,13 @@ describe('AddChannelForm', () => {
 		await fireEvent.input(screen.getByLabelText(/webhook url/i), { target: { value: 'https://x' } });
 		await fireEvent.click(screen.getByRole('radio', { name: /bash/i }));
 		expect(screen.queryByLabelText(/webhook url/i)).toBeNull();
-		expect((screen.getByLabelText(/script path/i) as HTMLInputElement).value).toBe('');
+		expect((screen.getByLabelText('Script') as HTMLSelectElement).value).toBe('');
+	});
+
+	it('bash shows the test panel instead of the Send test button', async () => {
+		renderComponent(AddChannelForm, { props: { catalog, eventTypes, onsave: () => {}, oncancel: () => {}, ontest: () => {} } });
+		await fireEvent.click(screen.getByRole('radio', { name: /bash/i }));
+		expect(screen.queryByRole('button', { name: 'Send test' })).toBeNull();
+		expect(screen.getByText('Test')).toBeInTheDocument();
 	});
 });

@@ -7,6 +7,7 @@
 	import RipPresetForm from '$lib/components/RipPresetForm.svelte';
 	import TranscodePresetForm from '$lib/components/TranscodePresetForm.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import CloseButton from '$lib/components/CloseButton.svelte';
 	import { deleteSession, cloneSession } from '$lib/api/sessions';
 	import {
 		createRipPreset,
@@ -303,14 +304,7 @@
 			<h2 class="text-lg font-semibold text-gray-900 dark:text-white">
 				{editing?.is_builtin ? 'View session' : editing ? 'Edit session' : 'Create a session'}
 			</h2>
-			<button
-				type="button"
-				aria-label="Close"
-				onclick={handleBuilderCancel}
-				class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-			>
-				✕
-			</button>
+			<CloseButton onclick={handleBuilderCancel} />
 		</div>
 
 		<div class="flex-1 overflow-y-auto p-6">

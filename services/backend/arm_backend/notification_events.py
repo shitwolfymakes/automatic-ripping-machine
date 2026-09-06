@@ -33,38 +33,38 @@ def _session(label: str, title: str, body: str) -> EventSpec:
 EVENT_VOCAB: dict[str, EventSpec] = {
     "rip.completed": _rip(
         "Rip completed",
-        "ARM: rip completed — {job_title}",
+        "ARM: rip completed - {job_title}",
         "{job_title} finished ripping on drive {drive_id} ({tracks_done}/{tracks_total} tracks).",
     ),
     "rip.partial": _rip(
         "Rip partial",
-        "ARM: rip partial — {job_title}",
+        "ARM: rip partial - {job_title}",
         "{job_title} ripped partially on drive {drive_id} ({tracks_done}/{tracks_total} done, {tracks_failed} failed).",
     ),
     "rip.failed": _rip(
         "Rip failed",
-        "ARM: rip failed — {job_title}",
+        "ARM: rip failed - {job_title}",
         "{job_title} failed to rip on drive {drive_id} ({tracks_done}/{tracks_total} done, {tracks_failed} failed).",
     ),
     "rip.needs_user_input": EventSpec(
         "Needs user input",
-        "ARM: needs user input — {job_title}",
+        "ARM: needs user input - {job_title}",
         "{job_title} on drive {drive_id} needs identification before ripping can continue.",
         _COMMON + ("volume_label", "disc_type"),
     ),
     "session.completed": _session(
         "Session completed",
-        "ARM: session completed — {job_title}",
+        "ARM: session completed - {job_title}",
         "{job_title} transcode session completed (status {status}).",
     ),
     "session.partial": _session(
         "Session partial",
-        "ARM: session partial — {job_title}",
+        "ARM: session partial - {job_title}",
         "{job_title} transcode session finished partially (status {status}).",
     ),
     "session.failed": _session(
         "Session failed",
-        "ARM: session failed — {job_title}",
+        "ARM: session failed - {job_title}",
         "{job_title} transcode session failed (status {status}).",
     ),
 }

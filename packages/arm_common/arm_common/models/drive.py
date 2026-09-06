@@ -1,11 +1,11 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, JSON, Column, DateTime, ForeignKey, String
 from sqlmodel import Field, SQLModel
 
 from arm_common.models._columns import created_at_column, enum_column, updated_at_column
-from arm_common.enums import DriveMediaStatus, DriveMode, DriveStatus
+from arm_common.enums import DriveIdentityKind, DriveLifecycle, DriveMediaStatus, DriveMode, DriveStatus
 from arm_common.ulid import new_id
 
 
@@ -27,6 +27,31 @@ class Drive(SQLModel, table=True):
     # instead of quietly overwriting device_path. None when the drive
     # doesn't expose a serial.
     serial: str | None = Field(default=None, nullable=True)
+    # --- lifecycle & identity (spec §1) -----------------------------------
+    # The udev /dev/disk/by-id link name for this physical drive: unique and
+    # stable across replug/renumbering. NULL for drives without a serial.
+    # UNIQUE with NULLs-distinct is the partial unique index the spec asks for.
+    by_id_name: str | None = Field(default=None, sa_column=Column(String, nullable=True, unique=True))
+    # sysfs device path cut before the first `hostN` component — the port the
+    # drive is plugged into. Fallback identity when there is no by-id link.
+    sysfs_port: str | None = Field(default=None)
+    identity_kind: DriveIdentityKind | None = Field(
+        default=None, sa_column=enum_column(DriveIdentityKind, "drive_identity_kind", nullable=True)
+    )
+    # Operator decision. Python default ENROLLED so a row created by the
+    # (Plan-3-removed) hostname register reads as what it is: a served drive.
+    # The scanner sets DETECTED explicitly on rows it creates.
+    lifecycle: DriveLifecycle = Field(
+        default=DriveLifecycle.ENROLLED,
+        sa_column=enum_column(DriveLifecycle, "drive_lifecycle", server_default=DriveLifecycle.ENROLLED.value),
+    )
+    # Hardware here right now. Scanner-owned for detected/ignored rows;
+    # heartbeat-owned (DETACHED → False) for enrolled rows.
+    present: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, server_default="true"))
+    vendor: str | None = Field(default=None)
+    model: str | None = Field(default=None)
+    # Last operator-visible failure (e.g. a Plan 3 docker error on enroll).
+    last_error: str | None = Field(default=None)
     display_name: str | None = Field(default=None)
     status: DriveStatus = Field(
         sa_column=enum_column(DriveStatus, "drive_status", server_default=DriveStatus.ONLINE.value)

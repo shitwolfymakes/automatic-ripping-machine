@@ -1,16 +1,23 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
 import EventsSection from '../sections/EventsSection.svelte';
 import ConfigureSection from '../sections/ConfigureSection.svelte';
 import type { CatalogField, CatalogService, ChannelTemplate } from '$lib/types/notifications';
 import type { EventTypeInfo } from '$lib/api/channels';
+import { fetchScripts, fetchScript } from '$lib/api/channels';
+
+vi.mock('$lib/api/channels', async (orig) => ({
+	...(await orig<typeof import('$lib/api/channels')>()),
+	fetchScripts: vi.fn(),
+	fetchScript: vi.fn()
+}));
 
 const catalogEventTypes: EventTypeInfo[] = [
 	{
 		key: 'rip.completed',
 		label: 'Rip completed',
 		variables: ['job_title', 'drive_id'],
-		default_title: 'ARM: rip completed — {job_title}',
+		default_title: 'ARM: rip completed - {job_title}',
 		default_body: '{job_title} finished ripping on drive {drive_id}.'
 	},
 	{
@@ -139,5 +146,57 @@ describe('ConfigureSection', () => {
 		});
 		expect(screen.getByLabelText(/webhook url/i)).toBeInTheDocument();
 		expect(screen.queryByText(/Advanced \(/)).toBeNull();
+	});
+});
+
+describe('ConfigureSection bash', () => {
+	afterEach(cleanup);
+	const info = {
+		name: 'send-email.sh', executable: true, description: 'Send an email', size_bytes: 120, modified_at: '2026-09-06T00:00:00Z',
+		preview: '#!/usr/bin/env bash\n# arm-hook: Send an email',
+		inputs: [
+			{ key: 'TO', label: 'Recipient', required: true, secret: false, default: '', values: null },
+			{ key: 'PRIORITY', label: 'Priority', required: false, secret: false, default: 'normal', values: ['low', 'normal', 'high'] },
+			{ key: 'SMTP_PASS', label: 'SMTP password', required: false, secret: true, default: '', values: null }
+		]
+	};
+
+	it('lists scripts, loads the selected script, renders its inputs and viewer', async () => {
+		vi.mocked(fetchScripts).mockResolvedValue([{ name: 'send-email.sh', executable: true, description: 'Send an email' }, { name: 'draft.sh', executable: false, description: '' }]);
+		vi.mocked(fetchScript).mockResolvedValue(info as never);
+		const props = $state({ type: 'bash' as const, name: 'x', enabled: true, config: {} as Record<string, unknown>, service: null });
+		renderComponent(ConfigureSection, { props });
+		await screen.findByText('Choose a script');
+		const select = screen.getByLabelText('Script') as HTMLSelectElement;
+		expect(select.options[2].disabled).toBe(true);
+		expect(select.options[2].textContent).toContain('not executable');
+		await fireEvent.change(select, { target: { value: 'send-email.sh' } });
+		expect(props.config.script).toBe('send-email.sh');
+		expect(await screen.findByText('Send an email')).toBeTruthy();
+		expect(await screen.findByLabelText('Recipient')).toBeTruthy();
+		const priority = (await screen.findByLabelText('Priority')) as HTMLSelectElement;
+		expect(priority.value).toBe('normal');
+		expect((screen.getByLabelText('SMTP password') as HTMLInputElement).type).toBe('password');
+		await fireEvent.input(screen.getByLabelText('Recipient'), { target: { value: 'me@x' } });
+		expect((props.config.inputs as Record<string, string>).TO).toBe('me@x');
+		await fireEvent.click(screen.getByText(/view script/i));
+		expect(screen.getByText(/arm-hook: Send an email/)).toBeTruthy();
+		expect((screen.getByLabelText('Timeout (seconds)') as HTMLInputElement).value).toBe('30');
+	});
+
+	it('shows the drop-in hint when no scripts exist', async () => {
+		vi.mocked(fetchScripts).mockResolvedValue([]);
+		renderComponent(ConfigureSection, { props: { type: 'bash', name: 'x', enabled: true, config: {}, service: null } });
+		expect(await screen.findByText(/arm\/scripts/)).toBeTruthy();
+	});
+
+	it('keeps a stale script name selectable as missing and masks stored secrets', async () => {
+		vi.mocked(fetchScripts).mockResolvedValue([]);
+		vi.mocked(fetchScript).mockRejectedValue(new Error('404'));
+		renderComponent(ConfigureSection, { props: { type: 'bash', name: 'x', enabled: true, config: { script: 'gone.sh', inputs: { SMTP_PASS: '<hidden>' }, secret_keys: ['SMTP_PASS'] }, service: null } });
+		await screen.findByText('No scripts found');
+		const select = screen.getByLabelText('Script') as HTMLSelectElement;
+		expect(select.value).toBe('gone.sh');
+		expect(select.options[1].textContent).toContain('missing');
 	});
 });

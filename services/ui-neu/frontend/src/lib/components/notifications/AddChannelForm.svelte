@@ -1,12 +1,14 @@
 <script lang="ts">
 	import type { Catalog, CatalogService, ChannelType } from '$lib/types/notifications';
 	import type { ChannelTemplate } from '$lib/types/notifications';
-	import type { EventTypeInfo } from '$lib/api/channels';
+	import type { EventTypeInfo, ScriptInput, BashScriptInfo } from '$lib/api/channels';
 	import ConfigureSection from './sections/ConfigureSection.svelte';
 	import LabelEnabledRow from './sections/LabelEnabledRow.svelte';
 	import EventsSection from './sections/EventsSection.svelte';
 	import ServiceDropdown from './ServiceDropdown.svelte';
+	import BashTestPanel from './BashTestPanel.svelte';
 	import { missingRequirements } from './channelHelpers';
+	import Glyph from '$lib/components/Glyph.svelte';
 
 	export interface AddChannelBody {
 		type: ChannelType;
@@ -39,12 +41,13 @@
 	let config = $state<Record<string, unknown>>({});
 	let events = $state<string[]>([]);
 	let templates = $state<Record<string, ChannelTemplate>>({});
+	let scriptInputs = $state<ScriptInput[]>([]);
 
 	const service = $derived<CatalogService | null>(
 		serviceId ? catalog.services.find((s) => s.id === serviceId) ?? null : null
 	);
 
-	const missing = $derived(missingRequirements({ type, name, config, events, service }));
+	const missing = $derived(missingRequirements({ type, name, config, events, service, inputs: type === 'bash' ? scriptInputs : undefined }));
 	const ready = $derived(missing.length === 0);
 
 	function setType(t: ChannelType) {
@@ -70,7 +73,7 @@
 <div class="rounded-xl border border-primary/25 bg-surface shadow-xl dark:border-primary/30 dark:bg-surface-dark">
 	<div class="flex items-center justify-between border-b border-primary/20 px-5 py-4">
 		<h3 class="text-sm font-semibold text-primary">Add notification channel</h3>
-		<button type="button" onclick={oncancel} class="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">✕ Cancel</button>
+		<button type="button" onclick={oncancel} class="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"><Glyph name="x" /> Cancel</button>
 	</div>
 
 	<div class="space-y-5 p-5">
@@ -93,17 +96,22 @@
 			</div>
 		{/if}
 
-		<ConfigureSection {type} bind:name bind:enabled bind:config {service} showLabelRow={false} />
-		<EventsSection bind:selected={events} bind:templates {eventTypes} />
+		<ConfigureSection {type} bind:name bind:enabled bind:config {service} showLabelRow={false} onscript={(i: BashScriptInfo | null) => (scriptInputs = i?.inputs ?? [])} />
+		<EventsSection bind:selected={events} bind:templates {eventTypes} inputs={scriptInputs} />
+		{#if type === 'bash'}
+			<BashTestPanel {config} {templates} {events} {eventTypes} inputs={scriptInputs} />
+		{/if}
 	</div>
 
 	<div class="flex items-center justify-between border-t border-primary/20 px-5 py-3.5">
-		<span class="text-xs {ready ? 'text-status-success' : 'text-gray-500 dark:text-gray-400'}">
-			{ready ? '✓ Ready to save' : `Needs: ${missing.join(', ')}`}
+		<span class="flex items-center gap-1 text-xs {ready ? 'text-status-success' : 'text-gray-500 dark:text-gray-400'}">
+			{#if ready}<Glyph name="check" class="h-3.5 w-3.5" /> Ready to save{:else}Needs: {missing.join(', ')}{/if}
 		</span>
 		<div class="flex gap-2">
 			<button type="button" onclick={oncancel} class="rounded-md px-4 py-2 text-sm text-gray-600 hover:bg-primary/10 dark:text-gray-300">Cancel</button>
-			<button type="button" onclick={() => ontest(body())} class="rounded-md border border-primary/25 px-4 py-2 text-sm text-primary-text hover:bg-primary/10 dark:border-primary/30 dark:text-primary-text-dark">Send test</button>
+			{#if type !== 'bash'}
+				<button type="button" onclick={() => ontest(body())} class="rounded-md border border-primary/25 px-4 py-2 text-sm text-primary-text hover:bg-primary/10 dark:border-primary/30 dark:text-primary-text-dark">Send test</button>
+			{/if}
 			<button type="button" disabled={!ready} onclick={() => onsave(body())} class="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-hover disabled:opacity-40">Save channel</button>
 		</div>
 	</div>

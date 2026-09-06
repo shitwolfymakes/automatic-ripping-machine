@@ -1,6 +1,8 @@
 """JobController behaviour with a fake BackendClient and stubbed scan."""
 
 import asyncio
+import errno
+import logging
 from collections import deque
 from datetime import datetime, timedelta, timezone
 
@@ -69,6 +71,7 @@ class FakeClient:
         self.get_job_calls: list[str] = []
         self.rip_start_calls: list[str] = []
         self.rip_complete_calls: list[str] = []
+        self.resume_calls: list[str] = []
         self.auto_rip_on_insert: bool = True
         self.makemkv_key: str | None = None
         self.get_ripper_config_error: Exception | None = None
@@ -105,6 +108,14 @@ class FakeClient:
 
     async def update_track(self, track_id: str, **fields: object) -> TrackView:  # pragma: no cover
         raise AssertionError("update_track should not be called when track list is empty")
+
+    async def resume(self, job_id: str) -> RipStartResponse:
+        self.resume_calls.append(job_id)
+        return RipStartResponse(
+            job_id=job_id,
+            rip_preset_id="rpr_builtin_movie_archive",
+            tracks=[],
+        )
 
     async def rip_complete(self, job_id: str) -> JobView:
         self.rip_complete_calls.append(job_id)
@@ -192,6 +203,41 @@ async def test_awaiting_polls_until_resolved_then_rips(stub_scan, stub_eject):
 
     assert client.rip_start_calls == ["job_test"]
     assert client.rip_complete_calls == ["job_test"]
+
+
+async def test_drive_vanishing_mid_scan_is_abandoned_cleanly(monkeypatch, caplog):
+    """Power-off mid-scan raises OSError(ENXIO, …) from scan_disc. The pipeline
+    must not propagate it — the poll loop's absence handling owns recovery —
+    and must log exactly one warning about it."""
+
+    async def _scan(_device_path: str) -> ScanResult:
+        raise OSError(errno.ENXIO, "No such device or address")
+
+    monkeypatch.setattr(jc_module, "scan_disc", _scan)
+    client = FakeClient()
+    controller = JobController(client, "drv_test")
+
+    with caplog.at_level(logging.WARNING, logger="arm_ripper.job_controller"):
+        await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert client.identify_calls == []
+    went_absent_records = [r for r in caplog.records if "went absent during scan" in r.message]
+    assert len(went_absent_records) == 1
+
+
+async def test_non_absent_oserror_during_scan_still_raises(monkeypatch):
+    """Only the absence errnos (ENOENT/ENXIO/ENODEV) are swallowed. A genuine
+    I/O error must keep propagating so it isn't silently lost."""
+
+    async def _scan(_device_path: str) -> ScanResult:
+        raise OSError(errno.EIO, "io")
+
+    monkeypatch.setattr(jc_module, "scan_disc", _scan)
+    client = FakeClient()
+    controller = JobController(client, "drv_test")
+
+    with pytest.raises(OSError):
+        await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
 
 
 async def test_unexpected_status_stops_without_rip(stub_scan, stub_eject):
@@ -335,6 +381,117 @@ async def test_rip_start_ws_command_wakes_review_waiter():
     )
 
     assert event.is_set()
+
+
+# --- abandon gives the disc back (user report: abandon left the disc seated) ----
+
+
+@pytest.fixture
+def eject_spy(monkeypatch):
+    calls: list[str] = []
+
+    async def _spy(self, device_path: str) -> None:
+        calls.append(device_path)
+
+    monkeypatch.setattr(jc_module.JobController, "_eject_with_retry", _spy)
+    return calls
+
+
+def _abandon_envelope() -> WSEnvelope:
+    return WSEnvelope(
+        event_id="evt_abandon",
+        event_type="job.abandoned",
+        emitted_at=datetime.now(timezone.utc),
+        topic="ripper.commands.drv_test",
+        job_id="job_test",
+        payload={"job_id": "job_test", "delete_raw": False},
+    )
+
+
+async def test_abandon_while_parked_cancels_and_ejects(stub_scan, eject_spy, monkeypatch):
+    """Abandoning a job parked in AWAITING_USER_ID cancels the parked pipeline
+    AND pops the tray — the post-rip eject never runs on an abandon exit."""
+    monkeypatch.setattr(jc_module, "RESOLUTION_WS_FIRST_WAIT_SECONDS", 5.0)
+    monkeypatch.setattr(jc_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 30.0)
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.AWAITING_USER_ID))
+    controller = JobController(client, "drv_test", device_path="/dev/sr0")
+
+    pipeline = asyncio.create_task(controller.handle_disc_inserted("/dev/sr0"))
+    await asyncio.sleep(0.05)  # reach _wait_for_resolution
+    await controller.on_ws_command(_abandon_envelope())
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(pipeline, timeout=2.0)
+    await asyncio.sleep(0.01)  # let the spawned eject task run
+
+    assert eject_spy == ["/dev/sr0"]
+    assert client.rip_start_calls == []
+
+
+async def test_abandon_during_rip_cancels_and_ejects(stub_scan, eject_spy):
+    """Abandon mid-rip cancels the pipeline task and still ejects the disc."""
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.IDENTIFIED, title="Mid Rip"))
+    rip_started = asyncio.Event()
+
+    async def _hanging_rip_start(job_id: str) -> RipStartResponse:
+        client.rip_start_calls.append(job_id)
+        rip_started.set()
+        await asyncio.sleep(3600)
+        raise AssertionError("unreachable")
+
+    client.rip_start = _hanging_rip_start  # type: ignore[method-assign]
+    controller = JobController(client, "drv_test", device_path="/dev/sr0")
+
+    pipeline = asyncio.create_task(controller.handle_disc_inserted("/dev/sr0"))
+    await asyncio.wait_for(rip_started.wait(), timeout=2.0)
+    await controller.on_ws_command(_abandon_envelope())
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(pipeline, timeout=2.0)
+    await asyncio.sleep(0.01)
+
+    assert eject_spy == ["/dev/sr0"]
+    assert client.rip_complete_calls == []
+
+
+async def test_abandon_idle_drive_with_disc_seated_ejects(eject_spy, monkeypatch):
+    """Abandon after the pipeline already exited (e.g. rip-start abort): the
+    idle drive still holds the disc — give it back."""
+    monkeypatch.setattr(jc_module, "read_drive_status", lambda _d: jc_module.DriveState.DISC_OK)
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
+
+    controller._handle_abandon("job_test", delete_raw=False)
+    await asyncio.sleep(0.01)
+
+    assert eject_spy == ["/dev/sr0"]
+
+
+async def test_abandon_idle_drive_without_disc_does_not_eject(eject_spy, monkeypatch):
+    """Abandoning an old job from history with an empty drive must not pop
+    the tray."""
+    monkeypatch.setattr(jc_module, "read_drive_status", lambda _d: jc_module.DriveState.NO_DISC)
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
+
+    controller._handle_abandon("job_test", delete_raw=False)
+    await asyncio.sleep(0.01)
+
+    assert eject_spy == []
+
+
+async def test_abandon_stale_job_during_other_rip_does_not_eject(eject_spy):
+    """A stale abandon while a DIFFERENT job's rip owns the drive must not
+    cancel it or eject its disc mid-rip."""
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
+    other = asyncio.create_task(asyncio.sleep(3600))
+    controller._active_task = other
+    controller._active_job_id = "job_other"
+
+    controller._handle_abandon("job_test", delete_raw=False)
+    await asyncio.sleep(0.01)
+
+    assert eject_spy == []
+    assert not other.cancelled()
+    other.cancel()
 
 
 async def test_ws_event_unblocks_resolution_faster_than_rest(monkeypatch, stub_scan, stub_eject):
@@ -497,7 +654,7 @@ async def test_eject_runs_umount_then_eject_until_success(monkeypatch):
         return next(rc_sequence), "Device or resource busy"
 
     monkeypatch.setattr(JobController, "_run_command", staticmethod(_fake_run))
-    controller = JobController(FakeClient(), "drv_test")
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
     await controller._eject_with_retry("/dev/sr0")
 
     assert invocations[0] == ("umount", "/dev/sr0")
@@ -512,7 +669,7 @@ async def test_eject_gives_up_after_all_attempts(monkeypatch, caplog):
         return 1, "Device or resource busy"
 
     monkeypatch.setattr(JobController, "_run_command", staticmethod(_always_busy))
-    controller = JobController(FakeClient(), "drv_test")
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
     with caplog.at_level("ERROR", logger="arm_ripper.job_controller"):
         await controller._eject_with_retry("/dev/sr0")
 

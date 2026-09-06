@@ -25,13 +25,39 @@ class DriveMediaStatus(StrEnum):
     NO_DISC = "no_disc"  # CDS_NO_DISC
     TRAY_OPEN = "tray_open"  # CDS_TRAY_OPEN
     NOT_READY = "not_ready"  # CDS_DRIVE_NOT_READY (medium spinning up)
-    UNAVAILABLE = "unavailable"  # open() failed — kernel ENODEV / device file gone
+    # The device node exists but open() was refused (EPERM/EACCES — cgroup
+    # rule not honoured, wrong group). Present-but-misconfigured; distinct
+    # from DETACHED so the UI can say "fix permissions", not "plug it in".
+    UNAVAILABLE = "unavailable"
     UNKNOWN = "unknown"  # CDS_NO_INFO, or ioctl unsupported on a probed device
+    # No hardware behind this drive's identity right now (ENOENT/ENXIO/ENODEV):
+    # unplugged, or not yet enumerated. The ripper keeps heartbeating so the
+    # row stays visible; the backend derives DriveStatus.OFFLINE from this.
+    DETACHED = "detached"
 
 
 class DriveMode(StrEnum):
     AUTO = "auto"  # ripper auto-rips on disc insert
     MANUAL = "manual"  # ripper waits for an explicit manual.trigger
+
+
+class DriveLifecycle(StrEnum):
+    """Operator-owned state of a physical optical drive the backend has seen.
+    Presence (plugged in right now) is a separate, orthogonal fact."""
+
+    DETECTED = "detected"  # seen by the scanner, no decision yet
+    IGNORED = "ignored"  # operator said "not ARM's" — never nag, never prune
+    ENROLLED = "enrolled"  # operator said "ARM's" — a ripper serves it (Plan 3 spawns it)
+
+
+class DriveIdentityKind(StrEnum):
+    """What a Drive row's identity is keyed on. BY_ID is the udev
+    /dev/disk/by-id link name (stable across replug and renumbering); PORT
+    is the sysfs device path — the degraded fallback for drives that expose
+    no serial, and the UI says so."""
+
+    BY_ID = "by_id"
+    PORT = "port"
 
 
 class JobStatus(StrEnum):
@@ -183,7 +209,7 @@ class VideoCodec(StrEnum):
 
 class MakemkvKeyState(StrEnum):
     """Outcome of the ripper's disc-free `makemkvcon info disc:9999` probe.
-    Stored on the Config singleton and read by test-key / preflight / config view.
+    Stored on the Config singleton and read by the key check, preflight and config view.
 
     VALID                   — clean probe, key accepted.
     UNREGISTERED_OR_EXPIRED — MSG:5052/5055 (evaluation expired / no valid key).

@@ -112,9 +112,9 @@ describe('ReviewTracksTable', () => {
 		renderComponent(ReviewTracksTable, {
 			props: { job, tracks: [], scanTitles: [scanTitle()], isVideo: true, isMusic: false, onrefresh: vi.fn() }
 		});
-		// the title cell shows an em-dash and is not clickable → no search field appears
-		// (isVideo: true also renders a second em-dash in the episode column, so use getAllByText)
-		await fireEvent.click(screen.getAllByText('—')[0]);
+		// the title cell shows a dash and is not clickable → no search field appears
+		// (isVideo: true also renders a second dash in the episode column, so use getAllByText)
+		await fireEvent.click(screen.getAllByText('-')[0]);
 		expect(screen.queryByPlaceholderText('Title...')).not.toBeInTheDocument();
 	});
 });

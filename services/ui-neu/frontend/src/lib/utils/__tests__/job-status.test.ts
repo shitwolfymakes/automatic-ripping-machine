@@ -69,11 +69,11 @@ describe('reviewPhaseBadge', () => {
 		expect(b.label).toBe('READY');
 		expect(b.accent).toContain('--color-primary');
 	});
-	it('ripped + no title -> RIPPED · NEEDS SESSION (session wins)', () => {
-		expect(reviewPhaseBadge(badgeJob('ripped', null)).label).toBe('RIPPED · NEEDS SESSION');
+	it('ripped + no title -> RIPPED | NEEDS SESSION (session wins)', () => {
+		expect(reviewPhaseBadge(badgeJob('ripped', null)).label).toBe('RIPPED | NEEDS SESSION');
 	});
-	it('ripped + has title -> RIPPED · NEEDS SESSION', () => {
-		expect(reviewPhaseBadge(badgeJob('ripped', 'MysterySuspense')).label).toBe('RIPPED · NEEDS SESSION');
+	it('ripped + has title -> RIPPED | NEEDS SESSION', () => {
+		expect(reviewPhaseBadge(badgeJob('ripped', 'MysterySuspense')).label).toBe('RIPPED | NEEDS SESSION');
 	});
 	it('ripped violet accent', () => {
 		expect(reviewPhaseBadge(badgeJob('ripped', null)).accent).toContain('#8b5cf6');
@@ -99,7 +99,7 @@ describe('transcodeColumnStatus', () => {
 		expect(transcodeColumnStatus(tp('failed', 4, 0, 4))).toEqual({ label: 'Transcode failed', badgeStatus: 'transcode_failed' });
 	});
 	it('transcoding + tasks_failed>0 -> Failed — retrying (red, never green/blue)', () => {
-		expect(transcodeColumnStatus(tp('transcoding', 4, 1, 1))).toEqual({ label: 'Failed — retrying 1/4', badgeStatus: 'transcode_failed' });
+		expect(transcodeColumnStatus(tp('transcoding', 4, 1, 1))).toEqual({ label: 'Failed, retrying 1/4', badgeStatus: 'transcode_failed' });
 	});
 	it('transcoding + no failures -> Transcoding N/M (blue)', () => {
 		expect(transcodeColumnStatus(tp('transcoding', 4, 2, 0))).toEqual({ label: 'Transcoding 2/4', badgeStatus: 'transcoding' });

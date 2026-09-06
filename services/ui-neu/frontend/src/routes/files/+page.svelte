@@ -12,6 +12,8 @@
 	import FileRow from '$lib/components/FileRow.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import { isAdmin } from '$lib/stores/auth';
+	import SortIndicator from '$lib/components/SortIndicator.svelte';
+	import Glyph from '$lib/components/Glyph.svelte';
 
 	let roots = $state<FileRoot[]>([]);
 	// Current navigation position: root key + subpath within that root
@@ -118,9 +120,9 @@
 		}
 	}
 
-	function sortIcon(key: string): string {
-		if (sortKey !== key) return '';
-		return sortDir === 'asc' ? ' ▲' : ' ▼';
+	function sortIconDir(key: string): 'asc' | 'desc' | null {
+		if (sortKey !== key) return null;
+		return sortDir;
 	}
 
 	function clearFeedback() {
@@ -443,6 +445,10 @@
 	});
 </script>
 
+{#snippet sortIcon(key: string)}
+	<SortIndicator dir={sortIconDir(key)} />
+{/snippet}
+
 <svelte:head>
 	<title>ARM - Files</title>
 </svelte:head>
@@ -648,14 +654,10 @@
 							class="flex-1 rounded border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
 						/>
 						<button type="button" onclick={confirmNewFolder} class="rounded p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20" title="Create">
-							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-							</svg>
+							<Glyph name="check" />
 						</button>
 						<button type="button" onclick={cancelNewFolder} class="rounded p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700" title="Cancel">
-							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-							</svg>
+							<Glyph name="x" />
 						</button>
 					</div>
 				{/if}
@@ -684,18 +686,18 @@
 								</th>
 								<th class="px-3 py-2">
 									<button type="button" onclick={() => toggleSort('name')} class="hover:text-gray-700 dark:hover:text-gray-300">
-										Name{sortIcon('name')}
+										Name {@render sortIcon('name')}
 									</button>
 								</th>
 								<th class="hidden px-3 py-2 lg:table-cell">Permissions</th>
 								<th class="px-3 py-2 text-right">
 									<button type="button" onclick={() => toggleSort('size')} class="hover:text-gray-700 dark:hover:text-gray-300">
-										Size{sortIcon('size')}
+										Size {@render sortIcon('size')}
 									</button>
 								</th>
 								<th class="hidden px-3 py-2 md:table-cell">
 									<button type="button" onclick={() => toggleSort('modified')} class="hover:text-gray-700 dark:hover:text-gray-300">
-										Modified{sortIcon('modified')}
+										Modified {@render sortIcon('modified')}
 									</button>
 								</th>
 								<th class="px-3 py-2 text-right">Actions</th>
@@ -950,9 +952,7 @@
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
 							</svg>
 							{folder.name}
-							<svg class="ml-auto h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-							</svg>
+							<Glyph name="chevron-right" class="ml-auto h-4 w-4 text-gray-400" />
 						</button>
 					{/each}
 				{/if}

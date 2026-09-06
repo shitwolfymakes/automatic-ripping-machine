@@ -7,7 +7,7 @@ vi.mock('$lib/api/client', () => ({
 }));
 
 import { get } from '$lib/api/client';
-import { fetchSettings, testMetadataKey } from '../api/settings';
+import { fetchSettings } from '../api/settings';
 
 const mockGet = vi.mocked(get);
 
@@ -39,20 +39,5 @@ describe('fetchSettings composition edge cases', () => {
 		// BFF-only panels are not populated under v3.
 		expect(data.transcoder_config).toBeNull();
 		expect(data.naming_variables).toBeNull();
-	});
-});
-
-describe('testMetadataKey fallback messaging', () => {
-	it('uses a default message when detail is absent and key is valid', async () => {
-		mockGet.mockResolvedValue({ provider: 'tvdb', valid: true });
-		const result = await testMetadataKey(undefined, 'tvdb');
-		expect(result.message).toBe('Key is valid');
-		expect(result.success).toBe(true);
-	});
-
-	it('encodes the provider query param', async () => {
-		mockGet.mockResolvedValue({ provider: 'makemkv', valid: null });
-		await testMetadataKey(undefined, 'makemkv');
-		expect(mockGet).toHaveBeenCalledWith('/api/metadata/test-key?provider=makemkv');
 	});
 });

@@ -77,6 +77,179 @@ export type AppriseChannelConfig = {
 };
 
 /**
+ * BashChannelConfig
+ *
+ * A script under the backend's ``/scripts`` mount (bare file name), run as
+ * ``bash <script> "<title>" "<body>"`` with ``ARM_*`` env vars plus one env
+ * var per declared input. ``secret_keys`` is server-written from the script
+ * header so masking does not depend on the file still existing; it is
+ * ignored on input (the field stays on the wire for round-tripping).
+ */
+export type BashChannelConfig = {
+    /**
+     * Type
+     */
+    type?: 'bash';
+    /**
+     * Script
+     */
+    script: string;
+    /**
+     * Timeout Seconds
+     */
+    timeout_seconds?: number;
+    /**
+     * Inputs
+     */
+    inputs?: {
+        [key: string]: string;
+    };
+    /**
+     * Secret Keys
+     */
+    secret_keys?: Array<string>;
+};
+
+/**
+ * BashPreviewRequest
+ *
+ * Resolve (and optionally run) a bash hook for one event with sample context.
+ */
+export type BashPreviewRequest = {
+    config: BashChannelConfig;
+    /**
+     * Event Type
+     */
+    event_type: string;
+    template?: ChannelTemplate | null;
+    /**
+     * Channel Id
+     */
+    channel_id?: string | null;
+    /**
+     * Run
+     */
+    run?: boolean;
+};
+
+/**
+ * BashPreviewResult
+ */
+export type BashPreviewResult = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Inputs
+     */
+    inputs: {
+        [key: string]: string;
+    };
+    /**
+     * Env
+     */
+    env: {
+        [key: string]: string;
+    };
+    /**
+     * Argv
+     */
+    argv: Array<string>;
+    /**
+     * Error
+     */
+    error?: string | null;
+    result?: BashRunResult | null;
+};
+
+/**
+ * BashRunResult
+ */
+export type BashRunResult = {
+    /**
+     * Ok
+     */
+    ok: boolean;
+    /**
+     * Exit Code
+     */
+    exit_code: number | null;
+    /**
+     * Duration Ms
+     */
+    duration_ms: number;
+    /**
+     * Stdout
+     */
+    stdout: string;
+    /**
+     * Stderr
+     */
+    stderr: string;
+    /**
+     * Error
+     */
+    error: string | null;
+};
+
+/**
+ * BashScriptInfo
+ */
+export type BashScriptInfo = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Executable
+     */
+    executable: boolean;
+    /**
+     * Description
+     */
+    description?: string;
+    /**
+     * Size Bytes
+     */
+    size_bytes: number;
+    /**
+     * Modified At
+     */
+    modified_at: string;
+    /**
+     * Inputs
+     */
+    inputs: Array<ScriptInput>;
+    /**
+     * Preview
+     */
+    preview: string;
+};
+
+/**
+ * BashScriptSummary
+ */
+export type BashScriptSummary = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Executable
+     */
+    executable: boolean;
+    /**
+     * Description
+     */
+    description?: string;
+};
+
+/**
  * Body_upload_theme_api_themes_post
  */
 export type BodyUploadThemeApiThemesPost = {
@@ -92,6 +265,27 @@ export type BodyUploadThemeApiThemesPost = {
      * Optional custom CSS
      */
     theme_css?: string;
+};
+
+/**
+ * BulkDeleteJobsRequest
+ *
+ * DELETE /api/jobs body (optional). Filters which terminal jobs are
+ * deleted:
+ * - `job_ids` set  -> delete only those jobs (still terminal-guarded)
+ * - `status` set   -> delete only terminal jobs in that JobStatus
+ * - neither set    -> delete ALL terminal jobs (legacy behavior)
+ * `job_ids` takes precedence over `status` if both are sent.
+ */
+export type BulkDeleteJobsRequest = {
+    /**
+     * Job Ids
+     */
+    job_ids?: Array<string> | null;
+    /**
+     * Status
+     */
+    status?: string | null;
 };
 
 /**
@@ -189,6 +383,12 @@ export type ChannelTemplate = {
      * Body
      */
     body?: string | null;
+    /**
+     * Inputs
+     */
+    inputs?: {
+        [key: string]: string;
+    } | null;
 };
 
 /**
@@ -355,9 +555,25 @@ export type ConfigUpdateRequest = {
      */
     community_keydb_enabled?: boolean | null;
     /**
+     * Drive Scan Interval Seconds
+     */
+    drive_scan_interval_seconds?: number | null;
+    /**
+     * Drive Detected Prune Days
+     */
+    drive_detected_prune_days?: number | null;
+    /**
      * Makemkv Sdf Enabled
      */
     makemkv_sdf_enabled?: boolean | null;
+    /**
+     * Thediscdb Enabled
+     */
+    thediscdb_enabled?: boolean | null;
+    /**
+     * Thediscdb Refresh Days
+     */
+    thediscdb_refresh_days?: number | null;
     /**
      * Ripping Paused
      */
@@ -423,9 +639,25 @@ export type ConfigView = {
      */
     community_keydb_enabled: boolean;
     /**
+     * Drive Scan Interval Seconds
+     */
+    drive_scan_interval_seconds: number;
+    /**
+     * Drive Detected Prune Days
+     */
+    drive_detected_prune_days: number;
+    /**
      * Makemkv Sdf Enabled
      */
     makemkv_sdf_enabled: boolean;
+    /**
+     * Thediscdb Enabled
+     */
+    thediscdb_enabled: boolean;
+    /**
+     * Thediscdb Refresh Days
+     */
+    thediscdb_refresh_days: number;
     /**
      * Ripping Paused
      */
@@ -596,6 +828,32 @@ export type Drive = {
      */
     serial?: string | null;
     /**
+     * By Id Name
+     */
+    by_id_name?: string | null;
+    /**
+     * Sysfs Port
+     */
+    sysfs_port?: string | null;
+    identity_kind?: DriveIdentityKind | null;
+    lifecycle?: DriveLifecycle;
+    /**
+     * Present
+     */
+    present?: boolean;
+    /**
+     * Vendor
+     */
+    vendor?: string | null;
+    /**
+     * Model
+     */
+    model?: string | null;
+    /**
+     * Last Error
+     */
+    last_error?: string | null;
+    /**
      * Display Name
      */
     display_name?: string | null;
@@ -670,18 +928,53 @@ export type DriveCurrentJobView = {
 };
 
 /**
+ * DriveDevicePathUpdateRequest
+ *
+ * Ripper → backend: the drive now occupies this node (replug under a
+ * new srN). Keeps the UI's node current without a re-register.
+ */
+export type DriveDevicePathUpdateRequest = {
+    /**
+     * Device Path
+     */
+    device_path: string;
+};
+
+/**
  * DriveDiagnosticItem
+ *
+ * One row of GET /api/drives/diagnostic's "Look for issues" panel: the
+ * lifecycle model's own verdict on a drive, not just heartbeat staleness.
  */
 export type DriveDiagnosticItem = {
     /**
      * Id
      */
     id: string;
+    lifecycle: DriveLifecycle;
+    /**
+     * Present
+     */
+    present: boolean;
+    identity_kind: DriveIdentityKind | null;
+    /**
+     * Device Path
+     */
+    device_path: string;
+    status: DriveStatus;
     media_status: DriveMediaStatus | null;
     /**
      * Media Status At
      */
     media_status_at: string | null;
+    /**
+     * Container
+     */
+    container: string | null;
+    /**
+     * Last Error
+     */
+    last_error: string | null;
     /**
      * Healthy
      */
@@ -700,7 +993,29 @@ export type DriveDiagnosticResponse = {
      * Drives
      */
     drives: Array<DriveDiagnosticItem>;
+    /**
+     * System
+     */
+    system?: Array<string>;
 };
+
+/**
+ * DriveIdentityKind
+ *
+ * What a Drive row's identity is keyed on. BY_ID is the udev
+ * /dev/disk/by-id link name (stable across replug and renumbering); PORT
+ * is the sysfs device path — the degraded fallback for drives that expose
+ * no serial, and the UI says so.
+ */
+export type DriveIdentityKind = 'by_id' | 'port';
+
+/**
+ * DriveLifecycle
+ *
+ * Operator-owned state of a physical optical drive the backend has seen.
+ * Presence (plugged in right now) is a separate, orthogonal fact.
+ */
+export type DriveLifecycle = 'detected' | 'ignored' | 'enrolled';
 
 /**
  * DriveMediaStatus
@@ -709,7 +1024,7 @@ export type DriveDiagnosticResponse = {
  * on a heartbeat so the backend can fail manual-trigger requests
  * fast when the user clicks Start without loading a disc.
  */
-export type DriveMediaStatus = 'loaded' | 'no_disc' | 'tray_open' | 'not_ready' | 'unavailable' | 'unknown';
+export type DriveMediaStatus = 'loaded' | 'no_disc' | 'tray_open' | 'not_ready' | 'unavailable' | 'unknown' | 'detached';
 
 /**
  * DriveMode
@@ -728,6 +1043,26 @@ export type DriveRescanResponse = {
      * Stale
      */
     stale: number;
+    /**
+     * Detected
+     */
+    detected?: number;
+    /**
+     * Ignored
+     */
+    ignored?: number;
+    /**
+     * Enrolled
+     */
+    enrolled?: number;
+    /**
+     * Absent
+     */
+    absent?: number;
+    /**
+     * Pruned
+     */
+    pruned?: number;
 };
 
 /**
@@ -847,6 +1182,32 @@ export type DriveView = {
      * Updated At
      */
     updated_at: string | null;
+    lifecycle: DriveLifecycle;
+    /**
+     * Present
+     */
+    present: boolean;
+    identity_kind: DriveIdentityKind | null;
+    /**
+     * Serial
+     */
+    serial: string | null;
+    /**
+     * By Id Name
+     */
+    by_id_name: string | null;
+    /**
+     * Vendor
+     */
+    vendor: string | null;
+    /**
+     * Model
+     */
+    model: string | null;
+    /**
+     * Last Error
+     */
+    last_error: string | null;
     current_job?: DriveCurrentJobView | null;
 };
 
@@ -1340,6 +1701,41 @@ export type JobView = {
 };
 
 /**
+ * KeyCheckRequest
+ *
+ * Body for POST /api/config/keys/{name}/check. `value` is an unsaved
+ * candidate key to probe; when omitted (None), the stored key is used.
+ */
+export type KeyCheckRequest = {
+    /**
+     * Value
+     */
+    value?: string | null;
+};
+
+/**
+ * KeyCheckResponse
+ */
+export type KeyCheckResponse = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Status
+     */
+    status: 'ok' | 'invalid' | 'missing' | 'error' | 'unknown';
+    /**
+     * Detail
+     */
+    detail?: string | null;
+    /**
+     * Checked At
+     */
+    checked_at?: string | null;
+};
+
+/**
  * KeydbState
  *
  * Outcome of the ripper's community-keydb fetch (`update_keydb.sh`),
@@ -1411,7 +1807,7 @@ export type LoginResponse = {
  * MakemkvKeyState
  *
  * Outcome of the ripper's disc-free `makemkvcon info disc:9999` probe.
- * Stored on the Config singleton and read by test-key / preflight / config view.
+ * Stored on the Config singleton and read by the key check, preflight and config view.
  *
  * VALID                   — clean probe, key accepted.
  * UNREGISTERED_OR_EXPIRED — MSG:5052/5055 (evaluation expired / no valid key).
@@ -1554,28 +1950,6 @@ export type MetadataCandidate = {
      * Track Count
      */
     track_count?: number | null;
-};
-
-/**
- * MetadataKeyTestResponse
- */
-export type MetadataKeyTestResponse = {
-    /**
-     * Provider
-     */
-    provider: 'omdb' | 'tmdb' | 'tvdb' | 'makemkv';
-    /**
-     * Valid
-     */
-    valid: boolean | null;
-    /**
-     * Detail
-     */
-    detail?: string | null;
-    /**
-     * Checked At
-     */
-    checked_at?: string | null;
 };
 
 /**
@@ -1827,7 +2201,7 @@ export type NotificationChannelCreateRequest = {
     /**
      * Type
      */
-    type?: 'apprise' | 'inapp';
+    type?: 'apprise' | 'inapp' | 'bash';
     /**
      * Name
      */
@@ -1843,7 +2217,9 @@ export type NotificationChannelCreateRequest = {
         type: 'apprise';
     } & AppriseChannelConfig) | ({
         type: 'inapp';
-    } & InAppChannelConfig);
+    } & InAppChannelConfig) | ({
+        type: 'bash';
+    } & BashChannelConfig);
     /**
      * Subscribed Events
      */
@@ -1893,7 +2269,9 @@ export type NotificationChannelUpdateRequest = {
         type: 'apprise';
     } & AppriseChannelConfig) | ({
         type: 'inapp';
-    } & InAppChannelConfig) | null;
+    } & InAppChannelConfig) | ({
+        type: 'bash';
+    } & BashChannelConfig) | null;
     /**
      * Subscribed Events
      */
@@ -2103,10 +2481,17 @@ export type NotificationInboxView = {
 /**
  * NotificationTestRequest
  *
- * Ad-hoc test of an unsaved apprise config.
+ * Ad-hoc test of an unsaved apprise or bash config.
  */
 export type NotificationTestRequest = {
-    config: AppriseChannelConfig;
+    /**
+     * Config
+     */
+    config: ({
+        type: 'apprise';
+    } & AppriseChannelConfig) | ({
+        type: 'bash';
+    } & BashChannelConfig);
     /**
      * Event Type
      */
@@ -2170,8 +2555,16 @@ export type PathStatus = {
 
 /**
  * RegisterRequest
+ *
+ * POST /api/ripper/register. Keyed on the Drive row the backend handed
+ * this container (ARM_DRIVE_ID); `by_id_name` is the udev link the ripper
+ * is bound to (None for a port-identity drive) and must match the row.
  */
 export type RegisterRequest = {
+    /**
+     * Drive Id
+     */
+    drive_id: string;
     /**
      * Hostname
      */
@@ -2191,9 +2584,9 @@ export type RegisterRequest = {
         [key: string]: unknown;
     };
     /**
-     * Serial
+     * By Id Name
      */
-    serial?: string | null;
+    by_id_name?: string | null;
 };
 
 /**
@@ -2580,6 +2973,36 @@ export type ScanTitle = {
      * Source File
      */
     source_file?: string | null;
+};
+
+/**
+ * ScriptInput
+ */
+export type ScriptInput = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Required
+     */
+    required?: boolean;
+    /**
+     * Secret
+     */
+    secret?: boolean;
+    /**
+     * Default
+     */
+    default?: string;
+    /**
+     * Values
+     */
+    values?: Array<string> | null;
 };
 
 /**
@@ -3660,6 +4083,78 @@ export type HeartbeatApiRipperHeartbeatPostResponses = {
 
 export type HeartbeatApiRipperHeartbeatPostResponse = HeartbeatApiRipperHeartbeatPostResponses[keyof HeartbeatApiRipperHeartbeatPostResponses];
 
+export type GetDriveApiRipperDrivesDriveIdGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Drive Id
+         */
+        drive_id: string;
+    };
+    query?: never;
+    url: '/api/ripper/drives/{drive_id}';
+};
+
+export type GetDriveApiRipperDrivesDriveIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetDriveApiRipperDrivesDriveIdGetError = GetDriveApiRipperDrivesDriveIdGetErrors[keyof GetDriveApiRipperDrivesDriveIdGetErrors];
+
+export type GetDriveApiRipperDrivesDriveIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Drive;
+};
+
+export type GetDriveApiRipperDrivesDriveIdGetResponse = GetDriveApiRipperDrivesDriveIdGetResponses[keyof GetDriveApiRipperDrivesDriveIdGetResponses];
+
+export type UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchData = {
+    body: DriveDevicePathUpdateRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Drive Id
+         */
+        drive_id: string;
+    };
+    query?: never;
+    url: '/api/ripper/drives/{drive_id}/device-path';
+};
+
+export type UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchError = UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchErrors[keyof UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchErrors];
+
+export type UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchResponse = UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchResponses[keyof UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchResponses];
+
 export type MakemkvKeyStatusApiRipperMakemkvKeyStatusPostData = {
     body: MakemkvKeyStatusReport;
     headers?: {
@@ -4156,7 +4651,10 @@ export type RipCompleteApiRipperJobsJobIdRipCompletePostResponses = {
 export type RipCompleteApiRipperJobsJobIdRipCompletePostResponse = RipCompleteApiRipperJobsJobIdRipCompletePostResponses[keyof RipCompleteApiRipperJobsJobIdRipCompletePostResponses];
 
 export type DeleteAllJobsApiJobsDeleteData = {
-    body?: never;
+    /**
+     * Req
+     */
+    body?: BulkDeleteJobsRequest | null;
     headers?: {
         /**
          * Authorization
@@ -4677,7 +5175,14 @@ export type RescanDrivesApiDrivesRescanPostData = {
         authorization?: string | null;
     };
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Force
+         *
+         * Prune detected drives that are not present right now (admin only).
+         */
+        force?: boolean;
+    };
     url: '/api/drives/rescan';
 };
 
@@ -4770,6 +5275,154 @@ export type UpdateDriveApiDrivesDriveIdPatchResponses = {
 };
 
 export type UpdateDriveApiDrivesDriveIdPatchResponse = UpdateDriveApiDrivesDriveIdPatchResponses[keyof UpdateDriveApiDrivesDriveIdPatchResponses];
+
+export type EnrollDriveApiDrivesDriveIdEnrollPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Drive Id
+         */
+        drive_id: string;
+    };
+    query?: never;
+    url: '/api/drives/{drive_id}/enroll';
+};
+
+export type EnrollDriveApiDrivesDriveIdEnrollPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EnrollDriveApiDrivesDriveIdEnrollPostError = EnrollDriveApiDrivesDriveIdEnrollPostErrors[keyof EnrollDriveApiDrivesDriveIdEnrollPostErrors];
+
+export type EnrollDriveApiDrivesDriveIdEnrollPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DriveView;
+};
+
+export type EnrollDriveApiDrivesDriveIdEnrollPostResponse = EnrollDriveApiDrivesDriveIdEnrollPostResponses[keyof EnrollDriveApiDrivesDriveIdEnrollPostResponses];
+
+export type IgnoreDriveApiDrivesDriveIdIgnorePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Drive Id
+         */
+        drive_id: string;
+    };
+    query?: never;
+    url: '/api/drives/{drive_id}/ignore';
+};
+
+export type IgnoreDriveApiDrivesDriveIdIgnorePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type IgnoreDriveApiDrivesDriveIdIgnorePostError = IgnoreDriveApiDrivesDriveIdIgnorePostErrors[keyof IgnoreDriveApiDrivesDriveIdIgnorePostErrors];
+
+export type IgnoreDriveApiDrivesDriveIdIgnorePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DriveView;
+};
+
+export type IgnoreDriveApiDrivesDriveIdIgnorePostResponse = IgnoreDriveApiDrivesDriveIdIgnorePostResponses[keyof IgnoreDriveApiDrivesDriveIdIgnorePostResponses];
+
+export type UnignoreDriveApiDrivesDriveIdUnignorePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Drive Id
+         */
+        drive_id: string;
+    };
+    query?: never;
+    url: '/api/drives/{drive_id}/unignore';
+};
+
+export type UnignoreDriveApiDrivesDriveIdUnignorePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UnignoreDriveApiDrivesDriveIdUnignorePostError = UnignoreDriveApiDrivesDriveIdUnignorePostErrors[keyof UnignoreDriveApiDrivesDriveIdUnignorePostErrors];
+
+export type UnignoreDriveApiDrivesDriveIdUnignorePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DriveView;
+};
+
+export type UnignoreDriveApiDrivesDriveIdUnignorePostResponse = UnignoreDriveApiDrivesDriveIdUnignorePostResponses[keyof UnignoreDriveApiDrivesDriveIdUnignorePostResponses];
+
+export type UnenrollDriveApiDrivesDriveIdUnenrollPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Drive Id
+         */
+        drive_id: string;
+    };
+    query?: never;
+    url: '/api/drives/{drive_id}/unenroll';
+};
+
+export type UnenrollDriveApiDrivesDriveIdUnenrollPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UnenrollDriveApiDrivesDriveIdUnenrollPostError = UnenrollDriveApiDrivesDriveIdUnenrollPostErrors[keyof UnenrollDriveApiDrivesDriveIdUnenrollPostErrors];
+
+export type UnenrollDriveApiDrivesDriveIdUnenrollPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DriveView;
+    /**
+     * Drive row deleted (detected-origin drive)
+     */
+    204: void;
+};
+
+export type UnenrollDriveApiDrivesDriveIdUnenrollPostResponse = UnenrollDriveApiDrivesDriveIdUnenrollPostResponses[keyof UnenrollDriveApiDrivesDriveIdUnenrollPostResponses];
 
 export type ListSessionsApiSessionsGetData = {
     body?: never;
@@ -5868,6 +6521,42 @@ export type UpdateConfigApiConfigPatchResponses = {
 
 export type UpdateConfigApiConfigPatchResponse = UpdateConfigApiConfigPatchResponses[keyof UpdateConfigApiConfigPatchResponses];
 
+export type CheckKeyApiConfigKeysNameCheckPostData = {
+    body: KeyCheckRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Name
+         */
+        name: 'tmdb' | 'omdb' | 'tvdb' | 'makemkv';
+    };
+    query?: never;
+    url: '/api/config/keys/{name}/check';
+};
+
+export type CheckKeyApiConfigKeysNameCheckPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CheckKeyApiConfigKeysNameCheckPostError = CheckKeyApiConfigKeysNameCheckPostErrors[keyof CheckKeyApiConfigKeysNameCheckPostErrors];
+
+export type CheckKeyApiConfigKeysNameCheckPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: KeyCheckResponse;
+};
+
+export type CheckKeyApiConfigKeysNameCheckPostResponse = CheckKeyApiConfigKeysNameCheckPostResponses[keyof CheckKeyApiConfigKeysNameCheckPostResponses];
+
 export type GetDiagnosticsApiDiagnosticsGetData = {
     body?: never;
     headers?: {
@@ -5898,42 +6587,6 @@ export type GetDiagnosticsApiDiagnosticsGetResponses = {
 };
 
 export type GetDiagnosticsApiDiagnosticsGetResponse = GetDiagnosticsApiDiagnosticsGetResponses[keyof GetDiagnosticsApiDiagnosticsGetResponses];
-
-export type TestKeyApiMetadataTestKeyGetData = {
-    body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
-    path?: never;
-    query: {
-        /**
-         * Provider
-         */
-        provider: 'omdb' | 'tmdb' | 'tvdb' | 'makemkv';
-    };
-    url: '/api/metadata/test-key';
-};
-
-export type TestKeyApiMetadataTestKeyGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type TestKeyApiMetadataTestKeyGetError = TestKeyApiMetadataTestKeyGetErrors[keyof TestKeyApiMetadataTestKeyGetErrors];
-
-export type TestKeyApiMetadataTestKeyGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: MetadataKeyTestResponse;
-};
-
-export type TestKeyApiMetadataTestKeyGetResponse = TestKeyApiMetadataTestKeyGetResponses[keyof TestKeyApiMetadataTestKeyGetResponses];
 
 export type SearchMetadataApiMetadataSearchGetData = {
     body?: never;
@@ -6165,7 +6818,14 @@ export type JobNamingPreviewApiJobsJobIdNamingPreviewGetData = {
          */
         job_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Session Id
+         *
+         * Preview this session instead of the job's effective one
+         */
+        session_id?: string | null;
+    };
     url: '/api/jobs/{job_id}/naming-preview';
 };
 
@@ -6451,6 +7111,106 @@ export type GetServicesApiNotificationsServicesGetResponses = {
 };
 
 export type GetServicesApiNotificationsServicesGetResponse = GetServicesApiNotificationsServicesGetResponses[keyof GetServicesApiNotificationsServicesGetResponses];
+
+export type GetScriptsApiNotificationsScriptsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/notifications/scripts';
+};
+
+export type GetScriptsApiNotificationsScriptsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetScriptsApiNotificationsScriptsGetError = GetScriptsApiNotificationsScriptsGetErrors[keyof GetScriptsApiNotificationsScriptsGetErrors];
+
+export type GetScriptsApiNotificationsScriptsGetResponses = {
+    /**
+     * Response Get Scripts Api Notifications Scripts Get
+     *
+     * Successful Response
+     */
+    200: Array<BashScriptSummary>;
+};
+
+export type GetScriptsApiNotificationsScriptsGetResponse = GetScriptsApiNotificationsScriptsGetResponses[keyof GetScriptsApiNotificationsScriptsGetResponses];
+
+export type PreviewScriptApiNotificationsScriptsPreviewPostData = {
+    body: BashPreviewRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/notifications/scripts/preview';
+};
+
+export type PreviewScriptApiNotificationsScriptsPreviewPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreviewScriptApiNotificationsScriptsPreviewPostError = PreviewScriptApiNotificationsScriptsPreviewPostErrors[keyof PreviewScriptApiNotificationsScriptsPreviewPostErrors];
+
+export type PreviewScriptApiNotificationsScriptsPreviewPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: BashPreviewResult;
+};
+
+export type PreviewScriptApiNotificationsScriptsPreviewPostResponse = PreviewScriptApiNotificationsScriptsPreviewPostResponses[keyof PreviewScriptApiNotificationsScriptsPreviewPostResponses];
+
+export type GetScriptApiNotificationsScriptsNameGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/api/notifications/scripts/{name}';
+};
+
+export type GetScriptApiNotificationsScriptsNameGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetScriptApiNotificationsScriptsNameGetError = GetScriptApiNotificationsScriptsNameGetErrors[keyof GetScriptApiNotificationsScriptsNameGetErrors];
+
+export type GetScriptApiNotificationsScriptsNameGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: BashScriptInfo;
+};
+
+export type GetScriptApiNotificationsScriptsNameGetResponse = GetScriptApiNotificationsScriptsNameGetResponses[keyof GetScriptApiNotificationsScriptsNameGetResponses];
 
 export type ComposeUrlApiNotificationsServicesServiceIdComposeUrlPostData = {
     body: ComposeUrlRequest;
@@ -7365,6 +8125,41 @@ export type SystemVersionApiSystemVersionGetResponses = {
 };
 
 export type SystemVersionApiSystemVersionGetResponse = SystemVersionApiSystemVersionGetResponses[keyof SystemVersionApiSystemVersionGetResponses];
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/system/thediscdb/refresh';
+};
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostError = ThediscdbRefreshNowApiSystemThediscdbRefreshPostErrors[keyof ThediscdbRefreshNowApiSystemThediscdbRefreshPostErrors];
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponses = {
+    /**
+     * Response Thediscdb Refresh Now Api System Thediscdb Refresh Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponse = ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponses[keyof ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponses];
 
 export type RootsApiFilesRootsGetData = {
     body?: never;
