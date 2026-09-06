@@ -4,6 +4,7 @@
 	import TimeAgo from '$lib/components/TimeAgo.svelte';
 	import Toggle from '$lib/components/notifications/Toggle.svelte';
 	import ChangePasswordForm from '$lib/components/settings/ChangePasswordForm.svelte';
+	import CloseButton from '$lib/components/CloseButton.svelte';
 	import { fetchUsers, setUserDisabled } from '$lib/api/users';
 	import type { UserView } from '$lib/types/api.gen';
 
@@ -140,14 +141,7 @@
 	>
 		<div class="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
 			<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Change password</h2>
-			<button
-				type="button"
-				aria-label="Close"
-				onclick={closePanel}
-				class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-			>
-				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-			</button>
+			<CloseButton onclick={closePanel} />
 		</div>
 		<div class="flex-1 overflow-y-auto p-6">
 			<ChangePasswordForm onsuccess={handleAdminPasswordSuccess} />

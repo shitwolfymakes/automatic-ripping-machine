@@ -4,6 +4,7 @@
 	import { matchIndicator, type MatchKind } from '$lib/utils/track-match';
 	import PosterImage from './PosterImage.svelte';
 	import { isAdmin } from '$lib/stores/auth';
+	import Glyph from './Glyph.svelte';
 
 	interface Props {
 		job: JobView;
@@ -258,9 +259,9 @@
 
 {#snippet matchGlyph(kind: MatchKind)}
 	{#if kind === 'match'}
-		<svg class="mx-auto h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+		<Glyph name="check" class="mx-auto h-3.5 w-3.5" />
 	{:else if kind === 'mismatch'}
-		<svg class="mx-auto h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+		<Glyph name="x" class="mx-auto h-3.5 w-3.5" />
 	{:else if kind === 'close'}
 		~
 	{:else}
@@ -468,7 +469,7 @@
 		<p class="text-xs text-gray-400">Loading...</p>
 	{:else if detail}
 		<div class="space-y-3 rounded-md border border-primary/15 bg-primary/5 p-3 dark:border-primary/20 dark:bg-primary/10">
-			<button onclick={() => (detail = null)} class="{btnBase} flex items-center gap-1 text-gray-500 hover:text-gray-700 dark:text-gray-400"><svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg> Back to results</button>
+			<button onclick={() => (detail = null)} class="{btnBase} flex items-center gap-1 text-gray-500 hover:text-gray-700 dark:text-gray-400"><Glyph name="arrow-left" /> Back to results</button>
 			<div class="flex items-start gap-3">
 				<PosterImage url={detail.poster_url} class="h-24 w-24 rounded object-cover" />
 				<div class="min-w-0 text-xs text-gray-600 dark:text-gray-400">
@@ -531,7 +532,7 @@
 
 			{#if confirmMismatch}
 				<div class="flex flex-wrap items-center gap-2 rounded-md border border-red-300 bg-red-50 p-2 text-xs text-red-700 dark:border-red-700 dark:bg-red-900/20 dark:text-red-400">
-					<span class="flex flex-1 items-center gap-1"><svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg> Total length differs, likely the wrong release</span>
+					<span class="flex flex-1 items-center gap-1"><Glyph name="warning" /> Total length differs, likely the wrong release</span>
 					<button
 						onclick={() => {
 							mismatchConfirmed = true;
@@ -557,7 +558,7 @@
 								{#each trackMapping as p}
 									<tr>
 										<td class="px-2 py-1 whitespace-nowrap font-mono text-gray-500 dark:text-gray-400">Disc #{p.disc.index} ({fmtSec(p.disc.expected_duration_seconds)})</td>
-										<td class="px-2 py-1 text-center text-gray-400"><svg class="mx-auto h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg></td>
+										<td class="px-2 py-1 text-center text-gray-400"><Glyph name="arrow-right" class="mx-auto h-3.5 w-3.5" /></td>
 										<td class="px-2 py-1 text-gray-700 dark:text-gray-300">{p.mb.title}</td>
 										<td class="px-2 py-1 text-right font-mono text-gray-500 dark:text-gray-400">{fmtMs(p.mb.length_ms)}</td>
 										<td class="px-2 py-1 text-center {MATCH_CLASS[p.match]}" title={p.match}>{@render matchGlyph(p.match)}</td>
