@@ -93,7 +93,7 @@
 		switch (v) {
 			case 'cpu_only': return 'CPU only';
 			case 'any': return 'Any (HW)';
-			default: return v ?? '-';
+			default: return v ?? '';
 		}
 	}
 
@@ -107,7 +107,9 @@
 			})()
 			: (() => {
 				const p = preset as TranscodePresetView;
-				return `${humanizeTool(p.tool)} | ${humanizeContainer(p.container)} | ${p.codec ? humanizeCodec(p.codec) : '-'} | ${humanizeHw(p.hw_preference)}`;
+				return [humanizeTool(p.tool), humanizeContainer(p.container), p.codec ? humanizeCodec(p.codec) : '', humanizeHw(p.hw_preference)]
+					.filter((v) => !!v)
+					.join(' | ');
 			})()
 	);
 
