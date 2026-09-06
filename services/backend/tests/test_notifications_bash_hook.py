@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import stat
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from arm_backend.notifications.bash_hook import (
     mask_bash_config,
     merge_bash_config,
     prepare_run,
+    redact_secrets,
     storage_config,
 )
 
@@ -96,15 +98,39 @@ def test_prepare_run_template_errors(tmp_path: Path) -> None:
 def test_prepare_run_bad_name_and_missing_file(tmp_path: Path) -> None:
     with pytest.raises(HookError, match="file name"):
         _prep(tmp_path, _config(script="../x.sh"))
-    # Missing file: still prepares (the runner reports "script not found"); no header means no inputs declared.
+    # Missing file: still prepares (the runner reports "script not found"); no header means no inputs at all.
     run = _prep(tmp_path, _config(script="gone.sh"))
-    assert run.inputs == {"TO": "me@x", "SMTP_PASS": "pw"} and run.path.name == "gone.sh"
+    assert run.inputs == {} and run.path.name == "gone.sh"
 
 
-def test_prepare_run_no_header_passes_config_inputs_through(tmp_path: Path) -> None:
+def test_prepare_run_drops_undeclared_config_inputs(tmp_path: Path) -> None:
     _script(tmp_path, "plain.sh", "#!/bin/bash\nexit 0\n")
     run = _prep(tmp_path, _config(script="plain.sh", inputs={"FOO": "bar"}, secret_keys=[]))
-    assert run.inputs == {"FOO": "bar"} and run.env["FOO"] == "bar"
+    assert run.inputs == {} and "FOO" not in run.env
+
+
+def test_prepare_run_ignores_reserved_and_undeclared_keys(tmp_path: Path) -> None:
+    _script(tmp_path)
+    run = _prep(tmp_path, _config(inputs={"BASH_ENV": "/tmp/x", "PATH": "/tmp/evil", "TO": "a"}))
+    assert "BASH_ENV" not in run.env
+    assert run.env["PATH"] == os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin")
+    assert run.inputs["TO"] == "a"
+    assert "BASH_ENV" not in run.inputs and "PATH" not in run.inputs
+
+
+def test_prepare_run_optional_choice_without_default_stays_blank(tmp_path: Path) -> None:
+    _script(tmp_path, "mode.sh", "#!/bin/bash\n# arm-input: MODE values=a,b\n")
+    run = _prep(tmp_path, _config(script="mode.sh", inputs={}, secret_keys=[]))
+    assert run.inputs == {"MODE": ""} and run.env["MODE"] == ""
+
+
+def test_redact_secrets(tmp_path: Path) -> None:
+    _script(tmp_path)
+    run = _prep(tmp_path, _config(inputs={"TO": "a", "SMTP_PASS": "s3cret"}))
+    assert redact_secrets("failed: pw=s3cret", run) == "failed: pw=<hidden>"
+    # An empty secret value is not substituted (it would redact everything).
+    blank = _prep(tmp_path, _config(inputs={"TO": "a"}, secret_keys=["SMTP_PASS"]))
+    assert redact_secrets("nothing to hide", blank) == "nothing to hide"
 
 
 def test_masked(tmp_path: Path) -> None:

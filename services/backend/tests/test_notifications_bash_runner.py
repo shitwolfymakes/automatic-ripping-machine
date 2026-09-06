@@ -37,6 +37,33 @@ def test_build_env_contract(monkeypatch) -> None:
     assert "DATABASE_URL" not in env and "LC_ALL" not in env
 
 
+def test_build_env_inputs_cannot_clobber_reserved_names(monkeypatch) -> None:
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    env = build_env(
+        {},
+        title="T",
+        body="B",
+        inputs={"PATH": "/tmp/evil", "BASH_ENV": "/tmp/x", "LD_PRELOAD": "/tmp/e.so", "TO": "x"},
+        media_root="/m",
+        raw_root="/r",
+    )
+    assert env["PATH"] == "/usr/bin:/bin"
+    assert "BASH_ENV" not in env and "LD_PRELOAD" not in env
+    assert env["TO"] == "x"
+
+
+def test_build_env_inputs_cannot_clobber_arm_context() -> None:
+    env = build_env(
+        {"job_title": "Dune"},
+        title="T",
+        body="B",
+        inputs={"ARM_JOB_TITLE": "spoofed", "ARM_TITLE": "spoofed"},
+        media_root="/m",
+        raw_root="/r",
+    )
+    assert env["ARM_JOB_TITLE"] == "Dune" and env["ARM_TITLE"] == "T"
+
+
 def test_build_env_default_path(monkeypatch) -> None:
     monkeypatch.delenv("PATH", raising=False)
     assert build_env({}, title="", body="", inputs={}, media_root="/m", raw_root="/r")["PATH"].startswith(
