@@ -4,6 +4,12 @@ import AddChannelForm from '../AddChannelForm.svelte';
 import type { Catalog } from '$lib/types/notifications';
 import type { EventTypeInfo } from '$lib/api/channels';
 
+vi.mock('$lib/api/channels', async (orig) => ({
+	...(await orig<typeof import('$lib/api/channels')>()),
+	fetchScripts: vi.fn().mockResolvedValue([]),
+	fetchScript: vi.fn().mockRejectedValue(new Error('no script selected'))
+}));
+
 const catalog: Catalog = {
 	featured: ['discord'],
 	services: [{ id: 'discord', name: 'Discord', docs_url: '', url_scheme: 'discord',
@@ -65,6 +71,6 @@ describe('AddChannelForm', () => {
 		await fireEvent.input(screen.getByLabelText(/webhook url/i), { target: { value: 'https://x' } });
 		await fireEvent.click(screen.getByRole('radio', { name: /bash/i }));
 		expect(screen.queryByLabelText(/webhook url/i)).toBeNull();
-		expect((screen.getByLabelText(/script path/i) as HTMLInputElement).value).toBe('');
+		expect((screen.getByLabelText('Script') as HTMLSelectElement).value).toBe('');
 	});
 });
