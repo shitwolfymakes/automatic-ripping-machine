@@ -16,11 +16,11 @@ picked.
     cp docs/ops/examples/send-email.sh arm/scripts/
     chmod +x arm/scripts/send-email.sh
 
-New installs get the directory and the mount from `install.sh`. An install
-that predates this feature has neither until the installer is re-run; to add
-them by hand, create `scripts/` next to `media/` in the install prefix and
-give the `arm-backend` service this volume in `docker-compose.override.yml`
-(then `docker compose up -d arm-backend`):
+`devtools/setup-dev.sh` creates the directory and generates the compose file
+with the mount from `docker-compose.yml.example`. A stack that predates this
+feature has neither; to add them by hand, create `scripts/` next to `media/`
+in the install prefix and give the `arm-backend` service this volume in
+`docker-compose.override.yml` (then `docker compose up -d arm-backend`):
 
     services:
       arm-backend:
