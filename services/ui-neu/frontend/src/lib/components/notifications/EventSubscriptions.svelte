@@ -118,7 +118,7 @@
 					</label>
 					{#each overridable as i (i.key)}
 						<label class="flex flex-col gap-1">
-							<span class="text-xs font-medium text-gray-600 dark:text-gray-400">{i.label}</span>
+							<span class="text-xs font-medium text-gray-600 dark:text-gray-400">{i.label}{i.required ? " *" : ""}</span>
 							{#if i.values && i.values.length}
 								<select aria-label={`${et.key} ${i.label}`} value={templates[et.key]?.inputs?.[i.key] ?? ''} onchange={(e) => setInput(et.key, i.key, (e.currentTarget as HTMLSelectElement).value)} class={FIELD_INPUT_CLASS}>
 									<option value="">inherit</option>

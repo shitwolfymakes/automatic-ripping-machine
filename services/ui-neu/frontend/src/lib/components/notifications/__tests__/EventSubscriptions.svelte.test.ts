@@ -85,6 +85,7 @@ describe('EventSubscriptions', () => {
 		renderComponent(EventSubscriptions, { props });
 		const field = screen.getByLabelText('rip.completed Recipient') as HTMLInputElement;
 		expect(field.placeholder).toBe('inherit');
+		expect(screen.getByText('Recipient *')).toBeTruthy();
 		expect(screen.queryByLabelText('rip.completed SMTP password')).toBeNull();
 		await fireEvent.input(field, { target: { value: 'oncall@x' } });
 		expect(props.templates['rip.completed'].inputs).toEqual({ TO: 'oncall@x' });
