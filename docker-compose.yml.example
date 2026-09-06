@@ -80,6 +80,9 @@ services:
       - ./arm/logs:/logs
       - ./arm/media:/media
       - ./arm/raw:/raw
+      # Bash hook scripts (Settings > Notifications > Bash script). Read-only:
+      # the backend runs them, operators edit them on the host.
+      - ./arm/scripts:/scripts:ro
       - ./arm/certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
       - ./arm/certs/arm-backend.crt:/etc/ssl/arm/tls.crt:ro
       - ./arm/certs/arm-backend.key:/etc/ssl/arm/tls.key:ro

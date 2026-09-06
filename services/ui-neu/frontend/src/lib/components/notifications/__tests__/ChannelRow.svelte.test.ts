@@ -34,4 +34,24 @@ describe('ChannelRow', () => {
 		expect(ontoggle).toHaveBeenCalled();
 		expect(onexpand).not.toHaveBeenCalled();
 	});
+
+	it('has an Edit button that calls onedit and shows the script for bash rows', async () => {
+		const onedit = vi.fn();
+		const bashChannel: Channel = {
+			...ch, type: 'bash', config: { type: 'bash', script: 'plex.sh' }
+		};
+		renderComponent(ChannelRow, { props: { channel: bashChannel, serviceName: 'bash', onedit } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+		expect(onedit).toHaveBeenCalled();
+		expect(screen.getByText(/plex\.sh/)).toBeInTheDocument();
+	});
+
+	it('Edit click fires onedit but not onexpand', async () => {
+		const onedit = vi.fn();
+		const onexpand = vi.fn();
+		renderComponent(ChannelRow, { props: { channel: ch, serviceName: 'Discord', onedit, onexpand } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+		expect(onedit).toHaveBeenCalled();
+		expect(onexpand).not.toHaveBeenCalled();
+	});
 });

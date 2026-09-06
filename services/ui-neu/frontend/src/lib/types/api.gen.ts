@@ -77,6 +77,179 @@ export type AppriseChannelConfig = {
 };
 
 /**
+ * BashChannelConfig
+ *
+ * A script under the backend's ``/scripts`` mount (bare file name), run as
+ * ``bash <script> "<title>" "<body>"`` with ``ARM_*`` env vars plus one env
+ * var per declared input. ``secret_keys`` is server-written from the script
+ * header so masking does not depend on the file still existing; it is
+ * ignored on input (the field stays on the wire for round-tripping).
+ */
+export type BashChannelConfig = {
+    /**
+     * Type
+     */
+    type?: 'bash';
+    /**
+     * Script
+     */
+    script: string;
+    /**
+     * Timeout Seconds
+     */
+    timeout_seconds?: number;
+    /**
+     * Inputs
+     */
+    inputs?: {
+        [key: string]: string;
+    };
+    /**
+     * Secret Keys
+     */
+    secret_keys?: Array<string>;
+};
+
+/**
+ * BashPreviewRequest
+ *
+ * Resolve (and optionally run) a bash hook for one event with sample context.
+ */
+export type BashPreviewRequest = {
+    config: BashChannelConfig;
+    /**
+     * Event Type
+     */
+    event_type: string;
+    template?: ChannelTemplate | null;
+    /**
+     * Channel Id
+     */
+    channel_id?: string | null;
+    /**
+     * Run
+     */
+    run?: boolean;
+};
+
+/**
+ * BashPreviewResult
+ */
+export type BashPreviewResult = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Inputs
+     */
+    inputs: {
+        [key: string]: string;
+    };
+    /**
+     * Env
+     */
+    env: {
+        [key: string]: string;
+    };
+    /**
+     * Argv
+     */
+    argv: Array<string>;
+    /**
+     * Error
+     */
+    error?: string | null;
+    result?: BashRunResult | null;
+};
+
+/**
+ * BashRunResult
+ */
+export type BashRunResult = {
+    /**
+     * Ok
+     */
+    ok: boolean;
+    /**
+     * Exit Code
+     */
+    exit_code: number | null;
+    /**
+     * Duration Ms
+     */
+    duration_ms: number;
+    /**
+     * Stdout
+     */
+    stdout: string;
+    /**
+     * Stderr
+     */
+    stderr: string;
+    /**
+     * Error
+     */
+    error: string | null;
+};
+
+/**
+ * BashScriptInfo
+ */
+export type BashScriptInfo = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Executable
+     */
+    executable: boolean;
+    /**
+     * Description
+     */
+    description?: string;
+    /**
+     * Size Bytes
+     */
+    size_bytes: number;
+    /**
+     * Modified At
+     */
+    modified_at: string;
+    /**
+     * Inputs
+     */
+    inputs: Array<ScriptInput>;
+    /**
+     * Preview
+     */
+    preview: string;
+};
+
+/**
+ * BashScriptSummary
+ */
+export type BashScriptSummary = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Executable
+     */
+    executable: boolean;
+    /**
+     * Description
+     */
+    description?: string;
+};
+
+/**
  * Body_upload_theme_api_themes_post
  */
 export type BodyUploadThemeApiThemesPost = {
@@ -189,6 +362,12 @@ export type ChannelTemplate = {
      * Body
      */
     body?: string | null;
+    /**
+     * Inputs
+     */
+    inputs?: {
+        [key: string]: string;
+    } | null;
 };
 
 /**
@@ -1827,7 +2006,7 @@ export type NotificationChannelCreateRequest = {
     /**
      * Type
      */
-    type?: 'apprise' | 'inapp';
+    type?: 'apprise' | 'inapp' | 'bash';
     /**
      * Name
      */
@@ -1843,7 +2022,9 @@ export type NotificationChannelCreateRequest = {
         type: 'apprise';
     } & AppriseChannelConfig) | ({
         type: 'inapp';
-    } & InAppChannelConfig);
+    } & InAppChannelConfig) | ({
+        type: 'bash';
+    } & BashChannelConfig);
     /**
      * Subscribed Events
      */
@@ -1893,7 +2074,9 @@ export type NotificationChannelUpdateRequest = {
         type: 'apprise';
     } & AppriseChannelConfig) | ({
         type: 'inapp';
-    } & InAppChannelConfig) | null;
+    } & InAppChannelConfig) | ({
+        type: 'bash';
+    } & BashChannelConfig) | null;
     /**
      * Subscribed Events
      */
@@ -2103,10 +2286,17 @@ export type NotificationInboxView = {
 /**
  * NotificationTestRequest
  *
- * Ad-hoc test of an unsaved apprise config.
+ * Ad-hoc test of an unsaved apprise or bash config.
  */
 export type NotificationTestRequest = {
-    config: AppriseChannelConfig;
+    /**
+     * Config
+     */
+    config: ({
+        type: 'apprise';
+    } & AppriseChannelConfig) | ({
+        type: 'bash';
+    } & BashChannelConfig);
     /**
      * Event Type
      */
@@ -2580,6 +2770,36 @@ export type ScanTitle = {
      * Source File
      */
     source_file?: string | null;
+};
+
+/**
+ * ScriptInput
+ */
+export type ScriptInput = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Required
+     */
+    required?: boolean;
+    /**
+     * Secret
+     */
+    secret?: boolean;
+    /**
+     * Default
+     */
+    default?: string;
+    /**
+     * Values
+     */
+    values?: Array<string> | null;
 };
 
 /**
@@ -6451,6 +6671,106 @@ export type GetServicesApiNotificationsServicesGetResponses = {
 };
 
 export type GetServicesApiNotificationsServicesGetResponse = GetServicesApiNotificationsServicesGetResponses[keyof GetServicesApiNotificationsServicesGetResponses];
+
+export type GetScriptsApiNotificationsScriptsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/notifications/scripts';
+};
+
+export type GetScriptsApiNotificationsScriptsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetScriptsApiNotificationsScriptsGetError = GetScriptsApiNotificationsScriptsGetErrors[keyof GetScriptsApiNotificationsScriptsGetErrors];
+
+export type GetScriptsApiNotificationsScriptsGetResponses = {
+    /**
+     * Response Get Scripts Api Notifications Scripts Get
+     *
+     * Successful Response
+     */
+    200: Array<BashScriptSummary>;
+};
+
+export type GetScriptsApiNotificationsScriptsGetResponse = GetScriptsApiNotificationsScriptsGetResponses[keyof GetScriptsApiNotificationsScriptsGetResponses];
+
+export type PreviewScriptApiNotificationsScriptsPreviewPostData = {
+    body: BashPreviewRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/notifications/scripts/preview';
+};
+
+export type PreviewScriptApiNotificationsScriptsPreviewPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreviewScriptApiNotificationsScriptsPreviewPostError = PreviewScriptApiNotificationsScriptsPreviewPostErrors[keyof PreviewScriptApiNotificationsScriptsPreviewPostErrors];
+
+export type PreviewScriptApiNotificationsScriptsPreviewPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: BashPreviewResult;
+};
+
+export type PreviewScriptApiNotificationsScriptsPreviewPostResponse = PreviewScriptApiNotificationsScriptsPreviewPostResponses[keyof PreviewScriptApiNotificationsScriptsPreviewPostResponses];
+
+export type GetScriptApiNotificationsScriptsNameGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/api/notifications/scripts/{name}';
+};
+
+export type GetScriptApiNotificationsScriptsNameGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetScriptApiNotificationsScriptsNameGetError = GetScriptApiNotificationsScriptsNameGetErrors[keyof GetScriptApiNotificationsScriptsNameGetErrors];
+
+export type GetScriptApiNotificationsScriptsNameGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: BashScriptInfo;
+};
+
+export type GetScriptApiNotificationsScriptsNameGetResponse = GetScriptApiNotificationsScriptsNameGetResponses[keyof GetScriptApiNotificationsScriptsNameGetResponses];
 
 export type ComposeUrlApiNotificationsServicesServiceIdComposeUrlPostData = {
     body: ComposeUrlRequest;

@@ -77,3 +77,17 @@ describe('isReady', () => {
 		expect(isReady({ type: 'webhook', name: '', config: {}, events: [], service: null })).toBe(false);
 	});
 });
+
+describe('missingRequirements bash', () => {
+	it('bash requires the script and required non-secret inputs', () => {
+		const inputs = [
+			{ key: 'TO', label: 'Recipient', required: true, secret: false, default: '', values: null },
+			{ key: 'PW', label: 'Password', required: true, secret: true, default: '', values: null }
+		];
+		const base = { type: 'bash' as const, name: 'Hook', config: {}, events: ['rip.completed'], service: null, inputs };
+		expect(missingRequirements(base)).toContain('required fields');
+		expect(missingRequirements({ ...base, config: { script: 'a.sh' } })).toContain('required fields');
+		expect(missingRequirements({ ...base, config: { script: 'a.sh', inputs: { TO: 'x' } } })).toEqual([]);
+		expect(missingRequirements({ ...base, inputs: undefined, config: { script: 'a.sh' } })).toEqual([]);
+	});
+});

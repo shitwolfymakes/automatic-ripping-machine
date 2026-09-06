@@ -5220,6 +5220,176 @@
         }
       }
     },
+    "/api/notifications/scripts": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Get Scripts",
+        "operationId": "get_scripts_api_notifications_scripts_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BashScriptSummary"
+                  },
+                  "title": "Response Get Scripts Api Notifications Scripts Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/scripts/preview": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Preview Script",
+        "operationId": "preview_script_api_notifications_scripts_preview_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BashPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BashPreviewResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/scripts/{name}": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Get Script",
+        "operationId": "get_script_api_notifications_scripts__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BashScriptInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/notifications/services/{service_id}/compose-url": {
       "post": {
         "tags": [
@@ -7456,6 +7626,276 @@
         "type": "object",
         "title": "AppriseChannelConfig"
       },
+      "BashChannelConfig": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "bash",
+            "title": "Type",
+            "default": "bash"
+          },
+          "script": {
+            "type": "string",
+            "title": "Script"
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "maximum": 600.0,
+            "minimum": 1.0,
+            "title": "Timeout Seconds",
+            "default": 30
+          },
+          "inputs": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Inputs"
+          },
+          "secret_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Secret Keys"
+          }
+        },
+        "type": "object",
+        "required": [
+          "script"
+        ],
+        "title": "BashChannelConfig",
+        "description": "A script under the backend's ``/scripts`` mount (bare file name), run as\n``bash <script> \"<title>\" \"<body>\"`` with ``ARM_*`` env vars plus one env\nvar per declared input. ``secret_keys`` is server-written from the script\nheader so masking does not depend on the file still existing; it is\nignored on input (the field stays on the wire for round-tripping)."
+      },
+      "BashPreviewRequest": {
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/BashChannelConfig"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "template": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelTemplate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "run": {
+            "type": "boolean",
+            "title": "Run",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "config",
+          "event_type"
+        ],
+        "title": "BashPreviewRequest",
+        "description": "Resolve (and optionally run) a bash hook for one event with sample context."
+      },
+      "BashPreviewResult": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "inputs": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Inputs"
+          },
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Env"
+          },
+          "argv": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Argv"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BashRunResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "body",
+          "inputs",
+          "env",
+          "argv"
+        ],
+        "title": "BashPreviewResult"
+      },
+      "BashRunResult": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "title": "Duration Ms"
+          },
+          "stdout": {
+            "type": "string",
+            "title": "Stdout"
+          },
+          "stderr": {
+            "type": "string",
+            "title": "Stderr"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok",
+          "exit_code",
+          "duration_ms",
+          "stdout",
+          "stderr",
+          "error"
+        ],
+        "title": "BashRunResult"
+      },
+      "BashScriptInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "executable": {
+            "type": "boolean",
+            "title": "Executable"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "modified_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Modified At"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/ScriptInput"
+            },
+            "type": "array",
+            "title": "Inputs"
+          },
+          "preview": {
+            "type": "string",
+            "title": "Preview"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "executable",
+          "size_bytes",
+          "modified_at",
+          "inputs",
+          "preview"
+        ],
+        "title": "BashScriptInfo"
+      },
+      "BashScriptSummary": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "executable": {
+            "type": "boolean",
+            "title": "Executable"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "executable"
+        ],
+        "title": "BashScriptSummary"
+      },
       "Body_upload_theme_api_themes_post": {
         "properties": {
           "theme_json": {
@@ -7625,6 +8065,20 @@
               }
             ],
             "title": "Body"
+          },
+          "inputs": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inputs"
           }
         },
         "type": "object",
@@ -10683,7 +11137,8 @@
             "type": "string",
             "enum": [
               "apprise",
-              "inapp"
+              "inapp",
+              "bash"
             ],
             "title": "Type",
             "default": "apprise"
@@ -10704,6 +11159,9 @@
               },
               {
                 "$ref": "#/components/schemas/InAppChannelConfig"
+              },
+              {
+                "$ref": "#/components/schemas/BashChannelConfig"
               }
             ],
             "title": "Config",
@@ -10711,6 +11169,7 @@
               "propertyName": "type",
               "mapping": {
                 "apprise": "#/components/schemas/AppriseChannelConfig",
+                "bash": "#/components/schemas/BashChannelConfig",
                 "inapp": "#/components/schemas/InAppChannelConfig"
               }
             }
@@ -10808,12 +11267,16 @@
                   },
                   {
                     "$ref": "#/components/schemas/InAppChannelConfig"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BashChannelConfig"
                   }
                 ],
                 "discriminator": {
                   "propertyName": "type",
                   "mapping": {
                     "apprise": "#/components/schemas/AppriseChannelConfig",
+                    "bash": "#/components/schemas/BashChannelConfig",
                     "inapp": "#/components/schemas/InAppChannelConfig"
                   }
                 }
@@ -11236,7 +11699,22 @@
       "NotificationTestRequest": {
         "properties": {
           "config": {
-            "$ref": "#/components/schemas/AppriseChannelConfig"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AppriseChannelConfig"
+              },
+              {
+                "$ref": "#/components/schemas/BashChannelConfig"
+              }
+            ],
+            "title": "Config",
+            "discriminator": {
+              "propertyName": "type",
+              "mapping": {
+                "apprise": "#/components/schemas/AppriseChannelConfig",
+                "bash": "#/components/schemas/BashChannelConfig"
+              }
+            }
           },
           "event_type": {
             "anyOf": [
@@ -11255,7 +11733,7 @@
           "config"
         ],
         "title": "NotificationTestRequest",
-        "description": "Ad-hoc test of an unsaved apprise config."
+        "description": "Ad-hoc test of an unsaved apprise or bash config."
       },
       "NotificationTestResult": {
         "properties": {
@@ -12042,6 +12520,53 @@
           "duration_seconds"
         ],
         "title": "ScanTitle"
+      },
+      "ScriptInput": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": false
+          },
+          "secret": {
+            "type": "boolean",
+            "title": "Secret",
+            "default": false
+          },
+          "default": {
+            "type": "string",
+            "title": "Default",
+            "default": ""
+          },
+          "values": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "ScriptInput"
       },
       "SdfStatusReport": {
         "properties": {
