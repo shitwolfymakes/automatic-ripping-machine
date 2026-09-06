@@ -43,8 +43,8 @@
 	$effect(() => {
 		// Track the form state so the preview refreshes as the user types.
 		void JSON.stringify([config, templates[eventType]]);
-		if (!open || !eventType) return;
 		clearTimeout(timer);
+		if (!open || !eventType) return;
 		timer = setTimeout(async () => {
 			try {
 				preview = await previewBash(request(false));

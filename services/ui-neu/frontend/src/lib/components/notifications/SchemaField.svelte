@@ -49,6 +49,9 @@
 				required={field.required}
 				class={FIELD_INPUT_CLASS}
 			>
+				{#if !field.required}
+					<option value="">(not set)</option>
+				{/if}
 				{#each field.values ?? [] as opt}
 					<option value={opt}>{opt}</option>
 				{/each}
