@@ -48,9 +48,13 @@
 			: '-'
 	);
 
+	// Only the parts the preset sets; a passthrough preset has no codec or
+	// hardware preference, so it reads "iso", not "iso | - |".
 	let transcodeSummary = $derived(
 		session.transcodePreset
-			? `${session.transcodePreset.container} | ${session.transcodePreset.codec ?? '-'} | ${session.transcodePreset.hw_preference ?? ''}`
+			? [session.transcodePreset.container, session.transcodePreset.codec, session.transcodePreset.hw_preference]
+					.filter((v) => !!v)
+					.join(' | ')
 			: null
 	);
 
