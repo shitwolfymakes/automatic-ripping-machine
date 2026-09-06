@@ -15,7 +15,12 @@ from typing import Any
 
 from arm_backend.notification_format import TemplateRenderError, resolve_title_body
 from arm_backend.notifications.bash_runner import build_env
-from arm_backend.notifications.script_meta import INPUT_KEY_RE, read_script_info, resolve_script
+from arm_backend.notifications.script_meta import (
+    INPUT_KEY_RE,
+    RESERVED_INPUT_KEYS,
+    read_script_info,
+    resolve_script,
+)
 from arm_common.schemas import ScriptInput
 from arm_common.secrets import HIDDEN_SECRET
 
@@ -49,7 +54,11 @@ def _declared(scripts_root: str, script: str) -> list[ScriptInput]:
 def _clean_inputs(raw: Any) -> dict[str, str]:
     if not isinstance(raw, dict):
         return {}
-    return {str(k): str(v) for k, v in raw.items() if INPUT_KEY_RE.match(str(k)) and not str(k).startswith("ARM_")}
+    return {
+        str(k): str(v)
+        for k, v in raw.items()
+        if INPUT_KEY_RE.match(str(k)) and not str(k).startswith("ARM_") and str(k) not in RESERVED_INPUT_KEYS
+    }
 
 
 def _render_input(key: str, value: str, context: dict[str, str]) -> str:
@@ -92,20 +101,21 @@ def prepare_run(
     channel_inputs = _clean_inputs(config.get("inputs"))
     event_inputs = _clean_inputs((template or {}).get("inputs"))
 
+    # Only keys the script header declares reach the child: an undeclared stored
+    # or per-event key is ignored, so a script with no header gets no inputs.
     resolved: dict[str, str] = {}
-    for key in list(dict.fromkeys([i.key for i in declared] + list(channel_inputs) + list(event_inputs))):
-        spec = next((i for i in declared if i.key == key), None)
-        value = spec.default if spec else ""
+    for spec in declared:
+        key = spec.key
+        value = spec.default
         if key in channel_inputs and channel_inputs[key] != "":
             value = channel_inputs[key]
         if key not in secret_keys and key in event_inputs and event_inputs[key] != "":
             value = event_inputs[key]
         value = _render_input(key, value, context)
-        if spec is not None:
-            if spec.required and value == "":
-                raise HookError(f"input {key} is required")
-            if spec.values and value not in spec.values:
-                raise HookError(f"input {key} must be one of {', '.join(spec.values)}")
+        if spec.required and value == "":
+            raise HookError(f"input {key} is required")
+        if spec.values and value != "" and value not in spec.values:
+            raise HookError(f"input {key} must be one of {', '.join(spec.values)}")
         resolved[key] = value
 
     env = build_env(context, title=title, body=body, inputs=resolved, media_root=media_root, raw_root=raw_root)
@@ -122,6 +132,19 @@ def prepare_run(
     )
 
 
+def redact_secrets(text: str, run: PreparedRun) -> str:
+    """Replace every non-empty secret input value in *text* with ``<hidden>``.
+
+    Script output can echo a secret (a curl error quoting the URL, ``set -x``
+    tracing); anything persisted as an error goes through here first.
+    """
+    for key in run.secret_keys:
+        value = run.inputs.get(key, "")
+        if value:
+            text = text.replace(value, HIDDEN_SECRET)
+    return text
+
+
 def masked(run: PreparedRun) -> tuple[dict[str, str], dict[str, str]]:
     inputs = {k: (HIDDEN_SECRET if k in run.secret_keys else v) for k, v in run.inputs.items()}
     env = {k: (HIDDEN_SECRET if k in run.secret_keys else v) for k, v in run.env.items()}
@@ -136,7 +159,11 @@ def mask_bash_config(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def merge_bash_config(existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
-    """``<hidden>`` on an incoming secret keeps the stored value; every other key is taken from incoming."""
+    """``<hidden>`` on an incoming secret keeps the stored value; every other key is taken from incoming.
+
+    This neither validates the config nor re-stamps ``secret_keys``:
+    ``storage_config`` is the only gate that writes ``secret_keys``.
+    """
     stored = existing.get("inputs") or {}
     merged = dict(incoming)
     merged["inputs"] = {
@@ -153,6 +180,8 @@ def storage_config(incoming: dict[str, Any], scripts_root: str) -> dict[str, Any
     except ValueError as exc:
         raise HookError(str(exc)) from exc
     raw_timeout = incoming.get("timeout_seconds")
+    # ``is None`` and not ``or``: an explicit 0 must fail the range check below
+    # rather than silently becoming the default.
     timeout = DEFAULT_TIMEOUT_SECONDS if raw_timeout is None else int(raw_timeout)
     if not 1 <= timeout <= MAX_TIMEOUT_SECONDS:
         raise HookError(f"timeout_seconds must be between 1 and {MAX_TIMEOUT_SECONDS}")

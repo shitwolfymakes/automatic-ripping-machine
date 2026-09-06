@@ -6,9 +6,10 @@ A hook script may declare itself in its first 60 lines:
     # arm-input: KEY label="..." [required] [secret] [default="..."] [values=a,b,c]
 
 Lines that do not match are ignored, so a plain v2 BASH_SCRIPT works with no
-inputs. Keys must match ``INPUT_KEY_RE`` and must not use the reserved
-``ARM_`` prefix; a later line for the same key keeps its first position, but
-the later attributes replace the earlier ones.
+inputs. Keys must match ``INPUT_KEY_RE``, must not use the reserved ``ARM_``
+prefix, and must not be one of ``RESERVED_INPUT_KEYS`` (shell-sensitive names
+such as ``PATH`` or ``BASH_ENV``); a later line for the same key keeps its
+first position, but the later attributes replace the earlier ones.
 """
 
 from __future__ import annotations
@@ -29,6 +30,27 @@ _HOOK_RE = re.compile(r"^#\s*arm-hook:\s*(.*?)\s*$")
 _INPUT_RE = re.compile(r"^#\s*arm-input:\s*(\S+)\s*(.*?)\s*$")
 _FLAGS = {"required", "secret"}
 
+# Names a declared input may never take: they either steer the shell/loader or
+# are part of the fixed passthrough environment built by ``bash_runner``.
+RESERVED_INPUT_KEYS = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "BASH_ENV",
+        "ENV",
+        "LD_PRELOAD",
+        "LD_LIBRARY_PATH",
+        "SHELLOPTS",
+        "BASHOPTS",
+        "IFS",
+        "PS4",
+        "CDPATH",
+        "GLOBIGNORE",
+    }
+)
+
 
 def validate_script_name(name: str) -> str:
     if not name or name in {".", ".."}:
@@ -39,12 +61,17 @@ def validate_script_name(name: str) -> str:
 
 
 def resolve_script(root: str, name: str) -> Path:
-    return Path(root) / validate_script_name(name)
+    path = Path(root) / validate_script_name(name)
+    # A symlink inside the mount may still point outside it; only entries that
+    # really live in the scripts directory are addressable.
+    if path.exists() and path.resolve().parent != Path(root).resolve():
+        raise ValueError("script must be a regular file inside the scripts directory")
+    return path
 
 
 def _parse_input(key: str, attrs: str) -> ScriptInput | None:
     """Parse a single arm-input line, returning ScriptInput or None if invalid."""
-    if not INPUT_KEY_RE.match(key) or key.startswith("ARM_"):
+    if not INPUT_KEY_RE.match(key) or key.startswith("ARM_") or key in RESERVED_INPUT_KEYS:
         return None
     try:
         tokens = shlex.split(attrs)
@@ -76,7 +103,7 @@ def parse_header(text: str) -> tuple[str, list[ScriptInput]]:
     description = ""
     inputs: dict[str, ScriptInput] = {}
     for line in text.splitlines()[:HEADER_LINES]:
-        # Strip leading non-ASCII for binary-safe parsing
+        # Drop leading U+FFFD replacement chars so a binary preamble still parses
         line_cleaned = line.lstrip("�")
         m = _HOOK_RE.match(line_cleaned)
         if m:
@@ -97,7 +124,10 @@ def _read_head(path: Path) -> str:
 
 
 def read_script_info(root: str, name: str) -> BashScriptInfo:
-    path = resolve_script(root, name)
+    try:
+        path = resolve_script(root, name)
+    except ValueError as exc:
+        raise FileNotFoundError(name) from exc
     if not path.is_file():
         raise FileNotFoundError(name)
     st = path.stat()
@@ -122,6 +152,8 @@ def list_scripts(root: str) -> list[BashScriptSummary]:
     out: list[BashScriptSummary] = []
     for p in sorted(base.iterdir()):
         if p.name.startswith(".") or not p.is_file():
+            continue
+        if p.resolve().parent != base.resolve():
             continue
         description, _ = parse_header(_read_head(p))
         out.append(BashScriptSummary(name=p.name, executable=os.access(p, os.X_OK), description=description))

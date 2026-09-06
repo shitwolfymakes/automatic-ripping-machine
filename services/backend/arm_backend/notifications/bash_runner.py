@@ -13,6 +13,7 @@ import os
 import time
 from pathlib import Path
 
+from arm_backend.notifications.script_meta import RESERVED_INPUT_KEYS
 from arm_common.schemas import BashRunResult
 
 OUTPUT_CAP = 4096
@@ -30,7 +31,10 @@ def build_env(
     media_root: str,
     raw_root: str,
 ) -> dict[str, str]:
-    env: dict[str, str] = {k: os.environ[k] for k in _PASSTHROUGH_ENV if k in os.environ}
+    # Inputs go in first so the passthrough and ARM_* values below always win:
+    # a declared input can never steer the shell, the loader, or the context.
+    env: dict[str, str] = {k: v for k, v in inputs.items() if k not in RESERVED_INPUT_KEYS}
+    env.update({k: os.environ[k] for k in _PASSTHROUGH_ENV if k in os.environ})
     env.setdefault("PATH", _DEFAULT_PATH)
     for key, value in context.items():
         env[f"ARM_{key.upper()}"] = value
@@ -38,7 +42,6 @@ def build_env(
     env["ARM_BODY"] = body
     env["ARM_MEDIA_ROOT"] = media_root
     env["ARM_RAW_ROOT"] = raw_root
-    env.update(inputs)
     return env
 
 

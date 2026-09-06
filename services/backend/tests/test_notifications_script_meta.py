@@ -56,6 +56,28 @@ def test_parse_header() -> None:
     assert inputs[3].secret is True and inputs[3].label == "SMTP password"
 
 
+def test_parse_header_ignores_reserved_shell_keys() -> None:
+    _, inputs = parse_header(
+        '# arm-input: BASH_ENV\n# arm-input: PATH label="evil"\n# arm-input: LD_PRELOAD\n# arm-input: OK\n'
+    )
+    assert [i.key for i in inputs] == ["OK"]
+
+
+def test_resolve_script_rejects_symlink_out_of_root(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    target = outside / "secret.sh"
+    target.write_text("#!/bin/bash\nexit 0\n")
+    root = tmp_path / "scripts"
+    root.mkdir()
+    (root / "link.sh").symlink_to(target)
+    with pytest.raises(ValueError, match="inside the scripts directory"):
+        resolve_script(str(root), "link.sh")
+    with pytest.raises(FileNotFoundError):
+        read_script_info(str(root), "link.sh")
+    assert [s.name for s in list_scripts(str(root))] == []
+
+
 def test_parse_header_no_metadata_and_label_fallback() -> None:
     assert parse_header("#!/bin/bash\necho hi\n") == ("", [])
     _, inputs = parse_header("# arm-input: TOKEN secret\n")
