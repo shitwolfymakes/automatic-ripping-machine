@@ -2,7 +2,11 @@
 	import type { CatalogField } from '$lib/types/notifications';
 	import { FIELD_INPUT_CLASS } from '$lib/types/notifications';
 
-	let { field, value = $bindable() }: { field: CatalogField; value: unknown } = $props();
+	let {
+		field,
+		value = $bindable(),
+		onchange
+	}: { field: CatalogField; value: unknown; onchange?: (v: unknown) => void } = $props();
 
 	const inputType = $derived(field.private ? 'password' : 'text');
 
@@ -13,8 +17,13 @@
 	const displayValue = $derived(isPrivateHidden ? '' : (value ?? ''));
 	const placeholder = $derived(isPrivateHidden ? '******** (set, leave blank to keep)' : '');
 
+	function setValue(v: unknown) {
+		value = v;
+		onchange?.(v);
+	}
+
 	function onInput(e: Event) {
-		value = (e.currentTarget as HTMLInputElement).value;
+		setValue((e.currentTarget as HTMLInputElement).value);
 	}
 </script>
 
@@ -24,7 +33,7 @@
 			type="checkbox"
 			aria-label={field.label}
 			checked={boolValue}
-			onchange={(e) => (value = e.currentTarget.checked)}
+			onchange={(e) => setValue(e.currentTarget.checked)}
 			class="rounded border-primary/40 text-primary focus:ring-primary"
 		/>
 		<span>{field.label}{field.required ? ' *' : ''}</span>
@@ -35,7 +44,8 @@
 		{#if field.type === 'choice'}
 			<select
 				aria-label={field.label}
-				bind:value
+				value={displayValue}
+				onchange={(e) => setValue((e.currentTarget as HTMLSelectElement).value)}
 				required={field.required}
 				class={FIELD_INPUT_CLASS}
 			>
@@ -48,7 +58,8 @@
 				type="number"
 				aria-label={field.label}
 				step={field.type === 'float' ? 'any' : '1'}
-				bind:value
+				value={displayValue}
+				oninput={onInput}
 				required={field.required}
 				class={FIELD_INPUT_CLASS}
 			/>

@@ -22,7 +22,10 @@ export interface WebhookConfig {
 
 export interface BashConfig {
 	type: 'bash';
-	script_path: string;
+	script: string;
+	timeout_seconds?: number;
+	inputs?: Record<string, string>;
+	secret_keys?: string[];
 }
 
 export type ChannelConfig = AppriseConfig | WebhookConfig | BashConfig;
@@ -30,6 +33,7 @@ export type ChannelConfig = AppriseConfig | WebhookConfig | BashConfig;
 export interface ChannelTemplate {
 	title?: string | null;
 	body?: string | null;
+	inputs?: Record<string, string> | null;
 }
 
 export interface Channel {

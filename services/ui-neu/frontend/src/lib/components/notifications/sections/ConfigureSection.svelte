@@ -1,8 +1,10 @@
 <script lang="ts">
 	import type { CatalogService, ChannelType, CatalogField } from '$lib/types/notifications';
+	import type { BashScriptInfo } from '$lib/api/channels';
 	import SchemaField from '../SchemaField.svelte';
 	import ServiceGlyph from '../ServiceGlyph.svelte';
 	import LabelEnabledRow from './LabelEnabledRow.svelte';
+	import BashScriptFields from './BashScriptFields.svelte';
 
 	let {
 		type,
@@ -11,7 +13,8 @@
 		config = $bindable(),
 		service,
 		showLabelRow = true,
-		preserveExisting = false
+		preserveExisting = false,
+		onscript
 	}: {
 		type: ChannelType;
 		name: string;
@@ -20,14 +23,12 @@
 		service: CatalogService | null;
 		showLabelRow?: boolean;
 		preserveExisting?: boolean;
+		onscript?: (info: BashScriptInfo | null) => void;
 	} = $props();
 
 	const webhookFields: CatalogField[] = [
 		{ key: 'url', label: 'Webhook URL', type: 'string', private: false, required: true },
 		{ key: 'shared_secret', label: 'Shared Secret', type: 'string', private: true, required: false }
-	];
-	const bashFields: CatalogField[] = [
-		{ key: 'script_path', label: 'Script Path', type: 'string', private: false, required: true }
 	];
 
 	const appriseRequired = $derived(service?.required_fields ?? []);
@@ -35,9 +36,7 @@
 	const appriseAdvancedText = $derived(appriseAdvancedAll.filter((f) => f.type !== 'bool'));
 	const appriseAdvancedBool = $derived(appriseAdvancedAll.filter((f) => f.type === 'bool'));
 
-	const flatFields = $derived(
-		type === 'webhook' ? webhookFields : type === 'bash' ? bashFields : []
-	);
+	const flatFields = $derived(type === 'webhook' ? webhookFields : []);
 
 	function applyPreserve(fields: CatalogField[]): CatalogField[] {
 		return preserveExisting ? fields.map((f) => ({ ...f, required: false })) : fields;
@@ -92,17 +91,22 @@
 				</details>
 			{/if}
 		</div>
+	{:else if type === 'bash'}
+		<div class="rounded-lg border border-primary/15 bg-page p-4 dark:border-primary/20 dark:bg-primary/5">
+			<div class="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-primary">Bash script configuration</div>
+			<BashScriptFields bind:config {preserveExisting} {onscript} />
+		</div>
 	{:else if flatFields.length}
 		<div class="rounded-lg border border-primary/15 bg-page p-4 dark:border-primary/20 dark:bg-primary/5">
 			<div class="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-primary">
-				{#if type === 'webhook'}Webhook configuration{:else}Bash script configuration{/if}
+				Webhook configuration
 			</div>
 			{#if preserveExisting}
 				<p class="mb-3 text-xs text-gray-500 dark:text-gray-400">Re-enter credentials to change the destination. Leave blank to keep the current settings.</p>
 			{/if}
 			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 				{#each applyPreserve(flatFields) as f (f.key)}
-					<div class={f.key === 'url' || f.key === 'script_path' ? 'sm:col-span-2' : ''}>
+					<div class={f.key === 'url' ? 'sm:col-span-2' : ''}>
 						<SchemaField field={f} bind:value={config[f.key]} />
 					</div>
 				{/each}
