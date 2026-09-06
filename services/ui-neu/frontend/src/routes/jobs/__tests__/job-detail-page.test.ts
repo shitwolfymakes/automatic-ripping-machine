@@ -67,7 +67,16 @@ vi.mock('$lib/api/sessions', () => ({
 vi.mock('$lib/api/logs', () => ({
 	fetchStructuredLogContent: vi.fn(() => Promise.resolve({ entries: [] })),
 	fetchStructuredTranscoderLogContent: vi.fn(() => Promise.resolve({ entries: [] })),
-	fetchTranscoderLogForArmJob: vi.fn(() => Promise.resolve(null))
+	fetchTranscoderLogForArmJob: vi.fn(() => Promise.resolve(null)),
+	fetchJobLog: vi.fn(() => Promise.resolve([])),
+	jobLogDownloadUrl: (id: string) => `/api/logs/${id}.zip`
+}));
+
+// The job log panel opens its own WS subscription for an active job (this
+// suite's fixture job is 'ripped', a terminal status, so it never
+// subscribes) - stub the client so no real WebSocket gets created in jsdom.
+vi.mock('$lib/api/ws', () => ({
+	wsClient: { subscribe: vi.fn(() => vi.fn()), start: vi.fn(), stop: vi.fn() }
 }));
 
 vi.mock('$lib/api/settings', () => ({
