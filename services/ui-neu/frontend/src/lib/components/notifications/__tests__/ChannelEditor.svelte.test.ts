@@ -5,6 +5,13 @@ import type { Channel, Catalog } from '$lib/types/notifications';
 import type { EventTypeInfo } from '$lib/api/channels';
 import { discordCatalog, appriseChannel, webhookChannel } from './apprise-fixtures';
 
+vi.mock('$lib/api/channels', async (orig) => ({
+	...(await orig<typeof import('$lib/api/channels')>()),
+	fetchScripts: vi.fn().mockResolvedValue([]),
+	fetchScript: vi.fn().mockRejectedValue(new Error('no script selected')),
+	previewBash: vi.fn().mockResolvedValue({ title: '', body: '', inputs: {}, env: {}, argv: [], error: null, result: null })
+}));
+
 const catalog: Catalog = { featured: [], services: [] };
 const ch: Channel = webhookChannel({ id: 3 });
 
@@ -117,5 +124,14 @@ describe('ChannelEditor', () => {
 		);
 		expect(await screen.findByText(/added via a raw URL/i)).toBeInTheDocument();
 		expect(screen.queryByLabelText(/Webhook ID/i)).toBeNull();
+	});
+
+	it('bash shows the test panel instead of the Send test button', async () => {
+		const bashChannel: Channel = {
+			...webhookChannel({ id: 5 }), type: 'bash', config: { type: 'bash', script: 'plex.sh' }
+		};
+		renderEditor(bashChannel);
+		expect(screen.queryByRole('button', { name: 'Send test' })).toBeNull();
+		expect(screen.getByText('Test')).toBeInTheDocument();
 	});
 });
