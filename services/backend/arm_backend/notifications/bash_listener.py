@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from arm_backend.notification_format import context_from_message
-from arm_backend.notifications.bash_hook import HookError, prepare_run
+from arm_backend.notifications.bash_hook import HookError, prepare_run, redact_secrets
 from arm_backend.notifications.bash_runner import run_script
 from arm_backend.notifications.message import Message
 from arm_common import NotificationChannel, NotificationDispatchLog
@@ -62,7 +62,7 @@ class BashListener:
                     run.path, title=title, body=body, env=run.env, timeout_seconds=run.timeout_seconds
                 )
                 if not result.ok:
-                    err = result.error
+                    err = redact_secrets(result.error or "", run)
             except HookError as exc:
                 err = str(exc)
             if err is not None:

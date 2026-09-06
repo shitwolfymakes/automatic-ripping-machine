@@ -1,8 +1,8 @@
 """Notification channels API.
 
-The channel ``config`` is masked on every read (private apprise fields →
-``<hidden>``; bash secret inputs, named by ``secret_keys``, → ``<hidden>``
-too). Create composes the apprise URL server-side when the body carries
+The channel ``config`` is masked on every read (private apprise fields become
+``<hidden>``; bash secret inputs, named by ``secret_keys``, become
+``<hidden>`` too). Create composes the apprise URL server-side when the body carries
 ``{service_id, fields}``; otherwise a raw apprise URL is accepted and
 validated. A ``bash`` channel runs a script from the scripts mount
 (``script`` is a bare file name, validated against path traversal); its
@@ -48,6 +48,7 @@ from arm_backend.notifications.bash_hook import (
     masked,
     merge_bash_config,
     prepare_run,
+    redact_secrets,
     storage_config,
 )
 from arm_backend.notifications.bash_runner import run_script
@@ -96,7 +97,7 @@ def _hook_422(exc: Exception) -> HTTPException:
 def _validate_template_inputs(templates: dict[str, Any], secret_keys: list[str]) -> None:
     """Per-event input overrides may not touch secret inputs."""
     for event, tmpl in templates.items():
-        inputs = (tmpl or {}).get("inputs") if isinstance(tmpl, dict) else getattr(tmpl, "inputs", None)
+        inputs = (tmpl or {}).get("inputs")
         bad = sorted(k for k in (inputs or {}) if k in secret_keys)
         if bad:
             raise HTTPException(
@@ -261,12 +262,6 @@ async def patch_channel(
         ch.enabled = req.enabled
     if req.subscribed_events is not None:
         ch.subscribed_events = list(req.subscribed_events)
-    if req.templates is not None:
-        if ch.type == "bash":
-            _validate_template_inputs(
-                _templates_to_storage(req.templates), list((ch.config or {}).get("secret_keys") or [])
-            )
-        ch.templates = _templates_to_storage(req.templates)
     if req.config is not None:
         incoming = req.config.model_dump(mode="json")
         if ch.type == "bash":
@@ -294,6 +289,14 @@ async def patch_channel(
                 new_config = merge_patch_config(ch.config or {}, incoming)
             _validate_apprise_url(new_config.get("url", ""))
             ch.config = new_config
+    # After the config update: a PATCH that swaps the script re-stamps
+    # secret_keys, and the per-event overrides are validated against the new set.
+    if req.templates is not None:
+        if ch.type == "bash":
+            _validate_template_inputs(
+                _templates_to_storage(req.templates), list((ch.config or {}).get("secret_keys") or [])
+            )
+        ch.templates = _templates_to_storage(req.templates)
     ch.updated_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(ch)
@@ -326,7 +329,7 @@ async def get_services(_: User = Depends(require_jwt)) -> dict[str, Any]:
 
 
 @router.get("/scripts", response_model=list[BashScriptSummary])
-async def get_scripts(_: User = Depends(require_jwt)) -> list[BashScriptSummary]:
+async def get_scripts(_: User = Depends(require_writer)) -> list[BashScriptSummary]:
     return list_scripts(settings.ARM_SCRIPTS_ROOT)
 
 
@@ -352,13 +355,22 @@ async def preview_script(
     db: AsyncSession = Depends(get_session),
 ) -> BashPreviewResult:
     config = req.config.model_dump(mode="json")
+    # ``secret_keys`` is server-owned: a preview may never name its own secrets,
+    # or stored values would be readable through the masked-input round-trip.
+    config["secret_keys"] = []
     if req.channel_id is not None:
         ch = (
             await db.execute(select(NotificationChannel).where(col(NotificationChannel.id) == req.channel_id))
         ).scalar_one_or_none()
         if ch is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown channel_id: {req.channel_id}")
+        if config.get("script") != (ch.config or {}).get("script"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="preview with channel_id must use the channel's stored script",
+            )
         config = merge_bash_config(ch.config or {}, config)
+        config["secret_keys"] = list((ch.config or {}).get("secret_keys") or [])
     template = req.template.model_dump(exclude_none=True) if req.template is not None else None
     try:
         run = _prepare_sample(config, template, req.event_type)
@@ -374,7 +386,7 @@ async def preview_script(
 
 
 @router.get("/scripts/{name}", response_model=BashScriptInfo)
-async def get_script(name: str, _: User = Depends(require_jwt)) -> BashScriptInfo:
+async def get_script(name: str, _: User = Depends(require_writer)) -> BashScriptInfo:
     try:
         validate_script_name(name)
         return read_script_info(settings.ARM_SCRIPTS_ROOT, name)
@@ -449,7 +461,7 @@ def _bash_send(
             run.path, title=run.title, body=run.body, env=run.env, timeout_seconds=run.timeout_seconds
         )
         if not result.ok:
-            raise RuntimeError(result.error)
+            raise RuntimeError(redact_secrets(result.error or "", run))
 
     return _send
 
@@ -461,6 +473,7 @@ async def _send_and_log(
     event_type: str,
     channel: NotificationChannel | None,
     template: dict[str, str | None] | None = None,
+    detail_errors: bool,
 ) -> NotificationTestResult:
     spec = EVENT_VOCAB.get(event_type)
     default_title = spec.default_title if spec is not None else "ARM: test notification"
@@ -483,7 +496,9 @@ async def _send_and_log(
         await send(title, body)
     except Exception as exc:  # never 500 on a bad destination
         ok = False
-        err = str(exc)
+        # A bash hook reports the real reason (the operator owns the script);
+        # an apprise failure stays a fixed string so provider internals do not leak.
+        err = str(exc) if detail_errors else "test send failed"
     if channel is not None:
         channel.last_fired_at = now
         if ok:
@@ -526,7 +541,12 @@ async def test_channel(
     template: dict[str, str | None] | None = raw_template if isinstance(raw_template, dict) else None
     if ch.type == "bash":
         return await _send_and_log(
-            db=db, send=_bash_send(config, template, event_type), event_type=event_type, channel=ch, template=template
+            db=db,
+            send=_bash_send(config, template, event_type),
+            event_type=event_type,
+            channel=ch,
+            template=template,
+            detail_errors=True,
         )
     # If the editor re-entered fields, merge them in to test the new url.
     # A raw-URL channel (no service_id — e.g. migration-imported) can't
@@ -545,7 +565,9 @@ async def test_channel(
     async def _send(t: str, b: str) -> None:
         await notifier.notify([url], t, b)
 
-    return await _send_and_log(db=db, send=_send, event_type=event_type, channel=ch, template=template)
+    return await _send_and_log(
+        db=db, send=_send, event_type=event_type, channel=ch, template=template, detail_errors=False
+    )
 
 
 @router.post("/test", response_model=NotificationTestResult)
@@ -559,7 +581,7 @@ async def test_config(
     event_type = req.event_type or "rip.completed"
     if config.get("type") == "bash":
         return await _send_and_log(
-            db=db, send=_bash_send(config, None, event_type), event_type=event_type, channel=None
+            db=db, send=_bash_send(config, None, event_type), event_type=event_type, channel=None, detail_errors=True
         )
     fields = config.get("fields") or {}
     service_id = config.get("service_id")
@@ -574,7 +596,7 @@ async def test_config(
     async def _send(t: str, b: str) -> None:
         await notifier.notify([url], t, b)
 
-    return await _send_and_log(db=db, send=_send, event_type=event_type, channel=None)
+    return await _send_and_log(db=db, send=_send, event_type=event_type, channel=None, detail_errors=False)
 
 
 @router.get("/dispatch-log", response_model=list[NotificationDispatchLogView])

@@ -109,6 +109,26 @@ async def test_script_failure_recorded(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_secret_values_are_redacted_from_the_error(tmp_path: Path) -> None:
+    p = tmp_path / "leak.sh"
+    p.write_text(
+        "#!/usr/bin/env bash\n"
+        '# arm-input: TO label="Recipient" required\n'
+        "# arm-input: SMTP_PASS secret\n"
+        'echo "pw=$SMTP_PASS" >&2; exit 1\n'
+    )
+    p.chmod(p.stat().st_mode | stat.S_IXUSR)
+    ch = _channel("leak.sh", inputs={"TO": "me@x", "SMTP_PASS": "s3cret"})
+    db = FakeSession()
+    db.rows["notification_channels"] = [ch]
+    await _listener(tmp_path).handle(db, _msg())
+    assert ch.last_error is not None
+    assert "s3cret" not in ch.last_error and "<hidden>" in ch.last_error
+    (log,) = _logs(db)
+    assert log.error is not None and "s3cret" not in log.error
+
+
+@pytest.mark.asyncio
 async def test_hook_error_recorded_with_empty_title(tmp_path: Path) -> None:
     _script(tmp_path, "ok.sh", "exit 0\n")
     ch = _channel("ok.sh", inputs={})  # TO required
