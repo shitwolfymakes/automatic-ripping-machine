@@ -91,6 +91,19 @@ def test_notification_test_request():
     assert req.event_type is None
 
 
+def test_notification_test_request_defaults_config_type_to_apprise():
+    """Pre-bash clients POST a config with no discriminator; it still means apprise."""
+    t = NotificationTestRequest.model_validate({"config": {"url": "json://x"}})
+    assert isinstance(t.config, AppriseChannelConfig) and t.config.url == "json://x"
+    # An explicit type is left alone, and a non-dict body still raises.
+    assert isinstance(
+        NotificationTestRequest.model_validate({"config": {"type": "bash", "script": "a.sh"}}).config,
+        BashChannelConfig,
+    )
+    with pytest.raises(ValidationError):
+        NotificationTestRequest.model_validate({"config": "nope"})
+
+
 def test_notification_channel_test_request_defaults():
     req = NotificationChannelTestRequest()
     assert req.fields == {}

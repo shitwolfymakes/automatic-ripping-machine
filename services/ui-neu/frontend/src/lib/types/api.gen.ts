@@ -82,7 +82,8 @@ export type AppriseChannelConfig = {
  * A script under the backend's ``/scripts`` mount (bare file name), run as
  * ``bash <script> "<title>" "<body>"`` with ``ARM_*`` env vars plus one env
  * var per declared input. ``secret_keys`` is server-written from the script
- * header so masking does not depend on the file still existing.
+ * header so masking does not depend on the file still existing; it is
+ * ignored on input (the field stays on the wire for round-tripping).
  */
 export type BashChannelConfig = {
     /**
