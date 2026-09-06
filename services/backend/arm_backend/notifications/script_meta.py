@@ -7,7 +7,8 @@ A hook script may declare itself in its first 60 lines:
 
 Lines that do not match are ignored, so a plain v2 BASH_SCRIPT works with no
 inputs. Keys must match ``INPUT_KEY_RE`` and must not use the reserved
-``ARM_`` prefix; a later line for the same key replaces the earlier one.
+``ARM_`` prefix; a later line for the same key keeps its first position, but
+the later attributes replace the earlier ones.
 """
 
 from __future__ import annotations
@@ -41,8 +42,8 @@ def resolve_script(root: str, name: str) -> Path:
     return Path(root) / validate_script_name(name)
 
 
-def _parse_input(key: str, attrs: str) -> tuple[ScriptInput, bool] | None:
-    """Parse a single arm-input line, returning (ScriptInput, has_explicit_label) or None if invalid."""
+def _parse_input(key: str, attrs: str) -> ScriptInput | None:
+    """Parse a single arm-input line, returning ScriptInput or None if invalid."""
     if not INPUT_KEY_RE.match(key) or key.startswith("ARM_"):
         return None
     try:
@@ -53,7 +54,6 @@ def _parse_input(key: str, attrs: str) -> tuple[ScriptInput, bool] | None:
     default = ""
     values: list[str] | None = None
     flags: set[str] = set()
-    has_explicit_label = False
     for tok in tokens:
         if tok in _FLAGS:
             flags.add(tok)
@@ -63,16 +63,12 @@ def _parse_input(key: str, attrs: str) -> tuple[ScriptInput, bool] | None:
             continue
         if name == "label":
             label = value or key
-            has_explicit_label = True
         elif name == "default":
             default = value
         elif name == "values":
             values = [v.strip() for v in value.split(",") if v.strip()] or None
-    return (
-        ScriptInput(
-            key=key, label=label, required="required" in flags, secret="secret" in flags, default=default, values=values
-        ),
-        has_explicit_label,
+    return ScriptInput(
+        key=key, label=label, required="required" in flags, secret="secret" in flags, default=default, values=values
     )
 
 
@@ -88,23 +84,10 @@ def parse_header(text: str) -> tuple[str, list[ScriptInput]]:
             continue
         m = _INPUT_RE.match(line_cleaned)
         if m:
-            result = _parse_input(m.group(1), m.group(2))
-            if result is not None:
-                parsed, has_explicit_label = result
-                # Re-declaring a key keeps its first position; the later attributes win.
-                if parsed.key in inputs:
-                    # Merge: use explicit label from this line if present, OR the boolean flags, keep first default/values
-                    existing = inputs[parsed.key]
-                    inputs[parsed.key] = ScriptInput(
-                        key=parsed.key,
-                        label=parsed.label if has_explicit_label else existing.label,
-                        required=parsed.required or existing.required,
-                        secret=parsed.secret or existing.secret,
-                        default=existing.default if existing.default else parsed.default,
-                        values=existing.values if existing.values is not None else parsed.values,
-                    )
-                else:
-                    inputs[parsed.key] = parsed
+            parsed = _parse_input(m.group(1), m.group(2))
+            if parsed is not None:
+                # Re-declaring a key keeps its first position; the later attributes replace the earlier ones.
+                inputs[parsed.key] = parsed
     return description, list(inputs.values())
 
 
