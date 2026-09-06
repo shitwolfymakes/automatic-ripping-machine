@@ -10,14 +10,14 @@
 </script>
 
 <!-- Fixed bottom bar, hidden below lg (1024px) — matches neu placement. -->
-<div class="fixed bottom-0 left-0 right-0 z-30 hidden h-10 items-center gap-3 border-t border-primary/20 bg-surface px-4 lg:flex 2xl:hidden dark:border-primary/20 dark:bg-surface-dark">
+<div data-testid="bottom-stats-bar" class="fixed bottom-0 left-0 right-0 z-30 hidden h-10 items-center gap-3 tabular-nums border-t border-primary/20 bg-surface px-4 lg:flex 2xl:hidden dark:border-primary/20 dark:bg-surface-dark">
 	<!-- CPU -->
 	<div class="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
 		<span class="shrink-0">CPU</span>
 		<div class="h-1 w-16 rounded-full bg-primary/15 dark:bg-primary/15">
 			<div class="h-1 rounded-full transition-all duration-500 {barColor($resources.cpu_percent, 'cpu')}" style="width: {Math.min(100, $resources.cpu_percent)}%"></div>
 		</div>
-		<span class="shrink-0">{$resources.cpu_percent.toFixed(0)}%</span>
+		<span class="w-9 shrink-0 text-right">{$resources.cpu_percent.toFixed(0)}%</span>
 	</div>
 
 	<div class="h-5 w-px shrink-0 bg-primary/15 dark:bg-primary/20"></div>
@@ -28,7 +28,7 @@
 		<div class="h-1 w-16 rounded-full bg-primary/15 dark:bg-primary/15">
 			<div class="h-1 rounded-full transition-all duration-500 {barColor($resources.memory.percent, 'mem')}" style="width: {Math.min(100, $resources.memory.percent)}%"></div>
 		</div>
-		<span class="shrink-0 whitespace-nowrap">{$resources.memory.used_gb} / {$resources.memory.total_gb} GB</span>
+		<span class="w-24 shrink-0 whitespace-nowrap">{$resources.memory.used_gb} / {$resources.memory.total_gb} GB</span>
 	</div>
 
 	<!-- Storage per root -->
@@ -41,7 +41,7 @@
 					<div class="h-1 w-12 rounded-full bg-primary/15 dark:bg-primary/15">
 						<div class="h-1 rounded-full transition-all duration-500 {barColor(s.percent, 'disk')}" style="width: {Math.min(100, s.percent)}%"></div>
 					</div>
-					<span>{s.free_gb} GB</span>
+					<span class="w-[4.5rem] shrink-0">{s.free_gb} GB</span>
 				</a>
 			{/each}
 		</div>

@@ -3,12 +3,14 @@
 
 	interface Props {
 		variant?: 'full' | 'compact';
+		/** Per-instance accent; when omitted, the theme's --frame-accent token
+		 * (or the #f90 default) applies via the CSS fallback chain. */
 		accent?: string;
 		label?: string;
 		children: Snippet;
 	}
 
-	let { variant = 'full', accent = '#f90', label = '', children }: Props = $props();
+	let { variant = 'full', accent = undefined, label = '', children }: Props = $props();
 </script>
 
 <div class="section-frame" data-frame-variant={variant} style:--frame-accent={accent}>
