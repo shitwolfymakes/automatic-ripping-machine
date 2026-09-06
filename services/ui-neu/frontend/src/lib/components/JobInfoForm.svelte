@@ -153,7 +153,7 @@
 					disabled={saving || !title.trim()}
 					class="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-on-primary hover:bg-primary/90 disabled:opacity-50"
 				>
-					{saving ? 'Saving…' : 'Save'}
+					{saving ? 'Saving...' : 'Save'}
 				</button>
 				<button
 					onclick={resetInfo}

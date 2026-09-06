@@ -47,7 +47,7 @@ it('submits createSession with the assembled body', async () => {
 	await waitFor(() => expect(onsaved).toHaveBeenCalled());
 });
 
-it('selecting "+ Create new rip preset…" fires oncreaterip and reverts select', async () => {
+it('selecting "+ Create new rip preset..." fires oncreaterip and reverts select', async () => {
 	const oncreaterip = vi.fn();
 	renderComponent(SessionBuilder, props({ oncreaterip }));
 	const sel = screen.getByLabelText(/rip preset/i) as HTMLSelectElement;
@@ -55,7 +55,7 @@ it('selecting "+ Create new rip preset…" fires oncreaterip and reverts select'
 	expect(oncreaterip).toHaveBeenCalledOnce();
 });
 
-it('selecting "+ Create new transcode preset…" fires oncreatetranscode', async () => {
+it('selecting "+ Create new transcode preset..." fires oncreatetranscode', async () => {
 	const oncreatetranscode = vi.fn();
 	renderComponent(SessionBuilder, props({ oncreatetranscode }));
 	const sel = screen.getByLabelText(/transcode preset/i) as HTMLSelectElement;

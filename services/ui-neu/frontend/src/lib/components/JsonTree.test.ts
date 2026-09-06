@@ -16,7 +16,7 @@ describe('JsonTree', () => {
 		renderComponent(JsonTree, { props: { name: 'scan_result', value: { a: 1 }, depth: 0 } });
 		const btn = screen.getByRole('button');
 		expect(btn).toHaveTextContent('scan_result');
-		expect(btn).toHaveTextContent('{…}');
+		expect(btn).toHaveTextContent('{...}');
 	});
 
 	it('is open at depth 0 (children visible)', () => {
