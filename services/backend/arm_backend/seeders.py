@@ -67,7 +67,7 @@ async def _seed_admin_user(session: AsyncSession) -> None:
         f" ARM v3 first-boot: default admin credentials\n"
         f" username: {ADMIN_USERNAME}\n"
         f" password: {ADMIN_DEFAULT_PASSWORD}\n"
-        f" You MUST change this on first login — the rest of the API is\n"
+        f" You MUST change this on first login: the rest of the API is\n"
         f" 403'd until you do.\n"
         f"{'=' * 72}\n"
     )
@@ -161,7 +161,7 @@ async def _seed_inapp_channel(session: AsyncSession) -> None:
 RIP_PRESETS: list[dict[str, Any]] = [
     {
         "id": "rpr_builtin_movie_main_feature",
-        "name": "Movie — Main Feature",
+        "name": "Movie: Main Feature",
         "media_type": MediaType.MOVIE,
         "track_selection": TrackSelection.MAIN_FEATURE,
         "identification_mode": IdentificationMode.REQUIRED,
@@ -169,7 +169,7 @@ RIP_PRESETS: list[dict[str, Any]] = [
     },
     {
         "id": "rpr_builtin_movie_all_tracks",
-        "name": "Movie — All Tracks",
+        "name": "Movie: All Tracks",
         "media_type": MediaType.MOVIE,
         "track_selection": TrackSelection.ALL_TRACKS,
         "identification_mode": IdentificationMode.REQUIRED,
@@ -177,7 +177,7 @@ RIP_PRESETS: list[dict[str, Any]] = [
     },
     {
         "id": "rpr_builtin_movie_archive",
-        "name": "Movie — Archive (all tracks + extras)",
+        "name": "Movie: Archive (all tracks + extras)",
         "media_type": MediaType.MOVIE,
         "track_selection": TrackSelection.ARCHIVE,
         "identification_mode": IdentificationMode.REQUIRED,
@@ -185,7 +185,7 @@ RIP_PRESETS: list[dict[str, Any]] = [
     },
     {
         "id": "rpr_builtin_tv_all_tracks",
-        "name": "TV — All Tracks",
+        "name": "TV: All Tracks",
         "media_type": MediaType.TV,
         "track_selection": TrackSelection.ALL_TRACKS,
         "identification_mode": IdentificationMode.REQUIRED,
@@ -193,7 +193,7 @@ RIP_PRESETS: list[dict[str, Any]] = [
     },
     {
         "id": "rpr_builtin_music_standard",
-        "name": "Music — Standard CD",
+        "name": "Music: Standard CD",
         "media_type": MediaType.MUSIC,
         "track_selection": TrackSelection.ALL_TRACKS,
         "identification_mode": IdentificationMode.REQUIRED,
@@ -201,7 +201,7 @@ RIP_PRESETS: list[dict[str, Any]] = [
     },
     {
         "id": "rpr_builtin_data_copy",
-        "name": "Data — Copy",
+        "name": "Data: Copy",
         "media_type": MediaType.DATA,
         "track_selection": TrackSelection.ALL_TRACKS,
         "identification_mode": IdentificationMode.SKIP,
@@ -209,7 +209,7 @@ RIP_PRESETS: list[dict[str, Any]] = [
     },
     {
         "id": "rpr_builtin_iso_dump",
-        "name": "ISO — Full-disc dump",
+        "name": "ISO: Full-disc dump",
         "media_type": MediaType.ISO,
         "track_selection": TrackSelection.ALL_TRACKS,
         "identification_mode": IdentificationMode.SKIP,
@@ -326,7 +326,7 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
 SESSIONS: list[dict[str, Any]] = [
     {
         "id": "ses_builtin_movie_plex_1080p",
-        "name": "Movie → Plex 1080p H.265",
+        "name": "Movie to Plex 1080p H.265",
         "media_type": MediaType.MOVIE,
         "rip_preset_id": "rpr_builtin_movie_main_feature",
         "transcode_preset_id": "tpr_builtin_plex_1080p_h265",
@@ -334,7 +334,7 @@ SESSIONS: list[dict[str, Any]] = [
     },
     {
         "id": "ses_builtin_movie_plex_1080p_gpu",
-        "name": "Movie → Plex 1080p H.265 (GPU preferred)",
+        "name": "Movie to Plex 1080p H.265 (GPU preferred)",
         "media_type": MediaType.MOVIE,
         "rip_preset_id": "rpr_builtin_movie_main_feature",
         "transcode_preset_id": "tpr_builtin_plex_1080p_h265_gpu",
@@ -342,7 +342,7 @@ SESSIONS: list[dict[str, Any]] = [
     },
     {
         "id": "ses_builtin_movie_plex_2160p",
-        "name": "Movie → Plex 2160p HEVC",
+        "name": "Movie to Plex 2160p HEVC",
         "media_type": MediaType.MOVIE,
         "rip_preset_id": "rpr_builtin_movie_main_feature",
         "transcode_preset_id": "tpr_builtin_plex_2160p_hevc",
@@ -350,7 +350,7 @@ SESSIONS: list[dict[str, Any]] = [
     },
     {
         "id": "ses_builtin_movie_archive",
-        "name": "Movie → Archive MKV",
+        "name": "Movie to Archive MKV",
         "media_type": MediaType.MOVIE,
         "rip_preset_id": "rpr_builtin_movie_archive",
         "transcode_preset_id": "tpr_builtin_passthrough_mkv",
@@ -362,7 +362,7 @@ SESSIONS: list[dict[str, Any]] = [
         # disc-equivalent contents in a smaller form, GPU-accelerated when
         # the host has matching silicon and CPU otherwise.
         "id": "ses_builtin_movie_archive_gpu",
-        "name": "Movie → Archive H.265 (GPU preferred)",
+        "name": "Movie to Archive H.265 (GPU preferred)",
         "media_type": MediaType.MOVIE,
         "rip_preset_id": "rpr_builtin_movie_archive",
         "transcode_preset_id": "tpr_builtin_plex_1080p_h265_gpu",
@@ -370,7 +370,7 @@ SESSIONS: list[dict[str, Any]] = [
     },
     {
         "id": "ses_builtin_tv_plex_1080p",
-        "name": "TV → Plex 1080p H.265",
+        "name": "TV to Plex 1080p H.265",
         "media_type": MediaType.TV,
         "rip_preset_id": "rpr_builtin_tv_all_tracks",
         "transcode_preset_id": "tpr_builtin_tv_plex_1080p_h265",
@@ -378,7 +378,7 @@ SESSIONS: list[dict[str, Any]] = [
     },
     {
         "id": "ses_builtin_music_flac",
-        "name": "Music → FLAC",
+        "name": "Music to FLAC",
         "media_type": MediaType.MUSIC,
         "rip_preset_id": "rpr_builtin_music_standard",
         "transcode_preset_id": "tpr_builtin_music_flac",
@@ -386,7 +386,7 @@ SESSIONS: list[dict[str, Any]] = [
     },
     {
         "id": "ses_builtin_music_mp3",
-        "name": "Music → MP3 V0",
+        "name": "Music to MP3 V0",
         "media_type": MediaType.MUSIC,
         "rip_preset_id": "rpr_builtin_music_standard",
         "transcode_preset_id": "tpr_builtin_music_mp3_v0",
@@ -394,7 +394,7 @@ SESSIONS: list[dict[str, Any]] = [
     },
     {
         "id": "ses_builtin_data_copy",
-        "name": "Data — Copy",
+        "name": "Data: Copy",
         "media_type": MediaType.DATA,
         "rip_preset_id": "rpr_builtin_data_copy",
         "transcode_preset_id": "tpr_builtin_data_passthrough",
@@ -402,7 +402,7 @@ SESSIONS: list[dict[str, Any]] = [
     },
     {
         "id": "ses_builtin_iso_dump",
-        "name": "ISO — Full-disc dump",
+        "name": "ISO: Full-disc dump",
         "media_type": MediaType.ISO,
         "rip_preset_id": "rpr_builtin_iso_dump",
         "transcode_preset_id": "tpr_builtin_iso_passthrough",
@@ -412,9 +412,10 @@ SESSIONS: list[dict[str, Any]] = [
 
 
 class _BuiltinRow(Protocol):
-    """Seedable model: has a string id and accepts row dicts plus is_builtin in its ctor."""
+    """Seedable model: has a string id and name and accepts row dicts plus is_builtin in its ctor."""
 
     id: str
+    name: str
 
     def __init__(self, **kwargs: Any) -> None: ...
 
@@ -424,9 +425,16 @@ async def _insert_missing(
     model: type[_BuiltinRow],
     rows: Iterable[dict[str, Any]],
 ) -> None:
+    """Insert built-in rows that are absent. An existing row is left alone
+    except for its name: built-ins are clone-to-edit, so the seeder owns the
+    name and corrects it when the shipped text changes (e.g. the 2026-09
+    special-character cleanup), without a migration."""
     for row in rows:
         existing = (await session.execute(select(model).where(col(model.id) == row["id"]))).scalar_one_or_none()
         if existing is not None:
+            if getattr(existing, "name", None) != row["name"]:
+                existing.name = row["name"]
+                session.add(existing)
             continue
         session.add(model(**row, is_builtin=True))
     await session.flush()

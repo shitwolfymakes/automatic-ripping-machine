@@ -14,7 +14,7 @@ const drive = {
 
 const sessionA = {
   id: 'ses_a',
-  name: 'Movie → Plex 1080p',
+  name: 'Movie to Plex 1080p',
   media_type: 'movie',
   is_builtin: true,
   rip_preset_id: 'rpr_x',
@@ -26,7 +26,7 @@ const sessionA = {
   updated_at: null,
 }
 
-const sessionB = { ...sessionA, id: 'ses_b', name: 'TV → Jellyfin' }
+const sessionB = { ...sessionA, id: 'ses_b', name: 'TV to Jellyfin' }
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -65,7 +65,7 @@ describe('Drives.vue', () => {
     const options = select.findAll('option')
     expect(options.length).toBe(3)
     expect(options[0].text()).toContain('none')
-    expect(options[1].text()).toContain('Movie → Plex 1080p')
-    expect(options[2].text()).toContain('TV → Jellyfin')
+    expect(options[1].text()).toContain('Movie to Plex 1080p')
+    expect(options[2].text()).toContain('TV to Jellyfin')
   })
 })
