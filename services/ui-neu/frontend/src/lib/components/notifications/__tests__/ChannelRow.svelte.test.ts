@@ -45,4 +45,13 @@ describe('ChannelRow', () => {
 		expect(onedit).toHaveBeenCalled();
 		expect(screen.getByText(/plex\.sh/)).toBeInTheDocument();
 	});
+
+	it('Edit click fires onedit but not onexpand', async () => {
+		const onedit = vi.fn();
+		const onexpand = vi.fn();
+		renderComponent(ChannelRow, { props: { channel: ch, serviceName: 'Discord', onedit, onexpand } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+		expect(onedit).toHaveBeenCalled();
+		expect(onexpand).not.toHaveBeenCalled();
+	});
 });

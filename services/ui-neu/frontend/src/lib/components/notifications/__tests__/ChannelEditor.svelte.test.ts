@@ -4,6 +4,7 @@ import ChannelEditor from '../ChannelEditor.svelte';
 import type { Channel, Catalog } from '$lib/types/notifications';
 import type { EventTypeInfo } from '$lib/api/channels';
 import { discordCatalog, appriseChannel, webhookChannel } from './apprise-fixtures';
+import * as channelsApi from '$lib/api/channels';
 
 vi.mock('$lib/api/channels', async (orig) => ({
 	...(await orig<typeof import('$lib/api/channels')>()),
@@ -133,5 +134,44 @@ describe('ChannelEditor', () => {
 		renderEditor(bashChannel);
 		expect(screen.queryByRole('button', { name: 'Send test' })).toBeNull();
 		expect(screen.getByText('Test')).toBeInTheDocument();
+	});
+
+	it('bash editor masks a stored secret input and keeps a non-secret input filled', async () => {
+		vi.mocked(channelsApi.fetchScripts).mockResolvedValueOnce([
+			{ name: 'send-email.sh', executable: true, description: '' }
+		]);
+		vi.mocked(channelsApi.fetchScript).mockResolvedValueOnce({
+			name: 'send-email.sh',
+			executable: true,
+			description: '',
+			size_bytes: 100,
+			modified_at: new Date().toISOString(),
+			preview: '#!/bin/bash',
+			inputs: [
+				{ key: 'TO', label: 'Recipient', required: true, secret: false, default: '', values: null },
+				{ key: 'SMTP_PASS', label: 'SMTP password', required: true, secret: true, default: '', values: null }
+			]
+		});
+		const bashChannel: Channel = {
+			...webhookChannel({ id: 6 }),
+			type: 'bash',
+			config: {
+				type: 'bash',
+				script: 'send-email.sh',
+				timeout_seconds: 30,
+				inputs: { TO: 'me@x', SMTP_PASS: '<hidden>' },
+				secret_keys: ['SMTP_PASS']
+			}
+		};
+		renderEditor(bashChannel);
+
+		const smtpPass = (await screen.findByLabelText('SMTP password')) as HTMLInputElement;
+		expect(smtpPass.type).toBe('password');
+		expect(smtpPass.value).toBe('');
+		expect(smtpPass.placeholder).toMatch(/leave blank to keep/i);
+		expect(smtpPass.required).toBe(false);
+
+		const to = (await screen.findByLabelText('Recipient', { selector: '[aria-label="Recipient"]' })) as HTMLInputElement;
+		expect(to.value).toBe('me@x');
 	});
 });
