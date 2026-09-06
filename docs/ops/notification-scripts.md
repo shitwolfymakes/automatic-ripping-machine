@@ -16,6 +16,20 @@ picked.
     cp docs/ops/examples/send-email.sh arm/scripts/
     chmod +x arm/scripts/send-email.sh
 
+New installs get the directory and the mount from `install.sh`. An install
+that predates this feature has neither until the installer is re-run; to add
+them by hand, create `scripts/` next to `media/` in the install prefix and
+give the `arm-backend` service this volume in `docker-compose.override.yml`
+(then `docker compose up -d arm-backend`):
+
+    services:
+      arm-backend:
+        volumes:
+          - ./scripts:/scripts:ro
+
+Until the mount exists the picker shows "No scripts found" for every file
+you add.
+
 ## Calling convention
 
     /usr/bin/env bash /scripts/<script> "<title>" "<body>"
