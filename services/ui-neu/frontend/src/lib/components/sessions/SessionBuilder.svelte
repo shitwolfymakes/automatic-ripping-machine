@@ -149,12 +149,12 @@
 	role="dialog"
 	aria-modal="true"
 	aria-label={isEdit ? 'Edit session' : 'Create session'}
-	class="flex flex-col gap-5"
+	class="stack stack-lg"
 >
-	<form onsubmit={handleSubmit} class="flex flex-col gap-5">
+	<form onsubmit={handleSubmit} class="stack stack-lg">
 		{#if readOnly}
 			<div
-				class="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-300"
+				class="alert alert-warning"
 				data-testid="sb-builtin-note"
 				role="status"
 			>
@@ -163,35 +163,29 @@
 		{/if}
 
 		<!-- Session name -->
-		<div class="flex flex-col gap-1">
-			<label for="sb-name" class="text-sm font-medium text-gray-700 dark:text-gray-300">
-				Session name
-			</label>
+		<label for="sb-name" class="field">
+			<span class="field-label">Session name</span>
 			<input
 				id="sb-name"
 				type="text"
-				class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
 				bind:value={name}
 				placeholder="e.g. Movies: Archive"
 				disabled={readOnly}
 				required
 			/>
-		</div>
+		</label>
 
 		<!-- Media type segmented control -->
-		<div class="flex flex-col gap-1">
-			<span class="text-sm font-medium text-gray-700 dark:text-gray-300">Media type</span>
-			<div class="flex flex-wrap gap-1">
+		<div class="field">
+			<span class="field-label">Media type</span>
+			<div class="cluster">
 				{#each MEDIA_TYPES as mt (mt.value)}
 					<button
 						type="button"
 						onclick={() => switchMediaType(mt.value)}
 						disabled={isEdit || readOnly}
-						class="rounded-md border px-3 py-1 text-sm font-medium transition-colors
-							{mediaType === mt.value
-								? 'border-primary bg-primary text-white'
-								: 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}
-							disabled:cursor-not-allowed disabled:opacity-50"
+						aria-pressed={mediaType === mt.value}
+						class="chip session-builder-media-chip"
 					>
 						{mt.label}
 					</button>
@@ -200,14 +194,10 @@
 		</div>
 
 		<!-- Rip preset -->
-		<div class="flex flex-col gap-1">
-			<label for="sb-rip" class="text-sm font-medium text-gray-700 dark:text-gray-300">
-				Rip preset
-				<span class="ml-1 text-red-500">*</span>
-			</label>
+		<label for="sb-rip" class="field">
+			<span class="field-label">Rip preset <span class="session-builder-required">*</span></span>
 			<select
 				id="sb-rip"
-				class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
 				value={ripId}
 				onchange={handleRipChange}
 				disabled={readOnly}
@@ -219,17 +209,13 @@
 				{/each}
 				<option value="__create_rip__">+ Create new rip preset...</option>
 			</select>
-		</div>
+		</label>
 
 		<!-- Transcode preset (optional) -->
-		<div class="flex flex-col gap-1">
-			<label for="sb-tc" class="text-sm font-medium text-gray-700 dark:text-gray-300">
-				Transcode preset
-				<span class="ml-1 text-xs text-gray-400">(optional)</span>
-			</label>
+		<label for="sb-tc" class="field">
+			<span class="field-label">Transcode preset <span class="session-builder-optional">(optional)</span></span>
 			<select
 				id="sb-tc"
-				class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
 				value={tcId}
 				onchange={handleTcChange}
 				disabled={readOnly}
@@ -240,14 +226,11 @@
 				{/each}
 				<option value="__create_tc__">+ Create new transcode preset...</option>
 			</select>
-		</div>
+		</label>
 
 		<!-- Output path template -->
-		<div class="flex flex-col gap-1">
-			<label for="sb-path" class="text-sm font-medium text-gray-700 dark:text-gray-300">
-				Output path
-				<span class="ml-1 text-red-500">*</span>
-			</label>
+		<div class="field">
+			<label class="field-label" for="sb-path">Output path <span class="session-builder-required">*</span></label>
 			<OutputPathField
 				id="sb-path"
 				value={template}
@@ -259,44 +242,44 @@
 		</div>
 
 		<!-- Advanced (collapsed) -->
-		<details class="rounded-md border border-gray-200 dark:border-gray-700">
-			<summary class="cursor-pointer select-none px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400">
+		<details class="session-builder-advanced">
+			<summary class="session-builder-advanced-summary">
 				Advanced
 			</summary>
-			<div class="flex flex-col gap-2 px-3 pb-3 pt-2">
-				<label for="sb-overrides" class="text-xs font-medium text-gray-600 dark:text-gray-400">
+			<div class="stack stack-sm session-builder-advanced-body">
+				<label for="sb-overrides" class="field-label session-builder-overrides-label">
 					Overrides JSON
 				</label>
 				<textarea
 					id="sb-overrides"
-					class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-xs text-gray-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+					class="mono field-control"
 					rows="4"
 					bind:value={overridesJson}
 					placeholder={`{"key": "value"}`}
 					disabled={readOnly}
 				></textarea>
 				{#if jsonError}
-					<p class="text-xs text-red-600 dark:text-red-400">{jsonError}</p>
+					<p class="field-error">{jsonError}</p>
 				{/if}
 			</div>
 		</details>
 
 		{#if submitError}
-			<p class="text-sm text-red-600 dark:text-red-400">{submitError}</p>
+			<p class="field-error">{submitError}</p>
 		{/if}
 
 		<!-- Footer -->
-		<div class="flex items-center justify-between gap-3 border-t border-gray-200 pt-4 dark:border-gray-700">
-			<div class="text-xs text-gray-400 dark:text-gray-500">
+		<div class="session-builder-footer">
+			<div class="session-builder-footer-note">
 				{#if !tcId}
 					Rips only, no transcode step.
 				{/if}
 			</div>
-			<div class="flex gap-2">
+			<div class="cluster">
 				<button
 					type="button"
 					onclick={oncancel}
-					class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+					class="btn"
 				>
 					{readOnly ? 'Close' : 'Cancel'}
 				</button>
@@ -304,7 +287,7 @@
 					<button
 						type="submit"
 						disabled={!canSubmit || submitting}
-						class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+						class="btn btn-primary session-builder-submit-btn"
 					>
 						{isEdit ? 'Save changes' : 'Create session'}
 					</button>
@@ -313,3 +296,41 @@
 		</div>
 	</form>
 </div>
+
+<style>
+	/* original: ml-1 text-red-500 (no dark: variant - same shade in both modes).
+	   --color-danger is red-600 in light / red-400 in dark, a mode-dependent
+	   shift the original never had; kept anyway per the migration reference's
+	   own ruling (row 38: "red-600 reads fine as both fill and text") since no
+	   mode-independent danger role exists in spec 5.1. */
+	.session-builder-required { margin-left: 0.25rem; color: var(--color-danger); }
+	/* original: ml-1 text-xs text-gray-400 dark:text-gray-500 - text-faint
+	   already flips gray-400/gray-500 across modes, matching exactly. */
+	.session-builder-optional { margin-left: 0.25rem; font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
+	/* original media-type chips: rounded-md border px-3 py-1 text-sm
+	   font-medium - chip's own radius (--radius-sm), padding (0.125rem
+	   0.375rem) and size (0.75rem) are tuned for the tighter filter-pill look,
+	   so the segmented-control metrics are restated here on top of chip's
+	   base cursor/transition/selected-state colours. */
+	.session-builder-media-chip { border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-surface-raised); padding: 0.25rem 0.75rem; font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text-secondary); }
+	.session-builder-media-chip:hover { background: var(--color-primary-tint-1); }
+	.session-builder-media-chip[aria-pressed="true"] { border-color: var(--color-primary); background: var(--color-primary); color: var(--color-on-primary); }
+	.session-builder-media-chip:disabled { opacity: 0.5; cursor: not-allowed; }
+	/* original: rounded-md border border-gray-200 dark:border-gray-700 - a
+	   plain neutral-bordered disclosure with no equivalent block. */
+	.session-builder-advanced { border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+	.session-builder-advanced-summary { cursor: pointer; user-select: none; padding: 0.5rem 0.75rem; font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text-secondary); }
+	.session-builder-advanced-body { padding: 0.5rem 0.75rem 0.75rem; }
+	/* original: text-xs font-medium text-gray-600 dark:text-gray-400
+	   (12px/16px) - field-label's own default is 0.875rem/1.25rem/600, tuned
+	   for a top-level field label, not this smaller nested-textarea caption. */
+	.session-builder-overrides-label { font-size: 0.75rem; line-height: 1rem; font-weight: 500; color: var(--color-text-secondary); }
+	.session-builder-footer { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; border-top: 1px solid var(--color-border); padding-top: 1rem; }
+	.session-builder-footer-note { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
+	/* original submit button: rounded-md bg-primary ... - no border/ring class
+	   at all. .btn-primary's own 1px border is invisible (same colour as the
+	   fill) but still occupies 2px of layout height, and its default radius
+	   is --radius-lg, not the original's smaller --radius-md (Task 9/10
+	   finding: a bare fill button with no border class needs border: 0). */
+	.session-builder-submit-btn { border: 0; border-radius: var(--radius-md); }
+</style>

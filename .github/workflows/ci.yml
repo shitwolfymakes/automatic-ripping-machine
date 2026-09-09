@@ -159,6 +159,11 @@ jobs:
           cache-dependency-path: services/ui-neu/frontend/package-lock.json
       - run: npm ci
       - run: npm run check
+      # style lint: bans inline utility styling outside the allowed layout
+      # families (see devtools/ui-neu-style-lint.mjs and docs/ui-neu-theming.md)
+      - run: node --test devtools/ui-neu-style-lint.test.mjs
+        working-directory: .
+      - run: npm run lint:styles
 
   test-ui-neu:
     name: test (ui-neu — vitest)

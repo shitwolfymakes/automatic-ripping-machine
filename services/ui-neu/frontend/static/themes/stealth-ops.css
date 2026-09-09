@@ -8,7 +8,7 @@
 	text-transform: uppercase;
 	letter-spacing: 0.2em;
 }
-[data-scheme="stealth-ops"] aside nav a[data-active="true"] {
+[data-scheme="stealth-ops"] aside .nav-item[data-active="true"] {
 	color: #ef4444 !important;
 	background: transparent !important;
 	border-right: 2px solid #ef4444;

@@ -1,0 +1,21 @@
+/* card: a record summary (job, drive, transcode).
+   Elements: card-header, card-title, card-body, card-footer, card-accent (the
+   status stripe).
+   Modifiers: card-status (accent colour from data-status).
+   State: [data-status], [data-selected="true"]. */
+@layer components {
+	.card { position: relative; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); box-shadow: var(--shadow-1); overflow: hidden; }
+	.card[data-selected="true"] { border-color: var(--color-primary); }
+	.card-header { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-bottom: 1px solid var(--color-border); }
+	.card-title { font-size: 0.875rem; font-weight: 600; color: var(--color-text); }
+	.card-body { padding: 0.75rem 1rem; }
+	.card-footer { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-top: 1px solid var(--color-border); }
+	.card-status, .card-accent { border-left: 4px solid var(--color-text-faint); }
+	.card-status[data-status="scanning"] { border-left-color: var(--color-status-scanning); }
+	.card-status[data-status="ripping"] { border-left-color: var(--color-status-ripping); }
+	.card-status[data-status="transcoding"] { border-left-color: var(--color-status-transcoding); }
+	.card-status[data-status="finishing"] { border-left-color: var(--color-status-finishing); }
+	.card-status[data-status="waiting"] { border-left-color: var(--color-status-waiting); }
+	.card-status[data-status="completed"], .card-status[data-status="success"] { border-left-color: var(--color-status-success); }
+	.card-status[data-status="failed"], .card-status[data-status="error"] { border-left-color: var(--color-status-error); }
+}

@@ -74,102 +74,109 @@
 	}
 </script>
 
-<div class="border-t border-primary/20 p-4 dark:border-primary/20">
+<div class="job-info-form">
 	{#if !resolvable}
-		<p class="mb-3 text-xs text-gray-500 dark:text-gray-400">
+		<p class="field-help mb-3">
 			Identity is locked once the disc is identified. Use Search to re-identify.
 		</p>
 	{/if}
 
 	<!-- Identity section -->
-	<p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Identity</p>
+	<p class="eyebrow mb-2">Identity</p>
 	<div class="flex gap-3">
-		<div class="flex-1">
-			<label for="info-title-{job.id}" class="block text-xs font-medium text-gray-600 dark:text-gray-300">Title</label>
+		<label class="field flex-1">
+			<span class="field-label job-info-form-small-label">Title</span>
 			<input
-				id="info-title-{job.id}"
 				aria-label="Title"
 				type="text"
 				bind:value={title}
 				oninput={() => (touched = { ...touched, title: true })}
 				disabled={!resolvable}
-				class="mt-1 w-full rounded-md border border-primary/25 bg-primary/5 px-2 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary disabled:opacity-50 dark:border-primary/30 dark:bg-primary/10 dark:text-white"
 			/>
-		</div>
-		<div class="w-24">
-			<label for="info-year-{job.id}" class="block text-xs font-medium text-gray-600 dark:text-gray-300">Year</label>
+		</label>
+		<label class="field w-24">
+			<span class="field-label job-info-form-small-label">Year</span>
 			<input
-				id="info-year-{job.id}"
 				aria-label="Year"
 				type="number"
 				bind:value={year}
 				oninput={() => (touched = { ...touched, year: true })}
 				disabled={!resolvable}
-				class="mt-1 w-full rounded-md border border-primary/25 bg-primary/5 px-2 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary disabled:opacity-50 dark:border-primary/30 dark:bg-primary/10 dark:text-white"
 			/>
-		</div>
+		</label>
 	</div>
 
 	<!-- Disc section -->
-	<p class="mb-2 mt-4 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Disc</p>
+	<p class="eyebrow mb-2 mt-4">Disc</p>
 	<div class="flex gap-3">
-		<div class="w-28">
-			<label for="info-discno-{job.id}" class="block text-xs font-medium text-gray-600 dark:text-gray-300">Disc number</label>
+		<label class="field w-28">
+			<span class="field-label job-info-form-small-label">Disc number</span>
 			<input
-				id="info-discno-{job.id}"
 				aria-label="Disc number"
 				type="number"
 				bind:value={discNumber}
 				oninput={() => (touched = { ...touched, discNumber: true })}
 				disabled={!resolvable}
 				placeholder="-"
-				class="mt-1 w-full rounded-md border border-primary/25 bg-primary/5 px-2 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary disabled:opacity-50 dark:border-primary/30 dark:bg-primary/10 dark:text-white"
 			/>
-		</div>
-		<div class="w-28">
-			<label for="info-disctot-{job.id}" class="block text-xs font-medium text-gray-600 dark:text-gray-300">Disc total</label>
+		</label>
+		<label class="field w-28">
+			<span class="field-label job-info-form-small-label">Disc total</span>
 			<input
-				id="info-disctot-{job.id}"
 				aria-label="Disc total"
 				type="number"
 				bind:value={discTotal}
 				oninput={() => (touched = { ...touched, discTotal: true })}
 				disabled={!resolvable}
 				placeholder="-"
-				class="mt-1 w-full rounded-md border border-primary/25 bg-primary/5 px-2 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary disabled:opacity-50 dark:border-primary/30 dark:bg-primary/10 dark:text-white"
 			/>
-		</div>
+		</label>
 	</div>
-	<p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+	<p class="field-help mt-1.5">
 		For multi-disc sets (box sets, TV seasons) set this disc's position. Leave blank for a single disc.
 	</p>
 
 	<!-- Save bar (metadata): appears when there are unsaved edits -->
 	{#if dirty && resolvable}
-		<div class="mt-3 flex items-center gap-2 border-t border-primary/10 pt-3 dark:border-primary/15">
+		<div class="mt-3 flex items-center gap-2 job-info-form-save-bar">
 			{#if $isAdmin}
 				<button
 					onclick={saveInfo}
 					disabled={saving || !title.trim()}
-					class="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-on-primary hover:bg-primary/90 disabled:opacity-50"
+					class="btn btn-primary job-info-form-save-btn"
 				>
 					{saving ? 'Saving...' : 'Save'}
 				</button>
 				<button
 					onclick={resetInfo}
 					disabled={saving}
-					class="rounded-md px-3 py-1.5 text-sm text-gray-600 ring-1 ring-primary/25 hover:bg-primary/5 disabled:opacity-50 dark:text-gray-300 dark:ring-primary/30"
+					class="btn job-info-form-reset-btn"
 				>
 					Reset
 				</button>
 			{/if}
 			{#if feedback}
-				<span in:reveal class="ml-auto text-xs {feedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{feedback.message}</span>
+				<span in:reveal class="ml-auto job-info-form-feedback" data-tone={feedback.type}>{feedback.message}</span>
 			{/if}
 		</div>
 	{:else if feedback}
-		<div class="mt-3 border-t border-primary/10 pt-3 dark:border-primary/15">
-			<span in:reveal class="text-xs {feedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{feedback.message}</span>
+		<div class="mt-3 job-info-form-save-bar">
+			<span in:reveal class="job-info-form-feedback" data-tone={feedback.type}>{feedback.message}</span>
 		</div>
 	{/if}
 </div>
+
+<style>
+	.job-info-form { border-top: 1px solid var(--color-border); padding: 1rem; }
+	/* the original labels were text-xs (12px/16px), one size down from
+	   field-label's default text-sm (14px/20px) */
+	.job-info-form-small-label { font-size: 0.75rem; line-height: 1rem; }
+	.job-info-form-save-bar { border-top: 1px solid var(--color-border); padding-top: 0.75rem; }
+	/* Save was px-4 py-1.5 (1rem/0.375rem) no border; Reset px-3 py-1.5
+	   (0.75rem/0.375rem) with a ring, not .btn's real border */
+	.job-info-form-save-btn { border: 0; padding: 0.375rem 1rem; }
+	.job-info-form-reset-btn { border: 0; padding: 0.375rem 0.75rem; box-shadow: 0 0 0 1px var(--color-border-strong); color: var(--color-text-secondary); }
+	.job-info-form-feedback { font-size: 0.75rem; line-height: 1rem; }
+	.job-info-form-feedback[data-tone="success"] { color: var(--color-success); }
+	.job-info-form-feedback[data-tone="error"] { color: var(--color-danger); }
+</style>

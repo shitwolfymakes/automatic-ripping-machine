@@ -1,0 +1,16 @@
+/* glyph: a small square tile holding a symbol or two-letter mark.
+   Modifiers: glyph-sm, glyph-md (default), glyph-lg; glyph-danger, glyph-warning,
+   glyph-success, glyph-info tint the tile.
+   State: [data-glyph] names the glyph (existing). */
+@layer components {
+	.glyph, .glyph-md { display: inline-flex; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; flex-shrink: 0; border-radius: var(--radius-md); background: var(--color-primary-tint-2); color: var(--color-primary-text); font-family: var(--font-mono); font-size: 0.75rem; }
+	.glyph svg { width: 1rem; height: 1rem; }
+	.glyph-sm { width: 1.25rem; height: 1.25rem; font-size: 0.625rem; }
+	.glyph-sm svg { width: 0.75rem; height: 0.75rem; }
+	.glyph-lg { width: 2.5rem; height: 2.5rem; font-size: 1rem; }
+	.glyph-lg svg { width: 1.5rem; height: 1.5rem; }
+	.glyph-danger { background: var(--color-danger-soft); color: var(--color-on-danger-soft); }
+	.glyph-warning { background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
+	.glyph-success { background: var(--color-success-soft); color: var(--color-on-success-soft); }
+	.glyph-info { background: var(--color-info-soft); color: var(--color-on-info-soft); }
+}

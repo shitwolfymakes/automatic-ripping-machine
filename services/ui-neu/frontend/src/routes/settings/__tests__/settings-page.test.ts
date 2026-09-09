@@ -279,7 +279,7 @@ describe('Settings Page', () => {
 				expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus();
 			});
 			expect(scrollIntoView).toHaveBeenCalled();
-			expect(screen.getByTestId('setting-tmdb_api_key').className).toContain('ring-2');
+			expect(screen.getByTestId('setting-tmdb_api_key').className).toContain('settings-field-highlight');
 		});
 
 		it('renders the Metadata config tab with the provider select', async () => {
@@ -290,7 +290,7 @@ describe('Settings Page', () => {
 
 		it('renders the Ripping config tab', async () => {
 			await renderAndWait();
-			await fireEvent.click(screen.getByRole('button', { name: 'Ripping' }));
+			await fireEvent.click(screen.getByRole('tab', { name: 'Ripping' }));
 			await waitFor(() => expect(screen.getByRole('checkbox', { name: /auto-rip on insert/i })).toBeInTheDocument());
 		});
 
@@ -301,7 +301,7 @@ describe('Settings Page', () => {
 
 		it('renders a Sessions tab', async () => {
 			await renderAndWait();
-			expect(screen.getByRole('button', { name: 'Sessions' })).toBeInTheDocument();
+			expect(screen.getByRole('tab', { name: 'Sessions' })).toBeInTheDocument();
 		});
 
 		it('does not render a Rip Presets tab', async () => {

@@ -48,17 +48,17 @@
 	     a containing block (transform/filter/backdrop-filter/will-change). -->
 	<div use:portal>
 		<!-- Backdrop -->
-		<div role="presentation" class="fixed inset-0 z-40 bg-black/40" onclick={close}></div>
+		<div role="presentation" class="slide-over-scrim fixed inset-0" onclick={close}></div>
 
 		<!-- Panel -->
 		<div
 			role="dialog"
 			aria-modal="true"
 			aria-label={title}
-			class="fixed inset-y-0 right-0 z-50 flex w-full {width} flex-col bg-white shadow-xl dark:bg-gray-900"
+			class="slide-over-panel slide-over-panel-fixed fixed flex {width}"
 		>
-			<div class="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
-				<h2 class="text-lg font-semibold text-gray-900 dark:text-white">{title}</h2>
+			<div class="slide-over-header">
+				<h2 class="modal-title">{title}</h2>
 				<div class="flex items-center gap-2">
 					{#if headerActions}{@render headerActions()}{/if}
 					<CloseButton onclick={close} />
@@ -71,3 +71,21 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	/* SlideOver renders the backdrop and panel as two separate portaled
+	   elements (not slide-over.css's single flex-end wrapper), so it needs
+	   its own fixed positioning + z-index; the panel keeps slide-over-panel's
+	   surface/border/shadow via that shared class. */
+	.slide-over-scrim {
+		z-index: 40;
+		background: var(--color-backdrop);
+	}
+	.slide-over-panel-fixed {
+		z-index: 50;
+		top: 0;
+		bottom: 0;
+		right: 0;
+		flex-direction: column;
+	}
+</style>

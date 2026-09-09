@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { Catalog, CatalogService } from '$lib/types/notifications';
-	import { FIELD_INPUT_CLASS } from '$lib/types/notifications';
 	import ServiceGlyph from './ServiceGlyph.svelte';
 
 	let {
@@ -45,41 +44,42 @@
 	});
 </script>
 
-<div class="relative" bind:this={rootEl}>
+<div class="service-dropdown" bind:this={rootEl}>
 	<button
 		type="button"
 		onclick={() => (open = !open)}
-		class="flex w-full items-center justify-between rounded-md border border-primary/25 bg-primary/5 px-3 py-2.5 text-left text-sm hover:border-primary dark:border-primary/30 dark:bg-primary/10"
+		aria-expanded={open}
+		class="service-dropdown-trigger"
 	>
 		{#if selected}
-			<span class="flex items-center gap-2">
+			<span class="cluster">
 				<ServiceGlyph id={selected.id} name={selected.name} size={22} />
-				<span class="text-gray-800 dark:text-gray-100">{selected.name}</span>
+				<span class="service-dropdown-name">{selected.name}</span>
 			</span>
 		{:else}
-			<span class="text-gray-500 dark:text-gray-400">Select a service...</span>
+			<span class="service-dropdown-placeholder">Select a service...</span>
 		{/if}
-		<svg class="h-4 w-4 transform transition-transform {open ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+		<svg class="service-dropdown-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
 	</button>
 
 	{#if open}
-		<div class="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-primary/25 bg-surface shadow-2xl dark:border-primary/30 dark:bg-surface-dark">
-			<div class="p-2">
+		<div class="service-dropdown-panel">
+			<div class="service-dropdown-search">
 				<!-- svelte-ignore a11y_autofocus -->
-				<input type="search" placeholder="Search services" bind:value={search} autofocus class="w-full {FIELD_INPUT_CLASS}" />
+				<input type="search" placeholder="Search services" bind:value={search} autofocus class="field-control" />
 			</div>
-			<ul class="max-h-[280px] overflow-y-auto py-1">
+			<ul class="service-dropdown-list">
 				{#if filtered}
 					{#each filtered as svc (svc.id)}
 						{@render option(svc)}
 					{/each}
 					{#if filtered.length === 0}
-						<li class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">No services match "{search}".</li>
+						<li class="service-dropdown-empty">No services match "{search}".</li>
 					{/if}
 				{:else}
-					<li class="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">Featured</li>
+					<li class="eyebrow service-dropdown-group">Featured</li>
 					{#each featured as svc (svc.id)}{@render option(svc)}{/each}
-					<li class="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500 dark:text-gray-400">All services</li>
+					<li class="eyebrow service-dropdown-group service-dropdown-group-muted">All services</li>
 					{#each rest as svc (svc.id)}{@render option(svc)}{/each}
 				{/if}
 			</ul>
@@ -92,11 +92,57 @@
 		<button
 			type="button"
 			onclick={() => choose(svc.id)}
-			class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-primary/10 dark:hover:bg-primary/15 {svc.id === selectedId ? 'bg-primary/15' : ''}"
+			class="flyout-item"
+			aria-pressed={svc.id === selectedId}
 		>
 			<ServiceGlyph id={svc.id} name={svc.name} size={22} />
-			<span class="text-gray-800 dark:text-gray-100">{svc.name}</span>
-			<span class="ml-auto font-mono text-[10.5px] text-gray-500">{svc.url_scheme}://</span>
+			<span class="service-dropdown-name">{svc.name}</span>
+			<span class="mono service-dropdown-scheme">{svc.url_scheme}://</span>
 		</button>
 	</li>
 {/snippet}
+
+<style>
+	/* The panel anchors under the trigger button (relative/absolute), unlike
+	   the Flyout primitive's viewport-fixed positioning, so it stays a local
+	   class rather than .flyout. */
+	.service-dropdown { position: relative; }
+	.service-dropdown-trigger {
+		display: flex;
+		width: 100%;
+		align-items: center;
+		justify-content: space-between;
+		border: 1px solid var(--color-border-strong);
+		border-radius: var(--radius-md);
+		background: var(--color-primary-tint-1);
+		padding: 0.625rem 0.75rem;
+		text-align: left;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text);
+		cursor: pointer;
+	}
+	.service-dropdown-trigger:hover { border-color: var(--color-primary); }
+	.service-dropdown-name { color: var(--color-text-secondary); }
+	.service-dropdown-placeholder { color: var(--color-text-muted); }
+	.service-dropdown-chevron { width: 1rem; height: 1rem; flex-shrink: 0; transition: transform var(--motion-fast) var(--ease); }
+	.service-dropdown-trigger[aria-expanded="true"] .service-dropdown-chevron { transform: rotate(180deg); }
+	.service-dropdown-panel {
+		position: absolute;
+		z-index: 20;
+		margin-top: 0.25rem;
+		width: 100%;
+		overflow: hidden;
+		border: 1px solid var(--color-border-strong);
+		border-radius: var(--radius-md);
+		background: var(--color-surface-raised);
+		box-shadow: var(--shadow-2);
+	}
+	.service-dropdown-search { padding: 0.5rem; }
+	.service-dropdown-list { max-height: 280px; overflow-y: auto; padding: 0.25rem 0; }
+	.service-dropdown-empty { padding: 0.5rem 0.75rem; font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	.service-dropdown-group { padding: 0.5rem 0.75rem 0.25rem; }
+	.service-dropdown-group-muted { color: var(--color-text-muted); }
+	.service-dropdown-scheme { margin-left: auto; font-size: 10.5px; color: var(--color-text-muted); }
+	.service-dropdown-list .flyout-item[aria-pressed="true"] { background: var(--color-primary-tint-3); }
+</style>

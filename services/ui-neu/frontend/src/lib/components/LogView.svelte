@@ -64,36 +64,46 @@
 
 	const isFiltered = $derived(filtered.length !== entries.length);
 
-	function segment(active: boolean): string {
-		return `rounded-md px-3 py-1.5 text-xs font-medium ${
-			active
-				? 'bg-primary text-on-primary'
-				: 'bg-primary/10 text-gray-600 hover:bg-primary/15 dark:bg-primary/15 dark:text-gray-300'
-		}`;
-	}
-
-	function chipClass(service: LogService): string {
+	// Backend/ripper/transcode have no four-tone match; ripper takes the
+	// warning tone (closest to the original's amber), transcode has no tone
+	// at all so it takes an accent token (accent-3 violet, matching the
+	// Series video-type hue's precedent for an untoned axis), backend keeps
+	// the primary-tinted default the "info-ish" original already used.
+	function chipVar(service: LogService): string {
 		switch (service) {
 			case 'backend':
-				return 'bg-primary/15 text-primary-text dark:bg-primary/20 dark:text-primary-text-dark';
+				return 'var(--color-primary-tint-3)';
 			case 'ripper':
-				return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
+				return 'var(--color-warning-soft)';
 			case 'transcode':
-				return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400';
+				return 'color-mix(in srgb, var(--color-accent-3) 15%, transparent)';
 			default:
-				return 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300';
+				return 'var(--color-primary-tint-2)';
 		}
 	}
 
-	function levelClass(level: string): string {
+	function chipTextVar(service: LogService): string {
+		switch (service) {
+			case 'backend':
+				return 'var(--color-primary-text)';
+			case 'ripper':
+				return 'var(--color-on-warning-soft)';
+			case 'transcode':
+				return 'var(--color-accent-3)';
+			default:
+				return 'var(--color-text-secondary)';
+		}
+	}
+
+	function levelTone(level: string): 'warning' | 'danger' | null {
 		switch ((level ?? '').toLowerCase()) {
 			case 'warning':
-				return 'text-amber-400';
+				return 'warning';
 			case 'error':
 			case 'critical':
-				return 'text-red-400';
+				return 'danger';
 			default:
-				return 'text-gray-300';
+				return null;
 		}
 	}
 
@@ -133,7 +143,7 @@
 
 <div class="flex flex-col gap-3">
 	<div class="flex flex-wrap items-center gap-2">
-		<div class="flex gap-1 rounded-lg bg-primary/5 p-1 dark:bg-primary/10" role="radiogroup" aria-label="Log filter">
+		<div class="log-view-segment-group" role="radiogroup" aria-label="Log filter">
 			{#each SERVICE_FILTERS as f}
 				<button
 					type="button"
@@ -143,11 +153,11 @@
 					onclick={() => {
 						serviceFilter = f.key;
 					}}
-					class={segment(serviceFilter === f.key)}
+					class="log-view-segment"
 				>{f.label}</button>
 			{/each}
 		</div>
-		<div class="flex gap-1 rounded-lg bg-primary/5 p-1 dark:bg-primary/10" role="radiogroup" aria-label="Log level filter">
+		<div class="log-view-segment-group" role="radiogroup" aria-label="Log level filter">
 			{#each LEVEL_FILTERS as f}
 				<button
 					type="button"
@@ -157,7 +167,7 @@
 					onclick={() => {
 						levelFilter = f.key;
 					}}
-					class={segment(levelFilter === f.key)}
+					class="log-view-segment"
 				>{f.label}</button>
 			{/each}
 		</div>
@@ -167,37 +177,37 @@
 				bind:value={searchText}
 				placeholder="Filter lines"
 				data-testid="job-log-search"
-				class="ml-auto rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-sm dark:border-primary/30 dark:bg-primary/10 dark:text-white"
+				class="ml-auto field-control log-view-search"
 			/>
 		{/if}
 	</div>
 
 	{#if isFiltered}
-		<p data-testid="job-log-count" class="text-xs text-gray-500 dark:text-gray-400">
+		<p data-testid="job-log-count" class="field-help">
 			Showing {filtered.length} of {entries.length} lines
 		</p>
 	{/if}
 
 	{#if error}
-		<p class="text-sm text-red-600 dark:text-red-400">{error.message}</p>
+		<p class="log-view-message" data-tone="error">{error.message}</p>
 	{:else if entries.length === 0}
-		<p class="text-sm text-gray-500 dark:text-gray-400">No log lines for this job yet.</p>
+		<p class="log-view-message">No log lines for this job yet.</p>
 	{:else}
 		<div class="relative">
 			<div
 				bind:this={viewEl}
 				onscroll={onScroll}
 				data-testid="job-log-view"
-				class="{maxHeightClass} overflow-y-auto rounded-lg border border-primary/20 bg-black/90 p-3 font-mono text-xs dark:border-primary/20"
+				class="{maxHeightClass} log-view-terminal"
 			>
 				{#each filtered as entry, i (i)}
 					{@const svc = logService(entry.service)}
 					<div class="flex items-start gap-2 py-0.5" data-testid="job-log-line" data-service={svc}>
-						<span class="shrink-0 text-gray-500 tabular-nums">{timeLabel(entry)}</span>
-						<span class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold {chipClass(svc)}">
+						<span class="shrink-0 log-view-time mono">{timeLabel(entry)}</span>
+						<span class="shrink-0 log-view-chip" style:--chip-bg={chipVar(svc)} style:--chip-text={chipTextVar(svc)}>
 							{serviceLabel(svc)}
 						</span>
-						<span class="break-all {levelClass(entry.level)}">{entry.event}</span>
+						<span class="break-all log-view-line" data-tone={levelTone(entry.level)}>{entry.event}</span>
 					</div>
 				{/each}
 			</div>
@@ -206,7 +216,7 @@
 					type="button"
 					onclick={jumpToLatest}
 					data-testid="job-log-jump"
-					class="absolute bottom-3 right-3 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-on-primary shadow-md"
+					class="btn btn-primary btn-sm log-view-jump"
 				>
 					Jump to latest
 				</button>
@@ -214,3 +224,32 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	.log-view-segment-group { display: flex; gap: 0.25rem; border-radius: var(--radius-lg); background: var(--color-primary-tint-1); padding: 0.25rem; }
+	.log-view-segment { border-radius: var(--radius-md); padding: 0.375rem 0.75rem; font-size: 0.75rem; line-height: 1rem; font-weight: 500; color: var(--color-text-secondary); background: transparent; transition: background-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease); }
+	.log-view-segment:hover { background: var(--color-primary-tint-2); }
+	.log-view-segment[aria-checked="true"] { background: var(--color-primary); color: var(--color-on-primary); }
+	.log-view-search { width: auto; }
+	.log-view-message { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	.log-view-message[data-tone="error"] { color: var(--color-danger); }
+	/* the original terminal background was an unqualified bg-black/90 (same
+	   in both modes); --color-on-frame-accent is the only mode-independent
+	   pure-black token, composed here via color-mix for the 90% opacity */
+	.log-view-terminal { overflow-y: auto; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: color-mix(in srgb, var(--color-on-frame-accent) 90%, transparent); padding: 0.75rem; font-family: var(--font-mono); font-size: 0.75rem; line-height: 1rem; }
+	/* the terminal surface is fixed near-black in both modes (see
+	   .log-view-terminal above); its text must stay a fixed light shade too,
+	   not the theme-flipping --color-text-* roles - --color-on-primary is
+	   the only mode-independent pure-white token, composed via color-mix for
+	   each line's original grayscale/tone shade */
+	.log-view-time { color: color-mix(in srgb, var(--color-on-primary) 62%, transparent); }
+	/* Tailwind's arbitrary text-[10px] still carries its own default
+	   line-height ratio (1.3333, i.e. 4/3 - not the ancestor's inherited
+	   1rem/16px); dropping the utility silently lost that, shrinking the
+	   chip (and with it every log row's height) by a few px per row. */
+	.log-view-chip { border-radius: var(--radius-sm); padding: 0.125rem 0.375rem; font-size: 10px; line-height: 1.3333333333333333; font-weight: 600; background: var(--chip-bg); color: var(--chip-text); }
+	.log-view-line { color: color-mix(in srgb, var(--color-on-primary) 82%, transparent); }
+	.log-view-line[data-tone="warning"] { color: var(--color-warning); }
+	.log-view-line[data-tone="danger"] { color: var(--color-danger); }
+	.log-view-jump { position: absolute; bottom: 0.75rem; right: 0.75rem; box-shadow: var(--shadow-2); }
+</style>

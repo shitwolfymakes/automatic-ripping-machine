@@ -180,87 +180,81 @@
 	}
 </script>
 
-<div class="fixed inset-0 z-50 flex items-center justify-center">
+<div class="modal">
 	<button
 		type="button"
-		class="absolute inset-0 bg-black/50"
+		class="apply-session-scrim"
 		aria-label="Close dialog"
 		onclick={onclose}
 	></button>
 
 	<div
-		class="relative z-10 w-full max-w-md rounded-lg bg-surface p-6 shadow-xl dark:bg-surface-dark"
+		class="modal-panel modal-wide apply-session-panel"
 		data-dialog
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="apply-session-title"
 	>
-		<h3 id="apply-session-title" class="text-lg font-semibold text-gray-900 dark:text-white">
+		<h3 id="apply-session-title" class="modal-title">
 			Apply session to job
 		</h3>
 
 		{#if error}
-			<p class="mt-2 text-sm text-red-600 dark:text-red-400" data-testid="apply-session-error">
+			<p class="field-error apply-session-error" data-testid="apply-session-error">
 				{error}
 			</p>
 		{/if}
 
 		{#if collisions.length === 0}
-			<div class="mt-4">
-				<label
-					for="apply-session-select"
-					class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-				>
-					Session
-				</label>
+			<label class="field apply-session-select-field">
+				<span class="field-label">Session</span>
 				<select
 					id="apply-session-select"
 					data-testid="apply-session-select"
 					bind:value={selected}
-					class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
 				>
 					<option value="" disabled>Choose...</option>
 					{#each filteredSessions as s (s.id)}
 						<option value={s.id}>{s.name} ({s.media_type})</option>
 					{/each}
 				</select>
-			</div>
+			</label>
 
 			{#if selectedSession}
 				<div
 					data-testid="recipe-preview"
-					class="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800/60"
+					class="code-block apply-session-recipe"
 				>
-					<p class="font-medium text-gray-700 dark:text-gray-300">Recipe</p>
-					<dl class="mt-1 space-y-0.5 text-gray-600 dark:text-gray-400">
-						<div class="flex gap-1">
-							<dt class="shrink-0">Rip:</dt>
-							<dd data-testid="recipe-rip-preset" class="truncate text-gray-900 dark:text-gray-100">
+					<p class="apply-session-recipe-title">Recipe</p>
+					<dl class="apply-session-recipe-list">
+						<div class="apply-session-recipe-row">
+							<dt class="apply-session-recipe-dt">Rip:</dt>
+							<dd data-testid="recipe-rip-preset" class="apply-session-recipe-dd">
 								{selectedRipPreset?.name ?? selectedSession.rip_preset_id}
 							</dd>
 						</div>
-						<div class="flex gap-1">
-							<dt class="shrink-0">Transcode:</dt>
+						<div class="apply-session-recipe-row">
+							<dt class="apply-session-recipe-dt">Transcode:</dt>
 							<dd
 								data-testid="recipe-transcode-preset"
-								class="truncate text-gray-900 dark:text-gray-100"
+								class="apply-session-recipe-dd"
 							>
 								{selectedTranscodePreset?.name ?? 'No transcode'}
 							</dd>
 						</div>
-						<div class="flex flex-col gap-1">
-							<dt class="shrink-0">Output:</dt>
-							<dd data-testid="recipe-output-path" class="font-mono text-xs text-gray-900 dark:text-gray-100">
+						<div class="apply-session-recipe-row apply-session-recipe-row-col">
+							<dt class="apply-session-recipe-dt">Output:</dt>
+							<dd data-testid="recipe-output-path" class="apply-session-recipe-dd apply-session-recipe-output">
 								{#if previewLoading}
-									<span class="text-gray-400">Resolving...</span>
+									<span class="apply-session-recipe-faint">Resolving...</span>
 								{:else if preview}
-									<ul class="space-y-0.5">
+									<ul class="apply-session-recipe-output-list">
 										{#each preview.items as item (item.track_id)}
-											<li class="truncate" title={item.output_path}>{item.output_path}</li>
+											<li class="apply-session-recipe-output-item" title={item.output_path}>{item.output_path}</li>
 										{/each}
 									</ul>
 									{#if preview.items.length === 0}
-										<span class="text-gray-400">No tracks to transcode with this session.</span>
+										<span class="apply-session-recipe-faint">No tracks to transcode with this session.</span>
 									{/if}
 								{/if}
 							</dd>
@@ -270,9 +264,9 @@
 				{#if previewProblem}
 					<p
 						data-testid="recipe-output-problem"
-						class="mt-2 flex items-start gap-1.5 text-sm text-amber-700 dark:text-amber-400"
+						class="apply-session-problem"
 					>
-						<svg class="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<svg class="apply-session-problem-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
 						</svg>
 						<span>{previewProblem}</span>
@@ -280,11 +274,11 @@
 				{/if}
 			{/if}
 
-			<div class="mt-4 flex justify-end gap-3">
+			<div class="modal-actions">
 				<button
 					type="button"
 					onclick={onclose}
-					class="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+					class="btn btn-ghost"
 				>
 					Cancel
 				</button>
@@ -293,43 +287,43 @@
 					data-testid="apply-session-apply"
 					disabled={!selected || submitting || previewLoading || previewProblem !== null}
 					onclick={() => applyOnce(false)}
-					class="confirm-btn-primary rounded-lg px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+					class="btn btn-primary"
 				>
 					{submitting ? 'Applying...' : 'Apply'}
 				</button>
 			</div>
 		{:else}
-			<p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+			<p class="apply-session-collision-intro">
 				This session can't be applied because of path collisions:
 			</p>
-			<ul class="mt-2 space-y-1 text-sm">
+			<ul class="apply-session-collision-list">
 				{#each collisions as c (c.output_path + c.reason)}
 					<li>
-						<code class="text-gray-900 dark:text-gray-100">{c.output_path}</code>
-						<span class="text-gray-500 dark:text-gray-400">({collisionLabel(c.reason)})</span>
+						<code class="mono apply-session-collision-path">{c.output_path}</code>
+						<span class="apply-session-recipe-faint">({collisionLabel(c.reason)})</span>
 					</li>
 				{/each}
 			</ul>
 
 			{#if hasDuplicateInRequest}
-				<p class="mt-3 text-sm text-gray-500 dark:text-gray-400">
+				<p class="apply-session-collision-note">
 					Two or more tracks resolve to the same output path - the session's template doesn't
 					differentiate per track. Pick a session whose template includes <code>{'{track}'}</code>
 					(e.g. <em>Movie -> Archive MKV</em>), or rip with a single-track preset.
 					<strong>Overwrite</strong> won't help here.
 				</p>
 			{:else}
-				<p class="mt-3 text-sm text-gray-500 dark:text-gray-400">
+				<p class="apply-session-collision-note">
 					Confirm <strong>Overwrite</strong> to queue anyway. The transcoder writes to
 					<code>.arm-inprogress</code> first, so partial writes never replace the existing file.
 				</p>
 			{/if}
 
-			<div class="mt-4 flex justify-end gap-3">
+			<div class="modal-actions">
 				<button
 					type="button"
 					onclick={onclose}
-					class="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+					class="btn btn-ghost"
 				>
 					Cancel
 				</button>
@@ -339,7 +333,7 @@
 						data-testid="apply-session-overwrite"
 						disabled={submitting}
 						onclick={() => applyOnce(true)}
-						class="confirm-btn-danger rounded-lg px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+						class="btn btn-danger"
 					>
 						{submitting ? 'Applying...' : 'Overwrite'}
 					</button>
@@ -348,3 +342,37 @@
 		{/if}
 	</div>
 </div>
+
+<style>
+	/* .modal is display:flex/align/justify-center over the scrim - the
+	   scrim button itself needs to fill that box and sit behind the panel
+	   (same pattern ConfirmDialog.svelte uses: relative stacking context via
+	   the panel's own z-index, no absolute/inset needed beyond covering the
+	   modal's own padded box). */
+	.apply-session-scrim { position: absolute; inset: 0; z-index: 0; background: transparent; border: 0; padding: 0; cursor: default; }
+	.apply-session-panel { position: relative; z-index: 1; }
+	.apply-session-error { margin-top: 0.5rem; }
+	.apply-session-select-field { margin-top: 1rem; }
+	/* original recipe box: rounded-lg border border-gray-200 bg-gray-50
+	   px-3 py-2 text-sm - code-block's own font-mono/0.72rem sizing is for
+	   literal preformatted text; this dl reads as prose, so type is reset
+	   back to text-sm/text-secondary while keeping code-block's box (border,
+	   radius, tint background). */
+	.apply-session-recipe { margin-top: 0.75rem; font-family: var(--font-sans); font-size: 0.875rem; line-height: 1.25rem; white-space: normal; }
+	.apply-session-recipe-title { font-weight: 500; color: var(--color-text-secondary); }
+	.apply-session-recipe-list { margin-top: 0.25rem; display: flex; flex-direction: column; gap: 0.125rem; color: var(--color-text-muted); }
+	.apply-session-recipe-row { display: flex; gap: 0.25rem; }
+	.apply-session-recipe-row-col { flex-direction: column; }
+	.apply-session-recipe-dt { flex-shrink: 0; }
+	.apply-session-recipe-dd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text); }
+	.apply-session-recipe-output { font-family: var(--font-mono); font-size: 0.75rem; white-space: normal; }
+	.apply-session-recipe-faint { color: var(--color-text-faint); }
+	.apply-session-recipe-output-list { display: flex; flex-direction: column; gap: 0.125rem; }
+	.apply-session-recipe-output-item { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.apply-session-problem { margin-top: 0.5rem; display: flex; align-items: flex-start; gap: 0.375rem; font-size: 0.875rem; color: var(--color-on-warning-soft); }
+	.apply-session-problem-icon { flex-shrink: 0; margin-top: 0.125rem; width: 1rem; height: 1rem; }
+	.apply-session-collision-intro { margin-top: 0.5rem; font-size: 0.875rem; color: var(--color-text-muted); }
+	.apply-session-collision-list { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.875rem; }
+	.apply-session-collision-path { color: var(--color-text); }
+	.apply-session-collision-note { margin-top: 0.75rem; font-size: 0.875rem; color: var(--color-text-muted); }
+</style>

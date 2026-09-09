@@ -1,0 +1,16 @@
+/* status-dot: a coloured dot for job/drive/channel state.
+   State: [data-status] picks the colour. */
+@layer components {
+	.status-dot { display: inline-block; width: 0.5rem; height: 0.5rem; flex-shrink: 0; border-radius: 9999px; background: var(--color-text-faint); }
+	/* Status dots use the --color-status-* scale, not the tone tokens: the
+	   originals were bg-red-500 / bg-green-500 (the status values), and the
+	   tone tokens are a muted red-600/green-600 in light and a washed
+	   red-400/green-400 in dark, which reads wrong on a 8px dot. */
+	.status-dot[data-status="ok"], .status-dot[data-status="success"], .status-dot[data-status="completed"] { background: var(--color-status-success); }
+	.status-dot[data-status="warn"], .status-dot[data-status="warning"], .status-dot[data-status="waiting"] { background: var(--color-warning); }
+	.status-dot[data-status="error"], .status-dot[data-status="failed"] { background: var(--color-status-error); }
+	.status-dot[data-status="off"], .status-dot[data-status="idle"] { background: var(--color-text-faint); }
+	.status-dot[data-status="scanning"] { background: var(--color-status-scanning); }
+	.status-dot[data-status="ripping"], .status-dot[data-status="active"] { background: var(--color-status-ripping); }
+	.status-dot[data-status="transcoding"] { background: var(--color-status-transcoding); }
+}

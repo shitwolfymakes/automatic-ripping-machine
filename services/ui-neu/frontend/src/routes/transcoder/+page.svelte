@@ -143,12 +143,12 @@
 	<title>ARM - Transcoder</title>
 </svelte:head>
 
-<div class="space-y-6">
-	<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Transcoder</h1>
+<div class="stack stack-lg">
+	<h1 class="page-title">Transcoder</h1>
 
 	<!-- API error -->
 	{#if $statsError}
-		<div in:fade={fadeIn} out:fade={fadeOut} class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+		<div in:fade={fadeIn} out:fade={fadeOut} class="alert alert-danger alert-lg">
 			Failed to reach transcoder: {$statsError}
 		</div>
 	{/if}
@@ -158,67 +158,67 @@
 	     layout shift; only show the "offline" banner once a poll has actually
 	     confirmed the service is down, never while still loading. -->
 	{#if !$statsInitialized && !$statsError}
-		<div class="space-y-4">
-			<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
+		<div class="stack">
+			<div class="panel">
 				<!-- Same box as the real header row (mb-3 + text-sm line) so the card
 				     is the same height before and after the first poll. -->
 				<div class="mb-3 flex items-center justify-between">
-					<div class="h-6 w-56 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
-					<div class="h-4 w-48 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+					<div class="skeleton skeleton-text transcoder-page-skeleton-title"></div>
+					<div class="skeleton skeleton-text transcoder-page-skeleton-subtitle"></div>
 				</div>
 			</div>
 			<div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
 				{#each Array(5) as _unused}
-					<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
-						<div class="h-4 w-16 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
-						<div class="mt-2 h-8 w-12 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+					<div class="panel">
+						<div class="skeleton skeleton-text transcoder-page-skeleton-label"></div>
+						<div class="skeleton skeleton-text transcoder-page-skeleton-value"></div>
 					</div>
 				{/each}
 			</div>
 		</div>
 	{:else if $statsError}
 		<!-- Offline banner -->
-		<div in:fade={fadeIn} out:fade={fadeOut} class="flex items-center gap-3 rounded-lg border border-primary/25 bg-page p-4 dark:border-primary/25 dark:bg-page-dark">
-			<div class="h-3 w-3 shrink-0 rounded-full bg-gray-400"></div>
+		<div in:fade={fadeIn} out:fade={fadeOut} class="flex items-center gap-3 panel-section transcoder-page-offline-banner">
+			<div class="shrink-0 transcoder-page-offline-dot"></div>
 			<div>
-				<p class="font-medium text-gray-700 dark:text-gray-300">Transcoder Offline</p>
-				<p class="text-sm text-gray-500 dark:text-gray-400">The transcoder service is not responding. Transcoding features are unavailable.</p>
+				<p class="transcoder-page-offline-title">Transcoder Offline</p>
+				<p class="transcoder-page-offline-subtitle">The transcoder service is not responding. Transcoding features are unavailable.</p>
 			</div>
 		</div>
 	{:else}
 		<!-- Worker pool + Stats cards -->
 		{@const w = $workers}
-		<div in:fade={fadeIn} out:fade={fadeOut} class="space-y-4">
+		<div in:fade={fadeIn} out:fade={fadeOut} class="stack">
 		<!-- Worker pool status -->
-		<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
+		<div class="panel">
 			<div class="mb-3 flex items-center justify-between">
 				<div class="flex items-center gap-2">
-					<div class="h-2.5 w-2.5 rounded-full {w.length > 0 ? 'bg-green-500' : 'bg-yellow-500'}"></div>
-					<span class="text-sm font-semibold text-gray-700 dark:text-gray-300">
+					<div class="transcoder-page-worker-dot" data-active={w.length > 0}></div>
+					<span class="transcoder-page-worker-title">
 						Workers {w.length}/{s.max_parallel} active
 					</span>
 				</div>
-				<span class="text-xs text-gray-400 dark:text-gray-500">
+				<span class="transcoder-page-worker-summary">
 					GPUs: {s.gpus_available}/{s.gpus_total} available &middot; Queue: {statusCount('queued')} queued
 				</span>
 			</div>
 			{#if w.length > 0}
 				<div class="grid gap-2 {s.max_parallel > 1 ? 'sm:grid-cols-2 lg:grid-cols-3' : ''}">
 					{#each w as worker (worker.task_id)}
-						<div class="flex items-center gap-3 rounded-md border border-indigo-200 bg-indigo-50/50 px-3 py-2 dark:border-indigo-800 dark:bg-indigo-900/20">
-							<div class="h-2 w-2 rounded-full bg-indigo-500 animate-pulse"></div>
+						<div class="flex items-center gap-3 transcoder-page-worker-card">
+							<div class="transcoder-page-worker-pulse"></div>
 							<div class="min-w-0 flex-1">
-								<p class="truncate text-sm font-medium text-gray-700 dark:text-gray-300" title={worker.output_path ?? worker.source_track_id}>
+								<p class="truncate transcoder-page-worker-task" title={worker.output_path ?? worker.source_track_id}>
 									Task #{worker.task_id}
 									{#if worker.claimed_by}
-										<span class="font-normal text-gray-500 dark:text-gray-400"> &mdash; {worker.claimed_by}</span>
+										<span class="transcoder-page-worker-claimed"> &mdash; {worker.claimed_by}</span>
 									{/if}
 								</p>
 								{#if worker.claim_heartbeat_at}
 									{@const dur = formatDuration(worker.claim_heartbeat_at)}
-									<p class="text-xs text-indigo-600 dark:text-indigo-400">{worker.progress_pct}%{#if dur} &middot; {dur} since heartbeat{/if}</p>
+									<p class="transcoder-page-worker-heartbeat">{worker.progress_pct}%{#if dur} &middot; {dur} since heartbeat{/if}</p>
 								{:else}
-									<p class="text-xs text-gray-400 dark:text-gray-500">{worker.progress_pct}%</p>
+									<p class="transcoder-page-worker-heartbeat-idle">{worker.progress_pct}%</p>
 								{/if}
 							</div>
 						</div>
@@ -227,25 +227,25 @@
 			{/if}
 		</div>
 		<div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
-			<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
-				<p class="text-sm text-gray-500 dark:text-gray-400">Queued</p>
-				<p class="mt-1 text-3xl font-bold text-primary-text dark:text-primary-text-dark">{statusCount('queued')}</p>
+			<div class="stat transcoder-page-stat">
+				<p class="stat-label">Queued</p>
+				<p class="stat-value transcoder-page-stat-value">{statusCount('queued')}</p>
 			</div>
-			<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
-				<p class="text-sm text-gray-500 dark:text-gray-400">In Progress</p>
-				<p class="mt-1 text-3xl font-bold text-indigo-600 dark:text-indigo-400">{statusCount('in_progress')}</p>
+			<div class="stat transcoder-page-stat">
+				<p class="stat-label">In Progress</p>
+				<p class="stat-value transcoder-page-stat-value transcoder-page-stat-value-progress">{statusCount('in_progress')}</p>
 			</div>
-			<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
-				<p class="text-sm text-gray-500 dark:text-gray-400">Done</p>
-				<p class="mt-1 text-3xl font-bold text-green-600 dark:text-green-400">{statusCount('done')}</p>
+			<div class="stat transcoder-page-stat">
+				<p class="stat-label">Done</p>
+				<p class="stat-value transcoder-page-stat-value transcoder-page-stat-value-success">{statusCount('done')}</p>
 			</div>
-			<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
-				<p class="text-sm text-gray-500 dark:text-gray-400">Failed</p>
-				<p class="mt-1 text-3xl font-bold text-red-600 dark:text-red-400">{statusCount('failed')}</p>
+			<div class="stat transcoder-page-stat">
+				<p class="stat-label">Failed</p>
+				<p class="stat-value transcoder-page-stat-value transcoder-page-stat-value-danger">{statusCount('failed')}</p>
 			</div>
-			<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
-				<p class="text-sm text-gray-500 dark:text-gray-400">Total</p>
-				<p class="mt-1 text-3xl font-bold text-gray-500 dark:text-gray-400">{s.total_tasks}</p>
+			<div class="stat transcoder-page-stat">
+				<p class="stat-label">Total</p>
+				<p class="stat-value transcoder-page-stat-value transcoder-page-stat-value-muted">{s.total_tasks}</p>
 			</div>
 		</div>
 		</div>
@@ -253,24 +253,22 @@
 
 	<!-- Jobs section -->
 	<section class="space-y-4">
-		<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Transcode Jobs</h2>
+		<h2 class="transcoder-page-section-title">Transcode Jobs</h2>
 
 		{#if actionFeedback}
-			<div class="rounded-lg border px-4 py-3 text-sm {actionFeedback.type === 'success' ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400' : 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400'}">
+			<div class="alert {actionFeedback.type === 'success' ? 'alert-success' : 'alert-danger'}">
 				{actionFeedback.message}
-				<button onclick={() => (actionFeedback = null)} class="ml-2 font-medium hover:opacity-75">Dismiss</button>
+				<button onclick={() => (actionFeedback = null)} class="btn btn-link transcoder-page-dismiss">Dismiss</button>
 			</div>
 		{/if}
 
 		<!-- Tabs -->
-		<div class="flex gap-1 border-b border-primary/20 dark:border-primary/20">
+		<div class="tabs transcoder-page-tabs">
 			{#each tabs as tab}
 				<button
 					onclick={() => switchTab(tab)}
-					class="border-b-2 px-4 py-2 text-sm font-medium transition-colors
-						{activeTab === tab
-							? 'border-primary text-primary-text dark:border-primary-text-dark dark:text-primary-text-dark'
-							: 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+					data-selected={activeTab === tab}
+					class="tabs-tab transcoder-page-tab"
 				>
 					{TAB_LABELS[tab] ?? tab}
 				</button>
@@ -288,25 +286,25 @@
 			{#snippet loadingSlot()}
 				<!-- As many placeholders as the stats poll says there are tasks (it
 				     lands first), so the list does not grow when the jobs arrive. -->
-				<div class="space-y-3">
+				<div class="stack stack-sm">
 					{#each Array(Math.min(s.total_tasks || 3, 6)) as _unused}
 						<SkeletonCard lines={4} class="pb-3" />
 					{/each}
 				</div>
 			{/snippet}
 			{#snippet empty()}
-				<p class="py-8 text-center text-gray-400">No transcode tasks found.</p>
+				<p class="transcoder-page-empty">No transcode tasks found.</p>
 			{/snippet}
 			{#snippet ready(jobList)}
-			<div class="space-y-3">
+			<div class="stack stack-sm">
 				{#each jobList as job (job.id)}
 					{@const sourceFile = sourceBasename(job.output_path)}
-					<div in:fade={fadeIn} out:fade={fadeOut} class="rounded-lg border border-primary/20 border-l-4 border-l-primary bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
+					<div in:fade={fadeIn} out:fade={fadeOut} class="card card-status transcoder-page-job-card" style:--card-accent="var(--color-primary)">
 						<div class="min-w-0 flex-1">
 							<!-- Row 1: Title + Status + Actions -->
 							<div class="flex items-start justify-between gap-2">
 								<div class="flex min-w-0 items-center gap-3">
-									<h3 class="truncate font-semibold text-gray-900 dark:text-white" title={job.output_path ?? job.source_track_id}>
+									<h3 class="truncate transcoder-page-job-title" title={job.output_path ?? job.source_track_id}>
 										{sourceFile || `Task #${job.id}`}
 									</h3>
 									<StatusBadge status={job.status} />
@@ -316,39 +314,39 @@
 										{#if job.status === 'failed'}
 											<button
 												onclick={() => handleRetry(job.id)}
-												class="rounded-sm bg-primary px-2.5 py-1 text-xs font-medium text-on-primary hover:bg-primary-hover"
+												class="btn btn-primary transcoder-page-job-action-btn"
 											>Retry</button>
 										{/if}
 										<button
 											onclick={() => handleDelete(job.id)}
-											class="rounded-sm bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700"
+											class="btn transcoder-page-job-action-btn transcoder-page-job-delete-btn"
 										>Delete</button>
 									</div>
 								{/if}
 							</div>
 
 							<!-- Row 2: ARM job link, attempts -->
-							<div class="mt-0.5 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+							<div class="mt-0.5 flex items-center gap-2 transcoder-page-job-meta">
 								{#if job.job_id}
 									<a
 										href="/jobs/{job.job_id}"
 										data-testid="transcode-job-link"
-										class="inline-flex items-center rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary-text hover:bg-primary/20 dark:bg-primary/15 dark:text-primary-text-dark dark:hover:bg-primary/25"
+										class="chip"
 									>Job {job.job_id}</a>
 								{:else}
-									<span class="inline-flex items-center rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-gray-500 dark:bg-primary/15 dark:text-gray-400">No job</span>
+									<span class="chip transcoder-page-no-job-chip">No job</span>
 								{/if}
 								{#if job.attempts > 0}
-									<span class="text-xs">Attempt {job.attempts}</span>
+									<span class="transcoder-page-attempt">Attempt {job.attempts}</span>
 								{/if}
 								{#if job.claimed_by}
-									<span class="truncate font-mono text-xs text-gray-400 dark:text-gray-500">{job.claimed_by}</span>
+									<span class="mono truncate transcoder-page-claimed-by">{job.claimed_by}</span>
 								{/if}
 							</div>
 
 							<!-- Error message for failed tasks -->
 							{#if job.status === 'failed' && job.last_error}
-								<p class="mt-2 rounded-sm bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
+								<p class="mt-2 alert alert-danger">
 									{job.last_error}
 								</p>
 							{/if}
@@ -356,12 +354,12 @@
 							<!-- Progress bar for queued/in_progress -->
 							{#if job.status === 'queued' || job.status === 'in_progress'}
 								<div class="mt-3">
-									<ProgressBar value={job.progress_pct} color="bg-indigo-500" />
+									<ProgressBar value={job.progress_pct} colorVar="var(--color-status-transcoding)" />
 								</div>
 							{/if}
 
 							<!-- Timestamps -->
-							<div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+							<div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 transcoder-page-job-meta-sm">
 								{#if job.created_at}
 									<span>Queued <TimeAgo date={job.created_at} /></span>
 								{/if}
@@ -371,16 +369,16 @@
 								{#if job.status === 'done' && job.created_at && job.updated_at}
 									{@const dur = formatDuration(job.created_at, job.updated_at)}
 									{#if dur}
-										<span class="text-green-600 dark:text-green-400">Took {dur}</span>
+										<span class="transcoder-page-took">Took {dur}</span>
 									{/if}
 								{/if}
 							</div>
 
 							<!-- Output path for done tasks -->
 							{#if job.status === 'done' && job.output_path}
-								<p class="mt-2 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-									<span class="text-gray-400 dark:text-gray-500">&rarr;</span>
-									<span class="truncate font-mono" title={job.output_path}>{sourceFile}</span>
+								<p class="mt-2 flex items-center gap-1 transcoder-page-job-meta-sm">
+									<span class="transcoder-page-arrow">&rarr;</span>
+									<span class="mono truncate" title={job.output_path}>{sourceFile}</span>
 								</p>
 							{/if}
 						</div>
@@ -391,3 +389,77 @@
 		</LoadState>
 	</section>
 </div>
+
+<style>
+	/* the original tab strip had no overflow-x-auto and its buttons had no
+	   whitespace-nowrap - at narrow widths the row itself shrinks and
+	   "In Progress" wraps to two lines, rather than the strip scrolling
+	   horizontally with single-line tabs */
+	/* the original tab strip was gap-1 (0.25rem), not .tabs' own 1rem
+	   default (tuned for the wider Settings tab strip); no overflow-x-auto
+	   either, so the row shrinks and wraps rather than scrolling */
+	.transcoder-page-tabs { gap: 0.25rem; overflow-x: visible; }
+	/* the original buttons were px-4 py-2 (1rem/0.5rem), not .tabs-tab's own
+	   0.25rem/0.625rem default, and had no whitespace-nowrap */
+	.transcoder-page-tab { padding: 0.5rem 1rem; white-space: normal; flex-shrink: 1; min-width: 0; text-align: center; }
+	.transcoder-page-skeleton-title { height: 1.5rem; width: 14rem; }
+	.transcoder-page-skeleton-subtitle { height: 1rem; width: 12rem; }
+	.transcoder-page-skeleton-label { height: 1rem; width: 4rem; }
+	.transcoder-page-skeleton-value { margin-top: 0.5rem; height: 2rem; width: 3rem; }
+	.transcoder-page-offline-dot { height: 0.75rem; width: 0.75rem; border-radius: 9999px; background: var(--color-text-faint); }
+	.transcoder-page-offline-title { font-weight: 500; color: var(--color-text-secondary); }
+	.transcoder-page-offline-subtitle { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	/* panel-section's own background is a translucent primary tint, which
+	   only matches the original's DARK-mode bg-page/5 half of its pair; the
+	   original LIGHT mode was the flat --color-page - same gap as the
+	   NotificationsTab precedent from Task 9 */
+	.transcoder-page-offline-banner { background: var(--color-page); }
+	.transcoder-page-worker-dot { height: 0.625rem; width: 0.625rem; border-radius: 9999px; background: var(--color-warning); }
+	.transcoder-page-worker-dot[data-active="true"] { background: var(--color-success); }
+	.transcoder-page-worker-title { font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; color: var(--color-text-secondary); }
+	.transcoder-page-worker-summary { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
+	/* the original worker card used a literal indigo hue (border-indigo-200,
+	   bg-indigo-50/50) with no shared token; collapses onto
+	   --color-status-transcoding (violet), the same tone already accepted
+	   for the transcoder domain's progress-bar tone (DEVIATIONS.md group 2) */
+	.transcoder-page-worker-card { border: 1px solid color-mix(in srgb, var(--color-status-transcoding) 30%, transparent); border-radius: var(--radius-md); background: color-mix(in srgb, var(--color-status-transcoding) 8%, transparent); padding: 0.5rem 0.75rem; }
+	.transcoder-page-worker-pulse { height: 0.5rem; width: 0.5rem; flex-shrink: 0; border-radius: 9999px; background: var(--color-status-transcoding); animation: skeleton-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+	.transcoder-page-worker-task { font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text-secondary); }
+	.transcoder-page-worker-claimed { font-weight: 400; color: var(--color-text-muted); }
+	.transcoder-page-worker-heartbeat { font-size: 0.75rem; line-height: 1rem; color: var(--color-status-transcoding); }
+	.transcoder-page-worker-heartbeat-idle { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
+	/* the original stat cards were text-3xl (1.875rem/2.25rem), taller than
+	   stat's own 1.5rem/2rem default (tuned for StatStrip) */
+	.transcoder-page-stat-value { font-size: 1.875rem; line-height: 2.25rem; }
+	/* the original "In Progress" value used a literal indigo hue with no
+	   shared token; same transcoder-domain collapse as the worker card and
+	   progress-bar tone above */
+	.transcoder-page-stat-value-progress { color: var(--color-status-transcoding); }
+	.transcoder-page-stat-value-success { color: var(--color-success); }
+	.transcoder-page-stat-value-danger { color: var(--color-danger); }
+	.transcoder-page-stat-value-muted { color: var(--color-text-muted); }
+	.transcoder-page-section-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-text); }
+	.transcoder-page-dismiss { margin-left: 0.5rem; }
+	.transcoder-page-dismiss:hover { opacity: 0.75; }
+	.transcoder-page-empty { padding: 2rem 0; text-align: center; color: var(--color-text-faint); }
+	/* card-status colours its left accent from data-status, but this card
+	   never sets that attribute - the original was always primary blue.
+	   style:--card-accent + this scoped rule (which already compiles
+	   unlayered, beating card-status's own @layer components rule
+	   regardless of specificity) reproduces that with no !important -
+	   same precedent as JobCard/TranscodeCard's own accent override. */
+	.transcoder-page-job-card { border-left-color: var(--card-accent); padding: 1rem; }
+	.transcoder-page-job-title { font-weight: 600; color: var(--color-text); }
+	/* original action buttons were px-2.5 py-1 text-xs (0.625rem/0.25rem),
+	   smaller than .btn's own default */
+	.transcoder-page-job-action-btn { padding: 0.25rem 0.625rem; font-size: 0.75rem; line-height: 1rem; }
+	.transcoder-page-job-delete-btn { border: 0; background: var(--color-danger); color: var(--color-on-primary); }
+	.transcoder-page-job-delete-btn:hover { filter: brightness(0.9); }
+	.transcoder-page-job-meta { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	.transcoder-page-job-meta-sm { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
+	.transcoder-page-no-job-chip { cursor: default; color: var(--color-text-muted); }
+	.transcoder-page-attempt { font-size: 0.75rem; line-height: 1rem; }
+	.transcoder-page-claimed-by { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
+	.transcoder-page-took { color: var(--color-success); }
+	.transcoder-page-arrow { color: var(--color-text-faint); }
+</style>

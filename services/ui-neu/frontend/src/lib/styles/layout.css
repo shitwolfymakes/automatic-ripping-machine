@@ -1,0 +1,22 @@
+/* layout helpers: names describe arrangement, the one exception to
+   role-based naming (spec 6.3). */
+@layer components {
+	.stack { display: flex; flex-direction: column; gap: 1rem; }
+	.stack-sm { gap: 0.5rem; }
+	.stack-lg { gap: 1.5rem; }
+	.cluster { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+	.grid-2 { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+	.grid-3 { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+	@media (min-width: 640px) {
+		.grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+		.grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+	}
+	.page { max-width: 72rem; margin: 0 auto; padding: 1.5rem; }
+	.page-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1.5rem; }
+	/* line-height matches Tailwind's text-2xl (2rem/32px), which every H1
+	   this replaces used - the browser default line-height a bare font-size
+	   gives is a hair shorter and drifts the whole page down by ~2px. */
+	.page-title { font-size: 1.5rem; line-height: 2rem; font-weight: 700; color: var(--color-text); }
+	.split { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
+	@media (min-width: 1024px) { .split { grid-template-columns: minmax(0, 1fr) 20rem; } }
+}

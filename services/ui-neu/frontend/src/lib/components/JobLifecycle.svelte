@@ -26,13 +26,12 @@
 	>
 		{#each nodes as node (node.id)}
 			<span
-				class="relative h-1.5 w-6 rounded-sm {node.state === 'active' ? 'lifecycle-pulse' : ''}"
-				style="background: {node.id === 'complete' && node.state === 'completed' && partial ? 'var(--color-status-waiting)' : lifecycleColorVar(node.state)}; opacity: {node.state === 'pending' ? 0.35 : 1}"
+				class="job-lifecycle-seg"
+				data-state={node.id === 'complete' && node.state === 'completed' && partial ? 'paused' : node.state}
+				style:--node-color={node.id === 'complete' && node.state === 'completed' && partial ? 'var(--color-status-waiting)' : lifecycleColorVar(node.state)}
 			>
 				{#if node.state === 'paused'}
-					<Pause
-						class="absolute -top-1 left-1/2 h-2.5 w-2.5 -translate-x-1/2 text-[var(--color-status-waiting)]"
-					/>
+					<Pause class="job-lifecycle-pause-sm" />
 				{/if}
 			</span>
 		{/each}
@@ -41,28 +40,23 @@
 	<!-- Detail-page sized: each stage is a block with the label above a
 	     small colored bar. Stages laid out side-by-side. -->
 	<ol
-		class="grid w-full gap-2 text-xs"
-		style="grid-template-columns: repeat({nodes.length}, minmax(0, 1fr));"
+		class="job-lifecycle-track"
+		style:--cols={nodes.length}
 		role="list"
 		aria-label="Job lifecycle"
 	>
 		{#each nodes as node (node.id)}
 			<li class="flex flex-col gap-1.5" title={`${node.label}: ${node.state}`}>
-				<div class="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider"
-					style="color: {node.state === 'pending'
-						? 'var(--color-status-pending, #9ca3af)'
-						: node.state === 'failed'
-						? 'var(--color-status-error)'
-						: 'var(--color-text, currentColor)'}; opacity: {node.state === 'pending' ? 0.55 : 1}"
-				>
+				<div class="job-lifecycle-label" data-state={node.state}>
 					{#if node.state === 'paused'}
 						<Pause class="h-3 w-3" />
 					{/if}
 					<span class="truncate">{node.label}</span>
 				</div>
 				<span
-					class="block h-2 w-full rounded-sm {node.state === 'active' ? 'lifecycle-pulse' : ''}"
-					style="background: {node.id === 'complete' && node.state === 'completed' && partial ? 'var(--color-status-waiting)' : lifecycleColorVar(node.state)}; opacity: {node.state === 'pending' ? 0.35 : 1}"
+					class="job-lifecycle-bar"
+					data-state={node.id === 'complete' && node.state === 'completed' && partial ? 'paused' : node.state}
+					style:--node-color={node.id === 'complete' && node.state === 'completed' && partial ? 'var(--color-status-waiting)' : lifecycleColorVar(node.state)}
 					aria-hidden="true"
 				></span>
 			</li>
@@ -71,9 +65,6 @@
 {/if}
 
 <style>
-	.lifecycle-pulse {
-		animation: lifecyclePulse 1.4s ease-in-out infinite;
-	}
 	@keyframes lifecyclePulse {
 		0%, 100% {
 			filter: brightness(1);
@@ -82,4 +73,18 @@
 			filter: brightness(1.3);
 		}
 	}
+
+	.job-lifecycle-seg { position: relative; height: 0.375rem; width: 1.5rem; border-radius: var(--radius-sm); background: var(--node-color); opacity: 1; }
+	.job-lifecycle-seg[data-state="pending"] { opacity: 0.35; }
+	.job-lifecycle-seg[data-state="active"] { animation: lifecyclePulse 1.4s ease-in-out infinite; }
+	/* :global: forwarded through lucide Pause's class prop onto its own svg */
+	:global(.job-lifecycle-pause-sm) { position: absolute; top: -0.25rem; left: 50%; height: 0.625rem; width: 0.625rem; transform: translateX(-50%); color: var(--color-status-waiting); }
+
+	.job-lifecycle-track { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); width: 100%; gap: 0.5rem; font-size: 0.75rem; line-height: 1rem; }
+	.job-lifecycle-label { display: flex; align-items: center; gap: 0.25rem; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text); opacity: 1; }
+	.job-lifecycle-label[data-state="pending"] { color: var(--color-status-pending, var(--color-text-faint)); opacity: 0.55; }
+	.job-lifecycle-label[data-state="failed"] { color: var(--color-status-error); opacity: 1; }
+	.job-lifecycle-bar { display: block; height: 0.5rem; width: 100%; border-radius: var(--radius-sm); background: var(--node-color); opacity: 1; }
+	.job-lifecycle-bar[data-state="pending"] { opacity: 0.35; }
+	.job-lifecycle-bar[data-state="active"] { animation: lifecyclePulse 1.4s ease-in-out infinite; }
 </style>
