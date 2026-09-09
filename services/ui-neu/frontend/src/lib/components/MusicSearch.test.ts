@@ -124,7 +124,7 @@ it('renders type/format/country badges on result cards', async () => {
 	await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 	await waitFor(() => screen.getByText('Greatest Hits'));
 	const badge = (text: string) =>
-		screen.getAllByText(text).find((el) => el.tagName === 'SPAN' && el.className.includes('rounded-sm'));
+		screen.getAllByText(text).find((el) => el.tagName === 'SPAN' && el.className.includes('music-search-result-pill'));
 	expect(badge('Album')).toBeInTheDocument();
 	expect(badge('CD')).toBeInTheDocument();
 	expect(screen.getByText('GB')).toBeInTheDocument();

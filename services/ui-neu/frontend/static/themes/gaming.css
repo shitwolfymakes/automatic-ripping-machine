@@ -20,16 +20,16 @@
 	box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
 }
 
-[data-scheme="gaming"] aside [data-logo] img {
+[data-scheme="gaming"] aside .nav-logo img {
 	filter: drop-shadow(0 0 10px #00d2ff) drop-shadow(0 0 2px #bc13fe);
 	transition: transform 0.3s ease;
 }
 
-[data-scheme="gaming"] aside [data-logo] img:hover {
+[data-scheme="gaming"] aside .nav-logo img:hover {
 	transform: scale(1.1) rotate(5deg);
 }
 
-[data-scheme="gaming"] aside nav a {
+[data-scheme="gaming"] aside .nav-item {
 	text-transform: uppercase;
 	font-weight: 700;
 	font-size: 0.95rem;
@@ -41,24 +41,19 @@
 	transition: all 0.2s ease-in-out;
 }
 
-[data-scheme="gaming"] aside nav a:hover {
+[data-scheme="gaming"] aside .nav-item:hover {
 	background: rgba(188, 19, 254, 0.1) !important;
 	color: #fff !important;
 	border-left: 4px solid #bc13fe !important;
 	padding-left: 1.5rem;
 }
 
-[data-scheme="gaming"] aside nav a[data-active="true"] {
+[data-scheme="gaming"] aside .nav-item[data-active="true"] {
 	background: rgba(0, 210, 255, 0.15) !important;
 	border-left: 4px solid #00d2ff !important;
 	color: #00d2ff !important;
 	text-shadow: 0 0 10px #00d2ff;
 	animation: gaming-breathe 3s infinite ease-in-out;
-}
-
-[data-scheme="gaming"] aside [data-stats] {
-	border-color: #1b1b2f;
-	background: #08080e;
 }
 
 [data-scheme="gaming"] [data-progress-fill] {
@@ -98,24 +93,23 @@
 	border-color: #1b1b2f !important;
 }
 
-[data-scheme="gaming"] aside .text-gray-400,
+/* Muted sidebar readouts (the stats labels and the Storage eyebrow).
+   The colour is a token override scoped to the sidebar, so it reaches
+   component-local text too; the typography rides the .eyebrow block. */
+[data-scheme="gaming"] aside {
+	--color-text-muted: #6a6a8a;
+	--color-text-faint: #6a6a8a;
+}
 
-[data-scheme="gaming"] aside .text-gray-500,
-
-[data-scheme="gaming"] aside .text-gray-600,
-
-[data-scheme="gaming"] aside .dark\:text-gray-300,
-
-[data-scheme="gaming"] aside .dark\:text-gray-400,
-
-[data-scheme="gaming"] aside .dark\:text-gray-500 {
-	color: #6a6a8a !important;
+[data-scheme="gaming"] aside .eyebrow {
+	color: #6a6a8a;
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
 	font-weight: 700;
 }
 
-[data-scheme="gaming"] aside .text-orange-500 {
-	color: #bc13fe !important;
-	font-weight: bold;
+/* The CPU temperature readout in the sidebar stats reads the
+   accent-1 role. */
+[data-scheme="gaming"] aside {
+	--color-accent-1: #bc13fe;
 }

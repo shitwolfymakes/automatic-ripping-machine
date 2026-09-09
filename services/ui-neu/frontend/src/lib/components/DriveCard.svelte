@@ -6,6 +6,7 @@
 	import StatusBadge from './StatusBadge.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import SlideOver from './SlideOver.svelte';
+	import Glyph from './Glyph.svelte';
 	import { reveal } from '$lib/transitions';
 
 	interface Props {
@@ -239,30 +240,37 @@
 {#if !drive}
 	<SkeletonCard />
 {:else}
-<div class="rounded-lg border border-primary/20 bg-surface p-2.5 shadow-xs dark:border-primary/20 dark:bg-surface-dark {isDetached ? 'opacity-60' : ''}">
+<!-- Plain `card`, deliberately NOT `card card-status`: the original card shell
+     (git 441d35d2, `rounded-lg border border-primary/20 bg-surface p-2.5
+     shadow-xs`) carried no status-driven styling at all. Drive status only ever
+     coloured the inline label/badge in the header, never the card itself, so
+     `card-status`'s 4px left accent stripe would be a new visual element the
+     baseline has no counterpart for. `isDetached` is the one shell-level state
+     the original had (`opacity-60`), kept here as `data-detached`. -->
+<div class="card drive-card" data-detached={isDetached}>
 	<!-- Header: name + rename + status -->
 	<div class="mb-1 flex items-center justify-between">
 		<div class="flex min-w-0 items-center gap-1.5">
-			<h3 class="truncate font-semibold text-gray-900 dark:text-white">
+			<h3 class="truncate drive-card-title">
 				{drive.display_name || drive.device_path || `Drive ${drive.id}`}
 			</h3>
 			{#if isError}
-				<span class="flex-shrink-0 text-[10px] font-medium text-red-600 dark:text-red-400" title={statusText}>{statusText}</span>
+				<span class="flex-shrink-0 drive-card-status-error" title={statusText}>{statusText}</span>
 			{:else if isDetached}
-				<span class="flex-shrink-0 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">{statusText}</span>
+				<span class="flex-shrink-0 badge badge-warning badge-sm drive-card-status-pill">{statusText}</span>
 			{:else if isOfflinePresent}
-				<span class="flex-shrink-0 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400" data-testid="drive-status-label">{statusText}</span>
+				<span class="flex-shrink-0 badge badge-warning badge-sm drive-card-status-pill" data-testid="drive-status-label">{statusText}</span>
 			{:else if !editing}
 				<button
 					onclick={startEdit}
-					class="flex-shrink-0 rounded border border-primary/15 px-1.5 py-0 text-[10px] text-gray-500 hover:bg-primary/10 dark:border-primary/20 dark:text-gray-400 dark:hover:bg-primary/15"
+					class="btn btn-link btn-sm flex-shrink-0"
 				>Rename</button>
 			{/if}
 		</div>
 		{#if drive.current_job}
 			<StatusBadge status={drive.current_job.status} />
 		{:else}
-			<span class="flex-shrink-0 text-xs text-gray-400">Idle</span>
+			<span class="flex-shrink-0 drive-card-idle">Idle</span>
 		{/if}
 	</div>
 
@@ -273,47 +281,47 @@
 				type="text"
 				bind:value={editName}
 				onkeydown={onKeydown}
-				class="rounded-sm border border-primary/25 bg-primary/5 px-2 py-1 text-sm font-semibold text-gray-900 dark:border-primary/30 dark:bg-primary/10 dark:text-white"
+				class="field-control drive-card-edit-input"
 				disabled={saving}
 			/>
 			<button
 				onclick={saveEdit}
 				disabled={saving}
-				class="rounded-sm bg-primary px-2 py-1 text-xs text-on-primary hover:bg-primary-hover disabled:opacity-50"
+				class="btn btn-primary btn-sm"
 			>Save</button>
 			<button
 				onclick={cancelEdit}
 				disabled={saving}
-				class="rounded-sm px-2 py-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+				class="btn btn-ghost btn-sm"
 			>Cancel</button>
 		</div>
 	{/if}
 
 	<!-- Drive info: labeled name:value rows -->
-	<div class="mb-1.5 space-y-0.5 text-[11px] leading-relaxed">
+	<div class="mb-1.5 drive-card-info">
 		{#if drive.device_path}
 			<div class="flex gap-1.5">
-				<span class="text-gray-500 dark:text-gray-400">Device:</span>
-				<span class="font-mono text-[10px] text-gray-700 dark:text-gray-300">{drive.device_path}</span>
+				<span class="drive-card-info-label">Device:</span>
+				<span class="mono drive-card-info-value drive-card-info-mono">{drive.device_path}</span>
 			</div>
 		{/if}
 		{#if drive.hostname}
 			<div class="flex gap-1.5">
-				<span class="text-gray-500 dark:text-gray-400">Host:</span>
-				<span class="text-gray-700 dark:text-gray-300">{drive.hostname}</span>
+				<span class="drive-card-info-label">Host:</span>
+				<span class="drive-card-info-value">{drive.hostname}</span>
 			</div>
 		{/if}
 		{#if drive.rip_speed != null || [drive.prescan_cache_mb, drive.prescan_timeout, drive.prescan_retries, drive.disc_enum_timeout].some(v => v != null)}
 			<div class="flex flex-wrap items-center gap-1 pt-0.5">
 				{#if drive.rip_speed != null}
-					<span in:reveal class="inline-flex items-center gap-0.5 rounded-sm bg-blue-500/15 px-1.5 py-0.5 text-[9px] font-medium text-blue-400">
-						<svg class="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+					<span in:reveal class="drive-card-chip drive-card-chip-speed">
+						<Glyph name="gear" class="h-2.5 w-2.5" />
 						{drive.rip_speed}x speed
 					</span>
 				{/if}
 				{#if [drive.prescan_cache_mb, drive.prescan_timeout, drive.prescan_retries, drive.disc_enum_timeout].some(v => v != null)}
 					{@const prescanOverrideCount = [drive.prescan_cache_mb, drive.prescan_timeout, drive.prescan_retries, drive.disc_enum_timeout].filter(v => v != null).length}
-					<span in:reveal class="inline-flex items-center gap-0.5 rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-medium text-amber-600 dark:text-amber-400">
+					<span in:reveal class="drive-card-chip drive-card-chip-warning">
 						{prescanOverrideCount} custom
 					</span>
 				{/if}
@@ -324,12 +332,12 @@
 	<!-- Media status + 4K -->
 	<div class="mb-2 flex flex-wrap items-center gap-1">
 		{#if drive.media_status}
-			<span class="inline-flex items-center gap-1 rounded-sm bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary-text dark:text-primary-text-dark">
+			<span class="drive-card-chip drive-card-chip-primary">
 				{drive.media_status.replace('_', ' ')}
 			</span>
 		{/if}
 		<label
-			class="inline-flex items-center gap-1 rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700 dark:text-amber-400"
+			class="drive-card-chip drive-card-chip-warning drive-card-uhd"
 			title="Display only - UHD disc detection and transcoding presets are applied automatically regardless of this setting."
 		>
 			<input
@@ -337,25 +345,20 @@
 				checked={drive.uhd_capable ?? false}
 				disabled={togglingUhd}
 				onchange={toggleUhd}
-				class="h-3 w-3 rounded-sm border-gray-300 text-amber-600 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700"
+				class="drive-card-uhd-checkbox"
 			/>
 			4K
-			<svg class="h-3 w-3 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-			</svg>
+			<Glyph name="info" class="h-3 w-3 drive-card-uhd-info" />
 		</label>
 	</div>
 
 	<!-- Consolidated action bar -->
-	<div class="flex items-center gap-1 rounded-lg border border-primary/10 bg-white/[0.025] p-1 dark:border-primary/10">
+	<div class="flex items-center gap-1 drive-card-action-bar">
 		<button
 			onclick={toggleMode}
 			disabled={togglingMode}
-			class="rounded-md px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors
-				{drive.drive_mode === 'manual'
-					? 'bg-amber-500/20 text-amber-700 hover:bg-amber-500/30 dark:text-amber-400'
-					: 'bg-primary/10 text-primary-text hover:bg-primary/20 dark:text-primary-text-dark'}
-				disabled:opacity-50"
+			class="drive-card-mode-btn"
+			data-manual={drive.drive_mode === 'manual'}
 			title="Toggle between auto and manual rip mode"
 		>
 			{drive.drive_mode === 'manual' ? 'Manual' : 'Auto'}
@@ -366,7 +369,7 @@
 			data-testid="drive-session-select"
 			disabled={triggering}
 			title="Optional session - auto-applies when the rip completes"
-			class="min-w-0 flex-1 rounded-md border border-primary/15 bg-primary/5 px-2 py-1.5 text-xs text-gray-900 dark:border-primary/20 dark:bg-primary/10 dark:text-white disabled:opacity-50"
+			class="min-w-0 flex-1 drive-card-session-select"
 		>
 			<option value="">- none -</option>
 			{#each sessions as s (s.id)}
@@ -377,26 +380,21 @@
 			onclick={startManualRip}
 			disabled={triggering}
 			data-testid="drive-start-rip"
-			class="flex items-center justify-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-on-primary transition-colors hover:bg-primary-hover disabled:opacity-50"
+			class="flex items-center justify-center gap-1 btn btn-primary btn-sm drive-card-start-btn"
 			title="Start a manual rip on this drive"
 		>
 			{triggering ? 'Starting...' : 'Start rip'}
 		</button>
 
-		<div class="h-6 w-px bg-primary/10 dark:bg-primary/15"></div>
+		<div class="drive-card-action-divider"></div>
 
 		<button
 			onclick={() => (showSettings = true)}
-			class="flex items-center justify-center rounded-md px-1.5 py-1.5 text-xs transition-colors
-				{showSettings
-					? 'bg-primary/20 text-primary-text dark:text-white'
-					: 'bg-primary/10 text-gray-500 hover:bg-primary/20 hover:text-primary-text dark:text-gray-400 dark:hover:text-primary-text-dark'}"
+			class="btn btn-icon drive-card-gear-btn"
+			aria-pressed={showSettings}
 			title="Drive settings"
 		>
-			<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-			</svg>
+			<Glyph name="gear" class="h-3.5 w-3.5" />
 		</button>
 
 		<button
@@ -404,23 +402,23 @@
 			onclick={handleUnenroll}
 			disabled={unenrolling || isRipping(drive)}
 			title={isRipping(drive) ? 'Cannot unenroll while ripping' : 'Stop and remove this drive\'s ripper'}
-			class="rounded-md bg-red-500/15 px-2 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-500/25 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-500/30"
+			class="btn btn-danger btn-sm drive-card-unenroll-btn"
 		>{unenrolling ? 'Unenrolling...' : 'Unenroll'}</button>
 	</div>
 
 	{#if manualError}
-		<p class="mt-1 text-[11px] text-red-600 dark:text-red-400" data-testid="drive-manual-error">{manualError}</p>
+		<p class="field-error mt-1 drive-card-error" data-testid="drive-manual-error">{manualError}</p>
 	{/if}
 
 	{#if unenrollError}
-		<p class="mt-1 text-[11px] text-red-600 dark:text-red-400" data-testid="drive-unenroll-error">{unenrollError}</p>
+		<p class="field-error mt-1 drive-card-error" data-testid="drive-unenroll-error">{unenrollError}</p>
 	{/if}
 
 	<!-- Current rip -->
 	{#if drive.current_job}
-		<div class="mt-2 border-t border-primary/10 pt-1.5 dark:border-primary/15">
-			<span class="text-[10px] font-semibold text-gray-500 dark:text-gray-400">Current Rip</span>
-			<a href="/jobs/{drive.current_job.id}" class="block truncate text-[11px] text-primary-text hover:underline dark:text-primary-text-dark">
+		<div class="mt-2 drive-card-current-rip">
+			<span class="drive-card-current-rip-label">Current Rip</span>
+			<a href="/jobs/{drive.current_job.id}" class="block truncate drive-card-current-rip-link">
 				{drive.current_job.title || 'Active Job'}
 			</a>
 		</div>
@@ -428,31 +426,30 @@
 
 	<!-- Drive settings slide-over -->
 	<SlideOver bind:open={showSettings} title="{drive.display_name || drive.device_path || 'Drive'} settings" width="max-w-md">
-		<div class="flex flex-col gap-5 text-sm">
-			<div>
-				<label for="default-session-{drive.id}" class="mb-1 block font-medium text-gray-700 dark:text-gray-300">Default session</label>
+		<div class="flex flex-col gap-5 drive-card-settings-body">
+			<div class="field">
+				<label for="default-session-{drive.id}" class="field-label">Default session</label>
 				<select
 					id="default-session-{drive.id}"
 					data-testid="drive-default-session"
 					value={drive.default_session_id ?? ''}
 					onchange={(e) => saveDefaultSession((e.currentTarget as HTMLSelectElement).value)}
 					disabled={savingDefaultSession}
-					class="w-full rounded-md border border-primary/25 bg-primary/5 px-3 py-2 text-gray-900 dark:border-primary/30 dark:bg-primary/10 dark:text-white disabled:opacity-50"
 				>
 					<option value="">- none -</option>
 					{#each sessions as s (s.id)}
 						<option value={s.id}>{s.name}{s.is_builtin ? ' (built-in)' : ''}</option>
 					{/each}
 				</select>
-				<p class="mt-1 text-xs leading-snug text-gray-400 dark:text-gray-500">Auto-applied to auto-mode rips on this drive.</p>
+				<p class="field-help">Auto-applied to auto-mode rips on this drive.</p>
 				{#if defaultSessionError}
-					<p class="mt-1 text-xs text-red-600 dark:text-red-400" data-testid="drive-default-session-error">{defaultSessionError}</p>
+					<p class="field-error" data-testid="drive-default-session-error">{defaultSessionError}</p>
 				{/if}
 			</div>
 
-			<div>
+			<div class="field">
 				<div class="flex items-center justify-between gap-2">
-					<label for="rip-speed-{drive.id}" class="font-medium text-gray-700 dark:text-gray-300">Rip Speed</label>
+					<label for="rip-speed-{drive.id}" class="field-label">Rip Speed</label>
 					<input
 						id="rip-speed-{drive.id}"
 						type="number"
@@ -462,19 +459,19 @@
 						onblur={saveSpeed}
 						onkeydown={onSpeedKeydown}
 						disabled={savingSpeed}
-						class="w-24 rounded-md border border-primary/25 bg-primary/5 px-3 py-2 text-center text-gray-900 dark:border-primary/30 dark:bg-primary/10 dark:text-white disabled:opacity-50"
+						class="drive-card-number-input"
 					/>
 				</div>
-				<p class="mt-1 text-xs leading-snug text-gray-400 dark:text-gray-500">Empty = max speed. Lower values help with read errors on problematic discs.</p>
+				<p class="field-help">Empty = max speed. Lower values help with read errors on problematic discs.</p>
 			</div>
 
-			<div class="space-y-3 border-t border-primary/15 pt-4">
-				<div class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Pre-scan tuning</div>
+			<div class="stack drive-card-prescan-section">
+				<div class="eyebrow">Pre-scan tuning</div>
 				{#each PRESCAN_FIELDS as field}
-					<div>
+					<div class="field">
 						<div class="flex items-center justify-between gap-2">
-							<label for="prescan-{field.key}-{drive.id}" class="text-gray-700 dark:text-gray-300">
-								{field.label}{#if field.unit}&nbsp;<span class="text-xs text-gray-400">({field.unit})</span>{/if}
+							<label for="prescan-{field.key}-{drive.id}" class="field-label">
+								{field.label}{#if field.unit}&nbsp;<span class="drive-card-unit">({field.unit})</span>{/if}
 							</label>
 							<input
 								id="prescan-{field.key}-{drive.id}"
@@ -493,10 +490,10 @@
 									}
 								}}
 								disabled={savingPrescan}
-								class="w-24 rounded-md border border-primary/25 bg-primary/5 px-3 py-2 text-center text-gray-900 placeholder:text-gray-400 dark:border-primary/30 dark:bg-primary/10 dark:text-white dark:placeholder:text-gray-500 disabled:opacity-50"
+								class="drive-card-number-input"
 							/>
 						</div>
-						<p class="mt-0.5 text-xs leading-snug text-gray-400 dark:text-gray-500">{field.tooltip}</p>
+						<p class="field-help">{field.tooltip}</p>
 					</div>
 				{/each}
 			</div>
@@ -504,3 +501,63 @@
 	</SlideOver>
 </div>
 {/if}
+
+<style>
+	/* DriveCard packs a lot of state into a small footprint (11px title,
+	   9-10px chips, tight action bar) - a fair bit denser than the shared
+	   card/badge/btn metrics, so most of its internals are scoped rather
+	   than block classes. */
+	.drive-card { padding: 0.625rem; }
+	.drive-card[data-detached="true"] { opacity: 0.6; }
+	.drive-card-title { font-weight: 600; font-size: 0.875rem; color: var(--color-text); }
+	/* text-xs text-gray-400 - a plain inline span in a flex row, not
+	   panel-hint's block-level note (whose own margin-top would misalign
+	   it against its row siblings) or its muted (not faint) color. */
+	.drive-card-idle { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
+	.drive-card-status-error { font-size: 0.625rem; font-weight: 500; color: var(--color-danger); }
+	/* badge-warning is a solid fill; this pill was always a soft amber tint
+	   (bg-amber-500/20 text-amber-700), closer to alert-warning's tone. */
+	.drive-card-status-pill { background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
+	.drive-card-edit-input { font-size: 0.875rem; font-weight: 600; }
+
+	/* the original was space-y-0.5 (0.125rem) - finer than stack-sm's
+	   0.5rem, so this needs its own flex column and gap. */
+	.drive-card-info { display: flex; flex-direction: column; gap: 0.125rem; font-size: 0.6875rem; line-height: 1.25; }
+	.drive-card-info-label { color: var(--color-text-muted); }
+	.drive-card-info-value { color: var(--color-text-secondary); }
+	.drive-card-info-mono { font-size: 0.625rem; }
+
+	.drive-card-chip { display: inline-flex; align-items: center; gap: 0.125rem; border-radius: var(--radius-sm); padding: 0.125rem 0.375rem; font-size: 0.5625rem; font-weight: 500; }
+	.drive-card-chip-speed { background: color-mix(in srgb, var(--color-info) 15%, transparent); color: var(--color-info); }
+	.drive-card-chip-warning { background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
+	.drive-card-chip-primary { background: var(--color-primary-tint-3); color: var(--color-primary-text); font-size: 0.625rem; }
+	.drive-card-uhd { cursor: pointer; }
+	.drive-card-uhd-checkbox { width: 0.75rem; height: 0.75rem; border-radius: var(--radius-sm); accent-color: var(--color-warning); }
+	:global(.drive-card-uhd-info) { color: var(--color-text-faint); } /* :global: forwarded onto Glyph's internal <svg>, outside this component's own template */
+
+	.drive-card-action-bar { border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--color-surface-raised) 2.5%, transparent); padding: 0.25rem; }
+	.drive-card-mode-btn { border-radius: var(--radius-md); padding: 0.375rem 0.625rem; font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; background: var(--color-primary-tint-2); color: var(--color-primary-text); cursor: pointer; transition: background-color var(--motion-fast) var(--ease); }
+	.drive-card-mode-btn:hover { background: var(--color-primary-tint-3); }
+	.drive-card-mode-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+	.drive-card-mode-btn[data-manual="true"] { background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
+	.drive-card-mode-btn[data-manual="true"]:hover { background: color-mix(in srgb, var(--color-warning) 30%, transparent); }
+	.drive-card-session-select { border-radius: var(--radius-md); border: 1px solid var(--color-border); background: var(--color-primary-tint-1); padding: 0.375rem 0.5rem; font-size: 0.75rem; color: var(--color-text); }
+	.drive-card-session-select:disabled { opacity: 0.5; }
+	.drive-card-start-btn { min-height: auto; padding: 0.375rem 0.625rem; }
+	.drive-card-action-divider { width: 1px; height: 1.5rem; background: var(--color-border); }
+	.drive-card-gear-btn[aria-pressed="true"] { background: var(--color-primary-tint-3); color: var(--color-primary-text); }
+	.drive-card-unenroll-btn { min-height: auto; padding: 0.375rem 0.5rem; }
+
+	.drive-card-error { font-size: 0.6875rem; }
+	.drive-card-current-rip { border-top: 1px solid var(--color-border); padding-top: 0.375rem; }
+	.drive-card-current-rip-label { font-size: 0.625rem; font-weight: 600; color: var(--color-text-muted); }
+	.drive-card-current-rip-link { font-size: 0.6875rem; color: var(--color-primary-text); }
+	.drive-card-current-rip-link:hover { text-decoration: underline; }
+
+	.drive-card-settings-body { font-size: 0.875rem; }
+	.drive-card-number-input { width: 6rem; text-align: center; }
+	/* the original was space-y-3 (0.75rem) - between stack-sm's 0.5rem and
+	   stack's own 1rem, so neither modifier matches exactly. */
+	.drive-card-prescan-section { gap: 0.75rem; border-top: 1px solid var(--color-border-strong); padding-top: 1rem; }
+	.drive-card-unit { font-size: 0.75rem; color: var(--color-text-faint); }
+</style>

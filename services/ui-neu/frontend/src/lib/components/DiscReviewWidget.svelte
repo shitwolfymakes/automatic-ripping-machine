@@ -217,18 +217,18 @@
 		loadSessions();
 	});
 
-	const btnBase = 'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors';
+
 </script>
 
 {#if !job}
 	<SkeletonCard lines={4} />
 {:else}
-<div class="overflow-hidden rounded-lg ring-2 ring-primary bg-surface shadow-md dark:bg-surface-dark">
+<div class="disc-review-widget">
 	<!-- Status bar -->
-	<div class="flex items-center justify-between bg-primary px-4 py-1.5">
+	<div class="disc-review-widget-status-bar">
 		<div class="flex items-center gap-2">
-			<div class="h-2 w-2 animate-pulse rounded-full bg-white/80"></div>
-			<span class="text-sm font-semibold text-on-primary">
+			<div class="disc-review-widget-status-dot"></div>
+			<span class="disc-review-widget-status-label">
 				{isReviewGate ? 'Ready: Review & Start' : isPostRip ? 'Ripped: Apply Session' : 'Awaiting Review'}
 			</span>
 		</div>
@@ -251,47 +251,47 @@
 
 	<!-- Header -->
 	<div class="flex gap-4 p-4">
-		<PosterImage url={displayJob.poster_url_manual ?? displayJob.poster_url} alt={displayJob.title ?? 'Poster'} class="h-24 shrink-0 rounded-sm object-cover {isMusic ? 'w-24' : 'w-16'}" />
+		<PosterImage url={displayJob.poster_url_manual ?? displayJob.poster_url} alt={displayJob.title ?? 'Poster'} class="disc-review-widget-poster {isMusic ? 'disc-review-widget-poster-square' : ''}" />
 
 		<div class="min-w-0 flex-1">
 			<div class="flex items-center gap-2">
-				<span class="shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white" style:background-color={phaseBadge.accent}>{phaseBadge.label}</span>
-				<h3 class="min-w-0 truncate text-lg font-semibold text-gray-900 dark:text-white">
+				<span class="disc-review-widget-phase-badge" style:--phase-accent={phaseBadge.accent}>{phaseBadge.label}</span>
+				<h3 class="min-w-0 truncate disc-review-widget-title">
 					{displayTitle}
 					{#if displayJob.year}
-						<span class="font-normal text-gray-500 dark:text-gray-400">({displayJob.year})</span>
+						<span class="disc-review-widget-title-year">({displayJob.year})</span>
 					{/if}
 				</h3>
 			</div>
-			<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-				<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{driveLabel(displayJob.drive_id, driveNames)}</span>
-				<span class="inline-flex items-center gap-1 rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">
+			<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 disc-review-widget-meta">
+				<span class="disc-review-widget-pill">{driveLabel(displayJob.drive_id, driveNames)}</span>
+				<span class="inline-flex items-center gap-1 disc-review-widget-pill">
 					<DiscTypeIcon disctype={displayJob.disc_type} size="h-3.5 w-3.5" />
 					{discTypeLabel(displayJob.disc_type)}
 				</span>
 				{#if jobMeta.video_type}
-					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{videoTypeLabel(jobMeta.video_type)}</span>
+					<span class="disc-review-widget-pill">{videoTypeLabel(jobMeta.video_type)}</span>
 				{/if}
 				{#if displayJob.disc_number != null}
-					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">Disc {displayJob.disc_number}{#if displayJob.disc_total != null}/{displayJob.disc_total}{/if}</span>
+					<span class="disc-review-widget-pill">Disc {displayJob.disc_number}{#if displayJob.disc_total != null}/{displayJob.disc_total}{/if}</span>
 				{/if}
 				{#if jobMeta.titleCount != null && jobMeta.titleCount > 0}
-					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{jobMeta.titleCount} titles</span>
+					<span class="disc-review-widget-pill">{jobMeta.titleCount} titles</span>
 				{/if}
 				{#if jobMeta.season}
-					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">S{jobMeta.season}</span>
+					<span class="disc-review-widget-pill">S{jobMeta.season}</span>
 				{/if}
 				{#if jobMeta.imdb_id && !isMusic}
-					<a href="https://www.imdb.com/title/{jobMeta.imdb_id}" target="_blank" rel="noopener noreferrer" class="rounded-sm bg-yellow-400 px-1.5 py-0.5 font-semibold text-black">IMDb</a>
+					<a href="https://www.imdb.com/title/{jobMeta.imdb_id}" target="_blank" rel="noopener noreferrer" class="badge badge-imdb">IMDb</a>
 				{/if}
 				{#if jobMeta.artist}
-					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{jobMeta.artist}</span>
+					<span class="disc-review-widget-pill">{jobMeta.artist}</span>
 				{/if}
 				{#if jobMeta.album}
-					<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{jobMeta.album}</span>
+					<span class="disc-review-widget-pill">{jobMeta.album}</span>
 				{/if}
 				{#if appliedSession}
-					<span class="rounded-sm bg-primary/15 px-1.5 py-0.5 font-medium text-primary-text dark:bg-primary/20 dark:text-primary-text-dark">Session: {appliedSession}</span>
+					<span class="disc-review-widget-session-pill">Session: {appliedSession}</span>
 				{/if}
 			</div>
 		</div>
@@ -299,32 +299,33 @@
 
 	<!-- Error banner -->
 	{#if errorMessage}
-		<div class="flex items-center gap-2 border-t border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+		<div class="alert alert-danger disc-review-widget-error">
 			<span class="flex-1">{errorMessage}</span>
-			<button onclick={() => (errorMessage = null)} class="shrink-0 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">&times;</button>
+			<button onclick={() => (errorMessage = null)} class="shrink-0 disc-review-widget-error-dismiss">&times;</button>
 		</div>
 	{/if}
 
 	<!-- Action buttons -->
-	<div class="flex items-center gap-1.5 border-t border-primary/20 bg-primary-light-bg/50 px-4 py-2 dark:border-primary/20 dark:bg-primary-light-bg-dark/10">
+	<div class="flex items-center gap-1.5 disc-review-widget-actions">
 		<button
 			onclick={() => toggleSection('info')}
-			class="{btnBase} {showInfo ? 'bg-primary text-on-primary' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}"
+			class="btn disc-review-widget-action-btn"
+			aria-pressed={showInfo}
 		>
 			Info
 		</button>
 		{#if isVideo}
-			<button onclick={() => toggleSection('title')} class="{btnBase} {showTitleSearch ? 'bg-primary text-on-primary' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}">Search</button>
+			<button onclick={() => toggleSection('title')} class="btn disc-review-widget-action-btn" aria-pressed={showTitleSearch}>Search</button>
 		{/if}
 		{#if isMusic}
-			<button onclick={() => toggleSection('music')} class="{btnBase} {showMusicSearch ? 'bg-primary text-on-primary' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}">Search</button>
+			<button onclick={() => toggleSection('music')} class="btn disc-review-widget-action-btn" aria-pressed={showMusicSearch}>Search</button>
 		{/if}
 		{#if $isAdmin}
-			<button onclick={() => (showApplySession = true)} class="{btnBase} {isPostRip ? 'bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}">{isPostRip ? 'Apply session & transcode' : 'Apply session'}</button>
+			<button onclick={() => (showApplySession = true)} class="btn {isPostRip ? 'disc-review-widget-success-btn' : 'disc-review-widget-action-btn'}">{isPostRip ? 'Apply session & transcode' : 'Apply session'}</button>
 		{/if}
 		<a
 			href="/jobs/{job.id}"
-			class="{btnBase} bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15"
+			class="btn disc-review-widget-action-btn"
 		>
 			View details
 		</a>
@@ -332,7 +333,7 @@
 			<button
 				onclick={handleCancel}
 				disabled={cancelling}
-				class="{btnBase} ml-auto text-red-600 ring-1 ring-red-300 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:ring-red-700 dark:hover:bg-red-900/20"
+				class="btn btn-danger ml-auto"
 			>
 				{cancelling ? 'Cancelling...' : 'Cancel'}
 			</button>
@@ -341,7 +342,7 @@
 			<button
 				onclick={handleStartRip}
 				disabled={starting}
-				class="{btnBase} bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 dark:bg-green-500 dark:hover:bg-green-600"
+				class="btn disc-review-widget-success-btn"
 				title="Save the metadata and start ripping this disc"
 			>
 				{starting ? 'Starting...' : 'Start rip'}
@@ -351,13 +352,13 @@
 
 	<!-- Expanded sections -->
 	{#if showTitleSearch && isVideo}
-		<div class="border-t border-primary/20 p-4 dark:border-primary/20">
+		<div class="disc-review-widget-panel">
 			<TitleSearch {job} onapply={handleTitleApply} />
 		</div>
 	{/if}
 
 	{#if showMusicSearch && isMusic}
-		<div class="border-t border-primary/20 p-4 dark:border-primary/20">
+		<div class="disc-review-widget-panel">
 			<MusicSearch {job} discTracks={tracks} onapply={handleTitleApply} />
 		</div>
 	{/if}
@@ -365,9 +366,9 @@
 	{#if showInfo}
 		<JobInfoForm {job} onrefresh={() => { onrefresh?.(); loadDetail(); }} />
 		<!-- Scanned titles (pre-rip) / tracks (post-rip) live at the bottom of the Info tab -->
-		<div class="border-t border-primary/20 dark:border-primary/20">
+		<div class="disc-review-widget-panel-top">
 			{#if initialLoading}
-				<p class="p-4 text-sm text-gray-400">Loading...</p>
+				<p class="disc-review-widget-loading">Loading...</p>
 			{:else}
 				<ReviewTracksTable {job} {tracks} {scanTitles} {isVideo} {isMusic} onrefresh={() => { onrefresh?.(); loadDetail(); }} />
 			{/if}
@@ -379,3 +380,47 @@
 	<ApplySessionDialog {job} onclose={() => (showApplySession = false)} onapplied={handleSessionApplied} />
 {/if}
 {/if}
+
+<style>
+	/* the widget's own emphasis ring (ring-2 ring-primary) is a stronger
+	   highlight than card's default 1px border, since this card is meant to
+	   grab attention on the dashboard */
+	.disc-review-widget { overflow: hidden; border-radius: var(--radius-lg); box-shadow: 0 0 0 2px var(--color-primary), var(--shadow-2); background: var(--color-surface); }
+	.disc-review-widget-status-bar { display: flex; align-items: center; justify-content: space-between; background: var(--color-primary); padding: 0.375rem 1rem; }
+	.disc-review-widget-status-dot { height: 0.5rem; width: 0.5rem; flex-shrink: 0; border-radius: 9999px; background: color-mix(in srgb, var(--color-on-primary) 80%, transparent); animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+	@keyframes pulse { 50% { opacity: 0.5; } }
+	/* :global: forwarded through PosterImage's class prop onto its own img */
+	:global(.disc-review-widget-poster) { height: 6rem; width: 4rem; flex-shrink: 0; border-radius: var(--radius-sm); object-fit: cover; }
+	/* :global: forwarded through PosterImage's class prop */
+	:global(.disc-review-widget-poster-square) { width: 6rem; }
+	.disc-review-widget-status-label { font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; color: var(--color-on-primary); }
+	.disc-review-widget-phase-badge { flex-shrink: 0; border-radius: var(--radius-sm); padding: 0.125rem 0.375rem; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-on-primary); background: var(--phase-accent); }
+	.disc-review-widget-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-text); }
+	.disc-review-widget-title-year { font-weight: 400; color: var(--color-text-muted); }
+	.disc-review-widget-loading { padding: 1rem; font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-faint); }
+	.disc-review-widget-meta { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
+	.disc-review-widget-pill { border-radius: var(--radius-sm); padding: 0.125rem 0.375rem; background: var(--color-primary-tint-2); }
+	.disc-review-widget-session-pill { border-radius: var(--radius-sm); padding: 0.125rem 0.375rem; font-weight: 500; background: var(--color-primary-tint-3); color: var(--color-primary-text); }
+	.disc-review-widget-error { display: flex; align-items: center; gap: 0.5rem; border-top: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent); border-radius: 0; padding: 0.5rem 1rem; }
+	.disc-review-widget-error-dismiss { color: var(--color-danger); }
+	.disc-review-widget-error-dismiss:hover { color: var(--color-on-danger-soft); }
+	.disc-review-widget-actions { border-top: 1px solid var(--color-border); background: color-mix(in srgb, var(--color-primary-tint-3) 50%, transparent); padding: 0.5rem 1rem; }
+	/* the original action buttons were px-3 py-1.5 text-sm (0.75rem/0.375rem,
+	   0.875rem) - between .btn's default and .btn-sm, so neither preset
+	   alone matches; override both on the row's own .btn children. The
+	   original border was a ring (box-shadow, no layout space), not .btn's
+	   real 1px border, so border:0 here keeps the height exact. */
+	.disc-review-widget-actions .btn { min-height: auto; padding: 0.375rem 0.75rem; font-size: 0.875rem; line-height: 1.25rem; border: 0; }
+	/* the original inactive action button was a tinted fill (bg-primary/5,
+	   ring-primary/25, text-gray-700), not .btn's bare-outline default
+	   (transparent background, primary-text colour) */
+	.disc-review-widget-action-btn { background: var(--color-primary-tint-1); box-shadow: 0 0 0 1px var(--color-border); color: var(--color-text-secondary); }
+	.disc-review-widget-action-btn:hover { background: var(--color-primary-tint-2); }
+	.disc-review-widget-action-btn[aria-pressed="true"] { background: var(--color-primary); color: var(--color-on-primary); box-shadow: none; }
+	.disc-review-widget-success-btn { background: var(--color-success); color: var(--color-on-primary); }
+	.disc-review-widget-success-btn:hover { background: var(--color-success); filter: brightness(0.9); }
+	/* Cancel keeps .btn-danger's tone but the original border was a ring too */
+	.disc-review-widget-actions .btn-danger { box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-danger) 30%, transparent); }
+	.disc-review-widget-panel { border-top: 1px solid var(--color-border); padding: 1rem; }
+	.disc-review-widget-panel-top { border-top: 1px solid var(--color-border); }
+</style>

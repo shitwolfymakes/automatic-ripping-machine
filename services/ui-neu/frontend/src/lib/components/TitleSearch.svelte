@@ -152,13 +152,10 @@
 		if (e.key === 'Enter') handleSearch();
 	}
 
-	const btnBase =
-		'rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-50 transition-colors';
-	const inputBase =
-		'rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary dark:border-primary/30 dark:bg-primary/10 dark:text-white';
+
 </script>
 
-<div class="space-y-4">
+<div class="stack">
 	<!-- Search form -->
 	<div class="flex flex-wrap gap-2">
 		<input
@@ -167,43 +164,43 @@
 			onkeydown={handleSearchKeydown}
 			onfocus={(e) => (e.target as HTMLInputElement).select()}
 			placeholder="Title..."
-			class="flex-1 min-w-[200px] {inputBase}"
+			class="field-control flex-1 title-search-min"
 		/>
 		<input
 			type="text"
 			bind:value={yearInput}
 			onkeydown={handleSearchKeydown}
 			placeholder="Year"
-			class="w-20 {inputBase}"
+			class="field-control w-20"
 		/>
 		<input
 			type="text"
 			bind:value={imdbInput}
 			onkeydown={handleSearchKeydown}
 			placeholder="IMDb ID (tt...)"
-			class="w-36 {inputBase}"
+			class="field-control w-36"
 		/>
 		<button
 			onclick={handleSearch}
 			disabled={searching || (!query.trim() && !imdbInput.trim())}
-			class="{btnBase} bg-primary text-on-primary hover:bg-primary-hover dark:bg-primary dark:hover:bg-primary-hover"
+			class="btn btn-primary title-search-action-btn"
 		>
 			{searching ? 'Searching...' : 'Search'}
 		</button>
-		<span class="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold bg-gray-100 text-gray-500 dark:bg-gray-700/50 dark:text-gray-400" title="Default metadata provider configured in Settings">
+		<span class="badge badge-sm" title="Default metadata provider configured in Settings">
 			{providerLabel}
 		</span>
 	</div>
 
 	{#if searchError}
 		{#if searchError.toLowerCase().includes('api key')}
-			<div class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-600/40 dark:bg-amber-900/20 dark:text-amber-300">
-				<p class="font-medium">{searchError}</p>
-				<p class="mt-1 text-xs text-amber-600 dark:text-amber-400">Configure API keys in <a href="/settings" class="underline hover:no-underline">Settings</a>.</p>
+			<div class="alert alert-warning">
+				<p class="title-search-alert-title">{searchError}</p>
+				<p class="mt-1 title-search-alert-hint">Configure API keys in <a href="/settings" class="title-search-alert-link">Settings</a>.</p>
 			</div>
 		{:else}
 			<div class="flex items-center gap-3">
-				<p class="text-sm text-gray-500 dark:text-gray-400">{searchError}</p>
+				<p class="field-help">{searchError}</p>
 			</div>
 		{/if}
 	{/if}
@@ -214,15 +211,14 @@
 			{#each results as result}
 				<button
 					onclick={() => handleSelect(result)}
-					class="group flex flex-col overflow-hidden rounded-lg border text-left transition-all {selected === result
-						? 'border-primary ring-2 ring-primary/30'
-						: 'border-primary/20 hover:border-primary/40 dark:border-primary/20 dark:hover:border-primary/40'}"
+					class="group flex flex-col overflow-hidden title-search-card"
+					data-selected={selected === result}
 				>
 					{#if result.poster_url}
-						<PosterImage url={result.poster_url} alt={result.title} class="aspect-[2/3] w-full object-cover" />
+						<PosterImage url={result.poster_url} alt={result.title} class="title-search-poster w-full object-cover" />
 					{:else}
 						<div
-							class="flex aspect-[2/3] w-full items-center justify-center bg-primary/10 text-gray-400 dark:bg-primary/15"
+							class="flex title-search-poster w-full items-center justify-center title-search-placeholder"
 						>
 							<svg class="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path
@@ -236,16 +232,15 @@
 					{/if}
 					<div class="p-2">
 						<p
-							class="text-sm font-medium text-gray-900 group-hover:text-primary-text dark:text-white dark:group-hover:text-primary-text-dark line-clamp-2"
+							class="title-search-card-title line-clamp-2"
 						>
 							{result.title}
 						</p>
 						<div class="mt-1 flex items-center gap-1.5">
-							<span class="text-xs text-gray-500 dark:text-gray-400">{result.year ?? ''}</span>
+							<span class="title-search-card-year">{result.year ?? ''}</span>
 							<span
-								class="rounded-sm px-1 py-0.5 text-[10px] font-medium uppercase {result.kind === 'series' || result.kind === 'tv'
-									? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-									: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'}"
+								class="badge badge-sm"
+								data-kind={result.kind === 'series' || result.kind === 'tv' ? 'series' : 'movie'}
 							>
 								{result.kind}
 							</span>
@@ -258,16 +253,16 @@
 
 	<!-- Detail panel with editable fields -->
 	{#if loadingDetail}
-		<div class="rounded-lg border border-primary/20 bg-page p-4 text-sm text-gray-500 dark:border-primary/20 dark:bg-page-dark dark:text-gray-400">
+		<div class="panel-section title-search-loading">
 			Loading details...
 		</div>
 	{:else if detail}
-		<div class="overflow-hidden rounded-lg border border-primary/20 dark:border-primary/20">
-			<div class="space-y-3 p-4">
+		<div class="panel">
+			<div class="stack">
 				{#if results.length > 0}
 					<button
 						onclick={backToResults}
-						class="inline-flex items-center gap-1 text-sm text-primary hover:text-primary-hover dark:text-primary dark:hover:text-primary-hover"
+						class="btn btn-link inline-flex items-center gap-1"
 					>
 						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -277,24 +272,24 @@
 				{/if}
 				<!-- Editable fields -->
 				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-					<label class="sm:col-span-2">
-						<span class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Title</span>
-						<input type="text" bind:value={editTitle} class="w-full {inputBase}" />
+					<label class="field sm:col-span-2">
+						<span class="field-label">Title</span>
+						<input type="text" bind:value={editTitle} />
 					</label>
-					<label>
-						<span class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Year</span>
-						<input type="text" bind:value={editYear} class="w-full {inputBase}" />
+					<label class="field">
+						<span class="field-label">Year</span>
+						<input type="text" bind:value={editYear} />
 					</label>
-					<label>
-						<span class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Type</span>
-						<select bind:value={editType} class="w-full {inputBase}">
+					<label class="field">
+						<span class="field-label">Type</span>
+						<select bind:value={editType}>
 							<option value="movie">Movie</option>
 							<option value="series">Series</option>
 						</select>
 					</label>
-					<label class="sm:col-span-2">
-						<span class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Poster URL</span>
-						<input type="text" bind:value={editPosterUrl} placeholder="https://..." class="w-full {inputBase}" />
+					<label class="field sm:col-span-2">
+						<span class="field-label">Poster URL</span>
+						<input type="text" bind:value={editPosterUrl} placeholder="https://..." />
 					</label>
 				</div>
 				<div class="flex items-center gap-2">
@@ -302,7 +297,7 @@
 						<button
 							onclick={applyResult}
 							disabled={applying}
-							class="{btnBase} bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
+							class="btn title-search-success-btn title-search-action-btn"
 						>
 							{applying ? 'Applying...' : canResolve ? 'Apply' : 'Apply Poster'}
 						</button>
@@ -310,16 +305,15 @@
 					{#if feedback}
 						<span
 							in:reveal
-							class="text-xs {feedback.type === 'success'
-								? 'text-green-600 dark:text-green-400'
-								: 'text-red-600 dark:text-red-400'}"
+							class="title-search-feedback"
+							data-tone={feedback.type}
 						>
 							{feedback.message}
 						</span>
 						{#if feedback.showEpisodes && onepisodes}
 							<button
 								onclick={onepisodes}
-								class="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600"
+								class="btn btn-primary title-search-action-btn"
 							>
 								Match Episodes
 							</button>
@@ -330,3 +324,33 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	.title-search-min { min-width: 200px; }
+	/* the original action buttons were px-3 py-1.5 (0.75rem/0.375rem),
+	   narrower than .btn's default 1rem/0.5rem */
+	.title-search-action-btn { padding: 0.375rem 0.75rem; }
+	/* :global: also passed as PosterImage's class prop, landing on its own <img> */
+	:global(.title-search-poster) { aspect-ratio: 2 / 3; }
+	.title-search-alert-title { font-weight: 500; }
+	.title-search-alert-link { text-decoration: underline; }
+	.title-search-alert-link:hover { text-decoration: none; }
+	.title-search-alert-hint { font-size: 0.75rem; line-height: 1rem; color: var(--color-on-warning-soft); }
+	.title-search-card { border: 1px solid var(--color-border); border-radius: var(--radius-lg); text-align: left; transition: border-color var(--motion-fast) var(--ease); }
+	.title-search-card:hover { border-color: var(--color-border-strong); }
+	.title-search-card[data-selected="true"] { border-color: var(--color-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 30%, transparent); }
+	.title-search-placeholder { background: var(--color-primary-tint-2); color: var(--color-text-faint); }
+	.title-search-card-title { font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text); }
+	.title-search-card:hover .title-search-card-title { color: var(--color-primary-text); }
+	.title-search-card-year { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
+	.title-search-loading { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	.title-search-success-btn { border: 0; background: var(--color-success); color: var(--color-on-primary); }
+	.title-search-success-btn:hover { filter: brightness(0.9); }
+	.title-search-feedback { font-size: 0.75rem; line-height: 1rem; }
+	.title-search-feedback[data-tone="success"] { color: var(--color-success); }
+	.title-search-feedback[data-tone="error"] { color: var(--color-danger); }
+	/* result kind pill: series -> accent-3 (violet, no tone matches purple);
+	   movie -> success tone (closest to the original's green) */
+	.badge[data-kind="series"] { background: color-mix(in srgb, var(--color-accent-3) 15%, transparent); color: var(--color-accent-3); text-transform: uppercase; }
+	.badge[data-kind="movie"] { background: var(--color-success-soft); color: var(--color-on-success-soft); text-transform: uppercase; }
+</style>

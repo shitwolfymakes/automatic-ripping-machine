@@ -9,7 +9,7 @@
 </script>
 
 <div
-    class="rounded skeleton-surface {cls}"
+    class="skeleton-surface {cls}"
     data-variant={variant}
     style:width
     style:height
@@ -17,11 +17,13 @@
 ></div>
 
 <style>
+    /* Skeleton.svelte takes arbitrary width/height (callers size it per use),
+       so it doesn't fit the fixed-size skeleton-text/block/card modifiers in
+       skeleton.css - it keeps its own scoped rule, on the same token those
+       use. */
     .skeleton-surface {
-        background: var(--skeleton-base, rgb(229 231 235));
-    }
-    :global(.dark) .skeleton-surface {
-        background: var(--skeleton-base-dark, rgb(31 41 55));
+        border-radius: var(--radius-sm);
+        background: var(--color-primary-tint-2);
     }
     @media (prefers-reduced-motion: no-preference) {
         .skeleton-surface {

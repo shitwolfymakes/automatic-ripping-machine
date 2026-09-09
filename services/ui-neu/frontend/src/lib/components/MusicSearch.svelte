@@ -161,11 +161,11 @@
 		return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 	}
 
-	const MATCH_CLASS = {
-		match: 'text-green-600 dark:text-green-400',
-		close: 'text-amber-600 dark:text-amber-400',
-		mismatch: 'text-red-600 dark:text-red-400',
-		unknown: 'text-gray-400'
+	const MATCH_TONE: Record<MatchKind, string> = {
+		match: 'success',
+		close: 'warning',
+		mismatch: 'danger',
+		unknown: 'muted'
 	};
 
 	let discTotalSec = $derived(
@@ -252,9 +252,7 @@
 		matchCount = false;
 	}
 
-	const btnBase = 'rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-50 transition-colors';
-	const inputBase = 'rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary dark:border-primary/30 dark:bg-primary/10 dark:text-white';
-	const selectBase = 'rounded-lg border border-primary/25 bg-primary/5 px-2 py-1.5 text-xs text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary dark:border-primary/30 dark:bg-primary/10 dark:text-white';
+
 </script>
 
 {#snippet matchGlyph(kind: MatchKind)}
@@ -269,34 +267,33 @@
 	{/if}
 {/snippet}
 
-<div class="space-y-3">
+<div class="stack">
 	<!-- Search panel -->
-	<div class="rounded-lg border border-primary/20 bg-primary/[0.02] p-3 dark:border-primary/20 dark:bg-primary/[0.03]">
+	<div class="panel-section">
 		<div class="flex flex-wrap items-end gap-2">
-			<label class="min-w-[160px] flex-1">
-				<span class="mb-0.5 block text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Album / Title</span>
+			<label class="flex-1 field music-search-field-min">
+				<span class="eyebrow music-search-label">Album / Title</span>
 				<input
 					type="text"
 					bind:value={query}
 					onkeydown={handleSearchKeydown}
 					onfocus={(e) => (e.target as HTMLInputElement).select()}
 					placeholder="Album or title..."
-					class="w-full {inputBase}"
 				/>
 			</label>
-			<label>
-				<span class="mb-0.5 block text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Artist</span>
+			<label class="field">
+				<span class="eyebrow music-search-label">Artist</span>
 				<input
 					type="text"
 					bind:value={artist}
 					onkeydown={handleSearchKeydown}
 					placeholder="Artist (optional)"
-					class="w-36 {inputBase}"
+					class="w-36"
 				/>
 			</label>
-			<label>
-				<span class="mb-0.5 block text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Type</span>
-				<select bind:value={filterType} class="{selectBase}">
+			<label class="field">
+				<span class="eyebrow music-search-label">Type</span>
+				<select bind:value={filterType} class="music-search-select-sm">
 					<option value="">Any</option>
 					<option value="album">Album</option>
 					<option value="single">Single</option>
@@ -306,9 +303,9 @@
 					<option value="soundtrack">Soundtrack</option>
 				</select>
 			</label>
-			<label>
-				<span class="mb-0.5 block text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Format</span>
-				<select bind:value={filterFormat} class="{selectBase}">
+			<label class="field">
+				<span class="eyebrow music-search-label">Format</span>
+				<select bind:value={filterFormat} class="music-search-select-sm">
 					<option value="">Any</option>
 					<option value="CD">CD</option>
 					<option value="Vinyl">Vinyl</option>
@@ -317,19 +314,19 @@
 					<option value="SACD">SACD</option>
 				</select>
 			</label>
-			<label>
-				<span class="mb-0.5 block text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Country</span>
+			<label class="field">
+				<span class="eyebrow music-search-label">Country</span>
 				<input
 					type="text"
 					bind:value={filterCountry}
 					onkeydown={handleSearchKeydown}
 					placeholder="US, GB..."
-					class="w-20 {selectBase}"
+					class="w-20 music-search-select-sm"
 				/>
 			</label>
-			<label>
-				<span class="mb-0.5 block text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Status</span>
-				<select bind:value={filterStatus} class="{selectBase}">
+			<label class="field">
+				<span class="eyebrow music-search-label">Status</span>
+				<select bind:value={filterStatus} class="music-search-select-sm">
 					<option value="">Any</option>
 					<option value="official">Official</option>
 					<option value="promotional">Promotional</option>
@@ -337,27 +334,27 @@
 				</select>
 			</label>
 			{#if discTracks.length > 0}
-				<label class="flex items-center gap-1.5">
-					<span class="mb-0.5 block text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">&nbsp;</span>
-					<div class="flex items-center gap-1.5 py-[5px]">
-						<input type="checkbox" bind:checked={matchCount} class="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary" />
-						<span class="text-xs text-gray-600 dark:text-gray-400">{discTracks.length} tracks</span>
+				<label class="flex items-center gap-1.5 field">
+					<span class="eyebrow music-search-label">&nbsp;</span>
+					<div class="flex items-center gap-1.5 music-search-checkbox-row">
+						<input type="checkbox" bind:checked={matchCount} class="music-search-checkbox" />
+						<span class="music-search-meta">{discTracks.length} tracks</span>
 					</div>
 				</label>
 			{/if}
 			<div class="flex items-center gap-2">
-				<span class="mb-0.5 block text-[10px]">&nbsp;</span>
+				<span class="eyebrow music-search-label">&nbsp;</span>
 				<button
 					onclick={handleSearch}
 					disabled={searching || !query.trim()}
-					class="{btnBase} bg-primary text-on-primary hover:bg-primary-hover dark:bg-primary dark:hover:bg-primary-hover"
+					class="btn btn-primary music-search-action-btn"
 				>
 					{searching ? 'Searching...' : 'Search'}
 				</button>
 				{#if activeFilterCount > 0}
 					<button
 						onclick={clearFilters}
-						class="rounded-lg px-2 py-1.5 text-xs text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
+						class="btn btn-ghost music-search-clear-btn"
 					>
 						Clear
 					</button>
@@ -367,7 +364,7 @@
 	</div>
 
 	{#if searchError}
-		<p class="text-xs text-gray-500 dark:text-gray-400">{searchError}</p>
+		<p class="music-search-meta">{searchError}</p>
 	{/if}
 
 	<!-- Results grid -->
@@ -377,27 +374,27 @@
 				{@const flipKey = c.provider_id ?? ''}
 				{@const flipData = flippedCards.get(flipKey)}
 				{@const isFlipped = flippedCards.has(flipKey)}
-				<div style="perspective: 800px">
-					<div class="relative" style="transform-style: preserve-3d; transition: transform 0.5s; {isFlipped ? 'transform: rotateY(180deg)' : ''}">
+				<div class="music-search-poster-scene">
+					<div class="music-search-poster-card" data-flipped={isFlipped}>
 						<!-- FRONT FACE -->
-						<div class="relative" style="backface-visibility: hidden; transform: rotateY(0deg)">
-							<button onclick={() => openDetail(c)} class="group flex w-full flex-col rounded-md border border-primary/15 text-left dark:border-primary/20">
-								<PosterImage url={c.poster_url} class="aspect-square w-full rounded-t-md object-cover" />
+						<div class="music-search-poster-face">
+							<button onclick={() => openDetail(c)} class="group flex w-full flex-col music-search-result-card">
+								<PosterImage url={c.poster_url} class="aspect-square w-full music-search-result-poster" />
 								<div class="p-1.5">
-									<p class="truncate text-[11px] font-medium text-gray-900 dark:text-white">{c.title}</p>
+									<p class="truncate music-search-result-title">{c.title}</p>
 									<div class="mt-1 flex flex-wrap items-center gap-1">
-										{#if c.year}<span class="text-[10px] text-gray-500">{c.year}</span>{/if}
-										{#if c.release_type}<span class="rounded-sm bg-purple-100 px-1 py-0.5 text-[10px] font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">{c.release_type}</span>{/if}
-										{#if c.format}<span class="rounded-sm bg-green-100 px-1 py-0.5 text-[10px] font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">{c.format}</span>{/if}
-										{#if c.country}<span class="rounded-sm bg-gray-100 px-1 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">{c.country}</span>{/if}
-										{#if c.track_count}<span class="rounded-sm bg-blue-100 px-1 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">{c.track_count} tracks</span>{/if}
+										{#if c.year}<span class="music-search-result-year">{c.year}</span>{/if}
+										{#if c.release_type}<span class="music-search-result-pill" data-kind="type">{c.release_type}</span>{/if}
+										{#if c.format}<span class="music-search-result-pill" data-kind="format">{c.format}</span>{/if}
+										{#if c.country}<span class="music-search-result-pill" data-kind="country">{c.country}</span>{/if}
+										{#if c.track_count}<span class="music-search-result-pill" data-kind="tracks">{c.track_count} tracks</span>{/if}
 									</div>
 								</div>
 							</button>
 							{#if c.track_count}
 								<button
 									onclick={(e) => toggleFlip(e, c)}
-									class="absolute top-1 right-1 z-10 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm transition-colors hover:bg-black/80"
+									class="absolute top-1 right-1 flex items-center gap-1 music-search-flip-btn"
 									title="Flip to see tracklist"
 								>
 									<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -409,47 +406,47 @@
 						</div>
 
 						<!-- BACK FACE -->
-						<div class="absolute inset-0 flex flex-col overflow-hidden rounded-md border border-primary/15 bg-white dark:border-primary/20 dark:bg-gray-900" style="backface-visibility: hidden; transform: rotateY(180deg)">
+						<div class="music-search-poster-face music-search-poster-back">
 							{#if flipData === 'loading'}
-								<div class="flex h-full items-center justify-center text-[11px] text-gray-500 dark:text-gray-400">
-									<svg class="mr-1.5 h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+								<div class="flex h-full items-center justify-center music-search-back-loading">
+									<svg class="mr-1.5 h-3.5 w-3.5 music-search-spinner" viewBox="0 0 24 24" fill="none">
+										<circle class="music-search-spinner-track" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+										<path class="music-search-spinner-arc" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
 									</svg>
 									Loading...
 								</div>
 							{:else if flipData && flipData.tracks && flipData.tracks.length > 0}
 								<!-- Compact header -->
-								<div class="flex items-center gap-2 border-b border-primary/15 p-1.5 dark:border-primary/20">
-									<PosterImage url={flipData.poster_url} class="h-8 w-8 shrink-0 rounded object-cover" />
+								<div class="flex items-center gap-2 music-search-back-header">
+									<PosterImage url={flipData.poster_url} class="h-8 w-8 shrink-0 music-search-back-poster" />
 									<div class="min-w-0 flex-1">
-										<p class="truncate text-[11px] font-semibold text-gray-900 dark:text-white">{flipData.title}</p>
-										<p class="truncate text-[10px] text-gray-500 dark:text-gray-400">{flipData.artist ?? ''}</p>
+										<p class="truncate music-search-back-title">{flipData.title}</p>
+										<p class="truncate music-search-back-artist">{flipData.artist ?? ''}</p>
 									</div>
 								</div>
 								<!-- Scrollable track list -->
 								<div class="min-h-0 flex-1 overflow-y-auto">
-									<table class="w-full text-[11px]">
+									<table class="w-full music-search-back-table">
 										<tbody>
 											{#each flipData.tracks as track, i}
 												{@const kind = discTracks.length > 0 ? matchIndicator(track.length_ms, discTracks[i]?.expected_duration_seconds) : null}
-												<tr class="border-b border-gray-100 last:border-0 dark:border-gray-800">
-													<td class="w-6 py-0.5 pl-1.5 pr-1 text-right font-mono text-gray-400 dark:text-gray-500">{track.position}</td>
-													<td class="max-w-0 truncate py-0.5 pr-1 text-gray-700 dark:text-gray-300">{track.title}</td>
-													<td class="w-10 whitespace-nowrap py-0.5 pr-1 text-right font-mono text-gray-400 dark:text-gray-500">{fmtMs(track.length_ms)}</td>
-													{#if kind}<td class="w-4 py-0.5 pr-1 text-center {MATCH_CLASS[kind]}" title={kind}>{@render matchGlyph(kind)}</td>{/if}
+												<tr class="music-search-back-row">
+													<td class="w-6 py-0.5 pl-1.5 pr-1 mono music-search-back-dim music-search-right">{track.position}</td>
+													<td class="max-w-0 truncate py-0.5 pr-1 music-search-back-track-title">{track.title}</td>
+													<td class="w-10 whitespace-nowrap py-0.5 pr-1 mono music-search-back-dim music-search-right">{fmtMs(track.length_ms)}</td>
+													{#if kind}<td class="w-4 py-0.5 pr-1 music-search-match" data-tone={MATCH_TONE[kind]} title={kind}>{@render matchGlyph(kind)}</td>{/if}
 												</tr>
 											{/each}
 										</tbody>
 									</table>
 								</div>
 							{:else}
-								<div class="flex h-full items-center justify-center text-[10px] text-gray-400 dark:text-gray-500">No track data</div>
+								<div class="flex h-full items-center justify-center music-search-back-empty">No track data</div>
 							{/if}
 							<!-- Flip-back button -->
 							<button
 								onclick={(e) => toggleFlip(e, c)}
-								class="absolute top-1 right-1 z-10 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm transition-colors hover:bg-black/80"
+								class="absolute top-1 right-1 flex items-center gap-1 music-search-flip-btn"
 								title="Flip back"
 							>
 								<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -466,22 +463,22 @@
 
 	<!-- Detail / apply -->
 	{#if loadingDetail}
-		<p class="text-xs text-gray-400">Loading...</p>
+		<p class="music-search-meta">Loading...</p>
 	{:else if detail}
-		<div class="space-y-3 rounded-md border border-primary/15 bg-primary/5 p-3 dark:border-primary/20 dark:bg-primary/10">
-			<button onclick={() => (detail = null)} class="{btnBase} flex items-center gap-1 text-gray-500 hover:text-gray-700 dark:text-gray-400"><Glyph name="arrow-left" /> Back to results</button>
+		<div class="stack panel-section">
+			<button onclick={() => (detail = null)} class="btn btn-ghost music-search-action-btn flex items-center gap-1"><Glyph name="arrow-left" /> Back to results</button>
 			<div class="flex items-start gap-3">
-				<PosterImage url={detail.poster_url} class="h-24 w-24 rounded object-cover" />
-				<div class="min-w-0 text-xs text-gray-600 dark:text-gray-400">
-					<p class="text-sm font-semibold text-gray-900 dark:text-white">{detail.title}</p>
+				<PosterImage url={detail.poster_url} class="h-24 w-24 music-search-detail-poster" />
+				<div class="min-w-0 music-search-detail-meta">
+					<p class="music-search-detail-title">{detail.title}</p>
 					<p>{detail.artist ?? ''}</p>
-					<p class="mt-1 space-x-2">
+					<p class="mt-1 flex flex-wrap gap-2">
 						{#if detail.country}<span>{detail.country}</span>{/if}
 						{#if detail.format}<span>{detail.format}</span>{/if}
 						{#if detail.status}<span>{detail.status}</span>{/if}
 						{#if detail.disc_count && detail.disc_count > 1}<span>{detail.disc_count} discs</span>{/if}
 					</p>
-					<p class="mt-0.5 font-mono text-[10px]">
+					<p class="mt-0.5 mono music-search-catalog">
 						{#if detail.catalog_number}Cat# {detail.catalog_number}{/if}
 						{#if detail.barcode}| {detail.barcode}{/if}
 					</p>
@@ -489,32 +486,32 @@
 			</div>
 
 			<!-- Tracklist with match indicators -->
-			<div class="overflow-x-auto rounded border border-primary/15 dark:border-primary/20">
-				<table class="w-full text-left text-xs">
-					<thead class="bg-page text-gray-600 dark:bg-primary/5 dark:text-gray-400">
-						<tr><th class="px-2 py-1">#</th><th class="px-2 py-1">Title</th>{#if discTracks.length > 0}<th class="px-2 py-1 text-right">Disc Length</th>{/if}<th class="px-2 py-1 text-right">{discTracks.length > 0 ? 'Match Length' : 'Duration'}</th>{#if discTracks.length > 0}<th class="px-2 py-1 text-center">Match</th>{/if}</tr>
+			<div class="overflow-x-auto music-search-table-scroll">
+				<table class="table music-search-detail-table">
+					<thead>
+						<tr><th class="table-header">#</th><th class="table-header">Title</th>{#if discTracks.length > 0}<th class="table-header music-search-right">Disc Length</th>{/if}<th class="table-header music-search-right">{discTracks.length > 0 ? 'Match Length' : 'Duration'}</th>{#if discTracks.length > 0}<th class="table-header music-search-center">Match</th>{/if}</tr>
 					</thead>
-					<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+					<tbody>
 						{#each visibleTracks as t, i}
 							{@const kind = matchIndicator(t.length_ms, discTracks[i]?.expected_duration_seconds)}
-							<tr>
-								<td class="px-2 py-1">{t.position ?? i + 1}</td>
-								<td class="px-2 py-1">{t.title}</td>
-								{#if discTracks.length > 0}<td class="px-2 py-1 text-right font-mono text-gray-500 dark:text-gray-400">{fmtSec(discTracks[i]?.expected_duration_seconds)}</td>{/if}
-								<td class="px-2 py-1 text-right">{fmtMs(t.length_ms)}</td>
-								{#if discTracks.length > 0}<td class="px-2 py-1 text-center {MATCH_CLASS[kind]}" title={kind}>{@render matchGlyph(kind)}</td>{/if}
+							<tr class="table-row">
+								<td class="table-cell">{t.position ?? i + 1}</td>
+								<td class="table-cell">{t.title}</td>
+								{#if discTracks.length > 0}<td class="table-cell mono music-search-right music-search-muted">{fmtSec(discTracks[i]?.expected_duration_seconds)}</td>{/if}
+								<td class="table-cell music-search-right">{fmtMs(t.length_ms)}</td>
+								{#if discTracks.length > 0}<td class="table-cell music-search-match" data-tone={MATCH_TONE[kind]} title={kind}>{@render matchGlyph(kind)}</td>{/if}
 							</tr>
 						{/each}
 					</tbody>
 					{#if discTracks.length > 0}
 						{@const totalKind = matchIndicator(mbTotalMs, discTotalSec)}
-						<tfoot class="border-t border-gray-200 bg-page font-medium dark:border-gray-600 dark:bg-primary/5">
+						<tfoot class="music-search-tfoot">
 							<tr>
-								<td class="px-2 py-1">Total</td>
-								<td class="px-2 py-1"></td>
-								<td class="px-2 py-1 text-right font-mono">{fmtSec(discTotalSec)}</td>
-								<td class="px-2 py-1 text-right font-mono">{fmtMs(mbTotalMs)}</td>
-								<td class="px-2 py-1 text-center {MATCH_CLASS[totalKind]}" title={totalKind}>{@render matchGlyph(totalKind)}</td>
+								<td class="table-cell">Total</td>
+								<td class="table-cell"></td>
+								<td class="table-cell mono music-search-right">{fmtSec(discTotalSec)}</td>
+								<td class="table-cell mono music-search-right">{fmtMs(mbTotalMs)}</td>
+								<td class="table-cell music-search-match" data-tone={MATCH_TONE[totalKind]} title={totalKind}>{@render matchGlyph(totalKind)}</td>
 							</tr>
 						</tfoot>
 					{/if}
@@ -523,15 +520,15 @@
 
 			<!-- Editable fields -->
 			<div class="grid grid-cols-2 gap-2">
-				<label class="col-span-2"><span class="mb-0.5 block text-[10px] text-gray-500">Album</span><input bind:value={editAlbum} class="w-full {inputBase}" /></label>
-				<label><span class="mb-0.5 block text-[10px] text-gray-500">Artist</span><input bind:value={editArtist} class="w-full {inputBase}" /></label>
-				<label><span class="mb-0.5 block text-[10px] text-gray-500">Year</span><input bind:value={editYear} class="w-full {inputBase}" /></label>
-				<label><span class="mb-0.5 block text-[10px] text-gray-500">Disc #</span><input bind:value={discNumber} placeholder="-" class="w-full {inputBase}" /></label>
-				<label><span class="mb-0.5 block text-[10px] text-gray-500">Disc total</span><input bind:value={discTotal} placeholder="-" class="w-full {inputBase}" /></label>
+				<label class="field col-span-2"><span class="field-label music-search-field-label-sm">Album</span><input bind:value={editAlbum} /></label>
+				<label class="field"><span class="field-label music-search-field-label-sm">Artist</span><input bind:value={editArtist} /></label>
+				<label class="field"><span class="field-label music-search-field-label-sm">Year</span><input bind:value={editYear} /></label>
+				<label class="field"><span class="field-label music-search-field-label-sm">Disc #</span><input bind:value={discNumber} placeholder="-" /></label>
+				<label class="field"><span class="field-label music-search-field-label-sm">Disc total</span><input bind:value={discTotal} placeholder="-" /></label>
 			</div>
 
 			{#if confirmMismatch}
-				<div class="flex flex-wrap items-center gap-2 rounded-md border border-red-300 bg-red-50 p-2 text-xs text-red-700 dark:border-red-700 dark:bg-red-900/20 dark:text-red-400">
+				<div class="flex flex-wrap items-center gap-2 alert alert-danger">
 					<span class="flex flex-1 items-center gap-1"><Glyph name="warning" /> Total length differs, likely the wrong release</span>
 					<button
 						onclick={() => {
@@ -539,29 +536,29 @@
 							confirmMismatch = false;
 							applyRelease();
 						}}
-						class="{btnBase} bg-red-600 text-white hover:bg-red-700"
+						class="btn music-search-solid-danger music-search-action-btn"
 					>
 						Apply anyway
 					</button>
-					<button onclick={() => (confirmMismatch = false)} class="{btnBase} text-gray-600 hover:text-gray-800 dark:text-gray-400">
+					<button onclick={() => (confirmMismatch = false)} class="btn btn-ghost music-search-action-btn">
 						Cancel
 					</button>
 				</div>
 			{/if}
 
 			{#if mappingPreview}
-				<div class="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-2 text-xs dark:border-primary/30 dark:bg-primary/10">
-					<p class="font-medium text-gray-700 dark:text-gray-300">Confirm track title mapping</p>
-					<div class="overflow-x-auto rounded border border-primary/15 dark:border-primary/20">
-						<table class="w-full text-left">
-							<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+				<div class="stack panel-section music-search-mapping-preview">
+					<p class="music-search-mapping-title">Confirm track title mapping</p>
+					<div class="overflow-x-auto music-search-table-scroll">
+						<table class="table">
+							<tbody>
 								{#each trackMapping as p}
-									<tr>
-										<td class="px-2 py-1 whitespace-nowrap font-mono text-gray-500 dark:text-gray-400">Disc #{p.disc.index} ({fmtSec(p.disc.expected_duration_seconds)})</td>
-										<td class="px-2 py-1 text-center text-gray-400"><Glyph name="arrow-right" class="mx-auto h-3.5 w-3.5" /></td>
-										<td class="px-2 py-1 text-gray-700 dark:text-gray-300">{p.mb.title}</td>
-										<td class="px-2 py-1 text-right font-mono text-gray-500 dark:text-gray-400">{fmtMs(p.mb.length_ms)}</td>
-										<td class="px-2 py-1 text-center {MATCH_CLASS[p.match]}" title={p.match}>{@render matchGlyph(p.match)}</td>
+									<tr class="table-row">
+										<td class="table-cell whitespace-nowrap mono music-search-muted">Disc #{p.disc.index} ({fmtSec(p.disc.expected_duration_seconds)})</td>
+										<td class="table-cell music-search-center music-search-faint"><Glyph name="arrow-right" class="mx-auto h-3.5 w-3.5" /></td>
+										<td class="table-cell">{p.mb.title}</td>
+										<td class="table-cell music-search-right mono music-search-muted">{fmtMs(p.mb.length_ms)}</td>
+										<td class="table-cell music-search-match" data-tone={MATCH_TONE[p.match]} title={p.match}>{@render matchGlyph(p.match)}</td>
 									</tr>
 								{/each}
 							</tbody>
@@ -574,11 +571,11 @@
 								mappingPreview = false;
 								applyRelease();
 							}}
-							class="{btnBase} bg-green-600 text-white hover:bg-green-700 dark:bg-green-500"
+							class="btn music-search-success-btn music-search-action-btn"
 						>
 							Apply titles
 						</button>
-						<button onclick={() => (mappingPreview = false)} class="{btnBase} text-gray-600 hover:text-gray-800 dark:text-gray-400">
+						<button onclick={() => (mappingPreview = false)} class="btn btn-ghost music-search-action-btn">
 							Cancel
 						</button>
 					</div>
@@ -587,14 +584,93 @@
 
 			<div class="flex items-center gap-2">
 				{#if $isAdmin}
-					<button onclick={applyRelease} disabled={applying || !editAlbum.trim()} class="{btnBase} bg-green-600 text-white hover:bg-green-700 dark:bg-green-500">
+					<button onclick={applyRelease} disabled={applying || !editAlbum.trim()} class="btn music-search-success-btn music-search-action-btn">
 						{applying ? 'Applying...' : 'Apply'}
 					</button>
 				{/if}
 				{#if feedback}
-					<span class="text-xs {feedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{feedback.message}</span>
+					<span class="music-search-feedback" data-tone={feedback.type}>{feedback.message}</span>
 				{/if}
 			</div>
 		</div>
 	{/if}
 </div>
+
+<style>
+	.music-search-label { color: var(--color-text-muted); }
+	.music-search-field-min { min-width: 160px; }
+	.music-search-right { text-align: right; }
+	.music-search-spinner { animation: music-search-spin 1s linear infinite; }
+	.music-search-spinner-track { opacity: 0.25; }
+	.music-search-spinner-arc { opacity: 0.75; }
+	@keyframes music-search-spin { to { transform: rotate(360deg); } }
+	.music-search-meta { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
+	.music-search-checkbox-row { padding: 0.3125rem 0; }
+	.music-search-checkbox { width: 0.875rem; height: 0.875rem; border-radius: var(--radius-sm); accent-color: var(--color-primary); }
+	.music-search-clear-btn:hover { color: var(--color-danger); }
+	/* select/input variants one size down from field-control's default
+	   (text-xs vs text-sm, tighter horizontal padding) */
+	.music-search-select-sm { padding-left: 0.5rem; padding-right: 0.5rem; font-size: 0.75rem; line-height: 1rem; }
+
+	.music-search-poster-scene { perspective: 800px; }
+	.music-search-poster-card { position: relative; transform-style: preserve-3d; transition: transform 0.5s; }
+	.music-search-poster-card[data-flipped="true"] { transform: rotateY(180deg); }
+	.music-search-poster-face { position: relative; backface-visibility: hidden; }
+	.music-search-poster-back { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface-raised); transform: rotateY(180deg); }
+	.music-search-result-card { border: 1px solid var(--color-border); border-radius: var(--radius-md); text-align: left; }
+	/* :global: forwarded through PosterImage's class prop */
+	:global(.music-search-result-poster) { border-top-left-radius: var(--radius-md); border-top-right-radius: var(--radius-md); }
+	.music-search-result-title { font-size: 11px; font-weight: 500; color: var(--color-text); }
+	.music-search-result-year { font-size: 10px; color: var(--color-text-muted); }
+	.music-search-result-pill { border-radius: var(--radius-sm); padding: 0.125rem 0.25rem; font-size: 10px; font-weight: 500; }
+	.music-search-result-pill[data-kind="type"] { background: color-mix(in srgb, var(--color-accent-3) 15%, transparent); color: var(--color-accent-3); }
+	.music-search-result-pill[data-kind="format"] { background: var(--color-success-soft); color: var(--color-on-success-soft); }
+	.music-search-result-pill[data-kind="country"] { background: var(--color-primary-tint-2); color: var(--color-text-secondary); }
+	.music-search-result-pill[data-kind="tracks"] { background: var(--color-info-soft); color: var(--color-on-info-soft); }
+	.music-search-flip-btn { border-radius: var(--radius-sm); padding: 0.125rem 0.375rem; font-size: 10px; font-weight: 500; color: var(--color-on-primary); background: color-mix(in srgb, var(--color-on-frame-accent) 60%, transparent); backdrop-filter: blur(4px); transition: background-color var(--motion-fast) var(--ease); }
+	.music-search-flip-btn:hover { background: color-mix(in srgb, var(--color-on-frame-accent) 80%, transparent); }
+	.music-search-back-loading { font-size: 11px; color: var(--color-text-muted); }
+	.music-search-back-header { border-bottom: 1px solid var(--color-border); padding: 0.375rem; }
+	/* :global: forwarded through PosterImage's class prop */
+	:global(.music-search-back-poster) { border-radius: var(--radius-sm); }
+	.music-search-back-title { font-size: 11px; font-weight: 600; color: var(--color-text); }
+	.music-search-back-artist { font-size: 10px; color: var(--color-text-muted); }
+	.music-search-back-table { font-size: 11px; }
+	.music-search-back-row { border-bottom: 1px solid var(--color-border); }
+	.music-search-back-row:last-child { border-bottom: 0; }
+	.music-search-back-dim { color: var(--color-text-faint); }
+	.music-search-back-track-title { color: var(--color-text-secondary); }
+	.music-search-back-empty { font-size: 10px; color: var(--color-text-faint); }
+
+	.music-search-match { text-align: center; }
+	.music-search-match[data-tone="success"] { color: var(--color-success); }
+	.music-search-match[data-tone="warning"] { color: var(--color-on-warning-soft); }
+	.music-search-match[data-tone="danger"] { color: var(--color-danger); }
+	.music-search-match[data-tone="muted"] { color: var(--color-text-faint); }
+
+	/* :global: forwarded through PosterImage's class prop */
+	:global(.music-search-detail-poster) { border-radius: var(--radius-md); object-fit: cover; }
+	.music-search-detail-meta { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
+	.music-search-detail-title { font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; color: var(--color-text); }
+	.music-search-catalog { font-size: 10px; }
+	.music-search-table-scroll { border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+	.music-search-detail-table { font-size: 0.75rem; line-height: 1rem; }
+	.music-search-detail-table .table-header, .music-search-detail-table .table-cell { padding: 0.25rem 0.5rem; }
+	.music-search-center { text-align: center; }
+	.music-search-muted { color: var(--color-text-muted); }
+	.music-search-faint { color: var(--color-text-faint); }
+	.music-search-tfoot { border-top: 1px solid var(--color-border); background: var(--color-surface-raised); font-weight: 500; }
+	.music-search-field-label-sm { font-size: 10px; }
+	.music-search-solid-danger { border: 0; background: var(--color-danger); color: var(--color-on-primary); }
+	.music-search-mapping-preview { border-color: color-mix(in srgb, var(--color-primary) 30%, transparent); }
+	.music-search-mapping-title { font-weight: 500; color: var(--color-text-secondary); }
+	.music-search-success-btn { border: 0; background: var(--color-success); color: var(--color-on-primary); }
+	.music-search-success-btn:hover { filter: brightness(0.9); }
+	/* the original action buttons were px-3 py-1.5 (0.75rem/0.375rem),
+	   narrower than .btn's default */
+	.music-search-action-btn { padding: 0.375rem 0.75rem; border: 0; }
+	.music-search-clear-btn { padding: 0.375rem 0.5rem; font-size: 0.75rem; line-height: 1rem; border: 0; }
+	.music-search-feedback { font-size: 0.75rem; line-height: 1rem; }
+	.music-search-feedback[data-tone="success"] { color: var(--color-success); }
+	.music-search-feedback[data-tone="error"] { color: var(--color-danger); }
+</style>

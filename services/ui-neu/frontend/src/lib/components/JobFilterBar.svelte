@@ -8,15 +8,13 @@
 	}
 
 	let { statusFilter, onstatusfilter }: Props = $props();
-
-	const selectClasses = 'rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-sm dark:border-primary/30 dark:bg-primary/10 dark:text-white';
 </script>
 
-<div class="flex flex-wrap items-center gap-3">
+<div class="cluster">
 	<select
 		value={statusFilter}
 		onchange={(e) => onstatusfilter((e.target as HTMLSelectElement).value)}
-		class={selectClasses}
+		class="field-control job-filter-bar-select"
 	>
 		<option value="">All Status</option>
 		<option value="created">Created</option>
@@ -31,3 +29,10 @@
 		<option value="failed">Failed</option>
 	</select>
 </div>
+
+<style>
+	/* the original select auto-sized to its content (no width utility); the
+	   shared .field-control forces width: 100%, which would stretch it across
+	   the whole filter row since it is the only child here */
+	.job-filter-bar-select { width: auto; }
+</style>
