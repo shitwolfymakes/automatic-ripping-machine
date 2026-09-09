@@ -91,36 +91,36 @@
 	});
 </script>
 
-<div class="space-y-6">
-	<div class="text-center">
-		<h2 class="text-2xl font-bold text-gray-900 dark:text-white">Readiness Checks</h2>
-		<p class="mt-2 text-gray-600 dark:text-gray-400">
+<div class="stack stack-lg">
+	<div class="readiness-step-header">
+		<h2 class="readiness-step-title">Readiness Checks</h2>
+		<p class="readiness-step-subtitle">
 			Verifying API keys and path permissions.
 		</p>
 	</div>
 
 	{#if loading}
-		<div class="py-8 text-center text-gray-400">
-			<svg class="mx-auto h-8 w-8 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-				<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-				<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+		<div class="readiness-step-loading">
+			<svg class="mx-auto h-8 w-8 spin readiness-step-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+				<circle class="spinner-track" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+				<path class="spinner-fill" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
 			</svg>
-			<p class="mt-3">Running checks...</p>
+			<p class="readiness-step-loading-text">Running checks...</p>
 		</div>
 	{:else if error && !result}
-		<div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+		<div class="alert alert-danger alert-lg">
 			{error}
 		</div>
 	{:else if result}
 		<!-- ARM Identity -->
 		<div>
-			<h3 class="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">ARM Identity</h3>
-			<div class="rounded-lg border border-primary/20 bg-surface p-4 dark:border-primary/20 dark:bg-surface-dark">
-				<div class="flex items-center gap-2">
-					<svg class="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+			<h3 class="eyebrow readiness-step-section-title">ARM Identity</h3>
+			<div class="panel">
+				<div class="cluster">
+					<svg class="h-5 w-5 readiness-step-icon-ok" fill="currentColor" viewBox="0 0 20 20">
 						<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
 					</svg>
-					<span class="text-sm font-medium text-gray-900 dark:text-white">
+					<span class="readiness-step-identity">
 						UID:{result.arm_uid} / GID:{result.arm_gid}
 					</span>
 				</div>
@@ -129,32 +129,32 @@
 
 		<!-- API Keys -->
 		<div>
-			<h3 class="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">API Keys</h3>
-			<div class="space-y-2">
+			<h3 class="eyebrow readiness-step-section-title">API Keys</h3>
+			<div class="stack stack-sm">
 				{#each result.checks as check}
 					{@const status = checkStatus(check)}
-					<div class="rounded-lg border border-primary/20 bg-surface p-4 dark:border-primary/20 dark:bg-surface-dark">
+					<div class="panel">
 						<div class="flex items-center justify-between">
-							<div class="flex items-center gap-2">
+							<div class="cluster">
 								{#if status === 'pass'}
-									<svg class="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+									<svg class="h-5 w-5 readiness-step-icon-ok" fill="currentColor" viewBox="0 0 20 20">
 										<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
 									</svg>
 								{:else if status === 'warn'}
-									<svg class="h-5 w-5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+									<svg class="h-5 w-5 readiness-step-icon-warn" fill="currentColor" viewBox="0 0 20 20">
 										<path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
 									</svg>
 								{:else}
-									<svg class="h-5 w-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+									<svg class="h-5 w-5 readiness-step-icon-fail" fill="currentColor" viewBox="0 0 20 20">
 										<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
 									</svg>
 								{/if}
-								<span class="text-sm font-medium text-gray-900 dark:text-white">
+								<span class="readiness-step-check-name">
 									{KEY_LABELS[check.name] ?? check.name}
 								</span>
 							</div>
-							<div class="flex items-center gap-2">
-								<span class="text-xs {status === 'pass' ? 'text-green-600 dark:text-green-400' : status === 'warn' ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}">
+							<div class="cluster">
+								<span class="readiness-step-check-message" data-status={status}>
 									{check.message}
 								</span>
 								{#if status === 'warn' && KEY_SIGNUP_URLS[check.name]}
@@ -162,7 +162,7 @@
 										href={KEY_SIGNUP_URLS[check.name]}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50 transition-colors"
+										class="readiness-step-get-key"
 									>
 										Get key
 									</a>
@@ -176,34 +176,34 @@
 
 		<!-- Paths & Permissions -->
 		<div>
-			<h3 class="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Paths & Permissions</h3>
-			<div class="space-y-2">
+			<h3 class="eyebrow readiness-step-section-title">Paths &amp; Permissions</h3>
+			<div class="stack stack-sm">
 				{#each result.paths as path}
 					{@const status = pathStatus(path)}
-					<div class="rounded-lg border border-primary/20 bg-surface p-4 dark:border-primary/20 dark:bg-surface-dark">
+					<div class="panel">
 						<div class="flex items-center justify-between">
-							<div class="flex items-center gap-2">
+							<div class="cluster">
 								{#if status === 'pass'}
-									<svg class="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+									<svg class="h-5 w-5 readiness-step-icon-ok" fill="currentColor" viewBox="0 0 20 20">
 										<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
 									</svg>
 								{:else}
-									<svg class="h-5 w-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+									<svg class="h-5 w-5 readiness-step-icon-fail" fill="currentColor" viewBox="0 0 20 20">
 										<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
 									</svg>
 								{/if}
 								<div>
-									<span class="text-sm font-medium text-gray-900 dark:text-white">{path.name}</span>
-									<div class="text-xs text-gray-400 dark:text-gray-500">{path.container_path}</div>
+									<span class="readiness-step-check-name">{path.name}</span>
+									<div class="readiness-step-path-container">{path.container_path}</div>
 								</div>
 							</div>
-							<div class="text-right">
+							<div class="readiness-step-path-status">
 								{#if status === 'pass'}
-									<span class="text-xs text-green-600 dark:text-green-400">
+									<span class="readiness-step-check-message" data-status="pass">
 										{#if !path.require_writable && !path.writable}Read-only{:else}OK{/if}
 									</span>
 								{:else}
-									<span class="text-xs text-red-600 dark:text-red-400">
+									<span class="readiness-step-check-message" data-status="fail">
 										{#if !path.exists}Missing{:else if !path.match}Owner mismatch{:else}Not writable{/if}
 									</span>
 								{/if}
@@ -211,14 +211,14 @@
 						</div>
 						{#if status === 'fail' && !path.fixable}
 							{@const cmd = chownCommand(path, result)}
-							<div class="mt-2 flex items-center gap-2">
-								<code class="flex-1 rounded-sm bg-gray-100 px-2 py-1 text-xs text-gray-800 dark:bg-gray-800 dark:text-gray-300 truncate" title={cmd}>
+							<div class="cluster readiness-step-chown-row">
+								<code class="mono flex-1 truncate readiness-step-chown-cmd" title={cmd}>
 									{cmd}
 								</code>
 								<button
 									type="button"
 									onclick={() => copyToClipboard(cmd)}
-									class="shrink-0 rounded-md bg-gray-100 p-1 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
+									class="btn btn-icon shrink-0"
 									title="Copy command"
 								>
 									<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
@@ -233,12 +233,12 @@
 		</div>
 
 		<!-- Action buttons -->
-		<div class="flex items-center justify-center gap-3">
+		<div class="cluster readiness-step-actions">
 			<button
 				type="button"
 				onclick={load}
 				disabled={loading}
-				class="rounded-lg px-4 py-2 text-sm font-medium bg-primary/15 text-primary-text hover:bg-primary/25 dark:text-primary-text-dark dark:hover:bg-primary/30 disabled:opacity-50 transition-colors"
+				class="btn readiness-step-rerun-btn"
 			>
 				{loading ? 'Checking...' : 'Re-run Checks'}
 			</button>
@@ -247,7 +247,7 @@
 					type="button"
 					onclick={fix}
 					disabled={fixing}
-					class="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-hover disabled:opacity-50 transition-colors"
+					class="btn btn-primary"
 				>
 					{fixing ? 'Fixing...' : `Fix ${fixableItems.length} Issue${fixableItems.length === 1 ? '' : 's'}`}
 				</button>
@@ -255,3 +255,34 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	.readiness-step-header { text-align: center; }
+	.readiness-step-title { font-size: 1.5rem; line-height: 2rem; font-weight: 700; color: var(--color-text); }
+	.readiness-step-subtitle { margin-top: 0.5rem; color: var(--color-text-muted); }
+	.readiness-step-loading { padding: 2rem 0; text-align: center; color: var(--color-text-faint); }
+	.readiness-step-spinner { color: var(--color-primary); }
+	.readiness-step-loading-text { margin-top: 0.75rem; }
+	.readiness-step-section-title { margin-bottom: 0.5rem; }
+	.readiness-step-identity, .readiness-step-check-name { font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text); }
+	.readiness-step-icon-ok { color: var(--color-success); }
+	.readiness-step-icon-warn { color: var(--color-warning); }
+	.readiness-step-icon-fail { color: var(--color-danger); }
+	.readiness-step-check-message { font-size: 0.75rem; line-height: 1rem; }
+	.readiness-step-check-message[data-status="pass"] { color: var(--color-success); }
+	.readiness-step-check-message[data-status="warn"] { color: var(--color-on-warning-soft); }
+	.readiness-step-check-message[data-status="fail"] { color: var(--color-danger); }
+	/* the original was a soft warning-tone pill (bg-amber-100 text-amber-700),
+	   not a solid badge fill - no shared block matches this shape exactly,
+	   so it stays a local class using the warning-soft/on-warning-soft pair */
+	.readiness-step-get-key { border-radius: var(--radius-md); padding: 0.125rem 0.5rem; font-size: 0.75rem; line-height: 1rem; font-weight: 500; background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
+	.readiness-step-get-key:hover { background: color-mix(in srgb, var(--color-warning-soft) 60%, var(--color-warning)); }
+	.readiness-step-path-container { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
+	.readiness-step-path-status { text-align: right; }
+	.readiness-step-chown-row { margin-top: 0.5rem; }
+	.readiness-step-chown-cmd { border-radius: var(--radius-sm); padding: 0.25rem 0.5rem; font-size: 0.75rem; line-height: 1rem; color: var(--color-text-secondary); background: var(--color-primary-tint-2); }
+	.readiness-step-actions { justify-content: center; }
+	/* original was a tinted-fill button (bg-primary/15, no border) */
+	.readiness-step-rerun-btn { border: 0; background: var(--color-primary-tint-3); color: var(--color-primary-text); }
+	.readiness-step-rerun-btn:hover { background: color-mix(in srgb, var(--color-primary-tint-3) 70%, var(--color-primary)); }
+</style>

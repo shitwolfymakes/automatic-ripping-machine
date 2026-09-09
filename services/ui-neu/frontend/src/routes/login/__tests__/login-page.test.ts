@@ -54,7 +54,7 @@ describe('Login page Continue as Guest', () => {
 
 		const btn = await waitFor(() => screen.getByText('Continue as Guest'));
 		expect(btn).toBeInTheDocument();
-		expect(btn.className).toContain('bg-amber-500');
+		expect(btn.className).toContain('btn-warning');
 
 		await fireEvent.click(btn);
 		expect(gotoMock).toHaveBeenCalledWith('/');

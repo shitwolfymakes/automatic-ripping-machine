@@ -25,46 +25,42 @@
 	}
 
 	onMount(load);
-
-	const cellClass = 'px-3 py-2 text-sm text-gray-700 dark:text-gray-300';
-	const headClass =
-		'px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400';
 </script>
 
-<section class="space-y-4">
+<section class="stack">
 	<div>
-		<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Diagnostics</h2>
-		<p class="text-sm text-gray-500 dark:text-gray-400">
+		<h2 class="diagnostics-section-title">Diagnostics</h2>
+		<p class="diagnostics-section-description">
 			Read-only view of each service's runtime log level.
 		</p>
 	</div>
 
 	{#if error}
-		<p class="text-sm text-red-600 dark:text-red-400" data-testid="diagnostics-error">{error}</p>
+		<p class="field-error" data-testid="diagnostics-error">{error}</p>
 	{/if}
 
 	{#if loading}
-		<p class="py-8 text-center text-gray-400">Loading diagnostics...</p>
+		<p class="diagnostics-section-empty">Loading diagnostics...</p>
 	{:else if services.length === 0}
-		<p class="py-8 text-center text-gray-400">No services reported.</p>
+		<p class="diagnostics-section-empty">No services reported.</p>
 	{:else}
-		<div class="overflow-x-auto rounded-lg border border-primary/10 bg-surface dark:bg-surface-dark dark:border-primary/10">
-			<table class="min-w-full divide-y divide-primary/10 dark:divide-primary/10">
+		<div class="overflow-x-auto diagnostics-section-table-wrap">
+			<table class="table">
 				<thead>
 					<tr>
-						<th class={headClass}>Service</th>
-						<th class={headClass}>Log level</th>
+						<th class="table-header">Service</th>
+						<th class="table-header">Log level</th>
 					</tr>
 				</thead>
-				<tbody class="divide-y divide-primary/5 dark:divide-primary/5">
+				<tbody>
 					{#each services as s (s.name)}
-						<tr data-testid="diagnostics-row">
-							<td class={cellClass}>
-								<span class="font-medium text-gray-900 dark:text-white">{s.name}</span>
+						<tr class="table-row" data-testid="diagnostics-row">
+							<td class="table-cell">
+								<span class="diagnostics-section-name">{s.name}</span>
 							</td>
-							<td class={cellClass}>
+							<td class="table-cell">
 								<span
-									class="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary-text dark:text-primary-text-dark"
+									class="badge"
 									data-testid="diag-level-{s.name}"
 								>
 									{s.log_level}
@@ -77,8 +73,20 @@
 		</div>
 	{/if}
 
-	<p class="text-xs text-gray-500 dark:text-gray-400">
-		To change a level, set <code class="rounded bg-primary/5 px-1 py-0.5 text-primary-text dark:text-primary-text-dark">ARM_LOG_LEVEL</code>
-		in <code class="rounded bg-primary/5 px-1 py-0.5 text-primary-text dark:text-primary-text-dark">.env</code> and restart the service.
+	<p class="panel-hint">
+		To change a level, set <code class="mono diagnostics-section-code">ARM_LOG_LEVEL</code>
+		in <code class="mono diagnostics-section-code">.env</code> and restart the service.
 	</p>
 </section>
+
+<style>
+	.diagnostics-section-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-text); }
+	/* the original description was text-sm (0.875rem/1.25rem), not
+	   panel-hint's 0.75rem - panel-hint is sized for a note under a form
+	   control, a visibly smaller role. */
+	.diagnostics-section-description { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	.diagnostics-section-empty { padding: 2rem 0; text-align: center; color: var(--color-text-faint); }
+	.diagnostics-section-table-wrap { border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); }
+	.diagnostics-section-name { font-weight: 500; color: var(--color-text); }
+	.diagnostics-section-code { font-size: 0.7rem; padding: 0 0.25rem; border-radius: var(--radius-sm); background: var(--color-primary-tint-2); color: var(--color-primary-text); }
+</style>

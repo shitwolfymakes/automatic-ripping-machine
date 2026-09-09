@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { FIELD_INPUT_CLASS } from '$lib/types/notifications';
 	import type { ChannelTemplate } from '$lib/types/notifications';
 	import type { EventTypeInfo, ScriptInput } from '$lib/api/channels';
 
@@ -73,24 +72,23 @@
 	}
 </script>
 
-<fieldset class="relative space-y-3">
+<fieldset class="stack stack-sm event-subscriptions">
 	<legend class="sr-only">Events</legend>
 	{#each eventTypes as et (et.key)}
-		<div class="rounded-md border border-primary/15 bg-page p-3 dark:border-primary/20 dark:bg-primary/5">
-			<label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+		<div class="panel-section event-subscriptions-item">
+			<label class="field field-row">
 				<input
 					type="checkbox"
 					aria-label={et.label}
 					checked={selected.includes(et.key)}
 					onchange={(e) => toggle(et.key, (e.currentTarget as HTMLInputElement).checked)}
-					class="rounded border-primary/40 text-primary focus:ring-primary"
 				/>
-				<span class="font-medium">{et.label}</span>
+				<span class="event-subscriptions-label">{et.label}</span>
 			</label>
 			{#if selected.includes(et.key)}
-				<div class="mt-3 space-y-2 pl-6">
-					<label class="flex flex-col gap-1">
-						<span class="text-xs font-medium text-gray-600 dark:text-gray-400">Title</span>
+				<div class="stack stack-sm event-subscriptions-detail">
+					<label class="field">
+						<span class="field-label event-subscriptions-sublabel">Title</span>
 						<input
 							aria-label={`${et.key} title`}
 							placeholder={defaultsFor(et.key).title}
@@ -99,11 +97,10 @@
 							onfocus={(e) => rememberCaret(et.key, 'title', e.currentTarget as HTMLInputElement)}
 							onkeyup={(e) => rememberCaret(et.key, 'title', e.currentTarget as HTMLInputElement)}
 							onclick={(e) => rememberCaret(et.key, 'title', e.currentTarget as HTMLInputElement)}
-							class={FIELD_INPUT_CLASS}
 						/>
 					</label>
-					<label class="flex flex-col gap-1">
-						<span class="text-xs font-medium text-gray-600 dark:text-gray-400">Body</span>
+					<label class="field">
+						<span class="field-label event-subscriptions-sublabel">Body</span>
 						<textarea
 							aria-label={`${et.key} body`}
 							rows="2"
@@ -113,30 +110,29 @@
 							onfocus={(e) => rememberCaret(et.key, 'body', e.currentTarget as HTMLTextAreaElement)}
 							onkeyup={(e) => rememberCaret(et.key, 'body', e.currentTarget as HTMLTextAreaElement)}
 							onclick={(e) => rememberCaret(et.key, 'body', e.currentTarget as HTMLTextAreaElement)}
-							class={FIELD_INPUT_CLASS}
 						></textarea>
 					</label>
 					{#each overridable as i (i.key)}
-						<label class="flex flex-col gap-1">
-							<span class="text-xs font-medium text-gray-600 dark:text-gray-400">{i.label}{i.required ? " *" : ""}</span>
+						<label class="field">
+							<span class="field-label event-subscriptions-sublabel">{i.label}{i.required ? " *" : ""}</span>
 							{#if i.values && i.values.length}
-								<select aria-label={`${et.key} ${i.label}`} value={templates[et.key]?.inputs?.[i.key] ?? ''} onchange={(e) => setInput(et.key, i.key, (e.currentTarget as HTMLSelectElement).value)} class={FIELD_INPUT_CLASS}>
+								<select aria-label={`${et.key} ${i.label}`} value={templates[et.key]?.inputs?.[i.key] ?? ''} onchange={(e) => setInput(et.key, i.key, (e.currentTarget as HTMLSelectElement).value)}>
 									<option value="">inherit</option>
 									{#each i.values as v}<option value={v}>{v}</option>{/each}
 								</select>
 							{:else}
-								<input aria-label={`${et.key} ${i.label}`} placeholder="inherit" value={templates[et.key]?.inputs?.[i.key] ?? ''} oninput={(e) => setInput(et.key, i.key, (e.currentTarget as HTMLInputElement).value)} class={FIELD_INPUT_CLASS} />
+								<input aria-label={`${et.key} ${i.label}`} placeholder="inherit" value={templates[et.key]?.inputs?.[i.key] ?? ''} oninput={(e) => setInput(et.key, i.key, (e.currentTarget as HTMLInputElement).value)} />
 							{/if}
 						</label>
 					{/each}
-					<p class="text-xs text-gray-500 dark:text-gray-400">Leave blank to use the default shown{overridable.length ? "; blank inputs inherit the hook's values." : '.'}</p>
-					<div class="flex flex-wrap gap-1">
+					<p class="field-help">Leave blank to use the default shown{overridable.length ? "; blank inputs inherit the hook's values." : '.'}</p>
+					<div class="cluster event-subscriptions-vars">
 						{#each varsFor(et.key) as v}
 							<button
 								type="button"
 								aria-label={`Insert {${v}}`}
 								onclick={() => insertVariable(et.key, v)}
-								class="rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary hover:bg-primary/20 dark:bg-primary/15 dark:hover:bg-primary/25"
+								class="chip"
 							><code>{`{${v}}`}</code></button>
 						{/each}
 					</div>
@@ -145,3 +141,14 @@
 		</div>
 	{/each}
 </fieldset>
+
+<style>
+	.event-subscriptions { position: relative; }
+	/* the original per-event box was p-3 (0.75rem), tighter than panel-section's 1rem. */
+	.event-subscriptions-item { padding: 0.75rem; }
+	.event-subscriptions-label { font-weight: 500; }
+	/* mt-3 pl-6: the detail block sits indented and offset under the checkbox row. */
+	.event-subscriptions-detail { margin-top: 0.75rem; padding-left: 1.5rem; gap: 0.5rem; }
+	.event-subscriptions-sublabel { font-size: 0.75rem; line-height: 1rem; }
+	.event-subscriptions-vars { gap: 0.25rem; }
+</style>

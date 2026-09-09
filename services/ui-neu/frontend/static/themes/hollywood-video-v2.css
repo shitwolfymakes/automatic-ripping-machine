@@ -23,30 +23,41 @@
 	box-shadow: 10px 0 30px rgba(0,0,0,0.8);
 }
 
-[data-scheme="hollywood-video-v2"] aside nav a {
+/* The .nav block is a flex column, where adjacent margins do NOT
+   collapse (the original block-level <nav> let them). This scheme's
+   inter-link spacing therefore rides the nav's own gap instead of a
+   margin on each link, which would otherwise double. */
+[data-scheme="hollywood-video-v2"] aside .nav {
+	gap: 8px;
+	/* the link margin also sat above the first link and below the
+	   last one, which a gap does not reproduce */
+	padding-top: calc(1rem + 8px);
+	padding-bottom: calc(1rem + 8px);
+}
+
+[data-scheme="hollywood-video-v2"] aside .nav-item {
 	text-transform: uppercase;
 	font-weight: 900;
 	letter-spacing: 0.1em;
 	border-radius: 0;
 	padding: 0.75rem;
-	margin: 8px 0;
 	transition: all 0.2s ease;
 	border: 2px solid transparent;
 }
 
-[data-scheme="hollywood-video-v2"] aside nav a:hover {
+[data-scheme="hollywood-video-v2"] aside .nav-item:hover {
 	color: #F2B705 !important;
 	background: rgba(242, 183, 5, 0.1) !important;
 }
 
-[data-scheme="hollywood-video-v2"] aside nav a[data-active="true"] {
+[data-scheme="hollywood-video-v2"] aside .nav-item[data-active="true"] {
 	background-color: #231640 !important;
 	color: #F2B705 !important;
 	border: 2px solid #231640;
 	text-shadow: 0 0 8px rgba(35, 22, 64, 0.5);
 }
 
-[data-scheme="hollywood-video-v2"] aside [data-logo] img {
+[data-scheme="hollywood-video-v2"] aside .nav-logo img {
 	filter: drop-shadow(0 0 6px rgba(217, 11, 28, 0.4));
 }
 
@@ -104,22 +115,6 @@
 	border-radius: 0 !important;
 }
 
-[data-scheme="hollywood-video-v2"] aside [data-stats] {
-	background: #f4f4f4 !important;
-	color: #111 !important;
-	border: 1px solid #ccc;
-	border-radius: 2px;
-	padding: 1rem;
-	font-family: 'Courier New', Courier, monospace;
-	transform: rotate(-2deg);
-	box-shadow: 5px 5px 0px rgba(0,0,0,0.9);
-	margin: 1.5rem 0.75rem;
-}
-
-[data-scheme="hollywood-video-v2"] aside [data-stats] * {
-	color: #111 !important;
-}
-
 [data-scheme="hollywood-video-v2"] .section-frame-bar-top {
 	display: flex;
 	align-items: center;
@@ -163,24 +158,36 @@
 	box-shadow: 8px 8px 0px rgba(0,0,0,0.5);
 }
 
-[data-scheme="hollywood-video-v2"] .section-frame-body div[class*="border"]:not([data-diag]):not(.border-transparent) {
+/* Everything bordered inside a frame body takes the video-store red.
+   The block vocabulary names these: panels, cards, stat tiles, alerts and
+   list rows carry a border; tables and tab strips carry a bottom rule. */
+[data-scheme="hollywood-video-v2"] .section-frame-body .panel,
+[data-scheme="hollywood-video-v2"] .section-frame-body .panel-section,
+[data-scheme="hollywood-video-v2"] .section-frame-body .card,
+[data-scheme="hollywood-video-v2"] .section-frame-body .stat,
+[data-scheme="hollywood-video-v2"] .section-frame-body .alert,
+[data-scheme="hollywood-video-v2"] .section-frame-body .list-row {
 	border-color: rgba(217, 11, 28, 0.5) !important;
 	border-width: 1px !important;
 }
 
-[data-scheme="hollywood-video-v2"] .section-frame-body div[class*="shadow-xs"] {
+[data-scheme="hollywood-video-v2"] .section-frame-body .panel,
+[data-scheme="hollywood-video-v2"] .section-frame-body .card,
+[data-scheme="hollywood-video-v2"] .section-frame-body .stat {
 	box-shadow: 2px 2px 0px rgba(0,0,0,0.25);
 }
 
-[data-scheme="hollywood-video-v2"] .section-frame-body div[class*="border-b"] {
+[data-scheme="hollywood-video-v2"] .section-frame-body .card-header,
+[data-scheme="hollywood-video-v2"] .section-frame-body .table-header,
+[data-scheme="hollywood-video-v2"] .section-frame-body .table-row,
+[data-scheme="hollywood-video-v2"] .section-frame-body .tabs {
 	border-bottom-color: rgba(217, 11, 28, 0.4) !important;
 }
 
-[data-scheme="hollywood-video-v2"] .section-frame-body input[class*="border"],
-
-[data-scheme="hollywood-video-v2"] .section-frame-body select[class*="border"],
-
-[data-scheme="hollywood-video-v2"] .section-frame-body textarea[class*="border"] {
+[data-scheme="hollywood-video-v2"] .section-frame-body .field input,
+[data-scheme="hollywood-video-v2"] .section-frame-body .field select,
+[data-scheme="hollywood-video-v2"] .section-frame-body .field textarea,
+[data-scheme="hollywood-video-v2"] .section-frame-body .field-control {
 	border-color: rgba(217, 11, 28, 0.25) !important;
 	border-width: 1px !important;
 }
@@ -190,15 +197,12 @@
 	opacity: 0.5;
 }
 
-[data-scheme="hollywood-video-v2"] .section-frame-body .border-2.border-primary {
+/* A selected card takes the deep-purple emphasis border. */
+[data-scheme="hollywood-video-v2"] .section-frame-body .card[data-selected="true"] {
 	border-color: #231640 !important;
 }
 
-[data-scheme="hollywood-video-v2"] .section-frame-body .border-2.border-primary > .bg-primary {
-	background-color: #231640 !important;
-}
-
-[data-scheme="hollywood-video-v2"] button.bg-primary {
+[data-scheme="hollywood-video-v2"] .btn-primary {
 	font-weight: 900;
 	text-transform: uppercase;
 	font-style: italic;
@@ -207,7 +211,7 @@
 	transition: transform 0.1s, box-shadow 0.1s;
 }
 
-[data-scheme="hollywood-video-v2"] button.bg-primary:active {
+[data-scheme="hollywood-video-v2"] .btn-primary:active {
 	transform: translate(2px, 2px);
 	box-shadow: 2px 2px 0px #000;
 }

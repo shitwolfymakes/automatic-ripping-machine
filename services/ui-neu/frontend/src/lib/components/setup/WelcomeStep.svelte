@@ -33,23 +33,23 @@
 	});
 </script>
 
-<div class="space-y-6">
-	<div class="text-center">
-		<h2 class="text-2xl font-bold text-gray-900 dark:text-white">Welcome to ARM</h2>
-		<p class="mt-2 text-gray-600 dark:text-gray-400">
+<div class="stack stack-lg">
+	<div class="welcome-step-header">
+		<h2 class="welcome-step-title">Welcome to ARM</h2>
+		<p class="welcome-step-subtitle">
 			Let's make sure your system is configured correctly.
 		</p>
 	</div>
 
-	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+	<div class="grid-2">
 		<InfoCard label="ARM Version">
-			<span class="text-lg font-medium text-gray-900 dark:text-white">{status.arm_version}</span>
+			<span class="welcome-step-value">{status.arm_version}</span>
 		</InfoCard>
 
 		<InfoCard label="Database">
-			<span class="flex items-center gap-2">
+			<span class="cluster">
 				<StatusIcon ok={!!status.db_initialized} />
-				<span class="text-lg font-medium {status.db_initialized ? 'setup-status-ok' : 'setup-status-warn'}">
+				<span class="welcome-step-value" data-tone={status.db_initialized ? 'ok' : 'warn'}>
 					{status.db_initialized ? 'Initialized' : 'Not initialized'}
 				</span>
 			</span>
@@ -57,32 +57,32 @@
 
 		{#if systemInfo}
 			<InfoCard label="CPU">
-				<span class="truncate text-sm font-medium text-gray-900 dark:text-white" title={systemInfo.cpu}>
+				<span class="truncate welcome-step-value-sm" title={systemInfo.cpu}>
 					{systemInfo.cpu}
 				</span>
 			</InfoCard>
 
 			<InfoCard label="Memory">
-				<span class="text-lg font-medium text-gray-900 dark:text-white">
+				<span class="welcome-step-value">
 					{systemInfo.memory_total_gb.toFixed(1)} GB
 				</span>
 			</InfoCard>
 		{/if}
 	</div>
 
-	<div class="grid grid-cols-1 gap-4 {$transcoderEnabled ? 'sm:grid-cols-3' : 'sm:grid-cols-1'}">
+	<div class="grid-2 welcome-step-status-row {$transcoderEnabled ? '' : 'welcome-step-status-row-single'}">
 		<InfoCard label="Drives">
-			<span class="text-sm font-medium text-gray-900 dark:text-white">{status.setup_steps?.drives ?? '?'}</span>
+			<span class="welcome-step-value-sm">{status.setup_steps?.drives ?? '?'}</span>
 		</InfoCard>
 
 		{#if $transcoderEnabled}
 			<InfoCard label="Transcoder">
 				{#if transcoderOnline === null}
-					<span class="text-sm setup-status-wait">Checking...</span>
+					<span class="welcome-step-value-sm" data-tone="wait">Checking...</span>
 				{:else}
-					<span class="flex items-center gap-2">
+					<span class="cluster">
 						<StatusIcon ok={transcoderOnline} />
-						<span class="text-sm font-medium {transcoderOnline ? 'setup-status-ok' : 'setup-status-off'}">
+						<span class="welcome-step-value-sm" data-tone={transcoderOnline ? 'ok' : 'off'}>
 							{transcoderOnline ? 'Online' : 'Offline'}
 						</span>
 					</span>
@@ -91,11 +91,11 @@
 
 			<InfoCard label="Transcoder DB">
 				{#if transcoderOnline === null}
-					<span class="text-sm setup-status-wait">Checking...</span>
+					<span class="welcome-step-value-sm" data-tone="wait">Checking...</span>
 				{:else}
-					<span class="flex items-center gap-2">
+					<span class="cluster">
 						<StatusIcon ok={!!(transcoderOnline && transcoderStats)} />
-						<span class="text-sm font-medium {transcoderOnline && transcoderStats ? 'setup-status-ok' : 'setup-status-off'}">
+						<span class="welcome-step-value-sm" data-tone={transcoderOnline && transcoderStats ? 'ok' : 'off'}>
 							{transcoderOnline && transcoderStats ? 'Ready' : 'Unavailable'}
 						</span>
 					</span>
@@ -104,3 +104,29 @@
 		{/if}
 	</div>
 </div>
+
+<style>
+	.welcome-step-header { text-align: center; }
+	.welcome-step-title { font-size: 1.5rem; line-height: 2rem; font-weight: 700; color: var(--color-text); }
+	.welcome-step-subtitle { margin-top: 0.5rem; color: var(--color-text-muted); }
+	.welcome-step-value { font-size: 1.125rem; line-height: 1.75rem; font-weight: 500; color: var(--color-text); }
+	.welcome-step-value-sm { font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text); }
+	/* status tones dissolved from legacy.css's .setup-status-* rules
+	   (Task 11): ok/warn use the same green/red pairing the legacy rules
+	   did, off/wait are muted text (off had no dark: variant in the
+	   original, so it stays --color-text-faint in both modes) */
+	.welcome-step-value[data-tone="ok"], .welcome-step-value-sm[data-tone="ok"] { color: var(--color-success); }
+	.welcome-step-value[data-tone="warn"] { color: var(--color-danger); }
+	.welcome-step-value-sm[data-tone="off"] { color: var(--color-text-muted); }
+	/* original .setup-status-wait was text-gray-400 with NO dark: variant,
+	   so it stayed gray-400 in both modes; --color-text-faint is gray-400 in
+	   light but gray-500 in dark, so dark mode needs --color-text-muted
+	   (gray-400 there) instead to keep the same rendered shade */
+	.welcome-step-value-sm[data-tone="wait"] { color: var(--color-text-faint); }
+	/* :global: dark-mode override, see the comment above */
+	:global(.dark) .welcome-step-value-sm[data-tone="wait"] { color: var(--color-text-muted); }
+	@media (min-width: 640px) {
+		.welcome-step-status-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+		.welcome-step-status-row-single { grid-template-columns: 1fr; }
+	}
+</style>

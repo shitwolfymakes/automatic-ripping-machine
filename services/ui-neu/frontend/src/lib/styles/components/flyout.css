@@ -1,0 +1,11 @@
+/* flyout: a positioned menu. Position (top/left/right/max-height) is set by
+   the component via style: directives (allowlisted).
+   Elements: flyout-item, flyout-divider.
+   State: [data-placement]. */
+@layer components {
+	.flyout { position: fixed; z-index: 40; min-width: 12rem; overflow: auto; border: 1px solid var(--color-border-strong); border-radius: var(--radius-lg); background: var(--color-surface-raised); padding: 0.25rem; box-shadow: var(--shadow-2); }
+	.flyout-item { display: flex; width: 100%; align-items: center; gap: 0.5rem; border-radius: var(--radius-md); padding: 0.5rem 0.75rem; font-size: 0.875rem; color: var(--color-text); text-align: left; cursor: pointer; background: none; border: 0; }
+	.flyout-item:hover { background: var(--color-primary-tint-2); }
+	.flyout-item:disabled { opacity: 0.4; cursor: not-allowed; }
+	.flyout-divider { margin: 0.25rem 0; border-top: 1px solid var(--color-border); }
+}

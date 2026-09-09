@@ -35,7 +35,7 @@ describe('JobLifecycle', () => {
 			const { container } = renderComponent(JobLifecycle, {
 				props: { status: 'transcoding', sourceType: 'disc' }
 			});
-			const pulsing = container.querySelectorAll('.lifecycle-pulse');
+			const pulsing = container.querySelectorAll('.job-lifecycle-bar[data-state="active"]');
 			// Exactly one stage should be actively pulsing
 			expect(pulsing.length).toBe(1);
 		});
@@ -44,7 +44,7 @@ describe('JobLifecycle', () => {
 			const { container } = renderComponent(JobLifecycle, {
 				props: { status: 'fail', sourceType: 'disc' }
 			});
-			const pulsing = container.querySelectorAll('.lifecycle-pulse');
+			const pulsing = container.querySelectorAll('.job-lifecycle-bar[data-state="active"]');
 			expect(pulsing.length).toBe(0);
 		});
 
@@ -52,7 +52,7 @@ describe('JobLifecycle', () => {
 			const { container } = renderComponent(JobLifecycle, {
 				props: { status: 'success', sourceType: 'disc' }
 			});
-			const pulsing = container.querySelectorAll('.lifecycle-pulse');
+			const pulsing = container.querySelectorAll('.job-lifecycle-bar[data-state="active"]');
 			expect(pulsing.length).toBe(0);
 		});
 	});
@@ -82,7 +82,7 @@ describe('JobLifecycle', () => {
 				props: { status: 'transcoding', sourceType: 'disc', size: 'sm' }
 			});
 			// 5 segments for disc rip
-			const segments = container.querySelectorAll('span.relative');
+			const segments = container.querySelectorAll('.job-lifecycle-seg');
 			expect(segments.length).toBe(5);
 		});
 	});

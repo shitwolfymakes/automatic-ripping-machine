@@ -259,25 +259,25 @@
 	<title>ARM - Dashboard</title>
 </svelte:head>
 
-<div class="space-y-6">
+<div class="stack-lg stack">
 	<div class="flex items-center justify-between">
-		<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+		<h1 class="page-title">Dashboard</h1>
 	</div>
 
 	<!-- Global pause banner -->
 	{#if !dashLoading && !dash.ripping_enabled}
-		<div class="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-900/20">
-			<div class="h-3 w-3 shrink-0 rounded-full bg-amber-500"></div>
+		<div class="alert alert-warning flex items-center gap-3 dashboard-pause-banner">
+			<div class="dashboard-pause-dot"></div>
 			<div>
-				<p class="font-medium text-amber-800 dark:text-amber-300">Ripping Paused</p>
-				<p class="text-sm text-amber-700 dark:text-amber-400">New discs won't start ripping while paused.</p>
+				<p class="alert-title">Ripping Paused</p>
+				<p class="alert-body">New discs won't start ripping while paused.</p>
 			</div>
 		</div>
 	{/if}
 
 	<!-- API error (backend unreachable) -->
 	{#if dashError}
-		<div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+		<div class="alert alert-danger">
 			Failed to reach backend: {dashError.message}
 		</div>
 	{/if}
@@ -300,7 +300,7 @@
 	<!-- Scanning -->
 	{#if scanningJobs.length > 0}
 		<section in:fade={fadeIn} out:fade={fadeOut}>
-			<SectionFrame variant="full" accent="var(--color-cyan-500, #06b6d4)" label="SCANNING - {scanningJobs.length} {scanningJobs.length === 1 ? 'DISC' : 'DISCS'}">
+			<SectionFrame variant="full" accent="var(--color-accent-4)" label="SCANNING - {scanningJobs.length} {scanningJobs.length === 1 ? 'DISC' : 'DISCS'}">
 				<div class="space-y-2">
 					{#each scanningJobs as job (job.id)}
 						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
@@ -330,7 +330,7 @@
 	<!-- Finishing (identified / ripped / ripped_partial) -->
 	{#if finishingJobs.length > 0}
 		<section in:fade={fadeIn} out:fade={fadeOut}>
-			<SectionFrame variant="full" accent="var(--color-amber-500, #f59e0b)" label="FINISHING - {finishingJobs.length} {finishingJobs.length === 1 ? 'JOB' : 'JOBS'}">
+			<SectionFrame variant="full" accent="var(--color-accent-1)" label="FINISHING - {finishingJobs.length} {finishingJobs.length === 1 ? 'JOB' : 'JOBS'}">
 				<div class="space-y-2">
 					{#each finishingJobs as job (job.id)}
 						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
@@ -369,25 +369,27 @@
 	{/if}
 
 	<!-- All Jobs -->
-	<section id="all-jobs" class="space-y-4">
+	<section id="all-jobs" class="stack">
 			<!-- Controls panel -->
-			<div class="rounded-lg border border-primary/20 bg-surface shadow-xs dark:border-primary/20 dark:bg-surface-dark">
+			<div class="dashboard-jobs-panel">
 				<!-- Header: Title + View toggle + Bulk actions -->
-				<div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-					<h2 class="text-lg font-semibold text-gray-900 dark:text-white">All Jobs</h2>
+				<div class="flex flex-wrap items-center justify-between gap-3 dashboard-jobs-header">
+					<h2 class="dashboard-jobs-title">All Jobs</h2>
 					<div class="flex items-center gap-3">
 						<div class="flex gap-1">
 							<button
 								onclick={() => (viewMode = 'card')}
-								class="rounded-md px-3 py-1.5 text-xs font-medium {viewMode === 'card' ? 'bg-primary text-on-primary' : 'bg-primary/10 text-gray-600 hover:bg-primary/15 dark:bg-primary/15 dark:text-gray-300'}"
+								class="dashboard-view-toggle"
+								aria-pressed={viewMode === 'card'}
 							>Cards</button>
 							<button
 								onclick={() => (viewMode = 'table')}
-								class="rounded-md px-3 py-1.5 text-xs font-medium {viewMode === 'table' ? 'bg-primary text-on-primary' : 'bg-primary/10 text-gray-600 hover:bg-primary/15 dark:bg-primary/15 dark:text-gray-300'}"
+								class="dashboard-view-toggle"
+								aria-pressed={viewMode === 'table'}
 							>Table</button>
 						</div>
 						{#if $isAdmin}
-							<div class="h-5 w-px bg-primary/20 dark:bg-primary/20"></div>
+							<div class="dashboard-jobs-divider"></div>
 							<BulkActionsMenu
 								{selectedJobs}
 								jobsStats={null}
@@ -399,7 +401,7 @@
 				</div>
 
 				<!-- Filters -->
-				<div class="border-t border-primary/15 px-4 py-3 dark:border-primary/15">
+				<div class="dashboard-jobs-section">
 					<JobFilterBar
 						{statusFilter}
 						onstatusfilter={setStatusFilter}
@@ -408,14 +410,14 @@
 
 				<!-- Bulk feedback banner -->
 				{#if bulkFeedback}
-					<div class="border-t border-primary/15 px-4 py-3 text-sm dark:border-primary/15 {bulkFeedback.type === 'success' ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}">
+					<div class="dashboard-jobs-section dashboard-bulk-feedback" data-tone={bulkFeedback.type}>
 						{bulkFeedback.message}
-						<button onclick={() => (bulkFeedback = null)} class="ml-2 font-bold opacity-60 hover:opacity-100">&times;</button>
+						<button onclick={() => (bulkFeedback = null)} class="dashboard-bulk-dismiss">&times;</button>
 					</div>
 				{/if}
 			</div>
 
-			<div style="min-height: 60vh;">
+			<div class="dashboard-jobs-body">
 			<LoadState
 				data={jobs}
 				loading={jobsLoading}
@@ -424,17 +426,17 @@
 			>
 				{#snippet loadingSlot()}
 					{#if viewMode === 'table'}
-						<div class="overflow-x-auto rounded-lg border border-primary/20 dark:border-primary/20">
-							<table class="responsive-table w-full text-left text-sm">
-								<thead class="bg-page text-gray-600 dark:bg-primary/5 dark:text-gray-400">
+						<div class="overflow-x-auto dashboard-table-scroll">
+							<table class="table responsive-table">
+								<thead>
 									<tr>
-										<th class="px-4 py-3 w-8"></th>
+										<th class="table-header w-8"></th>
 										{#each columns as col}
-											<th class="px-4 py-3 font-medium">{col.label}</th>
+											<th class="table-header">{col.label}</th>
 										{/each}
 									</tr>
 								</thead>
-								<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+								<tbody>
 									{#each { length: 25 } as _}
 										<JobRow />
 									{/each}
@@ -451,26 +453,26 @@
 				{/snippet}
 				{#snippet ready(list)}
 					{#if viewMode === 'table'}
-						<div class="overflow-x-auto rounded-lg border border-primary/20 dark:border-primary/20">
-							<table class="responsive-table w-full text-left text-sm">
-								<thead class="bg-page text-gray-600 dark:bg-primary/5 dark:text-gray-400">
+						<div class="overflow-x-auto dashboard-table-scroll">
+							<table class="table responsive-table">
+								<thead>
 									<tr>
-										<th class="px-4 py-3 w-8">
+										<th class="table-header w-8">
 											{#if $isAdmin}
 												<input
 													type="checkbox"
 													checked={allVisibleSelected}
 													onchange={toggleSelectAll}
-													class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary dark:border-gray-600 dark:bg-gray-700"
+													class="dashboard-select-all-checkbox"
 												/>
 											{/if}
 										</th>
 										{#each columns as col}
-											<th class="px-4 py-3 font-medium">{col.label}</th>
+											<th class="table-header">{col.label}</th>
 										{/each}
 									</tr>
 								</thead>
-								<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+								<tbody>
 									{#each list as job (job.id)}
 										<JobRow
 											{job}
@@ -491,9 +493,31 @@
 					{/if}
 				{/snippet}
 				{#snippet empty()}
-					<p class="py-8 text-center text-gray-400">No jobs found.</p>
+					<p class="dashboard-empty-jobs">No jobs found.</p>
 				{/snippet}
 			</LoadState>
 			</div>
 	</section>
 </div>
+
+<style>
+	.dashboard-pause-banner { padding: 1rem; }
+	.dashboard-pause-dot { height: 0.75rem; width: 0.75rem; flex-shrink: 0; border-radius: 9999px; background: var(--color-warning); }
+	.dashboard-jobs-panel { border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); box-shadow: var(--shadow-1); }
+	.dashboard-jobs-header { padding: 0.75rem 1rem; }
+	.dashboard-jobs-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-text); }
+	.dashboard-view-toggle { border-radius: var(--radius-md); padding: 0.375rem 0.75rem; font-size: 0.75rem; line-height: 1rem; font-weight: 500; color: var(--color-text-secondary); background: var(--color-primary-tint-2); transition: background-color var(--motion-fast) var(--ease); }
+	.dashboard-view-toggle:hover { background: var(--color-primary-tint-3); }
+	.dashboard-view-toggle[aria-pressed="true"] { background: var(--color-primary); color: var(--color-on-primary); }
+	.dashboard-jobs-divider { height: 1.25rem; width: 1px; background: var(--color-border); }
+	.dashboard-jobs-section { border-top: 1px solid var(--color-border); padding: 0.75rem 1rem; }
+	.dashboard-bulk-feedback { font-size: 0.875rem; line-height: 1.25rem; }
+	.dashboard-bulk-feedback[data-tone="success"] { color: var(--color-success); }
+	.dashboard-bulk-feedback[data-tone="error"] { color: var(--color-danger); }
+	.dashboard-bulk-dismiss { margin-left: 0.5rem; font-weight: 700; opacity: 0.6; }
+	.dashboard-bulk-dismiss:hover { opacity: 1; }
+	.dashboard-jobs-body { min-height: 60vh; }
+	.dashboard-table-scroll { border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
+	.dashboard-select-all-checkbox { width: 1rem; height: 1rem; border-radius: var(--radius-sm); accent-color: var(--color-primary); }
+	.dashboard-empty-jobs { padding: 2rem 0; text-align: center; color: var(--color-text-faint); }
+</style>

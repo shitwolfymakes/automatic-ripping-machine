@@ -4,7 +4,7 @@
 [data-scheme="synth-retro"] body {
 	background-image: linear-gradient(to bottom, rgb(18, 12, 28) 0%, rgb(12, 8, 20) 100%);
 }
-[data-scheme="synth-retro"] aside nav a[data-active="true"] {
+[data-scheme="synth-retro"] aside .nav-item[data-active="true"] {
 	text-shadow: 0 0 10px rgb(255, 0, 127);
 	border-right: 3px solid rgb(255, 0, 127);
 }

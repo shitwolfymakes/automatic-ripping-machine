@@ -13,6 +13,6 @@
 [data-scheme="deep-sea-abyss"] [data-progress-fill] {
 	background: linear-gradient(90deg, #0ea5e9, #2dd4bf) !important;
 }
-[data-scheme="deep-sea-abyss"] aside nav a:hover {
+[data-scheme="deep-sea-abyss"] aside .nav-item:hover {
 	background: linear-gradient(90deg, rgba(14, 165, 233, 0.1), transparent) !important;
 }

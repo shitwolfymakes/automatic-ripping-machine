@@ -54,18 +54,18 @@
 	}
 </script>
 
-<div class="mx-auto max-w-2xl space-y-8 px-4 py-8">
+<div class="stack setup-wizard">
 	<!-- Logo -->
-	<div class="text-center">
-		<img src="/img/arm-logo-black.png" alt="ARM" class="mx-auto h-20 w-20 dark:hidden" />
-		<img src="/img/arm-logo-white.png" alt="ARM" class="mx-auto hidden h-20 w-20 dark:block" />
+	<div class="setup-wizard-logo">
+		<img src="/img/arm-logo-black.png" alt="ARM" class="setup-wizard-logo-img setup-wizard-logo-light" />
+		<img src="/img/arm-logo-white.png" alt="ARM" class="setup-wizard-logo-img setup-wizard-logo-dark" />
 	</div>
 
 	<!-- Progress -->
 	<StepIndicator steps={steps.map(s => ({ id: s.id, label: s.label }))} {currentIndex} />
 
 	<!-- Step content -->
-	<div class="rounded-xl border border-primary/20 bg-surface p-6 shadow-sm dark:border-primary/20 dark:bg-surface-dark">
+	<div class="panel setup-wizard-panel">
 		{#if currentStep.id === 'welcome'}
 			<WelcomeStep {status} />
 		{:else if currentStep.id === 'drives'}
@@ -83,7 +83,7 @@
 			type="button"
 			onclick={prev}
 			disabled={isFirst}
-			class="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-100 disabled:opacity-0 dark:text-gray-300 dark:ring-gray-600 dark:hover:bg-gray-800 transition-colors"
+			class="btn setup-wizard-back-btn"
 		>
 			Back
 		</button>
@@ -93,7 +93,7 @@
 				type="button"
 				onclick={finish}
 				disabled={finishing}
-				class="rounded-lg bg-primary px-6 py-2 text-sm font-medium text-on-primary hover:bg-primary-hover disabled:opacity-50 transition-colors"
+				class="btn btn-primary setup-wizard-primary-btn"
 			>
 				{finishing ? 'Finishing...' : 'Finish Setup'}
 			</button>
@@ -101,10 +101,32 @@
 			<button
 				type="button"
 				onclick={next}
-				class="rounded-lg bg-primary px-6 py-2 text-sm font-medium text-on-primary hover:bg-primary-hover transition-colors"
+				class="btn btn-primary setup-wizard-primary-btn"
 			>
 				Next
 			</button>
 		{/if}
 	</div>
 </div>
+
+<style>
+	.setup-wizard { max-width: 42rem; margin: 0 auto; gap: 2rem; padding: 2rem 1rem; }
+	.setup-wizard-logo { text-align: center; }
+	.setup-wizard-logo-img { margin: 0 auto; height: 5rem; width: 5rem; }
+	.setup-wizard-logo-dark { display: none; }
+	/* The ARM wordmark is two pre-rendered bitmaps; dark mode swaps which
+	   one is visible - same precedent as +layout.svelte's header logo. */
+	/* :global: dark-mode logo swap, see the comment above */
+	:global(.dark) .setup-wizard-logo-light { display: none; }
+	/* :global: dark-mode logo swap, see the comment above */
+	:global(.dark) .setup-wizard-logo-dark { display: block; }
+	.setup-wizard-panel { border-radius: var(--radius-xl); }
+	/* original was a ring (box-shadow), not .btn's real border - border: 0
+	   plus the ring restated keeps the button's box height identical */
+	.setup-wizard-back-btn { border: 0; box-shadow: 0 0 0 1px var(--color-border-strong); color: var(--color-text-secondary); }
+	.setup-wizard-back-btn:hover { background: var(--color-primary-tint-1); }
+	.setup-wizard-back-btn:disabled { opacity: 0; }
+	/* original padding was px-6 py-2 (1.5rem/0.5rem), wider than .btn-primary's
+	   default 1rem/0.5rem */
+	.setup-wizard-primary-btn { padding: 0.5rem 1.5rem; }
+</style>

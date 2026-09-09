@@ -1,0 +1,31 @@
+/* alert: an inline message box.
+   Elements: alert-title, alert-body.
+   Modifiers: alert-info (default), alert-warning, alert-danger, alert-success,
+   alert-lg (a page-level banner: padding 1rem, radius var(--radius-lg) - the
+   original was rounded-lg p-4, not the default alert's rounded-md px-3 py-2;
+   Task 11 fix round 1).
+   font-size: 0.875rem carries an explicit line-height - a 2-line banner
+   without it drifted 2px per box, compounding down the page (Task 11 fix
+   round 1). The value is the unitless calc(1.25 / 0.875), Tailwind's own
+   text-sm ratio, not a fixed 1.25rem: at 14px the two are identical, but a
+   scheme that resizes text (winamp-97 runs 13.12px) needs the line box to
+   scale with it the way the original utility did. calc() rather than a
+   decimal because a rounded 1.4286 computes to 19.9996px, and that
+   sub-pixel miss shifts layout on text-dense pages. */
+@layer components {
+	.alert, .alert-info {
+		border: 1px solid color-mix(in srgb, var(--color-info) 30%, transparent);
+		border-radius: var(--radius-md);
+		background: var(--color-info-soft);
+		padding: 0.5rem 0.75rem;
+		font-size: 0.875rem;
+		line-height: calc(1.25 / 0.875);
+		color: var(--color-on-info-soft);
+	}
+	.alert-title { font-weight: 600; }
+	.alert-body { margin-top: 0.25rem; }
+	.alert-warning { border-color: color-mix(in srgb, var(--color-warning) 30%, transparent); background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
+	.alert-danger { border-color: color-mix(in srgb, var(--color-danger) 30%, transparent); background: var(--color-danger-soft); color: var(--color-on-danger-soft); }
+	.alert-success { border-color: color-mix(in srgb, var(--color-success) 30%, transparent); background: var(--color-success-soft); color: var(--color-on-success-soft); }
+	.alert-lg { padding: 1rem; border-radius: var(--radius-lg); }
+}

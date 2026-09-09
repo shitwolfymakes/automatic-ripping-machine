@@ -76,7 +76,7 @@ describe('ImportWizard', () => {
 		const { container } = renderComponent(ImportWizard, {
 			props: { open: true, onclose: vi.fn(), oncreated: vi.fn() }
 		});
-		const dots = container.querySelectorAll('.h-2.w-2.rounded-full');
+		const dots = container.querySelectorAll('.import-wizard-dot');
 		// 4-step wizard: Pick -> Verify metadata -> OMDB Match -> Confirm
 		expect(dots.length).toBe(4);
 	});

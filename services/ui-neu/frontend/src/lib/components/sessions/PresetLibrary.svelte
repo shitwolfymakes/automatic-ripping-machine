@@ -78,31 +78,31 @@
 	const SKELETON_COUNT = 3;
 </script>
 
-<div class="flex flex-col gap-6">
+<div class="stack stack-lg">
 	<!-- Reusable note -->
-	<p class="text-sm text-gray-500 dark:text-gray-400">
+	<p class="preset-library-note">
 		Presets are reusable building blocks: each preset can be used by multiple sessions, and changing
 		one affects every session that references it.
 	</p>
 
 	<!-- Search + filter container: same structure as the Sessions root -->
-	<div class="rounded-lg border border-primary/20 bg-surface px-4 py-3 shadow-xs dark:bg-surface-dark" data-testid="preset-action-bar">
+	<div class="panel panel-compact preset-library-bar" data-testid="preset-action-bar">
 		<!-- Top row: search + inline REFINE dropdown -->
-		<div class="flex flex-wrap items-center gap-3">
+		<div class="cluster">
 			<input
 				type="search"
 				placeholder="Search {noun} by name..."
 				aria-label="Search {noun}"
-				class="min-w-0 flex-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 shadow-xs placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+				class="field-control preset-library-search"
 				value={search}
 				oninput={(e) => { search = (e.currentTarget as HTMLInputElement).value; }}
 			/>
 
-			<span class="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Refine</span>
+			<span class="eyebrow">Refine</span>
 
 			<select
 				aria-label="Filter by source"
-				class="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-700 shadow-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+				class="field-control preset-library-source"
 				value={sourceFilter}
 				onchange={(e) => { sourceFilter = (e.currentTarget as HTMLSelectElement).value as typeof sourceFilter; }}
 			>
@@ -112,20 +112,17 @@
 			</select>
 		</div>
 
-		<hr class="my-3 border-primary/15" />
+		<hr class="preset-library-divider" />
 
 		<!-- Bottom row: TYPE chips + New preset -->
-		<div class="flex flex-wrap items-center gap-2">
-			<span class="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Type</span>
+		<div class="cluster">
+			<span class="eyebrow">Type</span>
 			{#each MEDIA_TYPES as chip}
 				{@const count = presetTypeCounts[chip.key] ?? 0}
 				<button
 					type="button"
 					aria-pressed={typeFilter === chip.key}
-					class="rounded-full border px-3 py-0.5 text-xs font-medium transition-colors
-						{typeFilter === chip.key
-							? 'border-primary bg-primary text-white'
-							: 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}"
+					class="chip preset-library-type-chip"
 					onclick={() => { typeFilter = chip.key; }}
 				>
 					{chip.label} {count}
@@ -136,13 +133,13 @@
 				<button
 					type="button"
 					onclick={onnewrip}
-					class="ml-auto shrink-0 rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-white hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+					class="btn btn-primary preset-library-new-btn"
 				>+ New rip preset</button>
 			{:else}
 				<button
 					type="button"
 					onclick={onnewtranscode}
-					class="ml-auto shrink-0 rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-white hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+					class="btn btn-primary preset-library-new-btn"
 				>+ New transcode preset</button>
 			{/if}
 		</div>
@@ -150,12 +147,9 @@
 
 	{#if loading}
 		<!-- Loading skeletons -->
-		<div class="flex flex-col gap-3">
+		<div class="stack stack-sm">
 			{#each Array(SKELETON_COUNT) as _}
-				<div
-					data-testid="preset-skeleton"
-					class="h-16 animate-pulse rounded-lg border border-primary/20 bg-gray-100 dark:bg-gray-800"
-				></div>
+				<div data-testid="preset-skeleton" class="skeleton preset-library-skeleton"></div>
 			{/each}
 		</div>
 	{:else if kind === 'rip'}
@@ -164,11 +158,11 @@
 			<h3 class="sr-only">Rip presets</h3>
 
 			{#if visibleRip.length === 0}
-				<p class="py-4 text-center text-sm text-gray-400 dark:text-gray-500">
+				<p class="preset-library-empty">
 					No rip presets match the current filters.
 				</p>
 			{:else}
-				<div class="flex flex-col gap-3">
+				<div class="stack stack-sm">
 					{#each visibleRip as preset (preset.id)}
 						<PresetRow
 							kind="rip"
@@ -189,11 +183,11 @@
 			<h3 class="sr-only">Transcode presets</h3>
 
 			{#if visibleTranscode.length === 0}
-				<p class="py-4 text-center text-sm text-gray-400 dark:text-gray-500">
+				<p class="preset-library-empty">
 					No transcode presets match the current filters.
 				</p>
 			{:else}
-				<div class="flex flex-col gap-3">
+				<div class="stack stack-sm">
 					{#each visibleTranscode as preset (preset.id)}
 						<PresetRow
 							kind="transcode"
@@ -210,3 +204,28 @@
 		</section>
 	{/if}
 </div>
+
+<style>
+	.preset-library-note { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	/* the original bar was px-4 py-3 (1rem/0.75rem); .panel-compact is
+	   0.75rem all round, close but not identical on the horizontal axis. */
+	.preset-library-bar { padding: 0.75rem 1rem; }
+	.preset-library-search { min-width: 0; flex: 1 1 0%; }
+	/* the divider's own border-primary/15 maps to --color-border; hr's
+	   default border-top plus browser margin is overridden to the original's
+	   my-3 (0.75rem) spacing, height 1px. */
+	.preset-library-divider { margin: 0.75rem 0; border: 0; border-top: 1px solid var(--color-border); }
+	/* chip's default modifiers are all solid-tone; the TYPE filter pills are
+	   a plain bordered toggle (border-gray-300 bg-white, selected =
+	   border-primary bg-primary), not chip's tinted-background look, so the
+	   shape is redrawn here on top of chip's base sizing/cursor/transition. */
+	.preset-library-type-chip { border: 1px solid var(--color-border-strong); border-radius: 9999px; background: var(--color-surface-raised); padding: 0.125rem 0.75rem; font-size: 0.75rem; font-weight: 500; color: var(--color-text-secondary); }
+	.preset-library-type-chip:hover { background: var(--color-primary-tint-1); }
+	.preset-library-type-chip[aria-pressed="true"] { border-color: var(--color-primary); background: var(--color-primary); color: var(--color-on-primary); }
+	.preset-library-new-btn { margin-left: auto; flex-shrink: 0; }
+	.preset-library-empty { padding: 1rem 0; text-align: center; font-size: 0.875rem; color: var(--color-text-faint); }
+	/* original: h-16 rounded-lg border border-primary/20 bg-gray-100 - taller,
+	   more-rounded, and bordered compared to .skeleton-block's 2.5rem/radius-sm/
+	   no border. */
+	.preset-library-skeleton { height: 4rem; border-radius: var(--radius-lg); border: 1px solid var(--color-border); }
+</style>

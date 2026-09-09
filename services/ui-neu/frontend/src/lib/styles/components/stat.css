@@ -1,0 +1,18 @@
+/* stat: a labelled number tile (StatStrip, JobStatsPanel).
+   Elements: stat-label (eyebrow), stat-value.
+   Modifiers: stat-danger, stat-warning, stat-success, stat-info (value colour),
+   stat-muted (neutral value colour, for a count with no tone of its own). */
+@layer components {
+	.stat { border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); padding: 1rem; }
+	/* 10.5px, not --eyebrow-size (11px): StatStrip's original label was an
+	   arbitrary text-[10.5px] value, not the shared eyebrow token, and no
+	   line-height was ever set on it (browser default ratio applies, same as
+	   the original), so the label height matches exactly. */
+	.stat-label { font-size: 10.5px; font-weight: 600; letter-spacing: var(--eyebrow-tracking); text-transform: uppercase; color: var(--color-text-muted); }
+	.stat-value { margin-top: 0.5rem; font-size: 1.5rem; line-height: calc(2 / 1.5); font-weight: 700; color: var(--color-primary); font-variant-numeric: tabular-nums; }
+	.stat-danger .stat-value { color: var(--color-danger); }
+	.stat-warning .stat-value { color: var(--color-on-warning-soft); }
+	.stat-success .stat-value { color: var(--color-success); }
+	.stat-info .stat-value { color: var(--color-info); }
+	.stat-muted .stat-value { color: var(--color-text-secondary); }
+}

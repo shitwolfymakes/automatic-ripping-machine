@@ -1,0 +1,500 @@
+<!doctype html>
+<!-- The ui-neu design-system reference, rendered with the system it
+     documents. Self-contained on purpose (no build coupling): served at
+     /style-guide.html by every deployment. Source of truth for the prose
+     is docs/ui-neu-style-guide.md; keep the two in step when the system
+     changes. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ui-neu Design System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap">
+<style>
+:root {
+  --page: rgb(232,240,255); --surface: rgb(241,247,255); --raised: rgb(255,255,255);
+  --border: color-mix(in srgb, var(--primary) 18%, transparent);
+  --border-strong: color-mix(in srgb, var(--primary) 30%, transparent);
+  --text: rgb(17,24,39); --text-2: rgb(55,65,81); --text-3: rgb(107,114,128); --text-4: rgb(156,163,175);
+  --primary: rgb(37,99,235); --primary-hover: rgb(29,78,216); --on-primary: #fff; --primary-text: rgb(29,78,216);
+  --tint-1: color-mix(in srgb, var(--primary) 5%, transparent);
+  --tint-2: color-mix(in srgb, var(--primary) 10%, transparent);
+  --tint-3: color-mix(in srgb, var(--primary) 20%, transparent);
+  --danger: rgb(220,38,38); --danger-soft: rgb(254,242,242); --on-danger-soft: rgb(185,28,28);
+  --warning: rgb(245,158,11); --warning-soft: rgb(255,251,235); --on-warning-soft: rgb(146,64,14);
+  --success: rgb(22,163,74); --success-soft: rgb(240,253,244); --on-success-soft: rgb(21,128,61);
+  --radius: 8px; --shadow-1: 0 1px 2px rgb(0 0 0 / .05); --shadow-2: 0 10px 25px rgb(0 0 0 / .15);
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --display: 'Rajdhani', ui-sans-serif, system-ui, sans-serif;
+  --sans: ui-sans-serif, system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --page: rgb(13,16,28); --surface: rgb(22,28,45); --raised: rgb(30,37,58);
+  --border: color-mix(in srgb, var(--primary) 22%, transparent);
+  --border-strong: color-mix(in srgb, var(--primary) 38%, transparent);
+  --text: rgb(243,244,246); --text-2: rgb(209,213,219); --text-3: rgb(156,163,175); --text-4: rgb(107,114,128);
+  --primary-text: rgb(96,165,250);
+  --danger: rgb(248,113,113); --danger-soft: rgb(127 29 29 / .35); --on-danger-soft: rgb(252,165,165);
+  --warning: rgb(251,191,36); --warning-soft: rgb(120 53 15 / .35); --on-warning-soft: rgb(252,211,77);
+  --success: rgb(74,222,128); --success-soft: rgb(20 83 45 / .35); --on-success-soft: rgb(134,239,172);
+  --shadow-2: 0 10px 25px rgb(0 0 0 / .5);
+} }
+:root[data-theme="dark"] {
+  --page: rgb(13,16,28); --surface: rgb(22,28,45); --raised: rgb(30,37,58);
+  --border: color-mix(in srgb, var(--primary) 22%, transparent);
+  --border-strong: color-mix(in srgb, var(--primary) 38%, transparent);
+  --text: rgb(243,244,246); --text-2: rgb(209,213,219); --text-3: rgb(156,163,175); --text-4: rgb(107,114,128);
+  --primary-text: rgb(96,165,250);
+  --danger: rgb(248,113,113); --danger-soft: rgb(127 29 29 / .35); --on-danger-soft: rgb(252,165,165);
+  --warning: rgb(251,191,36); --warning-soft: rgb(120 53 15 / .35); --on-warning-soft: rgb(252,211,77);
+  --success: rgb(74,222,128); --success-soft: rgb(20 83 45 / .35); --on-success-soft: rgb(134,239,172);
+  --shadow-2: 0 10px 25px rgb(0 0 0 / .5);
+}
+body { background: var(--page); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.55; }
+.page { max-width: 72rem; margin: 0 auto; padding: 2rem 1.5rem 5rem; }
+h1 { font-family: var(--display); font-size: 2.4rem; line-height: 1.1; margin: 0; letter-spacing: .01em; text-wrap: balance; }
+h2 { font-family: var(--display); font-size: 1.45rem; margin: 0 0 .25rem; letter-spacing: .01em; }
+.lede { color: var(--text-2); max-width: 60ch; margin: .75rem 0 0; }
+.eyebrow { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: var(--text-3); }
+section { margin-top: 3.5rem; scroll-margin-top: 1rem; }
+section > .eyebrow { color: var(--primary-text); }
+.toc { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.5rem; }
+.toc a { border-radius: 2px; background: var(--tint-2); color: var(--primary-text); padding: .125rem .5rem; font-size: .8rem; font-weight: 500; text-decoration: none; }
+.toc a:hover { background: var(--tint-3); }
+p { margin: .5rem 0; color: var(--text-2); max-width: 68ch; }
+p strong, li strong { color: var(--text); }
+code { font-family: var(--mono); font-size: .85em; background: var(--tint-1); border: 1px solid var(--border); border-radius: 4px; padding: .05em .3em; }
+pre { background: var(--tint-1); border: 1px solid var(--border); border-radius: 6px; padding: .75rem; font-family: var(--mono); font-size: .78rem; line-height: 1.6; overflow-x: auto; }
+pre code { background: none; border: 0; padding: 0; }
+.panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-1); padding: 1rem 1.25rem; }
+.grid { display: grid; gap: 1rem; }
+@media (min-width: 760px) { .grid-2 { grid-template-columns: 1fr 1fr; } .grid-3 { grid-template-columns: repeat(3, 1fr); } }
+/* layer diagram */
+.layers { display: grid; gap: .5rem; counter-reset: ly; }
+.layer { border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 6px; background: var(--surface); padding: .6rem .9rem; display: grid; grid-template-columns: auto 1fr; gap: .15rem .9rem; align-items: baseline; }
+.layer::before { counter-increment: ly; content: counter(ly); grid-row: span 2; font-family: var(--display); font-weight: 700; font-size: 1.3rem; color: var(--primary-text); }
+.layer b { color: var(--text); font-size: .9rem; }
+.layer span { grid-column: 2; color: var(--text-3); font-size: .8rem; }
+/* swatches */
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .6rem; margin-top: .75rem; }
+.sw { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--raised); }
+.sw-chip { height: 44px; border-bottom: 1px solid var(--border); }
+.sw-meta { padding: .4rem .55rem; }
+.sw-meta b { display: block; font-family: var(--mono); font-size: .68rem; font-weight: 600; color: var(--text); word-break: break-all; }
+.sw-meta span { font-size: .66rem; color: var(--text-3); }
+.pair { display: flex; height: 44px; border-bottom: 1px solid var(--border); }
+.pair i { flex: 1; }
+/* text roles demo */
+.troles div { padding: .3rem 0; border-bottom: 1px dashed var(--border); display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; }
+.troles div:last-child { border-bottom: 0; }
+.troles code { flex-shrink: 0; }
+/* specimens */
+.spec { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-1); overflow: hidden; }
+.spec-stage { padding: 1.1rem; display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; border-bottom: 1px solid var(--border); }
+.spec-name { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: .5rem .9rem; }
+.spec-name b { font-family: var(--mono); font-size: .78rem; color: var(--primary-text); }
+.spec-name span { font-size: .7rem; color: var(--text-3); text-align: right; }
+/* block specimens, faithful to the real blocks */
+.btn { display: inline-flex; align-items: center; gap: .375rem; border: 1px solid var(--border-strong); border-radius: 6px; background: transparent; padding: .375rem .75rem; font-size: .875rem; line-height: calc(1.25 / .875); font-weight: 500; color: var(--primary-text); cursor: pointer; font-family: var(--sans); }
+.btn:hover { background: var(--tint-1); }
+.btn-primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+.btn-danger { border-color: color-mix(in srgb, var(--danger) 30%, transparent); color: var(--danger); }
+.btn-danger:hover { background: var(--danger-soft); }
+.btn-warning { border-color: color-mix(in srgb, var(--warning) 30%, transparent); color: var(--on-warning-soft); }
+.btn-ghost { border-color: transparent; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.badge { display: inline-flex; align-items: center; gap: .375rem; border-radius: 9999px; padding: .125rem .5rem; font-size: .75rem; line-height: calc(1 / .75); font-weight: 500; background: var(--tint-2); color: var(--primary-text); white-space: nowrap; }
+.badge-danger { background: var(--danger); color: #fff; } .badge-success { background: var(--success); color: #fff; }
+.badge-warning { background: var(--warning); color: #fff; }
+.badge-sm { padding: 0 .375rem; font-size: .625rem; letter-spacing: .06em; text-transform: uppercase; border-radius: 2px; }
+.chip { display: inline-flex; align-items: center; gap: .25rem; border-radius: 2px; background: var(--tint-2); padding: .125rem .375rem; font-size: .75rem; color: var(--text-2); }
+.chip[data-selected="true"] { background: var(--primary); color: var(--on-primary); }
+.chip-danger { background: var(--danger-soft); color: var(--on-danger-soft); }
+.alert { border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent); border-radius: 6px; background: var(--tint-2); padding: .5rem .75rem; font-size: .875rem; line-height: calc(1.25 / .875); color: var(--primary-text); width: 100%; }
+.alert-warning { border-color: color-mix(in srgb, var(--warning) 30%, transparent); background: var(--warning-soft); color: var(--on-warning-soft); }
+.alert-danger { border-color: color-mix(in srgb, var(--danger) 30%, transparent); background: var(--danger-soft); color: var(--on-danger-soft); }
+.toggle { position: relative; display: inline-block; width: 2.25rem; height: 1.25rem; border-radius: 9999px; background: var(--tint-3); cursor: pointer; border: 0; padding: 0; transition: background .15s; }
+.toggle[aria-checked="true"] { background: var(--primary); }
+.toggle-thumb { position: absolute; top: .125rem; left: .125rem; width: 1rem; height: 1rem; border-radius: 9999px; background: #fff; box-shadow: var(--shadow-1); transition: transform .15s; }
+.toggle[aria-checked="true"] .toggle-thumb { transform: translateX(1rem); }
+.progress-track { position: relative; height: .625rem; width: 160px; overflow: hidden; border-radius: 9999px; background: var(--tint-2); }
+.progress-fill { height: 100%; border-radius: 9999px; background: var(--primary); }
+.progress-ind .progress-fill { width: 25%; animation: ind 1.5s ease-in-out infinite; background: var(--primary); }
+@keyframes ind { 0% { transform: translateX(-100%);} 100% { transform: translateX(400%);} }
+@media (prefers-reduced-motion: reduce) { .progress-ind .progress-fill, .skeleton { animation: none; } }
+.status-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 9999px; }
+.stat { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: .75rem 1rem; min-width: 8rem; }
+.stat .eyebrow { display: block; }
+.stat-value { margin-top: .5rem; font-size: 1.5rem; line-height: calc(2 / 1.5); font-weight: 700; color: var(--primary-text); font-variant-numeric: tabular-nums; }
+.tabs { display: flex; gap: 1rem; border-bottom: 1px solid var(--border); width: 100%; }
+.tabs-tab { margin-bottom: -1px; padding: .625rem .25rem; border: 0; border-bottom: 2px solid transparent; background: none; font-size: .875rem; font-weight: 500; color: var(--text-3); cursor: pointer; font-family: var(--sans); }
+.tabs-tab[aria-selected="true"] { color: var(--primary-text); border-bottom-color: var(--primary); }
+.skeleton { border-radius: 2px; background: var(--tint-2); animation: sk 2s cubic-bezier(.4,0,.6,1) infinite; height: 1rem; width: 140px; }
+@keyframes sk { 50% { opacity: .5; } }
+.fieldd { display: flex; flex-direction: column; gap: .25rem; min-width: 220px; }
+.field-label { font-size: .875rem; font-weight: 500; color: var(--text-2); }
+.field-control { min-height: 2.25rem; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--tint-1); padding: .5rem .75rem; font-size: .875rem; color: var(--text); font-family: var(--sans); }
+.field-help { font-size: .75rem; color: var(--text-3); }
+/* tables */
+table.doc { border-collapse: collapse; width: 100%; font-size: .8rem; }
+.tablewrap { overflow-x: auto; }
+table.doc th { text-align: left; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-3); font-weight: 600; padding: .45rem .6rem; border-bottom: 1px solid var(--border-strong); white-space: nowrap; }
+table.doc td { padding: .4rem .6rem; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--text-2); }
+table.doc td:first-child { font-family: var(--mono); font-size: .74rem; color: var(--text); white-space: nowrap; }
+.ok { color: var(--success); font-weight: 600; } .no { color: var(--danger); font-weight: 600; }
+ul { color: var(--text-2); padding-left: 1.2rem; } li { margin: .3rem 0; max-width: 68ch; }
+li code, td code { background: var(--tint-1); }
+.radius-row { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end; }
+.radius-demo { width: 72px; height: 48px; background: var(--tint-2); border: 1px solid var(--border-strong); display: grid; place-items: end center; padding-bottom: .2rem; font-family: var(--mono); font-size: .65rem; color: var(--text-3); }
+.callout { border-left: 3px solid var(--warning); background: var(--warning-soft); color: var(--on-warning-soft); border-radius: 0 6px 6px 0; padding: .6rem .9rem; font-size: .85rem; max-width: 68ch; }
+a { color: var(--primary-text); }
+footer { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: .75rem; color: var(--text-3); display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+</style>
+</head>
+<body style="margin:0">
+<div class="page">
+<header>
+  <div class="eyebrow">Automatic Ripping Machine · services/ui-neu</div>
+  <h1>ui-neu Design System</h1>
+  <p class="lede">Tokens are the only raw values, blocks are the shared looks, components scope what is genuinely local, and markup carries layout only. Everything on this page is rendered with the system it documents &mdash; switch your theme and it follows.</p>
+  <nav class="toc">
+    <a href="#arch">Architecture</a><a href="#tokens">Tokens</a><a href="#naming">Naming</a><a href="#blocks">Blocks</a><a href="#states">Interaction &amp; structure</a><a href="#layout">Layout</a><a href="#dynamic">Dynamic values</a><a href="#utilities">Inline utilities</a><a href="#scoped">Scoped styles</a><a href="#build">New components</a><a href="#grow">Growing the vocabulary</a><a href="#enforce">Enforcement</a>
+  </nav>
+</header>
+
+<section id="arch">
+  <div class="eyebrow">01 &middot; Architecture</div>
+  <h2>Four layers, one direction</h2>
+  <p>Every visual decision has exactly one home. Work down the list and stop at the first layer that fits:</p>
+  <div class="layers">
+    <div class="layer"><b>Tokens &mdash; <code>src/lib/styles/tokens.css</code></b><span>Every colour, radius, shadow and motion value. Nothing else may hold a literal.</span></div>
+    <div class="layer"><b>Blocks &mdash; <code>src/lib/styles/components/*.css</code></b><span>A look shared by two or more components: button, panel, badge, table. One file per block; the header comment is its contract.</span></div>
+    <div class="layer"><b>Layout helpers &mdash; <code>layout.css</code>, <code>utilities.css</code></b><span>Arrangement (<code>stack</code>, <code>cluster</code>, <code>grid-2</code>) and a few behaviours (<code>tabular</code>, <code>spin</code>).</span></div>
+    <div class="layer"><b>Component-scoped <code>&lt;style&gt;</code></b><span>What only that component needs: its grid template, a metric delta on a block, a one-off look.</span></div>
+  </div>
+  <p style="margin-top:1rem"><strong>The cascade facts worth memorising:</strong></p>
+  <ul>
+    <li>Tailwind&rsquo;s <code>utilities</code> layer beats our <code>components</code> layer, and <strong>Svelte scoped styles compile unlayered, beating both</strong> regardless of specificity. A scoped rule therefore overrides a block with no <code>!important</code> &mdash; which is banned outright.</li>
+    <li>Per-instance overrides use a custom property: set <code>style:--jt-accent</code> in the template, read <code>var(--jt-accent)</code> in a scoped rule. The JobCard precedent.</li>
+    <li>A colour scheme&rsquo;s token map is written as <em>inline style</em> on <code>&lt;html&gt;</code> and beats every stylesheet, including the scheme&rsquo;s own.</li>
+    <li><code>table</code>/<code>table-row</code>/<code>table-cell</code> are also Tailwind display utilities; the responsive-prefixed forms are banned, and rules that must outrank a utility live in <code>@layer utilities</code>.</li>
+  </ul>
+</section>
+
+<section id="tokens">
+  <div class="eyebrow">02 &middot; Tokens</div>
+  <h2>The closed set</h2>
+  <p>Primitives are private to <code>tokens.css</code>; components and themes reference semantic roles only. Every role flips in <code>.dark</code> &mdash; never write a dark override in a component. The set is closed: a missing exact match is a <em>named collapse</em> onto the nearest role, recorded in the PR, never a new token.</p>
+
+  <div class="grid grid-2" style="margin-top:1rem">
+    <div>
+      <div class="eyebrow">Surfaces &amp; borders</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:var(--page)"></div><div class="sw-meta"><b>--color-page</b><span>the body ground</span></div></div>
+        <div class="sw"><div class="sw-chip" style="background:var(--surface)"></div><div class="sw-meta"><b>--color-surface</b><span>panels, cards</span></div></div>
+        <div class="sw"><div class="sw-chip" style="background:var(--raised)"></div><div class="sw-meta"><b>--color-surface-raised</b><span>flyouts, popovers</span></div></div>
+        <div class="sw"><div class="sw-chip" style="background:var(--border)"></div><div class="sw-meta"><b>--color-border</b><span>default hairline (primary @ 18/22%)</span></div></div>
+        <div class="sw"><div class="sw-chip" style="background:var(--border-strong)"></div><div class="sw-meta"><b>--color-border-strong</b><span>controls, floating panels</span></div></div>
+        <div class="sw"><div class="sw-chip" style="background:rgb(0 0 0 / .5)"></div><div class="sw-meta"><b>--color-backdrop</b><span>modal scrims: rgb(0 0 0 / .5) light, rgb(0 0 0 / .6) dark</span></div></div>
+      </div>
+    </div>
+    <div>
+      <div class="eyebrow">Primary family</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:var(--primary)"></div><div class="sw-meta"><b>--color-primary</b><span>the accent; schemes re-point it</span></div></div>
+        <div class="sw"><div class="sw-chip" style="background:var(--primary-hover)"></div><div class="sw-meta"><b>--color-primary-hover</b><span>filled-button hover</span></div></div>
+        <div class="sw"><div class="sw-chip" style="background:var(--primary); display:grid; place-items:center"><span style="color:var(--on-primary);font-size:.7rem;font-weight:600">Aa</span></div><div class="sw-meta"><b>--color-on-primary</b><span>text on a primary fill</span></div></div>
+        <div class="sw"><div class="sw-chip" style="background:var(--surface); display:grid; place-items:center"><span style="color:var(--primary-text);font-size:.7rem;font-weight:600">Aa</span></div><div class="sw-meta"><b>--color-primary-text</b><span>primary text on plain surface</span></div></div>
+        <div class="sw"><div class="pair"><i style="background:var(--tint-1)"></i><i style="background:var(--tint-2)"></i><i style="background:var(--tint-3)"></i></div><div class="sw-meta"><b>--color-primary-tint-1/2/3</b><span>5 / 10 / 20% mixes: hovers, selection, fills</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:1.5rem">
+    <div class="eyebrow">Tones &mdash; solid / soft / on-soft triples</div>
+    <div class="swatches">
+      <div class="sw"><div class="pair"><i style="background:var(--danger)"></i><i style="background:var(--danger-soft); display:grid;place-items:center"><span style="color:var(--on-danger-soft);font-size:.7rem;font-weight:600">Aa</span></i></div><div class="sw-meta"><b>--color-danger / -danger-soft / -on-danger-soft</b><span>solid fill &middot; tinted box &middot; text in the box</span></div></div>
+      <div class="sw"><div class="pair"><i style="background:var(--warning)"></i><i style="background:var(--warning-soft); display:grid;place-items:center"><span style="color:var(--on-warning-soft);font-size:.7rem;font-weight:600">Aa</span></i></div><div class="sw-meta"><b>--color-warning / -warning-soft / -on-warning-soft</b><span>dark solids are the -400 row</span></div></div>
+      <div class="sw"><div class="pair"><i style="background:var(--success)"></i><i style="background:var(--success-soft); display:grid;place-items:center"><span style="color:var(--on-success-soft);font-size:.7rem;font-weight:600">Aa</span></i></div><div class="sw-meta"><b>--color-success / -success-soft / -on-success-soft</b><span></span></div></div>
+      <div class="sw"><div class="pair"><i style="background:var(--primary)"></i><i style="background:var(--tint-2); display:grid;place-items:center"><span style="color:var(--primary-text);font-size:.7rem;font-weight:600">Aa</span></i></div><div class="sw-meta"><b>--color-info / -info-soft / -on-info-soft</b><span>info aliases the primary family</span></div></div>
+    </div>
+  </div>
+
+  <div class="grid grid-2" style="margin-top:1.5rem">
+    <div>
+      <div class="eyebrow">Status scale (the state machine)</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:rgb(59,130,246)"></div><div class="sw-meta"><b>--color-status-ripping</b></div></div>
+        <div class="sw"><div class="sw-chip" style="background:rgb(139,92,246)"></div><div class="sw-meta"><b>--color-status-transcoding</b></div></div>
+        <div class="sw"><div class="sw-chip" style="background:rgb(6,182,212)"></div><div class="sw-meta"><b>--color-status-scanning</b></div></div>
+        <div class="sw"><div class="sw-chip" style="background:rgb(234,179,8)"></div><div class="sw-meta"><b>--color-status-waiting</b></div></div>
+        <div class="sw"><div class="sw-chip" style="background:rgb(34,197,94)"></div><div class="sw-meta"><b>--color-status-success</b></div></div>
+        <div class="sw"><div class="sw-chip" style="background:rgb(239,68,68)"></div><div class="sw-meta"><b>--color-status-error</b></div></div>
+      </div>
+      <p class="callout" style="margin-top:.75rem">Status tokens colour <strong>state indicators</strong> &mdash; dots, fills, badges. Schemes redefine them wholesale (winamp maps them all to LED green), so never use them for ordinary text. That mistake collapsed the header&rsquo;s four count colours into one.</p>
+    </div>
+    <div>
+      <div class="eyebrow">Text roles (exactly four) &amp; accents</div>
+      <div class="panel troles" style="margin-top:.75rem">
+        <div><span style="color:var(--text)">Primary copy, values, titles</span><code>--color-text</code></div>
+        <div><span style="color:var(--text-2)">Supporting copy, labels</span><code>--color-text-secondary</code></div>
+        <div><span style="color:var(--text-3)">Hints, timestamps, empty states</span><code>--color-text-muted</code></div>
+        <div><span style="color:var(--text-4)">Placeholders, disabled text</span><code>--color-text-faint</code></div>
+      </div>
+      <div class="swatches" style="margin-top:.75rem">
+        <div class="sw"><div class="pair"><i style="background:rgb(245,158,11)"></i><i style="background:rgb(59,130,246)"></i><i style="background:rgb(139,92,246)"></i><i style="background:rgb(6,182,212)"></i></div><div class="sw-meta"><b>--color-accent-1..4</b><span>fixed identity colours: disc-type icons, glyph tiles, header counts</span></div></div>
+        <div class="sw"><div class="pair"><i style="background:rgb(255,153,0)"></i><i style="background:rgb(0,0,0);display:grid;place-items:center"><span style="color:rgb(255,153,0);font-size:.7rem;font-weight:700">Aa</span></i></div><div class="sw-meta"><b>--color-frame-accent / on-</b><span>section-frame bars; per-instance via <code>--frame-accent</code></span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:1.5rem">
+    <div class="eyebrow">The type scale &mdash; nine sizes, two workhorses</div>
+    <div class="tablewrap" style="margin-top:.75rem"><table class="doc">
+      <tr><th>size</th><th>ratio</th><th>used for</th></tr>
+      <tr><td>0.625rem</td><td></td><td><code>badge-sm</code> uppercase tags</td></tr>
+      <tr><td>11px</td><td></td><td>the eyebrow (0.12em tracking): panel titles, table headers, stat labels &mdash; the labels on this page</td></tr>
+      <tr><td>0.72rem</td><td>1.6</td><td><code>code-block</code></td></tr>
+      <tr><td>0.75rem</td><td><code>calc(1 / 0.75)</code></td><td><strong>the small role</strong>: meta rows, hints, badges, chips, field-help/-error</td></tr>
+      <tr><td>0.875rem</td><td><code>calc(1.25 / 0.875)</code></td><td><strong>the body role</strong>: controls, buttons, nav, cell text, field-label</td></tr>
+      <tr><td>1rem</td><td></td><td><code>glyph-lg</code> marks</td></tr>
+      <tr><td>1.125rem</td><td></td><td><code>modal-title</code></td></tr>
+      <tr><td>1.5rem</td><td><code>calc(2 / 1.5)</code></td><td><code>page-title</code>, <code>stat-value</code></td></tr>
+    </table></div>
+    <p>A tenth size is a design decision, not a convenience.</p>
+  </div>
+
+  <div style="margin-top:1.5rem">
+    <div class="eyebrow">Radius scale &mdash; no 4px step, on purpose</div>
+    <div class="radius-row" style="margin-top:.75rem">
+      <div class="radius-demo" style="border-radius:2px">sm &middot; 2</div>
+      <div class="radius-demo" style="border-radius:6px">md &middot; 6</div>
+      <div class="radius-demo" style="border-radius:8px">lg &middot; 8</div>
+      <div class="radius-demo" style="border-radius:12px">xl &middot; 12</div>
+      <div class="radius-demo" style="border-radius:16px">2xl &middot; 16</div>
+    </div>
+    <p style="margin-top:.75rem">Plus the radius tokens <code>--radius-sm</code>/<code>-md</code>/<code>-lg</code>/<code>-xl</code>/<code>-2xl</code>, <code>--shadow-1/2</code>, <code>--motion-fast</code> / <code>--motion-base</code> + <code>--ease</code>, control heights <code>--control-h</code> 36px / <code>--control-h-sm</code> 28px, the eyebrow spec (11px / 0.12em &mdash; the labels on this page), <code>--font-display</code> (Rajdhani &mdash; these headings) and <code>--font-mono</code>.</p>
+  </div>
+</section>
+
+<section id="naming">
+  <div class="eyebrow">03 &middot; Naming</div>
+  <h2>BEM-lite, and state is never a class</h2>
+  <div class="tablewrap"><table class="doc">
+    <tr><th>form</th><th>rule</th><th>examples</th></tr>
+    <tr><td>block</td><td>one word, kebab-case</td><td><code>card</code> <code>panel</code> <code>btn</code> <code>status-dot</code></td></tr>
+    <tr><td>block-element</td><td>every part starts with the block name; families align</td><td><code>card-header</code> &middot; <code>table</code>/<code>table-header</code>/<code>table-row</code>/<code>table-cell</code></td></tr>
+    <tr><td>block-modifier</td><td>tone modifiers are the bare tone name</td><td><code>btn-primary</code> <code>alert-lg</code> <code>chip-danger</code> (never <code>chip-tone-danger</code>)</td></tr>
+    <tr><td>state</td><td><span class="no">never a class</span> &mdash; aria-*, data-*, pseudo-class</td><td><code>[aria-selected="true"]</code> <code>[data-status]</code> <code>:disabled</code></td></tr>
+    <tr><td>scoped</td><td>prefixed with the component&rsquo;s name; <strong>private</strong> &mdash; themes never touch them</td><td><code>job-card-meta</code> <code>session-builder-media-chip</code></td></tr>
+  </table></div>
+</section>
+
+<section id="blocks">
+  <div class="eyebrow">04 &middot; Block vocabulary</div>
+  <h2>Living specimens</h2>
+  <p>Each block&rsquo;s file header is its contract. A block earns its place by recurring across components &mdash; a look used once is a scoped style until the second consumer appears.</p>
+  <div class="grid grid-2" style="margin-top:1rem">
+    <div class="spec"><div class="spec-stage">
+      <button class="btn">Default</button><button class="btn btn-primary">Primary</button><button class="btn btn-danger">Danger</button><button class="btn btn-warning">Warning</button><button class="btn btn-ghost">Ghost</button><button class="btn" disabled>Disabled</button>
+    </div><div class="spec-name"><b>btn</b><span>-primary -danger -warning -ghost -link -icon -sm &middot; :disabled [aria-pressed] [data-busy]</span></div></div>
+    <div class="spec"><div class="spec-stage">
+      <span class="badge">14 tracks</span><span class="badge badge-success">Completed</span><span class="badge badge-danger">Failed</span><span class="badge badge-warning">3</span><span class="badge badge-sm" style="background:var(--warning-soft);color:var(--on-warning-soft)">Built-in</span>
+      <span class="chip">Movie 5</span><span class="chip" data-selected="true">All 10</span><span class="chip chip-danger">error</span>
+    </div><div class="spec-name"><b>badge &middot; chip</b><span>badge-status keys off [data-status]; chips select with [aria-pressed]/[data-selected]</span></div></div>
+    <div class="spec"><div class="spec-stage" style="flex-direction:column; align-items:stretch">
+      <div class="alert">An informational message in the info tone (the default).</div>
+      <div class="alert alert-warning">The warning alert &mdash; soft box, on-soft text.</div>
+      <div class="alert alert-danger">The danger alert. <code>alert-lg</code> pads page-level banners.</div>
+    </div><div class="spec-name"><b>alert</b><span>alert-title alert-body &middot; -info -warning -danger -success -lg</span></div></div>
+    <div class="spec"><div class="spec-stage">
+      <button class="toggle" aria-checked="true" role="switch" aria-label="demo on" onclick="this.setAttribute('aria-checked', this.getAttribute('aria-checked')==='true'?'false':'true')"><span class="toggle-thumb"></span></button>
+      <button class="toggle" aria-checked="false" role="switch" aria-label="demo off" onclick="this.setAttribute('aria-checked', this.getAttribute('aria-checked')==='true'?'false':'true')"><span class="toggle-thumb"></span></button>
+      <span style="display:inline-flex; gap:.5rem; align-items:center"><span class="status-dot" style="background:rgb(59,130,246)"></span><span class="status-dot" style="background:rgb(139,92,246)"></span><span class="status-dot" style="background:rgb(234,179,8)"></span><span class="status-dot" style="background:rgb(239,68,68)"></span><span class="status-dot" style="background:rgb(34,197,94)"></span></span>
+    </div><div class="spec-name"><b>toggle &middot; status-dot</b><span>[aria-checked] moves the thumb; dots use the status scale (full red-500, both modes)</span></div></div>
+    <div class="spec"><div class="spec-stage" style="flex-direction:column; align-items:flex-start">
+      <div class="progress-track"><div class="progress-fill" style="width:62%"></div></div>
+      <div class="progress-track progress-ind"><div class="progress-fill"></div></div>
+      <div class="skeleton"></div>
+    </div><div class="spec-name"><b>progress &middot; skeleton</b><span>width via <code>style:--progress</code>; keep the <code>data-progress-*</code> attrs &mdash; themes hook them</span></div></div>
+    <div class="spec"><div class="spec-stage">
+      <div class="stat"><span class="eyebrow">Queued</span><span class="stat-value">3</span></div>
+      <div class="stat"><span class="eyebrow">Failed</span><span class="stat-value" style="color:var(--danger)">0</span></div>
+      <div class="fieldd"><span class="field-label">Output path</span><input class="field-control" value="{title} ({year})" aria-label="demo field"><span class="field-help">field-help sits under the control; field-error takes the danger tone.</span></div>
+    </div><div class="spec-name"><b>stat &middot; field</b><span>stat-label is the eyebrow; field-control is the full-size control (compact bars restate metrics in scope)</span></div></div>
+  </div>
+  <div class="spec" style="margin-top:1rem"><div class="spec-stage">
+    <div class="tabs"><button class="tabs-tab" aria-selected="true">Sessions</button><button class="tabs-tab">Rip presets</button><button class="tabs-tab">Transcode presets</button></div>
+  </div><div class="spec-name"><b>tabs</b><span>[aria-selected] underlines; tabs-pills is the segmented variant</span></div></div>
+  <p style="margin-top:1rem">The full roster: <code>alert badge btn card chip code-block field flyout glyph list-row modal nav panel progress section-frame skeleton slide-over stat status-dot table tabs toast toggle</code> plus the text helpers <code>eyebrow / mono / kbd</code> &mdash; and <code>.mono</code> is <strong>size-neutral</strong> (family + tabular-nums only; size always comes from context).</p>
+</section>
+
+<section id="states">
+  <div class="eyebrow">05 &middot; Interaction, elevation, icons &amp; structure</div>
+  <h2>The conventions between the blocks</h2>
+  <div class="grid grid-2" style="margin-top:1rem">
+    <div class="panel">
+      <div class="eyebrow">Interaction states</div>
+      <ul style="padding-left:1.1rem; margin:.5rem 0 0">
+        <li><strong>Focus</strong>: one global ring &mdash; <code>:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px }</code>. Never removed, never a second style. <button class="btn" style="outline:2px solid var(--primary); outline-offset:2px">like this</button></li>
+        <li><strong>Hover</strong> climbs the tint ladder: transparent &rarr; tint-1 (rows, ghost) &rarr; tint-2 (selected); filled controls darken to <code>--color-primary-hover</code>.</li>
+        <li><strong>Disabled</strong> is <code>opacity: .4</code> + <code>not-allowed</code>, from the block &mdash; never restated darker.</li>
+        <li><strong>Busy</strong> is <code>[data-busy="true"]</code>, not a spinner class.</li>
+        <li><strong>Reduced motion</strong>: base.css zeroes the motion tokens and caps every animation; ride the tokens and it is handled for you.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="eyebrow">Elevation &amp; stacking &mdash; frozen</div>
+      <div class="tablewrap"><table class="doc" style="margin-top:.5rem">
+        <tr><th>tier</th><th>shadow</th><th>z</th><th>who</th></tr>
+        <tr><td>resting</td><td>--shadow-1</td><td>auto</td><td>card, panel, stat</td></tr>
+        <tr><td>floating</td><td>--shadow-2</td><td>40</td><td>flyout</td></tr>
+        <tr><td>overlay</td><td>--shadow-2</td><td>50</td><td>modal, slide-over</td></tr>
+      </table></div>
+      <p style="margin-top:.5rem">No other z-index exists; a stacking problem is solved by DOM order or a portal, not a bigger number.</p>
+      <div class="eyebrow" style="margin-top:1rem">Iconography</div>
+      <p style="margin-top:.35rem">lucide-svelte, coloured by <code>currentColor</code>. <strong>Size is owned by the containing block</strong>: nav 20px, glyph 16px, btn-icon 14px, the chevron 14px (rotating on <code>[aria-expanded]</code>). Targeting a lucide instance needs <code>:global(</code> &mdash; allowed only with a comment.</p>
+    </div>
+    <div class="panel">
+      <div class="eyebrow">Responsive structure &mdash; three breakpoints</div>
+      <div class="tablewrap"><table class="doc" style="margin-top:.5rem">
+        <tr><th>width</th><th>what changes</th></tr>
+        <tr><td>640px</td><td>grid-2/grid-3 collapse to one column</td></tr>
+        <tr><td>1024px</td><td>sidebar replaces the drawer; <code>responsive-table</code> stacks rows into label/value cards &mdash; give every cell <code>data-label="Column"</code></td></tr>
+        <tr><td>1536px</td><td>the sidebar stats panel appears</td></tr>
+      </table></div>
+      <p style="margin-top:.5rem">Wide content scrolls in its own <code>overflow-x-auto</code> container; the page body never scrolls sideways.</p>
+    </div>
+    <div class="panel">
+      <div class="eyebrow">Page states &amp; microcopy</div>
+      <ul style="padding-left:1.1rem; margin:.5rem 0 0">
+        <li><strong>Loading</strong>: skeleton shapes in the layout the data will fill, never a lone spinner.</li>
+        <li><strong>Empty</strong>: a muted sentence saying what will appear and how to cause it.</li>
+        <li><strong>Errors</strong>: <code>alert alert-danger</code> (page-level: <code>alert-lg</code>) saying what failed and what to do; field errors are <code>field-error</code> + <code>[aria-invalid]</code>.</li>
+        <li><strong>Copy</strong>: sentence case (themes uppercase for themselves); controls say what they do; three dots, not the ellipsis character; no em-dashes, no unicode-as-UI, no emojis.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="layout">
+  <div class="eyebrow">06 &middot; Layout helpers</div>
+  <h2>Arrangement classes</h2>
+  <p><code>stack</code> (column, 1rem gap; <code>-sm</code>/<code>-lg</code>), <code>cluster</code> (wrapping row), <code>grid-2/3</code>, <code>page</code>, <code>page-header</code>, <code>page-title</code>, <code>split</code>. The one sanctioned exception to role naming: they say what they arrange.</p>
+  <p class="callout"><strong>Two flexbox facts that each bit hard during the migration:</strong> a <code>stack</code> is a column flexbox, so children stretch full width regardless of <code>display</code> &mdash; shrink one with <code>align-self: flex-start</code>; and flex gaps <em>do not collapse</em> like block margins, so a child&rsquo;s <code>margin-bottom</code> adds to the gap instead of merging into it.</p>
+</section>
+
+<section id="dynamic">
+  <div class="eyebrow">07 &middot; Dynamic values</div>
+  <h2>Custom properties, not style strings</h2>
+  <pre><code>&lt;div class="progress-fill" style:--progress="{pct}%"&gt;          &lt;!-- the block reads var(--progress) --&gt;
+&lt;div class="card card-status" style:--jt-accent={accentVar}&gt;   &lt;!-- scoped rule reads it: no !important --&gt;</code></pre>
+  <p><code>style="..."</code> string attributes are banned; <code>style:</code> directives carry custom properties only (plus the Flyout position allowlist). Theme hooks are <code>data-*</code> attributes &mdash; <code>data-progress-track/-fill</code>, <code>data-sidebar-stats</code>, <code>data-poster</code>, <code>data-indeterminate</code> &mdash; kept on elements even where the block class is present, because schemes key off them.</p>
+</section>
+
+<section id="utilities">
+  <div class="eyebrow">08 &middot; Inline utilities</div>
+  <h2>Layout families only</h2>
+  <div class="tablewrap"><table class="doc">
+    <tr><th></th><th>families</th></tr>
+    <tr><td class="ok">allowed</td><td>spacing <code>m*/p*/gap*/space-*</code> &middot; display <code>flex/grid/hidden/&hellip;</code> &middot; arrangement <code>flex-*/items-*/justify-*/self-*/col-span-*/grid-cols-&lt;n&gt;</code> &middot; sizing <code>w-full/h-full/min-w-0/max-w-*</code> &middot; text behaviour <code>truncate/whitespace-*/break-*/overflow-*</code> &middot; <code>sr-only</code> &middot; positioning <code>relative/absolute/inset-0</code> &middot; responsive prefixes on all of these</td></tr>
+    <tr><td class="no">banned</td><td>every colour, type, border, radius, shadow and effect family &middot; <code>dark:</code> and every hover/focus variant &middot; arbitrary values <code>w-[13px]</code> &middot; <code>style=""</code> &middot; <code>class:</code> directives &middot; uncommented <code>:global(</code> &middot; literal colours in <code>&lt;style&gt;</code> &middot; <code>lg:table-cell</code>-style display utilities</td></tr>
+  </table></div>
+  <p>The lint (<code>npm run lint:styles</code>) scans class attributes, class-expression strings and script literals. It holds at <strong>0 violations</strong>, down from 7,439 before the cleanup, and runs in CI.</p>
+</section>
+
+<section id="scoped">
+  <div class="eyebrow">09 &middot; Scoped styles</div>
+  <h2>The rules for local CSS</h2>
+  <ul>
+    <li><strong>Never copy a block&rsquo;s declarations</strong> &mdash; use the class, add deltas.</li>
+    <li><strong>Original metrics win over block defaults.</strong> A compact control keeps <code>field-control</code> and restates its own padding/height in scope, with a comment saying why.</li>
+    <li><strong>Line heights are unitless calc ratios</strong>: <code>calc(1.25 / 0.875)</code> for text-sm, <code>calc(1 / 0.75)</code> for text-xs. Fixed lengths pin the line box when a theme resizes type; rounded decimals (<code>1.4286</code> &rarr; 19.9996px) shift dense pages by sub-pixel accumulation.</li>
+    <li><strong>No literal colours, no <code>!important</code>, no <code>dark:</code></strong> &mdash; tokens flip on their own, and scoped styles already out-cascade the blocks.</li>
+  </ul>
+</section>
+
+<section id="build">
+  <div class="eyebrow">10 &middot; Building a new component</div>
+  <h2>The decision tree</h2>
+  <p>For every visual element in a new component, work down and stop at the first fit:</p>
+  <div class="layers">
+    <div class="layer"><b>A block already looks like this</b><span>use the block class, done.</span></div>
+    <div class="layer"><b>A block almost looks like this</b><span>block class + a scoped delta restating only what differs, with a comment naming the reason.</span></div>
+    <div class="layer"><b>Blocks compose into this</b><span>combine them with layout helpers: <code>panel</code> + <code>stack</code> + <code>field</code> covers most forms.</span></div>
+    <div class="layer"><b>Only this component wants it</b><span>a scoped style, prefixed with the component&rsquo;s name.</span></div>
+    <div class="layer"><b>A second component will want it</b><span>a new block &mdash; see Growing the vocabulary.</span></div>
+  </div>
+  <div style="margin-top:1rem" class="eyebrow">Component file anatomy</div>
+<pre><code>&lt;script lang="ts"&gt;
+  // imports, a typed Props interface, then $props()/$state()/$derived
+&lt;/script&gt;
+
+&lt;!-- markup: block classes + allowed layout utilities; state as aria-*/data-*;
+     dynamic values as style:--x --&gt;
+&lt;div class="card" data-status={job.status} style:--jt-accent={accentVar}&gt;
+  &lt;div class="card-header"&gt;
+    &lt;h3 class="card-title"&gt;{job.title}&lt;/h3&gt;
+    &lt;span class="badge badge-status" data-status={job.status}&gt;{label}&lt;/span&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+
+&lt;style&gt;
+  /* scoped styles LAST; every class prefixed job-card-*; overrides carry a
+     comment naming the original value and why */
+  .job-card-meta { font-size: .75rem; line-height: calc(1 / .75); color: var(--color-text-muted); }
+&lt;/style&gt;</code></pre>
+  <ul>
+    <li>One component per file under <code>src/lib/components/</code> (route-private pieces live beside their <code>+page.svelte</code>); tests are colocated.</li>
+    <li>Interactive state is reflected in the attribute that styles it &mdash; the code sets <code>aria-pressed</code>/<code>data-selected</code>, the CSS keys off it. Never a parallel <code>active</code> class.</li>
+    <li>Themeable surfaces get the published <code>data-*</code> hook even where a block class is present.</li>
+    <li>Definition of done: <code>vitest</code> + <code>check</code> green, <code>lint:styles --files</code> at 0, and parity held (or a named collapse recorded) on every existing screen touched.</li>
+  </ul>
+</section>
+
+<section id="grow">
+  <div class="eyebrow">11 &middot; Growing the vocabulary</div>
+  <h2>Promotion, not duplication</h2>
+  <div class="grid grid-2" style="margin-top:1rem">
+    <div class="panel">
+      <div class="eyebrow">Element or modifier on an existing block</div>
+      <ul style="padding-left:1.1rem; margin:.5rem 0 0">
+        <li>Add the rule inside the block file&rsquo;s <code>@layer components</code>, tokens only.</li>
+        <li>Extend the file&rsquo;s <strong>header comment</strong> &mdash; it is the contract.</li>
+        <li>Add the class to the <code>BLOCKS</code> registry in <code>blocks.test.ts</code>.</li>
+        <li>Update the vocabulary tables here and in <code>ui-neu-theming.md</code>.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="eyebrow">A new block (second consumer appeared)</div>
+      <ul style="padding-left:1.1rem; margin:.5rem 0 0">
+        <li>Create <code>components/&lt;block&gt;.css</code>: header comment (Elements / Modifiers / State), <code>@layer components</code>, tokens only, calc line-height ratios.</li>
+        <li><code>@import</code> it from <code>app.css</code> (the index).</li>
+        <li>Register every class in <code>blocks.test.ts</code> &mdash; header, class list and no-raw-colours are enforced from then on.</li>
+        <li>Convert the original consumers, delete their scoped duplicates.</li>
+        <li>Document it in both guides; themes may target it from that moment, so name its state hooks deliberately.</li>
+        <li>Parity must hold on every screen the converted consumers appear on.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="callout" style="margin-top:1rem"><strong>Adding a token: almost never.</strong> The set is closed &mdash; a colour with no exact role collapses onto the nearest one, recorded. A genuinely new <em>role</em> needs a second consumer, light + dark values, a family-consistent name, the <code>.dark</code> twin, a <code>tokens.test.ts</code> entry, and a spec amendment. A new theme hook is a published <code>data-*</code> attribute (the <code>data-poster</code> pattern), listed in <code>ui-neu-theming.md</code> and stable from its first release.</p>
+</section>
+
+<section id="enforce">
+  <div class="eyebrow">12 &middot; Enforcement</div>
+  <h2>The gates</h2>
+  <div class="tablewrap"><table class="doc">
+    <tr><th>gate</th><th>what it holds</th></tr>
+    <tr><td>npm run lint:styles</td><td>the whole-frontend utility/style scan, 0 violations, in the ui-neu CI lint job with its own test suite</td></tr>
+    <tr><td>ui-neu-parity.mjs</td><td>44 screens &times; 6 schemes &times; 3 viewports against a pinned baseline, 0.5% pixelmatch; allowed deviations named in <code>DEVIATIONS.md</code></td></tr>
+    <tr><td>tokens.test.ts / blocks.test.ts</td><td>the token and vocabulary contracts: every block layered, headered, literal-free; the legacy aliases stay gone</td></tr>
+  </table></div>
+  <p>Repo references: <code>docs/ui-neu-style-guide.md</code> (this guide&rsquo;s source of truth) and <code>docs/ui-neu-theming.md</code> (the scheme-authoring contract).</p>
+</section>
+
+<footer><span>ARM v3 &middot; ui-neu styling cleanup</span><span>tokens &rarr; blocks &rarr; layout &rarr; scoped &middot; state via aria/data &middot; 0 lint violations</span></footer>
+</div>
+
+</body>
+</html>

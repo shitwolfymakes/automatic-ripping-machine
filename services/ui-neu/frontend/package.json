@@ -12,7 +12,8 @@
     "test:coverage": "vitest run --coverage",
     "test:visual": "playwright test",
     "test:visual:update": "playwright test --update-snapshots",
-    "codegen": "cd .. && bash scripts/codegen.sh"
+    "codegen": "cd .. && bash scripts/codegen.sh",
+    "lint:styles": "node ../../../devtools/ui-neu-style-lint.mjs"
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.98.1",
@@ -22,8 +23,12 @@
     "@sveltejs/vite-plugin-svelte": "^7",
     "@testing-library/jest-dom": "^6",
     "@testing-library/svelte": "^5",
+    "@types/node": "22.20.1",
     "@vitest/coverage-v8": "^4.1.8",
     "jsdom": "^29",
+    "pixelmatch": "^6.0.0",
+    "playwright": "^1.60.0",
+    "pngjs": "^7.0.0",
     "svelte": "^5",
     "svelte-check": "^4",
     "tailwindcss": "^4.3.0",

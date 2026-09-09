@@ -70,50 +70,50 @@
 	}
 </script>
 
-<div class="border-t border-primary/20 p-4 dark:border-primary/20">
+<div class="review-tracks-table-wrap">
 	{#if errorMessage}
-		<p class="mb-2 text-xs text-red-600 dark:text-red-400">{errorMessage}</p>
+		<p class="field-error mb-2">{errorMessage}</p>
 	{/if}
 	{#if rows.length > 0}
 		<div>
-			<h4 class="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+			<h4 class="mb-2 review-tracks-table-heading">
 				{tracks.length ? 'Tracks' : 'Scanned titles'} ({rows.length})
 			</h4>
-			<div class="overflow-x-auto rounded-md border border-primary/15 dark:border-primary/20">
-				<table class="w-full text-left text-xs">
-					<thead class="bg-page text-gray-500 dark:bg-primary/5 dark:text-gray-400">
+			<div class="overflow-x-auto review-tracks-table-scroll">
+				<table class="table review-tracks-table">
+					<thead>
 						<tr>
-							<th class="px-3 py-1.5 font-medium">#</th>
-							<th class="px-3 py-1.5 font-medium">{isMusic ? 'Name' : 'Title'}</th>
-							{#if isVideo}<th class="px-2 py-1.5 font-medium text-center">Episode</th>{/if}
-							<th class="px-3 py-1.5 font-medium">Length</th>
-							<th class="px-3 py-1.5 font-medium">Source</th>
-							{#if isVideo}<th class="w-8"></th>{/if}
+							<th class="table-header">#</th>
+							<th class="table-header">{isMusic ? 'Name' : 'Title'}</th>
+							{#if isVideo}<th class="table-header review-tracks-table-center">Episode</th>{/if}
+							<th class="table-header">Length</th>
+							<th class="table-header">Source</th>
+							{#if isVideo}<th class="table-header w-8"></th>{/if}
 						</tr>
 					</thead>
-					<tbody class="divide-y divide-gray-100 dark:divide-gray-700/50">
+					<tbody>
 						{#each rows as row}
-							<tr class="{row.excluded ? 'opacity-40' : ''}">
-								<td class="px-3 py-1.5 font-mono text-gray-700 dark:text-gray-300">{row.index}</td>
+							<tr class="table-row" data-disabled={row.excluded}>
+								<td class="table-cell mono">{row.index}</td>
 								<td
-									class="px-3 py-1.5 {isVideo && row.trackId ? 'cursor-pointer hover:bg-primary/5 dark:hover:bg-primary/10' : ''}"
+									class="table-cell {isVideo && row.trackId ? 'review-tracks-table-clickable' : ''}"
 									onclick={() => { if (isVideo && row.trackId) toggleTrackSearch(row.trackId!); }}
 								>
 									{#if row.title}
 										<div class="flex items-center gap-1.5">
-											<span class="font-medium text-gray-700 dark:text-gray-300">{row.title}</span>
+											<span class="review-tracks-table-title">{row.title}</span>
 											{#if row.year}
-												<span class="text-gray-400">({row.year})</span>
+												<span class="review-tracks-table-faint">({row.year})</span>
 											{/if}
 										</div>
 									{:else if row.trackId}
-										<span class="text-gray-400">{job.title || 'Untitled'}{#if job.year} ({job.year}){/if}</span>
+										<span class="review-tracks-table-faint">{job.title || 'Untitled'}{#if job.year} ({job.year}){/if}</span>
 									{:else}
-										<span class="text-gray-400">-</span>
+										<span class="review-tracks-table-faint">-</span>
 									{/if}
 								</td>
 								{#if isVideo}
-									<td class="px-2 py-1.5 text-center">
+									<td class="table-cell review-tracks-table-center">
 										{#if row.trackId}
 											<input
 												type="text"
@@ -121,21 +121,22 @@
 												onchange={(e) => handleEpisodeNumberInput(row.trackId!, e.currentTarget.value)}
 												placeholder="--"
 												disabled={row.excluded}
-												class="w-10 rounded-sm border border-primary/25 bg-primary/5 px-1 py-0.5 text-center text-xs text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary disabled:opacity-30 dark:border-primary/30 dark:bg-primary/10 dark:text-white"
+												class="field-control review-tracks-table-episode-input"
 											/>
 										{:else}
-											<span class="text-gray-400">-</span>
+											<span class="review-tracks-table-faint">-</span>
 										{/if}
 									</td>
 								{/if}
-								<td class="px-3 py-1.5 text-gray-700 dark:text-gray-300">{formatLength(row.durationSeconds)}</td>
-								<td class="px-3 py-1.5 font-mono text-gray-500 dark:text-gray-400">{row.sourceLabel}</td>
+								<td class="table-cell review-tracks-table-secondary">{formatLength(row.durationSeconds)}</td>
+								<td class="table-cell mono review-tracks-table-muted">{row.sourceLabel}</td>
 								{#if isVideo}
-									<td class="px-1 py-1.5">
+									<td class="table-cell">
 										{#if row.trackId}
 											<button
 												onclick={() => toggleTrackSearch(row.trackId!)}
-												class="rounded p-1 transition-colors {openSearchTrackIds.has(row.trackId) ? 'text-primary' : 'text-gray-400 hover:text-primary dark:text-gray-500 dark:hover:text-primary'}"
+												class="btn btn-icon review-tracks-table-search-btn"
+												aria-pressed={openSearchTrackIds.has(row.trackId)}
 												title={openSearchTrackIds.has(row.trackId) ? 'Close search' : 'Search title'}
 											>
 												<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
@@ -159,6 +160,28 @@
 			</div>
 		</div>
 	{:else}
-		<p class="text-sm text-gray-400">No tracks yet.</p>
+		<p class="review-tracks-table-empty">No tracks yet.</p>
 	{/if}
 </div>
+
+<style>
+	.review-tracks-table-wrap { border-top: 1px solid var(--color-border); padding: 1rem; }
+	.review-tracks-table-scroll { border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+	/* the original was px-3 py-1.5 (px-2 for the Episode column), between
+	   table's own default padding and table-compact's - a custom override
+	   rather than either preset */
+	.review-tracks-table { font-size: 0.75rem; line-height: 1rem; }
+	.review-tracks-table .table-header, .review-tracks-table .table-cell { padding: 0.375rem 0.75rem; }
+	.review-tracks-table-center { text-align: center; padding-left: 0.5rem; padding-right: 0.5rem; }
+	.table-row[data-disabled="true"] { opacity: 0.4; }
+	.review-tracks-table-clickable { cursor: pointer; }
+	.review-tracks-table-clickable:hover { background: var(--color-primary-tint-1); }
+	.review-tracks-table-episode-input { width: 2.5rem; min-height: auto; padding: 0.125rem 0.25rem; text-align: center; }
+	.review-tracks-table-search-btn[aria-pressed="true"] { color: var(--color-primary); }
+	.review-tracks-table-heading { font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; color: var(--color-text-secondary); }
+	.review-tracks-table-title { font-weight: 500; color: var(--color-text-secondary); }
+	.review-tracks-table-faint { color: var(--color-text-faint); }
+	.review-tracks-table-secondary { color: var(--color-text-secondary); }
+	.review-tracks-table-muted { color: var(--color-text-muted); }
+	.review-tracks-table-empty { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-faint); }
+</style>

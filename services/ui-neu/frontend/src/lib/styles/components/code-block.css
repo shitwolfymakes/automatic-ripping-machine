@@ -1,0 +1,6 @@
+/* code-block: preformatted text (script viewer, logs, JSON).
+   Modifiers: code-block-scroll (capped height with scrolling). */
+@layer components {
+	.code-block { margin: 0; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-primary-tint-1); padding: 0.75rem; font-family: var(--font-mono); font-size: 0.72rem; line-height: 1.6; color: var(--color-text); white-space: pre; overflow-x: auto; }
+	.code-block-scroll { max-height: 24rem; overflow: auto; }
+}

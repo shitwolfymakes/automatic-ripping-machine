@@ -105,13 +105,6 @@
 		detail ? Object.entries((detail.job.metadata_json ?? {}) as Record<string, unknown>) : []
 	);
 
-	const panelTabBase = 'flex-1 border-r border-primary/15 px-4 py-2.5 text-center text-sm font-medium transition-colors dark:border-primary/15';
-	const panelTabActive = 'text-primary border-b-2 border-b-primary bg-primary/5 dark:bg-primary/10';
-	const panelTabInactive = 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300';
-	function panelTabClass(id: string, last = false): string {
-		const base = last ? panelTabBase.replace(' border-r border-primary/15', '') : panelTabBase;
-		return `${base} ${activePanel === id ? panelTabActive : panelTabInactive}`;
-	}
 
 	function handleTrackTitleApply() {
 		editingTrackId = null;
@@ -222,45 +215,45 @@
 	{#snippet ready(d)}
 	{@const job = d.job}
 	{@const tracks = d.tracks}
-	<div class="space-y-6">
+	<div class="stack-lg stack">
 		<!-- Breadcrumb -->
-		<nav class="text-sm">
-			<a href="/" class="text-primary-text hover:underline dark:text-primary-text-dark">Dashboard</a>
-			<span class="mx-1.5 text-gray-400 dark:text-gray-500">&rsaquo;</span>
-			<span class="text-gray-500 dark:text-gray-400">{job.title || 'Untitled'}</span>
+		<nav class="job-detail-breadcrumb">
+			<a href="/" class="job-detail-breadcrumb-link">Dashboard</a>
+			<span class="mx-1.5 job-detail-breadcrumb-sep">&rsaquo;</span>
+			<span class="job-detail-breadcrumb-current">{job.title || 'Untitled'}</span>
 		</nav>
 
 		{#if actionNote}
 			<div
 				data-testid="action-note"
-				class="rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm text-primary-text dark:border-primary/30 dark:bg-primary/10 dark:text-primary-text-dark"
+				class="job-detail-action-note"
 			>
 				{actionNote}
 			</div>
 		{/if}
 
 		<!-- Main header container -->
-		<div class="rounded-lg border border-primary/20 bg-surface shadow-xs overflow-hidden dark:border-primary/20 dark:bg-surface-dark">
+		<div class="job-detail-header-card">
 
 			<!-- Title bar -->
-			<div class="flex flex-wrap items-center gap-2 border-b border-primary/15 px-5 py-3 dark:border-primary/15">
-				<h1 class="text-xl font-bold text-gray-900 dark:text-white">
+			<div class="flex flex-wrap items-center gap-2 job-detail-title-bar">
+				<h1 class="job-detail-title">
 					{job.title || 'Untitled'}
 				</h1>
 				{#if job.year}
-					<span class="text-base text-gray-400 dark:text-gray-500">({job.year})</span>
+					<span class="job-detail-year">({job.year})</span>
 				{/if}
 				<StatusBadge status={effectiveJobStatus(job)} />
 				{#if jobMeta.imdb_id && !isCdDisc}
-					<a href="https://www.imdb.com/title/{jobMeta.imdb_id}" target="_blank" rel="noopener noreferrer" class="rounded-full bg-yellow-400 px-2.5 py-0.5 text-[10px] font-bold text-black">IMDb</a>
+					<a href="https://www.imdb.com/title/{jobMeta.imdb_id}" target="_blank" rel="noopener noreferrer" class="badge badge-imdb job-detail-imdb-badge">IMDb</a>
 				{/if}
 				{#if jobMeta.multi_title}
-					<span class="rounded-full bg-purple-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">Multi-Title</span>
+					<span class="badge badge-sm job-detail-multi-title-badge">Multi-Title</span>
 				{/if}
 				{#if jobMeta.source_type === 'iso'}
-					<span class="rounded-sm bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">ISO</span>
+					<span class="job-detail-source-badge">ISO</span>
 				{:else if jobMeta.source_type === 'folder'}
-					<span class="rounded-sm bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">Folder</span>
+					<span class="job-detail-source-badge">Folder</span>
 				{/if}
 
 				<!-- Action buttons pushed right -->
@@ -270,7 +263,7 @@
 							type="button"
 							data-testid="identify-open"
 							onclick={() => (showIdentify = true)}
-							class="rounded-lg border border-primary/30 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 dark:border-primary/30 dark:text-primary dark:hover:bg-primary/10"
+							class="btn job-detail-header-btn"
 						>
 							{identifyLabel}
 						</button>
@@ -280,7 +273,7 @@
 							type="button"
 							data-testid="apply-open"
 							onclick={() => (showApply = true)}
-							class="rounded-lg border border-primary/30 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 dark:border-primary/30 dark:text-primary dark:hover:bg-primary/10"
+							class="btn job-detail-header-btn"
 						>
 							Apply session
 						</button>
@@ -294,25 +287,25 @@
 			<!-- Poster + Metadata grid -->
 			<div class="flex flex-col sm:flex-row items-start">
 				<!-- Poster -->
-				<div class="shrink-0 border-b sm:border-b-0 sm:border-r border-primary/15 p-4 dark:border-primary/15">
+				<div class="shrink-0 job-detail-poster-cell">
 					<PosterImage
 						url={jobPoster(job)}
 						alt={job.title ?? 'Poster'}
-						class="rounded-md object-cover shadow-sm w-[120px]"
-						style="aspect-ratio: {job.disc_type === 'cd' ? '1/1' : '2/3'}"
+						class="job-detail-poster"
+						style={`aspect-ratio: ${job.disc_type === 'cd' ? '1/1' : '2/3'}`}
 					/>
 				</div>
 
 				<!-- Metadata grid -->
-				<div class="metadata-grid w-full sm:w-auto flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+				<div class="job-detail-metadata-grid w-full sm:w-auto flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
 					{#each metadataFields as field}
-						<div class="metadata-cell px-4 py-3 border-b border-r border-primary/15 dark:border-primary/15">
+						<div class="job-detail-metadata-cell">
 							{#if !field.empty}
-								<div class="text-[11px] uppercase tracking-wider text-gray-500 dark:text-gray-400">{field.label}</div>
+								<div class="job-detail-metadata-label">{field.label}</div>
 								{#if field.link}
-									<a href={field.link} target="_blank" rel="noopener noreferrer" class="mt-1 block text-sm font-medium text-primary hover:underline dark:text-primary {field.mono ? 'font-mono text-xs' : ''}">{field.value}</a>
+									<a href={field.link} target="_blank" rel="noopener noreferrer" class="mt-1 block job-detail-metadata-value job-detail-metadata-link {field.mono ? 'mono job-detail-metadata-mono' : ''}">{field.value}</a>
 								{:else}
-									<div class="mt-1 text-sm font-medium text-gray-900 dark:text-white {field.mono ? 'font-mono text-xs truncate' : ''}" title={field.mono ? field.value : undefined}>{field.value}</div>
+									<div class="mt-1 job-detail-metadata-value {field.mono ? 'mono job-detail-metadata-mono truncate' : ''}" title={field.mono ? field.value : undefined}>{field.value}</div>
 								{/if}
 							{/if}
 						</div>
@@ -323,30 +316,30 @@
 			<!-- Panel toggle bar: poster override (manual poster_url_manual quick-edit).
 			     Disc identity now commits through the IdentifyDialog (resolve), not here. -->
 			{#if isVideoDisc}
-				<div class="flex border-t border-primary/15 bg-surface/50 dark:border-primary/15 dark:bg-surface-dark/50">
-					<button onclick={() => (activePanel = activePanel === 'title' ? null : 'title')} class={panelTabClass('title', true)}>Poster &amp; metadata search</button>
+				<div class="flex job-detail-panel-toggle-bar">
+					<button onclick={() => (activePanel = activePanel === 'title' ? null : 'title')} class="job-detail-panel-tab" aria-pressed={activePanel === 'title'}>Poster &amp; metadata search</button>
 				</div>
 			{:else if isCdDisc}
-				<div class="flex border-t border-primary/15 bg-surface/50 dark:border-primary/15 dark:bg-surface-dark/50">
-					<button onclick={() => (activePanel = activePanel === 'music' ? null : 'music')} class={panelTabClass('music', true)}>Match CD</button>
+				<div class="flex job-detail-panel-toggle-bar">
+					<button onclick={() => (activePanel = activePanel === 'music' ? null : 'music')} class="job-detail-panel-tab" aria-pressed={activePanel === 'music'}>Match CD</button>
 				</div>
 			{/if}
 
 			<!-- Active panel content -->
 			{#if activePanel === 'title'}
-				<div class="border-t border-primary/15 p-5 dark:border-primary/15">
+				<div class="job-detail-panel-content">
 					<TitleSearch {job} onapply={handleTitleApply} />
 				</div>
 			{/if}
 			{#if activePanel === 'music'}
-				<div class="border-t border-primary/15 p-5 dark:border-primary/15">
+				<div class="job-detail-panel-content">
 					<MusicSearch {job} discTracks={tracks} onapply={handleMusicApply} />
 				</div>
 			{/if}
 		</div>
 
 		<!-- Lifecycle widget: visual stage progression below header, above status bars -->
-		<div class="rounded-lg border border-primary/20 bg-surface px-4 py-3 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
+		<div class="job-detail-lifecycle-card">
 			<JobLifecycle status={effectiveJobStatus(job)} sourceType={null} size="md" partial={isPartialComplete(job)} />
 		</div>
 
@@ -354,137 +347,137 @@
 		{#if tracks.length > 0}
 			<section>
 				<div class="mb-3 flex items-center justify-between">
-					<h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+					<h2 class="job-detail-section-title">
 						Tracks ({tracks.length})
 					</h2>
 				</div>
-				<div class="overflow-x-auto rounded-lg border border-primary/20 dark:border-primary/20">
-					<table class="responsive-table w-full text-left text-sm">
-						<thead class="bg-page text-gray-600 dark:bg-primary/5 dark:text-gray-400">
+				<div class="overflow-x-auto job-detail-table-scroll">
+					<table class="table responsive-table">
+						<thead>
 							<tr>
-								<th class="px-4 py-3 font-medium">#</th>
-								<th class="px-4 py-3 font-medium">Kind</th>
-								<th class="px-4 py-3 font-medium">Title</th>
+								<th class="table-header">#</th>
+								<th class="table-header">Kind</th>
+								<th class="table-header">Title</th>
 								{#if tracksAreSeries}
-									<th class="px-4 py-3 font-medium">Episode</th>
+									<th class="table-header">Episode</th>
 								{/if}
-								<th class="px-4 py-3 font-medium">Filename</th>
-								<th class="px-4 py-3 font-medium">Length</th>
-								<th class="px-4 py-3 font-medium">Size</th>
-								<th class="px-4 py-3 font-medium">Include</th>
-								<th class="px-4 py-3 font-medium">Rip</th>
-								<th class="px-4 py-3 font-medium">Transcode</th>
+								<th class="table-header">Filename</th>
+								<th class="table-header">Length</th>
+								<th class="table-header">Size</th>
+								<th class="table-header">Include</th>
+								<th class="table-header">Rip</th>
+								<th class="table-header">Transcode</th>
 							</tr>
 						</thead>
-						<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+						<tbody>
 							{#each tracks as track}
 								{@const preview = previewByTrack.get(track.id)}
-								<tr class="hover:bg-page dark:hover:bg-gray-800/50 {track.excluded ? 'opacity-50' : ''}">
-									<td class="px-4 py-3" data-label="#">{track.index}</td>
-									<td class="px-4 py-3 text-gray-700 dark:text-gray-300" data-label="Kind">{trackKindLabel(track.kind)}</td>
+								<tr class="table-row" data-disabled={track.excluded}>
+									<td class="table-cell" data-label="#">{track.index}</td>
+									<td class="table-cell job-detail-track-kind" data-label="Kind">{trackKindLabel(track.kind)}</td>
 									<td
-										class="px-4 py-3 {$isAdmin ? 'cursor-pointer hover:bg-primary/5 dark:hover:bg-primary/10' : ''}"
+										class="table-cell {$isAdmin ? 'job-detail-track-title-cell' : ''}"
 										data-label="Title"
 										onclick={$isAdmin ? () => { editingTrackId = editingTrackId === track.id ? null : track.id; } : undefined}
 									>
 										{#if track.title}
 											<div class="flex items-center gap-1.5">
 												{#if track.poster_url}
-													<img src={posterSrc(track.poster_url)} alt="" class="h-8 w-5 rounded-sm object-cover" onerror={posterFallback} />
+													<img data-poster src={posterSrc(track.poster_url)} alt="" class="job-detail-track-poster" onerror={posterFallback} />
 												{/if}
 												<div>
-													<span class="font-medium text-gray-900 dark:text-white">{track.title}</span>
+													<span class="job-detail-track-title job-detail-track-title-strong">{track.title}</span>
 													{#if track.year}
-														<span class="text-gray-400"> ({track.year})</span>
+														<span class="job-detail-track-year"> ({track.year})</span>
 													{/if}
 													<div class="mt-0.5 flex flex-wrap items-center gap-1">
 														{#if track.imdb_id}
-															<a href="https://www.imdb.com/title/{track.imdb_id}" target="_blank" rel="noopener noreferrer" onclick={(e) => e.stopPropagation()} class="rounded-full bg-yellow-400 px-1.5 py-0.5 text-[9px] font-bold text-black">IMDb</a>
+															<a href="https://www.imdb.com/title/{track.imdb_id}" target="_blank" rel="noopener noreferrer" onclick={(e) => e.stopPropagation()} class="badge badge-imdb job-detail-track-imdb-badge">IMDb</a>
 														{/if}
 														{#if track.edition}
-															<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-gray-600 dark:bg-primary/15 dark:text-gray-300">{track.edition}</span>
+															<span class="job-detail-track-meta-pill">{track.edition}</span>
 														{/if}
 														{#if track.role}
-															<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-gray-600 dark:bg-primary/15 dark:text-gray-300">{track.role}</span>
+															<span class="job-detail-track-meta-pill">{track.role}</span>
 														{/if}
 													</div>
 												</div>
 											</div>
 										{:else}
-											<span class="text-xs text-gray-400">{job.title || 'Untitled'}{#if job.year} ({job.year}){/if}</span>
+											<span class="job-detail-track-untitled">{job.title || 'Untitled'}{#if job.year} ({job.year}){/if}</span>
 										{/if}
 									</td>
 									{#if tracksAreSeries}
-										<td class="px-4 py-3" data-label="Episode">
+										<td class="table-cell" data-label="Episode">
 											{#if track.episode_number != null}
-												<span class="font-medium text-gray-900 dark:text-white">{track.episode_number}</span>
+												<span class="job-detail-track-title job-detail-track-title-strong">{track.episode_number}</span>
 												{#if track.episode_name}
-													<span class="ml-1.5 text-xs text-gray-500 dark:text-gray-400">{track.episode_name}</span>
+													<span class="ml-1.5 job-detail-track-episode-name">{track.episode_name}</span>
 												{/if}
 											{:else}
-												<span class="text-gray-400">-</span>
+												<span class="job-detail-track-faint">-</span>
 											{/if}
 										</td>
 									{/if}
-									<td class="max-w-[260px] truncate px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300" data-label="Filename" title={preview?.output_name ?? ''}>
+									<td class="truncate table-cell mono job-detail-track-filename" data-label="Filename" title={preview?.output_name ?? ''}>
 										{#if preview?.output_name}
 											<span>{preview.output_name}</span>
 											{#if track.custom_filename}
-												<span class="ml-1 rounded-sm bg-amber-100 px-1 py-0.5 text-[9px] font-semibold uppercase text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">custom</span>
+												<span class="ml-1 badge badge-sm badge-warning">custom</span>
 											{/if}
 										{:else}
-											<span class="text-gray-400">{track.excluded ? 'excluded' : '-'}</span>
+											<span class="job-detail-track-faint">{track.excluded ? 'excluded' : '-'}</span>
 										{/if}
 									</td>
-									<td class="px-4 py-3" data-label="Length">
+									<td class="table-cell" data-label="Length">
 										{#if track.duration_seconds != null}
 											{formatDuration(track.duration_seconds)}
 										{:else if track.expected_duration_seconds != null}
-											<span class="text-gray-400">~{formatDuration(track.expected_duration_seconds)}</span>
+											<span class="job-detail-track-faint">~{formatDuration(track.expected_duration_seconds)}</span>
 										{:else}-{/if}
 									</td>
-									<td class="px-4 py-3 text-gray-700 dark:text-gray-300" data-label="Size">{trackSizeLabel(track)}</td>
-									<td class="px-4 py-3" data-label="Include">
+									<td class="table-cell job-detail-track-kind" data-label="Size">{trackSizeLabel(track)}</td>
+									<td class="table-cell" data-label="Include">
 										{#if $isAdmin}
 											<input
 												type="checkbox"
 												checked={!track.excluded}
 												onchange={(e) => toggleExcluded(track.id, !(e.currentTarget as HTMLInputElement).checked)}
 												title="Include this track in transcode output (the disc still rips in full)"
-												class="h-4 w-4 rounded border-primary/30 text-primary focus:ring-primary"
+												class="job-detail-track-checkbox"
 											/>
 										{:else}
-											<span class="text-xs text-gray-400">{track.excluded ? 'Excluded' : 'Included'}</span>
+											<span class="job-detail-track-untitled">{track.excluded ? 'Excluded' : 'Included'}</span>
 										{/if}
 									</td>
 									<!-- Rip outcome -->
-									<td class="px-4 py-3" data-label="Rip">
+									<td class="table-cell" data-label="Rip">
 										<span class="flex items-center gap-1">
 											<StatusBadge status={track.status} />
 											{#if track.attempts > 1}
-												<span class="text-[10px] text-gray-400" title="Rip attempts">x{track.attempts}</span>
+												<span class="job-detail-track-attempts" title="Rip attempts">x{track.attempts}</span>
 											{/if}
 										</span>
 									</td>
 									<!-- Transcode outcome (— when no transcode task yet) -->
-									<td class="px-4 py-3" data-label="Transcode">
+									<td class="table-cell" data-label="Transcode">
 										{#if track.transcode_status}
 											<StatusBadge status={track.transcode_status} />
 										{:else}
-											<span class="text-gray-400 dark:text-gray-500">-</span>
+											<span class="job-detail-track-faint">-</span>
 										{/if}
 									</td>
 								</tr>
 								{#if track.status === 'failed' && track.last_error}
 									<tr>
-										<td colspan="99" class="bg-red-50 px-4 py-2 text-xs text-red-700 dark:bg-red-900/15 dark:text-red-300" data-label="">
-											<span class="font-semibold">Error:</span> {track.last_error}
+										<td colspan="99" class="table-cell job-detail-track-error" data-label="">
+											<span class="job-detail-error-strong">Error:</span> {track.last_error}
 										</td>
 									</tr>
 								{/if}
 								{#if editingTrackId === track.id}
 									<tr>
-										<td colspan="99" class="px-4 py-3" data-label="">
+										<td colspan="99" class="table-cell" data-label="">
 											<TrackTitleSearch jobId={job.id} {track} onapply={handleTrackTitleApply} onclose={() => { editingTrackId = null; }} />
 										</td>
 									</tr>
@@ -499,20 +492,20 @@
 		<!-- Disc fingerprints (read-only) -->
 		{#if d.fingerprints && d.fingerprints.length > 0}
 			<section>
-				<h2 class="mb-3 text-lg font-semibold text-gray-900 dark:text-white">Disc fingerprints</h2>
-				<div class="overflow-x-auto rounded-lg border border-primary/20 dark:border-primary/20">
-					<table class="responsive-table w-full text-left text-sm">
-						<thead class="bg-page text-gray-600 dark:bg-primary/5 dark:text-gray-400">
+				<h2 class="mb-3 job-detail-section-title">Disc fingerprints</h2>
+				<div class="overflow-x-auto job-detail-table-scroll">
+					<table class="table responsive-table">
+						<thead>
 							<tr>
-								<th class="px-4 py-3 font-medium">Algorithm</th>
-								<th class="px-4 py-3 font-medium">Value</th>
+								<th class="table-header">Algorithm</th>
+								<th class="table-header">Value</th>
 							</tr>
 						</thead>
-						<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+						<tbody>
 							{#each d.fingerprints as fp}
-								<tr>
-									<td class="px-4 py-3 uppercase" data-label="Algorithm">{fp.algo}</td>
-									<td class="max-w-[420px] truncate px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300" data-label="Value" title={fp.value}>{fp.value}</td>
+								<tr class="table-row">
+									<td class="table-cell job-detail-uppercase" data-label="Algorithm">{fp.algo}</td>
+									<td class="truncate table-cell mono job-detail-fingerprint-value" data-label="Value" title={fp.value}>{fp.value}</td>
 								</tr>
 							{/each}
 						</tbody>
@@ -527,25 +520,25 @@
 		     just duplicate it. Mirrors neu's single-section behavior. -->
 		{#if tracks.length === 0 && musicTracks.length > 0}
 			<section>
-				<h2 class="mb-3 text-lg font-semibold text-gray-900 dark:text-white">
+				<h2 class="mb-3 job-detail-section-title">
 					Tracklist
-					<span class="text-sm font-normal text-gray-500 dark:text-gray-400">({musicTracks.length} tracks via MusicBrainz)</span>
+					<span class="job-detail-section-subtitle">({musicTracks.length} tracks via MusicBrainz)</span>
 				</h2>
-				<div class="overflow-x-auto rounded-lg border border-primary/20 dark:border-primary/20">
-					<table class="responsive-table w-full text-left text-sm">
-						<thead class="bg-page text-gray-600 dark:bg-primary/5 dark:text-gray-400">
+				<div class="overflow-x-auto job-detail-table-scroll">
+					<table class="table responsive-table">
+						<thead>
 							<tr>
-								<th class="px-4 py-3 font-medium">#</th>
-								<th class="px-4 py-3 font-medium">Title</th>
-								<th class="px-4 py-3 text-right font-medium">Duration</th>
+								<th class="table-header">#</th>
+								<th class="table-header">Title</th>
+								<th class="table-header job-detail-right">Duration</th>
 							</tr>
 						</thead>
-						<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+						<tbody>
 							{#each musicTracks as mt}
-								<tr>
-									<td class="px-4 py-3" data-label="#">{mt.number}</td>
-									<td class="px-4 py-3 text-gray-900 dark:text-white" data-label="Title">{mt.title}</td>
-									<td class="px-4 py-3 text-right text-gray-700 dark:text-gray-300" data-label="Duration">{mt.durationLabel}</td>
+								<tr class="table-row">
+									<td class="table-cell" data-label="#">{mt.number}</td>
+									<td class="table-cell" data-label="Title">{mt.title}</td>
+									<td class="table-cell job-detail-right" data-label="Duration">{mt.durationLabel}</td>
 								</tr>
 							{/each}
 						</tbody>
@@ -563,15 +556,16 @@
 				<button
 					type="button"
 					onclick={() => { showRawMetadata = !showRawMetadata; }}
-					class="flex w-full items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white"
+					class="flex w-full items-center gap-2 job-detail-section-title"
+					aria-expanded={showRawMetadata}
 				>
-					<svg class="h-4 w-4 transition-transform {showRawMetadata ? 'rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<svg class="h-4 w-4 chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
 					</svg>
 					Raw metadata
 				</button>
 				{#if showRawMetadata}
-					<div class="mt-3 overflow-x-auto rounded-lg border border-primary/20 p-3 dark:border-primary/20">
+					<div class="mt-3 overflow-x-auto job-detail-raw-metadata">
 						{#each rawMetadataPairs as [key, value]}
 							<JsonTree {value} name={key} depth={0} />
 						{/each}
@@ -589,3 +583,73 @@
 	{/if}
 	{/snippet}
 </LoadState>
+
+<style>
+	.job-detail-breadcrumb { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	.job-detail-breadcrumb-link { color: var(--color-primary-text); }
+	.job-detail-breadcrumb-link:hover { text-decoration: underline; }
+	.job-detail-breadcrumb-sep { color: var(--color-text-faint); }
+	.job-detail-breadcrumb-current { color: var(--color-text-muted); }
+	.job-detail-action-note { border: 1px solid var(--color-border-strong); border-radius: var(--radius-lg); background: var(--color-primary-tint-1); padding: 0.5rem 1rem; font-size: 0.875rem; line-height: 1.25rem; color: var(--color-primary-text); }
+	.job-detail-header-card { overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); box-shadow: var(--shadow-1); }
+	.job-detail-title-bar { border-bottom: 1px solid var(--color-border); padding: 0.75rem 1.25rem; }
+	/* the original header buttons were px-3 py-1.5 text-sm (0.75rem/0.375rem,
+	   0.875rem) - between .btn's default and .btn-sm */
+	.job-detail-header-btn { min-height: auto; padding: 0.375rem 0.75rem; font-size: 0.875rem; line-height: 1.25rem; }
+	.job-detail-title { font-size: 1.25rem; line-height: 1.75rem; font-weight: 700; color: var(--color-text); }
+	.job-detail-year { font-size: 1rem; line-height: 1.5rem; color: var(--color-text-faint); }
+	.job-detail-imdb-badge { border-radius: 9999px; padding: 0.125rem 0.625rem; font-size: 10px; }
+	.job-detail-multi-title-badge { border-radius: 9999px; text-transform: uppercase; background: color-mix(in srgb, var(--color-accent-3) 15%, transparent); color: var(--color-accent-3); }
+	.job-detail-source-badge { border-radius: var(--radius-sm); padding: 0.125rem 0.5rem; font-size: 10px; font-weight: 500; background: color-mix(in srgb, var(--color-accent-3) 15%, transparent); color: var(--color-accent-3); }
+	.job-detail-poster-cell { border-bottom: 1px solid var(--color-border); padding: 1rem; }
+	@media (min-width: 640px) { .job-detail-poster-cell { border-bottom: 0; border-right: 1px solid var(--color-border); } }
+	/* :global: forwarded through PosterImage's class prop */
+	:global(.job-detail-poster) { width: 120px; border-radius: var(--radius-md); object-fit: cover; box-shadow: var(--shadow-1); }
+	.job-detail-metadata-cell { border-bottom: 1px solid var(--color-border); border-right: 1px solid var(--color-border); padding: 0.75rem 1rem; }
+	.job-detail-metadata-cell:nth-child(2n) { border-right-width: 0; }
+	@media (min-width: 640px) {
+		.job-detail-metadata-cell:nth-child(2n) { border-right-width: 1px; }
+		.job-detail-metadata-cell:nth-child(3n) { border-right-width: 0; }
+	}
+	@media (min-width: 1024px) {
+		.job-detail-metadata-cell:nth-child(3n) { border-right-width: 1px; }
+		.job-detail-metadata-cell:nth-child(4n) { border-right-width: 0; }
+	}
+	.job-detail-metadata-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-muted); }
+	.job-detail-metadata-value { font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text); }
+	.job-detail-metadata-link { color: var(--color-primary); }
+	.job-detail-metadata-link:hover { text-decoration: underline; }
+	.job-detail-metadata-mono { font-size: 0.75rem; line-height: 1rem; }
+	.job-detail-panel-toggle-bar { border-top: 1px solid var(--color-border); background: color-mix(in srgb, var(--color-surface) 50%, transparent); }
+	.job-detail-panel-tab { flex: 1 1 0%; padding: 0.625rem 1rem; text-align: center; font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text-muted); transition: color var(--motion-fast) var(--ease); }
+	.job-detail-panel-tab:hover { color: var(--color-text-secondary); }
+	.job-detail-panel-tab[aria-pressed="true"] { color: var(--color-primary); border-bottom: 2px solid var(--color-primary); background: var(--color-primary-tint-1); }
+	.job-detail-panel-content { border-top: 1px solid var(--color-border); padding: 1.25rem; }
+	.job-detail-lifecycle-card { border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); padding: 0.75rem 1rem; box-shadow: var(--shadow-1); }
+	.job-detail-section-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-text); }
+	.job-detail-section-title .chevron { transition: transform var(--motion-fast) var(--ease); }
+	.job-detail-section-title[aria-expanded="true"] .chevron { transform: rotate(90deg); }
+	.job-detail-section-subtitle { font-size: 0.875rem; line-height: 1.25rem; font-weight: 400; color: var(--color-text-muted); }
+	.job-detail-table-scroll { border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
+	.job-detail-right { text-align: right; }
+	.job-detail-track-kind { color: var(--color-text-secondary); }
+	.job-detail-track-title-cell { cursor: pointer; }
+	.job-detail-track-title-cell:hover { background: var(--color-primary-tint-1); }
+	.job-detail-track-poster { height: 2rem; width: 1.25rem; border-radius: var(--radius-sm); object-fit: cover; }
+	.job-detail-track-title { color: var(--color-text); }
+	.job-detail-track-title-strong { font-weight: 500; }
+	.job-detail-error-strong { font-weight: 600; }
+	.job-detail-uppercase { text-transform: uppercase; }
+	.job-detail-track-year { color: var(--color-text-faint); }
+	.job-detail-track-imdb-badge { border-radius: 9999px; padding: 0.125rem 0.375rem; font-size: 9px; }
+	.job-detail-track-meta-pill { border-radius: var(--radius-sm); padding: 0.125rem 0.375rem; font-size: 9px; font-weight: 500; background: var(--color-primary-tint-2); color: var(--color-text-secondary); }
+	.job-detail-track-untitled { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
+	.job-detail-track-episode-name { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
+	.job-detail-track-faint { color: var(--color-text-faint); }
+	.job-detail-track-filename { max-width: 260px; color: var(--color-text-secondary); }
+	.job-detail-track-checkbox { width: 1rem; height: 1rem; border-radius: var(--radius-sm); accent-color: var(--color-primary); }
+	.job-detail-track-attempts { font-size: 10px; color: var(--color-text-faint); }
+	.job-detail-track-error { background: var(--color-danger-soft); color: var(--color-on-danger-soft); }
+	.job-detail-fingerprint-value { max-width: 420px; color: var(--color-text-secondary); }
+	.job-detail-raw-metadata { border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 0.75rem; }
+</style>

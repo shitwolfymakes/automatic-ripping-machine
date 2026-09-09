@@ -45,7 +45,7 @@ describe('ActiveJobRow', () => {
 			const { container } = renderComponent(ActiveJobRow, {
 				props: { job: createJob({ status: 'ripping' }) }
 			});
-			expect(container.querySelector('.animate-indeterminate')).toBeInTheDocument();
+			expect(container.querySelector('.job-active-row-indeterminate-fill')).toBeInTheDocument();
 		});
 
 		it('renders a determinate progress bar when a live progress value is fed', () => {
@@ -53,7 +53,7 @@ describe('ActiveJobRow', () => {
 				props: { job: createJob({ status: 'ripping' }), progress: 42 }
 			});
 			// The indeterminate spinner is replaced by the real bar.
-			expect(container.querySelector('.animate-indeterminate')).not.toBeInTheDocument();
+			expect(container.querySelector('.job-active-row-indeterminate-fill')).not.toBeInTheDocument();
 			expect(screen.getByText('42%')).toBeInTheDocument();
 		});
 

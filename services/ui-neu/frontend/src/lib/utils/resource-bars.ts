@@ -1,10 +1,13 @@
 // Shared helpers for the system-resource panels (BottomStatsBar + SidebarStats).
 
-/** Usage-bar color by percent + metric kind. */
-export function barColor(pct: number, kind: 'cpu' | 'mem' | 'disk'): string {
-	if (pct >= 90) return 'bg-red-500';
-	if (pct >= 70) return 'bg-yellow-500';
-	return kind === 'cpu' ? 'bg-cyan-500' : kind === 'mem' ? 'bg-violet-500' : 'bg-emerald-500';
+/** Usage-bar tone by percent + metric kind. Consumers set this as
+ *  `data-bar` on the fill element; `.stats-bar-slot [data-bar]` (BottomStatsBar
+ *  and SidebarStats scoped styles) maps it to a token colour - danger/warning
+ *  override the metric's own accent once usage gets high. */
+export function barColor(pct: number, kind: 'cpu' | 'mem' | 'disk'): 'danger' | 'warning' | 'cpu' | 'mem' | 'disk' {
+	if (pct >= 90) return 'danger';
+	if (pct >= 70) return 'warning';
+	return kind;
 }
 
 // Map a /api/system/resources storage root name to the files-browser root key

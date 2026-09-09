@@ -9,12 +9,12 @@
 	padding: 4px;
 }
 
-[data-scheme="craft"] aside [data-logo] {
+[data-scheme="craft"] aside .nav-logo {
 	color: #38ff38;
 	text-shadow: 2px 2px #000;
 }
 
-[data-scheme="craft"] aside [data-logo] img {
+[data-scheme="craft"] aside .nav-logo img {
 	filter: brightness(1.2) saturate(0.8);
 	image-rendering: pixelated;
 }
@@ -26,7 +26,19 @@
 	margin: 2px 4px;
 }
 
-[data-scheme="craft"] aside nav a {
+/* The .nav block is a flex column, where adjacent margins do NOT
+   collapse (the original block-level <nav> let them). This scheme's
+   inter-link spacing therefore rides the nav's own gap instead of a
+   margin on each link, which would otherwise double. */
+[data-scheme="craft"] aside .nav {
+	gap: 2px;
+	/* the link margin also sat above the first link and below the
+	   last one, which a gap does not reproduce */
+	padding-top: calc(1rem + 2px);
+	padding-bottom: calc(1rem + 2px);
+}
+
+[data-scheme="craft"] aside .nav-item {
 	background: #707070;
 	border: 2px solid #000;
 	border-top-color: #aaa;
@@ -38,32 +50,25 @@
 	text-shadow: 2px 2px #333;
 	justify-content: center;
 	padding: 0.7rem;
-	margin: 2px 0;
 }
 
-[data-scheme="craft"] aside nav a svg {
+[data-scheme="craft"] aside .nav-item svg {
 	display: none;
 }
 
-[data-scheme="craft"] aside nav a:hover {
+[data-scheme="craft"] aside .nav-item:hover {
 	background: #8080ff !important;
 	border-top-color: #9999ff;
 	border-left-color: #9999ff;
 	color: #ffffa0 !important;
 }
 
-[data-scheme="craft"] aside nav a[data-active="true"] {
+[data-scheme="craft"] aside .nav-item[data-active="true"] {
 	background: #4a4a4a !important;
 	border-top-color: #222;
 	border-left-color: #222;
 	color: #38ff38 !important;
 	text-shadow: 2px 2px #000;
-}
-
-[data-scheme="craft"] aside [data-stats] {
-	background: #222;
-	border: 2px solid #000;
-	margin: 4px;
 }
 
 [data-scheme="craft"] [data-progress-track] {
@@ -79,23 +84,23 @@
 	border-radius: 0 !important;
 }
 
-[data-scheme="craft"] aside .text-gray-400,
+/* Muted sidebar readouts (the stats labels and the Storage eyebrow).
+   The colour is a token override scoped to the sidebar, so it reaches
+   component-local text too; the typography rides the .eyebrow block. */
+[data-scheme="craft"] aside {
+	--color-text-muted: #fff;
+	--color-text-faint: #fff;
+}
 
-[data-scheme="craft"] aside .text-gray-500,
-
-[data-scheme="craft"] aside .text-gray-600,
-
-[data-scheme="craft"] aside .dark\:text-gray-300,
-
-[data-scheme="craft"] aside .dark\:text-gray-400,
-
-[data-scheme="craft"] aside .dark\:text-gray-500 {
-	color: #fff !important;
+[data-scheme="craft"] aside .eyebrow {
+	color: #fff;
 	font-size: 0.7rem;
 }
 
-[data-scheme="craft"] aside .text-orange-500 {
-	color: #ff5555 !important;
+/* The CPU temperature readout in the sidebar stats reads the
+   accent-1 role. */
+[data-scheme="craft"] aside {
+	--color-accent-1: #ff5555;
 }
 
 [data-scheme="craft"] header {
