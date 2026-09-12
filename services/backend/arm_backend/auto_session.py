@@ -52,13 +52,15 @@ logger = logging.getLogger("arm_backend.auto_session")
 
 
 _APPLY_OK_STATUSES: frozenset[JobStatus] = frozenset({JobStatus.IDENTIFIED, JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL})
+_RIPPED_STATUSES: frozenset[JobStatus] = frozenset({JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL})
+_NO_TRACKS_DETAIL = "no tracks yet: the rip has not started; the application fans out when the rip completes"
 
 
 class SessionNotFoundError(Exception):
     """Raised by `apply_session_internal` when `session_id` doesn't resolve."""
 
 
-SkippedReason = Literal["collisions", "template", "session_missing"]
+SkippedReason = Literal["collisions", "template", "session_missing", "no_tracks"]
 ApplySource = Literal["manual", "auto"]
 
 
@@ -252,14 +254,22 @@ async def _apply_session_internal(
     for task in outcome.tasks:
         await db.refresh(task)
 
-    logger.info(
-        "apply session_id=%s job_id=%s tasks=%d overwrite=%s source=%s",
-        session_id,
-        job.id,
-        len(outcome.tasks),
-        overwrite,
-        source,
-    )
+    if outcome.skipped_reason == "no_tracks":
+        logger.info(
+            "apply: parked session_id=%s job_id=%s (no tracks yet; fans out at rip-complete) source=%s",
+            session_id,
+            job.id,
+            source,
+        )
+    else:
+        logger.info(
+            "apply session_id=%s job_id=%s tasks=%d overwrite=%s source=%s",
+            session_id,
+            job.id,
+            len(outcome.tasks),
+            overwrite,
+            source,
+        )
 
     return outcome
 
@@ -293,6 +303,30 @@ async def _fan_out_tasks_for_application(
     new application's id is populated for downstream task FKs.
     """
     resolved = compute_outputs(job, tracks, sess, transcode_preset)
+
+    if not resolved and job.status not in _RIPPED_STATUSES:
+        # The ripper persists Track rows at rip-start, so a session applied
+        # between identify and rip-start (or resolved before the rip) has
+        # nothing to fan out yet. Park the application with no tasks instead
+        # of promoting an empty `queued` husk; `drain_parked_applications_after_rip`
+        # fans it out from rip-complete once the tracks exist.
+        if application is None:
+            application = SessionApplication(
+                session_id=sess.id,
+                job_id=job.id,
+                status=SessionApplicationStatus.WAITING_IDENTIFY,
+                overwrite=overwrite,
+                created_by_user_id=created_by_user_id,
+            )
+            db.add(application)
+            await db.flush()
+        return ApplySessionOutcome(
+            application=application,
+            tasks=[],
+            collisions=[],
+            idempotent=False,
+            skipped_reason="no_tracks",
+        )
 
     paths = [r.output_path for r in resolved]
     media_root = Path(settings.MEDIA_ROOT)
@@ -457,6 +491,17 @@ async def fan_out_waiting_identify_applications(
             )
             continue
 
+        if outcome.skipped_reason == "no_tracks":
+            outcomes.append(
+                ResolveFanOutOutcome(
+                    application=app,
+                    tasks=[],
+                    skipped_reason="no_tracks",
+                    error_detail=_NO_TRACKS_DETAIL,
+                )
+            )
+            continue
+
         assert outcome.application is not None
         outcomes.append(
             ResolveFanOutOutcome(
@@ -468,6 +513,46 @@ async def fan_out_waiting_identify_applications(
         )
 
     return outcomes
+
+
+async def drain_parked_applications_after_rip(
+    db: AsyncSession,
+    job: Job,
+    hub: WSHub,
+) -> None:
+    """Hook invoked from `rip-complete`, ahead of `maybe_auto_apply_session`.
+
+    A session applied (or resolved) before rip-start parks as
+    `waiting_identify` with no tasks because the ripper only persists Track
+    rows at rip-start. Now that the rip has landed its tracks, promote every
+    parked application on the job. Per-application problems stay parked and
+    log at WARN; nothing here may break the ripper's rip-complete call.
+    """
+    try:
+        outcomes = await fan_out_waiting_identify_applications(db, job=job, hub=hub)
+        if not outcomes:
+            return
+        await db.commit()
+    except Exception:  # noqa: BLE001 - hook must never break rip-complete
+        await db.rollback()
+        logger.exception("rip-complete: draining parked session_applications failed job_id=%s", job.id)
+        return
+    for outcome in outcomes:
+        if outcome.skipped_reason is None:
+            logger.info(
+                "rip-complete: fanned out parked session_application=%s job_id=%s tasks=%d",
+                outcome.application.id,
+                job.id,
+                len(outcome.tasks),
+            )
+        else:
+            logger.warning(
+                "rip-complete: parked session_application=%s job_id=%s stays parked reason=%s: %s",
+                outcome.application.id,
+                job.id,
+                outcome.skipped_reason,
+                outcome.error_detail,
+            )
 
 
 async def _evict_colliding_tasks(db: AsyncSession, paths: list[str]) -> None:

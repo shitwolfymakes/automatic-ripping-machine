@@ -232,13 +232,15 @@ class ResolveFanOutOutcomeView(BaseModel):
     promoted and `task_count` newly-created transcode tasks are queued.
     Anything else → the application stays parked in `waiting_identify`
     and `error_detail` carries the reason for the UI to surface.
+    `skipped_reason='no_tracks'` is the benign case: the rip has not started
+    yet (no Track rows exist), so the application fans out at rip-complete.
     """
 
     session_application_id: str
     session_id: str
     status: SessionApplicationStatus
     task_count: int
-    skipped_reason: Literal["collisions", "template", "session_missing"] | None = None
+    skipped_reason: Literal["collisions", "template", "session_missing", "no_tracks"] | None = None
     error_detail: str | None = None
 
 

@@ -484,3 +484,40 @@ def test_resolve_fan_out_transcode_preset_missing_returns_outcome(signing_key: b
     out = body["fan_out"][0]
     assert out["skipped_reason"] == "session_missing"
     assert "tpr_x" in (out["error_detail"] or "")
+
+
+def test_resolve_before_rip_keeps_application_parked(signing_key: bytes, tmp_path: Path) -> None:
+    """Resolve on a job whose rip has not started yet.
+
+    The ripper persists Track rows at rip-start, so at this point there is
+    nothing to fan out. The parked application must survive (still
+    `waiting_identify`, drained later by rip-complete) instead of being
+    promoted to an empty `queued` husk that never gets any tasks.
+    """
+    db = FakeSession()
+    hub = _CapturingHub()
+    _seed(db)
+    db.rows["tracks"] = []
+    app, token = _make_app(signing_key, db, tmp_path, hub)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Iron Man", "year": 2008},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["job"]["status"] == "identified"
+
+    assert len(body["fan_out"]) == 1
+    out = body["fan_out"][0]
+    assert out["session_application_id"] == "sap_x"
+    assert out["status"] == "waiting_identify"
+    assert out["task_count"] == 0
+    assert out["skipped_reason"] == "no_tracks"
+    assert out["error_detail"] is not None and "rip" in out["error_detail"]
+
+    app_row = next(a for a in db.rows["session_applications"] if a.id == "sap_x")
+    assert app_row.status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
+    assert not any(e["event_type"] == "session.queued" for e in hub.events)
