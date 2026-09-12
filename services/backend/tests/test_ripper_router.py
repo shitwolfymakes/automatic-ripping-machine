@@ -12,6 +12,7 @@ import logging
 import os
 import secrets
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
@@ -28,17 +29,24 @@ from arm_backend.routers import ripper as ripper_router  # noqa: E402
 from arm_backend.thediscdb.snapshot import DiscMatch  # noqa: E402
 from arm_common import (  # noqa: E402
     Config,
+    ContainerFormat,
     DiscFingerprint,
     DiscType,
     Drive,
     DriveLifecycle,
     DriveStatus,
+    HwPreference,
     Job,
     JobStatus,
     MediaType,
     RetentionPolicy,
     RipPreset,
+    Session,
+    SessionApplication,
+    SessionApplicationStatus,
     TrackStatus,
+    TranscodePreset,
+    TranscodeTool,
 )
 from arm_common.enums import IdentificationMode, OutputMode, TrackKind, TrackSelection  # noqa: E402
 from arm_common.models import Track  # noqa: E402
@@ -1466,3 +1474,131 @@ def test_get_config_reflects_makemkv_sdf_enabled() -> None:
         r = client.get("/api/ripper/config", headers=_SERVICE_AUTH)
     assert r.status_code == 200
     assert r.json()["makemkv_sdf_enabled"] is False
+
+
+# --- rip-complete drains applications parked before the rip -----------------
+
+
+def _seed_parked_session(db: FakeSession, *, session_exists: bool = True) -> None:
+    """A session applied before rip-start: parked as waiting_identify with no
+    tasks because no Track rows existed at apply time."""
+    db.rows["rip_presets"] = [_movie_preset("rpr_x")]
+    db.rows["transcode_presets"] = [
+        TranscodePreset(
+            id="tpr_x",
+            name="Plex 1080p H.265",
+            media_type=MediaType.MOVIE,
+            is_builtin=True,
+            tool=TranscodeTool.HANDBRAKE,
+            container=ContainerFormat.MKV,
+            hw_preference=HwPreference.CPU_ONLY,
+        )
+    ]
+    db.rows["sessions"] = (
+        [
+            Session(
+                id="ses_x",
+                name="My Plex",
+                media_type=MediaType.MOVIE,
+                is_builtin=False,
+                rip_preset_id="rpr_x",
+                transcode_preset_id="tpr_x",
+                output_path_template="{title} ({year})/{title} - {transcode_slug}.{ext}",
+            )
+        ]
+        if session_exists
+        else []
+    )
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_parked",
+            session_id="ses_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
+            status=SessionApplicationStatus.WAITING_IDENTIFY,
+            overwrite=False,
+        )
+    ]
+    db.rows["transcode_tasks"] = []
+
+
+def test_rip_complete_fans_out_parked_application(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from arm_backend import config as bcfg
+
+    bcfg.settings.MEDIA_ROOT = str(tmp_path)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
+    _seed_parked_session(db)
+    hub = _Hub()
+    r = _rip_complete(db, hub, monkeypatch)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ripped"
+
+    app_row = db.rows["session_applications"][0]
+    assert app_row.status == SessionApplicationStatus.QUEUED
+    tasks = db.rows["transcode_tasks"]
+    assert len(tasks) == 1
+    assert tasks[0].session_application_id == "sap_parked"
+    assert tasks[0].source_track_id == "t1"
+    queued = [e for e in hub.events if e["event_type"] == "session.queued"]
+    assert len(queued) == 1
+    assert queued[0]["payload"]["session_application_id"] == "sap_parked"
+
+
+def test_rip_complete_parked_application_with_missing_session_does_not_break(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from arm_backend import config as bcfg
+
+    bcfg.settings.MEDIA_ROOT = str(tmp_path)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
+    _seed_parked_session(db, session_exists=False)
+    r = _rip_complete(db, _Hub(), monkeypatch)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ripped"
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
+
+
+def test_rip_complete_failed_rip_leaves_parked_application_alone(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from arm_backend import config as bcfg
+
+    bcfg.settings.MEDIA_ROOT = str(tmp_path)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.FAILED)]
+    _seed_parked_session(db)
+    r = _rip_complete(db, _Hub(), monkeypatch)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "failed"
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
+
+
+def test_rip_complete_survives_parked_drain_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The drain hook must never break the ripper's rip-complete call."""
+    from arm_backend import auto_session as auto_session_mod
+    from arm_backend import config as bcfg
+
+    bcfg.settings.MEDIA_ROOT = str(tmp_path)
+
+    async def _boom(*_a: Any, **_k: Any) -> None:
+        raise RuntimeError("db exploded")
+
+    monkeypatch.setattr(auto_session_mod, "fan_out_waiting_identify_applications", _boom)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
+    _seed_parked_session(db)
+    r = _rip_complete(db, _Hub(), monkeypatch)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ripped"
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY

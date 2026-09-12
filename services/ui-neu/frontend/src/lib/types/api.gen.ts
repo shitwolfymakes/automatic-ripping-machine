@@ -2656,6 +2656,8 @@ export type RenameRequest = {
  * promoted and `task_count` newly-created transcode tasks are queued.
  * Anything else → the application stays parked in `waiting_identify`
  * and `error_detail` carries the reason for the UI to surface.
+ * `skipped_reason='no_tracks'` is the benign case: the rip has not started
+ * yet (no Track rows exist), so the application fans out at rip-complete.
  */
 export type ResolveFanOutOutcomeView = {
     /**
@@ -2674,7 +2676,7 @@ export type ResolveFanOutOutcomeView = {
     /**
      * Skipped Reason
      */
-    skipped_reason?: 'collisions' | 'template' | 'session_missing' | null;
+    skipped_reason?: 'collisions' | 'template' | 'session_missing' | 'no_tracks' | null;
     /**
      * Error Detail
      */

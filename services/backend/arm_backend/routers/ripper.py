@@ -12,7 +12,7 @@ from arm_backend.auth import (
     require_drive_owner_by_track,
     require_service_token,
 )
-from arm_backend.auto_session import maybe_auto_apply_session
+from arm_backend.auto_session import drain_parked_applications_after_rip, maybe_auto_apply_session
 from arm_backend.crash_recovery import reset_job_for_recovery
 from arm_backend.db import get_session
 from arm_backend.metadata import MetadataDispatcher
@@ -999,6 +999,10 @@ async def rip_complete(
     await session.commit()
 
     if job.status in (JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL):
+        # Sessions applied before rip-start are parked (no Track rows existed
+        # yet); drain them first so an explicit operator choice wins over the
+        # drive default, then run the auto-apply hook.
+        await drain_parked_applications_after_rip(session, job, hub)
         await maybe_auto_apply_session(session, job, hub)
 
     return JobView.model_validate(job)

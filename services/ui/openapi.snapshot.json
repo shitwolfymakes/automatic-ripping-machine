@@ -12823,7 +12823,8 @@
                 "enum": [
                   "collisions",
                   "template",
-                  "session_missing"
+                  "session_missing",
+                  "no_tracks"
                 ]
               },
               {
@@ -12852,7 +12853,7 @@
           "task_count"
         ],
         "title": "ResolveFanOutOutcomeView",
-        "description": "One waiting_identify application's post-resolve outcome.\n\n`status='queued'` + `skipped_reason=None` \u2192 the application was\npromoted and `task_count` newly-created transcode tasks are queued.\nAnything else \u2192 the application stays parked in `waiting_identify`\nand `error_detail` carries the reason for the UI to surface."
+        "description": "One waiting_identify application's post-resolve outcome.\n\n`status='queued'` + `skipped_reason=None` \u2192 the application was\npromoted and `task_count` newly-created transcode tasks are queued.\nAnything else \u2192 the application stays parked in `waiting_identify`\nand `error_detail` carries the reason for the UI to surface.\n`skipped_reason='no_tracks'` is the benign case: the rip has not started\nyet (no Track rows exist), so the application fans out at rip-complete."
       },
       "ResolveRequest": {
         "properties": {
