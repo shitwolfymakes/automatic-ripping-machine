@@ -139,3 +139,27 @@ async def test_missing_session_returns_none() -> None:
     job = _make_job(metadata_json={"pending_session_id": "ses_gone"})
     result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_drive_default_session_override_applies_without_flag() -> None:
+    """G-01: the override follows the ROUTED session, so an auto-rip whose
+    drive has a default session gets that session's min-length even with
+    auto_transcode_on_idle off."""
+    from arm_common import Config, Drive, DriveStatus
+
+    db = FakeSession()
+    db.rows["sessions"] = [_make_session(overrides_json={"min_length_seconds": 900})]
+    db.rows["drives"] = [
+        Drive(
+            id="drv_x",
+            hostname="h",
+            device_path="/dev/sr0",
+            status=DriveStatus.ONLINE,
+            default_session_id="ses_x",
+        )
+    ]
+    db.rows["config"] = [Config(id=1, auto_transcode_on_idle=False, auto_rip_on_insert=True, block_on_miss=True)]
+    job = _make_job(metadata_json={})
+    result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
+    assert result == 900

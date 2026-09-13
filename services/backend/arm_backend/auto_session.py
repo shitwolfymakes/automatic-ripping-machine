@@ -671,27 +671,42 @@ async def _load_tasks(db: AsyncSession, session_application_id: str) -> list[Tra
     return list(rows)
 
 
-async def resolve_effective_session_id(db: AsyncSession, job: Job) -> str | None:
-    """The session id the apply path will actually use for this job.
-
-    Resolution order (single source of truth — the naming-preview endpoint
-    resolves through this same helper so previews cannot drift from apply):
-      1. `job.metadata_json["pending_session_id"]` — explicit per-rip choice;
-         always wins and bypasses `auto_transcode_on_idle`.
-      2. `drive.default_session_id` — the persistent per-drive default, only
-         honoured when `Config.auto_transcode_on_idle` is True.
-    Returns None when neither applies.
-    """
+def _pending_session_id(job: Job) -> str | None:
     pending = (job.metadata_json or {}).get("pending_session_id")
-    if isinstance(pending, str) and pending:
+    return pending if isinstance(pending, str) and pending else None
+
+
+async def resolve_routed_session_id(db: AsyncSession, job: Job) -> str | None:
+    """Which session is ROUTED to this job (gap analysis §5.1).
+
+    Resolution order (single source of truth — rip-start's preset choice and
+    the naming preview resolve through this same helper so neither can drift
+    from the apply path):
+      1. `job.metadata_json["pending_session_id"]` — explicit per-rip choice.
+      2. `drive.default_session_id` — the persistent per-drive default.
+    No `auto_transcode_on_idle` gating: routing shapes the rip and the
+    preview; whether rip-complete may QUEUE the routed session unattended is
+    `auto_apply_allowed`'s question. Returns None when nothing routes.
+    """
+    pending = _pending_session_id(job)
+    if pending is not None:
         return pending
     drive = (await db.execute(select(Drive).where(col(Drive.id) == job.drive_id))).scalar_one_or_none()
-    if drive is None or drive.default_session_id is None:
-        return None
-    config_row = (await db.execute(select(Config).where(col(Config.id) == 1))).scalar_one_or_none()
-    if config_row is None or not config_row.auto_transcode_on_idle:
+    if drive is None:
         return None
     return drive.default_session_id
+
+
+async def auto_apply_allowed(db: AsyncSession, job: Job) -> bool:
+    """May rip-complete queue the routed session unattended?
+
+    An explicit per-rip choice is the user opting in for that one rip and
+    bypasses the flag; the drive default needs `auto_transcode_on_idle`.
+    """
+    if _pending_session_id(job) is not None:
+        return True
+    config_row = (await db.execute(select(Config).where(col(Config.id) == 1))).scalar_one_or_none()
+    return config_row is not None and bool(config_row.auto_transcode_on_idle)
 
 
 async def maybe_auto_apply_session(
@@ -701,15 +716,14 @@ async def maybe_auto_apply_session(
 ) -> None:
     """Hook invoked from `rip-complete`. Silent on every failure mode.
 
-    Resolution order for the session to apply:
-      1. `job.metadata_json["pending_session_id"]` — set by the ripper when
-         the rip was kicked off via `POST /api/jobs/manual` with a chosen
-         session. Always wins; bypasses `auto_transcode_on_idle` since the
-         user explicitly opted in for this one rip.
-      2. `drive.default_session_id` — the persistent per-drive default,
-         only honoured when `Config.auto_transcode_on_idle` is True.
+    Applies the ROUTED session (`resolve_routed_session_id`) when
+    `auto_apply_allowed` says unattended queueing is permitted: an explicit
+    per-rip choice always is; the drive default needs
+    `Config.auto_transcode_on_idle`.
     """
-    session_id = await resolve_effective_session_id(db, job)
+    if not await auto_apply_allowed(db, job):
+        return
+    session_id = await resolve_routed_session_id(db, job)
     if session_id is None:
         return
     try:

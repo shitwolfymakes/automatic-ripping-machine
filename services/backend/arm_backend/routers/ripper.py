@@ -12,7 +12,11 @@ from arm_backend.auth import (
     require_drive_owner_by_track,
     require_service_token,
 )
-from arm_backend.auto_session import drain_parked_applications_after_rip, maybe_auto_apply_session
+from arm_backend.auto_session import (
+    drain_parked_applications_after_rip,
+    maybe_auto_apply_session,
+    resolve_routed_session_id,
+)
 from arm_backend.crash_recovery import reset_job_for_recovery
 from arm_backend.db import get_session
 from arm_backend.metadata import MetadataDispatcher
@@ -92,13 +96,27 @@ async def resolve_rip_preset_id_for_job(db: AsyncSession, job: Job) -> str:
     rip-start, resume, the review-gate track persist — MUST resolve through
     here so a held disc and an unattended one rip the same track set.
 
-    Raises RipPresetUnavailable("no_default") for a disc type with no
-    default (422 at the routes — the ripper must not retry). Does NOT load
-    the row: rip-start's crash-resume and status-check paths answer without
-    it, and pre-existing behaviour only surfaces "not_seeded" when track
-    selection actually needs the preset.
+    G-01: the ROUTED session's rip preset wins — the disc-type default is
+    the fallback for jobs no session routes to (auto-rips on drives without
+    a default). A routed id whose Session row is gone (deleted between
+    trigger and rip) also falls back rather than failing the rip.
+
+    Raises RipPresetUnavailable("no_default") when nothing resolves for the
+    disc type (422 at the routes — the ripper must not retry). Does NOT load
+    the preset row: rip-start's crash-resume and status-check paths answer
+    without it, and "not_seeded" only surfaces when track selection actually
+    needs the preset.
     """
-    _ = db  # G-01 resolves the routed session here; the signature is ready.
+    routed_id = await resolve_routed_session_id(db, job)
+    if routed_id is not None:
+        sess = (await db.execute(select(Session).where(col(Session.id) == routed_id))).scalar_one_or_none()
+        if sess is not None:
+            return sess.rip_preset_id
+        logger.warning(
+            "routed session %s missing for job_id=%s; falling back to disc-type default",
+            routed_id,
+            job.id,
+        )
     preset_id = _DEFAULT_RIP_PRESET_BY_DISC_TYPE.get(job.disc_type)
     if preset_id is None:
         raise RipPresetUnavailable("no_default", f"no default rip preset for disc_type={job.disc_type.value}")
@@ -128,19 +146,13 @@ def _rip_preset_or_http(exc: RipPresetUnavailable) -> HTTPException:
 
 
 async def _resolve_min_length_override(db: AsyncSession, job: Job) -> int | None:
-    """Look up `Session.overrides_json["min_length_seconds"]` for a job
-    that has a pending_session_id, returning None when no override
-    applies. The ripper falls back to its host-side
-    `ARM_MIN_LENGTH_SECONDS` baseline when this is None.
-
-    Auto-rip-on-insert jobs typically don't have a pending_session_id
-    until rip-complete (`maybe_auto_apply_session` fires after the rip)
-    so they always use the baseline; manual-trigger jobs that selected
-    a session up front get their override here.
+    """Look up `Session.overrides_json["min_length_seconds"]` for the job's
+    ROUTED session (explicit per-rip choice, else the drive default),
+    returning None when no override applies. The ripper falls back to its
+    host-side `ARM_MIN_LENGTH_SECONDS` baseline when this is None.
     """
-    md = job.metadata_json or {}
-    sess_id = md.get("pending_session_id")
-    if not isinstance(sess_id, str):
+    sess_id = await resolve_routed_session_id(db, job)
+    if sess_id is None:
         return None
     sess = (await db.execute(select(Session).where(col(Session.id) == sess_id))).scalar_one_or_none()
     if sess is None or not sess.overrides_json:
