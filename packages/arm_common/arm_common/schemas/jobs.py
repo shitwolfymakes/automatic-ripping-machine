@@ -38,6 +38,19 @@ class AbandonJobRequest(BaseModel):
     delete_raw: bool = False
 
 
+class BulkDeleteJobsRequest(BaseModel):
+    """DELETE /api/jobs body (optional). Filters which terminal jobs are
+    deleted:
+      - `job_ids` set  -> delete only those jobs (still terminal-guarded)
+      - `status` set   -> delete only terminal jobs in that JobStatus
+      - neither set    -> delete ALL terminal jobs (legacy behavior)
+    `job_ids` takes precedence over `status` if both are sent.
+    """
+
+    job_ids: list[str] | None = None
+    status: str | None = None
+
+
 class BulkDeleteJobsResponse(BaseModel):
     """DELETE /api/jobs response. `deleted_ids` lists the jobs whose DB
     rows were removed; `skipped_non_terminal` lists job IDs that were
@@ -225,6 +238,12 @@ class RipStartResponse(BaseModel):
     min_length_seconds: int | None = None
 
 
+# The one definition of apply/fan-out skip reasons — the backend engine
+# (arm_backend.auto_session) imports this rather than re-declaring it, so the
+# wire schema and the engine can never drift.
+ApplySkippedReason = Literal["collisions", "template", "session_missing", "no_tracks"]
+
+
 class ResolveFanOutOutcomeView(BaseModel):
     """One waiting_identify application's post-resolve outcome.
 
@@ -232,13 +251,15 @@ class ResolveFanOutOutcomeView(BaseModel):
     promoted and `task_count` newly-created transcode tasks are queued.
     Anything else → the application stays parked in `waiting_identify`
     and `error_detail` carries the reason for the UI to surface.
+    `skipped_reason='no_tracks'` is the benign case: the rip has not started
+    yet (no Track rows exist), so the application fans out at rip-complete.
     """
 
     session_application_id: str
     session_id: str
     status: SessionApplicationStatus
     task_count: int
-    skipped_reason: Literal["collisions", "template", "session_missing"] | None = None
+    skipped_reason: ApplySkippedReason | None = None
     error_detail: str | None = None
 
 

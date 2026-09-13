@@ -11,12 +11,16 @@
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
 	import { theme, toggleTheme } from '$lib/stores/theme';
 	import { colorScheme, COLOR_SCHEMES, schemeLocksMode, allSchemes, loadThemesFromApi } from '$lib/stores/colorScheme';
-	import { uploadTheme, deleteTheme as deleteThemeApi } from '$lib/api/themes';
+	import { deleteTheme as deleteThemeApi } from '$lib/api/themes';
 	import { createPollingStore } from '$lib/stores/polling';
 	import { fetchDrives, fetchDriveDiagnostic, rescanDrives } from '$lib/api/drives';
+	import { partitionDrives } from '$lib/utils/drives';
+	import { formatDateTime } from '$lib/utils/format';
 	import { fetchSessions } from '$lib/api/sessions';
 	import DriveCard from '$lib/components/DriveCard.svelte';
-	import { restartArm, restartTranscoder } from '$lib/api/system';
+	import DriveMaintenance from '$lib/components/DriveMaintenance.svelte';
+	import DriveLifecycleLists from '$lib/components/DriveLifecycleLists.svelte';
+	import InterfaceSettings from '$lib/components/settings/InterfaceSettings.svelte';
 	import { fetchImageCacheStats, clearImageCache, type ImageCacheStats } from '$lib/api/maintenance';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import SystemHealth from '$lib/components/settings/SystemHealth.svelte';
@@ -32,48 +36,10 @@
 	let settingsLoading = $state(true);
 	let settingsError = $state<Error | null>(null);
 
-	// --- Restart state ---
-	let armRestarting = $state(false);
-	let armRestartFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
-	let tcRestarting = $state(false);
-	let tcRestartFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
-
-	async function handleRestart(service: 'arm' | 'transcoder') {
-		const label = service === 'arm' ? 'ARM ripping service' : 'Transcoder service';
-		const warning = service === 'arm'
-			? 'Restart the ARM ripping service? Active rips will be interrupted.'
-			: 'Restart the transcoder service? Active transcodes will be interrupted.';
-		if (!confirm(warning)) return;
-
-		if (service === 'arm') {
-			armRestarting = true;
-			armRestartFeedback = null;
-		} else {
-			tcRestarting = true;
-			tcRestartFeedback = null;
-		}
-
-		try {
-			const fn = service === 'arm' ? restartArm : restartTranscoder;
-			await fn();
-			const fb = { type: 'success' as const, message: `${label} is restarting` };
-			if (service === 'arm') armRestartFeedback = fb;
-			else tcRestartFeedback = fb;
-			setTimeout(() => {
-				if (service === 'arm') { armRestarting = false; armRestartFeedback = null; }
-				else { tcRestarting = false; tcRestartFeedback = null; }
-			}, 5000);
-		} catch {
-			const fb = { type: 'error' as const, message: `Failed to restart ${label}` };
-			if (service === 'arm') { armRestartFeedback = fb; armRestarting = false; }
-			else { tcRestartFeedback = fb; tcRestarting = false; }
-		}
-	}
-
 	// --- Tab state ---
 	type Tab = string;
 	// Non-config screen-tabs (their own bespoke UI).
-	const screenTabs = ['sessions', 'transcoding', 'notifications', 'appearance', 'drives', 'users', 'system'] as const;
+	const screenTabs = ['sessions', 'transcoding', 'notifications', 'interface', 'themes', 'drives', 'users', 'system'] as const;
 	// Config-group tabs derived from the backend schema. Metadata + Ripping have
 	// no bespoke screen-tab home → render as their own tabs. (Transcoding/
 	// Notifications single toggles fold into the existing transcoding/notifications
@@ -102,7 +68,8 @@
 		sessions: 'Sessions',
 		transcoding: 'Transcoding',
 		notifications: 'Notifications',
-		appearance: 'Appearance',
+		interface: 'Interface',
+		themes: 'Themes',
 		drives: 'Drives',
 		users: 'Users',
 		system: 'System',
@@ -121,14 +88,38 @@
 		// legacy hash (e.g. an old #music/#ripping bookmark) falls back to
 		// 'Metadata' instead of leaving the content pane blank.
 		const allowed = [...configGroupNames, ...screenTabs] as readonly string[];
+		if (tabPart === 'appearance') return 'themes'; // pre-rename bookmarks and links
 		return allowed.includes(tabPart) ? tabPart : 'Metadata';
 	}
 
 	let activeTab = $state<Tab>(parseHash());
 
+	// Deep link: `#<tab>/<field key>` (e.g. the header's Key dot points at
+	// #Metadata/makemkv_key). The field is scrolled into view, focused and
+	// briefly highlighted once its tab has rendered.
+	function parseHashField(): string | null {
+		if (typeof window === 'undefined') return null;
+		const part = window.location.hash.replace('#', '').split('/')[1];
+		return part ? decodeURIComponent(part) : null;
+	}
+	let pendingField = $state<string | null>(parseHashField());
+
+	$effect(() => {
+		const key = pendingField;
+		if (!key || !settings) return;
+		const el = document.getElementById(`setting-${key}`);
+		if (!el) return;
+		pendingField = null;
+		el.scrollIntoView({ block: 'center' });
+		el.querySelector<HTMLElement>('input, select, textarea')?.focus({ preventScroll: true });
+		el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+		setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 1600);
+	});
+
 	// --- Drives polling store ---
 	const drives = createPollingStore(fetchDrives, [] as Drive[], 10000);
 	const driveError = drives.error;
+	let parts = $derived(partitionDrives($drives));
 
 	let driveSessions = $state<SessionView[]>([]);
 
@@ -146,7 +137,6 @@
 	let diagResult = $state<DriveDiagnosticResponse | null>(null);
 	let diagError = $state<string | null>(null);
 	let diagOpen = $state(false);
-	let rescanning = $state(false);
 	let diagLastRun = $state<string | null>(null);
 
 	async function runDiagnostic() {
@@ -166,11 +156,7 @@
 	}
 
 	// --- Theme management ---
-	let themeUploading = $state(false);
 	let themeFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
-	let themeJsonFile = $state<File | null>(null);
-	let themeName = $state('');
-	let themeCssText = $state('');
 
 	// --- Image cache state ---
 	let cacheStats = $state<ImageCacheStats | null>(null);
@@ -201,44 +187,6 @@
 		cacheBusy = false;
 	}
 
-	async function handleThemeUpload() {
-		if (!themeJsonFile) return;
-		const name = themeName.trim();
-		if (!name) {
-			themeFeedback = { type: 'error', message: 'Theme name is required' };
-			return;
-		}
-		themeUploading = true;
-		themeFeedback = null;
-		try {
-			const text = await themeJsonFile.text();
-			const data = JSON.parse(text);
-			// Override label and derive id from the name field
-			data.label = name;
-			data.id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-			if (!data.id || !data.tokens) {
-				throw new Error('Invalid theme: missing required fields (tokens)');
-			}
-			// Re-create the file with patched data
-			const patched = new File([JSON.stringify(data)], `${data.id}.json`, { type: 'application/json' });
-			await uploadTheme(patched, themeCssText);
-			await loadThemesFromApi();
-			themeFeedback = { type: 'success', message: `Theme "${data.label}" uploaded` };
-			themeJsonFile = null;
-			themeName = '';
-			themeCssText = '';
-		} catch (e) {
-			themeFeedback = { type: 'error', message: e instanceof Error ? e.message : 'Upload failed' };
-		} finally {
-			themeUploading = false;
-		}
-	}
-
-	function handleJsonFileSelect(event: Event) {
-		const input = event.target as HTMLInputElement;
-		themeJsonFile = input.files?.[0] ?? null;
-	}
-
 	async function handleThemeDelete(id: string, label: string) {
 		if (!confirm(`Delete user theme "${label}"?`)) return;
 		themeFeedback = null;
@@ -252,33 +200,6 @@
 		}
 	}
 
-	function triggerDownload(blob: Blob, filename: string) {
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = filename;
-		a.click();
-		URL.revokeObjectURL(url);
-	}
-
-	async function handleThemeDownload(id: string) {
-		const enc = encodeURIComponent(id);
-		try {
-			// Download JSON
-			const jsonRes = await fetch(`/api/themes/${enc}/download`);
-			if (jsonRes.ok) {
-				const jsonBlob = await jsonRes.blob();
-				triggerDownload(jsonBlob, `${id}.json`);
-			}
-			// Download CSS if the theme has any
-			const cssRes = await fetch(`/api/themes/${enc}/css`);
-			if (cssRes.ok) {
-				const cssBlob = await cssRes.blob();
-				triggerDownload(cssBlob, `${id}.css`);
-			}
-		} catch { /* download failed silently */ }
-	}
-
 	// Set to true while we are mutating window.location.hash ourselves,
 	// so the hashchange listener can skip the work setTab already did
 	// (otherwise tab clicks scroll twice — once here, once in the listener).
@@ -288,7 +209,7 @@
 		activeTab = tab;
 		programmaticHashChange = true;
 		window.location.hash = tab;
-		if (tab === 'appearance') loadCacheStats();
+		if (tab === 'themes') loadCacheStats();
 		if (tab === 'drives') loadDriveSessions();
 		// Reset scroll to top when switching tabs
 		document.querySelector('main')?.scrollTo(0, 0);
@@ -300,7 +221,7 @@
 		rescanDrives().catch(() => {}).then(() => drives.start());
 		loadSettings();
 		// Handle initial hash tab (trigger side effects)
-		if (activeTab === 'appearance') loadCacheStats();
+		if (activeTab === 'themes') loadCacheStats();
 		if (activeTab === 'drives') loadDriveSessions();
 		function onHashChange() {
 			if (programmaticHashChange) {
@@ -309,7 +230,8 @@
 			}
 			const tab = parseHash();
 			activeTab = tab;
-			if (tab === 'appearance') loadCacheStats();
+			pendingField = parseHashField();
+			if (tab === 'themes') loadCacheStats();
 			if (tab === 'drives') loadDriveSessions();
 			// Reset scroll to top when switching tabs
 			document.querySelector('main')?.scrollTo(0, 0);
@@ -465,55 +387,6 @@
 				{/if}
 			</div>
 
-			<!-- Service Control -->
-			<section class="mt-6">
-				<h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Service Control</h2>
-				<div class="space-y-3">
-					<!-- ARM Restart -->
-					<div class="rounded-lg border border-red-200 bg-red-50/50 p-4 dark:border-red-800 dark:bg-red-900/10">
-						<div class="flex items-center justify-between">
-							<div>
-								<p class="text-sm font-medium text-gray-900 dark:text-white">Restart ARM Service</p>
-								<p class="text-xs text-gray-500 dark:text-gray-400">Restarts the ARM ripping service. Active rips will be interrupted.</p>
-								{#if armRestartFeedback}
-									<p class="mt-1 text-xs {armRestartFeedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{armRestartFeedback.message}</p>
-								{/if}
-							</div>
-							<button
-								type="button"
-								disabled={armRestarting}
-								onclick={() => handleRestart('arm')}
-								class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-							>
-								{armRestarting ? 'Restarting...' : 'Restart'}
-							</button>
-						</div>
-					</div>
-					<!-- Transcoder Restart -->
-					{#if $transcoderEnabled}
-					<div class="rounded-lg border border-red-200 bg-red-50/50 p-4 dark:border-red-800 dark:bg-red-900/10">
-						<div class="flex items-center justify-between">
-							<div>
-								<p class="text-sm font-medium text-gray-900 dark:text-white">Restart Transcoder Service</p>
-								<p class="text-xs text-gray-500 dark:text-gray-400">Restarts the transcoder service. Active transcodes will be interrupted.</p>
-								{#if tcRestartFeedback}
-									<p class="mt-1 text-xs {tcRestartFeedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{tcRestartFeedback.message}</p>
-								{/if}
-							</div>
-							<button
-								type="button"
-								disabled={tcRestarting}
-								onclick={() => handleRestart('transcoder')}
-								class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-							>
-								{tcRestarting ? 'Restarting...' : 'Restart'}
-							</button>
-						</div>
-					</div>
-					{/if}
-				</div>
-			</section>
-
 			<!-- Diagnostics (moved here from the standalone Diagnostics tab) -->
 			<section class="mt-6">
 				<DiagnosticsSection />
@@ -521,8 +394,12 @@
 		{/if}
 
 		<!-- Appearance Tab -->
-		{#if activeTab === 'appearance'}
-			<h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Appearance</h2>
+		{#if activeTab === 'interface'}
+			<InterfaceSettings />
+		{/if}
+
+		{#if activeTab === 'themes'}
+			<h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Themes</h2>
 			<section class="space-y-6">
 				<!-- Feedback toast -->
 				{#if themeFeedback}
@@ -553,16 +430,6 @@
 							</button>
 						{/each}
 					</div>
-					<div class="mt-3 flex gap-2">
-						<button
-							type="button"
-							onclick={() => handleThemeDownload($colorScheme)}
-							class="inline-flex items-center gap-1 rounded-md bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary-text transition-colors hover:bg-primary/20 dark:text-primary-text-dark"
-						>
-							<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-							Export current theme
-						</button>
-					</div>
 				</div>
 
 				<!-- User Themes -->
@@ -590,14 +457,6 @@
 									<div class="absolute -right-1 -top-1 flex gap-0.5">
 										<button
 											type="button"
-											onclick={() => handleThemeDownload(scheme.id)}
-											class="rounded-full bg-gray-200 p-0.5 text-gray-500 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600"
-											title="Download"
-										>
-											<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-										</button>
-										<button
-											type="button"
 											onclick={() => handleThemeDelete(scheme.id, scheme.label)}
 											class="rounded-full bg-red-100 p-0.5 text-red-500 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50"
 											title="Delete"
@@ -608,65 +467,13 @@
 								</div>
 							{/each}
 						</div>
+						{#if themeFeedback}
+							<p class="mt-3 text-sm {themeFeedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+								{themeFeedback.message}
+							</p>
+						{/if}
 					</div>
 				{/if}
-
-				<!-- Upload Theme -->
-				<div class="rounded-lg border border-primary/20 bg-surface p-6 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
-					<h3 class="mb-1 text-base font-semibold text-gray-900 dark:text-white">Import Theme</h3>
-					<p class="mb-4 text-sm text-gray-500 dark:text-gray-400">Upload a theme JSON file and optional custom CSS.</p>
-					<div class="space-y-4">
-						<!-- Theme name -->
-						<div>
-							<label for="theme-name-input" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Theme Name <span class="text-red-500">*</span></label>
-							<input
-								id="theme-name-input"
-								type="text"
-								bind:value={themeName}
-								placeholder="My Theme"
-								disabled={themeUploading}
-								class="w-full rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-sm dark:border-primary/30 dark:bg-primary/10 dark:text-white"
-							/>
-						</div>
-						<!-- JSON file picker -->
-						<div>
-							<span class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Theme JSON <span class="text-red-500">*</span></span>
-							<label class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-primary/10 px-4 py-2 text-sm font-medium text-primary-text transition-colors hover:bg-primary/20 dark:text-primary-text-dark">
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-								{themeJsonFile ? themeJsonFile.name : 'Choose .json file'}
-								<input type="file" accept=".json" class="hidden" onchange={handleJsonFileSelect} disabled={themeUploading} />
-							</label>
-						</div>
-						<!-- CSS textarea -->
-						<div>
-							<label for="theme-css-input" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Custom CSS <span class="text-xs text-gray-400">(optional)</span></label>
-							<textarea
-								id="theme-css-input"
-								bind:value={themeCssText}
-								placeholder={'[data-scheme="my-theme"] {\n  /* custom styles */\n}'}
-								rows="6"
-								disabled={themeUploading}
-								class="w-full rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 font-mono text-sm dark:border-primary/30 dark:bg-primary/10 dark:text-white"
-							></textarea>
-						</div>
-						<!-- Upload button -->
-						<div class="flex items-center gap-3">
-							<button
-								type="button"
-								onclick={handleThemeUpload}
-								disabled={!themeJsonFile || !themeName.trim() || themeUploading}
-								class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-colors hover:bg-primary-hover disabled:opacity-50"
-							>
-								{themeUploading ? 'Uploading...' : 'Upload Theme'}
-							</button>
-							{#if themeFeedback}
-								<span class="text-sm {themeFeedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
-									{themeFeedback.message}
-								</span>
-							{/if}
-						</div>
-					</div>
-				</div>
 
 				<!-- Dark Mode -->
 				<div class="rounded-lg border border-primary/20 bg-surface p-6 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
@@ -740,44 +547,33 @@
 		{/if}
 
 		{#if activeTab === 'drives'}
-			<h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Drives</h2>
+			<div class="mb-4 flex items-start justify-between gap-3">
+				<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Drives</h2>
+				<DriveMaintenance onrescanned={() => drives.refresh()} />
+			</div>
 			<section class="space-y-6">
 				{#if $driveError}
 					<div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
 						{$driveError}
 					</div>
-				{:else if $drives.length === 0}
-					<p class="py-8 text-center text-gray-400">No drives detected.</p>
 				{:else}
-					<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-						{#each $drives as drive (drive.id)}
-							<DriveCard {drive} sessions={driveSessions} onupdate={() => drives.refresh()} globalDefaults={{
-								prescan_cache_mb: Number(settings?.arm_config?.PRESCAN_CACHE_MB) || 1,
-								prescan_timeout: Number(settings?.arm_config?.PRESCAN_TIMEOUT) || 300,
-								prescan_retries: Number(settings?.arm_config?.PRESCAN_RETRIES) || 3,
-								disc_enum_timeout: Number(settings?.arm_config?.DISC_ENUM_TIMEOUT) || 60,
-							}} />
-						{/each}
-					</div>
+					{#if parts.enrolled.length > 0}
+						<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+							{#each parts.enrolled as drive (drive.id)}
+								<DriveCard {drive} sessions={driveSessions} onupdate={() => drives.refresh()} globalDefaults={{
+									prescan_cache_mb: Number(settings?.arm_config?.PRESCAN_CACHE_MB) || 1,
+									prescan_timeout: Number(settings?.arm_config?.PRESCAN_TIMEOUT) || 300,
+									prescan_retries: Number(settings?.arm_config?.PRESCAN_RETRIES) || 3,
+									disc_enum_timeout: Number(settings?.arm_config?.DISC_ENUM_TIMEOUT) || 60,
+								}} />
+							{/each}
+						</div>
+					{/if}
+					<DriveLifecycleLists detected={parts.detected} ignored={parts.ignored} onchanged={() => drives.refresh()} />
 				{/if}
 
-				<!-- Maintenance & Diagnostics -->
+				<!-- Diagnostics -->
 				<hr class="my-2 opacity-20" />
-				<div class="flex flex-wrap items-center gap-2">
-					<span class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Maintenance</span>
-					<button
-						onclick={async () => { rescanning = true; await rescanDrives(); await drives.refresh(); rescanning = false; }}
-						disabled={rescanning}
-						class="ml-auto rounded-lg border border-primary/20 px-3 py-1.5 text-xs font-medium text-primary-text transition-colors hover:bg-primary/10 disabled:opacity-50 dark:border-primary/20 dark:text-primary-text-dark dark:hover:bg-primary/15"
-						title="Re-detect optical drives and refresh database records"
-					>{rescanning ? 'Scanning...' : 'Rescan'}</button>
-					<button
-						onclick={async () => { rescanning = true; await rescanDrives(true); await drives.refresh(); rescanning = false; }}
-						disabled={rescanning}
-						class="rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-50 disabled:opacity-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/20"
-						title="Delete all stale drive records and re-detect from hardware"
-					>{rescanning ? 'Scanning...' : 'Force Rescan'}</button>
-				</div>
 				<div data-diag>
 					<button
 						onclick={() => { diagOpen = !diagOpen; }}
@@ -814,37 +610,60 @@
 							</div>
 
 							{#if diagResult}
-								{@const unhealthy = diagResult.drives.filter(d => !d.healthy || d.notes.length > 0)}
+								{@const system = diagResult.system ?? []}
+								{@const unhealthy = diagResult.drives.filter(d => !d.healthy || (d.notes.length > 0 && !(d.notes.length === 1 && d.notes[0] === 'ignored')))}
+								{#if system.length > 0}
+									<div class="mb-2 rounded-lg border border-amber-500/15 bg-amber-500/5 p-2.5" data-testid="diag-system">
+										{#each system as note}
+											<div class="text-xs text-amber-700 dark:text-amber-400">{note}</div>
+										{/each}
+									</div>
+								{/if}
+
 								<!-- Status bar -->
 								<div class="mb-2 flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 text-xs
-									{unhealthy.length > 0
+									{unhealthy.length > 0 || system.length > 0
 										? 'border-amber-500/15 bg-amber-500/5'
 										: 'border-green-500/15 bg-green-500/5'}">
 									<span class="text-gray-500 dark:text-gray-400">
 										{diagResult.drives.length} drive{diagResult.drives.length !== 1 ? 's' : ''}
 									</span>
-									<span class="font-medium {unhealthy.length > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}">
-										{unhealthy.length > 0 ? 'Issues Found' : 'All OK'}
+									<span class="font-medium {unhealthy.length > 0 || system.length > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}">
+										{unhealthy.length > 0 || system.length > 0 ? 'Issues Found' : 'All OK'}
 									</span>
 								</div>
 
-								<!-- Per-drive issues only -->
-								{#each unhealthy as diag}
-									<div class="mb-1.5 rounded-lg border border-amber-500/15 bg-amber-500/5 p-2.5">
+								<!-- Every drive, healthy or not -->
+								{#each diagResult.drives as diag (diag.id)}
+									{@const flagged = unhealthy.includes(diag)}
+									<div data-testid="diag-drive-{diag.id}" class="mb-1.5 rounded-lg border p-2.5 {flagged ? 'border-amber-500/15 bg-amber-500/5' : 'border-primary/10'}">
+										<div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
+											<code class="font-medium text-gray-900 dark:text-white">{diag.device_path}</code>
+											<span class="rounded-full bg-primary/10 px-1.5 text-[10px] uppercase">{diag.lifecycle}</span>
+											<span class={diag.present ? '' : 'text-amber-600 dark:text-amber-400'}>{diag.present ? 'connected' : 'not connected'}</span>
+											{#if diag.container}<span>container: {diag.container}</span>{/if}
+											{#if diag.status}<span>ripper: {diag.status}</span>{/if}
+											{#if diag.media_status}<span>media: {diag.media_status.replace('_', ' ')}</span>{/if}
+											{#if diag.media_status_at}<span class="text-gray-400">heartbeat {formatDateTime(diag.media_status_at)}</span>{/if}
+											{#if !flagged}<span class="ml-auto font-medium text-green-600 dark:text-green-400">OK</span>{/if}
+										</div>
+										{#if diag.last_error}
+											<div class="mt-1 text-xs text-red-600 dark:text-red-400">{diag.last_error}</div>
+										{/if}
 										{#each diag.notes as note}
-											<div class="flex items-start gap-1.5 text-xs">
-												<svg class="mt-0.5 h-3 w-3 flex-shrink-0 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-												</svg>
-												<span class="text-amber-700 dark:text-amber-400">
-													<span class="font-medium">{diag.id}</span> - {note}
-												</span>
+											<div class="mt-1 flex items-start gap-1.5 text-xs">
+												{#if note === 'ignored'}
+													<span class="text-gray-400">ignored</span>
+												{:else}
+													<svg class="mt-0.5 h-3 w-3 flex-shrink-0 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+													</svg>
+													<span class="text-amber-700 dark:text-amber-400">{note}</span>
+												{/if}
 											</div>
 										{/each}
 										{#if diag.notes.length === 0 && !diag.healthy}
-											<div class="text-xs text-amber-700 dark:text-amber-400">
-												<span class="font-medium">{diag.id}</span> - unhealthy
-											</div>
+											<div class="mt-1 text-xs text-amber-700 dark:text-amber-400">unhealthy</div>
 										{/if}
 									</div>
 								{/each}

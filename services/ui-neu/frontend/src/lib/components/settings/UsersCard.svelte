@@ -4,6 +4,7 @@
 	import TimeAgo from '$lib/components/TimeAgo.svelte';
 	import Toggle from '$lib/components/notifications/Toggle.svelte';
 	import ChangePasswordForm from '$lib/components/settings/ChangePasswordForm.svelte';
+	import CloseButton from '$lib/components/CloseButton.svelte';
 	import { fetchUsers, setUserDisabled } from '$lib/api/users';
 	import type { UserView } from '$lib/types/api.gen';
 
@@ -109,22 +110,18 @@
 				</div>
 			{/if}
 
-			<!-- Guest row -->
+			<!-- Guest access: guests never sign in (sessions are anonymous), so there
+			     is no username, status or last-login to show, just the switch. -->
 			{#if guest}
-				<div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/10 px-3 py-2.5 dark:border-primary/10">
-					<div class="flex min-w-0 flex-1 items-center gap-2">
-						<span class="truncate font-medium text-sm text-gray-900 dark:text-white">{guest.username}</span>
-						<span class="shrink-0 rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-widest {roleBadgeClass(guest.role)}">
-							{guest.role}
-						</span>
-						<span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">
-							{guest.disabled ? 'Disabled' : 'Active'}
-						</span>
-						<span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">
-							Last login: <TimeAgo date={guest.last_login_at ?? null} />
-						</span>
+				<div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/10 px-3 py-2.5 dark:border-primary/10" data-testid="guest-access-row">
+					<div class="min-w-0 flex-1">
+						<span class="text-sm font-medium text-gray-900 dark:text-white">Guest access</span>
+						<p class="text-xs text-gray-500 dark:text-gray-400">
+							Let anyone on the network browse without signing in. Guests can view but not change anything.
+						</p>
 					</div>
 					<div class="flex shrink-0 items-center gap-2">
+						<span class="text-xs text-gray-500 dark:text-gray-400">{guest.disabled ? 'Off' : 'On'}</span>
 						<Toggle checked={!guest.disabled} label="guest" onchange={handleGuestToggle} />
 					</div>
 				</div>
@@ -144,14 +141,7 @@
 	>
 		<div class="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
 			<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Change password</h2>
-			<button
-				type="button"
-				aria-label="Close"
-				onclick={closePanel}
-				class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-			>
-				✕
-			</button>
+			<CloseButton onclick={closePanel} />
 		</div>
 		<div class="flex-1 overflow-y-auto p-6">
 			<ChangePasswordForm onsuccess={handleAdminPasswordSuccess} />

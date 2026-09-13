@@ -13,3 +13,4 @@
 - [UI port is 8081; installer is canonical](feedback_ui_port_8081.md) — v3 UI runs on `https://localhost:8081`; never reconcile to 8080; the installer is the source of truth for deployment values.
 - [v3.0 is Linux + Docker only](project_linux_docker_only.md) — Unraid/Synology/NAS appliances dropped 2026-06-05; the single supported target is any Linux host with Docker Engine ≥ 24 + Compose v2.
 - [Pin NVENC nv-codec-headers to the distro driver](feedback_nvenc_header_driver_pin.md) — transcode image re-pins nv-codec-headers to 12.1.14.0 (driver ≥530) so HW encode works on Debian 13's driver 550; HandBrake's 13.0.19.0 default needs 570+ and fails rc=3. Keep Dockerfile NVCODEC_* + ARM_NVENC_MIN_DRIVER (install.sh & setup-dev.sh) in lockstep.
+- [Standard UI patterns](feedback_standard_ui_patterns.md) — recurring UI (sort indicators, close buttons, status glyphs, chips) is a shared component (`Glyph`, `SortIndicator`, `CloseButton`, ...), never one-off inline markup.

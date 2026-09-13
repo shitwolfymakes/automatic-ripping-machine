@@ -114,6 +114,8 @@ def test_diagnostics_ok(signing_key: bytes, tmp_path) -> None:
     app, token = _make_app(signing_key, db, tmp=tmp_path)
     # An absent transcode dispatcher also degrades to "warning" — stub a live one.
     app.state.transcode_dispatcher = _StubDispatcher(host_paths=True)
+    # Likewise an absent ripper manager — stub a live one.
+    app.state.ripper_manager = _StubRipperManager()
     r = _get(app, token)
     assert r.status_code == 200, r.text
     body = r.json()
@@ -344,11 +346,75 @@ class _StubDispatcher:
     diagnostics check reads. A real dispatcher needs a docker client + settings,
     which the Tier-1 fake-session suite has no business constructing."""
 
-    def __init__(self, *, host_paths: bool) -> None:
+    def __init__(self, *, host_paths: bool, probe=(True, None), last_spawn_error: str | None = None) -> None:
         self._host_paths = host_paths
+        self._probe = probe
+        self.last_spawn_error = last_spawn_error
 
     def host_paths_set(self) -> bool:
         return self._host_paths
+
+    def probe(self) -> tuple[bool, str | None]:
+        return self._probe
+
+
+class _StubRipperManager:
+    def __init__(self, *, host_paths: bool = True, probe=(True, None)) -> None:
+        self._host_paths = host_paths
+        self._probe = probe
+
+    def host_paths_set(self) -> bool:
+        return self._host_paths
+
+    def probe(self) -> tuple[bool, str | None]:
+        return self._probe
+
+
+def _ripper_check(body: dict) -> dict:
+    return next(ch for ch in body["checks"] if ch["name"] == "ripper_manager")
+
+
+def test_diagnostics_ripper_manager_warning_when_absent(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    check = _ripper_check(r.json())
+    assert check["status"] == "warning" and "docker" in check["detail"]
+
+
+def test_diagnostics_ripper_manager_warning_when_host_paths_unset(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.ripper_manager = _StubRipperManager(host_paths=False)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    check = _ripper_check(r.json())
+    assert check["status"] == "warning" and "ARM_HOST" in check["detail"]
+
+
+def test_diagnostics_ripper_manager_warning_when_probe_fails(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.ripper_manager = _StubRipperManager(probe=(False, "image arm-ripper:latest not present on docker host"))
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    check = _ripper_check(r.json())
+    assert check["status"] == "warning" and "not present" in check["detail"]
+
+
+def test_diagnostics_ripper_manager_ok(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.ripper_manager = _StubRipperManager()
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    check = _ripper_check(r.json())
+    assert check["status"] == "ok" and check["detail"] is None
 
 
 def test_diagnostics_transcoder_warning_when_no_dispatcher(signing_key: bytes, tmp_path) -> None:
@@ -388,6 +454,44 @@ def test_diagnostics_transcoder_ok_when_live(signing_key: bytes, tmp_path) -> No
     check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
     assert check["status"] == "ok"
     assert check["detail"] is None
+
+
+def test_diagnostics_transcoder_warning_when_probe_fails(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.transcode_dispatcher = _StubDispatcher(
+        host_paths=True, probe=(False, "image x not present on docker host")
+    )
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
+    assert check["status"] == "warning" and "not present" in check["detail"]
+
+
+def test_diagnostics_transcoder_warning_when_last_spawn_failed(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.transcode_dispatcher = _StubDispatcher(host_paths=True, last_spawn_error="409 name in use")
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
+    assert check["status"] == "warning" and "409" in check["detail"]
+
+
+def test_diagnostics_transcoder_ok_when_probe_and_spawns_clean(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.transcode_dispatcher = _StubDispatcher(host_paths=True)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
+    assert check["status"] == "ok"
 
 
 @pytest.mark.parametrize(
@@ -514,3 +618,49 @@ def test_stats_no_started_at(signing_key: bytes, tmp_path) -> None:
         r = c.get("/api/system/stats", headers=_auth(token))
     assert r.status_code == 200, r.text
     assert r.json()["uptime_seconds"] == 0
+
+
+def test_thediscdb_refresh_now_returns_count_and_persists_refreshed_at(
+    signing_key: bytes, tmp_path, monkeypatch
+) -> None:
+    async def _fake(http, path):  # noqa: ANN001, ANN202 — matches thediscdb_refresh signature
+        return 4724
+
+    monkeypatch.setattr(system_router, "thediscdb_refresh", _fake)
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.http = object()
+    with TestClient(app) as c:
+        r = c.post("/api/system/thediscdb/refresh", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["discs"] == 4724
+    assert datetime.fromisoformat(body["refreshed_at"])
+    assert db.rows["config"][0].thediscdb_refreshed_at is not None
+
+
+def test_thediscdb_refresh_now_maps_failure_to_502(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    async def _fake(http, path):  # noqa: ANN001, ANN202 — matches thediscdb_refresh signature
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(system_router, "thediscdb_refresh", _fake)
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.http = object()
+    with TestClient(app) as c:
+        r = c.post("/api/system/thediscdb/refresh", headers=_auth(token))
+    assert r.status_code == 502, r.text
+    assert db.rows["config"][0].thediscdb_refreshed_at is None
+
+
+def test_thediscdb_refresh_now_denied_for_guest(signing_key: bytes, tmp_path) -> None:
+    """Refresh is a mutating route (network fetch + config write) — guests get 403."""
+    db = FakeSession()
+    _seed(db)
+    app, _ = _make_app(signing_key, db, tmp=tmp_path)
+    guest_token, _ = issue_access_token("usr_guest", "guest", signing_key)
+    with TestClient(app) as c:
+        r = c.post("/api/system/thediscdb/refresh", headers=_auth(guest_token))
+    assert r.status_code == 403

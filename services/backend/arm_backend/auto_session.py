@@ -46,19 +46,23 @@ from arm_common import (
     TranscodeTaskStatus,
     with_log_context,
 )
-from arm_common.schemas import CollisionInfo
+from arm_common.schemas import ApplySkippedReason, CollisionInfo
 
 logger = logging.getLogger("arm_backend.auto_session")
 
 
 _APPLY_OK_STATUSES: frozenset[JobStatus] = frozenset({JobStatus.IDENTIFIED, JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL})
+_RIPPED_STATUSES: frozenset[JobStatus] = frozenset(
+    {JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL, JobStatus.RIPPED_AWAITING_IDENTIFY}
+)
+_NO_TRACKS_DETAIL = "no tracks yet: the rip has not started; the application fans out when the rip completes"
 
 
 class SessionNotFoundError(Exception):
     """Raised by `apply_session_internal` when `session_id` doesn't resolve."""
 
 
-SkippedReason = Literal["collisions", "template", "session_missing"]
+SkippedReason = ApplySkippedReason  # single definition lives in arm_common.schemas
 ApplySource = Literal["manual", "auto"]
 
 
@@ -176,9 +180,11 @@ async def _apply_session_internal(
             )
 
     # `awaiting_user_id` → park as `waiting_identify` with no tasks.
-    # In practice this only happens via the manual route — `rip-complete`
-    # only fires for jobs already past identification.
-    if job.status == JobStatus.AWAITING_USER_ID:
+    # In practice this only happens via the manual route. A placeholder rip
+    # that completed without identity (RIPPED_AWAITING_IDENTIFY) parks the
+    # same way: transcode is gated on identity, and resolve's after-rip pass
+    # promotes the application once the operator supplies it.
+    if job.status in (JobStatus.AWAITING_USER_ID, JobStatus.RIPPED_AWAITING_IDENTIFY):
         application = SessionApplication(
             session_id=session_id,
             job_id=job.id,
@@ -252,14 +258,22 @@ async def _apply_session_internal(
     for task in outcome.tasks:
         await db.refresh(task)
 
-    logger.info(
-        "apply session_id=%s job_id=%s tasks=%d overwrite=%s source=%s",
-        session_id,
-        job.id,
-        len(outcome.tasks),
-        overwrite,
-        source,
-    )
+    if outcome.skipped_reason == "no_tracks":
+        logger.info(
+            "apply: parked session_id=%s job_id=%s (no tracks yet; fans out at rip-complete) source=%s",
+            session_id,
+            job.id,
+            source,
+        )
+    else:
+        logger.info(
+            "apply session_id=%s job_id=%s tasks=%d overwrite=%s source=%s",
+            session_id,
+            job.id,
+            len(outcome.tasks),
+            overwrite,
+            source,
+        )
 
     return outcome
 
@@ -293,6 +307,30 @@ async def _fan_out_tasks_for_application(
     new application's id is populated for downstream task FKs.
     """
     resolved = compute_outputs(job, tracks, sess, transcode_preset)
+
+    if not resolved and job.status not in _RIPPED_STATUSES:
+        # The ripper persists Track rows at rip-start, so a session applied
+        # between identify and rip-start (or resolved before the rip) has
+        # nothing to fan out yet. Park the application with no tasks instead
+        # of promoting an empty `queued` husk; `drain_parked_applications_after_rip`
+        # fans it out from rip-complete once the tracks exist.
+        if application is None:
+            application = SessionApplication(
+                session_id=sess.id,
+                job_id=job.id,
+                status=SessionApplicationStatus.WAITING_IDENTIFY,
+                overwrite=overwrite,
+                created_by_user_id=created_by_user_id,
+            )
+            db.add(application)
+            await db.flush()
+        return ApplySessionOutcome(
+            application=application,
+            tasks=[],
+            collisions=[],
+            idempotent=False,
+            skipped_reason="no_tracks",
+        )
 
     paths = [r.output_path for r in resolved]
     media_root = Path(settings.MEDIA_ROOT)
@@ -457,6 +495,17 @@ async def fan_out_waiting_identify_applications(
             )
             continue
 
+        if outcome.skipped_reason == "no_tracks":
+            outcomes.append(
+                ResolveFanOutOutcome(
+                    application=app,
+                    tasks=[],
+                    skipped_reason="no_tracks",
+                    error_detail=_NO_TRACKS_DETAIL,
+                )
+            )
+            continue
+
         assert outcome.application is not None
         outcomes.append(
             ResolveFanOutOutcome(
@@ -467,6 +516,60 @@ async def fan_out_waiting_identify_applications(
             )
         )
 
+    return outcomes
+
+
+async def after_rip(db: AsyncSession, job: Job, hub: WSHub) -> list[ResolveFanOutOutcome]:
+    """Everything that happens once a job's rip is done and its identity is
+    known (gap analysis §5.4): drain parked applications, then the
+    auto-apply hook. Two callers — `rip-complete` for jobs that ripped
+    already identified, and `resolve` when a `ripped_awaiting_identify`
+    placeholder gains its identity. Never raises; returns the drain's
+    outcomes so resolve can report them.
+    """
+    outcomes = await drain_parked_applications_after_rip(db, job, hub)
+    await maybe_auto_apply_session(db, job, hub)
+    return outcomes
+
+
+async def drain_parked_applications_after_rip(
+    db: AsyncSession,
+    job: Job,
+    hub: WSHub,
+) -> list[ResolveFanOutOutcome]:
+    """First half of `after_rip`.
+
+    A session applied (or resolved) before rip-start parks as
+    `waiting_identify` with no tasks because the ripper only persists Track
+    rows at rip-start. Now that the rip has landed its tracks, promote every
+    parked application on the job. Per-application problems stay parked and
+    log at WARN; nothing here may break the caller.
+    """
+    try:
+        outcomes = await fan_out_waiting_identify_applications(db, job=job, hub=hub)
+        if not outcomes:
+            return []
+        await db.commit()
+    except Exception:  # noqa: BLE001 - hook must never break rip-complete
+        await db.rollback()
+        logger.exception("after-rip: draining parked session_applications failed job_id=%s", job.id)
+        return []
+    for outcome in outcomes:
+        if outcome.skipped_reason is None:
+            logger.info(
+                "after-rip: fanned out parked session_application=%s job_id=%s tasks=%d",
+                outcome.application.id,
+                job.id,
+                len(outcome.tasks),
+            )
+        else:
+            logger.warning(
+                "after-rip: parked session_application=%s job_id=%s stays parked reason=%s: %s",
+                outcome.application.id,
+                job.id,
+                outcome.skipped_reason,
+                outcome.error_detail,
+            )
     return outcomes
 
 
@@ -586,27 +689,42 @@ async def _load_tasks(db: AsyncSession, session_application_id: str) -> list[Tra
     return list(rows)
 
 
-async def resolve_effective_session_id(db: AsyncSession, job: Job) -> str | None:
-    """The session id the apply path will actually use for this job.
-
-    Resolution order (single source of truth — the naming-preview endpoint
-    resolves through this same helper so previews cannot drift from apply):
-      1. `job.metadata_json["pending_session_id"]` — explicit per-rip choice;
-         always wins and bypasses `auto_transcode_on_idle`.
-      2. `drive.default_session_id` — the persistent per-drive default, only
-         honoured when `Config.auto_transcode_on_idle` is True.
-    Returns None when neither applies.
-    """
+def _pending_session_id(job: Job) -> str | None:
     pending = (job.metadata_json or {}).get("pending_session_id")
-    if isinstance(pending, str) and pending:
+    return pending if isinstance(pending, str) and pending else None
+
+
+async def resolve_routed_session_id(db: AsyncSession, job: Job) -> str | None:
+    """Which session is ROUTED to this job (gap analysis §5.1).
+
+    Resolution order (single source of truth — rip-start's preset choice and
+    the naming preview resolve through this same helper so neither can drift
+    from the apply path):
+      1. `job.metadata_json["pending_session_id"]` — explicit per-rip choice.
+      2. `drive.default_session_id` — the persistent per-drive default.
+    No `auto_transcode_on_idle` gating: routing shapes the rip and the
+    preview; whether rip-complete may QUEUE the routed session unattended is
+    `auto_apply_allowed`'s question. Returns None when nothing routes.
+    """
+    pending = _pending_session_id(job)
+    if pending is not None:
         return pending
     drive = (await db.execute(select(Drive).where(col(Drive.id) == job.drive_id))).scalar_one_or_none()
-    if drive is None or drive.default_session_id is None:
-        return None
-    config_row = (await db.execute(select(Config).where(col(Config.id) == 1))).scalar_one_or_none()
-    if config_row is None or not config_row.auto_transcode_on_idle:
+    if drive is None:
         return None
     return drive.default_session_id
+
+
+async def auto_apply_allowed(db: AsyncSession, job: Job) -> bool:
+    """May rip-complete queue the routed session unattended?
+
+    An explicit per-rip choice is the user opting in for that one rip and
+    bypasses the flag; the drive default needs `auto_transcode_on_idle`.
+    """
+    if _pending_session_id(job) is not None:
+        return True
+    config_row = (await db.execute(select(Config).where(col(Config.id) == 1))).scalar_one_or_none()
+    return config_row is not None and bool(config_row.auto_transcode_on_idle)
 
 
 async def maybe_auto_apply_session(
@@ -616,15 +734,14 @@ async def maybe_auto_apply_session(
 ) -> None:
     """Hook invoked from `rip-complete`. Silent on every failure mode.
 
-    Resolution order for the session to apply:
-      1. `job.metadata_json["pending_session_id"]` — set by the ripper when
-         the rip was kicked off via `POST /api/jobs/manual` with a chosen
-         session. Always wins; bypasses `auto_transcode_on_idle` since the
-         user explicitly opted in for this one rip.
-      2. `drive.default_session_id` — the persistent per-drive default,
-         only honoured when `Config.auto_transcode_on_idle` is True.
+    Applies the ROUTED session (`resolve_routed_session_id`) when
+    `auto_apply_allowed` says unattended queueing is permitted: an explicit
+    per-rip choice always is; the drive default needs
+    `Config.auto_transcode_on_idle`.
     """
-    session_id = await resolve_effective_session_id(db, job)
+    if not await auto_apply_allowed(db, job):
+        return
+    session_id = await resolve_routed_session_id(db, job)
     if session_id is None:
         return
     try:

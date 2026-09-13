@@ -8,25 +8,29 @@ docs/arch/06-deployment.md), no rippers registered yet, a missing config
 row. The ported UI's settings System-Health panel and first-run wizard
 render it (Tier-12)."""
 
+import asyncio
 import functools
 import importlib.metadata
 import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import psutil  # type: ignore[import-untyped]
 
 from arm_backend.disk_usage_cache import get_disk_usage
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.auth import require_jwt
+from arm_backend.auth import require_jwt, require_writer
+from arm_backend.config import settings
 from arm_backend.db import get_session
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.thediscdb.snapshot import refresh as thediscdb_refresh
 from arm_backend.utils import default_roots
 from arm_common import Config, Drive, DriveStatus, Event, Job, KeydbState, MakemkvSdfState, User
 from arm_common.schemas import (
@@ -153,8 +157,29 @@ async def diagnostics(
     elif not dispatcher.host_paths_set():
         tc_status, tc_detail = "warning", "transcoder disabled: ARM_HOST_*_PATH not set"
     else:
-        tc_status, tc_detail = "ok", None
+        # probe() pings a possibly-remote ssh docker host; run it off the
+        # event loop so a slow/unreachable host doesn't block the server.
+        ok, detail = await asyncio.to_thread(dispatcher.probe)
+        if not ok:
+            tc_status, tc_detail = "warning", detail
+        elif dispatcher.last_spawn_error:
+            tc_status, tc_detail = "warning", f"last spawn failed: {dispatcher.last_spawn_error}"
+        else:
+            tc_status, tc_detail = "ok", None
     checks.append(SystemDiagnosticCheck(name="transcoder", status=tc_status, detail=tc_detail))
+
+    manager = getattr(request.app.state, "ripper_manager", None)
+    if manager is None:
+        rm_status, rm_detail = "warning", "ripper manager disabled: docker socket unavailable"
+    elif not manager.host_paths_set():
+        rm_status, rm_detail = "warning", "ripper manager disabled: ARM_HOST_*_PATH not set"
+    else:
+        ok, detail = await asyncio.to_thread(manager.probe)
+        if not ok:
+            rm_status, rm_detail = "warning", detail
+        else:
+            rm_status, rm_detail = "ok", None
+    checks.append(SystemDiagnosticCheck(name="ripper_manager", status=rm_status, detail=rm_detail))
 
     overall = "ok"
     for ch in checks:
@@ -279,3 +304,18 @@ def _app_version() -> str:
 @router.get("/version", response_model=SystemVersionResponse)
 async def system_version(_: User = Depends(require_jwt)) -> SystemVersionResponse:
     return SystemVersionResponse(version=_app_version())
+
+
+@router.post("/thediscdb/refresh", dependencies=[Depends(require_writer)])
+async def thediscdb_refresh_now(request: Request, session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
+    """Rebuild the TheDiscDB snapshot index from GitHub, on demand."""
+    try:
+        count = await thediscdb_refresh(request.app.state.http, Path(settings.ARM_THEDISCDB_PATH))
+    except Exception as e:  # noqa: BLE001 — network/tar/sqlite: report, keep old index
+        raise HTTPException(status_code=502, detail=f"thediscdb refresh failed: {e}") from e
+    now = datetime.now(timezone.utc)
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
+    cfg.thediscdb_refreshed_at = now
+    session.add(cfg)
+    await session.commit()
+    return {"discs": count, "refreshed_at": now.isoformat()}

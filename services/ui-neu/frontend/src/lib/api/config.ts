@@ -9,9 +9,11 @@ import { get } from './client';
 // subsystem-availability feature flag.)
 export interface AppConfig {
 	transcoder_enabled: boolean;
+	// Configured default metadata provider ('tmdb' | 'omdb'); null when unset.
+	metadata_provider: string | null;
 }
 
 export async function fetchConfig(): Promise<AppConfig> {
-	await get<ConfigView>('/api/config');
-	return { transcoder_enabled: true };
+	const cfg = await get<ConfigView>('/api/config');
+	return { transcoder_enabled: true, metadata_provider: cfg.metadata_provider ?? null };
 }

@@ -15,14 +15,24 @@
 	import { onMount } from 'svelte';
 	import { setUnauthorizedHandler } from '$lib/api/client';
 	import { logoutLocal, initAuth, isGuest } from '$lib/stores/auth';
+	import { uiPrefs } from '$lib/stores/uiPrefs';
 	import { isScreenEnabled } from '$lib/features';
 	import { logout as apiLogout } from '$lib/api/auth';
 	import { countRipping } from '$lib/utils/job-status';
 	import BottomStatsBar from '$lib/components/BottomStatsBar.svelte';
 	import SidebarStats from '$lib/components/SidebarStats.svelte';
+	import MobileStatsPanel from '$lib/components/MobileStatsPanel.svelte';
 	let { children } = $props();
 
 	let sidebarOpen = $state(false);
+	// Mobile drawer view — resets to 'menu' every time the drawer opens, so
+	// navigation (the drawer's primary job) is always one tap away.
+	let drawerView = $state<'menu' | 'stats'>('menu');
+
+	function openSidebar() {
+		drawerView = 'menu';
+		sidebarOpen = true;
+	}
 	let togglingPause = $state(false);
 	// Guards the 401 handler against firing redundant goto('/login') calls when
 	// multiple in-flight requests 401 at once. Reset once the user is back on a
@@ -178,9 +188,11 @@
 			</nav>
 			<!-- Sidebar stats only at 2xl+, where the bottom bar (lg:flex 2xl:hidden)
 			     is hidden — the two surfaces never show at the same viewport width. -->
-			<div class="hidden 2xl:block">
-				<SidebarStats />
-			</div>
+			{#if $uiPrefs.showStats}
+				<div class="hidden 2xl:block">
+					<SidebarStats />
+				</div>
+			{/if}
 		</div>
 	</aside>
 
@@ -189,7 +201,7 @@
 		<!-- Top bar -->
 		<header class="flex h-14 items-center justify-between border-b border-primary/20 bg-surface px-4 dark:border-primary/20 dark:bg-surface-dark lg:px-6">
 			<button
-				onclick={() => sidebarOpen = !sidebarOpen}
+				onclick={() => sidebarOpen ? (sidebarOpen = false) : openSidebar()}
 				aria-label="Toggle sidebar"
 				class="rounded-lg p-2 text-gray-500 hover:bg-primary/10 dark:text-gray-400 dark:hover:bg-primary/15 lg:hidden"
 			>
@@ -202,19 +214,19 @@
 			<div class="hidden lg:flex items-center gap-3 text-sm">
 				<!-- Service health dots -->
 				<div class="flex items-center gap-3">
-					<a href="/settings#system" class="flex items-center gap-1.5 hover:opacity-75 transition-opacity">
+					<svelte:element this={$isGuest ? 'span' : 'a'} href={$isGuest ? undefined : '/settings#system'} class="flex items-center gap-1.5 transition-opacity {$isGuest ? '' : 'hover:opacity-75'}">
 						<div class="h-2 w-2 shrink-0 rounded-full {$dashboard.arm_online ? 'bg-green-500' : 'bg-red-500'}"></div>
 						<span class="text-gray-700 dark:text-gray-200">ARM</span>
-					</a>
-					<a href="/settings#system" class="flex items-center gap-1.5 hover:opacity-75 transition-opacity">
+					</svelte:element>
+					<svelte:element this={$isGuest ? 'span' : 'a'} href={$isGuest ? undefined : '/settings#system'} class="flex items-center gap-1.5 transition-opacity {$isGuest ? '' : 'hover:opacity-75'}">
 						<div class="h-2 w-2 shrink-0 rounded-full {$dashboard.db_available ? 'bg-green-500' : 'bg-yellow-500'}"></div>
 						<span class="text-gray-700 dark:text-gray-200">DB</span>
-					</a>
-					<a href="/transcoder" class="flex items-center gap-1.5 hover:opacity-75 transition-opacity">
+					</svelte:element>
+					<a href="/transcoder" class="flex items-center gap-1.5 transition-opacity {$isGuest ? '' : 'hover:opacity-75'}">
 						<div class="h-2 w-2 shrink-0 rounded-full {$dashboard.transcoder_online && ($dashboard.transcoder_stats?.worker_running ?? true) ? 'bg-green-500' : $dashboard.transcoder_online ? 'bg-yellow-500' : 'bg-gray-400'}"></div>
 						<span class="text-gray-700 dark:text-gray-200">Transcode</span>
 					</a>
-					<a href="/settings#ripping/makemkv" class="flex items-center gap-1.5 hover:opacity-75 transition-opacity"
+					<svelte:element this={$isGuest ? 'span' : 'a'} href={$isGuest ? undefined : '/settings#Metadata/makemkv_key'} class="flex items-center gap-1.5 transition-opacity {$isGuest ? '' : 'hover:opacity-75'}"
 						title={$dashboard.makemkv_key_valid === true
 							? `MakeMKV key valid${$dashboard.makemkv_key_checked_at ? ' - checked ' + new Date($dashboard.makemkv_key_checked_at).toLocaleString() : ''}`
 							: $dashboard.makemkv_key_valid === false
@@ -223,13 +235,13 @@
 					>
 						<div class="h-2 w-2 shrink-0 rounded-full {$dashboard.makemkv_key_valid === true ? 'bg-green-500' : 'bg-red-500'}"></div>
 						<span class="text-gray-700 dark:text-gray-200">Key</span>
-					</a>
+					</svelte:element>
 				</div>
 				<!-- Divider -->
 				<div class="h-6 w-px bg-black dark:bg-white/30"></div>
 				<!-- Live activity -->
 				<div class="flex items-center gap-3 text-xs">
-					<a href="/settings#drives" class="text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary transition-colors">{$dashboard.db_available ? $dashboard.drives_online : '--'} drive{$dashboard.drives_online !== 1 ? 's' : ''}</a>
+					<svelte:element this={$isGuest ? 'span' : 'a'} href={$isGuest ? undefined : '/settings#drives'} class="text-gray-600 dark:text-gray-300 transition-colors {$isGuest ? '' : 'hover:text-primary dark:hover:text-primary'}">{$dashboard.db_available ? $dashboard.drives_online : '--'} drive{$dashboard.drives_online !== 1 ? 's' : ''}</svelte:element>
 					{#if rippingCount > 0}
 						<span class="font-semibold text-blue-600 dark:text-blue-400">{rippingCount} ripping</span>
 					{/if}
@@ -346,28 +358,46 @@
 						<img src="/img/arm-logo-black.png" alt="ARM" class="h-20 w-20 dark:hidden" />
 						<img src="/img/arm-logo-white.png" alt="ARM" class="hidden h-20 w-20 dark:block" />
 					</div>
-					<hr class="border-primary/20 dark:border-primary/20" />
-					<nav class="flex-1 overflow-y-auto space-y-1 px-3 py-4">
-						{#each navItems as item}
-							<a
-								href={item.href}
-								onclick={() => sidebarOpen = false}
-								data-active={isActive(item.href, $page.url.pathname) || undefined}
-								class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors
-									{isActive(item.href, $page.url.pathname)
-										? 'bg-primary-light-bg text-primary-text dark:bg-primary-light-bg-dark/30 dark:text-primary-text-dark'
-										: 'text-gray-700 hover:bg-primary/10 dark:text-gray-300 dark:hover:bg-primary/15'}"
+					<!-- Menu / Stats view toggle -->
+					<div class="mx-3 mb-2 grid grid-cols-2 gap-1 rounded-lg bg-primary/10 p-1 dark:bg-primary/15">
+						{#each [{ id: 'menu', label: 'Menu' }, { id: 'stats', label: 'Stats' }] as view (view.id)}
+							<button
+								type="button"
+								onclick={() => drawerView = view.id as 'menu' | 'stats'}
+								class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors {drawerView === view.id
+									? 'bg-primary-light-bg text-primary-text dark:bg-primary-light-bg-dark/30 dark:text-primary-text-dark'
+									: 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}"
 							>
-								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={item.icon} />
-								</svg>
-								{item.label}
-								{#if item.href === '/notifications' && ($dashboard.notification_count ?? 0) > 0}
-									<span class="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-xs font-medium text-white">{$dashboard.notification_count}</span>
-								{/if}
-							</a>
+								{view.label}
+							</button>
 						{/each}
-					</nav>
+					</div>
+					<hr class="border-primary/20 dark:border-primary/20" />
+					{#if drawerView === 'menu'}
+						<nav class="flex-1 overflow-y-auto space-y-1 px-3 py-4">
+							{#each navItems as item}
+								<a
+									href={item.href}
+									onclick={() => sidebarOpen = false}
+									data-active={isActive(item.href, $page.url.pathname) || undefined}
+									class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors
+										{isActive(item.href, $page.url.pathname)
+											? 'bg-primary-light-bg text-primary-text dark:bg-primary-light-bg-dark/30 dark:text-primary-text-dark'
+											: 'text-gray-700 hover:bg-primary/10 dark:text-gray-300 dark:hover:bg-primary/15'}"
+								>
+									<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={item.icon} />
+									</svg>
+									{item.label}
+									{#if item.href === '/notifications' && ($dashboard.notification_count ?? 0) > 0}
+										<span class="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-xs font-medium text-white">{$dashboard.notification_count}</span>
+									{/if}
+								</a>
+							{/each}
+						</nav>
+					{:else}
+						<MobileStatsPanel onnavigate={() => sidebarOpen = false} />
+					{/if}
 				</aside>
 			</div>
 		{/if}
@@ -379,7 +409,9 @@
 	</div>
 </div>
 {/if}
-<BottomStatsBar />
+{#if $uiPrefs.showStats}
+	<BottomStatsBar />
+{/if}
 
 <!-- Folder import wizard (global, triggered from gear menu) -->
 <ImportWizard

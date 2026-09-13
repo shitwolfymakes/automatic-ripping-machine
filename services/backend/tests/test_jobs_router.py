@@ -600,8 +600,8 @@ def test_resolve_cd_writes_structured_metadata(signing_key: bytes) -> None:
 
 
 def test_resolve_accepts_ripped_awaiting_identify(signing_key: bytes) -> None:
-    """The new RIPPED_AWAITING_IDENTIFY status is accepted by resolve as
-    groundwork for the future deferred-placeholder rip path."""
+    """Resolving a ripped placeholder promotes it to RIPPED — the rip is
+    already done, so IDENTIFIED (a pre-rip status) would be wrong (G-09)."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [_job(status=JobStatus.RIPPED_AWAITING_IDENTIFY, meta={})]
@@ -613,7 +613,7 @@ def test_resolve_accepts_ripped_awaiting_identify(signing_key: bytes) -> None:
         )
     assert r.status_code == 200
     body = r.json()
-    assert body["job"]["status"] == "identified"
+    assert body["job"]["status"] == "ripped"
     assert body["job"]["title"] == "Home Movie"
     assert body["fan_out"] == []
 

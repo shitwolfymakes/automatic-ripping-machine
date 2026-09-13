@@ -19,6 +19,7 @@ import pytest
 # arm_ripper.config builds a pydantic Settings at import time; set placeholders
 # before importing any arm_ripper.* module (matches the other ripper tests).
 os.environ.setdefault("ARM_DRIVE_DEV", "/dev/sr0")
+os.environ.setdefault("ARM_DRIVE_ID", "drv_test")
 os.environ.setdefault("ARM_BACKEND_URL", "https://backend.invalid")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "test-token")
 
@@ -212,3 +213,43 @@ async def test_probe_disc_none_when_read_status_raises(monkeypatch: pytest.Monke
     monkeypatch.setattr(disc_probe.asyncio, "sleep", _fake_sleep)
     probe = await disc_probe.probe_disc("/dev/sr0")
     assert probe.crc64 is None
+
+
+@pytest.mark.asyncio
+async def test_probe_disc_includes_thediscdb_hash(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _ready(_dev: str) -> bool:
+        return True
+
+    monkeypatch.setattr(disc_probe, "await_device_ready", _ready)
+    monkeypatch.setattr(disc_probe, "_compute_crc", lambda _dev: "AAAA000011112222")
+    monkeypatch.setattr(disc_probe, "probe_thediscdb_hash", lambda _p: "D9041EE29C567CFF50030C5FD0DDDF68")
+    probe = await disc_probe.probe_disc("/dev/sr0")
+    assert probe.thediscdb == "D9041EE29C567CFF50030C5FD0DDDF68"
+
+
+@pytest.mark.asyncio
+async def test_probe_disc_thediscdb_none_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _ready(_dev: str) -> bool:
+        return True
+
+    monkeypatch.setattr(disc_probe, "await_device_ready", _ready)
+    monkeypatch.setattr(disc_probe, "_compute_crc", lambda _dev: None)
+    monkeypatch.setattr(disc_probe, "probe_thediscdb_hash", lambda _p: None)
+    probe = await disc_probe.probe_disc("/dev/sr0")
+    assert probe.thediscdb is None
+
+
+@pytest.mark.asyncio
+async def test_probe_disc_skips_thediscdb_when_not_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Device not ready → probe_disc must NOT call probe_thediscdb_hash (no device read).
+    async def _not_ready(_dev: str) -> bool:
+        return False
+
+    monkeypatch.setattr(disc_probe, "await_device_ready", _not_ready)
+
+    def _boom(_p: str) -> str | None:
+        raise AssertionError("probe_thediscdb_hash must not run on a not-ready device")
+
+    monkeypatch.setattr(disc_probe, "probe_thediscdb_hash", _boom)
+    probe = await disc_probe.probe_disc("/dev/sr0")
+    assert probe.thediscdb is None

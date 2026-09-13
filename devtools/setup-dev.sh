@@ -172,7 +172,6 @@ detect_render_gid() {
 require uv      "install: curl -LsSf https://astral.sh/uv/install.sh | sh"
 require docker  "install: https://docs.docker.com/engine/install/"
 require openssl "openssl should be present on any linux system"
-require lsscsi  "drive enumeration needs lsscsi: 'apt-get install lsscsi' (Debian/Ubuntu), 'dnf install lsscsi' (Fedora), 'pacman -S lsscsi' (Arch)"
 
 # nvm users: pull Node onto PATH (and pin it to .nvmrc) before the checks below.
 load_nvm
@@ -206,7 +205,7 @@ fi
 # the group). Idempotent; pre-creating avoids docker bind-mounting root-owned
 # source dirs into the PUID-dropped containers.
 echo "==> ensuring data dirs under ${ARM_DIR}"
-mkdir -p "${ARM_DIR}"/{certs,raw,media,logs,db}
+mkdir -p "${ARM_DIR}"/{certs,raw,media,logs,db,scripts}
 chmod 700 "${ARM_DIR}/certs"
 chmod 2775 "${ARM_DIR}/raw" "${ARM_DIR}/media" "${ARM_DIR}/logs"
 
@@ -222,182 +221,28 @@ else
         --no-udev
 fi
 
-# docker-compose.yml is generated per host (gitignored, like .env): bootstrap it
-# from the committed docker-compose.yml.example template, then splice one
-# arm-ripper-srN service per optical drive into its GENERATED region (between the
-# `>>>/<<< arm-ripper services` sentinels). Static services (db/backend/ui/
-# transcode) live in the template above the sentinels; only the ripper blocks
-# below them are machine-written.
-#
-# `lsscsi -g` is the reliable source for the /dev/srN ↔ /dev/sgM pairing:
-# MakeMKV enumerates drives via SCSI-generic ioctls, and that node is NOT
-# lexicographically tied to the block device (sr0 may pair with sg2, sr1 with
-# sg6) — so we read the pairing straight out of lsscsi's last two columns.
+# docker-compose.yml is generated per host (gitignored, like .env): bootstrap
+# it from the committed docker-compose.yml.example template. Drives are NOT
+# enumerated here: the backend's scanner finds them and the operator enrolls
+# from the UI (drive lifecycle spec §5).
 COMPOSE_FILE_PATH="${ROOT_DIR}/docker-compose.yml"
 COMPOSE_TEMPLATE_PATH="${ROOT_DIR}/docker-compose.yml.example"
-RIPPER_BEGIN_MARK="# >>> arm-ripper services"
 
-DRIVES_SR=()   # bare drive numbers, e.g. (0 1)
-DRIVES_SG=()   # matching sg node names, index-aligned, e.g. (sg2 sg6)
-DRIVES_SERIAL=()  # ID_SERIAL_SHORT per drive, index-aligned; empty string if unavailable
-
-detect_optical_drives() {
-    DRIVES_SR=()
-    DRIVES_SG=()
-    DRIVES_SERIAL=()
-    local line srdev sgdev serial
-    while IFS= read -r line; do
-        [[ -z "${line}" ]] && continue
-        srdev="${line%% *}"   # /dev/srN
-        sgdev="${line##* }"   # /dev/sgM
-        DRIVES_SR+=("${srdev#/dev/sr}")
-        DRIVES_SG+=("${sgdev#/dev/}")
-        # Hardware serial, stable across reboots/replugs/renumbering — unlike
-        # the srN/sgM node names above, which the kernel reassigns by
-        # enumeration order. Not read from SCSI INQUIRY (many optical drives
-        # reject the VPD 0x80 Unit Serial Number page with ILLEGAL REQUEST);
-        # udev's ID_SERIAL_SHORT is populated from the ATA IDENTIFY / USB
-        # descriptor instead, which drives do reliably expose. Passed to the
-        # ripper container as ARM_DRIVE_SERIAL so the backend can detect a
-        # drive swap behind an unchanged srN slot (see Drive.serial).
-        serial="$(udevadm info --query=property --name="${srdev}" 2>/dev/null \
-            | sed -n 's/^ID_SERIAL_SHORT=//p')"
-        DRIVES_SERIAL+=("${serial}")
-    done < <(
-        lsscsi -g 2>/dev/null | awk '
-            $2 == "cd/dvd" {
-                blk = ""; gen = ""
-                for (i = 1; i <= NF; i++) {
-                    if ($i ~ /^\/dev\/sr[0-9]+$/)      blk = $i
-                    else if ($i ~ /^\/dev\/sg[0-9]+$/) gen = $i
-                }
-                if (blk != "" && gen != "") print blk, gen
-            }' | sort -V || true
-    )
-}
-
-emit_ripper_block() {
-    local n="$1" sg="$2" serial="$3"
-    cat <<EOF
-
-  arm-ripper-sr${n}:
-    build:
-      context: .
-      dockerfile: services/ripper/Dockerfile
-    container_name: armv3-ripper-sr${n}
-    hostname: arm-ripper-sr${n}
-    restart: unless-stopped
-    depends_on:
-      - arm-backend
-    devices:
-      - "/dev/sr${n}:/dev/sr${n}"
-      # MakeMKV reads the disc via SCSI-generic ioctls, not the block device.
-      # /dev/${sg} is the sg node paired with /dev/sr${n} by \`lsscsi -g\` (NOT
-      # lexicographically). Re-run devtools/setup-dev.sh if the pairing moves.
-      - "/dev/${sg}:/dev/${sg}"
-    # Unprivileged: MakeMKV (SCSI generic) + the pydvdid CRC64 off the block
-    # device (PyCdlib) both need only \`cdrom\` group membership. No mount, so
-    # no CAP_SYS_ADMIN and no AppArmor exception.
-    group_add:
-      - "\${CDROM_GID:-44}"
-    environment:
-      ARM_DRIVE_DEV: /dev/sr${n}
-      ARM_DRIVE_SERIAL: "${serial}"
-      ARM_BACKEND_URL: https://arm-backend:8443
-      ARM_SERVICE_TOKEN: \${ARM_SERVICE_TOKEN}
-      ARM_LOG_LEVEL: \${ARM_LOG_LEVEL:-info}
-      PUID: \${PUID:-1000}
-      PGID: \${PGID:-1000}
-      CDROM_GID: \${CDROM_GID:-44}
-    volumes:
-      - ./arm/raw:/raw
-      - ./arm/logs:/logs
-      - ./arm/certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
-      - ./arm/certs/arm-ripper-sr${n}.crt:/etc/ssl/arm/tls.crt:ro
-      - ./arm/certs/arm-ripper-sr${n}.key:/etc/ssl/arm/tls.key:ro
-EOF
-}
-
-# A drive attached after the initial cert bootstrap (when the certs/ dir
-# already existed, so the block above was skipped) won't have a leaf cert.
-# install.sh --certs-only regenerates every leaf, including the new drive.
-ensure_ripper_certs() {
-    local i n missing=0
-    for i in "${!DRIVES_SR[@]}"; do
-        n="${DRIVES_SR[$i]}"
-        if [[ ! -f "${ARM_DIR}/certs/arm-ripper-sr${n}.crt" \
-           || ! -f "${ARM_DIR}/certs/arm-ripper-sr${n}.key" ]]; then
-            missing=1
-        fi
-    done
-    if [[ ${missing} -eq 1 ]]; then
-        echo "==> a detected drive is missing its leaf cert — regenerating via install.sh --certs-only"
-        bash "${ROOT_DIR}/install.sh" \
-            --prefix "${ARM_DIR}" --certs-only --no-env --no-compose --no-udev
-    fi
-}
-
-generate_ripper_services() {
+generate_compose() {
     # The dev compose is a generated artifact (gitignored, like .env): always
-    # regenerate it from the committed template, then re-splice the per-drive
-    # ripper services. Regenerating every run keeps the static services
-    # (db/backend/ui/transcode) in sync with the template — knobs live in .env,
-    # so there are no hand-edits to preserve here. (A previous copy-if-absent
-    # left stale static services behind after template changes.)
+    # regenerate it from the committed template so static services stay in
+    # sync — knobs live in .env, so there are no hand-edits to preserve.
+    # Drives are NOT enumerated here: the backend's scanner finds them and the
+    # operator enrolls from the UI (drive lifecycle spec §5).
     if [[ ! -f "${COMPOSE_TEMPLATE_PATH}" ]]; then
         echo "ERROR: ${COMPOSE_TEMPLATE_PATH} missing; cannot create docker-compose.yml." >&2
         exit 1
     fi
     echo "==> generating docker-compose.yml from docker-compose.yml.example"
     cp "${COMPOSE_TEMPLATE_PATH}" "${COMPOSE_FILE_PATH}"
-
-    if ! grep -qF "${RIPPER_BEGIN_MARK}" "${COMPOSE_FILE_PATH}"; then
-        echo "ERROR: ${COMPOSE_FILE_PATH} lacks the '${RIPPER_BEGIN_MARK}' sentinel; cannot splice rippers." >&2
-        exit 1
-    fi
-
-    detect_optical_drives
-
-    local blocks_file
-    blocks_file="$(mktemp)"
-    {
-        echo "  # Re-run \`bash devtools/setup-dev.sh\` after attaching or removing a drive —"
-        echo "  # this region is regenerated from \`lsscsi -g\`, so don't hand-edit it."
-    } >> "${blocks_file}"
-
-    if [[ ${#DRIVES_SR[@]} -eq 0 ]]; then
-        echo "==> no optical drives found via lsscsi — ripper region left empty"
-        echo "  # (no optical drives detected on this host)" >> "${blocks_file}"
-    else
-        ensure_ripper_certs
-        local i summary=""
-        for i in "${!DRIVES_SR[@]}"; do
-            summary+="sr${DRIVES_SR[$i]}↔${DRIVES_SG[$i]} "
-            emit_ripper_block "${DRIVES_SR[$i]}" "${DRIVES_SG[$i]}" "${DRIVES_SERIAL[$i]}" >> "${blocks_file}"
-        done
-        echo "==> detected ${#DRIVES_SR[@]} optical drive(s): ${summary}"
-    fi
-
-    local tmp
-    tmp="$(mktemp)"
-    awk -v blockfile="${blocks_file}" '
-        index($0, "# >>> arm-ripper services") {
-            print
-            while ((getline line < blockfile) > 0) print line
-            close(blockfile)
-            skip = 1
-            next
-        }
-        index($0, "# <<< arm-ripper services") { skip = 0; print; next }
-        skip { next }
-        { print }
-    ' "${COMPOSE_FILE_PATH}" > "${tmp}"
-    mv "${tmp}" "${COMPOSE_FILE_PATH}"
-    rm -f "${blocks_file}"
-    echo "==> wrote ${#DRIVES_SR[@]} ripper service(s) into ${COMPOSE_FILE_PATH}"
 }
 
-generate_ripper_services
+generate_compose
 
 ENV_FILE="${ROOT_DIR}/.env"
 if [[ -f "${ENV_FILE}" ]]; then
@@ -446,40 +291,17 @@ echo "==> detected render group GID for ARM_RENDER_GID: ${RENDER_GID_VALUE:-(non
 # Prevent the host's udisks2/gvfs from auto-mounting optical drives ARM
 # wants to drive. Without this, post-rip `eject` from the ripper
 # container fails with EBUSY because the host mount holds /dev/srN.
-# Per-drive scope by ID_PATH so we don't disturb other optical drives
-# on the host. See docs/arch/06-deployment.md.
+# See docs/arch/06-deployment.md.
 UDEV_RULE_PATH="/etc/udev/rules.d/99-arm-no-automount.rules"
 build_udev_rule_content() {
-    local drives=()
-    shopt -s nullglob
-    drives=(/dev/sr[0-9]*)
-    shopt -u nullglob
-    if [[ ${#drives[@]} -eq 0 ]]; then
-        return 1
-    fi
-
-    local rule_lines=()
-    for dev in "${drives[@]}"; do
-        local id_path
-        id_path="$(udevadm info "${dev}" 2>/dev/null | sed -nE 's|^E: ID_PATH=(.*)|\1|p' | head -n 1)"
-        if [[ -n "${id_path}" ]]; then
-            rule_lines+=("SUBSYSTEM==\"block\", KERNEL==\"sr[0-9]*\", ENV{ID_PATH}==\"${id_path}\", ENV{UDISKS_AUTO}=\"0\"")
-        else
-            echo "WARN: ${dev} has no ID_PATH — skipping (rule scoping needs a stable identifier)" >&2
-        fi
-    done
-
-    if [[ ${#rule_lines[@]} -eq 0 ]]; then
-        return 1
-    fi
-
-    cat <<HEADER
+    cat <<'RULE'
 # Managed by devtools/setup-dev.sh — do not edit by hand.
-# Disables host auto-mount for ARM-managed optical drives so the ripper
-# container can eject after a rip. See:
-#   docs/arch/06-deployment.md#host-side-auto-mount-must-be-disabled
-HEADER
-    printf '%s\n' "${rule_lines[@]}"
+# Disables host auto-mount for optical drives so an ARM ripper container can
+# eject after a rip. Drives are hot-plugged and enrolled from the UI after
+# install, so the rule is not scoped per drive: ARM owns the optical drives
+# on this host. See docs/arch/06-deployment.md#host-side-auto-mount-must-be-disabled
+SUBSYSTEM=="block", KERNEL=="sr[0-9]*", ENV{UDISKS_AUTO}="0"
+RULE
 }
 
 ensure_udev_rule() {
@@ -489,13 +311,21 @@ ensure_udev_rule() {
     fi
 
     local desired
-    if ! desired="$(build_udev_rule_content)"; then
-        echo "==> no usable optical drives detected — skipping host udev rule"
-        return 0
-    fi
+    desired="$(build_udev_rule_content)"
 
     if [[ -r "${UDEV_RULE_PATH}" ]] && diff -q "${UDEV_RULE_PATH}" <(printf '%s' "${desired}") >/dev/null 2>&1; then
         echo "==> host udev rule already current at ${UDEV_RULE_PATH}"
+        return 0
+    fi
+
+    if ! sudo -n true 2>/dev/null; then
+        echo "==> sudo needs a password; to install the udev rule run:"
+        echo "    printf '%s' \"\$(cat <<'RULE'"
+        printf '%s\n' "${desired}"
+        echo "RULE"
+        echo "    )\" | sudo tee ${UDEV_RULE_PATH}"
+        echo "    sudo udevadm control --reload-rules"
+        echo "    sudo udevadm trigger --subsystem-match=block"
         return 0
     fi
 
@@ -512,6 +342,10 @@ cat <<EOF
 
 done — next:
   docker compose -f ${ROOT_DIR}/docker-compose.yml up -d --build
+  then open https://localhost:8081 → Drives → Enroll each drive you want ARM to use
+
+  optional — trust the local CA so browsers/curl skip the self-signed warning:
+    bash devtools/trust-ca.sh
 
 IDE: point your interpreter at ${ROOT_DIR}/.venv/bin/python
 EOF

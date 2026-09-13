@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -14,6 +14,7 @@ from arm_backend.auth import require_jwt, require_writer
 from arm_backend.auto_session import (
     SessionNotFoundError,
     apply_session_internal,
+    after_rip,
     fan_out_waiting_identify_applications,
 )
 from arm_backend.config import settings
@@ -43,6 +44,7 @@ from arm_common.schemas import (
     AbandonJobRequest,
     ApplySessionRequest,
     ApplySessionResponse,
+    BulkDeleteJobsRequest,
     BulkDeleteJobsResponse,
     DiscFingerprintView,
     JobDetailView,
@@ -83,7 +85,10 @@ _MEDIA_STATUS_DETAIL: dict[DriveMediaStatus, str] = {
     DriveMediaStatus.NO_DISC: "no disc loaded in the drive",
     DriveMediaStatus.TRAY_OPEN: "drive tray is open — close it before starting a rip",
     DriveMediaStatus.NOT_READY: "drive is busy / spinning up — try again in a moment",
-    DriveMediaStatus.UNAVAILABLE: "drive device node is gone — check the host /dev mount",
+    DriveMediaStatus.DETACHED: "drive is detached — reconnect it before starting a rip",
+    DriveMediaStatus.UNAVAILABLE: (
+        "drive node exists but could not be opened — check the device cgroup rule and CDROM_GID"
+    ),
 }
 
 
@@ -673,25 +678,44 @@ async def delete_job(
 @router.delete("", response_model=BulkDeleteJobsResponse)
 async def delete_all_jobs(
     delete_raw: bool = Query(default=False),
+    req: BulkDeleteJobsRequest | None = Body(default=None),
     _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> BulkDeleteJobsResponse:
-    """Hard-delete every job in a terminal status. Non-terminal jobs are
-    skipped and reported in `skipped_non_terminal` so the caller can
-    abandon-then-retry them.
+    """Hard-delete terminal jobs. An optional body filters the set:
+    `job_ids` (only those), `status` (only that JobStatus), or neither
+    (all terminal jobs — legacy). `job_ids` wins over `status`. Non-terminal
+    jobs are always skipped and reported in `skipped_non_terminal`.
 
     `delete_raw=true` runs the filesystem cleanup (raw rmtree + media file
     unlink + empty-parent prune) for each deleted job. Cleanups are
     independent — a failure on one job is logged and the next continues.
     """
+    req = req or BulkDeleteJobsRequest()
+
+    target_status: JobStatus | None = None
+    if req.status:
+        try:
+            target_status = JobStatus(req.status)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"invalid status: {req.status}") from exc
+
     rows = (await db.execute(select(Job))).scalars().all()
+
+    if req.job_ids:
+        wanted = set(req.job_ids)
+        candidates = [j for j in rows if j.id in wanted]
+    elif target_status is not None:
+        candidates = [j for j in rows if j.status == target_status]
+    else:
+        candidates = list(rows)
 
     raw_root = Path(settings.RAW_ROOT)
     media_root = Path(settings.MEDIA_ROOT)
     deleted_ids: list[str] = []
     skipped: list[str] = []
     totals = {"raw_dir_removed": 0, "media_files_removed": 0, "media_dirs_pruned": 0}
-    for job in rows:
+    for job in candidates:
         if job.status not in TERMINAL_JOB_STATUSES:
             skipped.append(job.id)
             continue
@@ -895,12 +919,24 @@ async def resolve(
     job.year = req.year
     job.disc_number = req.disc_number
     job.disc_total = req.disc_total
-    job.metadata_json = new_metadata
+    was_ripped_placeholder = job.status == JobStatus.RIPPED_AWAITING_IDENTIFY
     if job.status in _RESOLVABLE_STATUSES_PROMOTE:
-        job.status = JobStatus.IDENTIFIED
+        # Identity has landed; the flag that parked the job is spent.
+        new_metadata.pop("unidentified", None)
+        # A placeholder whose rip already finished becomes RIPPED, not
+        # IDENTIFIED — its rip is done (G-09).
+        job.status = JobStatus.RIPPED if was_ripped_placeholder else JobStatus.IDENTIFIED
+    job.metadata_json = new_metadata
     session.add(job)
 
-    fan_out_outcomes = await fan_out_waiting_identify_applications(session, job=job, hub=hub)
+    if was_ripped_placeholder:
+        # Rip done + identity just landed: run the same post-rip pass
+        # rip-complete runs for identified jobs — drain parked applications
+        # (fan-out uses the just-resolved title) and then the auto-apply
+        # hook. `after_rip` commits its own work and never raises.
+        fan_out_outcomes = await after_rip(session, job, hub)
+    else:
+        fan_out_outcomes = await fan_out_waiting_identify_applications(session, job=job, hub=hub)
 
     logger.info(
         "resolve job_id=%s -> identified title=%s fan_out=%d",
@@ -958,7 +994,7 @@ async def resolve(
 async def apply_session(
     job_id: JobIdParam,
     req: ApplySessionRequest,
-    _: User = Depends(require_writer),
+    user: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> ApplySessionResponse:
@@ -972,7 +1008,7 @@ async def apply_session(
             job=job,
             session_id=req.session_id,
             overwrite=req.overwrite,
-            created_by_user_id=None,
+            created_by_user_id=user.id,
             source="manual",
             hub=hub,
         )

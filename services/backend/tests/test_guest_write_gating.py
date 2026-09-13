@@ -150,6 +150,7 @@ _GATED_ROUTES: list[tuple[str, str, dict[str, object]]] = [
     ("DELETE", "/api/transcode-presets/tpr_x", {}),
     # config
     ("PATCH", "/api/config", {}),
+    ("POST", "/api/config/keys/tmdb/check", {}),
     # transcodes
     ("POST", "/api/transcodes/tct_x/retry", {}),
     ("DELETE", "/api/transcodes/tct_x", {}),

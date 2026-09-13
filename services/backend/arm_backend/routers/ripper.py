@@ -3,8 +3,6 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import func
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -14,13 +12,14 @@ from arm_backend.auth import (
     require_drive_owner_by_track,
     require_service_token,
 )
-from arm_backend.auto_session import maybe_auto_apply_session
+from arm_backend.auto_session import after_rip, resolve_routed_session_id
 from arm_backend.crash_recovery import reset_job_for_recovery
 from arm_backend.db import get_session
 from arm_backend.metadata import MetadataDispatcher
-from arm_backend.metadata.base import extract_poster_url
+from arm_backend.metadata.base import MetadataResult, extract_poster_url
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
 from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.thediscdb.matcher import apply_map, build_map, external_imdb_id
 from arm_backend.track_selection import select_tracks, select_tracks_for_review
 from arm_backend.ws import WSHub
 from arm_common import (
@@ -28,6 +27,8 @@ from arm_common import (
     DiscFingerprint,
     DiscType,
     Drive,
+    DriveLifecycle,
+    DriveMediaStatus,
     DriveStatus,
     Job,
     JobStatus,
@@ -40,6 +41,7 @@ from arm_common.enums import NON_TERMINAL_JOB_STATUSES
 from arm_common.models import Track
 from arm_common.models._columns import enum_value_str
 from arm_common.schemas import (
+    DriveDevicePathUpdateRequest,
     HeldJobView,
     IdentifyRequest,
     JobCompleteRequest,
@@ -68,20 +70,83 @@ _DEFAULT_RIP_PRESET_BY_DISC_TYPE: dict[DiscType, str] = {
 }
 
 
-async def _resolve_min_length_override(db: AsyncSession, job: Job) -> int | None:
-    """Look up `Session.overrides_json["min_length_seconds"]` for a job
-    that has a pending_session_id, returning None when no override
-    applies. The ripper falls back to its host-side
-    `ARM_MIN_LENGTH_SECONDS` baseline when this is None.
+class RipPresetUnavailable(Exception):
+    """resolve_rip_preset_for_job cannot produce a preset for this job.
 
-    Auto-rip-on-insert jobs typically don't have a pending_session_id
-    until rip-complete (`maybe_auto_apply_session` fires after the rip)
-    so they always use the baseline; manual-trigger jobs that selected
-    a session up front get their override here.
+    `reason` lets routes keep their distinct responses: "no_default" is a 422
+    (unknown disc type — the ripper must not retry), "not_seeded" is a 500
+    (deployment bug — seeding may fix it, retryable).
     """
-    md = job.metadata_json or {}
-    sess_id = md.get("pending_session_id")
-    if not isinstance(sess_id, str):
+
+    def __init__(self, reason: str, detail: str) -> None:
+        super().__init__(detail)
+        self.reason = reason
+        self.detail = detail
+
+
+async def resolve_rip_preset_id_for_job(db: AsyncSession, job: Job) -> str:
+    """The one place that decides WHICH rip preset governs a job's rip.
+
+    Today: the built-in default for the disc type. G-01 (gap analysis §5.2)
+    extends this to prefer the routed session's rip preset. Every chooser —
+    rip-start, resume, the review-gate track persist — MUST resolve through
+    here so a held disc and an unattended one rip the same track set.
+
+    G-01: the ROUTED session's rip preset wins — the disc-type default is
+    the fallback for jobs no session routes to (auto-rips on drives without
+    a default). A routed id whose Session row is gone (deleted between
+    trigger and rip) also falls back rather than failing the rip.
+
+    Raises RipPresetUnavailable("no_default") when nothing resolves for the
+    disc type (422 at the routes — the ripper must not retry). Does NOT load
+    the preset row: rip-start's crash-resume and status-check paths answer
+    without it, and "not_seeded" only surfaces when track selection actually
+    needs the preset.
+    """
+    routed_id = await resolve_routed_session_id(db, job)
+    if routed_id is not None:
+        sess = (await db.execute(select(Session).where(col(Session.id) == routed_id))).scalar_one_or_none()
+        if sess is not None:
+            return sess.rip_preset_id
+        logger.warning(
+            "routed session %s missing for job_id=%s; falling back to disc-type default",
+            routed_id,
+            job.id,
+        )
+    preset_id = _DEFAULT_RIP_PRESET_BY_DISC_TYPE.get(job.disc_type)
+    if preset_id is None:
+        raise RipPresetUnavailable("no_default", f"no default rip preset for disc_type={job.disc_type.value}")
+    return preset_id
+
+
+async def resolve_rip_preset_for_job(db: AsyncSession, job: Job) -> RipPreset:
+    """`resolve_rip_preset_id_for_job` plus the row load.
+
+    Additionally raises RipPresetUnavailable("not_seeded") when the resolved
+    id has no row (deployment bug; 500 at the routes, retryable).
+    """
+    preset_id = await resolve_rip_preset_id_for_job(db, job)
+    preset = (await db.execute(select(RipPreset).where(col(RipPreset.id) == preset_id))).scalar_one_or_none()
+    if preset is None:
+        raise RipPresetUnavailable("not_seeded", f"built-in rip preset {preset_id} not seeded")
+    return preset
+
+
+def _rip_preset_or_http(exc: RipPresetUnavailable) -> HTTPException:
+    code = (
+        status.HTTP_422_UNPROCESSABLE_CONTENT if exc.reason == "no_default" else status.HTTP_500_INTERNAL_SERVER_ERROR
+    )
+    return HTTPException(status_code=code, detail=exc.detail)
+
+
+async def _resolve_min_length_override(db: AsyncSession, job: Job) -> int | None:
+    """Look up `Session.overrides_json["min_length_seconds"]` for the job's
+    ROUTED session (explicit per-rip choice, else the drive default),
+    returning None when no override applies. The ripper falls back to its
+    host-side `ARM_MIN_LENGTH_SECONDS` baseline when this is None.
+    """
+    sess_id = await resolve_routed_session_id(db, job)
+    if sess_id is None:
         return None
     sess = (await db.execute(select(Session).where(col(Session.id) == sess_id))).scalar_one_or_none()
     if sess is None or not sess.overrides_json:
@@ -102,13 +167,10 @@ async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -
     `(job_id, source_ref)` so a ripper re-POST of identify on the same held disc
     doesn't double-insert (audit M1) — Track rows have no unique constraint.
     """
-    preset_id = _DEFAULT_RIP_PRESET_BY_DISC_TYPE.get(job.disc_type)
-    if preset_id is None:  # pragma: no cover - every DiscType has a default preset
-        logger.warning("no default rip preset for disc_type=%s; skipping review tracks", job.disc_type.value)
-        return
-    preset = (await db.execute(select(RipPreset).where(col(RipPreset.id) == preset_id))).scalar_one_or_none()
-    if preset is None:
-        logger.warning("built-in rip preset %s not seeded; skipping review tracks", preset_id)
+    try:
+        preset = await resolve_rip_preset_for_job(db, job)
+    except RipPresetUnavailable as exc:
+        logger.warning("skipping review tracks for job_id=%s: %s", job.id, exc.detail)
         return
     existing_refs = {
         t.source_ref for t in (await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
@@ -167,6 +229,47 @@ async def heartbeat(req: RipperHeartbeatRequest, session: AsyncSession = Depends
     drive.media_status = req.media_status
     drive.media_status_at = now
     drive.last_seen_at = now
+    # Spec §1: for an enrolled drive the ripper is authoritative on presence.
+    # DETACHED = the node has no hardware behind it right now. ERROR (identity
+    # mismatch, Plan 3) is an operator problem and is never auto-cleared.
+    if req.media_status is DriveMediaStatus.DETACHED:
+        drive.present = False
+        if drive.status is not DriveStatus.ERROR:
+            drive.status = DriveStatus.OFFLINE
+    else:
+        drive.present = True
+        if drive.status is DriveStatus.OFFLINE:
+            drive.status = DriveStatus.ONLINE
+    session.add(drive)
+    await session.commit()
+
+
+@router.get("/drives/{drive_id}", response_model=Drive, dependencies=[Depends(require_service_token)])
+async def get_drive(drive_id: str, session: AsyncSession = Depends(get_session)) -> Drive:
+    """This ripper's own row. Port-identity rippers read `device_path` from
+    it while their drive is absent — the scanner keeps that current by port
+    (spec §2), and the ripper cannot see a renumbering by itself without a
+    by-id link. Returns the table model: the ripper validates it as `Drive`."""
+    drive = (await session.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
+    if drive is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {drive_id}")
+    return drive
+
+
+@router.patch(
+    "/drives/{drive_id}/device-path",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_service_token)],
+)
+async def update_device_path(
+    drive_id: str, req: DriveDevicePathUpdateRequest, session: AsyncSession = Depends(get_session)
+) -> None:
+    """Ripper → backend on a node move (replug under a new srN), so the UI
+    never shows a stale node. Identity is untouched — only where it lives."""
+    drive = (await session.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
+    if drive is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {drive_id}")
+    drive.device_path = req.device_path
     session.add(drive)
     await session.commit()
 
@@ -190,7 +293,7 @@ async def makemkv_key_status(
 ) -> None:
     """A ripper reports its disc-free makemkv probe outcome. Global fact —
     written to the Config singleton (last writer wins across multiple rippers,
-    by design). test-key / preflight / config-view read it back."""
+    by design). the key check, preflight and config view read it back."""
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     if cfg is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="config singleton missing")
@@ -249,55 +352,57 @@ async def sdf_status(
 
 @router.post("/register", response_model=Drive, dependencies=[Depends(require_service_token)])
 async def register(req: RegisterRequest, session: AsyncSession = Depends(get_session)) -> Drive:
-    existing = (await session.execute(select(Drive).where(col(Drive.hostname) == req.hostname))).scalar_one_or_none()
-    # hostname is keyed to the srN slot baked into the compose file at
-    # generation time, not to the physical drive. If a previously-seen
-    # serial doesn't match what's registering now, the kernel/udev
-    # reassigned that slot to a different physical unit (replug, reboot
-    # with a different enumeration order, drive swap) — surface it instead
-    # of silently overwriting device_path as if nothing changed.
-    if (
-        existing is not None
-        and existing.serial is not None
-        and req.serial is not None
-        and existing.serial != req.serial
-    ):
-        logger.warning(
-            "drive serial mismatch on register: hostname=%s previous_serial=%s new_serial=%s "
-            "— the physical drive behind this slot appears to have changed",
-            req.hostname,
-            existing.serial,
-            req.serial,
-        )
-
-    insert_stmt = pg_insert(Drive).values(
-        hostname=req.hostname,
-        device_path=req.device_path,
-        serial=req.serial,
-        status=DriveStatus.ONLINE.value,
-    )
-    stmt = insert_stmt.on_conflict_do_update(
-        index_elements=[col(Drive.hostname)],
-        set_={
-            "device_path": req.device_path,
-            # A transient resolution failure on the ripper side (serial=None)
-            # shouldn't clobber a previously known-good serial — only a real
-            # new value replaces it.
-            "serial": func.coalesce(insert_stmt.excluded.serial, col(Drive.serial)),
-            "status": DriveStatus.ONLINE.value,
-        },
-    ).returning(col(Drive.id))
-    result = await session.execute(stmt)
-    drive_id = result.scalar_one()
+    """A ripper container announcing itself for the row the backend spawned
+    it for (ARM_DRIVE_ID). Keyed on the id — hostname is written as the
+    ownership token every X-ARM-Hostname check compares, never used to look
+    the row up. Identity is checked, never rewritten: a by-id mismatch means
+    the container is bound to a different physical drive than the row, so
+    the row goes ERROR and the container is left running for diagnosis
+    (spec §1, §3)."""
+    drive = (await session.execute(select(Drive).where(col(Drive.id) == req.drive_id))).scalar_one_or_none()
+    if drive is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
+    if drive.lifecycle is not DriveLifecycle.ENROLLED:
+        detail = f"drive is not enrolled (lifecycle '{drive.lifecycle.value}')"
+        logger.warning("register refused drive_id=%s: %s", drive.id, detail)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+    if drive.by_id_name and drive.by_id_name != req.by_id_name:
+        # The row has a by-id binding — the ripper must report the same one.
+        # None on the ripper's side counts as different (spec §1): a
+        # port-identity container registering against a by-id-bound row is
+        # exactly the identity mismatch this check exists to catch.
+        if req.by_id_name is None:
+            detail = (
+                f"identity mismatch: row is bound to {drive.by_id_name} but the ripper has no by-id binding — "
+                "unenroll and re-enroll to recreate the container"
+            )
+        else:
+            detail = f"identity mismatch: row is bound to {drive.by_id_name} but the ripper resolved {req.by_id_name}"
+        logger.error("register refused drive_id=%s: %s", drive.id, detail)
+        drive.status = DriveStatus.ERROR
+        drive.last_error = detail
+        session.add(drive)
+        await session.commit()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+    drive.hostname = req.hostname
+    drive.device_path = req.device_path
+    drive.status = DriveStatus.ONLINE
+    drive.present = True
+    drive.last_seen_at = datetime.now(timezone.utc)
+    drive.last_error = None
+    session.add(drive)
     await session.commit()
-
-    drive = (await session.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one()
+    # updated_at is server-generated (onupdate) and expired after the flush;
+    # the ripper validates the body as Drive, which requires it.
+    await session.refresh(drive)
+    logger.info("ripper registered drive_id=%s hostname=%s device=%s", drive.id, req.hostname, req.device_path)
     return drive
 
 
 @router.post("/identify", response_model=Job, dependencies=[Depends(require_service_token)])
 async def identify(
     req: IdentifyRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     dispatcher: MetadataDispatcher = Depends(_get_dispatcher),
     hub: WSHub = Depends(_get_hub),
@@ -372,6 +477,29 @@ async def identify(
         session.add(DiscFingerprint(job_id=job.id, algo=algo, value=fp.value))
     await session.flush()
 
+    thediscdb_match = None
+    if not already_identified and cfg.thediscdb_enabled:
+        store = getattr(request.app.state, "thediscdb", None)
+        content_hash = next(
+            (fp.value for fp in scan.fingerprints if fp.algo.lower() == "thediscdb" and fp.value),
+            None,
+        )
+        if store is not None and content_hash:
+            try:
+                thediscdb_match = await asyncio.to_thread(store.lookup, content_hash)
+                if thediscdb_match is not None:
+                    job.metadata_json = {
+                        **(job.metadata_json or {}),
+                        "thediscdb": {
+                            **build_map(thediscdb_match, scan),
+                            "matched_at": datetime.now(timezone.utc).isoformat(),
+                        },
+                    }
+                    logger.info("thediscdb: matched job_id=%s release=%s", job.id, thediscdb_match.release_slug)
+            except Exception as e:
+                logger.warning("thediscdb: lookup failed job_id=%s: %s", job.id, e)
+                thediscdb_match = None
+
     if already_identified:
         # Guard 1: preserve existing identity — do not re-run the dispatcher or
         # overwrite title/year/poster/metadata set by the previous identify run.
@@ -379,10 +507,17 @@ async def identify(
         timed_out = False
     else:
         try:
-            result = await asyncio.wait_for(
-                dispatcher.identify(scan, cfg),
-                timeout=DISPATCH_TIMEOUT_SECONDS,
-            )
+
+            async def _identify() -> MetadataResult | None:
+                if thediscdb_match is not None:
+                    imdb = external_imdb_id(thediscdb_match)
+                    if imdb:
+                        exact = await dispatcher.identify_from_imdb(imdb, cfg)
+                        if exact is not None:
+                            return exact
+                return await dispatcher.identify(scan, cfg)
+
+            result = await asyncio.wait_for(_identify(), timeout=DISPATCH_TIMEOUT_SECONDS)
             timed_out = False
         except asyncio.TimeoutError:
             logger.info("identify dispatch_timeout job_id=%s", job.id)
@@ -393,7 +528,7 @@ async def identify(
             job.title = result.title
             job.year = result.year
             job.poster_url = extract_poster_url(result)
-            job.metadata_json = result.payload
+            job.metadata_json = {**(job.metadata_json or {}), **result.payload}
             # Timed review gate: a GENUINELY identified disc (result is not None — not
             # the block_on_miss=false synthetic "unidentified" IDENTIFIED below) parks
             # for operator review when hold_for_review is on, stamping the countdown
@@ -404,6 +539,7 @@ async def identify(
                 job.status = JobStatus.AWAITING_REVIEW
                 job.wait_start_time = datetime.now(timezone.utc)
                 await _persist_review_tracks(session, job, scan)
+                await apply_map(session, job)
             else:
                 job.status = JobStatus.IDENTIFIED
         else:
@@ -414,11 +550,11 @@ async def identify(
                 job.status = JobStatus.AWAITING_USER_ID
                 job.title = scan.volume_label
                 if diagnostic:
-                    job.metadata_json = diagnostic
+                    job.metadata_json = {**(job.metadata_json or {}), **diagnostic}
             else:
                 job.status = JobStatus.IDENTIFIED
                 job.title = scan.volume_label
-                job.metadata_json = {"unidentified": True, **diagnostic}
+                job.metadata_json = {**(job.metadata_json or {}), "unidentified": True, **diagnostic}
 
     job.metadata_json = {
         **(job.metadata_json or {}),
@@ -471,12 +607,10 @@ async def rip_start(
     session: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> RipStartResponse:
-    preset_id = _DEFAULT_RIP_PRESET_BY_DISC_TYPE.get(job.disc_type)
-    if preset_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"no default rip preset for disc_type={job.disc_type.value}",
-        )
+    try:
+        preset_id = await resolve_rip_preset_id_for_job(session, job)
+    except RipPresetUnavailable as exc:
+        raise _rip_preset_or_http(exc) from exc
 
     existing = (
         (await session.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index))))
@@ -523,12 +657,10 @@ async def rip_start(
         )
     scan = ScanResult.model_validate(scan_dict)
 
-    preset = (await session.execute(select(RipPreset).where(col(RipPreset.id) == preset_id))).scalar_one_or_none()
-    if preset is None:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"built-in rip preset {preset_id} not seeded",
-        )
+    try:
+        preset = await resolve_rip_preset_for_job(session, job)
+    except RipPresetUnavailable as exc:
+        raise _rip_preset_or_http(exc) from exc
 
     new_tracks = select_tracks(job.id, scan, preset)
     if not new_tracks:
@@ -538,6 +670,8 @@ async def rip_start(
         )
 
     session.add_all(new_tracks)
+    await session.flush()
+    await apply_map(session, job)
     job.status = JobStatus.RIPPING
     job.started_at = datetime.now(timezone.utc)
     await session.commit()
@@ -593,12 +727,10 @@ async def resume(
             detail=f"job not in ripping state: status={job.status.value}",
         )
 
-    preset_id = _DEFAULT_RIP_PRESET_BY_DISC_TYPE.get(job.disc_type)
-    if preset_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"no default rip preset for disc_type={job.disc_type.value}",
-        )
+    try:
+        preset_id = await resolve_rip_preset_id_for_job(session, job)
+    except RipPresetUnavailable as exc:
+        raise _rip_preset_or_http(exc) from exc
 
     await reset_job_for_recovery(session, job)
     await session.commit()
@@ -883,7 +1015,16 @@ async def rip_complete(
     if total == 0 or done == 0:
         job.status = JobStatus.FAILED
     elif failed == 0:
-        job.status = JobStatus.RIPPED
+        # A placeholder rip (identify missed, block_on_miss=false) parks at
+        # RIPPED_AWAITING_IDENTIFY: transcode is gated on identity, so the
+        # after-rip hooks wait for resolve (G-09; docs/arch/02 § placeholder
+        # rips). A PARTIAL unidentified rip stays RIPPED_PARTIAL — the enum
+        # has no partial+unidentified value and losing partiality would hide
+        # failed tracks; it remains resolvable (PRESERVE) either way.
+        if (job.metadata_json or {}).get("unidentified"):
+            job.status = JobStatus.RIPPED_AWAITING_IDENTIFY
+        else:
+            job.status = JobStatus.RIPPED
     else:
         job.status = JobStatus.RIPPED_PARTIAL
 
@@ -901,6 +1042,7 @@ async def rip_complete(
 
     event_type = {
         JobStatus.RIPPED: "rip.completed",
+        JobStatus.RIPPED_AWAITING_IDENTIFY: "rip.completed",
         JobStatus.RIPPED_PARTIAL: "rip.partial",
         JobStatus.FAILED: "rip.failed",
     }.get(job.status, "rip.completed")
@@ -921,6 +1063,10 @@ async def rip_complete(
     await session.commit()
 
     if job.status in (JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL):
-        await maybe_auto_apply_session(session, job, hub)
+        # Rip done, identity known: drain parked applications (an explicit
+        # operator choice wins over the drive default), then auto-apply.
+        # RIPPED_AWAITING_IDENTIFY deliberately skips this — transcode is
+        # gated on identity; resolve runs the same hook when it lands.
+        await after_rip(session, job, hub)
 
     return JobView.model_validate(job)

@@ -5,7 +5,7 @@ import { createJob } from '../__fixtures__/job';
 import { fetchSessions } from '$lib/api/sessions';
 import { fetchRipPresets } from '$lib/api/ripPresets';
 import { fetchTranscodePresets } from '$lib/api/transcodePresets';
-import { applySession } from '$lib/api/jobs';
+import { applySession, fetchNamingPreview } from '$lib/api/jobs';
 import { ApiError } from '$lib/api/client';
 import type { SessionView, ApplySessionResponse, CollisionInfo, RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
 
@@ -19,13 +19,15 @@ vi.mock('$lib/api/transcodePresets', () => ({
 	fetchTranscodePresets: vi.fn()
 }));
 vi.mock('$lib/api/jobs', () => ({
-	applySession: vi.fn()
+	applySession: vi.fn(),
+	fetchNamingPreview: vi.fn()
 }));
 
 const fetchSessionsMock = vi.mocked(fetchSessions);
 const fetchRipPresetsMock = vi.mocked(fetchRipPresets);
 const fetchTranscodePresetsMock = vi.mocked(fetchTranscodePresets);
 const applySessionMock = vi.mocked(applySession);
+const fetchNamingPreviewMock = vi.mocked(fetchNamingPreview);
 
 function createSession(overrides: Partial<SessionView> = {}): SessionView {
 	return {
@@ -89,6 +91,13 @@ describe('ApplySessionDialog', () => {
 	beforeEach(() => {
 		fetchRipPresetsMock.mockResolvedValue([createRipPreset()]);
 		fetchTranscodePresetsMock.mockResolvedValue([createTranscodePreset()]);
+		fetchNamingPreviewMock.mockResolvedValue({
+			job_output_dir: 'MysterySuspense',
+			job_output_name: 'MysterySuspense',
+			items: [
+				{ track_id: 'trk_1', track_number: 1, output_path: 'MysterySuspense/MysterySuspense - Track 01.mkv', output_dir: 'MysterySuspense', output_name: 'MysterySuspense - Track 01.mkv' }
+			]
+		});
 	});
 
 	it('fetches sessions on mount and lists only media-type-matching (+ tv) sessions', async () => {
@@ -259,9 +268,42 @@ describe('ApplySessionDialog', () => {
 			expect(screen.getByTestId('recipe-preview')).toBeInTheDocument();
 			expect(screen.getByTestId('recipe-rip-preset')).toHaveTextContent('MakeMKV All Titles');
 			expect(screen.getByTestId('recipe-transcode-preset')).toHaveTextContent('H.265 1080p');
-			// resolveSample('{title}/{title}.mkv', 'movie') → 'Fight Club/Fight Club.mkv'
-			expect(screen.getByTestId('recipe-output-path')).toHaveTextContent('Fight Club/Fight Club.mkv');
+			// The real resolver's answer for this job + session, not a sample.
+			expect(screen.getByTestId('recipe-output-path')).toHaveTextContent('MysterySuspense/MysterySuspense - Track 01.mkv');
 		});
+		expect(fetchNamingPreviewMock).toHaveBeenCalledWith('job_1', 'ses_movie');
+	});
+
+	it('does not refetch the preview when the parent re-renders with a fresh job object (poll tick)', async () => {
+		fetchSessionsMock.mockResolvedValue([createSession({ id: 'ses_movie', name: 'Movie MKV', media_type: 'movie' })]);
+		const { rerender } = renderComponent(ApplySessionDialog, {
+			props: { job: createJob({ id: 'job_1', disc_type: 'dvd' }), onclose: vi.fn(), onapplied: vi.fn() }
+		});
+		await waitFor(() => expect(screen.getByText(/Movie MKV/)).toBeInTheDocument());
+		await fireEvent.change(screen.getByTestId('apply-session-select'), { target: { value: 'ses_movie' } });
+		await waitFor(() => expect(fetchNamingPreviewMock).toHaveBeenCalledTimes(1));
+		await rerender({ job: createJob({ id: 'job_1', disc_type: 'dvd' }), onclose: vi.fn(), onapplied: vi.fn() });
+		await new Promise((r) => setTimeout(r, 30));
+		expect(fetchNamingPreviewMock).toHaveBeenCalledTimes(1);
+		expect(screen.getByTestId('recipe-output-path')).toHaveTextContent('MysterySuspense');
+	});
+
+	it('explains a missing token in plain words and blocks Apply', async () => {
+		fetchSessionsMock.mockResolvedValue([
+			createSession({ id: 'ses_movie', name: 'Movie MKV', media_type: 'movie', output_path_template: '{title} ({year})/{title}.mkv' })
+		]);
+		fetchNamingPreviewMock.mockRejectedValue(
+			new Error("track index=0: token {year} resolved empty against the job's metadata")
+		);
+		renderComponent(ApplySessionDialog, {
+			props: { job: createJob({ id: 'job_1', disc_type: 'dvd' }), onclose: vi.fn(), onapplied: vi.fn() }
+		});
+		await waitFor(() => expect(screen.getByText(/Movie MKV/)).toBeInTheDocument());
+		await fireEvent.change(screen.getByTestId('apply-session-select'), { target: { value: 'ses_movie' } });
+		await waitFor(() => {
+			expect(screen.getByTestId('recipe-output-problem')).toHaveTextContent('This job has no year, so {year} in the output path cannot be filled.');
+		});
+		expect(screen.getByTestId('apply-session-apply')).toBeDisabled();
 	});
 
 	it('shows "No transcode" in recipe panel for a session without a transcode preset', async () => {

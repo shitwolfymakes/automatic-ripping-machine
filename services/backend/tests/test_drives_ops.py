@@ -78,23 +78,46 @@ def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+class _StubScanner:
+    """Scanner stub for the pre-existing rescan tests below (Task 5, Ruling C):
+    they predate the real scanner and only assert the heartbeat-derived
+    online/stale counts, so the scan itself is a no-op summary."""
+
+    def __init__(self, summary) -> None:
+        self.summary = summary
+        self.calls = 0
+
+    async def scan_once(self, session, *, prune_now: bool = False):
+        self.calls += 1
+        return self.summary
+
+
 def test_diagnostic_reports_drives(signing_key: bytes) -> None:
+    """No `drive_scanner`/`ripper_manager` on app.state -> both surface as
+    system notes; drive rows (default lifecycle ENROLLED, no container info
+    without a manager) are still judged on their own heartbeat freshness."""
     db = FakeSession()
     _seed(db)
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.get("/api/drives/diagnostic", headers=_auth(token))
     assert r.status_code == 200, r.text
-    by_id = {d["id"]: d for d in r.json()["drives"]}
+    body = r.json()
+    by_id = {d["id"]: d for d in body["drives"]}
     assert by_id["drv_frsh000000000000000000001"]["healthy"] is True
     assert by_id["drv_stal000000000000000000002"]["healthy"] is False
     assert by_id["drv_stal000000000000000000002"]["notes"]
+    assert "drive scanner is not running" in body["system"]
+    assert "ripper manager is not running: enroll is unavailable" in body["system"]
 
 
 def test_rescan_counts_online_and_stale(signing_key: bytes) -> None:
+    from arm_backend.drive_scanner import ScanSummary
+
     db = FakeSession()
     _seed(db)
     app, token = _make_app(signing_key, db)
+    app.state.drive_scanner = _StubScanner(ScanSummary(detected=0, ignored=0, enrolled=0, absent=0, pruned=0))
     with TestClient(app) as client:
         r = client.post("/api/drives/rescan", headers=_auth(token))
     assert r.status_code == 200, r.text
@@ -133,11 +156,11 @@ def test_diagnostic_drive_no_heartbeat(signing_key: bytes) -> None:
     assert r.status_code == 200, r.text
     item = r.json()["drives"][0]
     assert item["healthy"] is False
-    assert any("heartbeat" in n for n in item["notes"])
+    assert "no media-status heartbeat recorded" in item["notes"]
 
 
 def test_diagnostic_drive_offline_status(signing_key: bytes) -> None:
-    """Drive with status != ONLINE → healthy=False, status note appended."""
+    """Enrolled drive with status OFFLINE and present=True -> stale-heartbeat wording."""
     now = datetime.now(timezone.utc)
     db = FakeSession()
     db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
@@ -147,6 +170,7 @@ def test_diagnostic_drive_offline_status(signing_key: bytes) -> None:
             hostname="h4",
             device_path="/dev/sr3",
             status=DriveStatus.OFFLINE,
+            present=True,
             media_status=DriveMediaStatus.UNAVAILABLE,
             media_status_at=now,
         ),
@@ -157,14 +181,17 @@ def test_diagnostic_drive_offline_status(signing_key: bytes) -> None:
     assert r.status_code == 200, r.text
     item = r.json()["drives"][0]
     assert item["healthy"] is False
-    assert any("offline" in n for n in item["notes"])
+    assert "ripper heartbeat is stale" in item["notes"]
 
 
 def test_rescan_unauthenticated_reads_as_guest(signing_key: bytes) -> None:
     """No Authorization header falls back to the guest account (read-only route)."""
+    from arm_backend.drive_scanner import ScanSummary
+
     db = FakeSession()
     _seed(db)
     app, _ = _make_app(signing_key, db)
+    app.state.drive_scanner = _StubScanner(ScanSummary(detected=0, ignored=0, enrolled=0, absent=0, pruned=0))
     with TestClient(app) as client:
         r = client.post("/api/drives/rescan")
     assert r.status_code == 200

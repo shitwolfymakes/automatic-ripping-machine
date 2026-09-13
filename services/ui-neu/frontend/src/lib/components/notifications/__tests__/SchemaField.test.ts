@@ -27,10 +27,33 @@ describe('SchemaField', () => {
 	});
 
 	it('renders a select for choice with values', () => {
-		renderComponent(SchemaField, { props: { field: field({ type: 'choice', label: 'Fmt', values: ['a', 'b'] }), value: 'a' } });
+		renderComponent(SchemaField, { props: { field: field({ type: 'choice', label: 'Fmt', values: ['a', 'b'], required: true }), value: 'a' } });
 		const sel = screen.getByLabelText('Fmt') as HTMLSelectElement;
 		expect(sel.tagName).toBe('SELECT');
 		expect(sel.options.length).toBe(2);
+	});
+
+	it('an optional choice field leads with an empty (not set) option', () => {
+		renderComponent(SchemaField, { props: { field: field({ type: 'choice', label: 'Mode', values: ['a', 'b'] }), value: '' } });
+		const sel = screen.getByLabelText('Mode') as HTMLSelectElement;
+		expect(sel.options.length).toBe(3);
+		expect(sel.options[0].value).toBe('');
+		expect(sel.options[0].text).toBe('(not set)');
+		expect(sel.value).toBe('');
+	});
+
+	it('choosing a choice value fires onchange with that value', async () => {
+		const seen: unknown[] = [];
+		renderComponent(SchemaField, {
+			props: {
+				field: field({ type: 'choice', label: 'Mode', values: ['a', 'b'] }),
+				value: '',
+				onchange: (v: unknown) => seen.push(v)
+			}
+		});
+		const sel = screen.getByLabelText('Mode') as HTMLSelectElement;
+		await fireEvent.change(sel, { target: { value: 'b' } });
+		expect(seen).toEqual(['b']);
 	});
 
 	it('renders a number input for int', () => {
