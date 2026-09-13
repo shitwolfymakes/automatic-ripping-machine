@@ -276,8 +276,9 @@ def test_resolve_fans_out_multiple_waiting_identify_applications(signing_key: by
 
 
 def test_resolve_ripped_awaiting_identify_status_fans_out(signing_key: bytes, tmp_path: Path) -> None:
-    """Confirms fan-out isn't gated on AWAITING_USER_ID specifically — the
-    other resolvable status works the same way."""
+    """Fan-out isn't gated on AWAITING_USER_ID specifically — a ripped
+    placeholder drains the same way, promoting to RIPPED (its rip is done;
+    G-09) rather than IDENTIFIED."""
     db = FakeSession()
     hub = _CapturingHub()
     _seed(db, job_status=JobStatus.RIPPED_AWAITING_IDENTIFY)
@@ -290,7 +291,7 @@ def test_resolve_ripped_awaiting_identify_status_fans_out(signing_key: bytes, tm
         )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["job"]["status"] == "identified"
+    assert body["job"]["status"] == "ripped"
     assert len(body["fan_out"]) == 1
     assert body["fan_out"][0]["status"] == "queued"
 
@@ -521,3 +522,37 @@ def test_resolve_before_rip_keeps_application_parked(signing_key: bytes, tmp_pat
     assert app_row.status == SessionApplicationStatus.WAITING_IDENTIFY
     assert db.rows["transcode_tasks"] == []
     assert not any(e["event_type"] == "session.queued" for e in hub.events)
+
+
+def test_resolve_ripped_placeholder_promotes_to_ripped_and_runs_after_rip(signing_key: bytes, tmp_path: Path) -> None:
+    """G-09: resolving a ripped_awaiting_identify placeholder promotes it to
+    RIPPED (its rip is done — IDENTIFIED would claim otherwise), clears the
+    spent `unidentified` flag, and runs the same post-rip pass rip-complete
+    runs: the parked application fans out against the just-resolved title."""
+    db = FakeSession()
+    hub = _CapturingHub()
+    _seed(db, job_status=JobStatus.RIPPED_AWAITING_IDENTIFY)
+    db.rows["jobs"][0].metadata_json = {"unidentified": True}
+    app, token = _make_app(signing_key, db, tmp_path, hub)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Iron Man", "year": 2008},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["job"]["status"] == "ripped"
+    assert body["job"]["metadata_json"].get("unidentified") is None
+
+    assert len(body["fan_out"]) == 1
+    out = body["fan_out"][0]
+    assert out["status"] == "queued"
+    assert out["task_count"] == 1
+    assert out["skipped_reason"] is None
+
+    app_row = next(a for a in db.rows["session_applications"] if a.id == "sap_x")
+    assert app_row.status == SessionApplicationStatus.QUEUED
+    tasks = [t for t in db.rows["transcode_tasks"] if t.session_application_id == "sap_x"]
+    assert len(tasks) == 1
+    assert any(e["event_type"] == "session.queued" for e in hub.events)

@@ -14,6 +14,7 @@ from arm_backend.auth import require_jwt, require_writer
 from arm_backend.auto_session import (
     SessionNotFoundError,
     apply_session_internal,
+    after_rip,
     fan_out_waiting_identify_applications,
 )
 from arm_backend.config import settings
@@ -918,12 +919,24 @@ async def resolve(
     job.year = req.year
     job.disc_number = req.disc_number
     job.disc_total = req.disc_total
-    job.metadata_json = new_metadata
+    was_ripped_placeholder = job.status == JobStatus.RIPPED_AWAITING_IDENTIFY
     if job.status in _RESOLVABLE_STATUSES_PROMOTE:
-        job.status = JobStatus.IDENTIFIED
+        # Identity has landed; the flag that parked the job is spent.
+        new_metadata.pop("unidentified", None)
+        # A placeholder whose rip already finished becomes RIPPED, not
+        # IDENTIFIED — its rip is done (G-09).
+        job.status = JobStatus.RIPPED if was_ripped_placeholder else JobStatus.IDENTIFIED
+    job.metadata_json = new_metadata
     session.add(job)
 
-    fan_out_outcomes = await fan_out_waiting_identify_applications(session, job=job, hub=hub)
+    if was_ripped_placeholder:
+        # Rip done + identity just landed: run the same post-rip pass
+        # rip-complete runs for identified jobs — drain parked applications
+        # (fan-out uses the just-resolved title) and then the auto-apply
+        # hook. `after_rip` commits its own work and never raises.
+        fan_out_outcomes = await after_rip(session, job, hub)
+    else:
+        fan_out_outcomes = await fan_out_waiting_identify_applications(session, job=job, hub=hub)
 
     logger.info(
         "resolve job_id=%s -> identified title=%s fan_out=%d",

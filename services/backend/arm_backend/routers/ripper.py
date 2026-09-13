@@ -12,11 +12,7 @@ from arm_backend.auth import (
     require_drive_owner_by_track,
     require_service_token,
 )
-from arm_backend.auto_session import (
-    drain_parked_applications_after_rip,
-    maybe_auto_apply_session,
-    resolve_routed_session_id,
-)
+from arm_backend.auto_session import after_rip, resolve_routed_session_id
 from arm_backend.crash_recovery import reset_job_for_recovery
 from arm_backend.db import get_session
 from arm_backend.metadata import MetadataDispatcher
@@ -138,9 +134,7 @@ async def resolve_rip_preset_for_job(db: AsyncSession, job: Job) -> RipPreset:
 
 def _rip_preset_or_http(exc: RipPresetUnavailable) -> HTTPException:
     code = (
-        status.HTTP_422_UNPROCESSABLE_CONTENT
-        if exc.reason == "no_default"
-        else status.HTTP_500_INTERNAL_SERVER_ERROR
+        status.HTTP_422_UNPROCESSABLE_CONTENT if exc.reason == "no_default" else status.HTTP_500_INTERNAL_SERVER_ERROR
     )
     return HTTPException(status_code=code, detail=exc.detail)
 
@@ -1021,7 +1015,16 @@ async def rip_complete(
     if total == 0 or done == 0:
         job.status = JobStatus.FAILED
     elif failed == 0:
-        job.status = JobStatus.RIPPED
+        # A placeholder rip (identify missed, block_on_miss=false) parks at
+        # RIPPED_AWAITING_IDENTIFY: transcode is gated on identity, so the
+        # after-rip hooks wait for resolve (G-09; docs/arch/02 § placeholder
+        # rips). A PARTIAL unidentified rip stays RIPPED_PARTIAL — the enum
+        # has no partial+unidentified value and losing partiality would hide
+        # failed tracks; it remains resolvable (PRESERVE) either way.
+        if (job.metadata_json or {}).get("unidentified"):
+            job.status = JobStatus.RIPPED_AWAITING_IDENTIFY
+        else:
+            job.status = JobStatus.RIPPED
     else:
         job.status = JobStatus.RIPPED_PARTIAL
 
@@ -1039,6 +1042,7 @@ async def rip_complete(
 
     event_type = {
         JobStatus.RIPPED: "rip.completed",
+        JobStatus.RIPPED_AWAITING_IDENTIFY: "rip.completed",
         JobStatus.RIPPED_PARTIAL: "rip.partial",
         JobStatus.FAILED: "rip.failed",
     }.get(job.status, "rip.completed")
@@ -1059,10 +1063,10 @@ async def rip_complete(
     await session.commit()
 
     if job.status in (JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL):
-        # Sessions applied before rip-start are parked (no Track rows existed
-        # yet); drain them first so an explicit operator choice wins over the
-        # drive default, then run the auto-apply hook.
-        await drain_parked_applications_after_rip(session, job, hub)
-        await maybe_auto_apply_session(session, job, hub)
+        # Rip done, identity known: drain parked applications (an explicit
+        # operator choice wins over the drive default), then auto-apply.
+        # RIPPED_AWAITING_IDENTIFY deliberately skips this — transcode is
+        # gated on identity; resolve runs the same hook when it lands.
+        await after_rip(session, job, hub)
 
     return JobView.model_validate(job)
