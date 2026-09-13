@@ -238,6 +238,12 @@ class RipStartResponse(BaseModel):
     min_length_seconds: int | None = None
 
 
+# The one definition of apply/fan-out skip reasons — the backend engine
+# (arm_backend.auto_session) imports this rather than re-declaring it, so the
+# wire schema and the engine can never drift.
+ApplySkippedReason = Literal["collisions", "template", "session_missing", "no_tracks"]
+
+
 class ResolveFanOutOutcomeView(BaseModel):
     """One waiting_identify application's post-resolve outcome.
 
@@ -253,7 +259,7 @@ class ResolveFanOutOutcomeView(BaseModel):
     session_id: str
     status: SessionApplicationStatus
     task_count: int
-    skipped_reason: Literal["collisions", "template", "session_missing", "no_tracks"] | None = None
+    skipped_reason: ApplySkippedReason | None = None
     error_detail: str | None = None
 
 

@@ -46,7 +46,7 @@ from arm_common import (
     TranscodeTaskStatus,
     with_log_context,
 )
-from arm_common.schemas import CollisionInfo
+from arm_common.schemas import ApplySkippedReason, CollisionInfo
 
 logger = logging.getLogger("arm_backend.auto_session")
 
@@ -60,7 +60,7 @@ class SessionNotFoundError(Exception):
     """Raised by `apply_session_internal` when `session_id` doesn't resolve."""
 
 
-SkippedReason = Literal["collisions", "template", "session_missing", "no_tracks"]
+SkippedReason = ApplySkippedReason  # single definition lives in arm_common.schemas
 ApplySource = Literal["manual", "auto"]
 
 
