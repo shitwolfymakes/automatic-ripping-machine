@@ -142,7 +142,8 @@ def _seed_job(db: FakeSession) -> None:
             status=JobStatus.IDENTIFIED,
             title="Iron Man",
             year=2008,
-            metadata_json={"pending_session_id": _SES_ID},
+            metadata_json={},
+            pending_session_id=_SES_ID,
         )
     ]
     db.rows["tracks"] = [
@@ -254,7 +255,8 @@ def test_job_naming_preview_with_transcode_preset(signing_key: bytes) -> None:
             status=JobStatus.IDENTIFIED,
             title="Iron Man",
             year=2008,
-            metadata_json={"pending_session_id": _SES_ID},
+            metadata_json={},
+            pending_session_id=_SES_ID,
         )
     ]
     db.rows["tracks"] = [
@@ -300,7 +302,8 @@ def test_job_naming_preview_bad_template_422(signing_key: bytes) -> None:
             status=JobStatus.IDENTIFIED,
             title="Iron Man",
             year=None,  # year missing → {year} resolves to "" → TemplateValidationError
-            metadata_json={"pending_session_id": _SES_ID},
+            metadata_json={},
+            pending_session_id=_SES_ID,
         )
     ]
     db.rows["tracks"] = [
@@ -352,7 +355,8 @@ def test_naming_preview_split_and_job_fields(signing_key: bytes) -> None:
             status=JobStatus.IDENTIFIED,
             title="Battlestar",
             year=2004,
-            metadata_json={"pending_session_id": _SES_ID_2, "season": "01"},
+            metadata_json={"season": "01"},
+            pending_session_id=_SES_ID_2,
         )
     ]
     db.rows["tracks"] = [
@@ -425,7 +429,8 @@ def test_naming_preview_flat_template(signing_key: bytes) -> None:
             status=JobStatus.IDENTIFIED,
             title="Iron Man",
             year=2008,
-            metadata_json={"pending_session_id": _SES_ID_3},
+            metadata_json={},
+            pending_session_id=_SES_ID_3,
         )
     ]
     db.rows["tracks"] = [

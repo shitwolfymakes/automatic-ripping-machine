@@ -39,10 +39,17 @@ function asScalarString(v: unknown): string | undefined {
  * are intentionally NOT surfaced here — they belong to the raw viewer.
  */
 export function readJobMetadata(
-	metadata_json: Record<string, unknown> | null | undefined
+	metadata_json: Record<string, unknown> | null | undefined,
+	job?: Pick<JobView, 'season' | 'pending_session_id'> | null
 ): JobMetadata {
 	const md = (metadata_json ?? {}) as Record<string, unknown>;
 	const out: JobMetadata = {};
+
+	// Step 2 (backend): season and pending_session_id are job COLUMNS now;
+	// resolve lifts the legacy metadata keys away. Prefer the columns and
+	// keep the metadata reads as the fallback for pre-migration rows.
+	if (job?.season != null) out.season = String(job.season).padStart(2, '0');
+	if (job?.pending_session_id) out.pending_session_id = job.pending_session_id;
 
 	const imdb = asScalarString(md.imdb_id);
 	if (imdb !== undefined) out.imdb_id = imdb;
@@ -53,7 +60,7 @@ export function readJobMetadata(
 	const vt = asScalarString(md.video_type);
 	if (vt !== undefined) out.video_type = vt;
 	const season = asScalarString(md.season);
-	if (season !== undefined) out.season = season;
+	if (season !== undefined && out.season === undefined) out.season = season;
 	const artist = asScalarString(md.artist);
 	if (artist !== undefined) out.artist = artist;
 	const album = asScalarString(md.album);
@@ -62,7 +69,8 @@ export function readJobMetadata(
 	const source = asScalarString(md.source_type);
 	if (source !== undefined) out.source_type = source;
 	const pendingSession = asScalarString(md.pending_session_id);
-	if (pendingSession !== undefined) out.pending_session_id = pendingSession;
+	if (pendingSession !== undefined && out.pending_session_id === undefined)
+		out.pending_session_id = pendingSession;
 
 	const scan = md.scan_result;
 	if (scan && typeof scan === 'object') {

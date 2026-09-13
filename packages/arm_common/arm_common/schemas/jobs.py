@@ -3,7 +3,15 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from arm_common.enums import DiscType, JobStatus, SessionApplicationStatus, TrackKind, TrackStatus, TranscodeTaskStatus
+from arm_common.enums import (
+    DiscType,
+    JobStatus,
+    MediaType,
+    SessionApplicationStatus,
+    TrackKind,
+    TrackStatus,
+    TranscodeTaskStatus,
+)
 
 
 class ResolveRequest(BaseModel):
@@ -11,6 +19,10 @@ class ResolveRequest(BaseModel):
     year: int | None = None
     disc_number: int | None = None
     disc_total: int | None = None
+    # Classifications, not part of the identity statement: omitted = keep.
+    # (title/year/disc_number/total are the full statement — omitted clears.)
+    media_type: MediaType | None = None
+    season: int | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -105,6 +117,11 @@ class JobView(BaseModel):
     status: JobStatus
     title: str | None
     year: int | None
+    # Identity columns (step 2): the identified kind, the user-supplied TV
+    # season, and the explicit per-rip session choice.
+    media_type: MediaType | None = None
+    season: int | None = None
+    pending_session_id: str | None = None
     disc_number: int | None = None
     disc_total: int | None = None
     # Computed at identify; UI prefers `poster_url_manual` if set.

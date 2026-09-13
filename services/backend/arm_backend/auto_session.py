@@ -690,8 +690,7 @@ async def _load_tasks(db: AsyncSession, session_application_id: str) -> list[Tra
 
 
 def _pending_session_id(job: Job) -> str | None:
-    pending = (job.metadata_json or {}).get("pending_session_id")
-    return pending if isinstance(pending, str) and pending else None
+    return job.pending_session_id or None
 
 
 async def resolve_routed_session_id(db: AsyncSession, job: Job) -> str | None:
@@ -700,7 +699,7 @@ async def resolve_routed_session_id(db: AsyncSession, job: Job) -> str | None:
     Resolution order (single source of truth — rip-start's preset choice and
     the naming preview resolve through this same helper so neither can drift
     from the apply path):
-      1. `job.metadata_json["pending_session_id"]` — explicit per-rip choice.
+      1. `job.pending_session_id` — explicit per-rip choice.
       2. `drive.default_session_id` — the persistent per-drive default.
     No `auto_transcode_on_idle` gating: routing shapes the rip and the
     preview; whether rip-complete may QUEUE the routed session unattended is

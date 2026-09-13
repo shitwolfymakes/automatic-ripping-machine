@@ -896,6 +896,31 @@ async def resolve(
     job.year = req.year
     job.disc_number = req.disc_number
     job.disc_total = req.disc_total
+    # media_type/season are classifications, not part of the identity
+    # statement: omitted = keep (a title-only fix must not wipe them).
+    if req.media_type is not None:
+        job.media_type = req.media_type
+    if req.season is not None:
+        job.season = req.season
+    # Transitional (G-14): dialogs that still send season/disc inside
+    # `metadata` get them lifted into the columns; the loose keys are
+    # dropped so the TV naming tokens and the columns can't disagree.
+    # First-class fields win; unparseable legacy values are discarded.
+    for legacy_key, assign, first_class in (
+        ("season", "season", req.season),
+        ("disc", "disc_number", req.disc_number),
+    ):
+        raw = new_metadata.pop(legacy_key, None)
+        if first_class is None and raw is not None:
+            try:
+                setattr(job, assign, int(str(raw)))
+            except ValueError:
+                logger.warning(
+                    "resolve: discarding unparseable legacy metadata %s=%r job_id=%s",
+                    legacy_key,
+                    raw,
+                    job_id,
+                )
     was_ripped_placeholder = job.status == JobStatus.RIPPED_AWAITING_IDENTIFY
     if job.status in _RESOLVABLE_STATUSES_PROMOTE:
         # Identity has landed; the flag that parked the job is spent.

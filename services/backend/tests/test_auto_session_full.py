@@ -117,7 +117,7 @@ async def test_maybe_auto_apply_uses_pending_session_id(tmp_path: Path) -> None:
     _media_root(tmp_path)
     db = FakeSession()
     job = _seed(db)
-    job.metadata_json = {"pending_session_id": "ses_x"}
+    job.pending_session_id = "ses_x"
     db.rows["jobs"] = [job]
     hub = CapturingHub()
     await maybe_auto_apply_session(db, job, hub)

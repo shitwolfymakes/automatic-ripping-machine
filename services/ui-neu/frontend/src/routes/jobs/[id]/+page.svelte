@@ -98,7 +98,7 @@
 	let tracksAreSeries = $derived(
 		(detail?.tracks ?? []).some((t) => t.video_type === 'series' || t.episode_number != null)
 	);
-	let jobMeta = $derived(detail ? readJobMetadata(detail.job.metadata_json) : {});
+	let jobMeta = $derived(detail ? readJobMetadata(detail.job.metadata_json, detail.job) : {});
 	let showRawMetadata = $state(false);
 	let rawMetadataPairs = $derived(
 		detail ? Object.entries((detail.job.metadata_json ?? {}) as Record<string, unknown>) : []

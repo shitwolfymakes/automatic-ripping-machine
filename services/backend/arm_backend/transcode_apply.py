@@ -90,8 +90,16 @@ def _build_track_ctx(
         "title": sanitize_path_component(eff_title),
         "year": str(eff_year) if eff_year is not None else "",
         "show": sanitize_path_component(job.title or ""),
-        "season": sanitize_path_component(str(metadata.get("season") or "")),
-        "disc": sanitize_path_component(str(metadata.get("disc") or "")),
+        # G-14: the columns are authoritative (resolve lifts the legacy
+        # metadata keys into them); the metadata fallback covers rows from
+        # before the lift. Ints are zero-padded to match the S{NN}D{NN}
+        # convention (docs/arch/02 § TV).
+        "season": sanitize_path_component(
+            f"{job.season:02d}" if job.season is not None else str(metadata.get("season") or "")
+        ),
+        "disc": sanitize_path_component(
+            f"{job.disc_number:02d}" if job.disc_number is not None else str(metadata.get("disc") or "")
+        ),
         "track": track_index_padded,
         "episode": episode,
         "episode_title": sanitize_path_component(track.episode_name or ""),

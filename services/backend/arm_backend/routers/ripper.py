@@ -26,6 +26,7 @@ from arm_backend.track_selection import select_tracks, select_tracks_for_review
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
+    MediaType,
     DiscFingerprint,
     DiscType,
     Drive,
@@ -484,6 +485,9 @@ async def identify(
         if result is not None:
             job.title = result.title
             job.year = result.year
+            # G-03: keep the identified kind — it is the routing input.
+            # result.kind is a subset of MediaType's values by construction.
+            job.media_type = MediaType(result.kind)
             job.poster_url = extract_poster_url(result)
             job.metadata_json = {**(job.metadata_json or {}), **result.payload}
             # Timed review gate: a GENUINELY identified disc (result is not None — not
@@ -518,6 +522,10 @@ async def identify(
         "scan_result": scan.model_dump(mode="json"),
     }
     if req.pending_session_id is not None:
+        # Column is authoritative (step 2 §3.4); the metadata_json mirror
+        # stays until both UIs read the column, then dies with the
+        # JobMetadata schema migration.
+        job.pending_session_id = req.pending_session_id
         job.metadata_json = {
             **(job.metadata_json or {}),
             "pending_session_id": req.pending_session_id,

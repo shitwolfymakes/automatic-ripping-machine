@@ -1596,12 +1596,9 @@ def test_rip_start_uses_pending_session_rip_preset() -> None:
     db = FakeSession()
     db.rows["config"] = [_config()]
     db.rows["drives"] = [_drive()]
-    db.rows["jobs"] = [
-        _job(
-            status=JobStatus.IDENTIFIED,
-            meta={"scan_result": _scan_dict(), "pending_session_id": "ses_r"},
-        )
-    ]
+    routed_job = _job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict()})
+    routed_job.pending_session_id = "ses_r"
+    db.rows["jobs"] = [routed_job]
     db.rows["tracks"] = []
     db.rows["sessions"] = [_session_row()]
     db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session")]
@@ -1637,12 +1634,9 @@ def test_rip_start_falls_back_when_routed_session_row_missing() -> None:
     db = FakeSession()
     db.rows["config"] = [_config()]
     db.rows["drives"] = [_drive()]
-    db.rows["jobs"] = [
-        _job(
-            status=JobStatus.IDENTIFIED,
-            meta={"scan_result": _scan_dict(), "pending_session_id": "ses_ghost"},
-        )
-    ]
+    routed_job = _job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict()})
+    routed_job.pending_session_id = "ses_ghost"
+    db.rows["jobs"] = [routed_job]
     db.rows["tracks"] = []
     db.rows["sessions"] = []
     db.rows["rip_presets"] = [_movie_preset()]
@@ -1660,12 +1654,9 @@ def test_rip_start_routed_session_preset_not_seeded_500() -> None:
     db = FakeSession()
     db.rows["config"] = [_config()]
     db.rows["drives"] = [_drive()]
-    db.rows["jobs"] = [
-        _job(
-            status=JobStatus.IDENTIFIED,
-            meta={"scan_result": _scan_dict(), "pending_session_id": "ses_r"},
-        )
-    ]
+    routed_job = _job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict()})
+    routed_job.pending_session_id = "ses_r"
+    db.rows["jobs"] = [routed_job]
     db.rows["tracks"] = []
     db.rows["sessions"] = [_session_row(rip_preset_id="rpr_ghost")]
     db.rows["rip_presets"] = [_movie_preset()]
@@ -1719,3 +1710,66 @@ def test_rip_complete_partial_unidentified_stays_ripped_partial(
     r = _rip_complete(db, _Hub(), monkeypatch)
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "ripped_partial"
+
+
+# --- identify records the identified kind + pending session (step 2 / G-03) --
+
+
+def test_identify_sets_media_type_from_kind() -> None:
+    """G-03: the provider's kind (movie/tv/music) lands on jobs.media_type
+    so routing and the UI can tell a TV disc from a movie."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    body = {"drive_id": "drv_x", "scan_result": _scan_dict()}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["media_type"] == "movie"
+    assert db.rows["jobs"][0].media_type == MediaType.MOVIE
+
+
+def test_identify_tv_kind_sets_media_type_tv() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(title="The West Wing", year=1999, kind="tv", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    body = {"drive_id": "drv_x", "scan_result": _scan_dict()}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert db.rows["jobs"][0].media_type == MediaType.TV
+
+
+def test_identify_miss_leaves_media_type_unset() -> None:
+    """An identify miss knows nothing about the kind; the column stays None
+    for resolve to fill."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    app = _make_app(db, dispatcher=_Dispatcher(None))
+    body = {"drive_id": "drv_x", "scan_result": _scan_dict()}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert db.rows["jobs"][0].media_type is None
+
+
+def test_identify_pending_session_lands_on_column() -> None:
+    """pending_session_id is a job column now (step 2 §3.4); the
+    metadata_json mirror stays until both UIs read the column."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    body = {"drive_id": "drv_x", "scan_result": _scan_dict(), "pending_session_id": "ses_1"}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    job = db.rows["jobs"][0]
+    assert job.pending_session_id == "ses_1"
+    assert job.metadata_json["pending_session_id"] == "ses_1"  # transitional mirror

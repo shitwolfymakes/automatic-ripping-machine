@@ -960,3 +960,89 @@ def test_update_job_edits_multiple_tracks(signing_key: bytes) -> None:
     assert by_id[_TRK_ID_B].episode_name == "Part Two"
     updated = [e for e in hub.events if e["event_type"] == "track.updated"]
     assert len(updated) == 2
+
+
+# --- resolve fills the identity columns (step 2 / G-03, G-14) ----------------
+
+
+def test_resolve_sets_media_type_and_season_columns(signing_key: bytes) -> None:
+    """Resolve is where a human corrects what identify guessed: media_type
+    (a TV box set mis-searched as a movie) and season are first-class."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID, meta={})]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "The West Wing", "year": 1999, "media_type": "tv", "season": 3, "disc_number": 2},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    job = db.rows["jobs"][0]
+    assert job.media_type == MediaType.TV
+    assert job.season == 3
+    assert job.disc_number == 2
+    body = r.json()
+    assert body["job"]["media_type"] == "tv"
+    assert body["job"]["season"] == 3
+
+
+def test_resolve_lifts_legacy_metadata_season_and_disc(signing_key: bytes) -> None:
+    """G-14: the TV tokens read columns now, but callers that still send
+    season/disc inside `metadata` (the current dialogs) must keep working —
+    resolve lifts them into the columns and drops the loose keys."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID, meta={})]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "The West Wing", "metadata": {"season": "03", "disc": "2", "k": "v"}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    job = db.rows["jobs"][0]
+    assert job.season == 3
+    assert job.disc_number == 2
+    assert "season" not in job.metadata_json
+    assert "disc" not in job.metadata_json
+    assert job.metadata_json["k"] == "v"
+
+
+def test_resolve_omitting_media_type_and_season_keeps_them(signing_key: bytes) -> None:
+    """Unlike title/year (a full identity statement), media_type and season
+    are classifications: a title-only correction must not wipe them."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _job(status=JobStatus.AWAITING_USER_ID, meta={})
+    job.media_type = MediaType.TV
+    job.season = 3
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "The West Wing (fixed)"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert db.rows["jobs"][0].media_type == MediaType.TV
+    assert db.rows["jobs"][0].season == 3
+
+
+def test_resolve_discards_unparseable_legacy_season(signing_key: bytes) -> None:
+    """A legacy metadata season that isn't a number can't be lifted: the
+    loose key is still dropped (it could only disagree with the column) and
+    the column stays untouched."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID, meta={})]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "The West Wing", "metadata": {"season": "three"}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    job = db.rows["jobs"][0]
+    assert job.season is None
+    assert "season" not in job.metadata_json

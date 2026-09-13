@@ -1137,6 +1137,15 @@ export type Job = {
      * Year
      */
     year: number | null;
+    media_type?: MediaType | null;
+    /**
+     * Season
+     */
+    season: number | null;
+    /**
+     * Pending Session Id
+     */
+    pending_session_id?: string | null;
     /**
      * Disc Number
      */
@@ -1317,6 +1326,15 @@ export type JobView = {
      * Year
      */
     year: number | null;
+    media_type?: MediaType | null;
+    /**
+     * Season
+     */
+    season?: number | null;
+    /**
+     * Pending Session Id
+     */
+    pending_session_id?: string | null;
     /**
      * Disc Number
      */
@@ -2329,6 +2347,11 @@ export type ResolveRequest = {
      * Disc Total
      */
     disc_total?: number | null;
+    media_type?: MediaType | null;
+    /**
+     * Season
+     */
+    season?: number | null;
     /**
      * Metadata
      */

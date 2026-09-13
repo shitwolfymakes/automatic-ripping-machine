@@ -30,13 +30,14 @@ from arm_common import (  # noqa: E402
 from tests._fakes import FakeSession  # noqa: E402
 
 
-def _job(meta: dict | None = None) -> Job:
+def _job(pending: str | None = None) -> Job:
     return Job(
         id="job_01JZXR7K3M5Q8N4VWA00000001",
         drive_id="drv_x",
         disc_type=DiscType.DVD,
         status=JobStatus.RIPPED,
-        metadata_json=meta or {},
+        metadata_json={},
+        pending_session_id=pending,
     )
 
 
@@ -57,7 +58,7 @@ def _seed(db: FakeSession, *, default_session_id: str | None, flag: bool) -> Non
 async def test_pending_choice_wins_over_drive_default() -> None:
     db = FakeSession()
     _seed(db, default_session_id="ses_default", flag=True)
-    got = await resolve_routed_session_id(db, _job({"pending_session_id": "ses_chosen"}))  # type: ignore[arg-type]
+    got = await resolve_routed_session_id(db, _job(pending="ses_chosen"))  # type: ignore[arg-type]
     assert got == "ses_chosen"
 
 
@@ -101,4 +102,4 @@ async def test_auto_apply_pending_choice_bypasses_flag() -> None:
     rip; the global flag must not veto it."""
     db = FakeSession()
     _seed(db, default_session_id=None, flag=False)
-    assert await auto_apply_allowed(db, _job({"pending_session_id": "ses_chosen"})) is True  # type: ignore[arg-type]
+    assert await auto_apply_allowed(db, _job(pending="ses_chosen")) is True  # type: ignore[arg-type]
