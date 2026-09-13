@@ -69,6 +69,63 @@ _DEFAULT_RIP_PRESET_BY_DISC_TYPE: dict[DiscType, str] = {
 }
 
 
+class RipPresetUnavailable(Exception):
+    """resolve_rip_preset_for_job cannot produce a preset for this job.
+
+    `reason` lets routes keep their distinct responses: "no_default" is a 422
+    (unknown disc type — the ripper must not retry), "not_seeded" is a 500
+    (deployment bug — seeding may fix it, retryable).
+    """
+
+    def __init__(self, reason: str, detail: str) -> None:
+        super().__init__(detail)
+        self.reason = reason
+        self.detail = detail
+
+
+async def resolve_rip_preset_id_for_job(db: AsyncSession, job: Job) -> str:
+    """The one place that decides WHICH rip preset governs a job's rip.
+
+    Today: the built-in default for the disc type. G-01 (gap analysis §5.2)
+    extends this to prefer the routed session's rip preset. Every chooser —
+    rip-start, resume, the review-gate track persist — MUST resolve through
+    here so a held disc and an unattended one rip the same track set.
+
+    Raises RipPresetUnavailable("no_default") for a disc type with no
+    default (422 at the routes — the ripper must not retry). Does NOT load
+    the row: rip-start's crash-resume and status-check paths answer without
+    it, and pre-existing behaviour only surfaces "not_seeded" when track
+    selection actually needs the preset.
+    """
+    _ = db  # G-01 resolves the routed session here; the signature is ready.
+    preset_id = _DEFAULT_RIP_PRESET_BY_DISC_TYPE.get(job.disc_type)
+    if preset_id is None:
+        raise RipPresetUnavailable("no_default", f"no default rip preset for disc_type={job.disc_type.value}")
+    return preset_id
+
+
+async def resolve_rip_preset_for_job(db: AsyncSession, job: Job) -> RipPreset:
+    """`resolve_rip_preset_id_for_job` plus the row load.
+
+    Additionally raises RipPresetUnavailable("not_seeded") when the resolved
+    id has no row (deployment bug; 500 at the routes, retryable).
+    """
+    preset_id = await resolve_rip_preset_id_for_job(db, job)
+    preset = (await db.execute(select(RipPreset).where(col(RipPreset.id) == preset_id))).scalar_one_or_none()
+    if preset is None:
+        raise RipPresetUnavailable("not_seeded", f"built-in rip preset {preset_id} not seeded")
+    return preset
+
+
+def _rip_preset_or_http(exc: RipPresetUnavailable) -> HTTPException:
+    code = (
+        status.HTTP_422_UNPROCESSABLE_CONTENT
+        if exc.reason == "no_default"
+        else status.HTTP_500_INTERNAL_SERVER_ERROR
+    )
+    return HTTPException(status_code=code, detail=exc.detail)
+
+
 async def _resolve_min_length_override(db: AsyncSession, job: Job) -> int | None:
     """Look up `Session.overrides_json["min_length_seconds"]` for a job
     that has a pending_session_id, returning None when no override
@@ -103,13 +160,10 @@ async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -
     `(job_id, source_ref)` so a ripper re-POST of identify on the same held disc
     doesn't double-insert (audit M1) — Track rows have no unique constraint.
     """
-    preset_id = _DEFAULT_RIP_PRESET_BY_DISC_TYPE.get(job.disc_type)
-    if preset_id is None:  # pragma: no cover - every DiscType has a default preset
-        logger.warning("no default rip preset for disc_type=%s; skipping review tracks", job.disc_type.value)
-        return
-    preset = (await db.execute(select(RipPreset).where(col(RipPreset.id) == preset_id))).scalar_one_or_none()
-    if preset is None:
-        logger.warning("built-in rip preset %s not seeded; skipping review tracks", preset_id)
+    try:
+        preset = await resolve_rip_preset_for_job(db, job)
+    except RipPresetUnavailable as exc:
+        logger.warning("skipping review tracks for job_id=%s: %s", job.id, exc.detail)
         return
     existing_refs = {
         t.source_ref for t in (await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
@@ -504,12 +558,10 @@ async def rip_start(
     session: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> RipStartResponse:
-    preset_id = _DEFAULT_RIP_PRESET_BY_DISC_TYPE.get(job.disc_type)
-    if preset_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"no default rip preset for disc_type={job.disc_type.value}",
-        )
+    try:
+        preset_id = await resolve_rip_preset_id_for_job(session, job)
+    except RipPresetUnavailable as exc:
+        raise _rip_preset_or_http(exc) from exc
 
     existing = (
         (await session.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index))))
@@ -556,12 +608,10 @@ async def rip_start(
         )
     scan = ScanResult.model_validate(scan_dict)
 
-    preset = (await session.execute(select(RipPreset).where(col(RipPreset.id) == preset_id))).scalar_one_or_none()
-    if preset is None:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"built-in rip preset {preset_id} not seeded",
-        )
+    try:
+        preset = await resolve_rip_preset_for_job(session, job)
+    except RipPresetUnavailable as exc:
+        raise _rip_preset_or_http(exc) from exc
 
     new_tracks = select_tracks(job.id, scan, preset)
     if not new_tracks:
@@ -628,12 +678,10 @@ async def resume(
             detail=f"job not in ripping state: status={job.status.value}",
         )
 
-    preset_id = _DEFAULT_RIP_PRESET_BY_DISC_TYPE.get(job.disc_type)
-    if preset_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"no default rip preset for disc_type={job.disc_type.value}",
-        )
+    try:
+        preset_id = await resolve_rip_preset_id_for_job(session, job)
+    except RipPresetUnavailable as exc:
+        raise _rip_preset_or_http(exc) from exc
 
     await reset_job_for_recovery(session, job)
     await session.commit()
