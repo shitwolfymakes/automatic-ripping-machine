@@ -1564,3 +1564,103 @@ def test_rip_complete_survives_parked_drain_failure(monkeypatch: pytest.MonkeyPa
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "ripped"
     assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
+
+
+# --- rip-start honours the routed session's rip preset (G-01) ----------------
+
+
+def _session_row(session_id: str = "ses_r", rip_preset_id: str = "rpr_session") -> Session:
+    return Session(
+        id=session_id,
+        name="Routed",
+        media_type=MediaType.MOVIE,
+        is_builtin=False,
+        rip_preset_id=rip_preset_id,
+        transcode_preset_id=None,
+        output_path_template="{title} ({year})/{title}.mkv",
+    )
+
+
+def test_rip_start_uses_pending_session_rip_preset() -> None:
+    """A rip started with an explicit session choice rips that session's
+    track shape, not the disc-type default (G-01)."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [
+        _job(
+            status=JobStatus.IDENTIFIED,
+            meta={"scan_result": _scan_dict(), "pending_session_id": "ses_r"},
+        )
+    ]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row()]
+    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session")]
+    new = [_track("trk_new", status=TrackStatus.QUEUED)]
+    with TestClient(_make_app(db)) as client, _patch_select_tracks(new):
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200, r.text
+    assert r.json()["rip_preset_id"] == "rpr_session"
+
+
+def test_rip_start_uses_drive_default_session_preset_without_auto_flag() -> None:
+    """Routing ignores auto_transcode_on_idle: the drive default shapes the
+    rip even when unattended transcoding is off (§5.1)."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]  # auto_transcode_on_idle=False
+    drive = _drive()
+    drive.default_session_id = "ses_r"
+    db.rows["drives"] = [drive]
+    db.rows["jobs"] = [_job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict()})]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row()]
+    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session")]
+    new = [_track("trk_new", status=TrackStatus.QUEUED)]
+    with TestClient(_make_app(db)) as client, _patch_select_tracks(new):
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200, r.text
+    assert r.json()["rip_preset_id"] == "rpr_session"
+
+
+def test_rip_start_falls_back_when_routed_session_row_missing() -> None:
+    """A pending id whose Session row is gone (deleted between trigger and
+    rip) must not fail the rip: fall back to the disc-type default."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [
+        _job(
+            status=JobStatus.IDENTIFIED,
+            meta={"scan_result": _scan_dict(), "pending_session_id": "ses_ghost"},
+        )
+    ]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = []
+    db.rows["rip_presets"] = [_movie_preset()]
+    new = [_track("trk_new", status=TrackStatus.QUEUED)]
+    with TestClient(_make_app(db)) as client, _patch_select_tracks(new):
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200, r.text
+    assert r.json()["rip_preset_id"] == "rpr_builtin_movie_archive"
+
+
+def test_rip_start_routed_session_preset_not_seeded_500() -> None:
+    """A session that references a missing rip preset is the same deployment
+    bug as the built-in map pointing at an unseeded row: 500, retryable —
+    mirrors apply_session_internal's handling."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [
+        _job(
+            status=JobStatus.IDENTIFIED,
+            meta={"scan_result": _scan_dict(), "pending_session_id": "ses_r"},
+        )
+    ]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row(rip_preset_id="rpr_ghost")]
+    db.rows["rip_presets"] = [_movie_preset()]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 500
+    assert "not seeded" in r.json()["detail"]

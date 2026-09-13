@@ -12,7 +12,7 @@ from arm_backend.routers._params import JobIdParam
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
 from arm_backend.path_sanitize import sanitize_path_component
-from arm_backend.auto_session import resolve_effective_session_id
+from arm_backend.auto_session import resolve_routed_session_id
 from arm_backend.path_template import (
     TemplateValidationError,
     expand_template,
@@ -57,10 +57,11 @@ async def job_naming_preview(
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
 
-    # Same resolution the apply path uses (pending_session_id, else the
-    # drive default when auto_transcode_on_idle is on) — via the shared
-    # auto_session helper so previews cannot drift from apply.
-    session_id: str | None = await resolve_effective_session_id(db, job)
+    # The ROUTED session (pending_session_id, else the drive default) — via
+    # the shared auto_session helper so previews cannot drift from apply.
+    # auto_transcode_on_idle deliberately does not gate the preview: it only
+    # gates unattended queueing at rip-complete (gap analysis §5.1).
+    session_id: str | None = await resolve_routed_session_id(db, job)
     sess: Session | None = None
     if session_id is not None:
         sess = (await db.execute(select(Session).where(col(Session.id) == session_id))).scalar_one_or_none()

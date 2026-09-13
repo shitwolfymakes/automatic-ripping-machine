@@ -464,9 +464,10 @@ def test_preview_falls_back_to_drive_default_session(signing_key: bytes) -> None
     assert r.json()["items"]
 
 
-def test_preview_default_session_needs_auto_idle_flag(signing_key: bytes) -> None:
-    """Drive default alone is not enough — auto_transcode_on_idle=False means
-    the apply path would not use it, so neither may the preview."""
+def test_preview_drive_default_session_ignores_auto_idle_flag(signing_key: bytes) -> None:
+    """G-01 (§5.1): the flag gates unattended QUEUEING only. The drive
+    default is still the routed session — it shapes the rip and is what an
+    operator's Apply would use — so the preview must show it."""
     db = FakeSession()
     _seed(db)
     _seed_job(db)
@@ -476,7 +477,8 @@ def test_preview_default_session_needs_auto_idle_flag(signing_key: bytes) -> Non
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.get(f"/api/jobs/{_JOB_ID_1}/naming-preview", headers=_auth(token))
-    assert r.status_code == 409
+    assert r.status_code == 200, r.text
+    assert r.json()["items"]
 
 
 def test_preview_orders_items_by_track_index(signing_key: bytes) -> None:
