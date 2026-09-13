@@ -494,7 +494,7 @@ def test_identify_unidentified_with_hold_does_not_park(signing_key: bytes) -> No
     assert r.status_code == 200
     out = r.json()
     assert out["status"] == "identified"  # not awaiting_review
-    assert out["metadata_json"].get("unidentified") is True
+    assert out["metadata_json"]["flags"]["unidentified"] is True
 
 
 def test_identify_snapshots_drive_serial_onto_job() -> None:
@@ -545,7 +545,7 @@ def test_identify_miss_without_block_marks_identified_unidentified() -> None:
         )
     assert r.status_code == 200
     assert r.json()["status"] == "identified"
-    assert r.json()["metadata_json"]["unidentified"] is True
+    assert r.json()["metadata_json"]["flags"]["unidentified"] is True
 
 
 def test_identify_timeout_records_diagnostic() -> None:
@@ -561,7 +561,7 @@ def test_identify_timeout_records_diagnostic() -> None:
         )
     assert r.status_code == 200
     assert r.json()["status"] == "awaiting_user_id"
-    assert r.json()["metadata_json"]["dispatch_timeout"] is True
+    assert r.json()["metadata_json"]["flags"]["dispatch_timeout"] is True
 
 
 # --- /identify (TheDiscDB match) ----------------------------------------------
@@ -752,7 +752,7 @@ def test_identify_thediscdb_match_survives_total_identify_miss() -> None:
     assert r.status_code == 200
     out = r.json()
     assert out["status"] == "identified"  # unchanged synthetic-miss behavior
-    assert out["metadata_json"]["unidentified"] is True
+    assert out["metadata_json"]["flags"]["unidentified"] is True
     assert out["metadata_json"]["thediscdb"]["matched"]  # map survived the overwrite
 
 
@@ -1773,3 +1773,67 @@ def test_identify_pending_session_lands_on_column() -> None:
     job = db.rows["jobs"][0]
     assert job.pending_session_id == "ses_1"
     assert job.metadata_json["pending_session_id"] == "ses_1"  # transitional mirror
+
+
+# --- identify files provider output under identity/provider_raw (step 2 §3.4)
+
+
+def test_identify_writes_identity_and_provider_raw_not_top_level() -> None:
+    """The raw payload lands under provider_raw[<provider>], the conclusions
+    under identity; nothing from a provider reaches the top level, so a
+    re-identify with a different provider cannot leave stale keys behind."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(
+        title="Iron Man",
+        year=2008,
+        kind="movie",
+        payload={"id": 1726, "overview": "Tony Stark.", "poster_path": "/a.jpg", "imdb_id": "tt0371746"},
+        provider="tmdb",
+    )
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    body = {"drive_id": "drv_x", "scan_result": _scan_dict()}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    md = r.json()["metadata_json"]
+    assert md["identity"]["provider"] == "tmdb"
+    assert md["identity"]["external_ids"]["imdb"] == "tt0371746"
+    assert md["identity"]["external_ids"]["tmdb"] == "1726"
+    assert md["identity"]["overview"] == "Tony Stark."
+    assert md["provider_raw"]["tmdb"]["poster_path"] == "/a.jpg"
+    for legacy_key in ("id", "overview", "poster_path", "imdb_id"):
+        assert legacy_key not in md
+
+
+def test_identify_music_fills_music_section_and_disc_number() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(
+        title="Abbey Road",
+        year=1969,
+        kind="music",
+        payload={
+            "id": "mbid-123",
+            "artist": "The Beatles",
+            "album": "Abbey Road",
+            "tracks": [{"title": "Come Together", "position": 1}],
+            "disc": 2,
+        },
+        provider="musicbrainz",
+    )
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    body = {"drive_id": "drv_x", "scan_result": _scan_dict("cd")}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    job = db.rows["jobs"][0]
+    md = job.metadata_json
+    assert md["music"]["artist"] == "The Beatles"
+    assert md["music"]["tracks"][0]["title"] == "Come Together"
+    assert md["identity"]["external_ids"]["musicbrainz_release"] == "mbid-123"
+    assert job.disc_number == 2
+    assert job.media_type == MediaType.MUSIC
+    assert "artist" not in md and "tracks" not in md

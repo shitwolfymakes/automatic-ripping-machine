@@ -14,7 +14,7 @@ each candidate path under `MEDIA_ROOT` to surface filesystem-only hits
 
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -64,10 +64,14 @@ def _build_track_ctx(
     metadata: dict[str, object] = job.metadata_json or {}
     track_index_padded = f"{track.index:02d}"
 
-    # Best-effort per-track music title: job.metadata_json["tracks"] is populated
-    # by the music identification flow (separate phase); we read it if present.
+    # Music naming reads the typed `music` section (§3.4); the bare
+    # top-level keys are the pre-0031 fallback.
+    raw_music = metadata.get("music")
+    music_meta: dict[str, Any] = raw_music if isinstance(raw_music, dict) else {}
+
+    # Best-effort per-track music title from the music track list.
     track_title = ""
-    tracks_meta = metadata.get("tracks")
+    tracks_meta = music_meta.get("tracks") or metadata.get("tracks")
     if isinstance(tracks_meta, list) and 0 <= track.index - 1 < len(tracks_meta):
         entry = tracks_meta[track.index - 1]
         if isinstance(entry, dict):
@@ -104,8 +108,8 @@ def _build_track_ctx(
         "episode": episode,
         "episode_title": sanitize_path_component(track.episode_name or ""),
         "duration_human": _format_duration_human(track.expected_duration_seconds or track.duration_seconds),
-        "artist": sanitize_path_component(str(metadata.get("artist") or "")),
-        "album": sanitize_path_component(str(metadata.get("album") or "")),
+        "artist": sanitize_path_component(str(music_meta.get("artist") or metadata.get("artist") or "")),
+        "album": sanitize_path_component(str(music_meta.get("album") or metadata.get("album") or "")),
         "track_title": sanitize_path_component(track_title),
         "transcode_slug": slugify(transcode_preset.name) if transcode_preset is not None else "",
         "ext": transcode_preset.container.value if transcode_preset is not None else "",

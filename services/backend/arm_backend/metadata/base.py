@@ -1,5 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Any, Literal
+from datetime import datetime
+
+from arm_common.schemas import ExternalIds, JobIdentity, MusicMeta
 
 # TMDB serves posters from a CDN; `w500` (500px-wide) is the v2 default
 # and renders fine for thumbnail and detail-card use. Full hashed path is
@@ -25,6 +28,59 @@ class MetadataResult:
     year: int | None
     kind: Literal["movie", "tv", "music"]
     payload: dict[str, Any] = field(default_factory=dict)
+    # Stamped by the dispatcher's _call wrapper (the one place that knows
+    # which client produced the hit); None for results built outside it.
+    provider: str | None = None
+
+
+def _first_str(*candidates: Any) -> str | None:
+    for c in candidates:
+        if isinstance(c, str) and c and c != "N/A":
+            return c
+        if isinstance(c, int):
+            return str(c)
+    return None
+
+
+def metadata_with_identity(
+    metadata_json: dict[str, Any] | None,
+    result: MetadataResult,
+    *,
+    identified_at: datetime,
+) -> dict[str, Any]:
+    """Fold a provider hit into the job's metadata bag (gap analysis §3.4).
+
+    Replaces the old top-level `**result.payload` merge: the raw payload is
+    filed under `provider_raw[<provider>]`, the conclusions land in the
+    typed `identity` section, and a music hit fills `music`. Nothing from a
+    provider reaches the top level, so re-identifying with a different
+    provider can no longer leave contradictory keys behind.
+    """
+    payload = result.payload or {}
+    provider = result.provider or "unknown"
+    external = ExternalIds(
+        imdb=_first_str(payload.get("imdb_id"), payload.get("imdbID")),
+        tmdb=_first_str(payload.get("tmdb_id"), payload.get("id") if provider == "tmdb" else None),
+        tvdb=_first_str(payload.get("tvdb_id")),
+        musicbrainz_release=_first_str(payload.get("id") if provider == "musicbrainz" else None),
+    )
+    identity = JobIdentity(
+        provider=provider,
+        external_ids=external,
+        overview=_first_str(payload.get("overview"), payload.get("Plot")),
+        identified_at=identified_at,
+    )
+    md = dict(metadata_json or {})
+    md["identity"] = identity.model_dump(mode="json", exclude_none=True)
+    md["provider_raw"] = {**(md.get("provider_raw") or {}), provider: payload}
+    if result.kind == "music":
+        music = MusicMeta(
+            artist=_first_str(payload.get("artist")),
+            album=_first_str(payload.get("album")),
+            tracks=payload.get("tracks") or [],
+        )
+        md["music"] = music.model_dump(mode="json", exclude_none=True)
+    return md
 
 
 def extract_poster_url(result: MetadataResult) -> str | None:

@@ -31,6 +31,16 @@ from arm_common.schemas.files import (
     MoveRequest,
     RenameRequest,
 )
+from arm_common.schemas.job_metadata import (
+    ExternalIds,
+    JobFlags,
+    JobIdentity,
+    JobMetadata,
+    MusicMeta,
+    MusicTrackMeta,
+    flag_is_set,
+    with_flags,
+)
 from arm_common.schemas.jobs import (
     AbandonJobRequest,
     BulkDeleteJobsResponse,
@@ -251,6 +261,14 @@ __all__ = [
     "RipperConfigView",
     "RipperHeartbeatRequest",
     "ApplySkippedReason",
+    "ExternalIds",
+    "JobFlags",
+    "JobIdentity",
+    "JobMetadata",
+    "MusicMeta",
+    "MusicTrackMeta",
+    "flag_is_set",
+    "with_flags",
     "ResolveFanOutOutcomeView",
     "ResolveRequest",
     "ResolveResponse",

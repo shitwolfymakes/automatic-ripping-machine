@@ -164,3 +164,39 @@ describe('buildMetadataFields — promoted fields', () => {
 	});
 });
 
+
+describe('readJobMetadata typed sections (step 2 §3.4)', () => {
+	it('prefers identity/provider_raw/music over legacy top-level keys', () => {
+		const out = readJobMetadata({
+			identity: { provider: 'tmdb', external_ids: { imdb: 'tt0371746', tmdb: '1726' } },
+			provider_raw: { arm_server: { video_type: 'movie', multi_title: true, source_type: 'dvd' } },
+			music: { artist: 'The Beatles', album: 'Abbey Road' },
+			imdb_id: 'tt-stale',
+			video_type: 'series',
+			artist: 'Stale Artist'
+		});
+		expect(out.imdb_id).toBe('tt0371746');
+		expect(out.tmdb_id).toBe('1726');
+		expect(out.video_type).toBe('movie');
+		expect(out.multi_title).toBe(true);
+		expect(out.source_type).toBe('dvd');
+		expect(out.artist).toBe('The Beatles');
+		expect(out.album).toBe('Abbey Road');
+	});
+
+	it('still reads pre-migration rows via the legacy keys', () => {
+		const out = readJobMetadata({ imdb_id: 'tt123', video_type: 'series', artist: 'A' });
+		expect(out.imdb_id).toBe('tt123');
+		expect(out.video_type).toBe('series');
+		expect(out.artist).toBe('A');
+	});
+
+	it('prefers the job columns for season and pending session', () => {
+		const out = readJobMetadata(
+			{ season: '09', pending_session_id: 'ses_old' },
+			{ season: 3, pending_session_id: 'ses_col' } as never
+		);
+		expect(out.season).toBe('03');
+		expect(out.pending_session_id).toBe('ses_col');
+	});
+});

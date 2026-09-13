@@ -18,7 +18,7 @@ from arm_backend.auto_session import after_rip, resolve_routed_session_id
 from arm_backend.crash_recovery import reset_job_for_recovery
 from arm_backend.db import get_session
 from arm_backend.metadata import MetadataDispatcher
-from arm_backend.metadata.base import MetadataResult, extract_poster_url
+from arm_backend.metadata.base import MetadataResult, extract_poster_url, metadata_with_identity
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_backend.thediscdb.matcher import apply_map, build_map, external_imdb_id
@@ -42,6 +42,8 @@ from arm_common.enums import NON_TERMINAL_JOB_STATUSES
 from arm_common.models import Track
 from arm_common.models._columns import enum_value_str
 from arm_common.schemas import (
+    flag_is_set,
+    with_flags,
     HeldJobView,
     IdentifyRequest,
     JobCompleteRequest,
@@ -489,7 +491,16 @@ async def identify(
             # result.kind is a subset of MediaType's values by construction.
             job.media_type = MediaType(result.kind)
             job.poster_url = extract_poster_url(result)
-            job.metadata_json = {**(job.metadata_json or {}), **result.payload}
+            # §3.4: identity + provider_raw, never a top-level payload merge.
+            job.metadata_json = metadata_with_identity(
+                job.metadata_json, result, identified_at=datetime.now(timezone.utc)
+            )
+            # A MusicBrainz medium position is this disc's number; the {disc}
+            # naming token reads the column (G-14).
+            if result.kind == "music" and job.disc_number is None:
+                raw_disc = (result.payload or {}).get("disc")
+                if isinstance(raw_disc, int) and not isinstance(raw_disc, bool):
+                    job.disc_number = raw_disc
             # Timed review gate: a GENUINELY identified disc (result is not None — not
             # the block_on_miss=false synthetic "unidentified" IDENTIFIED below) parks
             # for operator review when hold_for_review is on, stamping the countdown
@@ -504,18 +515,18 @@ async def identify(
             else:
                 job.status = JobStatus.IDENTIFIED
         else:
-            diagnostic: dict[str, object] = {}
+            diagnostic: dict[str, bool] = {}
             if timed_out:
                 diagnostic["dispatch_timeout"] = True
             if cfg.block_on_miss:
                 job.status = JobStatus.AWAITING_USER_ID
                 job.title = scan.volume_label
                 if diagnostic:
-                    job.metadata_json = {**(job.metadata_json or {}), **diagnostic}
+                    job.metadata_json = with_flags(job.metadata_json, **diagnostic)
             else:
                 job.status = JobStatus.IDENTIFIED
                 job.title = scan.volume_label
-                job.metadata_json = {**(job.metadata_json or {}), "unidentified": True, **diagnostic}
+                job.metadata_json = with_flags(job.metadata_json, unidentified=True, **diagnostic)
 
     job.metadata_json = {
         **(job.metadata_json or {}),
@@ -986,7 +997,7 @@ async def rip_complete(
         # rips). A PARTIAL unidentified rip stays RIPPED_PARTIAL — the enum
         # has no partial+unidentified value and losing partiality would hide
         # failed tracks; it remains resolvable (PRESERVE) either way.
-        if (job.metadata_json or {}).get("unidentified"):
+        if flag_is_set(job.metadata_json, "unidentified"):
             job.status = JobStatus.RIPPED_AWAITING_IDENTIFY
         else:
             job.status = JobStatus.RIPPED

@@ -923,8 +923,11 @@ async def resolve(
                 )
     was_ripped_placeholder = job.status == JobStatus.RIPPED_AWAITING_IDENTIFY
     if job.status in _RESOLVABLE_STATUSES_PROMOTE:
-        # Identity has landed; the flag that parked the job is spent.
+        # Identity has landed; the flag that parked the job is spent
+        # (flags section + the pre-0031 top-level key).
         new_metadata.pop("unidentified", None)
+        if isinstance(new_metadata.get("flags"), dict):
+            new_metadata["flags"] = {k: v for k, v in new_metadata["flags"].items() if k != "unidentified"}
         # A placeholder whose rip already finished becomes RIPPED, not
         # IDENTIFIED — its rip is done (G-09).
         job.status = JobStatus.RIPPED if was_ripped_placeholder else JobStatus.IDENTIFIED
