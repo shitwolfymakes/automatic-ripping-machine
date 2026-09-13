@@ -958,7 +958,7 @@ async def resolve(
 async def apply_session(
     job_id: JobIdParam,
     req: ApplySessionRequest,
-    _: User = Depends(require_writer),
+    user: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> ApplySessionResponse:
@@ -972,7 +972,7 @@ async def apply_session(
             job=job,
             session_id=req.session_id,
             overwrite=req.overwrite,
-            created_by_user_id=None,
+            created_by_user_id=user.id,
             source="manual",
             hub=hub,
         )

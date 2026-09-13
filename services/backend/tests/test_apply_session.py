@@ -503,3 +503,19 @@ def test_apply_to_identified_unripped_job_parks_as_waiting_identify(signing_key:
     assert len(db.rows["session_applications"]) == 1
     assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
     assert db.rows["transcode_tasks"] == []
+
+
+def test_apply_records_the_operator(signing_key: bytes, tmp_path: Path) -> None:
+    """G-07: a manual apply stamps created_by_user_id with the caller, so
+    the audit trail can say who queued a transcode (auto stays None)."""
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert db.rows["session_applications"][0].created_by_user_id == "usr_admin"
