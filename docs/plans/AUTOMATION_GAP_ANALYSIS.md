@@ -84,7 +84,7 @@ IDs are stable so they can be referenced from issues and PRs.
 | G-06 | minor | "Auto-transcode when idle" has no idle semantics. | `config_metadata.py:170` | Relabel to "Auto-apply the drive/route default session after each rip", or implement real idle gating and keep the name. |
 | G-07 | minor | Manual applies record no user. | `routers/jobs.py:998` passes `created_by_user_id=None` | Pass the authenticated user id. |
 | G-08 | major | Overwrite eviction matches on `output_path` only, across jobs. Re-ripping a disc and applying with overwrite deletes the older job's finished tasks and application. Observed today: the 05:09 application on `job_01M1TGZ8…` vanished when the older duplicate rip was re-applied at 13:56. | `auto_session.py:_evict_colliding_tasks` | Scope eviction to the same job by default; cross-job overwrite becomes an explicit confirm with the other job named. |
-| G-09 | minor | `JobStatus.RIPPED_AWAITING_IDENTIFY` is defined and accepted by resolve but never assigned. | `enums.py:80`, `routers/jobs.py:877` | Either assign it in placeholder rips (rip-complete on an `unidentified` job) or delete it. |
+| G-09 | minor | `JobStatus.RIPPED_AWAITING_IDENTIFY` is defined and accepted by resolve but never assigned. Twelve UI files already label it. | `enums.py:80`, `routers/jobs.py:877` | Assign it at rip-complete for `unidentified` placeholder rips (cheaper than deleting). Consequences: resolve must promote it to `ripped`, not `identified`; resolve must then run the after-rip hooks (drain + auto-apply); the parking guard's ripped-set must include it. See §5. |
 
 ### Disc types
 
@@ -120,7 +120,7 @@ IDs are stable so they can be referenced from issues and PRs.
 |---|---|---|---|---|
 | G-18 | note | `block_on_miss=false` (placeholder mode) rips and transcodes under the volume label, and ARM never renames afterwards. Correct per design, but an unattended run needs the operator to know this trade-off. | `ripper.py:495-497`, `02-job-lifecycle.md` | Keep `block_on_miss=true` as the unattended default; document placeholder mode as "you will rename". |
 | G-19 | verify | `rip.needs_user_input` is emitted on an identify miss. Whether the notification catalog exposes it (so an unattended operator is paged) was not verified in this pass. | `ripper.py:518`, `notifications/catalog.py` | Confirm it is in the catalog; if not, add it. |
-| G-20 | major | No `/raw` retention is implemented. `default_retention_policy` exists in config (default `keep_forever`) but nothing prunes. Unattended runs fill the raw volume. | grep: only drive pruning exists (`drive_scanner.py`) | Implement `prune_after_session`: when every task derived from a job is terminal, remove `/raw/{job_id}` per policy. |
+| G-20 | major | No `/raw` retention is implemented. `default_retention_policy` exists in config (default `keep_forever`) but nothing prunes. Unattended runs fill the raw volume. | grep: only drive pruning exists (`drive_scanner.py`) | Implement `prune_after_session`: when every task derived from a job is terminal, remove `/raw/{job_id}` per policy. A `waiting_identify` application has zero tasks and must count as non-terminal, or pruning deletes raw before the parked transcode runs (§5). |
 | G-21 | note | Disc dedupe reuses pre-rip jobs across days (today's job was created 09-06 and ripped 09-12). A ripped disc re-inserted creates a new job whose outputs collide with the old one, which is how G-08 bites. | `disc_dedupe.py` | With G-08 scoped, offer "already ripped on {date}: skip / rip again" on re-insert. |
 
 ## 3. Free-form metadata: inventory and schema recommendation
@@ -256,9 +256,12 @@ Rules that go with it:
 
 Ordered so each step has a reader for what it adds.
 
-1. **Now (branch `fix/parked-session-survives-rip`, then cherry-pick):** G-01
-   rip-start honours the effective session's rip preset; G-06 relabel; G-07
-   user id; G-09 remove the dead status.
+1. **Now (branch `fix/rip-start-honours-session-preset`, stacked on the
+   parking fix, then cherry-pick):** open with refactors R-2 and R-6 (one
+   rip-preset resolver, one SkippedReason), then G-01 rip-start honours the
+   routed session's rip preset via the split resolver (§5.1); G-06 relabel;
+   G-07 user id; G-09 assign the status and route resolve through the
+   after-rip hook.
 2. **Data model:** `jobs.media_type`, `jobs.season`, `jobs.pending_session_id`
    columns; `JobMetadata` schema with migration; typed `ResolveRequest`;
    regenerate OpenAPI and both UIs (G-03, G-14, §3).
@@ -279,3 +282,105 @@ Ordered so each step has a reader for what it adds.
 
 Steps 2 and 3 are the ones that turn "automatic" from a per-drive switch into
 a policy the system can apply per disc. Everything after them is refinement.
+
+## 5. Step interactions
+
+A coherence pass over §4 against the code as it stands. Each item is a place
+where implementing a step naively would create a second copy of logic that
+already exists once, or where two steps collide.
+
+### 5.1 The session resolver carries a transcode flag
+
+`resolve_effective_session_id` returns the drive default only when
+`auto_transcode_on_idle` is on. If rip-start (G-01) calls it unchanged, the rip
+preset starts depending on a transcode setting. Split it:
+
+- `resolve_routed_session_id(db, job)` — pending choice, then route (step 3)
+  or drive default. No flag. Used by rip-start, the naming preview and the
+  auto-apply hook.
+- `may_auto_apply(cfg, job)` — the flag, bypassed by an explicit pending
+  choice. Consulted only by the after-rip hook.
+
+Step 3's routing table plugs into the first function and nowhere else.
+
+### 5.2 A second preset chooser exists
+
+`_persist_review_tracks` (hold-for-review) and the min-length override both
+bypass any session and read `_DEFAULT_RIP_PRESET_BY_DISC_TYPE` / the pending
+key directly. Changing rip-start alone makes a held disc rip a different track
+set than an unattended one. `resolve_rip_preset_for_job(db, job)` is the one
+home; rip-start, the review-gate persist and the min-length override call it.
+
+### 5.3 The media-type check lives in the fan-out helper
+
+Three callers fan out: manual apply, resolve's drain, rip-complete's drain.
+Putting the check (G-04) into `_fan_out_tasks_for_application` as a new
+`skipped_reason="media_mismatch"` gives all three the same behaviour, exactly
+as `no_tracks` did. One more OpenAPI regen, same pattern.
+
+### 5.4 G-09 implies an after-rip hook
+
+Assigning `ripped_awaiting_identify` means resolve becomes a second place
+where a job "becomes ripped". Today resolve promotes that status to
+`identified` (wrong for a job whose rip is done) and runs neither the parked
+drain nor the auto-apply hook. Extract `after_rip(db, job, hub)` (drain, then
+auto-apply) and call it from rip-complete and from resolve when the job was
+`ripped_awaiting_identify`. The parking guard's `_RIPPED_STATUSES` must include
+the new status.
+
+### 5.5 Retention versus parking
+
+G-20's rule "prune when every task derived from a job is terminal" is
+satisfied by a job whose only application is parked with zero tasks. Treat a
+`waiting_identify` application as non-terminal for retention.
+
+### 5.6 G-01 changes less than it sounds
+
+MakeMKV rips every title ≥ minlength in one invocation regardless of the
+track list; the list only decides which outputs become Track rows
+(`rip/dispatcher.py:158-200`). Unselected `.mkv` files stay in `/raw/{job}`
+and nothing removes them. Main-feature selection therefore fixes naming and
+fan-out, not rip time or disk. Decision needed: keep the one-invocation rule
+(memory: per-title invocations autosuspend USB-BD drives) and let retention
+clean the extras, or delete unattributed outputs at rip-complete. Recommended:
+the former, so G-20 gains "also remove unselected outputs".
+
+### 5.7 Where "UHD" lives
+
+The routing key is (media_type, disc_type). Smallest change: a new
+`DiscType.UHD_BLURAY` value that the backend upgrades `bluray` to when
+TheDiscDB (G-22) or per-title resolution (G-10) says so, before rip-start. The
+ripper's rip dispatcher branches on DVD/BLURAY by name and must accept the new
+value. The alternative (a separate `video_format` column) keeps disc type
+physical but adds a routing dimension. Take the enum value.
+
+### 5.8 Shared-logic map
+
+| Concern | One home | Callers |
+|---|---|---|
+| Which session is routed to a job | `resolve_routed_session_id` | rip-start, naming preview, after-rip hook |
+| Whether auto-apply may run | `may_auto_apply` | after-rip hook |
+| Which rip preset applies | `resolve_rip_preset_for_job` | rip-start, review-gate persist, min-length override |
+| Fan-out, parking, media check | `_fan_out_tasks_for_application` | manual apply, resolve drain, rip-complete drain |
+| Post-rip actions | `after_rip` | rip-complete, resolve of a ripped placeholder |
+| Job kind | `jobs.media_type` | identify, TheDiscDB exact match, resolve, routing |
+
+## 6. Refactor targets
+
+Behaviour-neutral changes that make the steps above smaller. Each can ship as
+its own commit ahead of the fix that needs it and cherry-picks cleanly. Sizes
+measured on `integration/all-prs@9ca4c88c`.
+
+| ID | Target | Evidence | Why now |
+|---|---|---|---|
+| R-1 | Extract the identify pipeline from `routers/ripper.py` into `identify_pipeline.py` with explicit stages (dedupe → fingerprints → TheDiscDB → identity → status decision). | The handler is one function, lines 343–535, in a 1008-line router that also holds review gate, rip-start, rip-complete, heartbeat, config, keydb/SDF status and track updates. | Every identification fix (G-03, G-15, G-22, G-23, G-24) lands inside that function. |
+| R-2 | One rip-preset resolver (`resolve_rip_preset_for_job`). | `_DEFAULT_RIP_PRESET_BY_DISC_TYPE` is consulted in four places in the same router. | Prerequisite for G-01; see §5.2. Small. |
+| R-3 | Split `auto_session.py` into session resolution, apply engine (fan-out, collisions, eviction, retry) and hooks (after-rip, resolve drain). | 765 lines, eight responsibilities. | Hosts §5.1 and §5.4 cleanly. |
+| R-4 | Status predicates on the enum (`JobStatus.is_ripped()`, `is_pre_rip()`, …) in `arm_common`. | Six ad-hoc status frozensets across backend modules (`_APPLY_OK_STATUSES`, `_RIPPED_STATUSES`, `_RESOLVABLE_STATUSES_PROMOTE/PRESERVE`, `_TERMINAL_SESSION_STATUSES`, …) plus two in `arm_common.enums`. | G-09 touches several of them; the ripper and UIs should share the definition. |
+| R-5 | Test factories (`tests/_factories.py`: job, session, preset, track builders; one `CapturingHub`). | 40 backend test files define their own seed / hub / app builder; `test_ripper_router.py` is 1604 lines; the parking-fix tests re-declared ~60 lines of preset seeding that exist verbatim in two other files. | Every step adds tests; the fast suite is the coverage gate. |
+| R-6 | Define `SkippedReason` once in `arm_common` and import it. | Declared in both `auto_session.py` and `schemas/jobs.py`; `no_tracks` required editing both, `media_mismatch` (§5.3) would again. | Small; first commit on the branch. |
+
+Noted, not scheduled: `session_applications` has no error column, so the
+orphan sweep's reason "lives in the log line" and the UI cannot show it; two
+frontends carry two generated type sets and two hand-rolled metadata readers,
+which the `JobMetadata` schema reduces to zero readers but not to one frontend.
