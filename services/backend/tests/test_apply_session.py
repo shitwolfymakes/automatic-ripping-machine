@@ -519,3 +519,22 @@ def test_apply_records_the_operator(signing_key: bytes, tmp_path: Path) -> None:
         )
     assert r.status_code == 200, r.text
     assert db.rows["session_applications"][0].created_by_user_id == "usr_admin"
+
+
+def test_apply_to_ripped_awaiting_identify_parks_as_waiting_identify(signing_key: bytes, tmp_path: Path) -> None:
+    """G-09: a completed placeholder rip still has no identity; applying a
+    session parks it exactly like the pre-rip unidentified case, and
+    resolve's after-rip pass promotes it."""
+    db = FakeSession()
+    _seed(db, job_status=JobStatus.RIPPED_AWAITING_IDENTIFY)
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["session_application"]["status"] == "waiting_identify"
+    assert body["tasks"] == []

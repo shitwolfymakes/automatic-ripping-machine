@@ -52,7 +52,9 @@ logger = logging.getLogger("arm_backend.auto_session")
 
 
 _APPLY_OK_STATUSES: frozenset[JobStatus] = frozenset({JobStatus.IDENTIFIED, JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL})
-_RIPPED_STATUSES: frozenset[JobStatus] = frozenset({JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL})
+_RIPPED_STATUSES: frozenset[JobStatus] = frozenset(
+    {JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL, JobStatus.RIPPED_AWAITING_IDENTIFY}
+)
 _NO_TRACKS_DETAIL = "no tracks yet: the rip has not started; the application fans out when the rip completes"
 
 
@@ -178,9 +180,11 @@ async def _apply_session_internal(
             )
 
     # `awaiting_user_id` → park as `waiting_identify` with no tasks.
-    # In practice this only happens via the manual route — `rip-complete`
-    # only fires for jobs already past identification.
-    if job.status == JobStatus.AWAITING_USER_ID:
+    # In practice this only happens via the manual route. A placeholder rip
+    # that completed without identity (RIPPED_AWAITING_IDENTIFY) parks the
+    # same way: transcode is gated on identity, and resolve's after-rip pass
+    # promotes the application once the operator supplies it.
+    if job.status in (JobStatus.AWAITING_USER_ID, JobStatus.RIPPED_AWAITING_IDENTIFY):
         application = SessionApplication(
             session_id=session_id,
             job_id=job.id,
@@ -515,44 +519,58 @@ async def fan_out_waiting_identify_applications(
     return outcomes
 
 
+async def after_rip(db: AsyncSession, job: Job, hub: WSHub) -> list[ResolveFanOutOutcome]:
+    """Everything that happens once a job's rip is done and its identity is
+    known (gap analysis §5.4): drain parked applications, then the
+    auto-apply hook. Two callers — `rip-complete` for jobs that ripped
+    already identified, and `resolve` when a `ripped_awaiting_identify`
+    placeholder gains its identity. Never raises; returns the drain's
+    outcomes so resolve can report them.
+    """
+    outcomes = await drain_parked_applications_after_rip(db, job, hub)
+    await maybe_auto_apply_session(db, job, hub)
+    return outcomes
+
+
 async def drain_parked_applications_after_rip(
     db: AsyncSession,
     job: Job,
     hub: WSHub,
-) -> None:
-    """Hook invoked from `rip-complete`, ahead of `maybe_auto_apply_session`.
+) -> list[ResolveFanOutOutcome]:
+    """First half of `after_rip`.
 
     A session applied (or resolved) before rip-start parks as
     `waiting_identify` with no tasks because the ripper only persists Track
     rows at rip-start. Now that the rip has landed its tracks, promote every
     parked application on the job. Per-application problems stay parked and
-    log at WARN; nothing here may break the ripper's rip-complete call.
+    log at WARN; nothing here may break the caller.
     """
     try:
         outcomes = await fan_out_waiting_identify_applications(db, job=job, hub=hub)
         if not outcomes:
-            return
+            return []
         await db.commit()
     except Exception:  # noqa: BLE001 - hook must never break rip-complete
         await db.rollback()
-        logger.exception("rip-complete: draining parked session_applications failed job_id=%s", job.id)
-        return
+        logger.exception("after-rip: draining parked session_applications failed job_id=%s", job.id)
+        return []
     for outcome in outcomes:
         if outcome.skipped_reason is None:
             logger.info(
-                "rip-complete: fanned out parked session_application=%s job_id=%s tasks=%d",
+                "after-rip: fanned out parked session_application=%s job_id=%s tasks=%d",
                 outcome.application.id,
                 job.id,
                 len(outcome.tasks),
             )
         else:
             logger.warning(
-                "rip-complete: parked session_application=%s job_id=%s stays parked reason=%s: %s",
+                "after-rip: parked session_application=%s job_id=%s stays parked reason=%s: %s",
                 outcome.application.id,
                 job.id,
                 outcome.skipped_reason,
                 outcome.error_detail,
             )
+    return outcomes
 
 
 async def _evict_colliding_tasks(db: AsyncSession, paths: list[str]) -> None:

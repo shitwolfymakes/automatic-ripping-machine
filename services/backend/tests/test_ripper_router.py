@@ -1230,10 +1230,19 @@ def test_update_track_invalid_target_409() -> None:
 
 
 def _rip_complete(db: FakeSession, hub: _Hub, monkeypatch: pytest.MonkeyPatch) -> Any:
+    """POST rip-complete with the auto-apply half of after_rip noop'd.
+
+    rip-complete now runs `after_rip` (drain parked applications, then
+    auto-apply). The drain stays REAL — the parked-application tests below
+    depend on it — while auto-apply is patched out at its own module so
+    these tests need no drive-default/config seeding.
+    """
+    from arm_backend import auto_session as auto_session_mod
+
     async def _noop(*_a: Any, **_k: Any) -> None:
         return None
 
-    monkeypatch.setattr(ripper_router, "maybe_auto_apply_session", _noop)
+    monkeypatch.setattr(auto_session_mod, "maybe_auto_apply_session", _noop)
     app = _make_app(db, hub=hub)
     with TestClient(app) as client:
         return client.post(
@@ -1664,3 +1673,49 @@ def test_rip_start_routed_session_preset_not_seeded_500() -> None:
         r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 500
     assert "not seeded" in r.json()["detail"]
+
+
+# --- rip-complete parks unidentified placeholder rips (G-09) -----------------
+
+
+def test_rip_complete_unidentified_parks_awaiting_identify(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A placeholder rip (identify missed, block_on_miss=false) that ripped
+    clean parks at ripped_awaiting_identify: transcode is gated on identity,
+    so neither the parked application nor auto-apply may fire yet."""
+    from arm_backend import config as bcfg
+
+    bcfg.settings.MEDIA_ROOT = str(tmp_path)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"unidentified": True})]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
+    _seed_parked_session(db)
+    hub = _Hub()
+    r = _rip_complete(db, hub, monkeypatch)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ripped_awaiting_identify"
+    assert any(e["event_type"] == "rip.completed" for e in hub.events)
+    # The parked application waits for resolve; nothing fanned out.
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
+
+
+def test_rip_complete_partial_unidentified_stays_ripped_partial(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Partiality wins over the placeholder flag: the enum has no
+    partial+unidentified value and hiding failed tracks would be worse.
+    RIPPED_PARTIAL stays resolvable (PRESERVE) for the identity edit."""
+    from arm_backend import config as bcfg
+
+    bcfg.settings.MEDIA_ROOT = str(tmp_path)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"unidentified": True})]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [
+        _track("t1", status=TrackStatus.DONE, index=1),
+        _track("t2", status=TrackStatus.FAILED, index=2),
+    ]
+    r = _rip_complete(db, _Hub(), monkeypatch)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ripped_partial"
