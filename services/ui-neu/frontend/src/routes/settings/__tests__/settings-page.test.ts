@@ -131,11 +131,6 @@ vi.mock('$lib/stores/colorScheme', async () => {
 	};
 });
 
-vi.mock('$lib/api/system', () => ({
-	restartArm: vi.fn(() => Promise.resolve()),
-	restartTranscoder: vi.fn(() => Promise.resolve())
-}));
-
 vi.mock('$lib/api/maintenance', () => ({
 	fetchImageCacheStats: vi.fn(() => Promise.resolve({ count: 5, size_bytes: 5242880, size_mb: '5.0' })),
 	clearImageCache: vi.fn(() => Promise.resolve({ success: true, cleared: 5, freed_bytes: 5242880 }))

@@ -48,6 +48,10 @@ class Config(SQLModel, table=True):
     makemkv_sdf_enabled: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
     makemkv_sdf_state: str | None = Field(sa_column=Column(String, nullable=True))
     makemkv_sdf_checked_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
+    # TheDiscDB disc-map matching (docs/superpowers/specs/2026-08-06-thediscdb-design.md).
+    thediscdb_enabled: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
+    thediscdb_refresh_days: int = Field(sa_column=Column(Integer, nullable=False, server_default="7"))
+    thediscdb_refreshed_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
     # See DEFAULT_MUSICBRAINZ_USER_AGENT above — a bare token 403s; operators are
     # still encouraged to override with their own contact info (UI placeholder hint).
     musicbrainz_user_agent: str | None = Field(default=DEFAULT_MUSICBRAINZ_USER_AGENT)

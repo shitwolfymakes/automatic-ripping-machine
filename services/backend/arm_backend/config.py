@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     # volume here in compose.
     ARM_IMAGE_CACHE_PATH: str = "/data/cache/images"
 
+    # TheDiscDB snapshot index (built from the GitHub data tarball).
+    ARM_THEDISCDB_PATH: str = "/data/cache/thediscdb"
+
     # User-uploaded themes live here (bind-mounted via ./arm/themes:/data/themes).
     # Built-in themes are a frontend concern — tokens compiled into the UI, CSS
     # served as static assets — so the backend stores only user themes.

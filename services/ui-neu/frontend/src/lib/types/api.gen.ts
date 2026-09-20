@@ -95,6 +95,27 @@ export type BodyUploadThemeApiThemesPost = {
 };
 
 /**
+ * BulkDeleteJobsRequest
+ *
+ * DELETE /api/jobs body (optional). Filters which terminal jobs are
+ * deleted:
+ * - `job_ids` set  -> delete only those jobs (still terminal-guarded)
+ * - `status` set   -> delete only terminal jobs in that JobStatus
+ * - neither set    -> delete ALL terminal jobs (legacy behavior)
+ * `job_ids` takes precedence over `status` if both are sent.
+ */
+export type BulkDeleteJobsRequest = {
+    /**
+     * Job Ids
+     */
+    job_ids?: Array<string> | null;
+    /**
+     * Status
+     */
+    status?: string | null;
+};
+
+/**
  * BulkDeleteJobsResponse
  *
  * DELETE /api/jobs response. `deleted_ids` lists the jobs whose DB
@@ -359,6 +380,14 @@ export type ConfigUpdateRequest = {
      */
     makemkv_sdf_enabled?: boolean | null;
     /**
+     * Thediscdb Enabled
+     */
+    thediscdb_enabled?: boolean | null;
+    /**
+     * Thediscdb Refresh Days
+     */
+    thediscdb_refresh_days?: number | null;
+    /**
      * Ripping Paused
      */
     ripping_paused?: boolean | null;
@@ -426,6 +455,14 @@ export type ConfigView = {
      * Makemkv Sdf Enabled
      */
     makemkv_sdf_enabled: boolean;
+    /**
+     * Thediscdb Enabled
+     */
+    thediscdb_enabled: boolean;
+    /**
+     * Thediscdb Refresh Days
+     */
+    thediscdb_refresh_days: number;
     /**
      * Ripping Paused
      */
@@ -4156,7 +4193,10 @@ export type RipCompleteApiRipperJobsJobIdRipCompletePostResponses = {
 export type RipCompleteApiRipperJobsJobIdRipCompletePostResponse = RipCompleteApiRipperJobsJobIdRipCompletePostResponses[keyof RipCompleteApiRipperJobsJobIdRipCompletePostResponses];
 
 export type DeleteAllJobsApiJobsDeleteData = {
-    body?: never;
+    /**
+     * Req
+     */
+    body?: BulkDeleteJobsRequest | null;
     headers?: {
         /**
          * Authorization
@@ -7365,6 +7405,41 @@ export type SystemVersionApiSystemVersionGetResponses = {
 };
 
 export type SystemVersionApiSystemVersionGetResponse = SystemVersionApiSystemVersionGetResponses[keyof SystemVersionApiSystemVersionGetResponses];
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/system/thediscdb/refresh';
+};
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostError = ThediscdbRefreshNowApiSystemThediscdbRefreshPostErrors[keyof ThediscdbRefreshNowApiSystemThediscdbRefreshPostErrors];
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponses = {
+    /**
+     * Response Thediscdb Refresh Now Api System Thediscdb Refresh Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponse = ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponses[keyof ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponses];
 
 export type RootsApiFilesRootsGetData = {
     body?: never;

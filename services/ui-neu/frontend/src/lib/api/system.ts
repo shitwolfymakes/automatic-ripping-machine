@@ -10,14 +10,6 @@ export function fetchJobStats(): Promise<JobStats> {
 	return apiFetch<JobStats>('/api/system/job-stats');
 }
 
-export function restartArm(): Promise<{ success: boolean }> {
-	return apiFetch('/api/system/restart', { method: 'POST' });
-}
-
-export function restartTranscoder(): Promise<{ success: boolean; message: string }> {
-	return apiFetch('/api/system/restart-transcoder', { method: 'POST' });
-}
-
 export interface PreflightCheck {
 	name: string;
 	success: boolean;
