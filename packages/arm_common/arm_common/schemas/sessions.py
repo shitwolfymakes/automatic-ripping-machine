@@ -181,6 +181,10 @@ class TranscodeTaskView(BaseModel):
 
     id: str
     session_application_id: str
+    # Resolved from the task's SessionApplication.job_id; populated by
+    # GET /api/transcodes so the transcode card can link to the job detail.
+    # None at other build sites (the card list is the only consumer).
+    job_id: str | None = None
     source_track_id: str
     status: TranscodeTaskStatus
     output_path: str | None

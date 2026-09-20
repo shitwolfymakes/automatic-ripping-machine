@@ -69,12 +69,70 @@ nvenc_driver_ok() {
     echo 0
 }
 
+# Probe the transcode image for the HW encoders HandBrake can actually run.
+# Prints the raw JSON ({"qsv":["h264"],...}) on success, nothing on failure.
+# Best-effort only: on a fresh install this runs before images are pulled, so
+# a missing image is expected and the caller treats empty output as "fall back
+# to h264+h265" — never blocks install. Mirrors install.sh.
+#
+# The `arm-transcode:latest` default is correct HERE (unlike install.sh, which
+# must qualify it as ${ARM_IMAGE_PREFIX}/arm-transcode:${ARM_IMAGE_TAG}): the dev
+# docker-compose.yml.example BUILDS + tags the transcode image as exactly
+# `arm-transcode:latest`, so that unqualified name is the real local image.
+probe_encoder_caps() {
+    local image="${ARM_TRANSCODE_IMAGE:-arm-transcode:latest}"
+    local devflags=()
+    if [[ -d /dev/dri ]]; then
+        devflags+=(--device /dev/dri)
+        # gosu (entrypoint) RESETS supplementary groups, so a docker --group-add
+        # render_gid would not survive into the `arm` process → HandBrake could
+        # not open the render node → QSV/VAAPI init fails → probe falsely reports
+        # {}. Pass RENDER_GID env instead: the entrypoint adds `arm` to it BEFORE
+        # the gosu drop (same as the transcode dispatcher). Mirrors install.sh.
+        local render_gid
+        render_gid="$(detect_render_gid || true)"
+        [[ -n "${render_gid}" ]] && devflags+=(-e "RENDER_GID=${render_gid}")
+    fi
+    command -v nvidia-smi >/dev/null 2>&1 && devflags+=(--gpus all)
+    # Print the probe's JSON on stdout and RETURN ITS EXIT STATUS (no `|| true`).
+    # The caller treats exit 0 as authoritative — even a `{}` result means
+    # "checked, this device has no working HW encoder" and MUST NOT be overridden
+    # with the h264+h265 default. Only a non-zero exit is a genuine probe failure.
+    timeout 60 docker run --rm "${devflags[@]}" "${image}" \
+        python -m arm_transcode.main --probe-encoders 2>/dev/null
+}
+
 # Phase 7b: enumerate GPUs host-side so the GPU-free backend can fill the `gpus`
 # table from ARM_GPUS instead of probing hardware. Prints a compact JSON array
 # (empty `[]` if none). Mirrors services/backend/arm_backend/gpu_probe.py and the
 # detect_gpus in install.sh.
 detect_gpus() {
     local entries=() node vendor_file vid vendor idx
+    local caps_json probe_ok
+    # Capture BOTH the probe output and whether it ran authoritatively. `&& ... ||`
+    # keeps the non-zero exit from aborting under `set -e`. probe_ok=1 means the
+    # probe ran and its JSON is the truth (even `{}`); probe_ok=0 means it failed
+    # (image missing/timeout/docker error) and we fall back to the safe default.
+    caps_json="$(probe_encoder_caps)" && probe_ok=1 || probe_ok=0
+    # kinds_for <vendor> -> JSON array string, e.g. ["h264","h265"], ["h264"], or [].
+    # When the probe RAN (probe_ok=1), its answer is authoritative: a vendor absent
+    # from the JSON (or present as []) means "no working HW encoder" -> [] (do NOT
+    # over-claim). Only a probe FAILURE falls back to h264+h265.
+    kinds_for() {
+        local vendor="$1" kinds=""
+        if [[ -n "${caps_json}" ]] && command -v jq >/dev/null 2>&1; then
+            kinds="$(printf '%s' "${caps_json}" | jq -c --arg v "${vendor}" '.[$v] // empty' 2>/dev/null)"
+        elif [[ -n "${caps_json}" ]]; then
+            kinds="$(printf '%s' "${caps_json}" | grep -oE "\"${vendor}\":\[[^]]*\]" | sed -E "s/\"${vendor}\"://")"
+        fi
+        if [[ -n "${kinds}" ]]; then
+            printf '%s' "${kinds}"        # probe reported real codecs for this vendor
+        elif [[ "${probe_ok}" == "1" ]]; then
+            printf '[]'                   # probe ran, vendor has no HW encoder -> honest empty
+        else
+            printf '["h264","h265"]'      # probe failed -> safe (pre-probe) default
+        fi
+    }
     if [[ -d /dev/dri ]]; then
         for node in /dev/dri/renderD*; do
             [[ -e "${node}" ]] || continue
@@ -86,13 +144,13 @@ detect_gpus() {
                 0x1002) vendor=vaapi ;;
                 *)      continue ;;
             esac
-            entries+=("{\"vendor\":\"${vendor}\",\"device_path\":\"${node}\",\"encoder_kinds\":[\"h264\",\"h265\"]}")
+            entries+=("{\"vendor\":\"${vendor}\",\"device_path\":\"${node}\",\"encoder_kinds\":$(kinds_for "${vendor}")}")
         done
     fi
     if command -v nvidia-smi >/dev/null 2>&1 && [[ "$(nvenc_driver_ok)" == 0 ]]; then
         while IFS= read -r idx; do
             [[ -n "${idx}" ]] || continue
-            entries+=("{\"vendor\":\"nvenc\",\"device_path\":\"nvidia://${idx}\",\"encoder_kinds\":[\"h264\",\"h265\"]}")
+            entries+=("{\"vendor\":\"nvenc\",\"device_path\":\"nvidia://${idx}\",\"encoder_kinds\":$(kinds_for nvenc)}")
         done < <(nvidia-smi -L 2>/dev/null | sed -nE 's/^GPU ([0-9]+):.*/\1/p')
     fi
     local IFS=,
@@ -181,17 +239,30 @@ RIPPER_BEGIN_MARK="# >>> arm-ripper services"
 
 DRIVES_SR=()   # bare drive numbers, e.g. (0 1)
 DRIVES_SG=()   # matching sg node names, index-aligned, e.g. (sg2 sg6)
+DRIVES_SERIAL=()  # ID_SERIAL_SHORT per drive, index-aligned; empty string if unavailable
 
 detect_optical_drives() {
     DRIVES_SR=()
     DRIVES_SG=()
-    local line srdev sgdev
+    DRIVES_SERIAL=()
+    local line srdev sgdev serial
     while IFS= read -r line; do
         [[ -z "${line}" ]] && continue
         srdev="${line%% *}"   # /dev/srN
         sgdev="${line##* }"   # /dev/sgM
         DRIVES_SR+=("${srdev#/dev/sr}")
         DRIVES_SG+=("${sgdev#/dev/}")
+        # Hardware serial, stable across reboots/replugs/renumbering — unlike
+        # the srN/sgM node names above, which the kernel reassigns by
+        # enumeration order. Not read from SCSI INQUIRY (many optical drives
+        # reject the VPD 0x80 Unit Serial Number page with ILLEGAL REQUEST);
+        # udev's ID_SERIAL_SHORT is populated from the ATA IDENTIFY / USB
+        # descriptor instead, which drives do reliably expose. Passed to the
+        # ripper container as ARM_DRIVE_SERIAL so the backend can detect a
+        # drive swap behind an unchanged srN slot (see Drive.serial).
+        serial="$(udevadm info --query=property --name="${srdev}" 2>/dev/null \
+            | sed -n 's/^ID_SERIAL_SHORT=//p')"
+        DRIVES_SERIAL+=("${serial}")
     done < <(
         lsscsi -g 2>/dev/null | awk '
             $2 == "cd/dvd" {
@@ -206,7 +277,7 @@ detect_optical_drives() {
 }
 
 emit_ripper_block() {
-    local n="$1" sg="$2"
+    local n="$1" sg="$2" serial="$3"
     cat <<EOF
 
   arm-ripper-sr${n}:
@@ -231,6 +302,7 @@ emit_ripper_block() {
       - "\${CDROM_GID:-44}"
     environment:
       ARM_DRIVE_DEV: /dev/sr${n}
+      ARM_DRIVE_SERIAL: "${serial}"
       ARM_BACKEND_URL: https://arm-backend:8443
       ARM_SERVICE_TOKEN: \${ARM_SERVICE_TOKEN}
       ARM_LOG_LEVEL: \${ARM_LOG_LEVEL:-info}
@@ -301,7 +373,7 @@ generate_ripper_services() {
         local i summary=""
         for i in "${!DRIVES_SR[@]}"; do
             summary+="sr${DRIVES_SR[$i]}↔${DRIVES_SG[$i]} "
-            emit_ripper_block "${DRIVES_SR[$i]}" "${DRIVES_SG[$i]}" >> "${blocks_file}"
+            emit_ripper_block "${DRIVES_SR[$i]}" "${DRIVES_SG[$i]}" "${DRIVES_SERIAL[$i]}" >> "${blocks_file}"
         done
         echo "==> detected ${#DRIVES_SR[@]} optical drive(s): ${summary}"
     fi

@@ -54,9 +54,35 @@ def test_poster_omdb_na_rejected() -> None:
     assert extract_poster_url(r) is None
 
 
-def test_poster_musicbrainz_caa() -> None:
-    r = MetadataResult(title="T", year=1, kind="music", payload={"id": "mbid-1"})
-    assert extract_poster_url(r) == "https://coverartarchive.org/release/mbid-1/front"
+def test_poster_musicbrainz_release_only() -> None:
+    # No release-group → per-release front-250, no fallback param. Matches neu's
+    # per-release URL shape (distinct covers across pressings).
+    r = MetadataResult(title="T", year=1, kind="music", payload={"id": "rel-1"})
+    assert extract_poster_url(r) == "https://coverartarchive.org/release/rel-1/front-250"
+
+
+def test_poster_musicbrainz_release_with_group_fallback() -> None:
+    # Per-release primary cover + the album's release-group id carried as
+    # fallback_group, so the image proxy can fall back to the group cover when
+    # the specific release has no art (the canonical Picard behavior).
+    r = MetadataResult(
+        title="T",
+        year=1,
+        kind="music",
+        payload={"id": "rel-1", "release-group": {"id": "grp-1"}},
+    )
+    assert extract_poster_url(r) == "https://coverartarchive.org/release/rel-1/front-250?fallback_group=grp-1"
+
+
+def test_poster_musicbrainz_group_without_id_no_fallback() -> None:
+    # release-group dict missing its id → release-only URL, no dangling param.
+    r = MetadataResult(
+        title="T",
+        year=1,
+        kind="music",
+        payload={"id": "rel-1", "release-group": {"title": "Album"}},
+    )
+    assert extract_poster_url(r) == "https://coverartarchive.org/release/rel-1/front-250"
 
 
 def test_poster_music_without_id_none() -> None:
@@ -346,3 +372,56 @@ async def test_arm_server_strips_pipe_from_crc64(http_client) -> None:  # type: 
     sent = str(route.calls.last.request.url)
     assert "crc64=79df7b128b27d001" in sent
     assert "%7C" not in sent and "|" not in sent
+
+
+# --- MusicBrainz search filters + candidate facets ---------------------------
+
+
+@respx.mock
+async def test_search_releases_builds_lucene_with_filters(  # type: ignore[no-untyped-def]
+    http_client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # All filters present → each AND-clause appears in the Lucene query string.
+    monkeypatch.setattr(mb_mod, "_MIN_INTERVAL_SECONDS", 0)
+    route = respx.get("https://musicbrainz.org/ws/2/release").mock(
+        return_value=httpx.Response(200, json={"releases": []})
+    )
+    client = MusicBrainzClient("UA/1.0", http_client)
+    await client.search_releases(
+        "greatest hits",
+        artist="Metronomy",
+        release_type="album",
+        format="CD",
+        country="GB",
+        status="official",
+    )
+    q = dict(route.calls.last.request.url.params)["query"]
+    assert 'artist:"Metronomy"' in q
+    assert "primarytype:album" in q
+    assert 'format:"CD"' in q
+    assert "country:GB" in q
+    assert "status:official" in q
+
+
+def test_to_candidate_populates_music_facets() -> None:
+    from arm_backend.routers.metadata import _to_candidate
+
+    r = MetadataResult(
+        title="Greatest Hits",
+        year=2025,
+        kind="music",
+        payload={
+            "id": "rel-1",
+            "release-group": {"id": "grp-1", "primary-type": "Album"},
+            "format": "CD",
+            "country": "GB",
+            "status": "Official",
+            "track-count": 17,
+        },
+    )
+    c = _to_candidate(r)
+    assert c.release_type == "Album"
+    assert c.format == "CD"
+    assert c.country == "GB"
+    assert c.status == "Official"
+    assert c.track_count == 17

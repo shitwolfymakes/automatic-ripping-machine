@@ -1,8 +1,11 @@
+import logging
 from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import Column, DateTime, Dialect, String, func
 from sqlalchemy.types import TypeDecorator
+
+logger = logging.getLogger("arm_common.models")
 
 
 class _StrEnumString(TypeDecorator[StrEnum]):
@@ -31,9 +34,41 @@ class _StrEnumString(TypeDecorator[StrEnum]):
         return str(value)
 
     def process_result_value(self, value: Any, dialect: Dialect) -> StrEnum | None:
+        # The declared return type matches TypeDecorator's supertype (StrEnum | None)
+        # so the override type-checks. At runtime the except branch may return a raw
+        # str for a forward-incompatible value (see below); callers must treat the
+        # loaded value as possibly-str and render it via `enum_value_str`, not `.value`.
         if value is None:
             return None
-        return self._enum_cls(value)
+        try:
+            return self._enum_cls(value)
+        except ValueError:
+            # Tolerant coercion: a value written by a NEWER build (an enum member
+            # this build doesn't know) must not raise on load — a single such row
+            # would 500 every bulk query (job list / detail). Return the raw
+            # string so the row still loads; the unknown status simply won't match
+            # any known-value branch. This keeps a status enum addition
+            # rollback-safe (old build reading a new row degrades, not crashes).
+            logger.warning(
+                "unknown %s value %r loaded from DB; returning raw string (forward-compat)",
+                self._enum_cls.__name__,
+                value,
+            )
+            return str(value)  # type: ignore[return-value]  # intentional runtime-only widening
+
+
+def enum_value_str(value: Any) -> str:
+    """Render an enum-backed column value as its string form, tolerating the
+    forward-compat raw-string case.
+
+    `_StrEnumString.process_result_value` returns a plain `str` (not the enum)
+    for a value written by a newer build (see its docstring). Code that builds
+    an error message off such a value must not assume `.value` exists — a `str`
+    has none, so `f"...{status.value}"` would raise AttributeError and turn an
+    intended 4xx into a 500. Use this instead: it returns `.value` for a known
+    enum member and the value unchanged for a raw string.
+    """
+    return value.value if isinstance(value, StrEnum) else str(value)
 
 
 def enum_column(

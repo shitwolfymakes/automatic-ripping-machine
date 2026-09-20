@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.auth import require_jwt
+from arm_backend.auth import require_jwt, require_writer
 from arm_backend.db import get_session
 from arm_common import MediaType, Session, TranscodePreset, User
 from arm_common.schemas import (
@@ -44,7 +44,7 @@ async def get_transcode_preset(
 @router.post("", response_model=TranscodePresetView, status_code=status.HTTP_201_CREATED)
 async def create_transcode_preset(
     req: TranscodePresetCreateRequest,
-    user: User = Depends(require_jwt),
+    user: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> TranscodePreset:
     row = TranscodePreset(
@@ -69,7 +69,7 @@ async def create_transcode_preset(
 async def update_transcode_preset(
     preset_id: str,
     req: TranscodePresetUpdateRequest,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> TranscodePreset:
     row = (await db.execute(select(TranscodePreset).where(col(TranscodePreset.id) == preset_id))).scalar_one_or_none()
@@ -93,7 +93,7 @@ async def update_transcode_preset(
 @router.delete("/{preset_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_transcode_preset(
     preset_id: str,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> None:
     row = (await db.execute(select(TranscodePreset).where(col(TranscodePreset.id) == preset_id))).scalar_one_or_none()

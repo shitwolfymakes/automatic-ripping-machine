@@ -24,6 +24,7 @@ import pytest  # noqa: E402
 
 from arm_backend.config import settings  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
+from arm_backend.seeders import GUEST_USERNAME  # noqa: E402
 from arm_backend.ws import router as ws_router  # noqa: E402
 from arm_common import (  # noqa: E402
     Drive,
@@ -34,6 +35,7 @@ from arm_common import (  # noqa: E402
     User,
 )
 from arm_common.models import TranscodeTask  # noqa: E402
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -108,6 +110,17 @@ def _make_app(db: FakeSession, hub: _Hub, monkeypatch: pytest.MonkeyPatch) -> Fa
 
 def _ripper_drive(drive_id: str = "drv_x", hostname: str = "ripper-host") -> Drive:
     return Drive(id=drive_id, hostname=hostname, device_path="/dev/sr0", status=DriveStatus.ONLINE)
+
+
+def _guest_user(disabled: bool = False) -> User:
+    return User(
+        id="usr_guest",
+        username=GUEST_USERNAME,
+        password_hash="x",
+        password_must_change=False,
+        role=GUEST_ROLE,
+        disabled=disabled,
+    )
 
 
 def _job(job_id: str = "job_01JZXR7K3M5Q8N4VWA00000001", drive_id: str = "drv_x") -> Job:
@@ -343,6 +356,78 @@ def test_ui_jwt_principal_subscribe(monkeypatch: pytest.MonkeyPatch) -> None:
     with TestClient(app) as client:
         with client.websocket_connect("/ws") as ws:
             ws.send_json({"op": "auth", "token": token})
+            assert ws.receive_json()["op"] == "ack"
+            ws.send_json({"op": "subscribe", "topic": "ripper.events"})
+            assert ws.receive_json() == {"op": "ack", "topic": "ripper.events"}
+    assert "ripper.events" in hub.subscribed
+
+
+# --- UI principal (anonymous guest, empty auth token) -------------------------
+
+
+def test_ws_anonymous_auth_enabled_ack(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    db.rows["users"] = [_guest_user()]
+    hub = _Hub()
+    app = _make_app(db, hub, monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"op": "auth", "token": ""})
+            assert ws.receive_json()["op"] == "ack"
+
+
+def test_ws_anonymous_auth_disabled_4401(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    db.rows["users"] = [_guest_user(disabled=True)]
+    hub = _Hub()
+    app = _make_app(db, hub, monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"op": "auth", "token": ""})
+            err = ws.receive_json()
+            assert err["code"] == ws_router.CLOSE_UNAUTHORIZED
+
+
+def test_ws_anonymous_auth_missing_guest_row_4401(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()  # no "users" rows at all — guest row missing
+    hub = _Hub()
+    app = _make_app(db, hub, monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"op": "auth", "token": ""})
+            err = ws.receive_json()
+            assert err["code"] == ws_router.CLOSE_UNAUTHORIZED
+
+
+def test_ws_anonymous_publish_denied(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    db.rows["users"] = [_guest_user()]
+    hub = _Hub()
+    app = _make_app(db, hub, monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"op": "auth", "token": ""})
+            assert ws.receive_json()["op"] == "ack"
+            ws.send_json(
+                {
+                    "op": "publish",
+                    "topic": "ripper.progress.job_01JZXR7K3M5Q8N4VWA00000001",
+                    "event_type": "rip.progress",
+                    "payload": {"pct": 5},
+                }
+            )
+            err = ws.receive_json()
+            assert err["code"] == ws_router.CLOSE_FORBIDDEN
+
+
+def test_ws_anonymous_subscribe_ui_topic_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    db.rows["users"] = [_guest_user()]
+    hub = _Hub()
+    app = _make_app(db, hub, monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"op": "auth", "token": ""})
             assert ws.receive_json()["op"] == "ack"
             ws.send_json({"op": "subscribe", "topic": "ripper.events"})
             assert ws.receive_json() == {"op": "ack", "topic": "ripper.events"}

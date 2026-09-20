@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import secrets
+from datetime import datetime, timezone
 from typing import Any
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
@@ -218,6 +219,153 @@ def test_abandon_success_emits_with_delete_raw(signing_key: bytes) -> None:
     assert all(e["payload"]["delete_raw"] is True for e in hub.events)
 
 
+# --- rip-start-review (timed review gate Start) -------------------------------
+
+
+def test_rip_start_review_transitions_to_ripping_and_emits(signing_key: bytes) -> None:
+    db = FakeSession()
+    hub = _Hub()
+    app, token = _make_app(signing_key, db, hub)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW)]
+    db.rows["tracks"] = [_track("trk_01JZXR7K3M5Q8N4VWA0000T01", status=TrackStatus.QUEUED)]
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()["status"] == "ripping"
+    types = {e["event_type"] for e in hub.events}
+    assert "rip.start" in types and "rip.started" in types
+
+
+def test_rip_start_review_wrong_status_409(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.IDENTIFIED)]
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token))
+    assert r.status_code == 409
+    assert "awaiting_review" in r.json()["detail"]
+
+
+def test_rip_start_review_unknown_status_409_not_500(signing_key: bytes) -> None:
+    """A forward-incompatible status (loaded as a raw str by _StrEnumString) must
+    return the intended 409, not an AttributeError 500 from f-string `.value`."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _job(status=JobStatus.IDENTIFIED)
+    object.__setattr__(job, "status", "some_future_status")
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token))
+    assert r.status_code == 409
+    assert "some_future_status" in r.json()["detail"]
+
+
+def test_rip_start_review_all_excluded_422(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW)]
+    excluded = _track("trk_01JZXR7K3M5Q8N4VWA0000T02", status=TrackStatus.QUEUED)
+    excluded.excluded = True
+    db.rows["tracks"] = [excluded]
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token))
+    assert r.status_code == 422
+    assert "at least one track" in r.json()["detail"]
+
+
+def test_rip_start_review_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA0000404X/rip-start-review", headers=_auth(token))
+    assert r.status_code == 404
+
+
+def test_rip_start_review_succeeds_while_globally_paused(signing_key: bytes) -> None:
+    """Explicit Start must rip even when the machine is globally paused — Start =
+    'I've reviewed it, go now', so the global pause does not block it."""
+    from arm_common import Config, RetentionPolicy
+
+    db = FakeSession()
+    db.rows["config"] = [
+        Config(
+            id=1,
+            ripping_paused=True,
+            hold_for_review=True,
+            default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
+        )
+    ]
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW)]
+    db.rows["tracks"] = [_track("trk_01JZXR7K3M5Q8N4VWA0000T03", status=TrackStatus.QUEUED)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()["status"] == "ripping"
+
+
+# --- review-pause (per-job pause) ---------------------------------------------
+
+
+def test_review_pause_sets_manual_pause(signing_key: bytes) -> None:
+    db = FakeSession()
+    hub = _Hub()
+    app, token = _make_app(signing_key, db, hub)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW)]
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/review-pause?paused=true", headers=_auth(token))
+    assert r.status_code == 200
+    assert db.rows["jobs"][0].manual_pause is True
+    assert any(e["event_type"] == "review.pause" for e in hub.events)
+
+
+def test_review_resume_clears_pause_and_resets_countdown(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _job(status=JobStatus.AWAITING_REVIEW)
+    job.manual_pause = True
+    job.wait_start_time = datetime(2020, 1, 1, tzinfo=timezone.utc)  # long-expired
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/review-pause?paused=false", headers=_auth(token))
+    assert r.status_code == 200
+    assert db.rows["jobs"][0].manual_pause is False
+    # resume restarts a FRESH countdown rather than honoring the expired one
+    assert db.rows["jobs"][0].wait_start_time > datetime(2025, 1, 1, tzinfo=timezone.utc)
+
+
+def test_review_pause_wrong_status_409(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/review-pause", headers=_auth(token))
+    assert r.status_code == 409
+    assert "awaiting_review" in r.json()["detail"]
+
+
+def test_review_pause_unknown_status_409_not_500(signing_key: bytes) -> None:
+    """A forward-incompatible status (raw str from _StrEnumString) must yield the
+    intended 409 here, not an AttributeError 500 from f-string `.value`."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _job(status=JobStatus.IDENTIFIED)
+    object.__setattr__(job, "status", "some_future_status")
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/review-pause", headers=_auth(token))
+    assert r.status_code == 409
+    assert "some_future_status" in r.json()["detail"]
+
+
+def test_review_pause_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA0000404X/review-pause", headers=_auth(token))
+    assert r.status_code == 404
+
+
 # --- delete_job log-cleanup error branch -------------------------------------
 
 
@@ -244,8 +392,6 @@ def test_delete_job_swallows_log_unlink_error(
 
 
 def _drive(*, media: DriveMediaStatus | None = None, fresh: bool = True) -> Drive:
-    from datetime import datetime, timezone
-
     d = Drive(id="drv_x", hostname="h", device_path="/dev/sr0", status=DriveStatus.ONLINE)
     if media is not None:
         d.media_status = media
@@ -674,3 +820,143 @@ def test_apply_session_success(signing_key: bytes, monkeypatch: pytest.MonkeyPat
     assert body["session_application"]["id"] == "sap_1"
     assert body["idempotent"] is True
     assert body["collisions"] == []
+
+
+# --- update_job track editing ------------------------------------------------
+
+
+_JOB_ID_A = "job_00000000000000000000000001"  # 26-char Crockford body
+_JOB_ID_B = "job_00000000000000000000000002"
+_TRK_ID_A = "trk_00000000000000000000000001"
+_DRV_ID_A = "drv_00000000000000000000000001"
+
+
+def _seed_job_with_track(db: FakeSession, *, job_id: str = _JOB_ID_A, track_id: str = _TRK_ID_A) -> None:
+    db.rows.setdefault("jobs", []).append(
+        Job(
+            id=job_id,
+            drive_id=_DRV_ID_A,
+            disc_type=DiscType.DVD,
+            status=JobStatus.RIPPED,
+            title="Box Set",
+            resumed_from_crash=False,
+            metadata_json={},
+        )
+    )
+    db.rows.setdefault("tracks", []).append(
+        Track(id=track_id, job_id=job_id, kind=TrackKind.VIDEO_TITLE, index=1, source_ref="0")
+    )
+
+
+def test_update_job_edits_track_fields(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    hub = _Hub()
+    app, token = _make_app(signing_key, db, hub=hub)
+    body = {
+        "tracks": [
+            {
+                "track_id": _TRK_ID_A,
+                "title": "Pilot",
+                "episode_number": 1,
+                "episode_name": "Pilot",
+                "excluded": False,
+                "custom_filename": "S01E01",
+            }
+        ]
+    }
+    with TestClient(app) as c:
+        r = c.patch(f"/api/jobs/{_JOB_ID_A}", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    track = db.rows["tracks"][0]
+    assert track.title == "Pilot"
+    assert track.episode_number == 1
+    assert track.episode_name == "Pilot"
+    assert track.custom_filename == "S01E01"
+    assert any(e["event_type"] == "track.updated" for e in hub.events)
+
+
+def test_update_job_track_partial_leaves_others(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    db.rows["tracks"][0].episode_name = "Old"
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}", json={"tracks": [{"track_id": _TRK_ID_A, "title": "New"}]}, headers=_auth(token)
+        )
+    assert r.status_code == 200, r.text
+    assert db.rows["tracks"][0].title == "New"
+    assert db.rows["tracks"][0].episode_name == "Old"
+
+
+def test_update_job_track_unknown_track_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}", json={"tracks": [{"track_id": "trk_nope", "title": "X"}]}, headers=_auth(token)
+        )
+    assert r.status_code == 404
+    assert db.rows["tracks"][0].title is None
+
+
+def test_update_job_track_unknown_field_422(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}", json={"tracks": [{"track_id": _TRK_ID_A, "bogus": 1}]}, headers=_auth(token)
+        )
+    assert r.status_code == 422
+
+
+def test_update_job_track_scoped_to_job_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    db.rows["jobs"].append(
+        Job(
+            id=_JOB_ID_B,
+            drive_id=_DRV_ID_A,
+            disc_type=DiscType.DVD,
+            status=JobStatus.RIPPED,
+            resumed_from_crash=False,
+            metadata_json={},
+        )
+    )
+    db.rows["tracks"].append(
+        Track(id="trk_other", job_id=_JOB_ID_B, kind=TrackKind.VIDEO_TITLE, index=1, source_ref="0")
+    )
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}", json={"tracks": [{"track_id": "trk_other", "title": "X"}]}, headers=_auth(token)
+        )
+    assert r.status_code == 404
+
+
+def test_update_job_edits_multiple_tracks(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)  # job + _TRK_ID_A (index 1)
+    _TRK_ID_B = "trk_00000000000000000000000002"
+    db.rows["tracks"].append(Track(id=_TRK_ID_B, job_id=_JOB_ID_A, kind=TrackKind.VIDEO_TITLE, index=2, source_ref="1"))
+    hub = _Hub()
+    app, token = _make_app(signing_key, db, hub=hub)
+    body = {
+        "tracks": [
+            {"track_id": _TRK_ID_A, "episode_number": 1, "episode_name": "Pilot"},
+            {"track_id": _TRK_ID_B, "episode_number": 2, "episode_name": "Part Two"},
+        ]
+    }
+    with TestClient(app) as c:
+        r = c.patch(f"/api/jobs/{_JOB_ID_A}", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    by_id = {t.id: t for t in db.rows["tracks"]}
+    assert by_id[_TRK_ID_A].episode_number == 1
+    assert by_id[_TRK_ID_A].episode_name == "Pilot"
+    assert by_id[_TRK_ID_B].episode_number == 2
+    assert by_id[_TRK_ID_B].episode_name == "Part Two"
+    updated = [e for e in hub.events if e["event_type"] == "track.updated"]
+    assert len(updated) == 2

@@ -33,6 +33,9 @@ COPY uv.lock /app/uv.lock
 COPY packages/arm_common /app/packages/arm_common
 COPY services/ripper/pyproject.toml /app/services/ripper/pyproject.toml
 COPY services/backend /app/services/backend
+# Canonical release version — /api/system/version reads this (see
+# arm_backend/routers/system.py _app_version resolution chain).
+COPY VERSION /app/VERSION
 
 RUN uv sync --frozen --package arm_backend --no-dev
 

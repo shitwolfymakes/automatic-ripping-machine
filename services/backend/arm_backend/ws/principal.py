@@ -15,6 +15,7 @@ import jwt
 
 from arm_backend.auth import check_service_token, looks_like_jwt
 from arm_backend.jwt_utils import verify_access_token
+from arm_backend.seeders import GUEST_USERNAME
 
 PrincipalKind = Literal["ripper", "transcoder"]
 
@@ -49,16 +50,22 @@ def resolve_principal(
     """Map an auth-message token to a Principal.
 
     Resolution order:
-      1. Service token + `task_id_hint` → ServicePrincipal(kind="transcoder", ...)
-      2. Service token → ServicePrincipal(kind="ripper", hostname=hostname_hint)
-      3. JWT-shaped + signing_key provided → UIPrincipal from verified payload
-      4. Raise AuthError
+      1. Empty token → anonymous-guest UIPrincipal (mirrors REST `require_jwt`'s
+         anonymous fallback; the router does the DB-backed guest-enabled check,
+         since this function stays DB-free)
+      2. Service token + `task_id_hint` → ServicePrincipal(kind="transcoder", ...)
+      3. Service token → ServicePrincipal(kind="ripper", hostname=hostname_hint)
+      4. JWT-shaped + signing_key provided → UIPrincipal from verified payload
+      5. Raise AuthError
 
     `task_id_hint` is sourced from the `X-ARM-Task-Id` header at the WS
     handshake. Cross-checking that the task is actually claimed by this
     hostname happens at subscribe/publish time in `ws/authz.py` — keeping
     the principal pure means we don't need a DB session here.
     """
+    if not token:
+        return UIPrincipal(user_id=GUEST_USERNAME, username=GUEST_USERNAME)
+
     if check_service_token(token):
         if not hostname_hint:
             raise AuthError("service-token connection requires hostname (X-ARM-Hostname header)")
