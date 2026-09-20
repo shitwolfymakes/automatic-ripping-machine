@@ -199,7 +199,8 @@ async def test_vaapi_available_claims_gpu_and_injects_devices() -> None:
     assert kwargs["environment"]["ARM_GPU_CODEC"] == "h265"
     assert kwargs["environment"]["ARM_GPU_DEVICE"] == "/dev/dri/renderD128"
     assert kwargs["devices"] == ["/dev/dri/renderD128:/dev/dri/renderD128:rwm"]
-    # No render GID configured → no RENDER_GID handed to the container entrypoint.
+    # No render GID configured → no RENDER_GID env; the entrypoint derives the
+    # gid from the mounted render node itself (derivation is the default).
     assert "RENDER_GID" not in kwargs["environment"]
     # GPU is claimed.
     assert db.rows["gpus"][0].status == GpuStatus.BUSY
@@ -220,9 +221,9 @@ async def test_qsv_available_uses_devices_injection() -> None:
 
 
 async def test_render_gid_passed_as_env_for_qsv() -> None:
-    """With ARM_RENDER_GID set, VAAPI/QSV spawns get RENDER_GID in the env so the
-    entrypoint adds `arm` to the render group (gosu would drop a docker
-    --group-add), letting the PUID transcoder open the /dev/dri node."""
+    """With ARM_RENDER_GID set, VAAPI/QSV spawns get RENDER_GID in the env as a
+    forced override — the entrypoint honors it over its own derivation from
+    the mounted node."""
     db = _build_db(
         hw_preference=HwPreference.ANY,
         gpus=[(GpuVendor.QSV, GpuStatus.AVAILABLE, ["h264", "h265"], None)],
