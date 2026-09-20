@@ -4,6 +4,7 @@
 	import { abandonJob, fetchJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { readJobMetadata, videoTypeLabel } from '$lib/utils/job-fields';
+	import { driveLabel } from '$lib/utils/drive-name';
 	import { reviewPhaseBadge } from '$lib/utils/job-status';
 	import CountdownTimer from './CountdownTimer.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
@@ -15,6 +16,7 @@
 	import SkeletonCard from './SkeletonCard.svelte';
 	import JobInfoForm from './JobInfoForm.svelte';
 	import ReviewTracksTable from './ReviewTracksTable.svelte';
+	import { isAdmin } from '$lib/stores/auth';
 
 	interface Props {
 		job?: JobView;
@@ -28,7 +30,6 @@
 	}
 
 	let { job, driveNames, paused = false, manualWaitSeconds = 60, onrefresh, ondismiss }: Props = $props();
-	let driveName = $derived(job?.drive_id ? (driveNames?.[job.drive_id] ?? null) : null);
 
 	// awaiting_review = the timed review gate (Start / countdown); other waiting
 	// statuses (awaiting_user_id / ripped_awaiting_identify) are identify-only.
@@ -242,8 +243,8 @@
 				waitSeconds={manualWaitSeconds}
 				paused={countdownPaused}
 				inverted
-				onpause={paused || pauseBusy ? undefined : () => handlePauseToggle(true)}
-				onresume={paused || pauseBusy ? undefined : () => handlePauseToggle(false)}
+				onpause={!$isAdmin || paused || pauseBusy ? undefined : () => handlePauseToggle(true)}
+				onresume={!$isAdmin || paused || pauseBusy ? undefined : () => handlePauseToggle(false)}
 			/>
 		{/if}
 	</div>
@@ -263,7 +264,7 @@
 				</h3>
 			</div>
 			<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-				<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{driveName ?? displayJob.drive_id}</span>
+				<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{driveLabel(displayJob.drive_id, driveNames)}</span>
 				<span class="inline-flex items-center gap-1 rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">
 					<DiscTypeIcon disctype={displayJob.disc_type} size="h-3.5 w-3.5" />
 					{discTypeLabel(displayJob.disc_type)}
@@ -318,21 +319,25 @@
 		{#if isMusic}
 			<button onclick={() => toggleSection('music')} class="{btnBase} {showMusicSearch ? 'bg-primary text-on-primary' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}">Search</button>
 		{/if}
-		<button onclick={() => (showApplySession = true)} class="{btnBase} {isPostRip ? 'bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}">{isPostRip ? 'Apply session & transcode' : 'Apply session'}</button>
+		{#if $isAdmin}
+			<button onclick={() => (showApplySession = true)} class="{btnBase} {isPostRip ? 'bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600' : 'bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15'}">{isPostRip ? 'Apply session & transcode' : 'Apply session'}</button>
+		{/if}
 		<a
 			href="/jobs/{job.id}"
 			class="{btnBase} bg-primary/5 text-gray-700 ring-1 ring-primary/25 hover:bg-primary/10 dark:bg-primary/10 dark:text-gray-200 dark:ring-primary/30 dark:hover:bg-primary/15"
 		>
 			View details
 		</a>
-		<button
-			onclick={handleCancel}
-			disabled={cancelling}
-			class="{btnBase} ml-auto text-red-600 ring-1 ring-red-300 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:ring-red-700 dark:hover:bg-red-900/20"
-		>
-			{cancelling ? 'Cancelling...' : 'Cancel'}
-		</button>
-		{#if canStart}
+		{#if $isAdmin}
+			<button
+				onclick={handleCancel}
+				disabled={cancelling}
+				class="{btnBase} ml-auto text-red-600 ring-1 ring-red-300 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:ring-red-700 dark:hover:bg-red-900/20"
+			>
+				{cancelling ? 'Cancelling...' : 'Cancel'}
+			</button>
+		{/if}
+		{#if canStart && $isAdmin}
 			<button
 				onclick={handleStartRip}
 				disabled={starting}

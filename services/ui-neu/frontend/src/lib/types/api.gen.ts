@@ -95,6 +95,27 @@ export type BodyUploadThemeApiThemesPost = {
 };
 
 /**
+ * BulkDeleteJobsRequest
+ *
+ * DELETE /api/jobs body (optional). Filters which terminal jobs are
+ * deleted:
+ * - `job_ids` set  -> delete only those jobs (still terminal-guarded)
+ * - `status` set   -> delete only terminal jobs in that JobStatus
+ * - neither set    -> delete ALL terminal jobs (legacy behavior)
+ * `job_ids` takes precedence over `status` if both are sent.
+ */
+export type BulkDeleteJobsRequest = {
+    /**
+     * Job Ids
+     */
+    job_ids?: Array<string> | null;
+    /**
+     * Status
+     */
+    status?: string | null;
+};
+
+/**
  * BulkDeleteJobsResponse
  *
  * DELETE /api/jobs response. `deleted_ids` lists the jobs whose DB
@@ -359,6 +380,14 @@ export type ConfigUpdateRequest = {
      */
     makemkv_sdf_enabled?: boolean | null;
     /**
+     * Thediscdb Enabled
+     */
+    thediscdb_enabled?: boolean | null;
+    /**
+     * Thediscdb Refresh Days
+     */
+    thediscdb_refresh_days?: number | null;
+    /**
      * Ripping Paused
      */
     ripping_paused?: boolean | null;
@@ -426,6 +455,14 @@ export type ConfigView = {
      * Makemkv Sdf Enabled
      */
     makemkv_sdf_enabled: boolean;
+    /**
+     * Thediscdb Enabled
+     */
+    thediscdb_enabled: boolean;
+    /**
+     * Thediscdb Refresh Days
+     */
+    thediscdb_refresh_days: number;
     /**
      * Ripping Paused
      */
@@ -1404,6 +1441,7 @@ export type LoginResponse = {
      * Password Must Change
      */
     password_must_change: boolean;
+    role: UserRole;
 };
 
 /**
@@ -3412,6 +3450,63 @@ export type TranscodeWorkerView = {
 };
 
 /**
+ * UserDisabledRequest
+ */
+export type UserDisabledRequest = {
+    /**
+     * Disabled
+     */
+    disabled: boolean;
+};
+
+/**
+ * UserPasswordSetRequest
+ */
+export type UserPasswordSetRequest = {
+    /**
+     * New Password
+     */
+    new_password: string;
+};
+
+/**
+ * UserRole
+ *
+ * Fixed two-account model (spec 2026-07-12-basic-user-management-design).
+ *
+ * ADMIN — the single writer; the only account that can hold a session.
+ * GUEST — read-everything/write-nothing; acquired by having no token at all
+ * rather than by logging in, and gated by the `disabled` flag on its
+ * row.
+ *
+ * Stored as VARCHAR via `enum_column`, never a Postgres CREATE TYPE.
+ */
+export type UserRole = 'admin' | 'guest';
+
+/**
+ * UserView
+ */
+export type UserView = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Username
+     */
+    username: string;
+    role: UserRole;
+    /**
+     * Disabled
+     */
+    disabled: boolean;
+    /**
+     * Last Login At
+     */
+    last_login_at?: string | null;
+};
+
+/**
  * ValidationError
  */
 export type ValidationError = {
@@ -4098,7 +4193,10 @@ export type RipCompleteApiRipperJobsJobIdRipCompletePostResponses = {
 export type RipCompleteApiRipperJobsJobIdRipCompletePostResponse = RipCompleteApiRipperJobsJobIdRipCompletePostResponses[keyof RipCompleteApiRipperJobsJobIdRipCompletePostResponses];
 
 export type DeleteAllJobsApiJobsDeleteData = {
-    body?: never;
+    /**
+     * Req
+     */
+    body?: BulkDeleteJobsRequest | null;
     headers?: {
         /**
          * Authorization
@@ -7308,6 +7406,41 @@ export type SystemVersionApiSystemVersionGetResponses = {
 
 export type SystemVersionApiSystemVersionGetResponse = SystemVersionApiSystemVersionGetResponses[keyof SystemVersionApiSystemVersionGetResponses];
 
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/system/thediscdb/refresh';
+};
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostError = ThediscdbRefreshNowApiSystemThediscdbRefreshPostErrors[keyof ThediscdbRefreshNowApiSystemThediscdbRefreshPostErrors];
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponses = {
+    /**
+     * Response Thediscdb Refresh Now Api System Thediscdb Refresh Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponse = ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponses[keyof ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponses];
+
 export type RootsApiFilesRootsGetData = {
     body?: never;
     headers?: {
@@ -7548,3 +7681,112 @@ export type DeleteApiFilesDeleteResponses = {
 };
 
 export type DeleteApiFilesDeleteResponse = DeleteApiFilesDeleteResponses[keyof DeleteApiFilesDeleteResponses];
+
+export type ListUsersApiUsersGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/users';
+};
+
+export type ListUsersApiUsersGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListUsersApiUsersGetError = ListUsersApiUsersGetErrors[keyof ListUsersApiUsersGetErrors];
+
+export type ListUsersApiUsersGetResponses = {
+    /**
+     * Response List Users Api Users Get
+     *
+     * Successful Response
+     */
+    200: Array<UserView>;
+};
+
+export type ListUsersApiUsersGetResponse = ListUsersApiUsersGetResponses[keyof ListUsersApiUsersGetResponses];
+
+export type SetDisabledApiUsersUserIdPatchData = {
+    body: UserDisabledRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/users/{user_id}';
+};
+
+export type SetDisabledApiUsersUserIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SetDisabledApiUsersUserIdPatchError = SetDisabledApiUsersUserIdPatchErrors[keyof SetDisabledApiUsersUserIdPatchErrors];
+
+export type SetDisabledApiUsersUserIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: UserView;
+};
+
+export type SetDisabledApiUsersUserIdPatchResponse = SetDisabledApiUsersUserIdPatchResponses[keyof SetDisabledApiUsersUserIdPatchResponses];
+
+export type SetPasswordApiUsersUserIdPasswordPostData = {
+    body: UserPasswordSetRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/users/{user_id}/password';
+};
+
+export type SetPasswordApiUsersUserIdPasswordPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SetPasswordApiUsersUserIdPasswordPostError = SetPasswordApiUsersUserIdPasswordPostErrors[keyof SetPasswordApiUsersUserIdPasswordPostErrors];
+
+export type SetPasswordApiUsersUserIdPasswordPostResponses = {
+    /**
+     * Response Set Password Api Users  User Id  Password Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: boolean;
+    };
+};
+
+export type SetPasswordApiUsersUserIdPasswordPostResponse = SetPasswordApiUsersUserIdPasswordPostResponses[keyof SetPasswordApiUsersUserIdPasswordPostResponses];

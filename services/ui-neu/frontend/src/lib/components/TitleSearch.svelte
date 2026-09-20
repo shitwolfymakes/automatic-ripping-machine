@@ -2,6 +2,14 @@
 	import type { JobView, MetadataCandidate } from '$lib/types/api.gen';
 	import { searchMetadata, fetchMediaDetail, updateJobTitle, resolveJob } from '$lib/api/jobs';
 	import PosterImage from './PosterImage.svelte';
+	import { reveal } from '$lib/transitions';
+	import { isAdmin } from '$lib/stores/auth';
+	import { metadataProvider } from '$lib/stores/config';
+
+	// Pretty label for the configured default metadata provider; generic until
+	// the config store hydrates (layout load runs hydrateConfig once per load).
+	const PROVIDER_LABELS: Record<string, string> = { tmdb: 'TMDb', omdb: 'OMDb' };
+	let providerLabel = $derived(PROVIDER_LABELS[$metadataProvider ?? ''] ?? 'OMDb/TMDb');
 
 	interface Props {
 		job: JobView;
@@ -182,8 +190,8 @@
 		>
 			{searching ? 'Searching...' : 'Search'}
 		</button>
-		<span class="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold bg-gray-100 text-gray-500 dark:bg-gray-700/50 dark:text-gray-400" title="Metadata provider configured in Settings">
-			OMDb/TMDb
+		<span class="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold bg-gray-100 text-gray-500 dark:bg-gray-700/50 dark:text-gray-400" title="Default metadata provider configured in Settings">
+			{providerLabel}
 		</span>
 	</div>
 
@@ -290,15 +298,18 @@
 					</label>
 				</div>
 				<div class="flex items-center gap-2">
-					<button
-						onclick={applyResult}
-						disabled={applying}
-						class="{btnBase} bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
-					>
-						{applying ? 'Applying...' : canResolve ? 'Apply' : 'Apply Poster'}
-					</button>
+					{#if $isAdmin}
+						<button
+							onclick={applyResult}
+							disabled={applying}
+							class="{btnBase} bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
+						>
+							{applying ? 'Applying...' : canResolve ? 'Apply' : 'Apply Poster'}
+						</button>
+					{/if}
 					{#if feedback}
 						<span
+							in:reveal
 							class="text-xs {feedback.type === 'success'
 								? 'text-green-600 dark:text-green-400'
 								: 'text-red-600 dark:text-red-400'}"

@@ -17,6 +17,7 @@ from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import notifications as notif_router  # noqa: E402
 from arm_backend.notifications import catalog as cat  # noqa: E402
 from arm_common import NotificationChannel, User  # noqa: E402
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -80,6 +81,16 @@ def _make_app(signing_key: bytes, db: FakeSession, notifier=None):
     db.rows.setdefault("users", []).append(
         User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)
     )
+    db.rows["users"].append(
+        User(
+            id="usr_guest",
+            username="guest",
+            password_hash="x",
+            password_must_change=False,
+            role=GUEST_ROLE,
+            disabled=False,
+        )
+    )
     token, _ = issue_access_token("usr_admin", "admin", signing_key)
     return app, token
 
@@ -89,11 +100,12 @@ def _auth(token: str) -> dict[str, str]:
 
 
 def test_list_requires_auth(signing_key: bytes) -> None:
+    """No Authorization header falls back to the guest account (read-only route)."""
     db = FakeSession()
     app, _ = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.get("/api/notifications/channels")
-    assert r.status_code == 401
+    assert r.status_code == 200
 
 
 def test_create_channel_with_raw_url(signing_key: bytes) -> None:

@@ -5,12 +5,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.auth import require_jwt
+from arm_backend.auth import require_jwt, require_writer
 from arm_backend.auto_session import (
     SessionNotFoundError,
     apply_session_internal,
@@ -43,6 +43,7 @@ from arm_common.schemas import (
     AbandonJobRequest,
     ApplySessionRequest,
     ApplySessionResponse,
+    BulkDeleteJobsRequest,
     BulkDeleteJobsResponse,
     DiscFingerprintView,
     JobDetailView,
@@ -348,7 +349,7 @@ async def get_job_detail(
 async def abandon_job(
     job_id: JobIdParam,
     req: AbandonJobRequest | None = None,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> Job:
@@ -414,7 +415,7 @@ async def abandon_job(
 @router.post("/{job_id}/rip-start-review", response_model=JobView)
 async def rip_start_review(
     job_id: JobIdParam,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> Job:
@@ -471,7 +472,7 @@ async def rip_start_review(
 async def review_pause(
     job_id: JobIdParam,
     paused: bool = True,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> Job:
@@ -619,7 +620,7 @@ def _delete_per_job_log(job_id: str) -> None:
 async def delete_job(
     job_id: JobIdParam,
     delete_raw: bool = Query(default=False),
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> None:
     """Hard-delete a Job. Tracks, fingerprints, session_applications,
@@ -673,25 +674,44 @@ async def delete_job(
 @router.delete("", response_model=BulkDeleteJobsResponse)
 async def delete_all_jobs(
     delete_raw: bool = Query(default=False),
-    _: User = Depends(require_jwt),
+    req: BulkDeleteJobsRequest | None = Body(default=None),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> BulkDeleteJobsResponse:
-    """Hard-delete every job in a terminal status. Non-terminal jobs are
-    skipped and reported in `skipped_non_terminal` so the caller can
-    abandon-then-retry them.
+    """Hard-delete terminal jobs. An optional body filters the set:
+    `job_ids` (only those), `status` (only that JobStatus), or neither
+    (all terminal jobs — legacy). `job_ids` wins over `status`. Non-terminal
+    jobs are always skipped and reported in `skipped_non_terminal`.
 
     `delete_raw=true` runs the filesystem cleanup (raw rmtree + media file
     unlink + empty-parent prune) for each deleted job. Cleanups are
     independent — a failure on one job is logged and the next continues.
     """
+    req = req or BulkDeleteJobsRequest()
+
+    target_status: JobStatus | None = None
+    if req.status:
+        try:
+            target_status = JobStatus(req.status)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"invalid status: {req.status}") from exc
+
     rows = (await db.execute(select(Job))).scalars().all()
+
+    if req.job_ids:
+        wanted = set(req.job_ids)
+        candidates = [j for j in rows if j.id in wanted]
+    elif target_status is not None:
+        candidates = [j for j in rows if j.status == target_status]
+    else:
+        candidates = list(rows)
 
     raw_root = Path(settings.RAW_ROOT)
     media_root = Path(settings.MEDIA_ROOT)
     deleted_ids: list[str] = []
     skipped: list[str] = []
     totals = {"raw_dir_removed": 0, "media_files_removed": 0, "media_dirs_pruned": 0}
-    for job in rows:
+    for job in candidates:
         if job.status not in TERMINAL_JOB_STATUSES:
             skipped.append(job.id)
             continue
@@ -728,7 +748,7 @@ async def delete_all_jobs(
 @router.post("/manual", response_model=ManualTriggerResponse, status_code=status.HTTP_202_ACCEPTED)
 async def manual_trigger(
     req: ManualTriggerRequest,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> ManualTriggerResponse:
@@ -794,7 +814,7 @@ async def manual_trigger(
 async def update_job(
     job_id: JobIdParam,
     req: JobUpdateRequest,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> Job:
@@ -871,7 +891,7 @@ _RESOLVABLE_STATUSES: frozenset[JobStatus] = _RESOLVABLE_STATUSES_PROMOTE | _RES
 async def resolve(
     job_id: JobIdParam,
     req: ResolveRequest,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     session: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> ResolveResponse:
@@ -958,7 +978,7 @@ async def resolve(
 async def apply_session(
     job_id: JobIdParam,
     req: ApplySessionRequest,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> ApplySessionResponse:

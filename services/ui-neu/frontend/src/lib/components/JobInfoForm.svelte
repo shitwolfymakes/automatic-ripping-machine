@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { JobView } from '$lib/types/api.gen';
 	import { resolveJob } from '$lib/api/jobs';
+	import { reveal } from '$lib/transitions';
+	import { isAdmin } from '$lib/stores/auth';
 
 	interface Props {
 		job: JobView;
@@ -145,27 +147,29 @@
 	<!-- Save bar (metadata): appears when there are unsaved edits -->
 	{#if dirty && resolvable}
 		<div class="mt-3 flex items-center gap-2 border-t border-primary/10 pt-3 dark:border-primary/15">
-			<button
-				onclick={saveInfo}
-				disabled={saving || !title.trim()}
-				class="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-on-primary hover:bg-primary/90 disabled:opacity-50"
-			>
-				{saving ? 'Saving…' : 'Save'}
-			</button>
-			<button
-				onclick={resetInfo}
-				disabled={saving}
-				class="rounded-md px-3 py-1.5 text-sm text-gray-600 ring-1 ring-primary/25 hover:bg-primary/5 disabled:opacity-50 dark:text-gray-300 dark:ring-primary/30"
-			>
-				Reset
-			</button>
+			{#if $isAdmin}
+				<button
+					onclick={saveInfo}
+					disabled={saving || !title.trim()}
+					class="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-on-primary hover:bg-primary/90 disabled:opacity-50"
+				>
+					{saving ? 'Saving…' : 'Save'}
+				</button>
+				<button
+					onclick={resetInfo}
+					disabled={saving}
+					class="rounded-md px-3 py-1.5 text-sm text-gray-600 ring-1 ring-primary/25 hover:bg-primary/5 disabled:opacity-50 dark:text-gray-300 dark:ring-primary/30"
+				>
+					Reset
+				</button>
+			{/if}
 			{#if feedback}
-				<span class="ml-auto text-xs {feedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{feedback.message}</span>
+				<span in:reveal class="ml-auto text-xs {feedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{feedback.message}</span>
 			{/if}
 		</div>
 	{:else if feedback}
 		<div class="mt-3 border-t border-primary/10 pt-3 dark:border-primary/15">
-			<span class="text-xs {feedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{feedback.message}</span>
+			<span in:reveal class="text-xs {feedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{feedback.message}</span>
 		</div>
 	{/if}
 </div>

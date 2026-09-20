@@ -178,6 +178,32 @@ async def test_omdb_config_key_used_by_dispatcher():
     assert omdb_route.calls.last.request.url.params["apikey"] == "from-config"
 
 
+async def test_identify_from_imdb_uses_tmdb_find(monkeypatch):
+    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata.base import MetadataResult
+
+    class FakeTMDB:
+        def __init__(self, api_key, http):  # matches TMDBClient signature
+            pass
+
+        async def find_by_imdb_id(self, imdb_id):
+            assert imdb_id == "tt0090557"
+            return MetadataResult(title="Round Midnight", year=1986, kind="movie")
+
+    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        hit = await dispatcher.identify_from_imdb("tt0090557", _config())
+        assert hit is not None
+        assert hit.title == "Round Midnight"
+
+        hit_nokey = await dispatcher.identify_from_imdb("tt0090557", _config(tmdb_api_key=None))
+        assert hit_nokey is None
+
+        hit_noid = await dispatcher.identify_from_imdb("", _config())
+        assert hit_noid is None
+
+
 @respx.mock
 async def test_omdb_skipped_when_config_key_empty():
     """When cfg.omdb_api_key is None the OMDb branch is skipped entirely."""

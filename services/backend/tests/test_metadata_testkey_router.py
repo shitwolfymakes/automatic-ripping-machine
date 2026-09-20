@@ -18,6 +18,7 @@ from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import metadata as metadata_router  # noqa: E402
 from arm_common import Config, User  # noqa: E402
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -120,12 +121,26 @@ def test_makemkv_stored_format_invalid_returns_false(signing_key: bytes) -> None
 
 
 def test_unauthenticated_returns_401(signing_key: bytes) -> None:
+    """No Authorization header falls back to the guest account; with guest
+    access disabled (the seeded default), the request still 401s before the
+    route body (and its outbound key-validation call) ever runs."""
     db = FakeSession()
     _seed(db)
+    db.rows["users"].append(
+        User(
+            id="usr_guest",
+            username="guest",
+            password_hash="x",
+            password_must_change=False,
+            role=GUEST_ROLE,
+            disabled=True,
+        )
+    )
     app, _token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.get("/api/metadata/test-key", params={"provider": "tmdb"})
     assert r.status_code == 401
+    assert r.json()["detail"] == "authentication required"
 
 
 def test_config_not_initialised_returns_400(signing_key: bytes) -> None:

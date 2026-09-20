@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.auth import require_jwt
+from arm_backend.auth import require_jwt, require_writer
 from arm_backend.db import get_session
 from arm_common import Drive, DriveStatus, Job, JobStatus, Session, User
 from arm_common.enums import TERMINAL_JOB_STATUSES
@@ -122,7 +122,7 @@ async def rescan_drives(
 async def update_drive(
     drive_id: str,
     req: DriveUpdateRequest,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> DriveView:
     drive = (await db.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
@@ -153,7 +153,7 @@ async def update_drive(
 @router.delete("/{drive_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_drive(
     drive_id: str,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> None:
     drive = (await db.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()

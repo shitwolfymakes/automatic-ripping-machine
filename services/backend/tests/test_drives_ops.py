@@ -18,6 +18,7 @@ from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import drives as drives_router  # noqa: E402
 from arm_common import Drive, DriveStatus, User  # noqa: E402
 from arm_common.enums import DriveMediaStatus  # noqa: E402
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -29,7 +30,17 @@ def signing_key() -> bytes:
 
 def _seed(db: FakeSession) -> None:
     now = datetime.now(timezone.utc)
-    db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
+    db.rows["users"] = [
+        User(id="usr_admin", username="admin", password_hash="x", password_must_change=False),
+        User(
+            id="usr_guest",
+            username="guest",
+            password_hash="x",
+            password_must_change=False,
+            role=GUEST_ROLE,
+            disabled=False,
+        ),
+    ]
     db.rows["drives"] = [
         Drive(
             id="drv_frsh000000000000000000001",
@@ -92,13 +103,14 @@ def test_rescan_counts_online_and_stale(signing_key: bytes) -> None:
     assert r.json()["stale"] == 1
 
 
-def test_diagnostic_unauthenticated_401(signing_key: bytes) -> None:
+def test_diagnostic_unauthenticated_reads_as_guest(signing_key: bytes) -> None:
+    """No Authorization header falls back to the guest account (read-only route)."""
     db = FakeSession()
     _seed(db)
     app, _ = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.get("/api/drives/diagnostic")
-    assert r.status_code == 401
+    assert r.status_code == 200
 
 
 def test_diagnostic_drive_no_heartbeat(signing_key: bytes) -> None:
@@ -148,13 +160,14 @@ def test_diagnostic_drive_offline_status(signing_key: bytes) -> None:
     assert any("offline" in n for n in item["notes"])
 
 
-def test_rescan_unauthenticated_401(signing_key: bytes) -> None:
+def test_rescan_unauthenticated_reads_as_guest(signing_key: bytes) -> None:
+    """No Authorization header falls back to the guest account (read-only route)."""
     db = FakeSession()
     _seed(db)
     app, _ = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.post("/api/drives/rescan")
-    assert r.status_code == 401
+    assert r.status_code == 200
 
 
 def test_list_drives_returns_all(signing_key: bytes) -> None:

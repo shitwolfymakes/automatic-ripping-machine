@@ -12,9 +12,11 @@
 		job?: JobView;
 		selected?: boolean;
 		onselect?: (jobId: string, selected: boolean) => void;
+		/** Selection exists only to feed bulk actions — hide the checkbox for guests. */
+		showSelect?: boolean;
 	}
 
-	let { job, selected = false, onselect }: Props = $props();
+	let { job, selected = false, onselect, showSelect = true }: Props = $props();
 
 	let typeConfig = $derived(getVideoTypeConfig(null, job?.disc_type ?? null));
 	let tc = $derived(job ? transcodeColumnStatus(job) : null);
@@ -35,12 +37,14 @@
 <tr class="border-b border-primary/20 hover:bg-page dark:border-primary/20 dark:hover:bg-primary/5 {selected ? 'bg-primary/[0.03] dark:bg-primary/[0.06]' : ''}">
 	<!-- Checkbox -->
 	<td class="px-4 py-3 w-8" data-label="">
-		<input
-			type="checkbox"
-			checked={selected}
-			onchange={() => onselect?.(job.id, !selected)}
-			class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary dark:border-gray-600 dark:bg-gray-700"
-		/>
+		{#if showSelect}
+			<input
+				type="checkbox"
+				checked={selected}
+				onchange={() => onselect?.(job.id, !selected)}
+				class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary dark:border-gray-600 dark:bg-gray-700"
+			/>
+		{/if}
 	</td>
 
 	<!-- Title -->

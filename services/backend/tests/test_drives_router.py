@@ -35,6 +35,7 @@ from arm_common import (  # noqa: E402
     TranscodeTool,
     User,
 )
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -45,7 +46,17 @@ def signing_key() -> bytes:
 
 
 def _seed(db: FakeSession) -> None:
-    db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
+    db.rows["users"] = [
+        User(id="usr_admin", username="admin", password_hash="x", password_must_change=False),
+        User(
+            id="usr_guest",
+            username="guest",
+            password_hash="x",
+            password_must_change=False,
+            role=GUEST_ROLE,
+            disabled=False,
+        ),
+    ]
     db.rows["drives"] = [
         Drive(
             id="drv_x",
@@ -178,13 +189,16 @@ def test_patch_unknown_drive_returns_404(signing_key: bytes) -> None:
     assert r.status_code == 404
 
 
-def test_patch_unauthenticated_returns_401(signing_key: bytes) -> None:
+def test_patch_unauthenticated_denied_as_guest(signing_key: bytes) -> None:
+    """No Authorization header falls back to the guest account; PATCH is a
+    write route, so guest gets 403, not 401."""
     db = FakeSession()
     _seed(db)
     app, _token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.patch("/api/drives/drv_x", json={"display_name": "x"})
-    assert r.status_code == 401
+    assert r.status_code == 403
+    assert r.json()["detail"] == "read-only role: write access required"
 
 
 def test_delete_drive_ok(signing_key: bytes) -> None:

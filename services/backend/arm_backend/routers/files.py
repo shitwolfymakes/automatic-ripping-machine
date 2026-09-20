@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from arm_backend import file_browser as fb
-from arm_backend.auth import require_jwt
+from arm_backend.auth import require_jwt, require_writer
 from arm_common import User
 from arm_common.schemas import (
     DirectoryListing,
@@ -55,7 +55,7 @@ async def list_directory(root: str, subpath: str = "", _: User = Depends(require
 
 
 @router.post("/mkdir", response_model=FilePathResponse)
-async def mkdir(req: MkdirRequest, _: User = Depends(require_jwt)) -> FilePathResponse:
+async def mkdir(req: MkdirRequest, _: User = Depends(require_writer)) -> FilePathResponse:
     try:
         root, subpath = fb.make_dir(req.root, req.subpath, req.name)
     except fb.PathError as e:
@@ -66,7 +66,7 @@ async def mkdir(req: MkdirRequest, _: User = Depends(require_jwt)) -> FilePathRe
 
 
 @router.post("/rename", response_model=FilePathResponse)
-async def rename(req: RenameRequest, _: User = Depends(require_jwt)) -> FilePathResponse:
+async def rename(req: RenameRequest, _: User = Depends(require_writer)) -> FilePathResponse:
     try:
         root, subpath = fb.rename(req.root, req.subpath, req.new_name)
     except fb.PathError as e:
@@ -77,7 +77,7 @@ async def rename(req: RenameRequest, _: User = Depends(require_jwt)) -> FilePath
 
 
 @router.post("/move", response_model=FilePathResponse)
-async def move(req: MoveRequest, _: User = Depends(require_jwt)) -> FilePathResponse:
+async def move(req: MoveRequest, _: User = Depends(require_writer)) -> FilePathResponse:
     try:
         root, subpath = fb.move(req.root, req.subpath, req.dest_root, req.dest_subpath)
     except fb.PathError as e:
@@ -88,7 +88,7 @@ async def move(req: MoveRequest, _: User = Depends(require_jwt)) -> FilePathResp
 
 
 @router.post("/fix-permissions", response_model=FixPermsResponse)
-async def fix_permissions(req: FilePathRequest, _: User = Depends(require_jwt)) -> FixPermsResponse:
+async def fix_permissions(req: FilePathRequest, _: User = Depends(require_writer)) -> FixPermsResponse:
     try:
         return FixPermsResponse(fixed=fb.fix_permissions(req.root, req.subpath))
     except fb.PathError as e:
@@ -98,7 +98,7 @@ async def fix_permissions(req: FilePathRequest, _: User = Depends(require_jwt)) 
 
 
 @router.delete("", response_model=dict[str, bool])
-async def delete(root: str, subpath: str, _: User = Depends(require_jwt)) -> dict[str, bool]:
+async def delete(root: str, subpath: str, _: User = Depends(require_writer)) -> dict[str, bool]:
     try:
         fb.delete(root, subpath)
     except fb.PathError as e:

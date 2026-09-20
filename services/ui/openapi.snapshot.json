@@ -1258,7 +1258,7 @@
           "jobs"
         ],
         "summary": "Delete All Jobs",
-        "description": "Hard-delete every job in a terminal status. Non-terminal jobs are\nskipped and reported in `skipped_non_terminal` so the caller can\nabandon-then-retry them.\n\n`delete_raw=true` runs the filesystem cleanup (raw rmtree + media file\nunlink + empty-parent prune) for each deleted job. Cleanups are\nindependent \u2014 a failure on one job is logged and the next continues.",
+        "description": "Hard-delete terminal jobs. An optional body filters the set:\n`job_ids` (only those), `status` (only that JobStatus), or neither\n(all terminal jobs \u2014 legacy). `job_ids` wins over `status`. Non-terminal\njobs are always skipped and reported in `skipped_non_terminal`.\n\n`delete_raw=true` runs the filesystem cleanup (raw rmtree + media file\nunlink + empty-parent prune) for each deleted job. Cleanups are\nindependent \u2014 a failure on one job is logged and the next continues.",
         "operationId": "delete_all_jobs_api_jobs_delete",
         "parameters": [
           {
@@ -1288,6 +1288,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/BulkDeleteJobsRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Req"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -6714,6 +6731,58 @@
         }
       }
     },
+    "/api/system/thediscdb/refresh": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Thediscdb Refresh Now",
+        "description": "Rebuild the TheDiscDB snapshot index from GitHub, on demand.",
+        "operationId": "thediscdb_refresh_now_api_system_thediscdb_refresh_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Thediscdb Refresh Now Api System Thediscdb Refresh Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/files/roots": {
       "get": {
         "tags": [
@@ -7141,6 +7210,199 @@
           }
         }
       }
+    },
+    "/api/users": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "List Users",
+        "operationId": "list_users_api_users_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserView"
+                  },
+                  "title": "Response List Users Api Users Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/{user_id}": {
+      "patch": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Set Disabled",
+        "operationId": "set_disabled_api_users__user_id__patch",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserDisabledRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/{user_id}/password": {
+      "post": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Set Password",
+        "operationId": "set_password_api_users__user_id__password_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserPasswordSetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Set Password Api Users  User Id  Password Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -7283,6 +7545,38 @@
           "theme_json"
         ],
         "title": "Body_upload_theme_api_themes_post"
+      },
+      "BulkDeleteJobsRequest": {
+        "properties": {
+          "job_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Ids"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "title": "BulkDeleteJobsRequest",
+        "description": "DELETE /api/jobs body (optional). Filters which terminal jobs are\ndeleted:\n  - `job_ids` set  -> delete only those jobs (still terminal-guarded)\n  - `status` set   -> delete only terminal jobs in that JobStatus\n  - neither set    -> delete ALL terminal jobs (legacy behavior)\n`job_ids` takes precedence over `status` if both are sent."
       },
       "BulkDeleteJobsResponse": {
         "properties": {
@@ -7736,6 +8030,28 @@
             ],
             "title": "Makemkv Sdf Enabled"
           },
+          "thediscdb_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thediscdb Enabled"
+          },
+          "thediscdb_refresh_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thediscdb Refresh Days"
+          },
           "ripping_paused": {
             "anyOf": [
               {
@@ -7872,6 +8188,14 @@
             "type": "boolean",
             "title": "Makemkv Sdf Enabled"
           },
+          "thediscdb_enabled": {
+            "type": "boolean",
+            "title": "Thediscdb Enabled"
+          },
+          "thediscdb_refresh_days": {
+            "type": "integer",
+            "title": "Thediscdb Refresh Days"
+          },
           "ripping_paused": {
             "type": "boolean",
             "title": "Ripping Paused"
@@ -7972,6 +8296,8 @@
           "block_on_miss",
           "community_keydb_enabled",
           "makemkv_sdf_enabled",
+          "thediscdb_enabled",
+          "thediscdb_refresh_days",
           "ripping_paused",
           "hold_for_review",
           "manual_wait_seconds",
@@ -9759,13 +10085,17 @@
           "password_must_change": {
             "type": "boolean",
             "title": "Password Must Change"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
           }
         },
         "type": "object",
         "required": [
           "access_token",
           "expires_at",
-          "password_must_change"
+          "password_must_change",
+          "role"
         ],
         "title": "LoginResponse"
       },
@@ -13512,6 +13842,81 @@
           "source_track_id"
         ],
         "title": "TranscodeWorkerView"
+      },
+      "UserDisabledRequest": {
+        "properties": {
+          "disabled": {
+            "type": "boolean",
+            "title": "Disabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "disabled"
+        ],
+        "title": "UserDisabledRequest"
+      },
+      "UserPasswordSetRequest": {
+        "properties": {
+          "new_password": {
+            "type": "string",
+            "minLength": 8,
+            "title": "New Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "new_password"
+        ],
+        "title": "UserPasswordSetRequest"
+      },
+      "UserRole": {
+        "type": "string",
+        "enum": [
+          "admin",
+          "guest"
+        ],
+        "title": "UserRole",
+        "description": "Fixed two-account model (spec 2026-07-12-basic-user-management-design).\n\nADMIN \u2014 the single writer; the only account that can hold a session.\nGUEST \u2014 read-everything/write-nothing; acquired by having no token at all\n        rather than by logging in, and gated by the `disabled` flag on its\n        row.\n\nStored as VARCHAR via `enum_column`, never a Postgres CREATE TYPE."
+      },
+      "UserView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          },
+          "disabled": {
+            "type": "boolean",
+            "title": "Disabled"
+          },
+          "last_login_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Login At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "role",
+          "disabled"
+        ],
+        "title": "UserView"
       },
       "ValidationError": {
         "properties": {

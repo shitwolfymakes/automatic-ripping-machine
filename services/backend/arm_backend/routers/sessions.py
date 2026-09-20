@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.auth import require_jwt
+from arm_backend.auth import require_jwt, require_writer
 from arm_backend.db import get_session
 from arm_backend.path_template import TemplateValidationError, validate_template, validate_template_or_http
 from arm_common import Drive, RipPreset, Session, TranscodePreset, User
@@ -71,7 +71,7 @@ async def get_session_by_id(
 @router.post("", response_model=SessionView, status_code=status.HTTP_201_CREATED)
 async def create_session(
     req: SessionCreateRequest,
-    user: User = Depends(require_jwt),
+    user: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> Session:
     rip_preset = await _load_rip_preset(db, req.rip_preset_id)
@@ -119,7 +119,7 @@ async def create_session(
 async def update_session(
     session_id: str,
     req: SessionUpdateRequest,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> Session:
     row = (await db.execute(select(Session).where(col(Session.id) == session_id))).scalar_one_or_none()
@@ -178,7 +178,7 @@ async def update_session(
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_session(
     session_id: str,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> None:
     row = (await db.execute(select(Session).where(col(Session.id) == session_id))).scalar_one_or_none()
@@ -208,7 +208,7 @@ async def delete_session(
 async def clone_session(
     session_id: str,
     req: SessionCloneRequest,
-    user: User = Depends(require_jwt),
+    user: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> Session:
     src = (await db.execute(select(Session).where(col(Session.id) == session_id))).scalar_one_or_none()

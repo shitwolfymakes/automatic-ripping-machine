@@ -26,14 +26,17 @@ from arm_common.enums import (
     TrackStatus,
     TranscodeTaskStatus,
     TranscodeTool,
+    UserRole,
     VideoCodec,
 )
 from arm_common.models import (
+    ADMIN_ROLE,
     DEFAULT_MUSICBRAINZ_USER_AGENT,
     Config,
     DiscFingerprint,
     Drive,
     Event,
+    GUEST_ROLE,
     Gpu,
     Job,
     NotificationChannel,
@@ -50,6 +53,7 @@ from arm_common.models import (
 from arm_common.ulid import new_id
 
 __all__ = [
+    "ADMIN_ROLE",
     "DEFAULT_MUSICBRAINZ_USER_AGENT",
     "Config",
     "ContainerFormat",
@@ -60,6 +64,7 @@ __all__ = [
     "DriveMode",
     "DriveStatus",
     "Event",
+    "GUEST_ROLE",
     "Gpu",
     "GpuStatus",
     "GpuVendor",
@@ -90,6 +95,7 @@ __all__ = [
     "TranscodeTaskStatus",
     "TranscodeTool",
     "User",
+    "UserRole",
     "VideoCodec",
     "configure_service_logging",
     "new_id",

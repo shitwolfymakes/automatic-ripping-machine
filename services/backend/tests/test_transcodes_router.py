@@ -32,6 +32,7 @@ from arm_common import (  # noqa: E402
     User,
 )
 from arm_common.models import TranscodeTask  # noqa: E402
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -93,6 +94,23 @@ def _make_app(
 
 def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def _guest_seeded_db() -> FakeSession:
+    """A FakeSession with only an enabled guest row — for exercising the
+    no-Authorization-header fallback in require_jwt."""
+    db = FakeSession()
+    db.rows["users"] = [
+        User(
+            id="usr_guest",
+            username="guest",
+            password_hash="x",
+            password_must_change=False,
+            role=GUEST_ROLE,
+            disabled=False,
+        )
+    ]
+    return db
 
 
 def _task(
@@ -249,10 +267,11 @@ def test_stats_empty_db_all_zero(signing_key: bytes) -> None:
 
 
 def test_stats_requires_jwt(signing_key: bytes) -> None:
-    app, _ = _make_app(signing_key, FakeSession())
+    """No Authorization header falls back to the guest account (read-only route)."""
+    app, _ = _make_app(signing_key, _guest_seeded_db())
     with TestClient(app) as c:
         r = c.get("/api/transcodes/stats")
-    assert r.status_code == 401
+    assert r.status_code == 200
 
 
 def test_workers_lists_only_in_progress_with_gpu(signing_key: bytes) -> None:
@@ -286,10 +305,11 @@ def test_workers_empty_when_nothing_running(signing_key: bytes) -> None:
 
 
 def test_workers_requires_jwt(signing_key: bytes) -> None:
-    app, _ = _make_app(signing_key, FakeSession())
+    """No Authorization header falls back to the guest account (read-only route)."""
+    app, _ = _make_app(signing_key, _guest_seeded_db())
     with TestClient(app) as c:
         r = c.get("/api/transcodes/workers")
-    assert r.status_code == 401
+    assert r.status_code == 200
 
 
 def test_retry_failed_requeues_and_resets(signing_key: bytes) -> None:
@@ -334,10 +354,13 @@ def test_retry_unknown_404(signing_key: bytes) -> None:
 
 
 def test_retry_requires_jwt(signing_key: bytes) -> None:
-    app, _ = _make_app(signing_key, FakeSession())
+    """No Authorization header falls back to the guest account; retry is a
+    write route, so guest gets 403, not 401."""
+    app, _ = _make_app(signing_key, _guest_seeded_db())
     with TestClient(app) as c:
         r = c.post("/api/transcodes/txt_x/retry")
-    assert r.status_code == 401
+    assert r.status_code == 403
+    assert r.json()["detail"] == "read-only role: write access required"
 
 
 def _write_task_log(log_dir: Path, task_id: str, lines: list[str]) -> None:
@@ -419,11 +442,14 @@ def test_log_zip_no_file_404(signing_key: bytes, tmp_path: Path, monkeypatch: py
 
 
 def test_log_requires_jwt(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No Authorization header falls back to the guest account (read-only
+    route). No transcode_task row seeded, so it 404s same as it would for an
+    authenticated caller — the point is it's not a 401."""
     monkeypatch.setattr(tx_router, "LOG_DIR", tmp_path)
-    app, _ = _make_app(signing_key, FakeSession())
+    app, _ = _make_app(signing_key, _guest_seeded_db())
     with TestClient(app) as c:
         r = c.get("/api/transcodes/txt_x/log")
-    assert r.status_code == 401
+    assert r.status_code == 404
 
 
 def test_log_zip_respects_hard_cap(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -454,11 +480,14 @@ def test_log_zip_unknown_task_404(signing_key: bytes, tmp_path: Path, monkeypatc
 
 
 def test_log_zip_requires_jwt(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No Authorization header falls back to the guest account (read-only
+    route). No transcode_task row seeded, so it 404s same as it would for an
+    authenticated caller — the point is it's not a 401."""
     monkeypatch.setattr(tx_router, "LOG_DIR", tmp_path)
-    app, _ = _make_app(signing_key, FakeSession())
+    app, _ = _make_app(signing_key, _guest_seeded_db())
     with TestClient(app) as c:
         r = c.get("/api/transcodes/txt_x/log.zip")
-    assert r.status_code == 401
+    assert r.status_code == 404
 
 
 def test_list_transcodes_populates_job_id(signing_key: bytes) -> None:

@@ -4,6 +4,7 @@ export interface LoginResult {
 	access_token: string;
 	expires_at: string;
 	password_must_change: boolean;
+	role: string;
 }
 
 export function login(username: string, password: string): Promise<LoginResult> {

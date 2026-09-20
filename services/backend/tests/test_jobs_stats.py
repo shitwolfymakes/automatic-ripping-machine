@@ -16,6 +16,7 @@ from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import jobs as jobs_router  # noqa: E402
 from arm_common import DiscType, Drive, DriveStatus, Job, JobStatus, User  # noqa: E402
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -92,12 +93,36 @@ def test_stats_empty_db(signing_key: bytes) -> None:
     assert r.json() == {"total": 0, "by_status": {}, "by_type": {}}
 
 
-def test_stats_unauthenticated_401(signing_key: bytes) -> None:
+def _guest_user(*, disabled: bool) -> User:
+    return User(
+        id="usr_guest",
+        username="guest",
+        password_hash="x",
+        password_must_change=False,
+        role=GUEST_ROLE,
+        disabled=disabled,
+    )
+
+
+def test_stats_unauthenticated_401_when_guest_disabled(signing_key: bytes) -> None:
+    """With guest access disabled, an anonymous request is rejected."""
     db = FakeSession()
+    db.rows["users"] = [_guest_user(disabled=True)]
     app, _ = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/jobs/stats")
     assert r.status_code == 401
+
+
+def test_stats_unauthenticated_reads_as_guest(signing_key: bytes) -> None:
+    """No Authorization header falls back to the guest account (read-only route)."""
+    db = FakeSession()
+    db.rows["users"] = [_guest_user(disabled=False)]
+    app, _ = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/jobs/stats")
+    assert r.status_code == 200
+    assert r.json() == {"total": 0, "by_status": {}, "by_type": {}}
 
 
 def test_stats_not_shadowed_by_job_id_route(signing_key: bytes) -> None:

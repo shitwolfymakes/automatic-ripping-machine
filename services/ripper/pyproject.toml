@@ -8,6 +8,7 @@ dependencies = [
     "pydantic-settings>=2.5",
     "discid>=1.2",
     "pydvdid-m>=1.1",
+    "pycdlib",
     "websockets>=12",
     "arm_common",
 ]

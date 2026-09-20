@@ -10,7 +10,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from arm_common.enums import RetentionPolicy
+from arm_common.enums import RetentionPolicy, UserRole
 from arm_common.schemas.jobs import DiscFingerprintView, JobView, TrackView
 
 
@@ -23,6 +23,7 @@ class LoginResponse(BaseModel):
     access_token: str
     expires_at: datetime
     password_must_change: bool
+    role: UserRole
 
 
 class PasswordChangeRequest(BaseModel):
@@ -49,6 +50,8 @@ class ConfigView(BaseModel):
     block_on_miss: bool
     community_keydb_enabled: bool
     makemkv_sdf_enabled: bool
+    thediscdb_enabled: bool
+    thediscdb_refresh_days: int
     ripping_paused: bool
     hold_for_review: bool
     manual_wait_seconds: int
@@ -74,6 +77,8 @@ class ConfigUpdateRequest(BaseModel):
     block_on_miss: bool | None = None
     community_keydb_enabled: bool | None = None
     makemkv_sdf_enabled: bool | None = None
+    thediscdb_enabled: bool | None = None
+    thediscdb_refresh_days: int | None = None
     ripping_paused: bool | None = None
     hold_for_review: bool | None = None
     manual_wait_seconds: int | None = None
@@ -88,3 +93,19 @@ class DiagnosticsServiceView(BaseModel):
 
 class DiagnosticsResponse(BaseModel):
     services: list[DiagnosticsServiceView]
+
+
+class UserView(BaseModel):
+    id: str
+    username: str
+    role: UserRole
+    disabled: bool
+    last_login_at: datetime | None = None
+
+
+class UserDisabledRequest(BaseModel):
+    disabled: bool
+
+
+class UserPasswordSetRequest(BaseModel):
+    new_password: str = Field(min_length=8)

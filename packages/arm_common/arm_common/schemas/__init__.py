@@ -7,6 +7,9 @@ from arm_common.schemas.auth import (
     LoginRequest,
     LoginResponse,
     PasswordChangeRequest,
+    UserDisabledRequest,
+    UserPasswordSetRequest,
+    UserView,
 )
 from arm_common.schemas.common import ErrorResponse, HealthResponse
 from arm_common.schemas.drives import (
@@ -30,6 +33,7 @@ from arm_common.schemas.files import (
 )
 from arm_common.schemas.jobs import (
     AbandonJobRequest,
+    BulkDeleteJobsRequest,
     BulkDeleteJobsResponse,
     DiscFingerprintView,
     HeldJobView,
@@ -171,6 +175,7 @@ __all__ = [
     "MetadataReleaseTrack",
     "MetadataSearchResponse",
     "ApplySessionRequest",
+    "BulkDeleteJobsRequest",
     "BulkDeleteJobsResponse",
     "DiscFingerprintInput",
     "DiscFingerprintView",
@@ -281,6 +286,9 @@ __all__ = [
     "TranscodeStatsView",
     "TranscodeTaskView",
     "TranscodeWorkerView",
+    "UserDisabledRequest",
+    "UserPasswordSetRequest",
+    "UserView",
     "WSAck",
     "WSAuthRequest",
     "WSEnvelope",
