@@ -24,6 +24,7 @@
 	import JsonTree from '$lib/components/JsonTree.svelte';
 	import { startRipperEvents, onRipperEvent } from '$lib/stores/ripperEvents.svelte';
 	import { isAdmin } from '$lib/stores/auth';
+	import { dashboard } from '$lib/stores/dashboard';
 
 	let detail = $state<JobDetailView | null>(null);
 	let jobLoading = $state(true);
@@ -92,7 +93,7 @@
 
 	let isCdDisc = $derived(detail?.job.disc_type === 'cd');
 
-	let metadataFields = $derived(detail ? buildMetadataFields(detail.job) : []);
+	let metadataFields = $derived(detail ? buildMetadataFields(detail.job, $dashboard.drive_names) : []);
 	let musicTracks = $derived(detail ? extractMusicTracks(detail.job.metadata_json) : []);
 	let tracksAreSeries = $derived(
 		(detail?.tracks ?? []).some((t) => t.video_type === 'series' || t.episode_number != null)
@@ -577,7 +578,7 @@
 	</div>
 
 	{#if showIdentify}
-		<IdentifyDialog {job} onclose={() => (showIdentify = false)} onidentified={handleIdentified} />
+		<IdentifyDialog {job} driveNames={$dashboard.drive_names} onclose={() => (showIdentify = false)} onidentified={handleIdentified} />
 	{/if}
 	{#if showApply}
 		<ApplySessionDialog {job} onclose={() => (showApply = false)} onapplied={handleApplied} />
