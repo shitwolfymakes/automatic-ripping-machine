@@ -7,6 +7,7 @@ land in one place.
 """
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -84,6 +85,20 @@ class ConfigUpdateRequest(BaseModel):
     manual_wait_seconds: int | None = None
     notifications_enabled: bool | None = None
     metadata_provider: str | None = None
+
+
+class KeyCheckRequest(BaseModel):
+    """Body for POST /api/config/keys/{name}/check. `value` is an unsaved
+    candidate key to probe; when omitted (None), the stored key is used."""
+
+    value: str | None = None
+
+
+class KeyCheckResponse(BaseModel):
+    name: str
+    status: Literal["ok", "invalid", "missing", "error", "unknown"]
+    detail: str | None = None
+    checked_at: datetime | None = None
 
 
 class DiagnosticsServiceView(BaseModel):

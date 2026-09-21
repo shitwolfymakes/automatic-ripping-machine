@@ -242,6 +242,18 @@ describe('Settings Page', () => {
 			expect(screen.getByText('Settings')).toBeInTheDocument();
 		});
 
+		it('deep-links #<tab>/<field> to the field: scrolls, focuses and highlights it', async () => {
+			window.location.hash = '#Metadata/tmdb_api_key';
+			const scrollIntoView = vi.fn();
+			Element.prototype.scrollIntoView = scrollIntoView;
+			await renderAndWait();
+			await waitFor(() => {
+				expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus();
+			});
+			expect(scrollIntoView).toHaveBeenCalled();
+			expect(screen.getByTestId('setting-tmdb_api_key').className).toContain('ring-2');
+		});
+
 		it('renders the Metadata config tab with the provider select', async () => {
 			await renderAndWait();
 			// Metadata is the default tab — its SchemaConfigForm renders the enum field.

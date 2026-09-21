@@ -183,7 +183,7 @@ class VideoCodec(StrEnum):
 
 class MakemkvKeyState(StrEnum):
     """Outcome of the ripper's disc-free `makemkvcon info disc:9999` probe.
-    Stored on the Config singleton and read by test-key / preflight / config view.
+    Stored on the Config singleton and read by the key check, preflight and config view.
 
     VALID                   — clean probe, key accepted.
     UNREGISTERED_OR_EXPIRED — MSG:5052/5055 (evaluation expired / no valid key).
