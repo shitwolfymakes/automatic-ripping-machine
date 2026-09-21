@@ -8,7 +8,7 @@ const TRACK_KIND_LABELS: Record<string, string> = {
 };
 
 export function trackKindLabel(kind: string | null | undefined): string {
-	if (!kind) return '—';
+	if (!kind) return '-';
 	return TRACK_KIND_LABELS[kind] ?? kind;
 }
 
@@ -16,5 +16,5 @@ export function trackKindLabel(kind: string | null | undefined): string {
 export function trackSizeLabel(track: TrackView): string {
 	if (track.size_bytes != null) return formatBytes(track.size_bytes);
 	if (track.expected_size_bytes != null) return `~${formatBytes(track.expected_size_bytes)}`;
-	return '—';
+	return '-';
 }

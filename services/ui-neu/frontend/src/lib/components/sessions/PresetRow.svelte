@@ -93,7 +93,7 @@
 		switch (v) {
 			case 'cpu_only': return 'CPU only';
 			case 'any': return 'Any (HW)';
-			default: return v ?? '-';
+			default: return v ?? '';
 		}
 	}
 
@@ -103,11 +103,13 @@
 		kind === 'rip'
 			? (() => {
 				const p = preset as RipPresetView;
-				return `${humanizeTrackSelection(p.track_selection)} · ${humanizeIdentificationMode(p.identification_mode)} · ${humanizeOutputMode(p.output_mode)}`;
+				return `${humanizeTrackSelection(p.track_selection)} | ${humanizeIdentificationMode(p.identification_mode)} | ${humanizeOutputMode(p.output_mode)}`;
 			})()
 			: (() => {
 				const p = preset as TranscodePresetView;
-				return `${humanizeTool(p.tool)} · ${humanizeContainer(p.container)} · ${p.codec ? humanizeCodec(p.codec) : '-'} · ${humanizeHw(p.hw_preference)}`;
+				return [humanizeTool(p.tool), humanizeContainer(p.container), p.codec ? humanizeCodec(p.codec) : '', humanizeHw(p.hw_preference)]
+					.filter((v) => !!v)
+					.join(' | ');
 			})()
 	);
 

@@ -165,7 +165,7 @@ vi.mock('$lib/api/channels', () => ({
 				key: 'rip.completed',
 				label: 'Rip completed',
 				variables: ['job_title', 'drive_id'],
-				default_title: 'ARM: rip completed — {job_title}',
+				default_title: 'ARM: rip completed - {job_title}',
 				default_body: '{job_title} finished ripping on drive {drive_id}.'
 			}
 		])

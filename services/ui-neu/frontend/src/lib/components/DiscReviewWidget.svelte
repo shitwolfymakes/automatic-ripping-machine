@@ -83,7 +83,7 @@
 	let jobMeta = $derived(readJobMetadata(displayJob.metadata_json));
 
 	function shortId(id: string): string {
-		return id.length > 15 ? `${id.slice(0, 15)}…` : id;
+		return id.length > 15 ? `${id.slice(0, 15)}...` : id;
 	}
 	let appliedSession = $derived(
 		jobMeta.pending_session_id
@@ -97,7 +97,7 @@
 	let phaseBadge = $derived.by(() => {
 		const b = reviewPhaseBadge(displayJob);
 		if (isPostRip && jobMeta.pending_session_id && !(displayJob.title?.trim())) {
-			return { ...b, label: 'RIPPED · NEEDS TITLE' };
+			return { ...b, label: 'RIPPED | NEEDS TITLE' };
 		}
 		return b;
 	});
@@ -154,7 +154,7 @@
 		const j = data?.job ?? job;
 		const startTitle = (j.title ?? '').trim();
 		if (!startTitle) {
-			errorMessage = 'A title is required to start — open Info or Search to set one.';
+			errorMessage = 'A title is required to start. Open Info or Search to set one.';
 			return;
 		}
 		starting = true;
@@ -229,7 +229,7 @@
 		<div class="flex items-center gap-2">
 			<div class="h-2 w-2 animate-pulse rounded-full bg-white/80"></div>
 			<span class="text-sm font-semibold text-on-primary">
-				{isReviewGate ? 'Ready — Review & Start' : isPostRip ? 'Ripped — Apply Session' : 'Awaiting Review'}
+				{isReviewGate ? 'Ready: Review & Start' : isPostRip ? 'Ripped: Apply Session' : 'Awaiting Review'}
 			</span>
 		</div>
 		<!-- Timed review gate: cosmetic countdown to auto-start (the ripper owns the
