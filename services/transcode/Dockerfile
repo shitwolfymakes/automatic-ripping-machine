@@ -78,7 +78,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
 #   - mesa-va-drivers           — AMD (VAAPI/VCN).
 #   - intel-media-va-driver-non-free + i965-va-driver — Intel QSV (modern +
 #     legacy iGPUs). The newer driver lives in Debian `non-free`.
-#   - libvpl2                   — oneVPL runtime for Intel QSV.
+#   - libvpl2 + libmfx-gen1.2   — oneVPL dispatcher (libvpl2) AND the modern
+#     oneVPL GPU runtime (libmfx-gen). The GPU runtime is REQUIRED on Gen12+
+#     Intel (Alder Lake / N-series, iHD 23.x): without it, oneVPL falls back to
+#     the legacy Media SDK (libmfxhw64) which dies with "Error setting child
+#     device handle: -17" → rc=3 on that silicon. Verified on an N97.
 # We apt-install `handbrake-cli` for its full runtime dependency closure, then
 # (further down) overwrite the binary with our HW-enabled build from the builder
 # stage. NVENC needs nothing baked here: `libnvidia-encode` is injected at
@@ -107,6 +111,7 @@ RUN echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://
         intel-media-va-driver-non-free \
         i965-va-driver \
         libvpl2 \
+        libmfx-gen1.2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Replace Debian's HW-less HandBrakeCLI with the HW-enabled build (NVENC/QSV/VCE).

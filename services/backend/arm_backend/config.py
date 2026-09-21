@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     # volume here in compose.
     ARM_IMAGE_CACHE_PATH: str = "/data/cache/images"
 
+    # TheDiscDB snapshot index (built from the GitHub data tarball).
+    ARM_THEDISCDB_PATH: str = "/data/cache/thediscdb"
+
     # User-uploaded themes live here (bind-mounted via ./arm/themes:/data/themes).
     # Built-in themes are a frontend concern — tokens compiled into the UI, CSS
     # served as static assets — so the backend stores only user themes.
@@ -141,11 +144,11 @@ class Settings(BaseSettings):
     # short-circuits blank input before json.loads).
     ARM_GPUS: str = "[]"
 
-    # GID of the host's /dev/dri render node group (detected host-side, like
-    # CDROM_GID for the ripper). The dispatcher adds it via `group_add` to each
-    # VAAPI/QSV transcoder so the PUID-dropped process can open the render node
-    # (root:render 0660) — without it HandBrake's QSV/VAAPI init fails with
-    # "failed to create hwdevice". Empty => no group added (CPU / NVENC-only).
+    # OPTIONAL override for the render-node group gid handed to QSV/VAAPI
+    # transcode containers. Normally UNSET: the container entrypoint derives
+    # the gid from the mounted /dev/dri/renderD* node itself (device nodes
+    # keep their host gid), which is correct on local and remote offload
+    # hosts alike. Set only to force a specific gid (exotic device perms).
     ARM_RENDER_GID: str = ""
 
     # --- Tier-3 air-gap: external metadata API base URLs --------------------
