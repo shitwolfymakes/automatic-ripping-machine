@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.auth import require_jwt
+from arm_backend.auth import require_jwt, require_writer
 from arm_backend.db import get_session
 from arm_common import MediaType, RipPreset, Session, TrackSelection, User
 from arm_common.schemas import (
@@ -73,7 +73,7 @@ async def get_rip_preset(
 @router.post("", response_model=RipPresetView, status_code=status.HTTP_201_CREATED)
 async def create_rip_preset(
     req: RipPresetCreateRequest,
-    user: User = Depends(require_jwt),
+    user: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> RipPreset:
     _validate_filters(req.track_selection, req.track_filters_json)
@@ -97,7 +97,7 @@ async def create_rip_preset(
 async def update_rip_preset(
     preset_id: str,
     req: RipPresetUpdateRequest,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> RipPreset:
     row = (await db.execute(select(RipPreset).where(col(RipPreset.id) == preset_id))).scalar_one_or_none()
@@ -126,7 +126,7 @@ async def update_rip_preset(
 @router.delete("/{preset_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_rip_preset(
     preset_id: str,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> None:
     row = (await db.execute(select(RipPreset).where(col(RipPreset.id) == preset_id))).scalar_one_or_none()

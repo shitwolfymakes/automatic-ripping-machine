@@ -60,7 +60,12 @@ async def boot_probe(
         return
 
     if job is None:
-        logger.debug("boot probe: no in-flight job for drive_id=%s", drive_id)
+        logger.debug("boot probe: no in-flight RIPPING job for drive_id=%s", drive_id)
+        # No crashed rip — but a disc may have been HELD in the review gate when
+        # the ripper restarted (timed review gate §6.3). Recover it: a paused
+        # hold re-parks; a counting-down hold is abandoned so the seated disc
+        # re-fires the InsertDetector and re-enters review with a fresh countdown.
+        await _recover_held_job(client, drive_id, device_path, controller)
         return
 
     try:
@@ -83,3 +88,42 @@ async def boot_probe(
         await controller.resume_inflight_job(job, device_path)
     except Exception as exc:  # noqa: BLE001 — boot must continue
         logger.exception("boot probe: resume failed for job_id=%s: %s", job.id, exc)
+
+
+async def _recover_held_job(
+    client: BackendClient,
+    drive_id: str,
+    device_path: str,
+    controller: JobController,
+) -> None:
+    """Recover a disc held in the review gate when the ripper restarted.
+
+    Paused hold (operator intent to keep) -> re-park the review wait. Counting-down
+    hold (transient) -> abandon, freeing the drive; the seated disc then re-fires
+    the InsertDetector and re-enters review with a fresh countdown. All errors are
+    logged + swallowed so boot continues to the normal poll loop.
+    """
+    try:
+        held = await client.get_held_job(drive_id)
+    except httpx.HTTPError as exc:
+        logger.warning("boot probe: held-job lookup failed: %s", exc)
+        return
+
+    if held is None:
+        logger.debug("boot probe: no held job for drive_id=%s", drive_id)
+        return
+
+    if held.paused:
+        logger.info("boot probe: re-parking paused held job_id=%s on drive_id=%s", held.job.id, drive_id)
+        try:
+            await controller.recover_held_job(held.job, device_path)
+        except Exception as exc:  # noqa: BLE001 — boot must continue
+            logger.exception("boot probe: re-park failed for job_id=%s: %s", held.job.id, exc)
+        return
+
+    # Counting-down (not paused): abandon so the disc re-enters review fresh.
+    logger.info("boot probe: abandoning counting-down held job_id=%s on drive_id=%s", held.job.id, drive_id)
+    try:
+        await client.recovery_abandon(held.job.id)
+    except httpx.HTTPError as exc:
+        logger.warning("boot probe: recovery-abandon failed for job_id=%s: %s", held.job.id, exc)

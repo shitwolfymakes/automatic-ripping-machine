@@ -7,6 +7,11 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=None, extra="ignore")
 
     ARM_DRIVE_DEV: str
+    # Hardware serial for this drive (udev ID_SERIAL_SHORT), resolved on the
+    # host at compose-generation time. Lets the backend detect a physical
+    # drive swap behind an unchanged srN slot; None when the drive doesn't
+    # expose one (rare, but some very old ATAPI drives report nothing).
+    ARM_DRIVE_SERIAL: str | None = None
     ARM_BACKEND_URL: str
     ARM_SERVICE_TOKEN: str
     ARM_LOG_LEVEL: str = "info"
@@ -29,6 +34,11 @@ class Settings(BaseSettings):
     # cancellation. Intended for local smoke tests against the
     # matrix256-corpus ISOs; production deployments leave this unset.
     ARM_MANUAL_TRIGGER_ISO: str | None = None
+    # Tier-4: how often the ripper re-probes makemkv key validity (daily default).
+    MAKEMKV_KEYCHECK_INTERVAL_SECONDS: int = 86400
+    # Tier-4: consecutive NOT_READY polls before re-arming insert detection.
+    # Flaky USB-BD vs cheap optical need different swap-detection windows.
+    ARM_NOT_READY_REARM_POLLS: int = 3
 
 
 settings = Settings()  # type: ignore[call-arg]  # fields loaded from env by pydantic-settings

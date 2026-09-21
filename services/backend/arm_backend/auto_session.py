@@ -586,6 +586,29 @@ async def _load_tasks(db: AsyncSession, session_application_id: str) -> list[Tra
     return list(rows)
 
 
+async def resolve_effective_session_id(db: AsyncSession, job: Job) -> str | None:
+    """The session id the apply path will actually use for this job.
+
+    Resolution order (single source of truth — the naming-preview endpoint
+    resolves through this same helper so previews cannot drift from apply):
+      1. `job.metadata_json["pending_session_id"]` — explicit per-rip choice;
+         always wins and bypasses `auto_transcode_on_idle`.
+      2. `drive.default_session_id` — the persistent per-drive default, only
+         honoured when `Config.auto_transcode_on_idle` is True.
+    Returns None when neither applies.
+    """
+    pending = (job.metadata_json or {}).get("pending_session_id")
+    if isinstance(pending, str) and pending:
+        return pending
+    drive = (await db.execute(select(Drive).where(col(Drive.id) == job.drive_id))).scalar_one_or_none()
+    if drive is None or drive.default_session_id is None:
+        return None
+    config_row = (await db.execute(select(Config).where(col(Config.id) == 1))).scalar_one_or_none()
+    if config_row is None or not config_row.auto_transcode_on_idle:
+        return None
+    return drive.default_session_id
+
+
 async def maybe_auto_apply_session(
     db: AsyncSession,
     job: Job,
@@ -601,19 +624,9 @@ async def maybe_auto_apply_session(
       2. `drive.default_session_id` — the persistent per-drive default,
          only honoured when `Config.auto_transcode_on_idle` is True.
     """
-    pending = (job.metadata_json or {}).get("pending_session_id")
-    if isinstance(pending, str) and pending:
-        session_id = pending
-    else:
-        drive = (await db.execute(select(Drive).where(col(Drive.id) == job.drive_id))).scalar_one_or_none()
-        if drive is None or drive.default_session_id is None:
-            return
-
-        config_row = (await db.execute(select(Config).where(col(Config.id) == 1))).scalar_one_or_none()
-        if config_row is None or not config_row.auto_transcode_on_idle:
-            return
-
-        session_id = drive.default_session_id
+    session_id = await resolve_effective_session_id(db, job)
+    if session_id is None:
+        return
     try:
         outcome = await apply_session_internal(
             db,

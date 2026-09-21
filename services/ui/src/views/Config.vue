@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { api, ApiError } from '../api/client'
 import type { ConfigUpdateRequest, ConfigView } from '../api/types'
+import { CONFIG_FORM_KEYS } from './configFormFields'
 
 const cfg = ref<ConfigView | null>(null)
 const error = ref<string | null>(null)
@@ -9,23 +10,15 @@ const saved = ref(false)
 const submitting = ref(false)
 
 const form = ref<ConfigUpdateRequest>({})
-const appriseInput = ref<string>('')
 
 async function reload() {
   cfg.value = await api.get<ConfigView>('/api/config')
-  form.value = {
-    tmdb_api_key: cfg.value.tmdb_api_key,
-    omdb_api_key: cfg.value.omdb_api_key,
-    makemkv_key: cfg.value.makemkv_key,
-    musicbrainz_user_agent: cfg.value.musicbrainz_user_agent,
-    auto_transcode_on_idle: cfg.value.auto_transcode_on_idle,
-    auto_rip_on_insert: cfg.value.auto_rip_on_insert,
-    block_on_miss: cfg.value.block_on_miss,
-    default_retention_policy: cfg.value.default_retention_policy,
-    notification_apprise_urls: [...cfg.value.notification_apprise_urls],
-    notifications_enabled: cfg.value.notifications_enabled,
+  const next: ConfigUpdateRequest = {}
+  for (const k of CONFIG_FORM_KEYS) {
+    // each key is a valid ConfigUpdateRequest field; copy its current value
+    ;(next as Record<string, unknown>)[k] = (cfg.value as Record<string, unknown>)[k]
   }
-  appriseInput.value = (cfg.value.notification_apprise_urls ?? []).join('\n')
+  form.value = next
 }
 
 onMounted(async () => {
@@ -41,10 +34,6 @@ async function save() {
   error.value = null
   submitting.value = true
   try {
-    form.value.notification_apprise_urls = appriseInput.value
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean)
     cfg.value = await api.patch<ConfigView>('/api/config', form.value)
     saved.value = true
   } catch (e) {
@@ -68,6 +57,10 @@ async function save() {
       <input v-model="form.omdb_api_key" />
     </div>
     <div class="field">
+      <label>TVDB API key</label>
+      <input v-model="form.tvdb_api_key" data-testid="tvdb-key" />
+    </div>
+    <div class="field">
       <label>MakeMKV key</label>
       <input
         v-model="form.makemkv_key"
@@ -84,12 +77,12 @@ async function save() {
       <input v-model="form.musicbrainz_user_agent" placeholder="my-arm/1.0 (you@example.com)" />
     </div>
     <div class="field">
-      <label>Default raw rip retention policy</label>
-      <select v-model="form.default_retention_policy">
-        <option value="keep_forever">keep_forever</option>
-        <option value="prune_after_session">prune_after_session</option>
-        <option value="custom">custom</option>
+      <label>Metadata provider</label>
+      <select v-model="form.metadata_provider" data-testid="metadata-provider">
+        <option value="tmdb">tmdb</option>
+        <option value="omdb">omdb</option>
       </select>
+      <!-- TODO(1.4): render options from /api/settings/schema enum_values once the form fetches the schema -->
     </div>
     <div class="row" style="margin-bottom: 12px">
       <label class="row" style="gap: 6px">
@@ -111,6 +104,12 @@ async function save() {
     </div>
     <div class="row" style="margin-bottom: 12px">
       <label class="row" style="gap: 6px">
+        <input type="checkbox" v-model="form.ripping_paused" data-testid="ripping-paused" />
+        pause ripping (no new rips will start while checked)
+      </label>
+    </div>
+    <div class="row" style="margin-bottom: 12px">
+      <label class="row" style="gap: 6px">
         <input
           type="checkbox"
           v-model="form.notifications_enabled"
@@ -118,13 +117,6 @@ async function save() {
         />
         Enable notifications (Apprise)
       </label>
-    </div>
-    <div class="field">
-      <label>Apprise URLs (one per line)</label>
-      <textarea v-model="appriseInput" rows="4" />
-      <p class="muted">
-        Notifications are off by default. Add URLs and check the box above to enable.
-      </p>
     </div>
     <div class="row">
       <button :disabled="submitting" type="submit">{{ submitting ? 'Saving…' : 'Save' }}</button>

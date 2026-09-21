@@ -26,10 +26,9 @@ NOTE: Patrons receive significantly more daily API requests. Please consider con
 
 ### TO USE YOUR NEW OMDBAPI KEY:
 
-Select "Arm Settings" on the top menu, then select "Ripper Settings".  Navigate to the line for 
-"OMDB_API_KEY:" and enter your API key here. Select "Submit" at the bottom of the page. 
-That's it! The API key will be propagated throughout the ARM tool as appropriate, and any future
-links or tools using the API will be made aware.
+Open the ARM web UI and navigate to **Settings** (`/config`). Under **Metadata / identification**,
+enter your key in the **OMDb API key** field and save. The key is stored in the database and takes
+effect immediately — no restart required.
 
 ### DEVELOPER'S NOTES:
 

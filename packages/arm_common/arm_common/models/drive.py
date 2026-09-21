@@ -5,7 +5,7 @@ from sqlalchemy import JSON, Column, DateTime, ForeignKey, String
 from sqlmodel import Field, SQLModel
 
 from arm_common.models._columns import created_at_column, enum_column, updated_at_column
-from arm_common.enums import DriveMediaStatus, DriveStatus
+from arm_common.enums import DriveMediaStatus, DriveMode, DriveStatus
 from arm_common.ulid import new_id
 
 
@@ -19,6 +19,14 @@ class Drive(SQLModel, table=True):
     id: str = Field(default_factory=_drive_id, primary_key=True)
     hostname: str = Field(sa_column=Column(String, unique=True, nullable=False, index=True))
     device_path: str = Field(nullable=False)
+    # Hardware serial (udev ID_SERIAL_SHORT), reported by the ripper at
+    # register time. hostname is keyed to the srN slot the compose file was
+    # generated against, which the kernel can silently reassign to a
+    # different physical drive after a replug/reboot; comparing this field
+    # against the previous value lets the register endpoint detect that swap
+    # instead of quietly overwriting device_path. None when the drive
+    # doesn't expose a serial.
+    serial: str | None = Field(default=None, nullable=True)
     display_name: str | None = Field(default=None)
     status: DriveStatus = Field(
         sa_column=enum_column(DriveStatus, "drive_status", server_default=DriveStatus.ONLINE.value)
@@ -37,6 +45,13 @@ class Drive(SQLModel, table=True):
         default_factory=dict,
         sa_column=Column(JSON, nullable=False, server_default="{}"),
     )
+    rip_speed: int | None = Field(default=None)
+    drive_mode: DriveMode | None = Field(sa_column=enum_column(DriveMode, "drive_mode", nullable=True))
+    uhd_capable: bool | None = Field(default=None)
+    prescan_cache_mb: int | None = Field(default=None)
+    prescan_timeout: int | None = Field(default=None)
+    prescan_retries: int | None = Field(default=None)
+    disc_enum_timeout: int | None = Field(default=None)
     default_session_id: str | None = Field(
         sa_column=Column(String, ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True)
     )

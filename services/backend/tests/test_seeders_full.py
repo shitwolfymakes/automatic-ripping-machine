@@ -70,7 +70,7 @@ async def test_run_seeders_idempotent(tmp_path: Path, monkeypatch: pytest.Monkey
     await run_seeders(db)
     first_users = len(db.rows.get("users", []))
     first_presets = len(db.rows.get("rip_presets", []))
-    assert first_users == 1 and first_presets >= 1
+    assert first_users == 2 and first_presets >= 1
 
     # Re-run: every _insert_missing row already exists → continue past each.
     await run_seeders(db)

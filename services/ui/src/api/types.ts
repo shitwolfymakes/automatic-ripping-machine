@@ -2,6 +2,12 @@
 // `openapi-typescript` writes ./generated.ts at build time; we re-export the
 // few types the views care about so the rest of the codebase imports from one
 // spot (and we can swap the source of truth later without touching call sites).
+//
+// NOTE: ConfigView/ConfigUpdateRequest are re-exported from the generated
+// OpenAPI types (./generated) — not hand-maintained here. The rest of this
+// file is still hand-typed.
+
+import type { components } from './generated'
 
 export interface LoginRequest {
   username: string
@@ -349,33 +355,10 @@ export interface TemplatePreviewResponse {
   expansion: string
 }
 
-export interface ConfigView {
-  tmdb_api_key: string | null
-  omdb_api_key: string | null
-  makemkv_key: string | null
-  musicbrainz_user_agent: string | null
-  auto_transcode_on_idle: boolean
-  auto_rip_on_insert: boolean
-  block_on_miss: boolean
-  default_retention_policy: string
-  notification_apprise_urls: string[]
-  notifications_enabled: boolean
-  updated_by_user_id: string | null
-  updated_at: string | null
-}
-
-export interface ConfigUpdateRequest {
-  tmdb_api_key?: string | null
-  omdb_api_key?: string | null
-  makemkv_key?: string | null
-  musicbrainz_user_agent?: string | null
-  auto_transcode_on_idle?: boolean
-  auto_rip_on_insert?: boolean
-  block_on_miss?: boolean
-  default_retention_policy?: string
-  notification_apprise_urls?: string[]
-  notifications_enabled?: boolean
-}
+// Config wire types come from the generated OpenAPI schema — do not hand-maintain
+// (they drifted and silently dropped fields; see settings audit §1.3).
+export type ConfigView = components['schemas']['ConfigView']
+export type ConfigUpdateRequest = components['schemas']['ConfigUpdateRequest']
 
 export interface DiagnosticsServiceView {
   name: string

@@ -24,3 +24,17 @@ def test_clip_error_keeps_the_tail_not_the_head() -> None:
 def test_clip_error_at_exact_boundary_is_unchanged() -> None:
     msg = "y" * _MAX_ERROR_CHARS
     assert _clip_error(msg) == msg
+
+
+def test_probe_encoders_mode_prints_json(monkeypatch, capsys) -> None:
+    import json
+
+    import arm_transcode.main as m
+
+    monkeypatch.setattr(m.sys, "argv", ["arm_transcode", "--probe-encoders"])
+    monkeypatch.setattr(m, "probe_encoders", lambda: {"qsv": ["h264"]})
+    rc = m.main()
+    assert rc == 0
+    out = capsys.readouterr().out.strip()
+    assert json.loads(out) == {"qsv": ["h264"]}
+    assert "\n" not in out  # exactly one JSON line

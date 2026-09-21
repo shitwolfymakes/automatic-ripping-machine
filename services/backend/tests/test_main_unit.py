@@ -53,6 +53,20 @@ def test_build_docker_client_returns_none_on_error(monkeypatch: pytest.MonkeyPat
     assert main_mod._build_docker_client() is None
 
 
+def test_build_docker_client_remote_uses_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    sentinel = object()
+    captured: dict[str, str] = {}
+
+    def _docker_client(*, base_url: str) -> object:
+        captured["base_url"] = base_url
+        return sentinel
+
+    fake_docker = type("D", (), {"DockerClient": staticmethod(_docker_client)})
+    monkeypatch.setitem(__import__("sys").modules, "docker", fake_docker)
+    assert main_mod._build_docker_client("ssh://sam@transcoder-server") is sentinel
+    assert captured["base_url"] == "ssh://sam@transcoder-server"
+
+
 def test_main_invokes_uvicorn(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 

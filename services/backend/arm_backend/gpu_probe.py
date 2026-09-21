@@ -28,8 +28,10 @@ from arm_common.enums import GpuVendor
 
 logger = logging.getLogger("arm_backend.gpu_probe")
 
-# All three vendors' modern silicon supports h264 + h265 universally;
-# AV1 and VP9 require silicon-generation gating that Phase 7b skips.
+# encoder_kinds is set per-device at install time by probing the transcode
+# image's HandBrake (see install.sh detect_gpus). This default is the fallback
+# used only when an ARM_GPUS entry omits encoder_kinds (older configs / probe
+# failure): h264 + h265, the universally-safe baseline.
 _DEFAULT_ENCODER_KINDS: list[str] = ["h264", "h265"]
 
 

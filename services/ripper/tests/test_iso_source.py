@@ -304,12 +304,20 @@ async def test_heartbeat_short_circuits_probe_for_iso_source(monkeypatch, tmp_pa
     client = MagicMock()
     client.heartbeat = AsyncMock()
 
+    # Idle controller stub — is_idle() returns True so maybe_reacquire_current_job
+    # would call get_current_job, but get_current_job is not set on the MagicMock
+    # here; we patch it to return None so no pickup happens.
+    controller = MagicMock()
+    controller.is_idle = MagicMock(return_value=True)
+    controller.pickup = AsyncMock()
+    client.get_current_job = AsyncMock(return_value=None)
+
     # Cancel after one tick so the test doesn't hang on the loop.
     async def cancel_after_one_tick() -> None:
         await asyncio.sleep(0)
         task.cancel()
 
-    task = asyncio.create_task(ripper_main.heartbeat_loop(client, "drv_iso", str(iso)))
+    task = asyncio.create_task(ripper_main.heartbeat_loop(client, "drv_iso", str(iso), controller))
     asyncio.create_task(cancel_after_one_tick())
     with pytest.raises(asyncio.CancelledError):
         await task
