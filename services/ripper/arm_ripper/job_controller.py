@@ -134,6 +134,10 @@ class JobController:
         # the raw dir for cleanup. Set inside `_run_pipeline` only.
         self._active_task: asyncio.Task[None] | None = None
         self._active_job_id: str | None = None
+        # Abandon-triggered eject runs fire-and-forget (the WS handler is
+        # sync); kept here so overlapping abandon signals don't stack
+        # umount/eject subprocess retries. Set inside `_spawn_eject` only.
+        self._eject_task: asyncio.Task[None] | None = None
 
     @property
     def is_active(self) -> bool:
@@ -213,17 +217,20 @@ class JobController:
             logger.debug("ws command ignored: type=%s", envelope.event_type)
 
     def _handle_abandon(self, job_id: str, *, delete_raw: bool) -> None:
-        """Cancel the active pipeline if it owns this job, then optionally
-        wipe `/raw/<job_id>/`. Runs synchronously from the WS handler;
-        cancel + rmtree are both fast and don't need awaitable plumbing.
+        """Cancel the active pipeline if it owns this job, optionally wipe
+        `/raw/<job_id>/`, then give the disc back. Runs synchronously from
+        the WS handler; cancel + rmtree are both fast and don't need
+        awaitable plumbing (eject spawns as a task).
 
         rmtree on Linux is safe even if makemkvcon still has file handles
         open: the directory entries are removed, existing fds keep working
         (writing to nowhere) until the cancelled subprocess dies.
         """
-        if self._active_job_id == job_id and self._active_task is not None and not self._active_task.done():
+        active = self._active_task
+        owns = self._active_job_id == job_id and active is not None and not active.done()
+        if active is not None and owns:
             logger.info("job.abandoned: cancelling active task for job_id=%s", job_id)
-            self._active_task.cancel()
+            active.cancel()
         if delete_raw:
             target = RAW_ROOT / job_id
             try:
@@ -233,6 +240,37 @@ class JobController:
                 logger.info("raw dir already absent job_id=%s path=%s", job_id, target)
             except OSError as exc:
                 logger.warning("raw-dir cleanup failed job_id=%s path=%s: %s", job_id, target, exc)
+        # Abandon means "done with this disc — give it back". The lifecycle's
+        # post-rip eject (end of _run_rip) never runs on an abandon exit, so
+        # eject here: when this job owns the drive's pipeline (ripping or
+        # parked — _eject_with_retry's EBUSY retries absorb the cancelled
+        # makemkvcon's teardown), or when the drive is idle with a disc still
+        # seated (pipeline already exited, e.g. after a rip-start abort). A
+        # stale abandon while a DIFFERENT job's rip owns the drive must not
+        # pop the tray mid-rip.
+        idle = active is None or active.done()
+        if owns or (idle and self._disc_seated()):
+            self._spawn_eject()
+
+    def _disc_seated(self) -> bool:
+        """True when the drive currently reports a seated disc (DISC_OK) —
+        guards abandon-eject so abandoning an old job from history with an
+        empty (or already-ejected) drive doesn't pop the tray."""
+        if self._device_path is None or is_iso_source(self._device_path):
+            return False
+        try:
+            return read_drive_status(self._device_path) == DriveState.DISC_OK
+        except OSError:
+            return False
+
+    def _spawn_eject(self) -> None:
+        """Fire-and-forget eject for the sync abandon handler; deduped so
+        overlapping abandon signals don't stack umount/eject retries."""
+        if self._device_path is None:
+            return
+        if self._eject_task is not None and not self._eject_task.done():
+            return
+        self._eject_task = asyncio.create_task(self._eject_with_retry(self._device_path))
 
     async def handle_manual_trigger(self, session_id: str | None) -> None:
         """Run the normal scan→identify→rip flow on demand, threading
