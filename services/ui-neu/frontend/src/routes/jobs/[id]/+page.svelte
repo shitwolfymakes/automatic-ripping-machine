@@ -22,6 +22,7 @@
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import JsonTree from '$lib/components/JsonTree.svelte';
+	import JobLogPanel from '$lib/components/JobLogPanel.svelte';
 	import { startRipperEvents, onRipperEvent } from '$lib/stores/ripperEvents.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	import { dashboard } from '$lib/stores/dashboard';
@@ -552,6 +553,9 @@
 				</div>
 			</section>
 		{/if}
+
+		<!-- Live, per-service job log (backend + ripper + transcode aggregated) -->
+		<JobLogPanel jobId={job.id} status={job.status} />
 
 		<!-- Raw metadata (collapsible): the full metadata_json as a JSON tree, nothing hidden -->
 		{#if rawMetadataPairs.length > 0}

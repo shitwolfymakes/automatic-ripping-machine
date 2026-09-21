@@ -14,7 +14,7 @@ function textResponse(body: string, ok = true, status = 200) {
 	return { ok, status, statusText: ok ? 'OK' : 'Error', text: () => Promise.resolve(body) };
 }
 
-import { fetchJobLog, jobLogDownloadUrl } from '../logs';
+import { fetchJobLog, jobLogDownloadUrl, toLogEntry } from '../logs';
 
 beforeEach(() => {
 	mockFetch.mockReset();
@@ -33,8 +33,8 @@ describe('fetchJobLog', () => {
 			expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer tok-123' }) })
 		);
 		expect(entries).toEqual([
-			{ timestamp: '2026-06-19T00:00:01Z', level: 'info', logger: 'arm', event: 'start', job_id: 'job_a', label: null },
-			{ timestamp: '2026-06-19T00:00:02Z', level: 'error', logger: 'ripper', event: 'boom', job_id: 'job_a', label: null }
+			{ timestamp: '2026-06-19T00:00:01Z', level: 'info', logger: 'arm', event: 'start', job_id: 'job_a', label: null, service: 'arm-backend' },
+			{ timestamp: '2026-06-19T00:00:02Z', level: 'error', logger: 'ripper', event: 'boom', job_id: 'job_a', label: null, service: 'arm-backend' }
 		]);
 	});
 
@@ -50,7 +50,7 @@ describe('fetchJobLog', () => {
 		mockFetch.mockResolvedValue(textResponse(ndjson));
 		const entries = await fetchJobLog('job_x');
 		expect(entries).toEqual([
-			{ timestamp: '2026-06-19T00:00:01Z', level: 'info', logger: 'a', event: 'ok', job_id: null, label: null }
+			{ timestamp: '2026-06-19T00:00:01Z', level: 'info', logger: 'a', event: 'ok', job_id: null, label: null, service: 'x' }
 		]);
 	});
 
@@ -88,5 +88,27 @@ describe('fetchJobLog', () => {
 describe('jobLogDownloadUrl', () => {
 	it('builds the per-job zip url', () => {
 		expect(jobLogDownloadUrl('job_x')).toBe('/api/logs/job_x.zip');
+	});
+});
+
+describe('toLogEntry', () => {
+	it('is exported so the WS live-tail path can parse raw records the same way', () => {
+		const entry = toLogEntry({
+			ts: '2026-09-05T00:00:00Z',
+			level: 'warning',
+			service: 'arm-ripper-ABCD',
+			job_id: 'job_a',
+			msg: 'drive slow',
+			extra: {}
+		});
+		expect(entry).toEqual({
+			timestamp: '2026-09-05T00:00:00Z',
+			level: 'warning',
+			logger: 'arm-ripper-ABCD',
+			event: 'drive slow',
+			job_id: 'job_a',
+			label: null,
+			service: 'arm-ripper-ABCD'
+		});
 	});
 });
