@@ -4,6 +4,10 @@ Status: draft, 2026-09-12. Written against `integration/all-prs` at `65a39959`
 (which includes the pre-rip session parking fix, cherry-picked from
 `feat/media-identification`). Evidence is cited as `file:line` on that tree
 or as observations from the live stack on hifi-server.
+Review pass 2026-09-22 (against the stack + live ops evidence): G-19
+resolved, G-26 narrowed, G-12 anchored to the existing key-status feed;
+G-27..G-29 added from the 2026-09-12 live sessions; step 2 marked in
+flight.
 
 The question this answers: **what stands between ARM v3 today and a disc
 going in one end and a correctly named, correctly encoded file coming out
@@ -92,7 +96,7 @@ IDs are stable so they can be referenced from issues and PRs.
 |---|---|---|---|---|
 | G-10 | major | UHD is indistinguishable from Blu-ray. No per-title resolution or HDR information reaches the backend, so no rule can pick a 2160p session or an HDR-aware preset. | `DiscType`, `ScanTitle` | Extend `ScanTitle` with `width`, `height`, `hdr` (from MakeMKV's per-title video stream info, `SINFO` lines), keep `disc_type=bluray`, and route on `height >= 2160`. |
 | G-11 | major | The only 2160p preset is software HandBrake `H.265 MKV 2160p60 4K` with `hw_preference=None`. HDR10 / Dolby Vision passthrough is unverified; a 4K encode on CPU is hours per title. | `seeders.py:248-255` | Add a `tpr_builtin_plex_2160p_hevc_gpu` (NVENC 10-bit) and verify HDR metadata survives; document DV as unsupported unless proven. |
-| G-12 | note | UHD needs a friendly drive and an unexpired MakeMKV beta; BD/UHD silently fail (`MSG:5021`) when the beta lapses. Not a code gap, but an unattended run has no way to notice except failed rips. | `docs/ops/makemkv.md:33-47` | Surface MakeMKV expiry as a health check and notification. |
+| G-12 | note | UHD needs a friendly drive and an unexpired MakeMKV beta; BD/UHD silently fail (`MSG:5021`) when the beta lapses. Not a code gap, but an unattended run has no way to notice except failed rips. | `docs/ops/makemkv.md:33-47` | The classifier hook already exists: the ripper's disc-free key probe posts MSG-code classes to `POST /api/ripper/makemkv-key-status` (`feat/makemkv-key-validity`). Add the expiry class to that feed, surface it in the diagnostics endpoint, and emit a notification event. |
 
 ### Multi-title and TV
 
@@ -112,16 +116,19 @@ IDs are stable so they can be referenced from issues and PRs.
 | G-23 | minor | Volume-label normalisation strips NTSC, `_BD` and Blu-ray branding but not `UHD` / `4K` / `2160`, so a label like `MOVIE_UHD` reaches TMDB with the suffix attached. | `metadata/dispatcher.py:_normalize_volume_label` | Add the tokens to the strip list; also record "label mentioned UHD" as a weak format hint. |
 | G-24 | major | Fuzzy identify searches TMDB movies before TV. A show sharing a name with a film (or a box-set label that reduces to a common phrase) identifies as the film with no warning. | `metadata/dispatcher.py:112-115` | When the scan looks like a box set (many titles of similar episode length, or an `S\d+` / `D\d+` hint in the label), search TV first; otherwise keep movie first. Surface both candidates when both hit. |
 | G-25 | note | The TheDiscDB snapshot indexes only the `movie` and `series` trees; `sets` (box-set collections, multi-film releases) is skipped, so exactly the discs that most need per-title help get none. | `thediscdb/snapshot.py:39` | Index `sets` once its grouping shape is handled. |
-| G-26 | note | Identity is one-per-job. A double feature or a compilation disc identifies as one film; the other titles can only be corrected by editing per-track fields after the fact. Whether the UI offers a per-track title search was not checked. | `TrackEditRequest`, `_build_track_ctx` per-track overrides | Add a per-track "identify this title" action that runs the same ladder against a typed name and writes the track's identity fields. |
+| G-26 | note | Identity is one-per-job. A double feature or a compilation disc identifies as one film; the other titles can only be corrected by editing per-track fields after the fact. ui-neu already ships a per-track title search on the job page (`TrackTitleSearch`, writing the track's naming fields), so the gap is narrower than first written: what is missing is backend-side — running the identify ladder per track so external ids and posters land too. | `TrackEditRequest`, `_build_track_ctx` per-track overrides, `ui-neu TrackTitleSearch.svelte` | Add a per-track "identify this title" action that runs the same ladder against a typed name and writes the track's identity fields. |
 
 ### Unidentified discs and operations
 
 | ID | Sev | Gap | Evidence | Proposal |
 |---|---|---|---|---|
 | G-18 | note | `block_on_miss=false` (placeholder mode) rips and transcodes under the volume label, and ARM never renames afterwards. Correct per design, but an unattended run needs the operator to know this trade-off. | `ripper.py:495-497`, `02-job-lifecycle.md` | Keep `block_on_miss=true` as the unattended default; document placeholder mode as "you will rename". |
-| G-19 | verify | `rip.needs_user_input` is emitted on an identify miss. Whether the notification catalog exposes it (so an unattended operator is paged) was not verified in this pass. | `ripper.py:518`, `notifications/catalog.py` | Confirm it is in the catalog; if not, add it. |
+| G-19 | done | `rip.needs_user_input` is emitted on an identify miss and IS notifiable — verified 2026-09-22: it is in the event vocabulary (`notification_events.py:49`) and the seeded in-app channel subscribes it. | `ripper.py:518`, `notification_events.py:49`, seeded `ncl_inbox` | Resolved by verification. The remaining exposure — a channel that fails delivery does so silently — is G-29. |
 | G-20 | major | No `/raw` retention is implemented. `default_retention_policy` exists in config (default `keep_forever`) but nothing prunes. Unattended runs fill the raw volume. | grep: only drive pruning exists (`drive_scanner.py`) | Implement `prune_after_session`: when every task derived from a job is terminal, remove `/raw/{job_id}` per policy. A `waiting_identify` application has zero tasks and must count as non-terminal, or pruning deletes raw before the parked transcode runs (§5). |
 | G-21 | note | Disc dedupe reuses pre-rip jobs across days (today's job was created 09-06 and ripped 09-12). A ripped disc re-inserted creates a new job whose outputs collide with the old one, which is how G-08 bites. | `disc_dedupe.py` | With G-08 scoped, offer "already ripped on {date}: skip / rip again" on re-insert. |
+| G-27 | critical | Remote transcode dispatch never recovers a dead SSH transport. With `ARM_TRANSCODE_DOCKER_HOST=ssh://…` the dispatcher builds its docker client once; when the paramiko transport dies idle, every spawn fails `SSH session not active` and the queue stalls until a backend restart. Observed live 2026-09-12: "Connection reset by peer" after ~5 idle days, then 53 consecutive spawn failures with tasks stuck `queued` until a manual restart. | `transcode_dispatcher.py` `_build_docker_client` / `_spawn_container`; hifi-server logs 2026-09-12 05:09 | On `SSHException` / connection-reset, rebuild the docker client and retry the spawn once; enable paramiko keepalives so idle transports survive. |
+| G-28 | major | The default WS origin allowlist blinds the UI on every real deployment. `install.sh` and `.env.example` write only `https://localhost:8081`; ui-neu is published on 8082 (8888 on hifi-server), so every browser WebSocket is rejected pre-auth (1008) and the UI silently retries forever — live rip progress, `ripper.events` instant refresh and the log stream are all dead. Unattended runs are unobservable in real time out of the box. | `ws/router.py:_origin_allowed`, `install.sh:1159`, `.env.example:42`; verified live 2026-09-12 | Installer derives/collects the real origins (ui-neu port + LAN address); the UI shows a visible "live updates unavailable" state instead of a silent reconnect loop. |
+| G-29 | major | Notification delivery failures are invisible. Channels store `last_error` / `last_success_at` but nothing surfaces persistent failure; hifi-server's only Discord channel 404'd on every send (dead test webhook) for days while rips completed "silently". An unattended operator's pager can be broken without anyone knowing. | `notification_channels.last_error`, apprise listener logs, hifi-server 2026-09-12 | Diagnostics check for channels whose recent dispatches all failed, plus an operator-visible alert that does not depend on the failing channel (in-app inbox + UI badge). |
 
 ## 3. Free-form metadata: inventory and schema recommendation
 
@@ -265,7 +272,9 @@ Ordered so each step has a reader for what it adds.
    shared `after_rip` hook (§5.4). One deviation from §5.4: a PARTIAL
    unidentified rip stays `ripped_partial` — the enum has no
    partial+unidentified value and hiding failed tracks would be worse.
-2. **Data model:** `jobs.media_type`, `jobs.season`, `jobs.pending_session_id`
+2. **Data model (in flight on `feat/job-identity-columns` — identity
+   columns `ecaad12b` + typed metadata sections `a7561e2c` as of
+   2026-09-22):** `jobs.media_type`, `jobs.season`, `jobs.pending_session_id`
    columns; `JobMetadata` schema with migration; typed `ResolveRequest`;
    regenerate OpenAPI and both UIs (G-03, G-14, §3).
 3. **Routing:** defaults table by (`media_type`, `disc_type`) with drive
@@ -281,7 +290,10 @@ Ordered so each step has a reader for what it adds.
    volume-label season/disc hints (G-15); status-based fan-out gate (G-16);
    per-track identify (G-26); index TheDiscDB `sets` (G-25).
 6. **Operations:** `/raw` retention pruning (G-20); re-insert prompt
-   (G-21); confirm `rip.needs_user_input` is notifiable (G-19).
+   (G-21); SSH-transport recovery in the remote dispatcher (G-27); WS
+   origin defaults + a visible live-updates-down state (G-28);
+   notification-channel health surfaced (G-29). (G-19 verified done
+   2026-09-22.)
 
 Steps 2 and 3 are the ones that turn "automatic" from a per-drive switch into
 a policy the system can apply per disc. Everything after them is refinement.
