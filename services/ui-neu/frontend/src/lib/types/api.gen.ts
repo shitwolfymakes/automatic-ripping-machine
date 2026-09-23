@@ -914,6 +914,29 @@ export type EventTypeInfo = {
 };
 
 /**
+ * ExternalIds
+ */
+export type ExternalIds = {
+    /**
+     * Imdb
+     */
+    imdb?: string | null;
+    /**
+     * Tmdb
+     */
+    tmdb?: string | null;
+    /**
+     * Tvdb
+     */
+    tvdb?: string | null;
+    /**
+     * Musicbrainz Release
+     */
+    musicbrainz_release?: string | null;
+    [key: string]: unknown;
+};
+
+/**
  * FailTaskRequest
  */
 export type FailTaskRequest = {
@@ -1158,6 +1181,15 @@ export type Job = {
      * Year
      */
     year: number | null;
+    media_type?: MediaType | null;
+    /**
+     * Season
+     */
+    season: number | null;
+    /**
+     * Pending Session Id
+     */
+    pending_session_id?: string | null;
     /**
      * Disc Number
      */
@@ -1236,6 +1268,70 @@ export type JobDetailView = {
      * Fingerprints
      */
     fingerprints?: Array<DiscFingerprintView>;
+};
+
+/**
+ * JobFlags
+ */
+export type JobFlags = {
+    /**
+     * Unidentified
+     */
+    unidentified?: boolean;
+    /**
+     * Dispatch Timeout
+     */
+    dispatch_timeout?: boolean;
+    [key: string]: unknown;
+};
+
+/**
+ * JobIdentity
+ *
+ * What identification concluded. Title/year/media_type/poster live on
+ * the Job row itself — this records where they came from and the ids that
+ * let a UI link out or re-query.
+ */
+export type JobIdentity = {
+    /**
+     * Provider
+     */
+    provider: string;
+    external_ids?: ExternalIds;
+    /**
+     * Overview
+     */
+    overview?: string | null;
+    /**
+     * Identified At
+     */
+    identified_at?: string | null;
+    [key: string]: unknown;
+};
+
+/**
+ * JobMetadata
+ */
+export type JobMetadata = {
+    scan_result?: ScanResult | null;
+    identity?: JobIdentity | null;
+    music?: MusicMeta | null;
+    /**
+     * Thediscdb
+     */
+    thediscdb?: {
+        [key: string]: unknown;
+    } | null;
+    flags?: JobFlags;
+    /**
+     * Provider Raw
+     */
+    provider_raw?: {
+        [key: string]: {
+            [key: string]: unknown;
+        };
+    };
+    [key: string]: unknown;
 };
 
 /**
@@ -1338,6 +1434,15 @@ export type JobView = {
      * Year
      */
     year: number | null;
+    media_type?: MediaType | null;
+    /**
+     * Season
+     */
+    season?: number | null;
+    /**
+     * Pending Session Id
+     */
+    pending_session_id?: string | null;
     /**
      * Disc Number
      */
@@ -1354,12 +1459,7 @@ export type JobView = {
      * Poster Url Manual
      */
     poster_url_manual?: string | null;
-    /**
-     * Metadata Json
-     */
-    metadata_json: {
-        [key: string]: unknown;
-    };
+    metadata_json: JobMetadata;
     /**
      * Resumed From Crash
      */
@@ -1760,6 +1860,48 @@ export type MoveRequest = {
      * Dest Subpath
      */
     dest_subpath: string;
+};
+
+/**
+ * MusicMeta
+ */
+export type MusicMeta = {
+    /**
+     * Artist
+     */
+    artist?: string | null;
+    /**
+     * Album
+     */
+    album?: string | null;
+    /**
+     * Tracks
+     */
+    tracks?: Array<MusicTrackMeta>;
+    [key: string]: unknown;
+};
+
+/**
+ * MusicTrackMeta
+ */
+export type MusicTrackMeta = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Position
+     */
+    position?: number | null;
+    /**
+     * Length Ms
+     */
+    length_ms?: number | null;
+    /**
+     * Disc Number
+     */
+    disc_number?: number | null;
+    [key: string]: unknown;
 };
 
 /**
@@ -2313,6 +2455,8 @@ export type RenameRequest = {
  * promoted and `task_count` newly-created transcode tasks are queued.
  * Anything else → the application stays parked in `waiting_identify`
  * and `error_detail` carries the reason for the UI to surface.
+ * `skipped_reason='no_tracks'` is the benign case: the rip has not started
+ * yet (no Track rows exist), so the application fans out at rip-complete.
  */
 export type ResolveFanOutOutcomeView = {
     /**
@@ -2331,7 +2475,7 @@ export type ResolveFanOutOutcomeView = {
     /**
      * Skipped Reason
      */
-    skipped_reason?: 'collisions' | 'template' | 'session_missing' | null;
+    skipped_reason?: 'collisions' | 'template' | 'session_missing' | 'no_tracks' | null;
     /**
      * Error Detail
      */
@@ -2358,12 +2502,13 @@ export type ResolveRequest = {
      * Disc Total
      */
     disc_total?: number | null;
+    media_type?: MediaType | null;
     /**
-     * Metadata
+     * Season
      */
-    metadata?: {
-        [key: string]: unknown;
-    };
+    season?: number | null;
+    music?: MusicMeta | null;
+    external_ids?: ExternalIds | null;
 };
 
 /**

@@ -47,8 +47,10 @@ class JobStatus(StrEnum):
     # Distinct from AWAITING_USER_ID ("could not identify — needs operator ID").
     # Resolvable (PRESERVE) for identity edits; non-terminal; not an APPLY status.
     AWAITING_REVIEW = "awaiting_review"
-    # Set by the (future) deferred-placeholder rip path when a disc rips
-    # successfully but identification never landed. Resolvable via the
+    # Set by rip-complete when a placeholder disc rips successfully but
+    # identification never landed (metadata_json["unidentified"]): transcode
+    # is gated on identity, so the after-rip hooks wait for resolve, which
+    # promotes this to RIPPED (not IDENTIFIED). Resolvable via the
     # /resolve endpoint just like AWAITING_USER_ID. Inert today — no code
     # path sets this yet.
     RIPPED_AWAITING_IDENTIFY = "ripped_awaiting_identify"

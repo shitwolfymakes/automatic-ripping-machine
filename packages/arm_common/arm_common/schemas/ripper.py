@@ -95,8 +95,9 @@ class IdentifyRequest(BaseModel):
     drive_id: str
     scan_result: ScanResult
     # Set by the ripper when it's running a manual-trigger flow; backend
-    # stamps it into job.metadata_json so `maybe_auto_apply_session` can
-    # prefer it over the drive's persistent default_session_id.
+    # stamps it into the job's `pending_session_id` column so
+    # `maybe_auto_apply_session` can prefer it over the drive's persistent
+    # default_session_id.
     pending_session_id: str | None = None
 
 

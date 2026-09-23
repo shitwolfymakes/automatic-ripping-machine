@@ -119,7 +119,7 @@ def test_resolve_persists_disc_fields(signing_key: bytes, tmp_path: Path) -> Non
                 "year": 1969,
                 "disc_number": 1,
                 "disc_total": 2,
-                "metadata": {"artist": "The Beatles"},
+                "music": {"artist": "The Beatles"},
             },
             headers=_auth(token),
         )

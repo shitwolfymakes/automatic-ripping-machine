@@ -328,7 +328,7 @@ export interface ApplySessionResponse {
 export interface ResolveJobRequest {
   title: string
   year?: number | null
-  metadata?: Record<string, unknown>
+  music?: { artist: string; album: string; tracks: { title: string }[] }
 }
 
 export interface ResolveFanOutOutcomeView {

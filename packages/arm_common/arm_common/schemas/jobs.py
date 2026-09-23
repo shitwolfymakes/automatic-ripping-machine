@@ -1,24 +1,43 @@
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
-from arm_common.enums import DiscType, JobStatus, SessionApplicationStatus, TrackKind, TrackStatus, TranscodeTaskStatus
+from arm_common.enums import (
+    DiscType,
+    JobStatus,
+    MediaType,
+    SessionApplicationStatus,
+    TrackKind,
+    TrackStatus,
+    TranscodeTaskStatus,
+)
+from arm_common.schemas.job_metadata import ExternalIds, JobMetadata, MusicMeta
 
 
 class ResolveRequest(BaseModel):
+    # Unknown keys are a caller bug: the free-form metadata bag is gone (G-03/§3.4).
+    model_config = ConfigDict(extra="forbid")
+
     title: str
     year: int | None = None
     disc_number: int | None = None
     disc_total: int | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    # Classifications, not part of the identity statement: omitted = keep.
+    # (title/year/disc_number/total are the full statement — omitted clears.)
+    media_type: MediaType | None = None
+    season: int | None = None
+    # Typed replacements for the last free-form uses.
+    music: MusicMeta | None = None
+    external_ids: ExternalIds | None = None
 
 
 class ManualTriggerRequest(BaseModel):
     """POST /api/jobs/manual — kick off a rip on a drive that already has a
     disc in the tray. The ripper picks it up via WS command and runs the
     normal scan→identify→rip flow; the optional `session_id` is stamped on
-    the resulting Job's metadata so `rip-complete` auto-applies it.
+    the resulting Job's `pending_session_id` column so `rip-complete`
+    auto-applies it.
     """
 
     drive_id: str
@@ -118,12 +137,17 @@ class JobView(BaseModel):
     status: JobStatus
     title: str | None
     year: int | None
+    # Identity columns (step 2): the identified kind, the user-supplied TV
+    # season, and the explicit per-rip session choice.
+    media_type: MediaType | None = None
+    season: int | None = None
+    pending_session_id: str | None = None
     disc_number: int | None = None
     disc_total: int | None = None
     # Computed at identify; UI prefers `poster_url_manual` if set.
     poster_url: str | None = None
     poster_url_manual: str | None = None
-    metadata_json: dict[str, Any]
+    metadata_json: JobMetadata
     resumed_from_crash: bool
     # Timed review gate: when the countdown started (AWAITING_REVIEW). Drives the
     # ripper's remaining-delay calc + the UI's cosmetic countdown. Null otherwise.
@@ -238,6 +262,12 @@ class RipStartResponse(BaseModel):
     min_length_seconds: int | None = None
 
 
+# The one definition of apply/fan-out skip reasons — the backend engine
+# (arm_backend.auto_session) imports this rather than re-declaring it, so the
+# wire schema and the engine can never drift.
+ApplySkippedReason = Literal["collisions", "template", "session_missing", "no_tracks"]
+
+
 class ResolveFanOutOutcomeView(BaseModel):
     """One waiting_identify application's post-resolve outcome.
 
@@ -245,13 +275,15 @@ class ResolveFanOutOutcomeView(BaseModel):
     promoted and `task_count` newly-created transcode tasks are queued.
     Anything else → the application stays parked in `waiting_identify`
     and `error_detail` carries the reason for the UI to surface.
+    `skipped_reason='no_tracks'` is the benign case: the rip has not started
+    yet (no Track rows exist), so the application fans out at rip-complete.
     """
 
     session_application_id: str
     session_id: str
     status: SessionApplicationStatus
     task_count: int
-    skipped_reason: Literal["collisions", "template", "session_missing"] | None = None
+    skipped_reason: ApplySkippedReason | None = None
     error_detail: str | None = None
 
 
