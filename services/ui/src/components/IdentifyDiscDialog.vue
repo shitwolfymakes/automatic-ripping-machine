@@ -68,7 +68,7 @@ async function submit(): Promise<void> {
       ? {
           title: album.value.trim(),
           year: year.value ?? null,
-          metadata: {
+          music: {
             artist: artist.value.trim(),
             album: album.value.trim(),
             tracks: trackTitles.value.map((t) => ({ title: t.trim() })),

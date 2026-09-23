@@ -80,7 +80,7 @@
 	let sessions = $state<SessionView[]>([]);
 	let sessionNameById = $derived(new Map(sessions.map((s) => [s.id, s.name])));
 
-	let jobMeta = $derived(readJobMetadata(displayJob.metadata_json));
+	let jobMeta = $derived(readJobMetadata(displayJob.metadata_json, displayJob));
 
 	function shortId(id: string): string {
 		return id.length > 15 ? `${id.slice(0, 15)}...` : id;
@@ -164,8 +164,7 @@
 				title: startTitle,
 				year: j.year ?? null,
 				disc_number: j.disc_number ?? null,
-				disc_total: j.disc_total ?? null,
-				metadata: {}
+				disc_total: j.disc_total ?? null
 			});
 			if (isReviewGate) {
 				await startWaitingJob(job.id);

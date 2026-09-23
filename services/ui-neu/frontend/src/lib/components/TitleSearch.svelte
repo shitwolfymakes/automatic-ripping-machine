@@ -120,7 +120,11 @@
 		const isSeries = editType === 'series';
 		try {
 			if (canResolve) {
-				await resolveJob(job.id, { title, year, metadata: { video_type: editType } });
+				await resolveJob(job.id, {
+					title,
+					year,
+					media_type: editType === 'series' ? 'tv' : 'movie'
+				});
 				let message = 'Identified';
 				if (poster !== (job.poster_url_manual ?? null)) {
 					try {

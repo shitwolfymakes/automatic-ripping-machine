@@ -158,18 +158,20 @@ describe('IdentifyDiscDialog.vue', () => {
       expect(btn.attributes('disabled')).toBeUndefined()
     })
 
-    it('submit posts structured metadata with artist + album + tracks array', async () => {
+    it('submit posts structured music with artist + album + tracks array', async () => {
       const resp = resolveSuccessResponse({
         disc_type: 'cd',
         title: 'Animals',
         metadata_json: {
-          artist: 'Pink Floyd',
-          album: 'Animals',
-          tracks: [
-            { title: 'Pigs on the Wing 1' },
-            { title: 'Dogs' },
-            { title: 'Pigs (Three Different Ones)' },
-          ],
+          music: {
+            artist: 'Pink Floyd',
+            album: 'Animals',
+            tracks: [
+              { title: 'Pigs on the Wing 1' },
+              { title: 'Dogs' },
+              { title: 'Pigs (Three Different Ones)' },
+            ],
+          },
         },
       })
       const fetchMock = vi.fn().mockResolvedValue(jsonResponse(resp))
@@ -191,7 +193,7 @@ describe('IdentifyDiscDialog.vue', () => {
       expect(body).toEqual({
         title: 'Animals',
         year: 1977,
-        metadata: {
+        music: {
           artist: 'Pink Floyd',
           album: 'Animals',
           tracks: [

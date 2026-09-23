@@ -16,6 +16,14 @@ from arm_common.schemas import ScanResult
 logger = logging.getLogger("arm_backend.metadata.dispatcher")
 
 PROVIDER_TIMEOUT_SECONDS = 8.0
+
+# _call labels are "<provider>[_<operation>]"; arm_server's prefix is "arm".
+_PROVIDER_BY_LABEL_PREFIX = {
+    "tmdb": "tmdb",
+    "omdb": "omdb",
+    "arm": "arm_server",
+    "musicbrainz": "musicbrainz",
+}
 DISPATCH_TIMEOUT_SECONDS = 25.0
 
 _YEAR_SUFFIX_RE = re.compile(r"[\s_\-.]*\(?\d{4}\)?\s*$")
@@ -136,7 +144,12 @@ class MetadataDispatcher:
 
     async def _call(self, label: str, coro) -> MetadataResult | None:  # type: ignore[no-untyped-def]
         try:
-            return await asyncio.wait_for(coro, timeout=PROVIDER_TIMEOUT_SECONDS)
+            result: MetadataResult | None = await asyncio.wait_for(coro, timeout=PROVIDER_TIMEOUT_SECONDS)
+            if result is not None:
+                # "tmdb_movie"/"tmdb_tv"/"tmdb_find_imdb" → "tmdb"; the
+                # canonical name keys provider_raw and identity.provider.
+                result.provider = _PROVIDER_BY_LABEL_PREFIX.get(label.split("_", 1)[0], label)
+            return result
         except asyncio.TimeoutError:
             logger.info("metadata.%s timeout", label)
             return None

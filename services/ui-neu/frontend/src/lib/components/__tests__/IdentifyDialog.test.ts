@@ -22,7 +22,7 @@ describe('IdentifyDialog', () => {
 	});
 
 	describe('video job', () => {
-		it('renders title + year inputs and submits title/year with no metadata', async () => {
+		it('renders title + year inputs and submits title/year with no music', async () => {
 			resolveJobMock.mockResolvedValue(makeResp());
 			const onidentified = vi.fn();
 			const job = createJob({
@@ -49,7 +49,7 @@ describe('IdentifyDialog', () => {
 				expect(resolveJobMock).toHaveBeenCalledWith('job_v', {
 					title: 'Blade Runner',
 					year: 1982,
-					metadata: undefined
+					music: undefined
 				});
 				expect(onidentified).toHaveBeenCalledTimes(1);
 			});
@@ -57,7 +57,7 @@ describe('IdentifyDialog', () => {
 	});
 
 	describe('music job', () => {
-		it('renders album + artist + per-track inputs and submits the music metadata shape', async () => {
+		it('renders album + artist + per-track inputs and submits the music shape', async () => {
 			resolveJobMock.mockResolvedValue(makeResp());
 			const onidentified = vi.fn();
 			const job = createJob({
@@ -66,7 +66,15 @@ describe('IdentifyDialog', () => {
 				status: 'awaiting_user_id',
 				title: '',
 				year: null,
-				metadata_json: { scan_result: { titles: [{}, {}] } }
+				metadata_json: {
+					scan_result: {
+						disc_type: 'cd',
+						titles: [
+							{ index: 0, duration_seconds: 0 },
+							{ index: 1, duration_seconds: 0 }
+						]
+					}
+				}
 			});
 			renderComponent(IdentifyDialog, {
 				props: { job, onclose: vi.fn(), onidentified }
@@ -92,7 +100,7 @@ describe('IdentifyDialog', () => {
 				expect(resolveJobMock).toHaveBeenCalledWith('job_cd', {
 					title: 'Dark Side',
 					year: null,
-					metadata: {
+					music: {
 						artist: 'Pink Floyd',
 						album: 'Dark Side',
 						tracks: [{ title: 'Speak to Me' }, { title: 'Breathe' }]
@@ -149,7 +157,7 @@ describe('IdentifyDialog', () => {
 				disc_type: 'cd',
 				status: 'awaiting_user_id',
 				title: '',
-				metadata_json: { scan_result: { titles: [] } }
+				metadata_json: { scan_result: { disc_type: 'cd', titles: [] } }
 			});
 			renderComponent(IdentifyDialog, {
 				props: { job, onclose: vi.fn(), onidentified: vi.fn() }
