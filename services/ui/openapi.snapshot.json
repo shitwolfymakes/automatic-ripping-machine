@@ -12661,7 +12661,8 @@
                   "collisions",
                   "template",
                   "session_missing",
-                  "no_tracks"
+                  "no_tracks",
+                  "no_outputs"
                 ]
               },
               {

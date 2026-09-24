@@ -283,7 +283,13 @@ class RipStartResponse(BaseModel):
 # The one definition of apply/fan-out skip reasons — the backend engine
 # (arm_backend.auto_session) imports this rather than re-declaring it, so the
 # wire schema and the engine can never drift.
-ApplySkippedReason = Literal["collisions", "template", "session_missing", "no_tracks"]
+#
+# "no_tracks" — no Track rows exist yet (pre-rip-start apply); fans out once
+# rip-complete/resolve drains it. "no_outputs" (Fix 75-7) — Track rows DO
+# exist but none qualify for this session's media_type/exclusion, so
+# compute_outputs legitimately resolves zero paths; re-applying after the
+# rip won't change that outcome the way "no_tracks" implies it will.
+ApplySkippedReason = Literal["collisions", "template", "session_missing", "no_tracks", "no_outputs"]
 
 
 class ResolveFanOutOutcomeView(BaseModel):

@@ -538,3 +538,53 @@ def test_apply_to_ripped_awaiting_identify_parks_as_waiting_identify(signing_key
     body = r.json()
     assert body["session_application"]["status"] == "waiting_identify"
     assert body["tasks"] == []
+
+
+def test_apply_ripped_with_all_tracks_excluded_parks_as_no_outputs_not_no_tracks(
+    signing_key: bytes, tmp_path: Path
+) -> None:
+    """Fix 75-7 regression: on a RIPPED job whose only track is excluded,
+    Track rows DO exist but compute_outputs legitimately resolves zero
+    paths. Before the fix, the park decision was keyed on `not resolved`
+    (compute_outputs' result) rather than `not tracks`, so this case was
+    indistinguishable from the genuine pre-rip "no tracks yet" case and
+    reported skipped_reason=no_tracks -- a promise of a rip-complete
+    fan-out that can never happen, because the rip is already done and the
+    excluded track will never un-exclude itself. It must report the
+    distinct, honest "no_outputs" reason instead, and the application must
+    never be promoted to queued."""
+    db = FakeSession()
+    _seed(db, job_status=JobStatus.RIPPED)
+    db.rows["tracks"][0].excluded = True
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["session_application"]["status"] == "waiting_identify"
+    assert body["tasks"] == []
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
+
+    # The drain must never promote this empty husk to queued: re-running the
+    # fan-out (as rip-complete/resolve would) against the same tracks still
+    # resolves zero outputs and must leave the application parked.
+    import asyncio
+
+    from arm_backend.auto_session import fan_out_waiting_identify_applications
+
+    class _NoopHub:
+        async def emit(self, *args: object, **kwargs: object) -> None:
+            return None
+
+    job = db.rows["jobs"][0]
+    outcomes = asyncio.run(fan_out_waiting_identify_applications(db, job=job, hub=_NoopHub()))  # type: ignore[arg-type]
+    assert len(outcomes) == 1
+    assert outcomes[0].skipped_reason == "no_outputs"
+    assert outcomes[0].application.status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
