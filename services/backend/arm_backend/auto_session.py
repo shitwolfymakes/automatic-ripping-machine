@@ -2,18 +2,19 @@
 
 `apply_session_internal` is the engine behind both code paths:
   * `POST /api/jobs/{id}/transcode` — manual click in the UI.
-  * `_maybe_auto_apply_session` — fired from `rip-complete` when the disc's
-    drive has `default_session_id` set and `Config.auto_transcode_on_idle` is
-    enabled.
+  * `_maybe_auto_apply_session` — fired from `rip-complete` when a session is
+    ROUTED to the job (`resolve_routed_session_id`: pending choice, else the
+    compatibility-gated drive default, else `session_routes`) and
+    `auto_apply_allowed` says unattended queueing is permitted.
 
 Both paths emit a single `session.queued` WS event on success with the
 `source` field set to `"manual"` or `"auto"` so the UI can render where each
 in-flight transcode came from.
 
 Auto-apply failures never bubble out: a deleted session, a template that
-resolves to an empty token, or a path collision all log at WARN and let the
-caller's HTTP response succeed unchanged. The user can still hand-apply the
-session afterwards.
+resolves to an empty token, a path collision, or a session/job media_type
+incompatibility all log at WARN and let the caller's HTTP response succeed
+unchanged. The user can still hand-apply the session afterwards.
 """
 
 from __future__ import annotations
@@ -36,29 +37,71 @@ from arm_common import (
     Drive,
     Job,
     JobStatus,
+    MediaType,
     RipPreset,
     Session,
     SessionApplication,
     SessionApplicationStatus,
+    SessionRoute,
     Track,
     TranscodePreset,
     TranscodeTask,
     TranscodeTaskStatus,
     with_log_context,
 )
-from arm_common.schemas import CollisionInfo
+from arm_common.models._columns import enum_value_str
+from arm_common.schemas import ApplySkippedReason, CollisionInfo
 
 logger = logging.getLogger("arm_backend.auto_session")
 
 
 _APPLY_OK_STATUSES: frozenset[JobStatus] = frozenset({JobStatus.IDENTIFIED, JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL})
+_RIPPED_STATUSES: frozenset[JobStatus] = frozenset(
+    {JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL, JobStatus.RIPPED_AWAITING_IDENTIFY}
+)
+_NO_TRACKS_DETAIL = "no tracks yet: the rip has not started; the application fans out when the rip completes"
+
+
+def _media_types_compatible(job_mt: MediaType, sess_mt: MediaType) -> bool:
+    """Whether a session of `sess_mt` can meaningfully apply to a job of `job_mt`.
+
+    movie and tv are the same track kind (`TrackKind.VIDEO_TITLE`, see
+    `_track_kinds_for_media` in transcode_apply.py) - a TV session applied to
+    a job that got identified as a movie (or vice versa) still fans out real
+    tasks. An iso/data session consumes a dump of any video disc (or another
+    data disc) - no identified job is ever `iso`, so an iso-typed
+    drive-default/route must still apply to movie/tv/data jobs. Music is
+    strictly music: never compatible with anything else.
+    """
+    if job_mt == sess_mt:
+        return True
+    video = {MediaType.MOVIE, MediaType.TV}
+    if sess_mt in video and job_mt in video:
+        return True
+    if sess_mt in (MediaType.ISO, MediaType.DATA) and job_mt in video | {MediaType.DATA}:
+        return True
+    return False
+
+
+def media_mismatch_detail(job: Job, sess: Session) -> str:
+    """Human-readable detail for `skipped_reason="media_mismatch"`, naming
+    both sides. `job.media_type`/`sess.media_type` are both non-None by the
+    time this is called (the guard only fires when both are set and
+    incompatible). Uses `enum_value_str` rather than `.value` so a
+    forward-compat row that loaded as a raw `str` still renders instead of
+    raising `AttributeError`."""
+    assert job.media_type is not None
+    return (
+        f"session media type {enum_value_str(sess.media_type)} is not compatible with "
+        f"job media type {enum_value_str(job.media_type)}"
+    )
 
 
 class SessionNotFoundError(Exception):
     """Raised by `apply_session_internal` when `session_id` doesn't resolve."""
 
 
-SkippedReason = Literal["collisions", "template", "session_missing"]
+SkippedReason = ApplySkippedReason  # single definition lives in arm_common.schemas
 ApplySource = Literal["manual", "auto"]
 
 
@@ -176,9 +219,11 @@ async def _apply_session_internal(
             )
 
     # `awaiting_user_id` → park as `waiting_identify` with no tasks.
-    # In practice this only happens via the manual route — `rip-complete`
-    # only fires for jobs already past identification.
-    if job.status == JobStatus.AWAITING_USER_ID:
+    # In practice this only happens via the manual route. A placeholder rip
+    # that completed without identity (RIPPED_AWAITING_IDENTIFY) parks the
+    # same way: transcode is gated on identity, and resolve's after-rip pass
+    # promotes the application once the operator supplies it.
+    if job.status in (JobStatus.AWAITING_USER_ID, JobStatus.RIPPED_AWAITING_IDENTIFY):
         application = SessionApplication(
             session_id=session_id,
             job_id=job.id,
@@ -242,24 +287,35 @@ async def _apply_session_internal(
         created_by_user_id=created_by_user_id,
     )
 
-    if outcome.skipped_reason == "collisions":
-        # Nothing was persisted in the helper on this branch; no commit needed.
+    if outcome.skipped_reason in ("collisions", "media_mismatch"):
+        # Nothing new was persisted in the helper on either branch (both are
+        # hard-stop errors, not parks): no commit needed. On the resolve-drain
+        # path `outcome.application` may be a pre-existing row the caller
+        # passed in, but the helper made no unflushed writes to it here.
         return outcome
 
     await db.commit()
-    if outcome.application is not None:  # pragma: no branch — collision branch early-returns above
+    if outcome.application is not None:  # pragma: no branch — error branches early-return above
         await db.refresh(outcome.application)
     for task in outcome.tasks:
         await db.refresh(task)
 
-    logger.info(
-        "apply session_id=%s job_id=%s tasks=%d overwrite=%s source=%s",
-        session_id,
-        job.id,
-        len(outcome.tasks),
-        overwrite,
-        source,
-    )
+    if outcome.skipped_reason == "no_tracks":
+        logger.info(
+            "apply: parked session_id=%s job_id=%s (no tracks yet; fans out at rip-complete) source=%s",
+            session_id,
+            job.id,
+            source,
+        )
+    else:
+        logger.info(
+            "apply session_id=%s job_id=%s tasks=%d overwrite=%s source=%s",
+            session_id,
+            job.id,
+            len(outcome.tasks),
+            overwrite,
+            source,
+        )
 
     return outcome
 
@@ -292,7 +348,69 @@ async def _fan_out_tasks_for_application(
     Caller is responsible for the commit. The helper only `flush`es so the
     new application's id is populated for downstream task FKs.
     """
+    if (
+        job.media_type is not None
+        and sess.media_type is not None
+        and not _media_types_compatible(job.media_type, sess.media_type)
+    ):
+        # A routed/manually-picked session whose media_type is INCOMPATIBLE
+        # with what the job was actually identified as (e.g. a music session
+        # applied to a movie job) fans out zero tasks if we let it through —
+        # that's silently indistinguishable from a real crash and gets swept
+        # as one. Treat it as a first-class skip instead. Only fires when
+        # both sides have declared a type; an unidentified job
+        # (media_type=None) has nothing to disagree with yet. Compatible
+        # pairs (movie/tv, iso-or-data over any video/data job) are let
+        # through — see `_media_types_compatible`.
+        #
+        # Like `collisions` (and unlike `no_tracks`), this is a hard-stop
+        # error, not a "waiting for more info" park: don't create a new
+        # application when the caller passed `application=None` (manual
+        # apply, which 422s and has nothing to point the new row at).
+        # `application` is only non-None here on the resolve-drain path,
+        # where it's an existing WAITING_IDENTIFY row that simply stays
+        # untouched/parked.
+        logger.warning(
+            "apply: media type incompatible session_id=%s job_id=%s session_media_type=%s job_media_type=%s source=%s",
+            sess.id,
+            job.id,
+            enum_value_str(sess.media_type),
+            enum_value_str(job.media_type),
+            source,
+        )
+        return ApplySessionOutcome(
+            application=application,
+            tasks=[],
+            collisions=[],
+            idempotent=False,
+            skipped_reason="media_mismatch",
+        )
+
     resolved = compute_outputs(job, tracks, sess, transcode_preset)
+
+    if not resolved and job.status not in _RIPPED_STATUSES:
+        # The ripper persists Track rows at rip-start, so a session applied
+        # between identify and rip-start (or resolved before the rip) has
+        # nothing to fan out yet. Park the application with no tasks instead
+        # of promoting an empty `queued` husk; `drain_parked_applications_after_rip`
+        # fans it out from rip-complete once the tracks exist.
+        if application is None:
+            application = SessionApplication(
+                session_id=sess.id,
+                job_id=job.id,
+                status=SessionApplicationStatus.WAITING_IDENTIFY,
+                overwrite=overwrite,
+                created_by_user_id=created_by_user_id,
+            )
+            db.add(application)
+            await db.flush()
+        return ApplySessionOutcome(
+            application=application,
+            tasks=[],
+            collisions=[],
+            idempotent=False,
+            skipped_reason="no_tracks",
+        )
 
     paths = [r.output_path for r in resolved]
     media_root = Path(settings.MEDIA_ROOT)
@@ -307,7 +425,23 @@ async def _fan_out_tasks_for_application(
         )
 
     if overwrite and collisions:
-        await _evict_colliding_tasks(db, paths)
+        # overwrite=True only ever licenses evicting the *applying* job's own
+        # colliding tasks. A collision whose owning job differs (or is
+        # unknown, e.g. an on-disk-only hit) is never silently clobbered —
+        # re-ripping a disc and overwriting must not destroy another job's
+        # finished output. Any such cross-job collision is a hard skip,
+        # even though overwrite was requested.
+        cross_job_collisions = [c for c in collisions if c.existing_job_id is not None and c.existing_job_id != job.id]
+        if cross_job_collisions:
+            return ApplySessionOutcome(
+                application=application,
+                tasks=[],
+                collisions=cross_job_collisions,
+                idempotent=False,
+                skipped_reason="collisions",
+            )
+        same_job_paths = [c.output_path for c in collisions if c.existing_job_id is None or c.existing_job_id == job.id]
+        await _evict_colliding_tasks(db, same_job_paths, job_id=job.id)
 
     if application is None:
         application = SessionApplication(
@@ -457,6 +591,28 @@ async def fan_out_waiting_identify_applications(
             )
             continue
 
+        if outcome.skipped_reason == "no_tracks":
+            outcomes.append(
+                ResolveFanOutOutcome(
+                    application=app,
+                    tasks=[],
+                    skipped_reason="no_tracks",
+                    error_detail=_NO_TRACKS_DETAIL,
+                )
+            )
+            continue
+
+        if outcome.skipped_reason == "media_mismatch":
+            outcomes.append(
+                ResolveFanOutOutcome(
+                    application=app,
+                    tasks=[],
+                    skipped_reason="media_mismatch",
+                    error_detail=media_mismatch_detail(job, sess),
+                )
+            )
+            continue
+
         assert outcome.application is not None
         outcomes.append(
             ResolveFanOutOutcome(
@@ -470,8 +626,63 @@ async def fan_out_waiting_identify_applications(
     return outcomes
 
 
-async def _evict_colliding_tasks(db: AsyncSession, paths: list[str]) -> None:
-    """Delete live tasks that claim the soon-to-be-reused `paths`.
+async def after_rip(db: AsyncSession, job: Job, hub: WSHub) -> list[ResolveFanOutOutcome]:
+    """Everything that happens once a job's rip is done and its identity is
+    known (gap analysis §5.4): drain parked applications, then the
+    auto-apply hook. Two callers — `rip-complete` for jobs that ripped
+    already identified, and `resolve` when a `ripped_awaiting_identify`
+    placeholder gains its identity. Never raises; returns the drain's
+    outcomes so resolve can report them.
+    """
+    outcomes = await drain_parked_applications_after_rip(db, job, hub)
+    await maybe_auto_apply_session(db, job, hub)
+    return outcomes
+
+
+async def drain_parked_applications_after_rip(
+    db: AsyncSession,
+    job: Job,
+    hub: WSHub,
+) -> list[ResolveFanOutOutcome]:
+    """First half of `after_rip`.
+
+    A session applied (or resolved) before rip-start parks as
+    `waiting_identify` with no tasks because the ripper only persists Track
+    rows at rip-start. Now that the rip has landed its tracks, promote every
+    parked application on the job. Per-application problems stay parked and
+    log at WARN; nothing here may break the caller.
+    """
+    try:
+        outcomes = await fan_out_waiting_identify_applications(db, job=job, hub=hub)
+        if not outcomes:
+            return []
+        await db.commit()
+    except Exception:  # noqa: BLE001 - hook must never break rip-complete
+        await db.rollback()
+        logger.exception("after-rip: draining parked session_applications failed job_id=%s", job.id)
+        return []
+    for outcome in outcomes:
+        if outcome.skipped_reason is None:
+            logger.info(
+                "after-rip: fanned out parked session_application=%s job_id=%s tasks=%d",
+                outcome.application.id,
+                job.id,
+                len(outcome.tasks),
+            )
+        else:
+            logger.warning(
+                "after-rip: parked session_application=%s job_id=%s stays parked reason=%s: %s",
+                outcome.application.id,
+                job.id,
+                outcome.skipped_reason,
+                outcome.error_detail,
+            )
+    return outcomes
+
+
+async def _evict_colliding_tasks(db: AsyncSession, paths: list[str], *, job_id: str) -> None:
+    """Delete the *applying job's own* live tasks that claim the
+    soon-to-be-reused `paths`.
 
     Called on the overwrite=True branch of manual apply. We delete the
     QUEUED/DONE/FAILED rows at those paths so the new fan-out doesn't
@@ -480,15 +691,35 @@ async def _evict_colliding_tasks(db: AsyncSession, paths: list[str]) -> None:
     and can't be safely displaced; the user should cancel that task
     explicitly first.
 
+    Scoped to `job_id`: eviction only ever removes tasks that belong to
+    applications owned by the job doing the applying (G-08). A collision
+    owned by a *different* job is never reachable here — the caller filters
+    those out and reports them as a hard `skipped_reason="collisions"`
+    before this function is called, even when overwrite=True. Re-ripping a
+    disc and overwriting must never silently destroy another job's finished
+    output.
+
     Empty `session_applications` left behind (all their tasks evicted)
     get cleaned up here so the JobDetail page doesn't accumulate husk
     rows on every re-apply.
     """
+    own_application_ids = [
+        row.id
+        for row in (
+            await db.execute(select(SessionApplication.id).where(col(SessionApplication.job_id) == job_id))
+        ).all()
+    ]
+    if not own_application_ids:
+        # Nothing of this job's has ever fanned out a task — an evictable
+        # collision can only be an on-disk-only hit, which has no DB row.
+        return
+
     in_progress_ids = (
         (
             await db.execute(
                 select(TranscodeTask.id)
                 .where(col(TranscodeTask.output_path).in_(paths))
+                .where(col(TranscodeTask.session_application_id).in_(own_application_ids))
                 .where(col(TranscodeTask.status) == TranscodeTaskStatus.IN_PROGRESS)
             )
         )
@@ -509,6 +740,7 @@ async def _evict_colliding_tasks(db: AsyncSession, paths: list[str]) -> None:
             await db.execute(
                 select(TranscodeTask)
                 .where(col(TranscodeTask.output_path).in_(paths))
+                .where(col(TranscodeTask.session_application_id).in_(own_application_ids))
                 .where(col(TranscodeTask.status).in_(_EVICTABLE_STATES))
             )
         )
@@ -586,27 +818,83 @@ async def _load_tasks(db: AsyncSession, session_application_id: str) -> list[Tra
     return list(rows)
 
 
-async def resolve_effective_session_id(db: AsyncSession, job: Job) -> str | None:
-    """The session id the apply path will actually use for this job.
+def _pending_session_id(job: Job) -> str | None:
+    return job.pending_session_id or None
 
-    Resolution order (single source of truth — the naming-preview endpoint
-    resolves through this same helper so previews cannot drift from apply):
-      1. `job.metadata_json["pending_session_id"]` — explicit per-rip choice;
-         always wins and bypasses `auto_transcode_on_idle`.
-      2. `drive.default_session_id` — the persistent per-drive default, only
-         honoured when `Config.auto_transcode_on_idle` is True.
-    Returns None when neither applies.
+
+async def resolve_routed_session_id(db: AsyncSession, job: Job) -> str | None:
+    """Which session is ROUTED to this job (gap analysis §5.1, G-02/G-17).
+
+    Resolution order (single source of truth - rip-start's preset choice and
+    the naming preview resolve through this same helper so neither can drift
+    from the apply path):
+      1. `job.pending_session_id` - explicit per-rip choice.
+      2. `drive.default_session_id` - the persistent per-drive default, but
+         ONLY when it's compatibility-gated: the drive default wins when
+         `job.media_type is None` (nothing to disagree with yet) OR the
+         drive-default session's media_type is `_media_types_compatible`
+         with the job's. Otherwise (e.g. a movie drive default on a music CD
+         job) it's skipped in favor of steps 3-4 - a drive default must not
+         permanently swallow a media type it was never meant for (G-17). A
+         dangling `default_session_id` (the session row no longer exists)
+         also falls through to routes, logged at DEBUG.
+      3. `session_routes` row matching `(job.media_type, job.disc_type)` exactly.
+      4. `session_routes` wildcard row matching `(job.media_type, NULL)`.
+      5. None.
+    Steps 3-4 are skipped when `job.media_type is None` (never identified) -
+    a route is keyed on media_type, so there is nothing to match. No
+    `auto_transcode_on_idle` gating: routing shapes the rip and the preview;
+    whether rip-complete may QUEUE the routed session unattended is
+    `auto_apply_allowed`'s question. Returns None when nothing routes.
     """
-    pending = (job.metadata_json or {}).get("pending_session_id")
-    if isinstance(pending, str) and pending:
+    pending = _pending_session_id(job)
+    if pending is not None:
         return pending
     drive = (await db.execute(select(Drive).where(col(Drive.id) == job.drive_id))).scalar_one_or_none()
-    if drive is None or drive.default_session_id is None:
+    if drive is not None and drive.default_session_id is not None:
+        if job.media_type is None:
+            return drive.default_session_id
+        default_sess = (
+            await db.execute(select(Session).where(col(Session.id) == drive.default_session_id))
+        ).scalar_one_or_none()
+        if default_sess is None:
+            logger.debug(
+                "resolve_routed_session_id: drive default session_id=%s missing for drive_id=%s; falling through to routes",
+                drive.default_session_id,
+                drive.id,
+            )
+        elif default_sess.media_type is None or _media_types_compatible(job.media_type, default_sess.media_type):
+            return drive.default_session_id
+        # else: incompatible drive default — fall through to session_routes.
+
+    if job.media_type is None:
         return None
+
+    routes = (
+        (await db.execute(select(SessionRoute).where(col(SessionRoute.media_type) == job.media_type))).scalars().all()
+    )
+    exact = next((r for r in routes if r.disc_type == job.disc_type), None)
+    if exact is not None:
+        return exact.session_id
+    wildcard = next((r for r in routes if r.disc_type is None), None)
+    if wildcard is not None:
+        return wildcard.session_id
+    return None
+
+
+async def auto_apply_allowed(db: AsyncSession, job: Job) -> bool:
+    """May rip-complete queue the ROUTED session (`resolve_routed_session_id`
+    — pending choice, else the compatibility-gated drive default, else
+    `session_routes`) unattended?
+
+    An explicit per-rip choice is the user opting in for that one rip and
+    bypasses the flag; everything else (drive default or a route) needs
+    `auto_transcode_on_idle`.
+    """
+    if _pending_session_id(job) is not None:
+        return True
     config_row = (await db.execute(select(Config).where(col(Config.id) == 1))).scalar_one_or_none()
-    if config_row is None or not config_row.auto_transcode_on_idle:
-        return None
-    return drive.default_session_id
+    return config_row is not None and bool(config_row.auto_transcode_on_idle)
 
 
 async def maybe_auto_apply_session(
@@ -616,15 +904,15 @@ async def maybe_auto_apply_session(
 ) -> None:
     """Hook invoked from `rip-complete`. Silent on every failure mode.
 
-    Resolution order for the session to apply:
-      1. `job.metadata_json["pending_session_id"]` — set by the ripper when
-         the rip was kicked off via `POST /api/jobs/manual` with a chosen
-         session. Always wins; bypasses `auto_transcode_on_idle` since the
-         user explicitly opted in for this one rip.
-      2. `drive.default_session_id` — the persistent per-drive default,
-         only honoured when `Config.auto_transcode_on_idle` is True.
+    Applies the ROUTED session (`resolve_routed_session_id`: pending choice,
+    else the compatibility-gated drive default, else `session_routes`) when
+    `auto_apply_allowed` says unattended queueing is permitted: an explicit
+    per-rip choice always is; the drive default or a route needs
+    `Config.auto_transcode_on_idle`.
     """
-    session_id = await resolve_effective_session_id(db, job)
+    if not await auto_apply_allowed(db, job):
+        return
+    session_id = await resolve_routed_session_id(db, job)
     if session_id is None:
         return
     try:

@@ -32,6 +32,7 @@
 	import SessionsArea from '$lib/components/sessions/SessionsArea.svelte';
 	import UsersCard from '$lib/components/settings/UsersCard.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
+	import SessionRoutesCard from '$lib/components/settings/SessionRoutesCard.svelte';
 
 	let settings = $state<SettingsData | null>(null);
 	let settingsLoading = $state(true);
@@ -335,7 +336,10 @@
 		{/if}
 
 		{#if activeTab === 'sessions'}
-			<SessionsArea />
+			<div class="space-y-6">
+				<SessionsArea />
+				<SessionRoutesCard />
+			</div>
 		{/if}
 
 		<!-- Notifications Tab -->

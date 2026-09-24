@@ -418,6 +418,10 @@ export type CollisionInfo = {
      * Reason
      */
     reason: 'existing_task' | 'on_disk' | 'duplicate_in_request';
+    /**
+     * Existing Job Id
+     */
+    existing_job_id?: string | null;
 };
 
 /**
@@ -1238,6 +1242,29 @@ export type EventTypeInfo = {
 };
 
 /**
+ * ExternalIds
+ */
+export type ExternalIds = {
+    /**
+     * Imdb
+     */
+    imdb?: string | null;
+    /**
+     * Tmdb
+     */
+    tmdb?: string | null;
+    /**
+     * Tvdb
+     */
+    tvdb?: string | null;
+    /**
+     * Musicbrainz Release
+     */
+    musicbrainz_release?: string | null;
+    [key: string]: unknown;
+};
+
+/**
  * FailTaskRequest
  */
 export type FailTaskRequest = {
@@ -1482,6 +1509,15 @@ export type Job = {
      * Year
      */
     year: number | null;
+    media_type?: MediaType | null;
+    /**
+     * Season
+     */
+    season: number | null;
+    /**
+     * Pending Session Id
+     */
+    pending_session_id?: string | null;
     /**
      * Disc Number
      */
@@ -1560,6 +1596,70 @@ export type JobDetailView = {
      * Fingerprints
      */
     fingerprints?: Array<DiscFingerprintView>;
+};
+
+/**
+ * JobFlags
+ */
+export type JobFlags = {
+    /**
+     * Unidentified
+     */
+    unidentified?: boolean;
+    /**
+     * Dispatch Timeout
+     */
+    dispatch_timeout?: boolean;
+    [key: string]: unknown;
+};
+
+/**
+ * JobIdentity
+ *
+ * What identification concluded. Title/year/media_type/poster live on
+ * the Job row itself — this records where they came from and the ids that
+ * let a UI link out or re-query.
+ */
+export type JobIdentity = {
+    /**
+     * Provider
+     */
+    provider: string;
+    external_ids?: ExternalIds;
+    /**
+     * Overview
+     */
+    overview?: string | null;
+    /**
+     * Identified At
+     */
+    identified_at?: string | null;
+    [key: string]: unknown;
+};
+
+/**
+ * JobMetadata
+ */
+export type JobMetadata = {
+    scan_result?: ScanResult | null;
+    identity?: JobIdentity | null;
+    music?: MusicMeta | null;
+    /**
+     * Thediscdb
+     */
+    thediscdb?: {
+        [key: string]: unknown;
+    } | null;
+    flags?: JobFlags;
+    /**
+     * Provider Raw
+     */
+    provider_raw?: {
+        [key: string]: {
+            [key: string]: unknown;
+        };
+    };
+    [key: string]: unknown;
 };
 
 /**
@@ -1662,6 +1762,15 @@ export type JobView = {
      * Year
      */
     year: number | null;
+    media_type?: MediaType | null;
+    /**
+     * Season
+     */
+    season?: number | null;
+    /**
+     * Pending Session Id
+     */
+    pending_session_id?: string | null;
     /**
      * Disc Number
      */
@@ -1678,12 +1787,7 @@ export type JobView = {
      * Poster Url Manual
      */
     poster_url_manual?: string | null;
-    /**
-     * Metadata Json
-     */
-    metadata_json: {
-        [key: string]: unknown;
-    };
+    metadata_json: JobMetadata;
     /**
      * Resumed From Crash
      */
@@ -1852,7 +1956,8 @@ export type MakemkvSdfState = 'updated' | 'fresh_kept' | 'disabled' | 'download_
  * POST /api/jobs/manual — kick off a rip on a drive that already has a
  * disc in the tray. The ripper picks it up via WS command and runs the
  * normal scan→identify→rip flow; the optional `session_id` is stamped on
- * the resulting Job's metadata so `rip-complete` auto-applies it.
+ * the resulting Job's `pending_session_id` column so `rip-complete`
+ * auto-applies it.
  */
 export type ManualTriggerRequest = {
     /**
@@ -2084,6 +2189,48 @@ export type MoveRequest = {
      * Dest Subpath
      */
     dest_subpath: string;
+};
+
+/**
+ * MusicMeta
+ */
+export type MusicMeta = {
+    /**
+     * Artist
+     */
+    artist?: string | null;
+    /**
+     * Album
+     */
+    album?: string | null;
+    /**
+     * Tracks
+     */
+    tracks?: Array<MusicTrackMeta>;
+    [key: string]: unknown;
+};
+
+/**
+ * MusicTrackMeta
+ */
+export type MusicTrackMeta = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Position
+     */
+    position?: number | null;
+    /**
+     * Length Ms
+     */
+    length_ms?: number | null;
+    /**
+     * Disc Number
+     */
+    disc_number?: number | null;
+    [key: string]: unknown;
 };
 
 /**
@@ -2656,6 +2803,8 @@ export type RenameRequest = {
  * promoted and `task_count` newly-created transcode tasks are queued.
  * Anything else → the application stays parked in `waiting_identify`
  * and `error_detail` carries the reason for the UI to surface.
+ * `skipped_reason='no_tracks'` is the benign case: the rip has not started
+ * yet (no Track rows exist), so the application fans out at rip-complete.
  */
 export type ResolveFanOutOutcomeView = {
     /**
@@ -2674,7 +2823,7 @@ export type ResolveFanOutOutcomeView = {
     /**
      * Skipped Reason
      */
-    skipped_reason?: 'collisions' | 'template' | 'session_missing' | null;
+    skipped_reason?: 'collisions' | 'template' | 'session_missing' | 'no_tracks' | 'media_mismatch' | null;
     /**
      * Error Detail
      */
@@ -2701,12 +2850,13 @@ export type ResolveRequest = {
      * Disc Total
      */
     disc_total?: number | null;
+    media_type?: MediaType | null;
     /**
-     * Metadata
+     * Season
      */
-    metadata?: {
-        [key: string]: unknown;
-    };
+    season?: number | null;
+    music?: MusicMeta | null;
+    external_ids?: ExternalIds | null;
 };
 
 /**
@@ -3117,6 +3267,42 @@ export type SessionCreateRequest = {
     overrides_json?: {
         [key: string]: unknown;
     } | null;
+};
+
+/**
+ * SessionRouteUpsert
+ */
+export type SessionRouteUpsert = {
+    media_type: MediaType;
+    disc_type?: DiscType | null;
+    /**
+     * Session Id
+     */
+    session_id: string;
+};
+
+/**
+ * SessionRouteView
+ */
+export type SessionRouteView = {
+    /**
+     * Id
+     */
+    id: string;
+    media_type: MediaType;
+    disc_type: DiscType | null;
+    /**
+     * Session Id
+     */
+    session_id: string;
+    /**
+     * Created At
+     */
+    created_at: string | null;
+    /**
+     * Updated At
+     */
+    updated_at: string | null;
 };
 
 /**
@@ -5662,6 +5848,106 @@ export type PreviewTemplateApiSessionsPreviewPostResponses = {
 };
 
 export type PreviewTemplateApiSessionsPreviewPostResponse = PreviewTemplateApiSessionsPreviewPostResponses[keyof PreviewTemplateApiSessionsPreviewPostResponses];
+
+export type ListSessionRoutesApiSessionRoutesGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/session-routes';
+};
+
+export type ListSessionRoutesApiSessionRoutesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListSessionRoutesApiSessionRoutesGetError = ListSessionRoutesApiSessionRoutesGetErrors[keyof ListSessionRoutesApiSessionRoutesGetErrors];
+
+export type ListSessionRoutesApiSessionRoutesGetResponses = {
+    /**
+     * Response List Session Routes Api Session Routes Get
+     *
+     * Successful Response
+     */
+    200: Array<SessionRouteView>;
+};
+
+export type ListSessionRoutesApiSessionRoutesGetResponse = ListSessionRoutesApiSessionRoutesGetResponses[keyof ListSessionRoutesApiSessionRoutesGetResponses];
+
+export type UpsertSessionRouteApiSessionRoutesPutData = {
+    body: SessionRouteUpsert;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/session-routes';
+};
+
+export type UpsertSessionRouteApiSessionRoutesPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpsertSessionRouteApiSessionRoutesPutError = UpsertSessionRouteApiSessionRoutesPutErrors[keyof UpsertSessionRouteApiSessionRoutesPutErrors];
+
+export type UpsertSessionRouteApiSessionRoutesPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: SessionRouteView;
+};
+
+export type UpsertSessionRouteApiSessionRoutesPutResponse = UpsertSessionRouteApiSessionRoutesPutResponses[keyof UpsertSessionRouteApiSessionRoutesPutResponses];
+
+export type DeleteSessionRouteApiSessionRoutesRouteIdDeleteData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Route Id
+         */
+        route_id: string;
+    };
+    query?: never;
+    url: '/api/session-routes/{route_id}';
+};
+
+export type DeleteSessionRouteApiSessionRoutesRouteIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteSessionRouteApiSessionRoutesRouteIdDeleteError = DeleteSessionRouteApiSessionRoutesRouteIdDeleteErrors[keyof DeleteSessionRouteApiSessionRoutesRouteIdDeleteErrors];
+
+export type DeleteSessionRouteApiSessionRoutesRouteIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteSessionRouteApiSessionRoutesRouteIdDeleteResponse = DeleteSessionRouteApiSessionRoutesRouteIdDeleteResponses[keyof DeleteSessionRouteApiSessionRoutesRouteIdDeleteResponses];
 
 export type ListRipPresetsApiRipPresetsGetData = {
     body?: never;

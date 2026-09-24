@@ -34,6 +34,16 @@ from arm_common.schemas.files import (
     MoveRequest,
     RenameRequest,
 )
+from arm_common.schemas.job_metadata import (
+    ExternalIds,
+    JobFlags,
+    JobIdentity,
+    JobMetadata,
+    MusicMeta,
+    MusicTrackMeta,
+    flag_is_set,
+    with_flags,
+)
 from arm_common.schemas.jobs import (
     AbandonJobRequest,
     BulkDeleteJobsRequest,
@@ -45,6 +55,7 @@ from arm_common.schemas.jobs import (
     JobView,
     ManualTriggerRequest,
     ManualTriggerResponse,
+    ApplySkippedReason,
     ResolveFanOutOutcomeView,
     ResolveRequest,
     ResolveResponse,
@@ -84,6 +95,10 @@ from arm_common.schemas.ripper import (
     ScanTitle,
     SdfStatusReport,
     TrackUpdateRequest,
+)
+from arm_common.schemas.session_routes import (
+    SessionRouteUpsert,
+    SessionRouteView,
 )
 from arm_common.schemas.sessions import (
     ApplySessionRequest,
@@ -268,6 +283,15 @@ __all__ = [
     "RenameRequest",
     "RipperConfigView",
     "RipperHeartbeatRequest",
+    "ApplySkippedReason",
+    "ExternalIds",
+    "JobFlags",
+    "JobIdentity",
+    "JobMetadata",
+    "MusicMeta",
+    "MusicTrackMeta",
+    "flag_is_set",
+    "with_flags",
     "ResolveFanOutOutcomeView",
     "ResolveRequest",
     "ResolveResponse",
@@ -283,6 +307,8 @@ __all__ = [
     "SessionApplicationView",
     "SessionCloneRequest",
     "SessionCreateRequest",
+    "SessionRouteUpsert",
+    "SessionRouteView",
     "SessionUpdateRequest",
     "SessionView",
     "SettingsGroup",

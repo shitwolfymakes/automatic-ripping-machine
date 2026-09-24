@@ -12,6 +12,7 @@ import logging
 import os
 import secrets
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
@@ -28,17 +29,24 @@ from arm_backend.routers import ripper as ripper_router  # noqa: E402
 from arm_backend.thediscdb.snapshot import DiscMatch  # noqa: E402
 from arm_common import (  # noqa: E402
     Config,
+    ContainerFormat,
     DiscFingerprint,
     DiscType,
     Drive,
     DriveLifecycle,
     DriveStatus,
+    HwPreference,
     Job,
     JobStatus,
     MediaType,
     RetentionPolicy,
     RipPreset,
+    Session,
+    SessionApplication,
+    SessionApplicationStatus,
     TrackStatus,
+    TranscodePreset,
+    TranscodeTool,
 )
 from arm_common.enums import IdentificationMode, OutputMode, TrackKind, TrackSelection  # noqa: E402
 from arm_common.models import Track  # noqa: E402
@@ -389,7 +397,8 @@ def test_identify_success_sets_identified_and_poster() -> None:
     assert out["status"] == "identified"
     assert out["title"] == "Iron Man"
     assert out["poster_url"] == "https://image.tmdb.org/t/p/w500/abc.jpg"
-    assert out["metadata_json"]["pending_session_id"] == "ses_1"
+    assert out["pending_session_id"] == "ses_1"
+    assert "pending_session_id" not in out["metadata_json"]
     fps = [r for r in db.added if type(r).__name__ == "DiscFingerprint"]
     assert {f.algo for f in fps} == {"crc64"}  # dedup + empty skipped
 
@@ -524,7 +533,7 @@ def test_identify_unidentified_with_hold_does_not_park(signing_key: bytes) -> No
     assert r.status_code == 200
     out = r.json()
     assert out["status"] == "identified"  # not awaiting_review
-    assert out["metadata_json"].get("unidentified") is True
+    assert out["metadata_json"]["flags"]["unidentified"] is True
 
 
 def test_identify_snapshots_drive_serial_onto_job() -> None:
@@ -575,7 +584,7 @@ def test_identify_miss_without_block_marks_identified_unidentified() -> None:
         )
     assert r.status_code == 200
     assert r.json()["status"] == "identified"
-    assert r.json()["metadata_json"]["unidentified"] is True
+    assert r.json()["metadata_json"]["flags"]["unidentified"] is True
 
 
 def test_identify_timeout_records_diagnostic() -> None:
@@ -591,7 +600,7 @@ def test_identify_timeout_records_diagnostic() -> None:
         )
     assert r.status_code == 200
     assert r.json()["status"] == "awaiting_user_id"
-    assert r.json()["metadata_json"]["dispatch_timeout"] is True
+    assert r.json()["metadata_json"]["flags"]["dispatch_timeout"] is True
 
 
 # --- /identify (TheDiscDB match) ----------------------------------------------
@@ -782,7 +791,7 @@ def test_identify_thediscdb_match_survives_total_identify_miss() -> None:
     assert r.status_code == 200
     out = r.json()
     assert out["status"] == "identified"  # unchanged synthetic-miss behavior
-    assert out["metadata_json"]["unidentified"] is True
+    assert out["metadata_json"]["flags"]["unidentified"] is True
     assert out["metadata_json"]["thediscdb"]["matched"]  # map survived the overwrite
 
 
@@ -1260,10 +1269,19 @@ def test_update_track_invalid_target_409() -> None:
 
 
 def _rip_complete(db: FakeSession, hub: _Hub, monkeypatch: pytest.MonkeyPatch) -> Any:
+    """POST rip-complete with the auto-apply half of after_rip noop'd.
+
+    rip-complete now runs `after_rip` (drain parked applications, then
+    auto-apply). The drain stays REAL — the parked-application tests below
+    depend on it — while auto-apply is patched out at its own module so
+    these tests need no drive-default/config seeding.
+    """
+    from arm_backend import auto_session as auto_session_mod
+
     async def _noop(*_a: Any, **_k: Any) -> None:
         return None
 
-    monkeypatch.setattr(ripper_router, "maybe_auto_apply_session", _noop)
+    monkeypatch.setattr(auto_session_mod, "maybe_auto_apply_session", _noop)
     app = _make_app(db, hub=hub)
     with TestClient(app) as client:
         return client.post(
@@ -1466,3 +1484,411 @@ def test_get_config_reflects_makemkv_sdf_enabled() -> None:
         r = client.get("/api/ripper/config", headers=_SERVICE_AUTH)
     assert r.status_code == 200
     assert r.json()["makemkv_sdf_enabled"] is False
+
+
+# --- rip-complete drains applications parked before the rip -----------------
+
+
+def _seed_parked_session(db: FakeSession, *, session_exists: bool = True) -> None:
+    """A session applied before rip-start: parked as waiting_identify with no
+    tasks because no Track rows existed at apply time."""
+    db.rows["rip_presets"] = [_movie_preset("rpr_x")]
+    db.rows["transcode_presets"] = [
+        TranscodePreset(
+            id="tpr_x",
+            name="Plex 1080p H.265",
+            media_type=MediaType.MOVIE,
+            is_builtin=True,
+            tool=TranscodeTool.HANDBRAKE,
+            container=ContainerFormat.MKV,
+            hw_preference=HwPreference.CPU_ONLY,
+        )
+    ]
+    db.rows["sessions"] = (
+        [
+            Session(
+                id="ses_x",
+                name="My Plex",
+                media_type=MediaType.MOVIE,
+                is_builtin=False,
+                rip_preset_id="rpr_x",
+                transcode_preset_id="tpr_x",
+                output_path_template="{title} ({year})/{title} - {transcode_slug}.{ext}",
+            )
+        ]
+        if session_exists
+        else []
+    )
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_parked",
+            session_id="ses_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
+            status=SessionApplicationStatus.WAITING_IDENTIFY,
+            overwrite=False,
+        )
+    ]
+    db.rows["transcode_tasks"] = []
+
+
+def test_rip_complete_fans_out_parked_application(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from arm_backend import config as bcfg
+
+    bcfg.settings.MEDIA_ROOT = str(tmp_path)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
+    _seed_parked_session(db)
+    hub = _Hub()
+    r = _rip_complete(db, hub, monkeypatch)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ripped"
+
+    app_row = db.rows["session_applications"][0]
+    assert app_row.status == SessionApplicationStatus.QUEUED
+    tasks = db.rows["transcode_tasks"]
+    assert len(tasks) == 1
+    assert tasks[0].session_application_id == "sap_parked"
+    assert tasks[0].source_track_id == "t1"
+    queued = [e for e in hub.events if e["event_type"] == "session.queued"]
+    assert len(queued) == 1
+    assert queued[0]["payload"]["session_application_id"] == "sap_parked"
+
+
+def test_rip_complete_parked_application_with_missing_session_does_not_break(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from arm_backend import config as bcfg
+
+    bcfg.settings.MEDIA_ROOT = str(tmp_path)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
+    _seed_parked_session(db, session_exists=False)
+    r = _rip_complete(db, _Hub(), monkeypatch)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ripped"
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
+
+
+def test_rip_complete_failed_rip_leaves_parked_application_alone(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from arm_backend import config as bcfg
+
+    bcfg.settings.MEDIA_ROOT = str(tmp_path)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.FAILED)]
+    _seed_parked_session(db)
+    r = _rip_complete(db, _Hub(), monkeypatch)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "failed"
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
+
+
+def test_rip_complete_survives_parked_drain_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The drain hook must never break the ripper's rip-complete call."""
+    from arm_backend import auto_session as auto_session_mod
+    from arm_backend import config as bcfg
+
+    bcfg.settings.MEDIA_ROOT = str(tmp_path)
+
+    async def _boom(*_a: Any, **_k: Any) -> None:
+        raise RuntimeError("db exploded")
+
+    monkeypatch.setattr(auto_session_mod, "fan_out_waiting_identify_applications", _boom)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
+    _seed_parked_session(db)
+    r = _rip_complete(db, _Hub(), monkeypatch)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ripped"
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
+
+
+# --- rip-start honours the routed session's rip preset (G-01) ----------------
+
+
+def _session_row(session_id: str = "ses_r", rip_preset_id: str = "rpr_session") -> Session:
+    return Session(
+        id=session_id,
+        name="Routed",
+        media_type=MediaType.MOVIE,
+        is_builtin=False,
+        rip_preset_id=rip_preset_id,
+        transcode_preset_id=None,
+        output_path_template="{title} ({year})/{title}.mkv",
+    )
+
+
+def test_rip_start_uses_pending_session_rip_preset() -> None:
+    """A rip started with an explicit session choice rips that session's
+    track shape, not the disc-type default (G-01)."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [_drive()]
+    routed_job = _job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict()})
+    routed_job.pending_session_id = "ses_r"
+    db.rows["jobs"] = [routed_job]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row()]
+    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session")]
+    new = [_track("trk_new", status=TrackStatus.QUEUED)]
+    with TestClient(_make_app(db)) as client, _patch_select_tracks(new):
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200, r.text
+    assert r.json()["rip_preset_id"] == "rpr_session"
+
+
+def test_rip_start_uses_drive_default_session_preset_without_auto_flag() -> None:
+    """Routing ignores auto_transcode_on_idle: the drive default shapes the
+    rip even when unattended transcoding is off (§5.1)."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]  # auto_transcode_on_idle=False
+    drive = _drive()
+    drive.default_session_id = "ses_r"
+    db.rows["drives"] = [drive]
+    db.rows["jobs"] = [_job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict()})]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row()]
+    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session")]
+    new = [_track("trk_new", status=TrackStatus.QUEUED)]
+    with TestClient(_make_app(db)) as client, _patch_select_tracks(new):
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200, r.text
+    assert r.json()["rip_preset_id"] == "rpr_session"
+
+
+def test_rip_start_falls_back_when_routed_session_row_missing() -> None:
+    """A pending id whose Session row is gone (deleted between trigger and
+    rip) must not fail the rip: fall back to the disc-type default."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [_drive()]
+    routed_job = _job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict()})
+    routed_job.pending_session_id = "ses_ghost"
+    db.rows["jobs"] = [routed_job]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = []
+    db.rows["rip_presets"] = [_movie_preset()]
+    new = [_track("trk_new", status=TrackStatus.QUEUED)]
+    with TestClient(_make_app(db)) as client, _patch_select_tracks(new):
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200, r.text
+    assert r.json()["rip_preset_id"] == "rpr_builtin_movie_archive"
+
+
+def test_rip_start_routed_session_preset_not_seeded_500() -> None:
+    """A session that references a missing rip preset is the same deployment
+    bug as the built-in map pointing at an unseeded row: 500, retryable —
+    mirrors apply_session_internal's handling."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [_drive()]
+    routed_job = _job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict()})
+    routed_job.pending_session_id = "ses_r"
+    db.rows["jobs"] = [routed_job]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row(rip_preset_id="rpr_ghost")]
+    db.rows["rip_presets"] = [_movie_preset()]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 500
+    assert "not seeded" in r.json()["detail"]
+
+
+# --- rip-complete parks unidentified placeholder rips (G-09) -----------------
+
+
+def test_rip_complete_unidentified_parks_awaiting_identify(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A placeholder rip (identify missed, block_on_miss=false) that ripped
+    clean parks at ripped_awaiting_identify: transcode is gated on identity,
+    so neither the parked application nor auto-apply may fire yet."""
+    from arm_backend import config as bcfg
+
+    bcfg.settings.MEDIA_ROOT = str(tmp_path)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"unidentified": True})]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
+    _seed_parked_session(db)
+    hub = _Hub()
+    r = _rip_complete(db, hub, monkeypatch)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ripped_awaiting_identify"
+    assert any(e["event_type"] == "rip.completed" for e in hub.events)
+    # The parked application waits for resolve; nothing fanned out.
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
+
+
+def test_rip_complete_partial_unidentified_stays_ripped_partial(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Partiality wins over the placeholder flag: the enum has no
+    partial+unidentified value and hiding failed tracks would be worse.
+    RIPPED_PARTIAL stays resolvable (PRESERVE) for the identity edit."""
+    from arm_backend import config as bcfg
+
+    bcfg.settings.MEDIA_ROOT = str(tmp_path)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"unidentified": True})]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [
+        _track("t1", status=TrackStatus.DONE, index=1),
+        _track("t2", status=TrackStatus.FAILED, index=2),
+    ]
+    r = _rip_complete(db, _Hub(), monkeypatch)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ripped_partial"
+
+
+# --- identify records the identified kind + pending session (step 2 / G-03) --
+
+
+def test_identify_sets_media_type_from_kind() -> None:
+    """G-03: the provider's kind (movie/tv/music) lands on jobs.media_type
+    so routing and the UI can tell a TV disc from a movie."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    body = {"drive_id": "drv_x", "scan_result": _scan_dict()}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["media_type"] == "movie"
+    assert db.rows["jobs"][0].media_type == MediaType.MOVIE
+
+
+def test_identify_tv_kind_sets_media_type_tv() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(title="The West Wing", year=1999, kind="tv", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    body = {"drive_id": "drv_x", "scan_result": _scan_dict()}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert db.rows["jobs"][0].media_type == MediaType.TV
+
+
+def test_identify_miss_leaves_media_type_unset() -> None:
+    """An identify miss knows nothing about the kind; the column stays None
+    for resolve to fill."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    app = _make_app(db, dispatcher=_Dispatcher(None))
+    body = {"drive_id": "drv_x", "scan_result": _scan_dict()}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert db.rows["jobs"][0].media_type is None
+
+
+def test_identify_pending_session_lands_on_column() -> None:
+    """pending_session_id is a job column (step 2 §3.4); identify writes only
+    the column, never a metadata_json mirror (task 2 drops the mirror)."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    body = {"drive_id": "drv_x", "scan_result": _scan_dict(), "pending_session_id": "ses_1"}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    job = db.rows["jobs"][0]
+    assert job.pending_session_id == "ses_1"
+    assert "pending_session_id" not in job.metadata_json
+
+
+def test_identify_writes_no_pending_mirror() -> None:
+    """Response body's metadata_json must not carry the mirror either."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    body = {"drive_id": "drv_x", "scan_result": _scan_dict(), "pending_session_id": "ses_builtin_movie_plex_1080p"}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    job = r.json()
+    assert job["pending_session_id"] == "ses_builtin_movie_plex_1080p"
+    assert "pending_session_id" not in job["metadata_json"]
+
+
+# --- identify files provider output under identity/provider_raw (step 2 §3.4)
+
+
+def test_identify_writes_identity_and_provider_raw_not_top_level() -> None:
+    """The raw payload lands under provider_raw[<provider>], the conclusions
+    under identity; nothing from a provider reaches the top level, so a
+    re-identify with a different provider cannot leave stale keys behind."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(
+        title="Iron Man",
+        year=2008,
+        kind="movie",
+        payload={"id": 1726, "overview": "Tony Stark.", "poster_path": "/a.jpg", "imdb_id": "tt0371746"},
+        provider="tmdb",
+    )
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    body = {"drive_id": "drv_x", "scan_result": _scan_dict()}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    md = r.json()["metadata_json"]
+    assert md["identity"]["provider"] == "tmdb"
+    assert md["identity"]["external_ids"]["imdb"] == "tt0371746"
+    assert md["identity"]["external_ids"]["tmdb"] == "1726"
+    assert md["identity"]["overview"] == "Tony Stark."
+    assert md["provider_raw"]["tmdb"]["poster_path"] == "/a.jpg"
+    for legacy_key in ("id", "overview", "poster_path", "imdb_id"):
+        assert legacy_key not in md
+
+
+def test_identify_music_fills_music_section_and_disc_number() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(
+        title="Abbey Road",
+        year=1969,
+        kind="music",
+        payload={
+            "id": "mbid-123",
+            "artist": "The Beatles",
+            "album": "Abbey Road",
+            "tracks": [{"title": "Come Together", "position": 1}],
+            "disc": 2,
+        },
+        provider="musicbrainz",
+    )
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    body = {"drive_id": "drv_x", "scan_result": _scan_dict("cd")}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    job = db.rows["jobs"][0]
+    md = job.metadata_json
+    assert md["music"]["artist"] == "The Beatles"
+    assert md["music"]["tracks"][0]["title"] == "Come Together"
+    assert md["identity"]["external_ids"]["musicbrainz_release"] == "mbid-123"
+    assert job.disc_number == 2
+    assert job.media_type == MediaType.MUSIC
+    assert "artist" not in md and "tracks" not in md

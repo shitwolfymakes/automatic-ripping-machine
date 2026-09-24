@@ -344,3 +344,41 @@ def test_custom_filename_different_ext_stripped_and_resolved_ext_appended() -> N
     path = resolved[0].output_path
     assert path.endswith("S01E01.mkv")
     assert not path.endswith(".avi.mkv")
+
+
+def test_tv_tokens_prefer_job_columns_over_metadata(tmp_path) -> None:
+    """G-14: {season}/{disc} read jobs.season / jobs.disc_number (zero-padded)
+    and only fall back to the legacy metadata keys; the two can no longer
+    disagree silently once resolve lifts the keys."""
+    job = Job(
+        id="job_tv2",
+        drive_id="drv_x",
+        disc_type=DiscType.DVD,
+        title="Battlestar Galactica",
+        year=2004,
+        status=JobStatus.RIPPED,
+        metadata_json={"season": "09", "disc": "09"},  # stale legacy keys lose
+    )
+    job.season = 1
+    job.disc_number = 2
+    sess = Session(
+        id="ses_tv",
+        name="Plex TV 1080p H.265",
+        media_type=MediaType.TV,
+        rip_preset_id="rpr_x",
+        transcode_preset_id="tpr_x",
+        output_path_template="{show} ({year})/Season {season}/S{season}D{disc}T{track} - {transcode_slug}.{ext}",
+    )
+    tp = _movie_preset()
+    tp.media_type = MediaType.TV
+    tp.name = "Plex TV 1080p H.265"
+    track = Track(
+        id="trk_1",
+        job_id="job_tv2",
+        kind=TrackKind.VIDEO_TITLE,
+        index=3,
+        source_ref="3",
+        expected_duration_seconds=2700,
+    )
+    resolved = compute_outputs(job, [track], sess, tp)
+    assert resolved[0].output_path.startswith("Battlestar Galactica (2004)/Season 01/S01D02T03 - ")

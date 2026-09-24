@@ -167,8 +167,10 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         key="auto_transcode_on_idle",
         group="Transcoding",
         tier="operator",
-        label="Auto-transcode when idle",
-        help="Queue transcodes automatically when the system is idle.",
+        label="Auto-apply default session after rip",
+        help="When a rip completes, automatically apply the drive's default session "
+        "(queue its transcodes). An explicit per-rip session choice always applies, "
+        "and the default session still shapes the rip either way.",
         type="bool",
         editable=True,
     ),

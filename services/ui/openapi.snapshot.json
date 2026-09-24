@@ -1902,7 +1902,7 @@
           "jobs"
         ],
         "summary": "Manual Trigger",
-        "description": "Kick the ripper to run a job on a drive that already has a disc in\nthe tray. The ripper handles the WS command, scans the disc, and\nthreads `pending_session_id` through identify so the resulting Job's\nmetadata carries it. `rip-complete` then auto-applies that session.",
+        "description": "Kick the ripper to run a job on a drive that already has a disc in\nthe tray. The ripper handles the WS command, scans the disc, and\nthreads `pending_session_id` through identify so the resulting Job's\n`pending_session_id` column carries it. `rip-complete` then auto-applies\nthat session.",
         "operationId": "manual_trigger_api_jobs_manual_post",
         "parameters": [
           {
@@ -3010,6 +3010,167 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session-routes": {
+      "get": {
+        "tags": [
+          "session-routes"
+        ],
+        "summary": "List Session Routes",
+        "operationId": "list_session_routes_api_session_routes_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SessionRouteView"
+                  },
+                  "title": "Response List Session Routes Api Session Routes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "session-routes"
+        ],
+        "summary": "Upsert Session Route",
+        "operationId": "upsert_session_route_api_session_routes_put",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionRouteUpsert"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionRouteView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session-routes/{route_id}": {
+      "delete": {
+        "tags": [
+          "session-routes"
+        ],
+        "summary": "Delete Session Route",
+        "operationId": "delete_session_route_api_session_routes__route_id__delete",
+        "parameters": [
+          {
+            "name": "route_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Route Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -8627,6 +8788,17 @@
               "duplicate_in_request"
             ],
             "title": "Reason"
+          },
+          "existing_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Existing Job Id"
           }
         },
         "type": "object",
@@ -10325,6 +10497,57 @@
         ],
         "title": "EventTypeInfo"
       },
+      "ExternalIds": {
+        "properties": {
+          "imdb": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imdb"
+          },
+          "tmdb": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tmdb"
+          },
+          "tvdb": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tvdb"
+          },
+          "musicbrainz_release": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Musicbrainz Release"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "ExternalIds"
+      },
       "FailTaskRequest": {
         "properties": {
           "last_error": {
@@ -10705,6 +10928,38 @@
             ],
             "title": "Year"
           },
+          "media_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MediaType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Season"
+          },
+          "pending_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Session Id"
+          },
           "disc_number": {
             "anyOf": [
               {
@@ -10832,6 +11087,7 @@
           "drive_id",
           "disc_type",
           "year",
+          "season",
           "disc_number",
           "disc_total",
           "poster_url",
@@ -10878,6 +11134,124 @@
           "tracks"
         ],
         "title": "JobDetailView"
+      },
+      "JobFlags": {
+        "properties": {
+          "unidentified": {
+            "type": "boolean",
+            "title": "Unidentified",
+            "default": false
+          },
+          "dispatch_timeout": {
+            "type": "boolean",
+            "title": "Dispatch Timeout",
+            "default": false
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "JobFlags"
+      },
+      "JobIdentity": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "external_ids": {
+            "$ref": "#/components/schemas/ExternalIds"
+          },
+          "overview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overview"
+          },
+          "identified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identified At"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "provider"
+        ],
+        "title": "JobIdentity",
+        "description": "What identification concluded. Title/year/media_type/poster live on\nthe Job row itself \u2014 this records where they came from and the ids that\nlet a UI link out or re-query."
+      },
+      "JobMetadata": {
+        "properties": {
+          "scan_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScanResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobIdentity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "music": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MusicMeta"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "thediscdb": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thediscdb"
+          },
+          "flags": {
+            "$ref": "#/components/schemas/JobFlags"
+          },
+          "provider_raw": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Provider Raw"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "JobMetadata"
       },
       "JobNamingPreviewResponse": {
         "properties": {
@@ -11062,6 +11436,38 @@
             ],
             "title": "Year"
           },
+          "media_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MediaType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Season"
+          },
+          "pending_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Session Id"
+          },
           "disc_number": {
             "anyOf": [
               {
@@ -11107,9 +11513,7 @@
             "title": "Poster Url Manual"
           },
           "metadata_json": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Metadata Json"
+            "$ref": "#/components/schemas/JobMetadata"
           },
           "resumed_from_crash": {
             "type": "boolean",
@@ -11397,7 +11801,7 @@
           "drive_id"
         ],
         "title": "ManualTriggerRequest",
-        "description": "POST /api/jobs/manual \u2014 kick off a rip on a drive that already has a\ndisc in the tray. The ripper picks it up via WS command and runs the\nnormal scan\u2192identify\u2192rip flow; the optional `session_id` is stamped on\nthe resulting Job's metadata so `rip-complete` auto-applies it."
+        "description": "POST /api/jobs/manual \u2014 kick off a rip on a drive that already has a\ndisc in the tray. The ripper picks it up via WS command and runs the\nnormal scan\u2192identify\u2192rip flow; the optional `session_id` is stamped on\nthe resulting Job's `pending_session_id` column so `rip-complete`\nauto-applies it."
       },
       "ManualTriggerResponse": {
         "properties": {
@@ -11827,6 +12231,89 @@
           "dest_subpath"
         ],
         "title": "MoveRequest"
+      },
+      "MusicMeta": {
+        "properties": {
+          "artist": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artist"
+          },
+          "album": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Album"
+          },
+          "tracks": {
+            "items": {
+              "$ref": "#/components/schemas/MusicTrackMeta"
+            },
+            "type": "array",
+            "title": "Tracks"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "MusicMeta"
+      },
+      "MusicTrackMeta": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "length_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Length Ms"
+          },
+          "disc_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Number"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "MusicTrackMeta"
       },
       "NamingPreviewItem": {
         "properties": {
@@ -12823,7 +13310,9 @@
                 "enum": [
                   "collisions",
                   "template",
-                  "session_missing"
+                  "session_missing",
+                  "no_tracks",
+                  "media_mismatch"
                 ]
               },
               {
@@ -12852,7 +13341,7 @@
           "task_count"
         ],
         "title": "ResolveFanOutOutcomeView",
-        "description": "One waiting_identify application's post-resolve outcome.\n\n`status='queued'` + `skipped_reason=None` \u2192 the application was\npromoted and `task_count` newly-created transcode tasks are queued.\nAnything else \u2192 the application stays parked in `waiting_identify`\nand `error_detail` carries the reason for the UI to surface."
+        "description": "One waiting_identify application's post-resolve outcome.\n\n`status='queued'` + `skipped_reason=None` \u2192 the application was\npromoted and `task_count` newly-created transcode tasks are queued.\nAnything else \u2192 the application stays parked in `waiting_identify`\nand `error_detail` carries the reason for the UI to surface.\n`skipped_reason='no_tracks'` is the benign case: the rip has not started\nyet (no Track rows exist), so the application fans out at rip-complete."
       },
       "ResolveRequest": {
         "properties": {
@@ -12893,12 +13382,49 @@
             ],
             "title": "Disc Total"
           },
-          "metadata": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Metadata"
+          "media_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MediaType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Season"
+          },
+          "music": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MusicMeta"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "external_ids": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExternalIds"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "title"
@@ -13635,6 +14161,92 @@
           "output_path_template"
         ],
         "title": "SessionCreateRequest"
+      },
+      "SessionRouteUpsert": {
+        "properties": {
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "disc_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "media_type",
+          "session_id"
+        ],
+        "title": "SessionRouteUpsert"
+      },
+      "SessionRouteView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "disc_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "media_type",
+          "disc_type",
+          "session_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SessionRouteView"
       },
       "SessionUpdateRequest": {
         "properties": {

@@ -273,10 +273,21 @@ def test_manual_reapply_with_overwrite_evicts_done_tasks_and_creates_new(signing
 
 def test_manual_reapply_overwrite_refused_when_in_progress(signing_key: bytes, tmp_path: Path) -> None:
     """Don't displace a transcoder that's actively writing — even with
-    `overwrite=true`, an IN_PROGRESS collision is a hard 409 telling the
-    user to cancel the running task explicitly first."""
+    `overwrite=true`, an IN_PROGRESS collision on the *same* job's own prior
+    application is a hard 409 telling the user to cancel the running task
+    explicitly first (G-08: eviction is scoped to the applying job, but a
+    same-job in-progress task is still refused, not silently skipped)."""
     db = FakeSession()
     _seed(db)
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_other",
+            session_id="ses_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
+            status=SessionApplicationStatus.RUNNING,
+            overwrite=False,
+        )
+    ]
     db.rows["transcode_tasks"] = [
         TranscodeTask(
             id="txt_running",
@@ -298,6 +309,51 @@ def test_manual_reapply_overwrite_refused_when_in_progress(signing_key: bytes, t
         )
     assert r.status_code == 409
     assert "in_progress" in r.json()["detail"].lower()
+
+
+def test_manual_reapply_overwrite_cross_job_in_progress_is_reported_not_refused(
+    signing_key: bytes, tmp_path: Path
+) -> None:
+    """A *different* job's IN_PROGRESS task at the same output_path is never
+    reachable by this job's eviction at all (G-08 scoping) — it surfaces as
+    an ordinary cross-job `skipped_reason="collisions"` (409 collisions,
+    not the in-progress-refusal 409), naming the owning job."""
+    db = FakeSession()
+    _seed(db)
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_other",
+            session_id="ses_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA0000000J",
+            status=SessionApplicationStatus.RUNNING,
+            overwrite=False,
+        )
+    ]
+    db.rows["transcode_tasks"] = [
+        TranscodeTask(
+            id="txt_running",
+            session_application_id="sap_other",
+            source_track_id="trk_other",
+            status=TranscodeTaskStatus.IN_PROGRESS,
+            output_path="Iron Man (2008)/Iron Man - plex-1080p-h-265.mkv",
+            attempts=1,
+            progress_pct=42,
+            claimed_by="arm-transcode-running",
+        )
+    ]
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x", "overwrite": True},
+            headers=_auth(token),
+        )
+    assert r.status_code == 409
+    detail = r.json()["detail"]
+    assert detail["message"] == "output_path collisions detected"
+    assert detail["collisions"][0]["existing_job_id"] == "job_01JZXR7K3M5Q8N4VWA0000000J"
+    # The other job's in-progress task is untouched.
+    assert any(t.id == "txt_running" for t in db.rows["transcode_tasks"])
 
 
 def test_apply_collision_409_lists_paths(signing_key: bytes, tmp_path: Path) -> None:
@@ -405,6 +461,73 @@ def test_apply_duplicate_in_request_collision_for_multi_track_no_track_token(
     assert c["on_filesystem"] is False
 
 
+def test_manual_apply_media_mismatch_is_422(signing_key: bytes, tmp_path: Path) -> None:
+    """G-04: applying a movie session to a job identified as music (or vice
+    versa) is a client error, not a silent empty fan-out. The detail names
+    both types so the operator can see the mismatch."""
+    db = FakeSession()
+    _seed(db)
+    db.rows["jobs"][0].media_type = MediaType.MUSIC
+    db.rows["sessions"][0].media_type = MediaType.MOVIE
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert "media" in detail
+    assert "not compatible with" in detail
+    assert "movie" in detail
+    assert "music" in detail
+    assert db.rows["transcode_tasks"] == []
+    assert db.rows["session_applications"] == []
+
+
+def test_manual_apply_tv_session_on_movie_job_succeeds(signing_key: bytes, tmp_path: Path) -> None:
+    """C1: movie and tv are the same track kind (VIDEO_TITLE) — a TV session
+    manually applied to a job identified as a movie (or vice versa) must
+    fan out, not 422 as a mismatch."""
+    db = FakeSession()
+    _seed(db)
+    db.rows["jobs"][0].media_type = MediaType.MOVIE
+    db.rows["sessions"][0].media_type = MediaType.TV
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert len(body["tasks"]) == 1
+    assert body["collisions"] == []
+
+
+def test_manual_apply_iso_session_on_movie_job_succeeds(signing_key: bytes, tmp_path: Path) -> None:
+    """C1: an iso session applied to a movie job must fan out — no
+    identified job is ever `iso`, so an iso drive-default/route must still
+    apply to a video disc's job or it dead-ends every rip."""
+    db = FakeSession()
+    _seed(db)
+    db.rows["jobs"][0].media_type = MediaType.MOVIE
+    db.rows["sessions"][0].media_type = MediaType.ISO
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert len(body["tasks"]) == 1
+    assert body["collisions"] == []
+
+
 def test_apply_to_unidentified_job_creates_waiting_identify(signing_key: bytes, tmp_path: Path) -> None:
     db = FakeSession()
     _seed(db, job_status=JobStatus.AWAITING_USER_ID)
@@ -480,3 +603,61 @@ def test_apply_emits_session_queued_with_manual_source(signing_key: bytes, tmp_p
     assert payload["source"] == "manual"
     assert payload["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001"
     assert payload["task_count"] == 1
+
+
+def test_apply_to_identified_unripped_job_parks_as_waiting_identify(signing_key: bytes, tmp_path: Path) -> None:
+    """Apply between identify and rip-start: the job is `identified` but has no
+    Track rows yet (the ripper persists them at rip-start). The application
+    must park rather than fan out an empty `queued` application."""
+    db = FakeSession()
+    _seed(db, job_status=JobStatus.IDENTIFIED)
+    db.rows["tracks"] = []
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["session_application"]["status"] == "waiting_identify"
+    assert body["tasks"] == []
+    assert len(db.rows["session_applications"]) == 1
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
+
+
+def test_apply_records_the_operator(signing_key: bytes, tmp_path: Path) -> None:
+    """G-07: a manual apply stamps created_by_user_id with the caller, so
+    the audit trail can say who queued a transcode (auto stays None)."""
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert db.rows["session_applications"][0].created_by_user_id == "usr_admin"
+
+
+def test_apply_to_ripped_awaiting_identify_parks_as_waiting_identify(signing_key: bytes, tmp_path: Path) -> None:
+    """G-09: a completed placeholder rip still has no identity; applying a
+    session parks it exactly like the pre-rip unidentified case, and
+    resolve's after-rip pass promotes it."""
+    db = FakeSession()
+    _seed(db, job_status=JobStatus.RIPPED_AWAITING_IDENTIFY)
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["session_application"]["status"] == "waiting_identify"
+    assert body["tasks"] == []

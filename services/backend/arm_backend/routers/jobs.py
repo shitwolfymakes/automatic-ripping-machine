@@ -14,7 +14,9 @@ from arm_backend.auth import require_jwt, require_writer
 from arm_backend.auto_session import (
     SessionNotFoundError,
     apply_session_internal,
+    after_rip,
     fan_out_waiting_identify_applications,
+    media_mismatch_detail,
 )
 from arm_backend.config import settings
 from arm_backend.db import get_session
@@ -62,6 +64,7 @@ from arm_common.schemas import (
     TranscodeTaskView,
 )
 from arm_common.enums import NON_TERMINAL_JOB_STATUSES, TERMINAL_JOB_STATUSES
+from arm_common.schemas.job_metadata import JobIdentity, JobMetadata
 from arm_common.ulid import is_valid_id
 
 logger = logging.getLogger("arm_backend.routers.jobs")
@@ -758,7 +761,8 @@ async def manual_trigger(
     """Kick the ripper to run a job on a drive that already has a disc in
     the tray. The ripper handles the WS command, scans the disc, and
     threads `pending_session_id` through identify so the resulting Job's
-    metadata carries it. `rip-complete` then auto-applies that session.
+    `pending_session_id` column carries it. `rip-complete` then auto-applies
+    that session.
     """
     drive = (await db.execute(select(Drive).where(col(Drive.id) == req.drive_id))).scalar_one_or_none()
     if drive is None:
@@ -907,23 +911,64 @@ async def resolve(
             detail=f"job {job_id} is in status {job.status.value}, not in an identify-resolvable status",
         )
 
-    # Merge semantics: req.metadata is overlaid on existing metadata_json, not a replacement.
-    # The partial-edit case ("just fix the title") sends `metadata: {}` and must NOT wipe
-    # auto-identified artist/album/scan_result keys. Callers that DO want to replace a field
-    # send it explicitly (None clears, missing leaves alone).
-    new_metadata = dict(job.metadata_json or {})
-    new_metadata.update(req.metadata)
+    # Typed merge (G-03/§3.4): req.music / req.external_ids overlay the
+    # matching typed sections of the existing metadata_json; everything else
+    # (scan_result, provider_raw, etc.) round-trips untouched. The
+    # partial-edit case ("just fix the title") sends neither field and must
+    # NOT wipe auto-identified sections.
+    md = JobMetadata.model_validate(job.metadata_json or {})
+    if req.music is not None:
+        md.music = req.music
+    if req.external_ids is not None:
+        if md.identity is None:
+            md.identity = JobIdentity(provider="manual")
+        # Per-field overlay, not a wholesale replace: a request that only
+        # sets tmdb must not wipe a previously stored imdb/tvdb/etc.
+        # Re-assigned (not just mutated) so exclude_unset picks up
+        # external_ids as set even when identity was just freshly created.
+        existing_ids = md.identity.external_ids
+        if req.external_ids.imdb is not None:
+            existing_ids.imdb = req.external_ids.imdb
+        if req.external_ids.tmdb is not None:
+            existing_ids.tmdb = req.external_ids.tmdb
+        if req.external_ids.tvdb is not None:
+            existing_ids.tvdb = req.external_ids.tvdb
+        if req.external_ids.musicbrainz_release is not None:
+            existing_ids.musicbrainz_release = req.external_ids.musicbrainz_release
+        md.identity.external_ids = existing_ids
+    new_metadata = md.model_dump(mode="json", exclude_unset=True)
 
     job.title = req.title
     job.year = req.year
     job.disc_number = req.disc_number
     job.disc_total = req.disc_total
-    job.metadata_json = new_metadata
+    # media_type/season are classifications, not part of the identity
+    # statement: omitted = keep (a title-only fix must not wipe them).
+    if req.media_type is not None:
+        job.media_type = req.media_type
+    if req.season is not None:
+        job.season = req.season
+    was_ripped_placeholder = job.status == JobStatus.RIPPED_AWAITING_IDENTIFY
     if job.status in _RESOLVABLE_STATUSES_PROMOTE:
-        job.status = JobStatus.IDENTIFIED
+        # Identity has landed; the flag that parked the job is spent
+        # (flags section + the pre-0031 top-level key).
+        new_metadata.pop("unidentified", None)
+        if isinstance(new_metadata.get("flags"), dict):
+            new_metadata["flags"] = {k: v for k, v in new_metadata["flags"].items() if k != "unidentified"}
+        # A placeholder whose rip already finished becomes RIPPED, not
+        # IDENTIFIED — its rip is done (G-09).
+        job.status = JobStatus.RIPPED if was_ripped_placeholder else JobStatus.IDENTIFIED
+    job.metadata_json = new_metadata
     session.add(job)
 
-    fan_out_outcomes = await fan_out_waiting_identify_applications(session, job=job, hub=hub)
+    if was_ripped_placeholder:
+        # Rip done + identity just landed: run the same post-rip pass
+        # rip-complete runs for identified jobs — drain parked applications
+        # (fan-out uses the just-resolved title) and then the auto-apply
+        # hook. `after_rip` commits its own work and never raises.
+        fan_out_outcomes = await after_rip(session, job, hub)
+    else:
+        fan_out_outcomes = await fan_out_waiting_identify_applications(session, job=job, hub=hub)
 
     logger.info(
         "resolve job_id=%s -> identified title=%s fan_out=%d",
@@ -981,7 +1026,7 @@ async def resolve(
 async def apply_session(
     job_id: JobIdParam,
     req: ApplySessionRequest,
-    _: User = Depends(require_writer),
+    user: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> ApplySessionResponse:
@@ -995,7 +1040,7 @@ async def apply_session(
             job=job,
             session_id=req.session_id,
             overwrite=req.overwrite,
-            created_by_user_id=None,
+            created_by_user_id=user.id,
             source="manual",
             hub=hub,
         )
@@ -1020,6 +1065,14 @@ async def apply_session(
                 "message": "output_path collisions detected",
                 "collisions": [c.model_dump() for c in outcome.collisions],
             },
+        )
+
+    if outcome.skipped_reason == "media_mismatch":
+        sess = (await db.execute(select(Session).where(col(Session.id) == req.session_id))).scalar_one_or_none()
+        assert sess is not None  # apply_session_internal already resolved it to reach this branch
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=media_mismatch_detail(job, sess),
         )
 
     assert outcome.application is not None

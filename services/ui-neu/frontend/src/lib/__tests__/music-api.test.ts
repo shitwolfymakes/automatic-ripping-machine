@@ -30,8 +30,20 @@ describe('searchMusicMetadata', () => {
 describe('resolveJob with disc fields', () => {
 	it('includes disc_number/disc_total in the body', async () => {
 		mockFetch.mockResolvedValue(jsonResponse({ job: {}, fan_out: [] }));
-		await resolveJob('job_1', { title: 'Abbey Road', year: 1969, disc_number: 1, disc_total: 2, metadata: { artist: 'X' } });
+		await resolveJob('job_1', {
+			title: 'Abbey Road',
+			year: 1969,
+			disc_number: 1,
+			disc_total: 2,
+			music: { artist: 'X' }
+		});
 		const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
-		expect(body).toEqual({ title: 'Abbey Road', year: 1969, disc_number: 1, disc_total: 2, metadata: { artist: 'X' } });
+		expect(body).toEqual({
+			title: 'Abbey Road',
+			year: 1969,
+			disc_number: 1,
+			disc_total: 2,
+			music: { artist: 'X' }
+		});
 	});
 });
