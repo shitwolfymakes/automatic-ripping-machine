@@ -2629,7 +2629,7 @@ export type ResolveFanOutOutcomeView = {
     /**
      * Skipped Reason
      */
-    skipped_reason?: 'collisions' | 'template' | 'session_missing' | 'no_tracks' | null;
+    skipped_reason?: 'collisions' | 'template' | 'session_missing' | 'no_tracks' | 'no_outputs' | null;
     /**
      * Error Detail
      */
