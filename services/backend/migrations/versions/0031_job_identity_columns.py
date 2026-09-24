@@ -27,7 +27,7 @@ Downgrade drops the columns; lifted-and-dropped season/disc keys are not
 restored to metadata_json.
 
 Revision ID: 0031_job_identity_columns
-Revises: 0029_thediscdb
+Revises: 0030_drive_lifecycle
 Create Date: 2026-09-13
 
 """

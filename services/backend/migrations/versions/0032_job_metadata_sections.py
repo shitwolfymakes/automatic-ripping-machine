@@ -1,6 +1,6 @@
 """Restructure jobs.metadata_json into its typed sections.
 
-Companion to 0030 (gap analysis §3.4): identify no longer merges provider
+Companion to 0031 (gap analysis §3.4): identify no longer merges provider
 payloads into the top level of the bag — conclusions live under `identity`,
 music naming under `music`, behaviour flags under `flags`, and raw payloads
 under `provider_raw[<provider>]`. This migration lifts existing rows into

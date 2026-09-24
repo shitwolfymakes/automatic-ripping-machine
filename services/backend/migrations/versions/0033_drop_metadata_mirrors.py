@@ -1,19 +1,19 @@
 """Scrub the lifted-to-column mirror keys out of jobs.metadata_json.
 
-Step 2 lockdown slice (docs/plans/AUTOMATION_GAP_ANALYSIS.md §3.4): 0030
+Step 2 lockdown slice (docs/plans/AUTOMATION_GAP_ANALYSIS.md §3.4): 0031
 lifted `pending_session_id` (and `season`/`disc`) into real columns but kept
 the metadata_json copies around "until both UIs read the column." They do
 now (`JobView.pending_session_id` is exposed; both UIs prefer the column),
 so identify no longer writes the mirror and this migration removes the
 stray top-level `pending_session_id`, `season`, and `disc` keys from
-existing rows. In practice, 0030 already dropped `season`/`disc` from any
+existing rows. In practice, 0031 already dropped `season`/`disc` from any
 row it touched during its own lift, so on an already-migrated database this
 migration's only real scrub target is `pending_session_id`; the other two
 keys are covered defensively in case a row reached this point without going
-through 0030's lift (e.g. written between 0030 and 0032 by code that still
+through 0031's lift (e.g. written between 0031 and 0032 by code that still
 had a mirror write path).
 
-Per row (PostgreSQL only, in Python — same as 0030/0031, not sane SQL):
+Per row (PostgreSQL only, in Python — same as 0031/0032, not sane SQL):
 strip any of MIRROR_KEYS found at the top level of metadata_json and
 rewrite the row only when something changed.
 
