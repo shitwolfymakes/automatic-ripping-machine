@@ -67,9 +67,7 @@ def upgrade() -> None:
     # and it's the only state where the old empty-table seed gate is known
     # to have already fired. An empty table with no prior proof of a seed
     # is left seeded=false so the boot seeder gets its one real shot.
-    op.execute(
-        sa.text("UPDATE config SET session_routes_seeded = true WHERE EXISTS (SELECT 1 FROM session_routes)")
-    )
+    op.execute(sa.text("UPDATE config SET session_routes_seeded = true WHERE EXISTS (SELECT 1 FROM session_routes)"))
 
 
 def downgrade() -> None:
