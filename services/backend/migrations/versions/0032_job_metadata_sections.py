@@ -22,8 +22,8 @@ nothing. Downgrade is a no-op — the sections remain readable by the
 pre-migration code's fallbacks except provider_raw, which older code never
 read anyway.
 
-Revision ID: 0031_job_metadata_sections
-Revises: 0030_job_identity_columns
+Revision ID: 0032_job_metadata_sections
+Revises: 0031_job_identity_columns
 Create Date: 2026-09-13
 
 """
@@ -34,8 +34,8 @@ from typing import Any, Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0031_job_metadata_sections"
-down_revision: Union[str, None] = "0030_job_identity_columns"
+revision: str = "0032_job_metadata_sections"
+down_revision: Union[str, None] = "0031_job_identity_columns"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

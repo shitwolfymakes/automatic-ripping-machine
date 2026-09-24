@@ -26,7 +26,7 @@ no legacy rows):
 Downgrade drops the columns; lifted-and-dropped season/disc keys are not
 restored to metadata_json.
 
-Revision ID: 0030_job_identity_columns
+Revision ID: 0031_job_identity_columns
 Revises: 0029_thediscdb
 Create Date: 2026-09-13
 
@@ -37,8 +37,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0030_job_identity_columns"
-down_revision: Union[str, None] = "0029_thediscdb"
+revision: str = "0031_job_identity_columns"
+down_revision: Union[str, None] = "0030_drive_lifecycle"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
