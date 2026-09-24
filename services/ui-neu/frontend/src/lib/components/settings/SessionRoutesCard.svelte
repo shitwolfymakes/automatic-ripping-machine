@@ -189,18 +189,16 @@
 		</div>
 
 		{#if otherRoutes().length > 0}
-			<div class="mt-4">
-				<h4 class="mb-1.5 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-					Other routes
-				</h4>
-				<div class="space-y-1.5">
+			<div class="session-routes-card-other">
+				<h4 class="eyebrow session-routes-card-group-title">Other routes</h4>
+				<div class="stack stack-sm">
 					{#each otherRoutes() as route (route.id)}
 						{@const key = rowKey(route.media_type, route.disc_type)}
 						{@const rowBusy = pending.has(key)}
-						<div class="flex flex-wrap items-center gap-2 rounded-lg border border-primary/10 px-3 py-2 dark:border-primary/10">
-							<span class="min-w-0 flex-1 text-xs text-gray-600 dark:text-gray-300">
-								<span class="font-medium">{route.media_type} / {discLabel(route.disc_type)}</span>
-								<span class="text-gray-400 dark:text-gray-500">&rarr;</span>
+						<div class="panel-section session-routes-card-row">
+							<span class="session-routes-card-other-label">
+								<span class="session-routes-card-other-key">{route.media_type} / {discLabel(route.disc_type)}</span>
+								<span class="session-routes-card-other-arrow">&rarr;</span>
 								{sessionNameFor(route.session_id)}
 							</span>
 							{#if $isAdmin}
@@ -209,7 +207,7 @@
 									onclick={() => handleClear(route)}
 									disabled={rowBusy}
 									aria-label="Clear {route.media_type} / {discLabel(route.disc_type)} route ({sessionNameFor(route.session_id)})"
-									class="shrink-0 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+									class="btn btn-sm"
 								>
 									Clear
 								</button>
@@ -239,4 +237,10 @@
 	.session-routes-card-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; border-color: var(--color-primary-tint-2); background: none; padding: 0.5rem 0.75rem; }
 	.session-routes-card-scope-label { width: 5rem; flex-shrink: 0; font-size: 0.75rem; line-height: 1rem; font-weight: 500; color: var(--color-text-secondary); }
 	.session-routes-card-select { min-width: 0; flex: 1 1 0%; width: auto; min-height: 0; padding: 0.375rem 0.5rem; font-size: 0.75rem; }
+	/* other-routes: API-created keys outside the grid; same row shape,
+	   muted single-line label. */
+	.session-routes-card-other { margin-top: 1rem; }
+	.session-routes-card-other-label { min-width: 0; flex: 1 1 0%; font-size: 0.75rem; line-height: 1rem; color: var(--color-text-secondary); }
+	.session-routes-card-other-key { font-weight: 500; }
+	.session-routes-card-other-arrow { color: var(--color-text-faint); }
 </style>
