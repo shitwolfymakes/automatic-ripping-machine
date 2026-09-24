@@ -13,7 +13,7 @@ const mockEventTypes = [
 		key: 'rip.completed',
 		label: 'Rip completed',
 		variables: ['job_title', 'drive_id', 'tracks_done', 'tracks_total', 'status', 'job_id', 'job_year', 'job_disc_type', 'event_type', 'occurred_at', 'tracks_failed'],
-		default_title: 'ARM: rip completed — {job_title}',
+		default_title: 'ARM: rip completed - {job_title}',
 		default_body: '{job_title} finished ripping on drive {drive_id} ({tracks_done}/{tracks_total} tracks).'
 	},
 	{

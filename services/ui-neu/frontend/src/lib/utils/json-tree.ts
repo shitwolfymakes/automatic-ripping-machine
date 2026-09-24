@@ -39,7 +39,7 @@ export function classifyJsonValue(value: unknown): ClassifiedJson {
 		return {
 			kind: 'object',
 			isContainer: entries.length > 0,
-			preview: entries.length > 0 ? '{…}' : '{}',
+			preview: entries.length > 0 ? '{...}' : '{}',
 			entries
 		};
 	}

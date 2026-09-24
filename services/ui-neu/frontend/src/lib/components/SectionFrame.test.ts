@@ -58,5 +58,21 @@ describe('SectionFrame', () => {
 			});
 			expect(container.querySelector('.section-frame-sidebar')).toBeNull();
 		});
+
+		it('sets inline --frame-accent when accent is provided', () => {
+			const { container } = renderComponent(SectionFrame, {
+				props: { accent: '#99f', children: textSnippet('content') }
+			});
+			const frame = container.querySelector('.section-frame') as HTMLElement;
+			expect(frame.style.getPropertyValue('--frame-accent')).toBe('#99f');
+		});
+
+		it('omits inline --frame-accent when accent is not provided (theme token can apply)', () => {
+			const { container } = renderComponent(SectionFrame, {
+				props: { children: textSnippet('content') }
+			});
+			const frame = container.querySelector('.section-frame') as HTMLElement;
+			expect(frame.style.getPropertyValue('--frame-accent')).toBe('');
+		});
 	});
 });

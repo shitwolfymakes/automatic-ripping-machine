@@ -76,6 +76,12 @@ describe('fetchNamingPreview', () => {
 		expect(result.job_output_name).toBe('Test Show S01E01');
 		expect(result.items).toHaveLength(1);
 	});
+
+	it('passes an explicit session_id through as a query param', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ job_output_dir: '', job_output_name: '', items: [] }));
+		await fetchNamingPreview('job_42', 'ses_9');
+		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/job_42/naming-preview?session_id=ses_9', expect.anything());
+	});
 });
 
 describe('namingPreview', () => {

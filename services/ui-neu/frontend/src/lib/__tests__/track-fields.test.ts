@@ -27,8 +27,8 @@ describe('trackSizeLabel', () => {
 		expect(trackSizeLabel(t)).toBe('~2 MB');
 	});
 
-	it('returns em-dash when neither is present', () => {
+	it('returns a dash when neither is present', () => {
 		const t = createTrack({ size_bytes: null, expected_size_bytes: null });
-		expect(trackSizeLabel(t)).toBe('—');
+		expect(trackSizeLabel(t)).toBe('-');
 	});
 });
