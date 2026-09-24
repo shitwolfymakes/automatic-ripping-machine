@@ -271,8 +271,7 @@ async def _apply_session_internal(
         )
     elif outcome.skipped_reason == "no_outputs":
         logger.info(
-            "apply: parked session_id=%s job_id=%s (tracks exist but none resolved an output; "
-            "stays parked) source=%s",
+            "apply: parked session_id=%s job_id=%s (tracks exist but none resolved an output; stays parked) source=%s",
             session_id,
             job.id,
             source,
