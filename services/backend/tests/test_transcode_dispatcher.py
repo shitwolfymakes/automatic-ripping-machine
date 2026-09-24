@@ -93,6 +93,35 @@ def _app_with_one_task(status: TranscodeTaskStatus, **task_kwargs: Any) -> FakeS
     return db
 
 
+def test_is_transport_death_detects_direct_eof_error() -> None:
+    """Fix 76-9: paramiko commonly surfaces a dead transport as a raw
+    EOFError (not just SSHException/ConnectionResetError/BrokenPipeError)."""
+    from arm_backend.transcode_dispatcher import _is_transport_death
+
+    assert _is_transport_death(EOFError("EOF"))
+
+
+def test_is_transport_death_detects_eof_error_nested_in_cause_chain() -> None:
+    """docker-py wraps the underlying transport error; walk __cause__ to
+    find an EOFError root cause, same as the existing SSHException path."""
+    from arm_backend.transcode_dispatcher import _is_transport_death
+
+    inner = EOFError("EOF")
+    try:
+        try:
+            raise inner
+        except EOFError as e:
+            raise RuntimeError("docker APIError wrapper") from e
+    except RuntimeError as wrapped:
+        assert _is_transport_death(wrapped)
+
+
+def test_is_transport_death_rejects_unrelated_error() -> None:
+    from arm_backend.transcode_dispatcher import _is_transport_death
+
+    assert not _is_transport_death(ValueError("not a transport error"))
+
+
 def _orphan_db(
     app_status: SessionApplicationStatus,
     *,
@@ -348,6 +377,37 @@ async def test_spawn_continues_after_one_failure() -> None:
     spawned = await disp.spawn_pending(db)
     assert spawned == 1  # second task succeeded; first logged + skipped
     assert docker.containers.run.call_count == 2
+
+
+async def test_spawn_pending_runs_spawn_container_via_to_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fix 76-4: `_spawn_container` does a blocking docker call (and, on the
+    SSH-rebuild path, a blocking TCP+SSH handshake that can take tens of
+    seconds against a black-holed host) — it must run off the event loop via
+    `asyncio.to_thread`, not synchronously inline in `spawn_pending`. Pin the
+    mechanism with a pass-through recorder standing in for `to_thread`:
+    running the loop under pytest-asyncio makes `to_thread` transparent, so
+    this only proves the call site is used, not concurrency itself."""
+    import asyncio
+
+    db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
+    db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+
+    calls: list[tuple[Any, ...]] = []
+    real_to_thread = asyncio.to_thread
+
+    async def _recording_to_thread(func: Any, *args: Any, **kwargs: Any) -> Any:
+        calls.append((func, args, kwargs))
+        return await real_to_thread(func, *args, **kwargs)
+
+    monkeypatch.setattr(asyncio, "to_thread", _recording_to_thread)
+
+    spawned = await disp.spawn_pending(db)
+
+    assert spawned == 1
+    assert len(calls) == 1
+    assert calls[0][0] == disp._spawn_container
 
 
 async def test_spawn_rebuilds_docker_client_on_dead_ssh_transport(
