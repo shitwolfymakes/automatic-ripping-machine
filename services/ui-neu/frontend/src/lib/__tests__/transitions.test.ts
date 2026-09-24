@@ -5,10 +5,10 @@ describe('transitions', () => {
         vi.resetModules();
     });
 
-    it('exports send and receive from crossfade', async () => {
-        const mod = await import('../transitions');
-        expect(typeof mod.send).toBe('function');
-        expect(typeof mod.receive).toBe('function');
+    it('does not export a crossfade: content must appear in place, never animate geometry', async () => {
+        const mod = (await import('../transitions')) as Record<string, unknown>;
+        expect(mod.send).toBeUndefined();
+        expect(mod.receive).toBeUndefined();
     });
 
     it('fadeIn has duration 150 when reduced-motion is not set', async () => {

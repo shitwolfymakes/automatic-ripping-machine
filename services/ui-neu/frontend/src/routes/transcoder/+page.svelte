@@ -160,7 +160,12 @@
 	{#if !$statsInitialized && !$statsError}
 		<div class="space-y-4">
 			<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:border-primary/20 dark:bg-surface-dark">
-				<div class="h-5 w-56 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+				<!-- Same box as the real header row (mb-3 + text-sm line) so the card
+				     is the same height before and after the first poll. -->
+				<div class="mb-3 flex items-center justify-between">
+					<div class="h-6 w-56 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+					<div class="h-4 w-48 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+				</div>
 			</div>
 			<div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
 				{#each Array(5) as _unused}
@@ -281,10 +286,12 @@
 			transitionKey="transcoder-jobs"
 		>
 			{#snippet loadingSlot()}
+				<!-- As many placeholders as the stats poll says there are tasks (it
+				     lands first), so the list does not grow when the jobs arrive. -->
 				<div class="space-y-3">
-					<SkeletonCard lines={4} />
-					<SkeletonCard lines={4} />
-					<SkeletonCard lines={4} />
+					{#each Array(Math.min(s.total_tasks || 3, 6)) as _unused}
+						<SkeletonCard lines={4} class="pb-3" />
+					{/each}
 				</div>
 			{/snippet}
 			{#snippet empty()}
@@ -322,10 +329,15 @@
 
 							<!-- Row 2: ARM job link, attempts -->
 							<div class="mt-0.5 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-								<a
-									href="/jobs/{job.session_application_id}"
-									class="inline-flex items-center rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary-text hover:bg-primary/20 dark:bg-primary/15 dark:text-primary-text-dark dark:hover:bg-primary/25"
-								>Job #{job.session_application_id}</a>
+								{#if job.job_id}
+									<a
+										href="/jobs/{job.job_id}"
+										data-testid="transcode-job-link"
+										class="inline-flex items-center rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary-text hover:bg-primary/20 dark:bg-primary/15 dark:text-primary-text-dark dark:hover:bg-primary/25"
+									>Job {job.job_id}</a>
+								{:else}
+									<span class="inline-flex items-center rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-gray-500 dark:bg-primary/15 dark:text-gray-400">No job</span>
+								{/if}
 								{#if job.attempts > 0}
 									<span class="text-xs">Attempt {job.attempts}</span>
 								{/if}

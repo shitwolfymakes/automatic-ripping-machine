@@ -98,7 +98,7 @@ def _tv_transcode_preset() -> TranscodePreset:
 def _builtin_session() -> Session:
     return Session(
         id="ses_builtin",
-        name="Movie → Plex 1080p",
+        name="Movie to Plex 1080p",
         media_type=MediaType.MOVIE,
         is_builtin=True,
         rip_preset_id="rpr_movie",
@@ -154,7 +154,7 @@ def test_list_sessions_returns_seeded_rows(signing_key: bytes) -> None:
     assert r.status_code == 200
     body = r.json()
     assert len(body) == 1
-    assert body[0]["name"] == "Movie → Plex 1080p"
+    assert body[0]["name"] == "Movie to Plex 1080p"
 
 
 def test_get_session_404(signing_key: bytes) -> None:
@@ -340,7 +340,7 @@ def test_get_session_happy_path(signing_key: bytes) -> None:
     assert r.status_code == 200
     body = r.json()
     assert body["id"] == "ses_builtin"
-    assert body["name"] == "Movie → Plex 1080p"
+    assert body["name"] == "Movie to Plex 1080p"
     assert body["is_builtin"] is True
     assert body["rip_preset_id"] == "rpr_movie"
     assert body["transcode_preset_id"] == "tpr_plex"
