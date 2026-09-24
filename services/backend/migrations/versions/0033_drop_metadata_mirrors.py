@@ -21,8 +21,8 @@ Idempotent: a row with none of the mirror keys is left untouched (the loop
 rewrites nothing). Downgrade is a no-op — this is a data-only scrub, and the
 dropped keys are not restored (they are redundant with the columns).
 
-Revision ID: 0032_drop_metadata_mirrors
-Revises: 0031_job_metadata_sections
+Revision ID: 0033_drop_metadata_mirrors
+Revises: 0032_job_metadata_sections
 Create Date: 2026-09-22
 
 """
@@ -33,8 +33,8 @@ from typing import Any, Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0032_drop_metadata_mirrors"
-down_revision: Union[str, None] = "0031_job_metadata_sections"
+revision: str = "0033_drop_metadata_mirrors"
+down_revision: Union[str, None] = "0032_job_metadata_sections"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
