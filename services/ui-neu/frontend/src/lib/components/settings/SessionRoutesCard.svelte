@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { isAdmin } from '$lib/stores/auth';
+	import { reveal } from '$lib/transitions';
 	import { fetchSessionRoutes, upsertSessionRoute, deleteSessionRoute } from '$lib/api/sessionRoutes';
 	import { fetchSessions } from '$lib/api/sessions';
 	import type { DiscType, MediaType, SessionRouteView, SessionView } from '$lib/types/api.gen';
@@ -103,42 +104,42 @@
 	}
 </script>
 
-<div class="rounded-lg border border-primary/20 bg-surface p-4 shadow-xs dark:bg-surface-dark">
-	<h3 class="mb-1 text-base font-semibold text-gray-900 dark:text-white">Session Routing</h3>
-	<p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
+<div class="panel">
+	<h3 class="session-routes-card-title">Session Routing</h3>
+	<p class="session-routes-card-intro">
 		A route applies the chosen session when a disc's identified media type matches. The drive's default session
 		overrides every route here, and a disc-type-specific route (DVD, Blu-ray, CD) beats the Any-disc wildcard
 		for the same media type.
 	</p>
 
 	{#if feedback}
-		<p class="mb-3 rounded px-3 py-2 text-sm {feedback.type === 'success' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'}">
+		<p in:reveal class="alert {feedback.type === 'success' ? 'alert-success' : 'alert-danger'} mb-3">
 			{feedback.message}
 		</p>
 	{/if}
 
 	{#if loading}
-		<p class="py-4 text-center text-sm text-gray-400">Loading...</p>
+		<p class="session-routes-card-loading">Loading...</p>
 	{:else}
-		<div class="space-y-4">
+		<div class="stack">
 			{#each MEDIA_TYPES as mt (mt.key)}
 				{@const options = sessionsFor(mt.key)}
 				<div>
-					<h4 class="mb-1.5 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">{mt.label}</h4>
-					<div class="space-y-1.5">
+					<h4 class="eyebrow session-routes-card-group-title">{mt.label}</h4>
+					<div class="stack stack-sm">
 						{#each DISC_SCOPES as scope (scope.key ?? 'any')}
 							{@const route = routeFor(mt.key, scope.key)}
 							{@const key = rowKey(mt.key, scope.key)}
 							{@const rowBusy = pending.has(key)}
-							<div class="flex flex-wrap items-center gap-2 rounded-lg border border-primary/10 px-3 py-2 dark:border-primary/10">
-								<span class="w-20 shrink-0 text-xs font-medium text-gray-600 dark:text-gray-300">{scope.label}</span>
+							<div class="panel-section session-routes-card-row">
+								<span class="session-routes-card-scope-label">{scope.label}</span>
 								<select
 									id="route-{key}"
 									aria-label="{mt.label} / {scope.label} session"
 									value={route?.session_id ?? ''}
 									disabled={!$isAdmin || rowBusy || options.length === 0}
 									onchange={(e) => handleChange(mt.key, scope.key, (e.target as HTMLSelectElement).value)}
-									class="min-w-0 flex-1 rounded-md border border-primary/15 bg-primary/5 px-2 py-1.5 text-xs text-gray-900 disabled:opacity-50 dark:border-primary/20 dark:bg-primary/10 dark:text-white"
+									class="field-control session-routes-card-select"
 								>
 									<option value="">- none -</option>
 									{#each options as s (s.id)}
@@ -151,7 +152,7 @@
 										onclick={() => handleClear(route)}
 										disabled={rowBusy}
 										aria-label="Clear {mt.label} / {scope.label} route"
-										class="shrink-0 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+										class="btn btn-sm"
 									>
 										Clear
 									</button>
@@ -164,3 +165,22 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	/* the original title was text-base font-semibold text-gray-900, mb-1 -
+	   a plain heading, not panel-title's uppercase eyebrow look (matches
+	   UsersCard's own title treatment). */
+	.session-routes-card-title { margin-bottom: 0.25rem; font-size: 1rem; line-height: 1.5rem; font-weight: 600; color: var(--color-text); }
+	.session-routes-card-intro { margin-bottom: 1rem; font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	.session-routes-card-loading { padding: 1rem 0; text-align: center; font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-faint); }
+	/* the original group heading was text-xs font-bold uppercase
+	   tracking-wider (12px/700/0.05em) - close to but not exactly .eyebrow's
+	   own weight/tracking, so those two are overridden here. */
+	.session-routes-card-group-title { margin-bottom: 0.375rem; font-weight: 700; letter-spacing: 0.05em; }
+	/* the original row was a bordered, unfilled box (rounded-lg
+	   border-primary/10 px-3 py-2) - panel-section's shape, but without its
+	   tint-1 fill and at a tighter 10% border + own padding. */
+	.session-routes-card-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; border-color: var(--color-primary-tint-2); background: none; padding: 0.5rem 0.75rem; }
+	.session-routes-card-scope-label { width: 5rem; flex-shrink: 0; font-size: 0.75rem; line-height: 1rem; font-weight: 500; color: var(--color-text-secondary); }
+	.session-routes-card-select { min-width: 0; flex: 1 1 0%; width: auto; min-height: 0; padding: 0.375rem 0.5rem; font-size: 0.75rem; }
+</style>
