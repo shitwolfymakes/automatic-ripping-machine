@@ -502,9 +502,7 @@ async def _fan_out_tasks_for_application(
         # structurally different "not applicable" sentinel, not an unowned
         # task — there's no task row to misattribute, so those stay
         # evictable/same-job as before.
-        cross_job_collisions = [
-            c for c in collisions if c.reason == "existing_task" and c.existing_job_id != job.id
-        ]
+        cross_job_collisions = [c for c in collisions if c.reason == "existing_task" and c.existing_job_id != job.id]
         if cross_job_collisions:
             # The cross-job (+ unowned-task) subset is what blocks the
             # apply, but the response should still tell the whole truth
