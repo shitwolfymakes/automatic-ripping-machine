@@ -13,9 +13,16 @@ export interface LogEntry {
 	event: string;
 	job_id?: number | string | null;
 	label?: string | null;
+	service: string;
 }
 
-function toLogEntry(raw: Record<string, unknown>): LogEntry {
+/**
+ * Parse one raw backend log record ({ts, level, service, job_id, track_id,
+ * session_application_id, msg, extra:{logger,...}}) into a LogEntry. Exported
+ * so the WS live-tail path (jobLog store) can reuse the same parsing as the
+ * one-shot NDJSON fetch below.
+ */
+export function toLogEntry(raw: Record<string, unknown>): LogEntry {
 	const extra = (raw.extra ?? {}) as Record<string, unknown>;
 	const str = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v));
 	return {
@@ -24,7 +31,8 @@ function toLogEntry(raw: Record<string, unknown>): LogEntry {
 		logger: str(extra.logger ?? raw.service),
 		event: str(raw.msg),
 		job_id: (raw.job_id as string | number | null | undefined) ?? null,
-		label: typeof extra.label === 'string' ? extra.label : null
+		label: typeof extra.label === 'string' ? extra.label : null,
+		service: str(raw.service)
 	};
 }
 

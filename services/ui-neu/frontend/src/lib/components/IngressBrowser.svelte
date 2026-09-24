@@ -5,6 +5,7 @@
 	import { showImportWizard } from '$lib/stores/importWizard';
 	import type { FileEntry } from '$lib/api/files';
 	import { Folder, FolderArchive, Disc, File as FileIcon } from 'lucide-svelte';
+	import SortIndicator from '$lib/components/SortIndicator.svelte';
 
 	// NOTE: kind/importable are computed client-side until the BFF (arm-neu PR #333)
 	// emits them per entry. Once the BFF lands those fields and api.gen.ts picks
@@ -83,9 +84,9 @@
 		else { sortKey = key; sortDir = key === 'modified' ? 'desc' : 'asc'; }
 	}
 
-	function sortIcon(key: string): string {
-		if (sortKey !== key) return '';
-		return sortDir === 'asc' ? ' ▴' : ' ▾';
+	function sortIconDir(key: string): 'asc' | 'desc' | null {
+		if (sortKey !== key) return null;
+		return sortDir;
 	}
 
 	function formatSize(bytes: number): string {
@@ -191,6 +192,10 @@
 	onMount(() => { init(); });
 </script>
 
+{#snippet sortIcon(key: string)}
+	<SortIndicator dir={sortIconDir(key)} />
+{/snippet}
+
 <div class="flex min-h-0 flex-1 flex-col">
 	{#if needsConfig}
 		<div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400">
@@ -257,13 +262,13 @@
 					<thead class="bg-page text-gray-600 dark:bg-primary/5 dark:text-gray-400">
 						<tr>
 							<th class="px-4 py-2 font-medium">
-								<button type="button" onclick={() => toggleSort('name')} class="hover:text-gray-700 dark:hover:text-gray-300">Name{sortIcon('name')}</button>
+								<button type="button" onclick={() => toggleSort('name')} class="hover:text-gray-700 dark:hover:text-gray-300">Name {@render sortIcon('name')}</button>
 							</th>
 							<th class="px-4 py-2 font-medium">
-								<button type="button" onclick={() => toggleSort('size')} class="hover:text-gray-700 dark:hover:text-gray-300">Size{sortIcon('size')}</button>
+								<button type="button" onclick={() => toggleSort('size')} class="hover:text-gray-700 dark:hover:text-gray-300">Size {@render sortIcon('size')}</button>
 							</th>
 							<th class="px-4 py-2 font-medium">
-								<button type="button" onclick={() => toggleSort('modified')} class="hover:text-gray-700 dark:hover:text-gray-300">Modified{sortIcon('modified')}</button>
+								<button type="button" onclick={() => toggleSort('modified')} class="hover:text-gray-700 dark:hover:text-gray-300">Modified {@render sortIcon('modified')}</button>
 							</th>
 						</tr>
 					</thead>

@@ -4,6 +4,7 @@
 	import { abandonJob, fetchJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { readJobMetadata, videoTypeLabel } from '$lib/utils/job-fields';
+	import { driveLabel } from '$lib/utils/drive-name';
 	import { reviewPhaseBadge } from '$lib/utils/job-status';
 	import CountdownTimer from './CountdownTimer.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
@@ -29,7 +30,6 @@
 	}
 
 	let { job, driveNames, paused = false, manualWaitSeconds = 60, onrefresh, ondismiss }: Props = $props();
-	let driveName = $derived(job?.drive_id ? (driveNames?.[job.drive_id] ?? null) : null);
 
 	// awaiting_review = the timed review gate (Start / countdown); other waiting
 	// statuses (awaiting_user_id / ripped_awaiting_identify) are identify-only.
@@ -83,7 +83,7 @@
 	let jobMeta = $derived(readJobMetadata(displayJob.metadata_json));
 
 	function shortId(id: string): string {
-		return id.length > 15 ? `${id.slice(0, 15)}…` : id;
+		return id.length > 15 ? `${id.slice(0, 15)}...` : id;
 	}
 	let appliedSession = $derived(
 		jobMeta.pending_session_id
@@ -97,7 +97,7 @@
 	let phaseBadge = $derived.by(() => {
 		const b = reviewPhaseBadge(displayJob);
 		if (isPostRip && jobMeta.pending_session_id && !(displayJob.title?.trim())) {
-			return { ...b, label: 'RIPPED · NEEDS TITLE' };
+			return { ...b, label: 'RIPPED | NEEDS TITLE' };
 		}
 		return b;
 	});
@@ -154,7 +154,7 @@
 		const j = data?.job ?? job;
 		const startTitle = (j.title ?? '').trim();
 		if (!startTitle) {
-			errorMessage = 'A title is required to start — open Info or Search to set one.';
+			errorMessage = 'A title is required to start. Open Info or Search to set one.';
 			return;
 		}
 		starting = true;
@@ -229,7 +229,7 @@
 		<div class="flex items-center gap-2">
 			<div class="h-2 w-2 animate-pulse rounded-full bg-white/80"></div>
 			<span class="text-sm font-semibold text-on-primary">
-				{isReviewGate ? 'Ready — Review & Start' : isPostRip ? 'Ripped — Apply Session' : 'Awaiting Review'}
+				{isReviewGate ? 'Ready: Review & Start' : isPostRip ? 'Ripped: Apply Session' : 'Awaiting Review'}
 			</span>
 		</div>
 		<!-- Timed review gate: cosmetic countdown to auto-start (the ripper owns the
@@ -264,7 +264,7 @@
 				</h3>
 			</div>
 			<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-				<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{driveName ?? displayJob.drive_id}</span>
+				<span class="rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">{driveLabel(displayJob.drive_id, driveNames)}</span>
 				<span class="inline-flex items-center gap-1 rounded-sm bg-primary/10 px-1.5 py-0.5 dark:bg-primary/15">
 					<DiscTypeIcon disctype={displayJob.disc_type} size="h-3.5 w-3.5" />
 					{discTypeLabel(displayJob.disc_type)}

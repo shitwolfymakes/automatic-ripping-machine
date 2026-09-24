@@ -1,4 +1,4 @@
-"""0029_drive_lifecycle: columns for spec §1/§2, rendered offline like test_migration_chain."""
+"""0030_drive_lifecycle: columns for spec §1/§2, rendered offline like test_migration_chain."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from arm_common import Config, Drive  # noqa: E402
 from tests.test_migration_chain import _render_sql  # noqa: E402
 
 _PARENT = "0028_user_role_disabled"
-_REV = "0029_drive_lifecycle"
+_REV = "0030_drive_lifecycle"
 
 _DRIVE_COLS = ("by_id_name", "sysfs_port", "identity_kind", "lifecycle", "present", "vendor", "model", "last_error")
 _CONFIG_COLS = ("drive_scan_interval_seconds", "drive_detected_prune_days")

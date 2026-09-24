@@ -1,16 +1,8 @@
-from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 MetadataProvider = Literal["omdb", "tmdb", "tvdb", "makemkv"]
-
-
-class MetadataKeyTestResponse(BaseModel):
-    provider: MetadataProvider
-    valid: bool | None  # tri-state: True/False, or None = "unknown" (makemkv not-yet-checked / probe failed)
-    detail: str | None = None
-    checked_at: datetime | None = None  # when the makemkv probe last ran; None for live-checked providers
 
 
 class MetadataCandidate(BaseModel):

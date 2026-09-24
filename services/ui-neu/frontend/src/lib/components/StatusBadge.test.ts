@@ -9,7 +9,8 @@ describe('StatusBadge', () => {
 		['ripping', 'Ripping', 'status-active'],
 		['SUCCESS', 'Success', 'status-success'],
 		['copying', 'Copying', 'status-finishing'],
-		['something_new', 'something_new', 'status-unknown']
+		// Unmapped statuses humanize (proper-cased) rather than leaking raw text.
+		['something_new', 'Something New', 'status-unknown']
 	])('renders status=%s as "%s" with class %s', (status, expectedText, expectedClass) => {
 		renderComponent(StatusBadge, { props: { status } });
 		const badge = screen.getByText(expectedText);

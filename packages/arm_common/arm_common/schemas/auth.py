@@ -7,6 +7,7 @@ land in one place.
 """
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -53,6 +54,8 @@ class ConfigView(BaseModel):
     drive_scan_interval_seconds: int
     drive_detected_prune_days: int
     makemkv_sdf_enabled: bool
+    thediscdb_enabled: bool
+    thediscdb_refresh_days: int
     ripping_paused: bool
     hold_for_review: bool
     manual_wait_seconds: int
@@ -80,11 +83,27 @@ class ConfigUpdateRequest(BaseModel):
     drive_scan_interval_seconds: int | None = None
     drive_detected_prune_days: int | None = None
     makemkv_sdf_enabled: bool | None = None
+    thediscdb_enabled: bool | None = None
+    thediscdb_refresh_days: int | None = None
     ripping_paused: bool | None = None
     hold_for_review: bool | None = None
     manual_wait_seconds: int | None = None
     notifications_enabled: bool | None = None
     metadata_provider: str | None = None
+
+
+class KeyCheckRequest(BaseModel):
+    """Body for POST /api/config/keys/{name}/check. `value` is an unsaved
+    candidate key to probe; when omitted (None), the stored key is used."""
+
+    value: str | None = None
+
+
+class KeyCheckResponse(BaseModel):
+    name: str
+    status: Literal["ok", "invalid", "missing", "error", "unknown"]
+    detail: str | None = None
+    checked_at: datetime | None = None
 
 
 class DiagnosticsServiceView(BaseModel):
