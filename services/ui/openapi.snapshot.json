@@ -12778,7 +12778,8 @@
         "required": [
           "title"
         ],
-        "title": "ResolveRequest"
+        "title": "ResolveRequest",
+        "description": "POST /api/jobs/{id}/resolve body.\n\ntitle/year/disc_number/disc_total are the full identity statement: every\nresolve restates them, so there is no \"omitted\" case for these four --\nwhatever value is sent (including null) is exactly what lands.\n\nmedia_type/season are classifications, not part of that statement, and\nfollow different semantics: **omitted = keep** the stored value (a\ntitle-only fix must not wipe them), **explicit null = clear** it (the\noperator saying \"this isn't a season\" / \"clear the kind\"). The same\nomitted=keep / explicit-null=clears rule applies per-field inside\n`external_ids`: sending `external_ids` at all starts an identity edit,\nand each of its member fields (imdb/tmdb/tvdb/musicbrainz_release) that\nis explicitly present -- even as `null` -- clears that one id, while a\nmember field left out of the payload keeps its previously stored value.\nDistinguishing \"sent null\" from \"not sent\" requires Pydantic's\n`model_fields_set`, not an `is not None` check, since both collapse to\nthe same `None` once parsed."
       },
       "ResolveResponse": {
         "properties": {

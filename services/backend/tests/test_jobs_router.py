@@ -754,6 +754,38 @@ def test_resolve_post_rip_correction_preserves_status(signing_key: bytes, status
     assert {"identify.resolved", "rip.identify_resolved"} <= types
 
 
+def test_resolve_ripped_partial_placeholder_clears_unidentified_flag(signing_key: bytes) -> None:
+    """Fix 75-6 regression: resolving a RIPPED_PARTIAL placeholder must clear
+    the spent `unidentified` flag too. RIPPED_PARTIAL stays in the PRESERVE
+    bucket (partiality wins over the placeholder status -- see rip-complete),
+    so before the fix the pop only ran on the PROMOTE branch and a resolved
+    partial placeholder kept flags.unidentified=true forever."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [
+        _job(
+            status=JobStatus.RIPPED_PARTIAL,
+            title="MY_DISC",
+            year=None,
+            meta={"flags": {"unidentified": True}},
+        )
+    ]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Iron Man", "year": 2008},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["job"]["status"] == "ripped_partial"  # status unchanged (PRESERVE)
+    # Cleared per flag_is_set's semantics: the key may still be present as
+    # False (JobMetadata's Flags model default) or absent entirely -- either
+    # way it must no longer read as "set".
+    assert not (body["job"]["metadata_json"].get("flags") or {}).get("unidentified")
+    assert not (db.rows["jobs"][0].metadata_json.get("flags") or {}).get("unidentified")
+
+
 def test_resolve_external_ids_overlay_existing_identity(signing_key: bytes) -> None:
     """req.external_ids overlays the existing identity.external_ids section
     field-by-field, not a wholesale replace: sending only tmdb must not wipe
@@ -782,6 +814,35 @@ def test_resolve_external_ids_overlay_existing_identity(signing_key: bytes) -> N
     assert md["identity"]["external_ids"]["imdb"] == "tt0111161"  # survives the partial update
     assert md["identity"]["provider"] == "tmdb"  # preserved
     assert md["scan_result"]["disc_type"] == "dvd"  # preserved
+
+
+def test_resolve_explicit_null_external_id_clears_it(signing_key: bytes) -> None:
+    """Fix 75-5 regression: sending an external_ids member field as explicit
+    null CLEARS the stored id -- distinct from omitting the field entirely
+    (which keeps it, covered by test_resolve_external_ids_overlay_existing_identity).
+    Before the fix, `is not None` treated "sent null" and "not sent" the
+    same, so an explicit null silently kept the old value instead of
+    clearing it."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [
+        _job(
+            status=JobStatus.IDENTIFIED,
+            meta={
+                "identity": {"provider": "tmdb", "external_ids": {"tmdb": "99", "imdb": "tt0111161"}},
+            },
+        )
+    ]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "T", "external_ids": {"imdb": None}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    md = r.json()["job"]["metadata_json"]
+    assert md["identity"]["external_ids"]["imdb"] is None  # explicit null clears
+    assert md["identity"]["external_ids"]["tmdb"] == "99"  # untouched field survives
 
 
 # --- apply_session exception mapping (happy/collision in test_apply_session) --
@@ -1108,6 +1169,30 @@ def test_resolve_omitting_media_type_and_season_keeps_them(signing_key: bytes) -
     assert r.status_code == 200, r.text
     assert db.rows["jobs"][0].media_type == MediaType.TV
     assert db.rows["jobs"][0].season == 3
+
+
+def test_resolve_explicit_null_media_type_and_season_clears_them(signing_key: bytes) -> None:
+    """Fix 75-5 regression: EXPLICIT null for media_type/season clears the
+    stored value -- distinct from omitting the field, which keeps it
+    (test_resolve_omitting_media_type_and_season_keeps_them above). Before
+    the fix, `req.media_type is not None` couldn't distinguish "sent null"
+    from "not sent", so an explicit null silently no-opped instead of
+    clearing."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _job(status=JobStatus.AWAITING_USER_ID, meta={})
+    job.media_type = MediaType.TV
+    job.season = 3
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "The West Wing (fixed)", "media_type": None, "season": None},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert db.rows["jobs"][0].media_type is None
+    assert db.rows["jobs"][0].season is None
 
 
 def test_resolve_season_first_class_field_used_directly(signing_key: bytes) -> None:

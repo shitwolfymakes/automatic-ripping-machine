@@ -2638,6 +2638,25 @@ export type ResolveFanOutOutcomeView = {
 
 /**
  * ResolveRequest
+ *
+ * POST /api/jobs/{id}/resolve body.
+ *
+ * title/year/disc_number/disc_total are the full identity statement: every
+ * resolve restates them, so there is no "omitted" case for these four --
+ * whatever value is sent (including null) is exactly what lands.
+ *
+ * media_type/season are classifications, not part of that statement, and
+ * follow different semantics: **omitted = keep** the stored value (a
+ * title-only fix must not wipe them), **explicit null = clear** it (the
+ * operator saying "this isn't a season" / "clear the kind"). The same
+ * omitted=keep / explicit-null=clears rule applies per-field inside
+ * `external_ids`: sending `external_ids` at all starts an identity edit,
+ * and each of its member fields (imdb/tmdb/tvdb/musicbrainz_release) that
+ * is explicitly present -- even as `null` -- clears that one id, while a
+ * member field left out of the payload keeps its previously stored value.
+ * Distinguishing "sent null" from "not sent" requires Pydantic's
+ * `model_fields_set`, not an `is not None` check, since both collapse to
+ * the same `None` once parsed.
  */
 export type ResolveRequest = {
     /**
