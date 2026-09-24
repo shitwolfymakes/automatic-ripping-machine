@@ -1711,6 +1711,45 @@ def test_rip_start_uses_pending_session_rip_preset() -> None:
     assert r.json()["rip_preset_id"] == "rpr_session"
 
 
+def test_rip_start_resolves_routed_session_exactly_once() -> None:
+    """Fix 75-8 regression: rip-start must resolve the routed session ONE
+    time per request (preset choice + min-length override both derive from
+    that single resolution), not once per consumer. Before the fix,
+    resolve_rip_preset_id_for_job, resolve_rip_preset_for_job, and
+    _resolve_min_length_override each independently called
+    resolve_routed_session_id (and re-queried the Session row) -- up to
+    three redundant resolutions for a single rip-start on the no-existing-
+    tracks path."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [_drive()]
+    routed_job = _job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict()})
+    routed_job.pending_session_id = "ses_r"
+    db.rows["jobs"] = [routed_job]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row()]
+    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session")]
+    new = [_track("trk_new", status=TrackStatus.QUEUED)]
+
+    calls: list[str] = []
+    orig = ripper_router.resolve_routed_session_id
+
+    async def _counting(db_arg: Any, job_arg: Any) -> Any:
+        calls.append(job_arg.id)
+        return await orig(db_arg, job_arg)
+
+    ripper_router.resolve_routed_session_id = _counting  # type: ignore[assignment]
+    try:
+        with TestClient(_make_app(db)) as client, _patch_select_tracks(new):
+            r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    finally:
+        ripper_router.resolve_routed_session_id = orig  # type: ignore[assignment]
+
+    assert r.status_code == 200, r.text
+    assert r.json()["rip_preset_id"] == "rpr_session"
+    assert len(calls) == 1  # exactly one resolution for the whole request
+
+
 def test_rip_start_uses_drive_default_session_preset_without_auto_flag() -> None:
     """Routing ignores auto_transcode_on_idle: the drive default shapes the
     rip even when unattended transcoding is off (§5.1)."""
