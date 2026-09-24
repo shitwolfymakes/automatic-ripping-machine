@@ -503,6 +503,17 @@ async def identify(
                 logger.warning("thediscdb: lookup failed job_id=%s: %s", job.id, e)
                 thediscdb_match = None
 
+    # Fix 75-1: pending_session_id must land BEFORE anything below that resolves
+    # the job's rip preset — _persist_review_tracks (hold_for_review branch)
+    # resolves via resolve_rip_preset_for_job -> resolve_routed_session_id, which
+    # reads this column. Assigning it after (as before) meant a manual-trigger
+    # rip with an explicit session and hold_for_review on would persist review
+    # tracks chosen by the drive/disc-type default preset instead of the routed
+    # session's preset — the exact held-vs-unattended divergence
+    # resolve_rip_preset_id_for_job's docstring promises never happens.
+    if req.pending_session_id is not None:
+        job.pending_session_id = req.pending_session_id
+
     if already_identified:
         # Guard 1: preserve existing identity — do not re-run the dispatcher or
         # overwrite title/year/poster/metadata set by the previous identify run.
@@ -575,8 +586,6 @@ async def identify(
         **(job.metadata_json or {}),
         "scan_result": scan.model_dump(mode="json"),
     }
-    if req.pending_session_id is not None:
-        job.pending_session_id = req.pending_session_id
 
     await session.commit()
     await session.refresh(job)

@@ -439,6 +439,69 @@ def test_identify_with_hold_parks_review(signing_key: bytes) -> None:
     assert by_ref["2"].excluded is True  # short extra excluded by default
 
 
+def test_identify_hold_with_pending_session_uses_routed_preset() -> None:
+    """Fix 75-1 regression: a manual trigger (explicit session_id) with
+    hold_for_review on must persist review tracks chosen by the ROUTED
+    session's rip preset, not the drive/disc-type default. Before the fix,
+    pending_session_id was assigned AFTER _persist_review_tracks ran, so
+    resolve_rip_preset_for_job always fell back to the disc-type default
+    (ALL_TRACKS here) instead of the routed session's MAIN_FEATURE preset —
+    the held and unattended track sets diverged.
+    """
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(hold_for_review=True)]
+    # Disc-type default is the ALL_TRACKS builtin; the routed session instead
+    # points at a MAIN_FEATURE preset — the two must select different track
+    # sets for the same scan so the test can tell which one actually ran.
+    db.rows["rip_presets"] = [
+        _movie_preset(),  # rpr_builtin_movie_archive, ALL_TRACKS (the WRONG default)
+        RipPreset(
+            id="rpr_main_feature",
+            name="Main feature only",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            track_selection=TrackSelection.MAIN_FEATURE,
+            identification_mode=IdentificationMode.SKIP,
+            output_mode=OutputMode.TRACKS,
+        ),
+    ]
+    db.rows["sessions"] = [
+        Session(
+            id="ses_routed",
+            name="Main feature session",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_main_feature",
+            output_path_template="{title}/{title}.mkv",
+        )
+    ]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    scan = _scan_dict()
+    # Two long-enough titles: ALL_TRACKS keeps both; MAIN_FEATURE keeps only
+    # the longer one.
+    scan["titles"] = [
+        {"index": 1, "duration_seconds": 4200},
+        {"index": 2, "duration_seconds": 3000},
+    ]
+    body = {"drive_id": "drv_x", "scan_result": scan, "pending_session_id": "ses_routed"}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["status"] == "awaiting_review"
+
+    # select_tracks_for_review persists every title (review UI shows the full
+    # list) but marks non-selected ones excluded=True using whichever preset
+    # resolved. MAIN_FEATURE keeps only the longer title; ALL_TRACKS (the
+    # WRONG pre-fix default) would keep both. This is the signal the pre-fix
+    # code gets wrong.
+    tracks = [row for row in db.added if type(row).__name__ == "Track"]
+    by_ref = {t.source_ref: t for t in tracks}
+    assert by_ref["1"].excluded is False  # the longer title: MAIN_FEATURE keeps it
+    assert by_ref["2"].excluded is True  # MAIN_FEATURE drops it; ALL_TRACKS would keep it
+
+
 async def test_persist_review_tracks_is_idempotent() -> None:
     """Idempotency (audit M1): a title whose Track row already exists (ripper
     re-POSTed identify on the same held disc) is NOT re-inserted."""
