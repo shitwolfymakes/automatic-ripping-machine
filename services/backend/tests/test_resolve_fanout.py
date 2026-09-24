@@ -441,6 +441,43 @@ def test_resolve_fan_out_session_missing_returns_outcome(signing_key: bytes, tmp
     assert "ses_x" in (out["error_detail"] or "")
 
 
+def test_resolve_media_mismatch_keeps_application_parked(signing_key: bytes, tmp_path: Path) -> None:
+    """G-04: resolve sets `job.media_type` from the identify call, then
+    drains parked applications. A session applied before identity was known
+    (e.g. a movie session routed to what turns out to be a music CD) must
+    stay parked with `skipped_reason='media_mismatch'` instead of fanning
+    out a movie transcode against a music job."""
+    db = FakeSession()
+    hub = _CapturingHub()
+    _seed(db)
+    db.rows["sessions"][0].media_type = MediaType.MOVIE
+    app, token = _make_app(signing_key, db, tmp_path, hub)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Various Artists", "year": 2008, "media_type": "music"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["job"]["media_type"] == "music"
+
+    assert len(body["fan_out"]) == 1
+    out = body["fan_out"][0]
+    assert out["session_application_id"] == "sap_x"
+    assert out["status"] == "waiting_identify"
+    assert out["task_count"] == 0
+    assert out["skipped_reason"] == "media_mismatch"
+    assert out["error_detail"] is not None
+    assert "movie" in out["error_detail"]
+    assert "music" in out["error_detail"]
+
+    app_row = next(a for a in db.rows["session_applications"] if a.id == "sap_x")
+    assert app_row.status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
+    assert not any(e["event_type"] == "session.queued" for e in hub.events)
+
+
 def test_resolve_fan_out_session_without_transcode_preset(signing_key: bytes, tmp_path: Path) -> None:
     """A session with `transcode_preset_id=None` (rip-only, no transcode
     pass) is a real production case — the fan-out must promote it without

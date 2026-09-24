@@ -239,6 +239,10 @@ export type CollisionInfo = {
      * Reason
      */
     reason: 'existing_task' | 'on_disk' | 'duplicate_in_request';
+    /**
+     * Existing Job Id
+     */
+    existing_job_id?: string | null;
 };
 
 /**
@@ -2629,7 +2633,7 @@ export type ResolveFanOutOutcomeView = {
     /**
      * Skipped Reason
      */
-    skipped_reason?: 'collisions' | 'template' | 'session_missing' | 'no_tracks' | 'no_outputs' | null;
+    skipped_reason?: 'collisions' | 'template' | 'session_missing' | 'no_tracks' | 'no_outputs' | 'media_mismatch' | null;
     /**
      * Error Detail
      */
@@ -3062,6 +3066,42 @@ export type SessionCreateRequest = {
     overrides_json?: {
         [key: string]: unknown;
     } | null;
+};
+
+/**
+ * SessionRouteUpsert
+ */
+export type SessionRouteUpsert = {
+    media_type: MediaType;
+    disc_type?: DiscType | null;
+    /**
+     * Session Id
+     */
+    session_id: string;
+};
+
+/**
+ * SessionRouteView
+ */
+export type SessionRouteView = {
+    /**
+     * Id
+     */
+    id: string;
+    media_type: MediaType;
+    disc_type: DiscType | null;
+    /**
+     * Session Id
+     */
+    session_id: string;
+    /**
+     * Created At
+     */
+    created_at: string | null;
+    /**
+     * Updated At
+     */
+    updated_at: string | null;
 };
 
 /**
@@ -5607,6 +5647,106 @@ export type PreviewTemplateApiSessionsPreviewPostResponses = {
 };
 
 export type PreviewTemplateApiSessionsPreviewPostResponse = PreviewTemplateApiSessionsPreviewPostResponses[keyof PreviewTemplateApiSessionsPreviewPostResponses];
+
+export type ListSessionRoutesApiSessionRoutesGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/session-routes';
+};
+
+export type ListSessionRoutesApiSessionRoutesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListSessionRoutesApiSessionRoutesGetError = ListSessionRoutesApiSessionRoutesGetErrors[keyof ListSessionRoutesApiSessionRoutesGetErrors];
+
+export type ListSessionRoutesApiSessionRoutesGetResponses = {
+    /**
+     * Response List Session Routes Api Session Routes Get
+     *
+     * Successful Response
+     */
+    200: Array<SessionRouteView>;
+};
+
+export type ListSessionRoutesApiSessionRoutesGetResponse = ListSessionRoutesApiSessionRoutesGetResponses[keyof ListSessionRoutesApiSessionRoutesGetResponses];
+
+export type UpsertSessionRouteApiSessionRoutesPutData = {
+    body: SessionRouteUpsert;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/session-routes';
+};
+
+export type UpsertSessionRouteApiSessionRoutesPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpsertSessionRouteApiSessionRoutesPutError = UpsertSessionRouteApiSessionRoutesPutErrors[keyof UpsertSessionRouteApiSessionRoutesPutErrors];
+
+export type UpsertSessionRouteApiSessionRoutesPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: SessionRouteView;
+};
+
+export type UpsertSessionRouteApiSessionRoutesPutResponse = UpsertSessionRouteApiSessionRoutesPutResponses[keyof UpsertSessionRouteApiSessionRoutesPutResponses];
+
+export type DeleteSessionRouteApiSessionRoutesRouteIdDeleteData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Route Id
+         */
+        route_id: string;
+    };
+    query?: never;
+    url: '/api/session-routes/{route_id}';
+};
+
+export type DeleteSessionRouteApiSessionRoutesRouteIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteSessionRouteApiSessionRoutesRouteIdDeleteError = DeleteSessionRouteApiSessionRoutesRouteIdDeleteErrors[keyof DeleteSessionRouteApiSessionRoutesRouteIdDeleteErrors];
+
+export type DeleteSessionRouteApiSessionRoutesRouteIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteSessionRouteApiSessionRoutesRouteIdDeleteResponse = DeleteSessionRouteApiSessionRoutesRouteIdDeleteResponses[keyof DeleteSessionRouteApiSessionRoutesRouteIdDeleteResponses];
 
 export type ListRipPresetsApiRipPresetsGetData = {
     body?: never;

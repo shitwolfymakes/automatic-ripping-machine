@@ -66,8 +66,9 @@ async def job_naming_preview(
         if sess is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown session_id: {session_id}")
     else:
-        # The ROUTED session (pending_session_id, else the drive default) — via
-        # the shared auto_session helper so previews cannot drift from apply.
+        # The ROUTED session (pending_session_id, else the compatibility-gated
+        # drive default, else a session_routes match) - via the shared
+        # auto_session helper so previews cannot drift from apply.
         # auto_transcode_on_idle deliberately does not gate the preview: it only
         # gates unattended queueing at rip-complete (gap analysis §5.1).
         effective: str | None = await resolve_routed_session_id(db, job)

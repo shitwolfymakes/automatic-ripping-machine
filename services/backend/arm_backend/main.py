@@ -44,6 +44,7 @@ from arm_backend.routers import (
     notifications as notifications_router,
     rip_presets,
     ripper,
+    session_routes,
     sessions,
     settings as settings_router,
     system as system_router,
@@ -197,7 +198,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception as exc:  # pragma: no cover — startup-degradation guard; sweep failing is real-DB-only
         logger.exception("startup crash-recovery sweep failed: %s", exc)
 
-    docker_client = _build_docker_client(settings.ARM_TRANSCODE_DOCKER_HOST)
+    def _make_docker_client() -> object | None:
+        return _build_docker_client(settings.ARM_TRANSCODE_DOCKER_HOST)
+
+    docker_client = _make_docker_client()
     transcode_dispatcher: TranscodeDispatcher | None = None
     dispatcher_task: asyncio.Task[None] | None = None
     if docker_client is not None:  # pragma: no cover — needs a real docker socket; integration tier, not the SQLite e2e
@@ -206,6 +210,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             db_factory=SessionLocal,
             docker_client=docker_client,
             hub=app.state.ws_hub,
+            docker_client_factory=_make_docker_client,
         )
         # One-shot orphan sweep before the dispatcher loop starts.
         try:
@@ -326,6 +331,7 @@ app.include_router(ripper.router)
 app.include_router(jobs.router)
 app.include_router(drives.router)
 app.include_router(sessions.router)
+app.include_router(session_routes.router)
 app.include_router(rip_presets.router)
 app.include_router(transcode_presets.router)
 app.include_router(transcoder.router)

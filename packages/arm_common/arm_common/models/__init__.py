@@ -10,6 +10,7 @@ from arm_common.models.notification_inbox import NotificationInbox
 from arm_common.models.rip_preset import RipPreset
 from arm_common.models.session import Session
 from arm_common.models.session_application import SessionApplication
+from arm_common.models.session_route import SessionRoute
 from arm_common.models.track import Track
 from arm_common.models.transcode_preset import TranscodePreset
 from arm_common.models.transcode_task import TranscodeTask
@@ -31,6 +32,7 @@ __all__ = [
     "RipPreset",
     "Session",
     "SessionApplication",
+    "SessionRoute",
     "Track",
     "TranscodePreset",
     "TranscodeTask",
