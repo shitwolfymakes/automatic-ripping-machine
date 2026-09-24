@@ -1628,7 +1628,8 @@ export type MakemkvSdfState = 'updated' | 'fresh_kept' | 'disabled' | 'download_
  * POST /api/jobs/manual — kick off a rip on a drive that already has a
  * disc in the tray. The ripper picks it up via WS command and runs the
  * normal scan→identify→rip flow; the optional `session_id` is stamped on
- * the resulting Job's metadata so `rip-complete` auto-applies it.
+ * the resulting Job's `pending_session_id` column so `rip-complete`
+ * auto-applies it.
  */
 export type ManualTriggerRequest = {
     /**

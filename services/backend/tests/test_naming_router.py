@@ -698,7 +698,6 @@ def test_preview_falls_back_to_drive_default_session(signing_key: bytes) -> None
     assert r.json()["items"]
 
 
-
 def test_preview_orders_items_by_track_index(signing_key: bytes) -> None:
     """Items must come back in track-index order (the apply path's order),
     not DB insertion order."""
