@@ -4,8 +4,8 @@ Green-field: no backfill. Rows that predate this revision take the
 server defaults (lifecycle=enrolled, present=true) — see the plan's
 "Transitional state" note.
 
-Revision ID: 0029_drive_lifecycle
-Revises: 0028_user_role_disabled
+Revision ID: 0030_drive_lifecycle
+Revises: 0029_thediscdb
 Create Date: 2026-09-04
 """
 
@@ -14,8 +14,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0029_drive_lifecycle"
-down_revision: Union[str, None] = "0028_user_role_disabled"
+revision: str = "0030_drive_lifecycle"
+down_revision: Union[str, None] = "0029_thediscdb"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
