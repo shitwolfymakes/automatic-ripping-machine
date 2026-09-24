@@ -526,8 +526,18 @@ async def after_rip(db: AsyncSession, job: Job, hub: WSHub) -> list[ResolveFanOu
     already identified, and `resolve` when a `ripped_awaiting_identify`
     placeholder gains its identity. Never raises; returns the drain's
     outcomes so resolve can report them.
+
+    Fix 75-4: if the drain promoted at least one parked application to
+    QUEUED-with-tasks, that IS the operator's explicit choice winning — skip
+    the drive-default auto-apply entirely rather than also queueing it
+    alongside. Without this, a disc with both a parked session (explicit,
+    pre-rip apply) and a drive default (auto_transcode_on_idle) would fan
+    out tasks for both, even though a promoted parked application already
+    represents a deliberate operator decision for this disc.
     """
     outcomes = await drain_parked_applications_after_rip(db, job, hub)
+    if any(outcome.skipped_reason is None for outcome in outcomes):
+        return outcomes
     await maybe_auto_apply_session(db, job, hub)
     return outcomes
 
