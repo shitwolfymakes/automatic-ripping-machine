@@ -8,6 +8,7 @@ docs/arch/06-deployment.md), no rippers registered yet, a missing config
 row. The ported UI's settings System-Health panel and first-run wizard
 render it (Tier-12)."""
 
+import asyncio
 import functools
 import importlib.metadata
 import logging
@@ -156,8 +157,29 @@ async def diagnostics(
     elif not dispatcher.host_paths_set():
         tc_status, tc_detail = "warning", "transcoder disabled: ARM_HOST_*_PATH not set"
     else:
-        tc_status, tc_detail = "ok", None
+        # probe() pings a possibly-remote ssh docker host; run it off the
+        # event loop so a slow/unreachable host doesn't block the server.
+        ok, detail = await asyncio.to_thread(dispatcher.probe)
+        if not ok:
+            tc_status, tc_detail = "warning", detail
+        elif dispatcher.last_spawn_error:
+            tc_status, tc_detail = "warning", f"last spawn failed: {dispatcher.last_spawn_error}"
+        else:
+            tc_status, tc_detail = "ok", None
     checks.append(SystemDiagnosticCheck(name="transcoder", status=tc_status, detail=tc_detail))
+
+    manager = getattr(request.app.state, "ripper_manager", None)
+    if manager is None:
+        rm_status, rm_detail = "warning", "ripper manager disabled: docker socket unavailable"
+    elif not manager.host_paths_set():
+        rm_status, rm_detail = "warning", "ripper manager disabled: ARM_HOST_*_PATH not set"
+    else:
+        ok, detail = await asyncio.to_thread(manager.probe)
+        if not ok:
+            rm_status, rm_detail = "warning", detail
+        else:
+            rm_status, rm_detail = "ok", None
+    checks.append(SystemDiagnosticCheck(name="ripper_manager", status=rm_status, detail=rm_detail))
 
     overall = "ok"
     for ch in checks:

@@ -6,6 +6,8 @@ from arm_common.logging import (
 from arm_common.enums import (
     ContainerFormat,
     DiscType,
+    DriveIdentityKind,
+    DriveLifecycle,
     DriveMediaStatus,
     DriveMode,
     DriveStatus,
@@ -60,6 +62,8 @@ __all__ = [
     "DiscFingerprint",
     "DiscType",
     "Drive",
+    "DriveIdentityKind",
+    "DriveLifecycle",
     "DriveMediaStatus",
     "DriveMode",
     "DriveStatus",
