@@ -27,8 +27,8 @@ future write path could bypass.
 
 Downgrade drops the table.
 
-Revision ID: 0033_session_routes
-Revises: 0032_drop_metadata_mirrors
+Revision ID: 0034_session_routes
+Revises: 0033_drop_metadata_mirrors
 Create Date: 2026-09-22
 
 """
@@ -38,8 +38,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0033_session_routes"
-down_revision: Union[str, None] = "0032_drop_metadata_mirrors"
+revision: str = "0034_session_routes"
+down_revision: Union[str, None] = "0033_drop_metadata_mirrors"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

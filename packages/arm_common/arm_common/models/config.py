@@ -94,7 +94,7 @@ class Config(SQLModel, table=True):
     # is false AND the table is empty; seeding then flips it true. Without
     # this, "seed when table empty" would silently resurrect a route a user
     # deliberately deleted on every backend restart. See migration
-    # 0034_session_routes_seed_marker for why it defaults true on any
+    # 0035_session_routes_seed_marker for why it defaults true on any
     # already-deployed Postgres DB.
     session_routes_seeded: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
     updated_by_user_id: str | None = Field(

@@ -31,8 +31,8 @@ seeder still runs once, normally.
 Downgrade drops the column (a rerun of the seeder next boot returns to the
 old empty-table-gate behavior).
 
-Revision ID: 0034_session_routes_seed_marker
-Revises: 0033_session_routes
+Revision ID: 0035_session_routes_seed_marker
+Revises: 0034_session_routes
 Create Date: 2026-09-23
 
 """
@@ -42,8 +42,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0034_session_routes_seed_marker"
-down_revision: Union[str, None] = "0033_session_routes"
+revision: str = "0035_session_routes_seed_marker"
+down_revision: Union[str, None] = "0034_session_routes"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
