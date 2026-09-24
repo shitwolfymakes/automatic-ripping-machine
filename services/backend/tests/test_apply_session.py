@@ -383,8 +383,20 @@ def test_apply_collision_409_lists_paths(signing_key: bytes, tmp_path: Path) -> 
 
 
 def test_apply_overwrite_true_clears_collision(signing_key: bytes, tmp_path: Path) -> None:
+    """overwrite=True clears a collision owned by THIS job (a prior
+    session_application for job_01JZXR7K3M5Q8N4VWA00000001) — the
+    same-job case licensed for eviction."""
     db = FakeSession()
     _seed(db)
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_other",
+            session_id="ses_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
+            status=SessionApplicationStatus.DONE,
+            overwrite=False,
+        )
+    ]
     db.rows["transcode_tasks"] = [
         TranscodeTask(
             id="txt_other",
@@ -403,6 +415,33 @@ def test_apply_overwrite_true_clears_collision(signing_key: bytes, tmp_path: Pat
         )
     assert r.status_code == 200
     assert r.json()["session_application"]["overwrite"] is True
+
+
+def test_apply_overwrite_true_unowned_task_still_409s(signing_key: bytes, tmp_path: Path) -> None:
+    """Fix 76-5: overwrite=True must NOT clear a collision whose owning
+    session_application is missing (existing_job_id can't be resolved) —
+    an unowned task is treated as cross-job, always reported, never
+    evicted, even under overwrite."""
+    db = FakeSession()
+    _seed(db)
+    db.rows["transcode_tasks"] = [
+        TranscodeTask(
+            id="txt_other",
+            session_application_id="sap_missing",  # no matching session_applications row
+            source_track_id="trk_other",
+            status=TranscodeTaskStatus.QUEUED,
+            output_path="Iron Man (2008)/Iron Man - plex-1080p-h-265.mkv",
+        )
+    ]
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x", "overwrite": True},
+            headers=_auth(token),
+        )
+    assert r.status_code == 409
+    assert r.json()["detail"]["collisions"][0]["existing_task_id"] == "txt_other"
 
 
 def test_apply_filesystem_collision_detected(signing_key: bytes, tmp_path: Path) -> None:
