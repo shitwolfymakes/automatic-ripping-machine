@@ -439,6 +439,69 @@ def test_identify_with_hold_parks_review(signing_key: bytes) -> None:
     assert by_ref["2"].excluded is True  # short extra excluded by default
 
 
+def test_identify_hold_with_pending_session_uses_routed_preset() -> None:
+    """Fix 75-1 regression: a manual trigger (explicit session_id) with
+    hold_for_review on must persist review tracks chosen by the ROUTED
+    session's rip preset, not the drive/disc-type default. Before the fix,
+    pending_session_id was assigned AFTER _persist_review_tracks ran, so
+    resolve_rip_preset_for_job always fell back to the disc-type default
+    (ALL_TRACKS here) instead of the routed session's MAIN_FEATURE preset —
+    the held and unattended track sets diverged.
+    """
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(hold_for_review=True)]
+    # Disc-type default is the ALL_TRACKS builtin; the routed session instead
+    # points at a MAIN_FEATURE preset — the two must select different track
+    # sets for the same scan so the test can tell which one actually ran.
+    db.rows["rip_presets"] = [
+        _movie_preset(),  # rpr_builtin_movie_archive, ALL_TRACKS (the WRONG default)
+        RipPreset(
+            id="rpr_main_feature",
+            name="Main feature only",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            track_selection=TrackSelection.MAIN_FEATURE,
+            identification_mode=IdentificationMode.SKIP,
+            output_mode=OutputMode.TRACKS,
+        ),
+    ]
+    db.rows["sessions"] = [
+        Session(
+            id="ses_routed",
+            name="Main feature session",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_main_feature",
+            output_path_template="{title}/{title}.mkv",
+        )
+    ]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    scan = _scan_dict()
+    # Two long-enough titles: ALL_TRACKS keeps both; MAIN_FEATURE keeps only
+    # the longer one.
+    scan["titles"] = [
+        {"index": 1, "duration_seconds": 4200},
+        {"index": 2, "duration_seconds": 3000},
+    ]
+    body = {"drive_id": "drv_x", "scan_result": scan, "pending_session_id": "ses_routed"}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["status"] == "awaiting_review"
+
+    # select_tracks_for_review persists every title (review UI shows the full
+    # list) but marks non-selected ones excluded=True using whichever preset
+    # resolved. MAIN_FEATURE keeps only the longer title; ALL_TRACKS (the
+    # WRONG pre-fix default) would keep both. This is the signal the pre-fix
+    # code gets wrong.
+    tracks = [row for row in db.added if type(row).__name__ == "Track"]
+    by_ref = {t.source_ref: t for t in tracks}
+    assert by_ref["1"].excluded is False  # the longer title: MAIN_FEATURE keeps it
+    assert by_ref["2"].excluded is True  # MAIN_FEATURE drops it; ALL_TRACKS would keep it
+
+
 async def test_persist_review_tracks_is_idempotent() -> None:
     """Idempotency (audit M1): a title whose Track row already exists (ripper
     re-POSTed identify on the same held disc) is NOT re-inserted."""
@@ -1648,6 +1711,45 @@ def test_rip_start_uses_pending_session_rip_preset() -> None:
     assert r.json()["rip_preset_id"] == "rpr_session"
 
 
+def test_rip_start_resolves_routed_session_exactly_once() -> None:
+    """Fix 75-8 regression: rip-start must resolve the routed session ONE
+    time per request (preset choice + min-length override both derive from
+    that single resolution), not once per consumer. Before the fix,
+    resolve_rip_preset_id_for_job, resolve_rip_preset_for_job, and
+    _resolve_min_length_override each independently called
+    resolve_routed_session_id (and re-queried the Session row) -- up to
+    three redundant resolutions for a single rip-start on the no-existing-
+    tracks path."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [_drive()]
+    routed_job = _job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict()})
+    routed_job.pending_session_id = "ses_r"
+    db.rows["jobs"] = [routed_job]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row()]
+    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session")]
+    new = [_track("trk_new", status=TrackStatus.QUEUED)]
+
+    calls: list[str] = []
+    orig = ripper_router.resolve_routed_session_id
+
+    async def _counting(db_arg: Any, job_arg: Any) -> Any:
+        calls.append(job_arg.id)
+        return await orig(db_arg, job_arg)
+
+    ripper_router.resolve_routed_session_id = _counting  # type: ignore[assignment]
+    try:
+        with TestClient(_make_app(db)) as client, _patch_select_tracks(new):
+            r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    finally:
+        ripper_router.resolve_routed_session_id = orig  # type: ignore[assignment]
+
+    assert r.status_code == 200, r.text
+    assert r.json()["rip_preset_id"] == "rpr_session"
+    assert len(calls) == 1  # exactly one resolution for the whole request
+
+
 def test_rip_start_uses_drive_default_session_preset_without_auto_flag() -> None:
     """Routing ignores auto_transcode_on_idle: the drive default shapes the
     rip even when unattended transcoding is off (§5.1)."""
@@ -1749,6 +1851,44 @@ def test_rip_complete_partial_unidentified_stays_ripped_partial(
     r = _rip_complete(db, _Hub(), monkeypatch)
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "ripped_partial"
+
+
+def test_rip_complete_partial_unidentified_does_not_run_after_rip(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Fix 75-3 regression: a RIPPED_PARTIAL placeholder (identify missed,
+    block_on_miss=false) must NOT run after_rip. Before the fix the
+    unidentified-flag gate only covered the failed==0 (RIPPED) branch, so a
+    partial placeholder fell through unconditionally and fanned out
+    transcodes with paths built from the raw volume label under the wrong
+    identity. Status handling is unchanged (still RIPPED_PARTIAL); the
+    parked application must stay parked and drain normally once resolve
+    supplies the real identity."""
+    from arm_backend import config as bcfg
+
+    bcfg.settings.MEDIA_ROOT = str(tmp_path)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"unidentified": True})]
+    db.rows["drives"] = [_drive()]
+    failed_track = _track("t2", status=TrackStatus.FAILED, index=2)
+    # Excluded from transcode-output resolution (compute_outputs skips
+    # excluded tracks) so it can't collide on output_path with t1's -- the
+    # movie template doesn't key on track index, only the failed COUNT
+    # matters for RIPPED_PARTIAL here, not which tracks fan out.
+    failed_track.excluded = True
+    db.rows["tracks"] = [
+        _track("t1", status=TrackStatus.DONE, index=1),
+        failed_track,
+    ]
+    _seed_parked_session(db)
+    hub = _Hub()
+    r = _rip_complete(db, hub, monkeypatch)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ripped_partial"
+    # No fan-out, no auto-apply: the parked application is untouched.
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
+    assert not any(e["event_type"] == "session.queued" for e in hub.events)
 
 
 # --- identify records the identified kind + pending session (step 2 / G-03) --

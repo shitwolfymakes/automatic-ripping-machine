@@ -16,6 +16,26 @@ from arm_common.schemas.job_metadata import ExternalIds, JobMetadata, MusicMeta
 
 
 class ResolveRequest(BaseModel):
+    """POST /api/jobs/{id}/resolve body.
+
+    title/year/disc_number/disc_total are the full identity statement: every
+    resolve restates them, so there is no "omitted" case for these four --
+    whatever value is sent (including null) is exactly what lands.
+
+    media_type/season are classifications, not part of that statement, and
+    follow different semantics: **omitted = keep** the stored value (a
+    title-only fix must not wipe them), **explicit null = clear** it (the
+    operator saying "this isn't a season" / "clear the kind"). The same
+    omitted=keep / explicit-null=clears rule applies per-field inside
+    `external_ids`: sending `external_ids` at all starts an identity edit,
+    and each of its member fields (imdb/tmdb/tvdb/musicbrainz_release) that
+    is explicitly present -- even as `null` -- clears that one id, while a
+    member field left out of the payload keeps its previously stored value.
+    Distinguishing "sent null" from "not sent" requires Pydantic's
+    `model_fields_set`, not an `is not None` check, since both collapse to
+    the same `None` once parsed.
+    """
+
     # Unknown keys are a caller bug: the free-form metadata bag is gone (G-03/§3.4).
     model_config = ConfigDict(extra="forbid")
 
@@ -23,8 +43,6 @@ class ResolveRequest(BaseModel):
     year: int | None = None
     disc_number: int | None = None
     disc_total: int | None = None
-    # Classifications, not part of the identity statement: omitted = keep.
-    # (title/year/disc_number/total are the full statement — omitted clears.)
     media_type: MediaType | None = None
     season: int | None = None
     # Typed replacements for the last free-form uses.
@@ -265,7 +283,18 @@ class RipStartResponse(BaseModel):
 # The one definition of apply/fan-out skip reasons — the backend engine
 # (arm_backend.auto_session) imports this rather than re-declaring it, so the
 # wire schema and the engine can never drift.
-ApplySkippedReason = Literal["collisions", "template", "session_missing", "no_tracks", "media_mismatch"]
+#
+# "no_tracks" — no Track rows exist yet (pre-rip-start apply); fans out once
+# rip-complete/resolve drains it. "no_outputs" (Fix 75-7) — Track rows DO
+# exist but none qualify for this session's media_type/exclusion, so
+# compute_outputs legitimately resolves zero paths; re-applying after the
+# rip won't change that outcome the way "no_tracks" implies it will.
+# "media_mismatch" — the session's media_type is incompatible with the
+# job's drive/disc-type routing (see `_media_types_compatible`); fanning
+# out would apply the wrong session to the wrong kind of disc.
+ApplySkippedReason = Literal[
+    "collisions", "template", "session_missing", "no_tracks", "no_outputs", "media_mismatch"
+]
 
 
 class ResolveFanOutOutcomeView(BaseModel):
