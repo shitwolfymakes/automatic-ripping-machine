@@ -22,8 +22,10 @@
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import JsonTree from '$lib/components/JsonTree.svelte';
+	import JobLogPanel from '$lib/components/JobLogPanel.svelte';
 	import { startRipperEvents, onRipperEvent } from '$lib/stores/ripperEvents.svelte';
 	import { isAdmin } from '$lib/stores/auth';
+	import { dashboard } from '$lib/stores/dashboard';
 
 	let detail = $state<JobDetailView | null>(null);
 	let jobLoading = $state(true);
@@ -92,7 +94,7 @@
 
 	let isCdDisc = $derived(detail?.job.disc_type === 'cd');
 
-	let metadataFields = $derived(detail ? buildMetadataFields(detail.job) : []);
+	let metadataFields = $derived(detail ? buildMetadataFields(detail.job, $dashboard.drive_names) : []);
 	let musicTracks = $derived(detail ? extractMusicTracks(detail.job.metadata_json) : []);
 	let tracksAreSeries = $derived(
 		(detail?.tracks ?? []).some((t) => t.video_type === 'series' || t.episode_number != null)
@@ -420,7 +422,7 @@
 													<span class="ml-1.5 text-xs text-gray-500 dark:text-gray-400">{track.episode_name}</span>
 												{/if}
 											{:else}
-												<span class="text-gray-400">—</span>
+												<span class="text-gray-400">-</span>
 											{/if}
 										</td>
 									{/if}
@@ -431,7 +433,7 @@
 												<span class="ml-1 rounded-sm bg-amber-100 px-1 py-0.5 text-[9px] font-semibold uppercase text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">custom</span>
 											{/if}
 										{:else}
-											<span class="text-gray-400">{track.excluded ? 'excluded' : '—'}</span>
+											<span class="text-gray-400">{track.excluded ? 'excluded' : '-'}</span>
 										{/if}
 									</td>
 									<td class="px-4 py-3" data-label="Length">
@@ -439,7 +441,7 @@
 											{formatDuration(track.duration_seconds)}
 										{:else if track.expected_duration_seconds != null}
 											<span class="text-gray-400">~{formatDuration(track.expected_duration_seconds)}</span>
-										{:else}—{/if}
+										{:else}-{/if}
 									</td>
 									<td class="px-4 py-3 text-gray-700 dark:text-gray-300" data-label="Size">{trackSizeLabel(track)}</td>
 									<td class="px-4 py-3" data-label="Include">
@@ -460,7 +462,7 @@
 										<span class="flex items-center gap-1">
 											<StatusBadge status={track.status} />
 											{#if track.attempts > 1}
-												<span class="text-[10px] text-gray-400" title="Rip attempts">×{track.attempts}</span>
+												<span class="text-[10px] text-gray-400" title="Rip attempts">x{track.attempts}</span>
 											{/if}
 										</span>
 									</td>
@@ -469,7 +471,7 @@
 										{#if track.transcode_status}
 											<StatusBadge status={track.transcode_status} />
 										{:else}
-											<span class="text-gray-400 dark:text-gray-500">—</span>
+											<span class="text-gray-400 dark:text-gray-500">-</span>
 										{/if}
 									</td>
 								</tr>
@@ -552,6 +554,9 @@
 			</section>
 		{/if}
 
+		<!-- Live, per-service job log (backend + ripper + transcode aggregated) -->
+		<JobLogPanel jobId={job.id} status={job.status} />
+
 		<!-- Raw metadata (collapsible): the full metadata_json as a JSON tree, nothing hidden -->
 		{#if rawMetadataPairs.length > 0}
 			<section>
@@ -577,7 +582,7 @@
 	</div>
 
 	{#if showIdentify}
-		<IdentifyDialog {job} onclose={() => (showIdentify = false)} onidentified={handleIdentified} />
+		<IdentifyDialog {job} driveNames={$dashboard.drive_names} onclose={() => (showIdentify = false)} onidentified={handleIdentified} />
 	{/if}
 	{#if showApply}
 		<ApplySessionDialog {job} onclose={() => (showApply = false)} onapplied={handleApplied} />

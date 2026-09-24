@@ -147,11 +147,6 @@ vi.mock('$lib/stores/colorScheme', async () => {
 	};
 });
 
-vi.mock('$lib/api/system', () => ({
-	restartArm: vi.fn(() => Promise.resolve()),
-	restartTranscoder: vi.fn(() => Promise.resolve())
-}));
-
 vi.mock('$lib/api/maintenance', () => ({
 	fetchImageCacheStats: vi.fn(() => Promise.resolve({ count: 5, size_bytes: 5242880, size_mb: '5.0' })),
 	clearImageCache: vi.fn(() => Promise.resolve({ success: true, cleared: 5, freed_bytes: 5242880 }))
@@ -186,7 +181,7 @@ vi.mock('$lib/api/channels', () => ({
 				key: 'rip.completed',
 				label: 'Rip completed',
 				variables: ['job_title', 'drive_id'],
-				default_title: 'ARM: rip completed — {job_title}',
+				default_title: 'ARM: rip completed - {job_title}',
 				default_body: '{job_title} finished ripping on drive {drive_id}.'
 			}
 		])
@@ -255,9 +250,36 @@ describe('Settings Page', () => {
 	}
 
 	describe('rendering', () => {
+		it('renders the Interface tab with the stats toggle and dashboard layout', async () => {
+			await renderAndOpenTab('Interface');
+			expect(screen.getByRole('switch', { name: /show resource stats/i })).toBeInTheDocument();
+			expect(screen.getByRole('radio', { name: /cards/i })).toBeInTheDocument();
+			expect(screen.getByRole('radio', { name: /table/i })).toBeInTheDocument();
+		});
+
+		it('maps a legacy #appearance hash to the Themes tab', async () => {
+			window.location.hash = '#appearance';
+			renderComponent(SettingsPage);
+			await waitFor(() => {
+				expect(screen.getByText('Image Cache')).toBeInTheDocument();
+			});
+		});
+
 		it('renders page title', () => {
 			renderComponent(SettingsPage);
 			expect(screen.getByText('Settings')).toBeInTheDocument();
+		});
+
+		it('deep-links #<tab>/<field> to the field: scrolls, focuses and highlights it', async () => {
+			window.location.hash = '#Metadata/tmdb_api_key';
+			const scrollIntoView = vi.fn();
+			Element.prototype.scrollIntoView = scrollIntoView;
+			await renderAndWait();
+			await waitFor(() => {
+				expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus();
+			});
+			expect(scrollIntoView).toHaveBeenCalled();
+			expect(screen.getByTestId('setting-tmdb_api_key').className).toContain('ring-2');
 		});
 
 		it('renders the Metadata config tab with the provider select', async () => {
@@ -292,14 +314,14 @@ describe('Settings Page', () => {
 			expect(screen.queryByRole('button', { name: 'Transcode Presets' })).not.toBeInTheDocument();
 		});
 
-		it('shows Appearance tab', async () => {
+		it('shows Themes tab', async () => {
 			await renderAndWait();
-			const matches = screen.getAllByText('Appearance');
+			const matches = screen.getAllByText('Themes');
 			expect(matches.length).toBeGreaterThanOrEqual(1);
 		});
 
-		it('image cache section loads when Appearance tab active', async () => {
-			await renderAndOpenTab('Appearance');
+		it('image cache section loads when Themes tab active', async () => {
+			await renderAndOpenTab('Themes');
 			await waitFor(() => {
 				expect(screen.getByText('Image Cache')).toBeInTheDocument();
 			});
@@ -313,7 +335,7 @@ describe('Settings Page', () => {
 		});
 
 		it('shows cache feedback after clearing image cache', async () => {
-			await renderAndOpenTab('Appearance');
+			await renderAndOpenTab('Themes');
 			await waitFor(() => {
 				expect(screen.getByText('Clear Cache')).toBeInTheDocument();
 			});
@@ -332,7 +354,7 @@ describe('Settings Page', () => {
 		});
 
 		it('shows dark mode toggle when scheme does not lock mode', async () => {
-			await renderAndOpenTab('Appearance');
+			await renderAndOpenTab('Themes');
 			await waitFor(() => {
 				expect(screen.getByText('Dark Mode')).toBeInTheDocument();
 			});
@@ -342,7 +364,7 @@ describe('Settings Page', () => {
 
 		it('calls toggleTheme when dark mode switch is clicked', async () => {
 			const { toggleTheme } = await import('$lib/stores/theme');
-			await renderAndOpenTab('Appearance');
+			await renderAndOpenTab('Themes');
 			await waitFor(() => {
 				expect(screen.getByLabelText('Dark mode')).toBeInTheDocument();
 			});
@@ -356,7 +378,7 @@ describe('Settings Page', () => {
 			const locked = writable(true);
 			Object.assign(schemeLocksMode, { set: locked.set, subscribe: locked.subscribe, update: locked.update });
 
-			await renderAndOpenTab('Appearance');
+			await renderAndOpenTab('Themes');
 			await waitFor(() => {
 				expect(screen.getByText('Locked by theme')).toBeInTheDocument();
 			});

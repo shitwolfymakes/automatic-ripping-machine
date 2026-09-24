@@ -2,9 +2,27 @@ import { writable, derived } from 'svelte/store';
 import { getToken, setToken, clearToken } from '$lib/api/client';
 import type { LoginResult } from '$lib/api/auth';
 
-const _isAuthenticated = writable<boolean>(false);
+// Seeded from the persisted session at module load, not in initAuth(): the
+// layout's guest guard (`isGuest && /settings -> goto('/')`) runs on first
+// render, before onMount, so a store that starts "unauthenticated" bounces a
+// logged-in operator to the dashboard on every hard refresh of /settings.
+function persistedRole(): string | null {
+	try {
+		return localStorage.getItem('arm_role');
+	} catch {
+		return null;
+	}
+}
+function persistedToken(): boolean {
+	try {
+		return getToken() !== null;
+	} catch {
+		return false;
+	}
+}
+const _isAuthenticated = writable<boolean>(persistedToken());
 const _passwordMustChange = writable<boolean>(false);
-const _role = writable<string | null>(null);
+const _role = writable<string | null>(persistedRole());
 
 export const isAuthenticated = { subscribe: _isAuthenticated.subscribe };
 export const passwordMustChange = { subscribe: _passwordMustChange.subscribe };
@@ -23,11 +41,7 @@ export const isGuest = derived(_isAuthenticated, (a) => !a);
 // the user's password_must_change is true). The client flag is UX, not security.
 export function initAuth(): void {
 	_isAuthenticated.set(getToken() !== null);
-	try {
-		_role.set(localStorage.getItem('arm_role'));
-	} catch {
-		/* ignore */
-	}
+	_role.set(persistedRole());
 }
 
 export function applyLogin(result: LoginResult): void {

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { portal } from '$lib/actions/portal';
+	import CloseButton from './CloseButton.svelte';
 
 	interface Props {
 		/** Whether the panel is shown. Bindable so callers can also close it. */
@@ -60,14 +61,7 @@
 				<h2 class="text-lg font-semibold text-gray-900 dark:text-white">{title}</h2>
 				<div class="flex items-center gap-2">
 					{#if headerActions}{@render headerActions()}{/if}
-					<button
-						type="button"
-						aria-label="Close"
-						onclick={close}
-						class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-					>
-						✕
-					</button>
+					<CloseButton onclick={close} />
 				</div>
 			</div>
 

@@ -344,5 +344,8 @@ done — next:
   docker compose -f ${ROOT_DIR}/docker-compose.yml up -d --build
   then open https://localhost:8081 → Drives → Enroll each drive you want ARM to use
 
+  optional — trust the local CA so browsers/curl skip the self-signed warning:
+    bash devtools/trust-ca.sh
+
 IDE: point your interpreter at ${ROOT_DIR}/.venv/bin/python
 EOF

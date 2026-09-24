@@ -95,6 +95,27 @@ export type BodyUploadThemeApiThemesPost = {
 };
 
 /**
+ * BulkDeleteJobsRequest
+ *
+ * DELETE /api/jobs body (optional). Filters which terminal jobs are
+ * deleted:
+ * - `job_ids` set  -> delete only those jobs (still terminal-guarded)
+ * - `status` set   -> delete only terminal jobs in that JobStatus
+ * - neither set    -> delete ALL terminal jobs (legacy behavior)
+ * `job_ids` takes precedence over `status` if both are sent.
+ */
+export type BulkDeleteJobsRequest = {
+    /**
+     * Job Ids
+     */
+    job_ids?: Array<string> | null;
+    /**
+     * Status
+     */
+    status?: string | null;
+};
+
+/**
  * BulkDeleteJobsResponse
  *
  * DELETE /api/jobs response. `deleted_ids` lists the jobs whose DB
@@ -367,6 +388,14 @@ export type ConfigUpdateRequest = {
      */
     makemkv_sdf_enabled?: boolean | null;
     /**
+     * Thediscdb Enabled
+     */
+    thediscdb_enabled?: boolean | null;
+    /**
+     * Thediscdb Refresh Days
+     */
+    thediscdb_refresh_days?: number | null;
+    /**
      * Ripping Paused
      */
     ripping_paused?: boolean | null;
@@ -442,6 +471,14 @@ export type ConfigView = {
      * Makemkv Sdf Enabled
      */
     makemkv_sdf_enabled: boolean;
+    /**
+     * Thediscdb Enabled
+     */
+    thediscdb_enabled: boolean;
+    /**
+     * Thediscdb Refresh Days
+     */
+    thediscdb_refresh_days: number;
     /**
      * Ripping Paused
      */
@@ -1485,6 +1522,41 @@ export type JobView = {
 };
 
 /**
+ * KeyCheckRequest
+ *
+ * Body for POST /api/config/keys/{name}/check. `value` is an unsaved
+ * candidate key to probe; when omitted (None), the stored key is used.
+ */
+export type KeyCheckRequest = {
+    /**
+     * Value
+     */
+    value?: string | null;
+};
+
+/**
+ * KeyCheckResponse
+ */
+export type KeyCheckResponse = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Status
+     */
+    status: 'ok' | 'invalid' | 'missing' | 'error' | 'unknown';
+    /**
+     * Detail
+     */
+    detail?: string | null;
+    /**
+     * Checked At
+     */
+    checked_at?: string | null;
+};
+
+/**
  * KeydbState
  *
  * Outcome of the ripper's community-keydb fetch (`update_keydb.sh`),
@@ -1556,7 +1628,7 @@ export type LoginResponse = {
  * MakemkvKeyState
  *
  * Outcome of the ripper's disc-free `makemkvcon info disc:9999` probe.
- * Stored on the Config singleton and read by test-key / preflight / config view.
+ * Stored on the Config singleton and read by the key check, preflight and config view.
  *
  * VALID                   — clean probe, key accepted.
  * UNREGISTERED_OR_EXPIRED — MSG:5052/5055 (evaluation expired / no valid key).
@@ -1699,28 +1771,6 @@ export type MetadataCandidate = {
      * Track Count
      */
     track_count?: number | null;
-};
-
-/**
- * MetadataKeyTestResponse
- */
-export type MetadataKeyTestResponse = {
-    /**
-     * Provider
-     */
-    provider: 'omdb' | 'tmdb' | 'tvdb' | 'makemkv';
-    /**
-     * Valid
-     */
-    valid: boolean | null;
-    /**
-     * Detail
-     */
-    detail?: string | null;
-    /**
-     * Checked At
-     */
-    checked_at?: string | null;
 };
 
 /**
@@ -4381,7 +4431,10 @@ export type RipCompleteApiRipperJobsJobIdRipCompletePostResponses = {
 export type RipCompleteApiRipperJobsJobIdRipCompletePostResponse = RipCompleteApiRipperJobsJobIdRipCompletePostResponses[keyof RipCompleteApiRipperJobsJobIdRipCompletePostResponses];
 
 export type DeleteAllJobsApiJobsDeleteData = {
-    body?: never;
+    /**
+     * Req
+     */
+    body?: BulkDeleteJobsRequest | null;
     headers?: {
         /**
          * Authorization
@@ -6248,6 +6301,42 @@ export type UpdateConfigApiConfigPatchResponses = {
 
 export type UpdateConfigApiConfigPatchResponse = UpdateConfigApiConfigPatchResponses[keyof UpdateConfigApiConfigPatchResponses];
 
+export type CheckKeyApiConfigKeysNameCheckPostData = {
+    body: KeyCheckRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Name
+         */
+        name: 'tmdb' | 'omdb' | 'tvdb' | 'makemkv';
+    };
+    query?: never;
+    url: '/api/config/keys/{name}/check';
+};
+
+export type CheckKeyApiConfigKeysNameCheckPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CheckKeyApiConfigKeysNameCheckPostError = CheckKeyApiConfigKeysNameCheckPostErrors[keyof CheckKeyApiConfigKeysNameCheckPostErrors];
+
+export type CheckKeyApiConfigKeysNameCheckPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: KeyCheckResponse;
+};
+
+export type CheckKeyApiConfigKeysNameCheckPostResponse = CheckKeyApiConfigKeysNameCheckPostResponses[keyof CheckKeyApiConfigKeysNameCheckPostResponses];
+
 export type GetDiagnosticsApiDiagnosticsGetData = {
     body?: never;
     headers?: {
@@ -6278,42 +6367,6 @@ export type GetDiagnosticsApiDiagnosticsGetResponses = {
 };
 
 export type GetDiagnosticsApiDiagnosticsGetResponse = GetDiagnosticsApiDiagnosticsGetResponses[keyof GetDiagnosticsApiDiagnosticsGetResponses];
-
-export type TestKeyApiMetadataTestKeyGetData = {
-    body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
-    path?: never;
-    query: {
-        /**
-         * Provider
-         */
-        provider: 'omdb' | 'tmdb' | 'tvdb' | 'makemkv';
-    };
-    url: '/api/metadata/test-key';
-};
-
-export type TestKeyApiMetadataTestKeyGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type TestKeyApiMetadataTestKeyGetError = TestKeyApiMetadataTestKeyGetErrors[keyof TestKeyApiMetadataTestKeyGetErrors];
-
-export type TestKeyApiMetadataTestKeyGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: MetadataKeyTestResponse;
-};
-
-export type TestKeyApiMetadataTestKeyGetResponse = TestKeyApiMetadataTestKeyGetResponses[keyof TestKeyApiMetadataTestKeyGetResponses];
 
 export type SearchMetadataApiMetadataSearchGetData = {
     body?: never;
@@ -6545,7 +6598,14 @@ export type JobNamingPreviewApiJobsJobIdNamingPreviewGetData = {
          */
         job_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Session Id
+         *
+         * Preview this session instead of the job's effective one
+         */
+        session_id?: string | null;
+    };
     url: '/api/jobs/{job_id}/naming-preview';
 };
 
@@ -7745,6 +7805,41 @@ export type SystemVersionApiSystemVersionGetResponses = {
 };
 
 export type SystemVersionApiSystemVersionGetResponse = SystemVersionApiSystemVersionGetResponses[keyof SystemVersionApiSystemVersionGetResponses];
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/system/thediscdb/refresh';
+};
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostError = ThediscdbRefreshNowApiSystemThediscdbRefreshPostErrors[keyof ThediscdbRefreshNowApiSystemThediscdbRefreshPostErrors];
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponses = {
+    /**
+     * Response Thediscdb Refresh Now Api System Thediscdb Refresh Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponse = ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponses[keyof ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponses];
 
 export type RootsApiFilesRootsGetData = {
     body?: never;
