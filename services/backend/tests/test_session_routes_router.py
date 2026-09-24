@@ -144,7 +144,8 @@ def test_upsert_unknown_session_404(signing_key: bytes) -> None:
 
 
 def test_upsert_media_type_mismatch_422(signing_key: bytes) -> None:
-    """A tv route pointing at a music session is a config error."""
+    """A tv route pointing at a music session is a config error: tv and
+    music are never compatible in either direction."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["sessions"] = [_session(media_type=MediaType.MUSIC)]
@@ -153,6 +154,46 @@ def test_upsert_media_type_mismatch_422(signing_key: bytes) -> None:
         r = client.put("/api/session-routes", json=body, headers=_auth(token))
     assert r.status_code == 422
     assert "media_type" in r.json()["detail"]
+    assert "not compatible with" in r.json()["detail"]
+
+
+def test_upsert_movie_route_to_iso_session_accepted(signing_key: bytes) -> None:
+    """A movie route pointing at an iso-dump session is expressible: an
+    iso/data session consumes a dump of any video disc, matching what the
+    apply path (_media_types_compatible) already allows."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["sessions"] = [_session(session_id="ses_iso", media_type=MediaType.ISO)]
+    body = {"media_type": "movie", "disc_type": None, "session_id": "ses_iso"}
+    with TestClient(app) as client:
+        r = client.put("/api/session-routes", json=body, headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()["session_id"] == "ses_iso"
+
+
+def test_upsert_movie_route_to_tv_session_accepted(signing_key: bytes) -> None:
+    """movie and tv are the same track kind — a movie route to a tv session
+    (or vice versa) is a compatible pairing, not a config error."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["sessions"] = [_session(session_id="ses_tv", media_type=MediaType.TV)]
+    body = {"media_type": "movie", "disc_type": None, "session_id": "ses_tv"}
+    with TestClient(app) as client:
+        r = client.put("/api/session-routes", json=body, headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()["session_id"] == "ses_tv"
+
+
+def test_upsert_movie_route_to_music_session_still_422(signing_key: bytes) -> None:
+    """Music stays strictly music: a movie route to a music session is still
+    a hard config error even under the relaxed compatibility check."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["sessions"] = [_session(session_id="ses_music_2", media_type=MediaType.MUSIC)]
+    body = {"media_type": "movie", "disc_type": None, "session_id": "ses_music_2"}
+    with TestClient(app) as client:
+        r = client.put("/api/session-routes", json=body, headers=_auth(token))
+    assert r.status_code == 422
 
 
 def test_upsert_requires_writer_403(signing_key: bytes) -> None:

@@ -133,6 +133,41 @@ async def test_seed_session_routes_flips_flag_on_fresh_seed(tmp_path: Path, monk
     assert db.rows["config"][0].session_routes_seeded is True
 
 
+async def test_upgraded_install_with_flag_false_and_empty_routes_seeds_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fix 76-1: simulates an existing deployment that has been through
+    migration 0035 under the corrected (conditional) UPDATE — a config row
+    already exists with `session_routes_seeded=False` because
+    session_routes was empty at migration time (the seeder never shipped
+    for this install, not a deliberate clear). The very next boot's
+    `run_seeders` call must seed the built-ins exactly once."""
+    monkeypatch.setattr(seeders, "FIRST_BOOT_LOG", tmp_path / "fb.log")
+    db = FakeSession()
+    db.rows["config"] = [
+        Config(
+            id=1,
+            auto_transcode_on_idle=False,
+            auto_rip_on_insert=True,
+            block_on_miss=True,
+            default_retention_policy=RetentionPolicy.KEEP_FOREVER,
+            session_signing_key=b"x" * 32,
+            session_routes_seeded=False,
+        )
+    ]
+    db.rows["session_routes"] = []
+
+    await run_seeders(db)
+
+    routes = db.rows["session_routes"]
+    assert len(routes) == 2
+    assert db.rows["config"][0].session_routes_seeded is True
+
+    # A second boot must not duplicate the routes (flag now true).
+    await run_seeders(db)
+    assert len(db.rows["session_routes"]) == 2
+
+
 async def test_delete_all_routes_then_rerun_seeders_stays_empty(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

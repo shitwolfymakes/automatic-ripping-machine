@@ -25,6 +25,9 @@ from arm_common import (  # noqa: E402
     DriveStatus,
     SessionApplication,
     SessionApplicationStatus,
+    Track,
+    TrackKind,
+    TrackStatus,
     TranscodeTask,
     TranscodeTaskStatus,
 )
@@ -345,6 +348,108 @@ async def test_overwrite_evicts_only_same_job_tasks(tmp_path: Path) -> None:
     assert any(t.id == "txt_b" for t in db.rows["transcode_tasks"])
     assert len(out.collisions) == 1
     assert out.collisions[0].existing_job_id == job_b_id
+
+
+async def test_overwrite_unowned_collision_is_cross_job_not_evicted(tmp_path: Path) -> None:
+    """Fix 76-5: a colliding task whose owning session_application is
+    missing (existing_job_id=None — Postgres-unreachable via CASCADE in
+    real life, but modeled reachable by the fake tier / find_collisions,
+    e.g. a dangling session_application_id) must classify as CROSS-JOB, not
+    same-job. Same-job eviction can neither refuse nor evict an unowned row
+    safely, and letting it through would trip the output_path unique index
+    on fan-out."""
+    _media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    db.rows["transcode_tasks"] = [
+        TranscodeTask(
+            id="txt_unowned",
+            session_application_id="sap_missing",  # no matching session_applications row
+            source_track_id="trk_o1",
+            status=TranscodeTaskStatus.DONE,
+            output_path=_COLLIDE_PATH,
+            progress_pct=100,
+            attempts=1,
+        ),
+    ]
+    out = await apply_session_internal(
+        db, job=job, session_id="ses_x", overwrite=True, created_by_user_id=None, source="manual"
+    )
+    assert out.skipped_reason == "collisions"
+    # The unowned task must survive untouched — it was never evicted.
+    assert any(t.id == "txt_unowned" for t in db.rows["transcode_tasks"])
+    assert len(out.collisions) == 1
+    assert out.collisions[0].existing_job_id is None
+
+
+async def test_overwrite_mixed_collision_409_reports_full_collision_list(tmp_path: Path) -> None:
+    """Fix 76-6: overwrite=True with BOTH a same-job and a cross-job
+    collision must report the FULL collision list in the skip outcome, not
+    only the cross-job subset — the cross-job subset is what blocks, but
+    the body should still tell the whole truth about every colliding path.
+    Two tracks (template includes {track} so each resolves a distinct
+    path) each collide against a different owning job."""
+    _media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    db.rows["sessions"][0].output_path_template = "{title} ({year})/{title} - {track} - {transcode_slug}.{ext}"
+    db.rows["tracks"].append(
+        Track(
+            id="trk_2",
+            job_id=job.id,
+            kind=TrackKind.VIDEO_TITLE,
+            index=2,
+            source_ref="2",
+            expected_duration_seconds=8000,
+            status=TrackStatus.DONE,
+        )
+    )
+    path_1 = "Iron Man (2008)/Iron Man - 01 - plex-1080p-h-265.mkv"
+    path_2 = "Iron Man (2008)/Iron Man - 02 - plex-1080p-h-265.mkv"
+    other_job_id = "job_01JZXR7K3M5Q8N4VWA0000000J"
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_mine",
+            session_id="ses_x",
+            job_id=job.id,
+            status=SessionApplicationStatus.DONE,
+            overwrite=False,
+        ),
+        SessionApplication(
+            id="sap_other_job",
+            session_id="ses_other",
+            job_id=other_job_id,
+            status=SessionApplicationStatus.DONE,
+            overwrite=False,
+        ),
+    ]
+    db.rows["transcode_tasks"] = [
+        TranscodeTask(
+            id="txt_mine",
+            session_application_id="sap_mine",
+            source_track_id="trk_1",
+            status=TranscodeTaskStatus.DONE,
+            output_path=path_1,
+            progress_pct=100,
+            attempts=1,
+        ),
+        TranscodeTask(
+            id="txt_other",
+            session_application_id="sap_other_job",
+            source_track_id="trk_2",
+            status=TranscodeTaskStatus.DONE,
+            output_path=path_2,
+            progress_pct=100,
+            attempts=1,
+        ),
+    ]
+
+    out = await apply_session_internal(
+        db, job=job, session_id="ses_x", overwrite=True, created_by_user_id=None, source="manual"
+    )
+    assert out.skipped_reason == "collisions"
+    # Both rows must appear — not just the cross-job one.
+    assert {c.existing_task_id for c in out.collisions} == {"txt_mine", "txt_other"}
 
 
 async def test_same_job_overwrite_still_works(tmp_path: Path) -> None:

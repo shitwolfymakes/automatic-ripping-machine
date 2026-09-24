@@ -40,6 +40,30 @@
 		return sessions.filter((s) => s.media_type === mediaType);
 	}
 
+	// A route is grid-covered when both its media_type and disc_type appear
+	// among the fixed 4x4 grid's rows/columns. Anything else (media_type=iso,
+	// or disc_type=data/unknown) is creatable via the API and wins resolution
+	// (resolve_routed_session_id), but has no cell in the grid to render in;
+	// it must still be visible and clearable here, or it's silently stuck.
+	const GRID_MEDIA_TYPES = new Set(MEDIA_TYPES.map((mt) => mt.key));
+	const GRID_DISC_TYPES = new Set(DISC_SCOPES.map((s) => s.key));
+
+	function isGridCovered(route: SessionRouteView): boolean {
+		return GRID_MEDIA_TYPES.has(route.media_type) && GRID_DISC_TYPES.has(route.disc_type);
+	}
+
+	function otherRoutes(): SessionRouteView[] {
+		return routes.filter((r) => !isGridCovered(r));
+	}
+
+	function sessionNameFor(sessionId: string): string {
+		return sessions.find((s) => s.id === sessionId)?.name ?? sessionId;
+	}
+
+	function discLabel(discType: DiscType | null): string {
+		return discType ?? 'Any disc';
+	}
+
 	async function load() {
 		loading = true;
 		try {
@@ -108,8 +132,8 @@
 	<h3 class="session-routes-card-title">Session Routing</h3>
 	<p class="session-routes-card-intro">
 		A route applies the chosen session when a disc's identified media type matches. The drive's default session
-		overrides every route here, and a disc-type-specific route (DVD, Blu-ray, CD) beats the Any-disc wildcard
-		for the same media type.
+		wins when it is compatible with the disc's media type; otherwise these routes apply instead. A disc-type-specific
+		route (DVD, Blu-ray, CD) beats the Any-disc wildcard for the same media type.
 	</p>
 
 	{#if feedback}
@@ -163,6 +187,38 @@
 				</div>
 			{/each}
 		</div>
+
+		{#if otherRoutes().length > 0}
+			<div class="mt-4">
+				<h4 class="mb-1.5 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+					Other routes
+				</h4>
+				<div class="space-y-1.5">
+					{#each otherRoutes() as route (route.id)}
+						{@const key = rowKey(route.media_type, route.disc_type)}
+						{@const rowBusy = pending.has(key)}
+						<div class="flex flex-wrap items-center gap-2 rounded-lg border border-primary/10 px-3 py-2 dark:border-primary/10">
+							<span class="min-w-0 flex-1 text-xs text-gray-600 dark:text-gray-300">
+								<span class="font-medium">{route.media_type} / {discLabel(route.disc_type)}</span>
+								<span class="text-gray-400 dark:text-gray-500">&rarr;</span>
+								{sessionNameFor(route.session_id)}
+							</span>
+							{#if $isAdmin}
+								<button
+									type="button"
+									onclick={() => handleClear(route)}
+									disabled={rowBusy}
+									aria-label="Clear {route.media_type} / {discLabel(route.disc_type)} route ({sessionNameFor(route.session_id)})"
+									class="shrink-0 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+								>
+									Clear
+								</button>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/if}
 	{/if}
 </div>
 

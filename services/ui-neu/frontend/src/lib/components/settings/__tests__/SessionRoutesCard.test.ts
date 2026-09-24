@@ -75,6 +75,20 @@ afterEach(async () => {
 });
 
 describe('SessionRoutesCard', () => {
+	it('help text matches the compatibility-gated drive-default override (Fix 76-8)', async () => {
+		fetchSessionRoutes.mockResolvedValue([]);
+		fetchSessions.mockResolvedValue([musicSession, movieSession]);
+		renderComponent(SessionRoutesCard, { props: {} });
+
+		await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(16));
+		// The drive default only wins when compatible with the disc's media
+		// type; an incompatible default falls through to routes (G-17). The old
+		// copy claimed the default "overrides every route" unconditionally,
+		// which is what this pins away from.
+		expect(screen.getByText(/wins when it is compatible/i)).toBeInTheDocument();
+		expect(screen.queryByText(/overrides every route/i)).not.toBeInTheDocument();
+	});
+
 	it('renders a row for every media type x disc-scope combination', async () => {
 		fetchSessionRoutes.mockResolvedValue([]);
 		fetchSessions.mockResolvedValue([musicSession, movieSession]);
@@ -157,6 +171,83 @@ describe('SessionRoutesCard', () => {
 
 		expect(deleteSessionRoute).not.toHaveBeenCalled();
 		expect(upsertSessionRoute).not.toHaveBeenCalled();
+	});
+
+	it('renders a data/data route in the Other routes list, not duplicated in the grid', async () => {
+		const dataSession: SessionView = {
+			id: 'ses_data',
+			name: 'Data -> Copy',
+			media_type: 'data',
+			is_builtin: true,
+			rip_preset_id: 'rpr_data',
+			transcode_preset_id: null,
+			output_path_template: '{title}/',
+			overrides_json: null,
+			created_by_user_id: null,
+			created_at: null,
+			updated_at: null
+		} as unknown as SessionView;
+		const otherRoute: SessionRouteView = {
+			id: 'srt_other',
+			media_type: 'data',
+			disc_type: 'data',
+			session_id: 'ses_data',
+			created_at: null,
+			updated_at: null
+		};
+		fetchSessionRoutes.mockResolvedValue([otherRoute]);
+		fetchSessions.mockResolvedValue([musicSession, dataSession]);
+		renderComponent(SessionRoutesCard, { props: {} });
+
+		await screen.findByText(/other routes/i);
+		expect(screen.getByText(/data \/ data/i)).toBeInTheDocument();
+
+		// Not duplicated into the grid: the grid's Data/CD row must still show
+		// its own "- none -" state, unaffected by the data/data route.
+		const dataCdSelect = screen.getByLabelText(/data.*cd session/i) as HTMLSelectElement;
+		expect(dataCdSelect.value).toBe('');
+	});
+
+	it('clearing an Other-routes row calls the delete API', async () => {
+		const dataSession: SessionView = {
+			id: 'ses_data',
+			name: 'Data -> Copy',
+			media_type: 'data',
+			is_builtin: true,
+			rip_preset_id: 'rpr_data',
+			transcode_preset_id: null,
+			output_path_template: '{title}/',
+			overrides_json: null,
+			created_by_user_id: null,
+			created_at: null,
+			updated_at: null
+		} as unknown as SessionView;
+		const otherRoute: SessionRouteView = {
+			id: 'srt_other',
+			media_type: 'data',
+			disc_type: 'data',
+			session_id: 'ses_data',
+			created_at: null,
+			updated_at: null
+		};
+		fetchSessionRoutes.mockResolvedValue([otherRoute]);
+		fetchSessions.mockResolvedValue([dataSession]);
+		deleteSessionRoute.mockResolvedValue(undefined);
+		renderComponent(SessionRoutesCard, { props: {} });
+
+		await screen.findByText(/other routes/i);
+		await fireEvent.click(screen.getByRole('button', { name: /clear.*data -> copy/i }));
+
+		await waitFor(() => expect(deleteSessionRoute).toHaveBeenCalledWith('srt_other'));
+	});
+
+	it('does not show an Other routes section when every route is grid-covered', async () => {
+		fetchSessionRoutes.mockResolvedValue(seededRoutes);
+		fetchSessions.mockResolvedValue([musicSession, movieSession]);
+		renderComponent(SessionRoutesCard, { props: {} });
+
+		await screen.findByLabelText(/music.*cd session/i);
+		expect(screen.queryByText(/other routes/i)).not.toBeInTheDocument();
 	});
 
 	it('is read-only for a non-writer: selects disabled, no clear buttons', async () => {

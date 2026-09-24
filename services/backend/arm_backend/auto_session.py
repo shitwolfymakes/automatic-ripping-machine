@@ -115,6 +115,14 @@ class ApplySessionOutcome(NamedTuple):
     collisions: list[CollisionInfo]
     idempotent: bool
     skipped_reason: SkippedReason | None
+    # Human-readable detail for the caller's error response, populated only
+    # for skipped_reason="media_mismatch" (Fix 76-7). Computed once here, at
+    # the guard site where `job`/`sess` are both in hand, so the manual-apply
+    # router (jobs.py) can build its 422 straight from this field instead of
+    # re-SELECTing the Session and asserting it's non-None — a re-query that
+    # a concurrent delete (or `python -O`, which strips asserts) could turn
+    # into a 500 instead of the intended 422.
+    error_detail: str | None = None
 
 
 class ResolveFanOutOutcome(NamedTuple):
@@ -395,6 +403,7 @@ async def _fan_out_tasks_for_application(
             collisions=[],
             idempotent=False,
             skipped_reason="media_mismatch",
+            error_detail=media_mismatch_detail(job, sess),
         )
 
     resolved = compute_outputs(job, tracks, sess, transcode_preset)
@@ -474,21 +483,41 @@ async def _fan_out_tasks_for_application(
 
     if overwrite and collisions:
         # overwrite=True only ever licenses evicting the *applying* job's own
-        # colliding tasks. A collision whose owning job differs (or is
-        # unknown, e.g. an on-disk-only hit) is never silently clobbered —
-        # re-ripping a disc and overwriting must not destroy another job's
-        # finished output. Any such cross-job collision is a hard skip,
-        # even though overwrite was requested.
-        cross_job_collisions = [c for c in collisions if c.existing_job_id is not None and c.existing_job_id != job.id]
+        # colliding tasks. A collision whose owning job differs, OR whose
+        # owning job is unknown for an actual existing task
+        # (existing_job_id=None with reason="existing_task": a dangling
+        # session_application_id, unreachable in real Postgres via CASCADE
+        # but modeled reachable by the fake tier / find_collisions), is
+        # never silently clobbered — re-ripping a disc and overwriting must
+        # not destroy another job's finished output, and an unowned task
+        # can't be proven to belong to THIS job either. Any such cross-job
+        # (or unowned-task) collision is a hard skip, even though overwrite
+        # was requested; same-job eviction can neither refuse nor safely
+        # evict an unowned row, and letting it through would trip the
+        # output_path unique index on fan-out.
+        #
+        # `on_disk`/`duplicate_in_request` collisions always carry
+        # existing_job_id=None too (see CollisionInfo: the field is only
+        # ever populated for reason="existing_task"), but that's a
+        # structurally different "not applicable" sentinel, not an unowned
+        # task — there's no task row to misattribute, so those stay
+        # evictable/same-job as before.
+        cross_job_collisions = [c for c in collisions if c.reason == "existing_task" and c.existing_job_id != job.id]
         if cross_job_collisions:
+            # The cross-job (+ unowned-task) subset is what blocks the
+            # apply, but the response should still tell the whole truth
+            # about every colliding path — report the full collision list,
+            # not just the blocking subset.
             return ApplySessionOutcome(
                 application=application,
                 tasks=[],
-                collisions=cross_job_collisions,
+                collisions=collisions,
                 idempotent=False,
                 skipped_reason="collisions",
             )
-        same_job_paths = [c.output_path for c in collisions if c.existing_job_id is None or c.existing_job_id == job.id]
+        same_job_paths = [
+            c.output_path for c in collisions if c.reason != "existing_task" or c.existing_job_id == job.id
+        ]
         await _evict_colliding_tasks(db, same_job_paths, job_id=job.id)
 
     if application is None:
@@ -656,7 +685,7 @@ async def fan_out_waiting_identify_applications(
                     application=app,
                     tasks=[],
                     skipped_reason="media_mismatch",
-                    error_detail=media_mismatch_detail(job, sess),
+                    error_detail=outcome.error_detail or media_mismatch_detail(job, sess),
                 )
             )
             continue

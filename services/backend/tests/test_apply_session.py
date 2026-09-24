@@ -383,8 +383,20 @@ def test_apply_collision_409_lists_paths(signing_key: bytes, tmp_path: Path) -> 
 
 
 def test_apply_overwrite_true_clears_collision(signing_key: bytes, tmp_path: Path) -> None:
+    """overwrite=True clears a collision owned by THIS job (a prior
+    session_application for job_01JZXR7K3M5Q8N4VWA00000001) — the
+    same-job case licensed for eviction."""
     db = FakeSession()
     _seed(db)
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_other",
+            session_id="ses_x",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
+            status=SessionApplicationStatus.DONE,
+            overwrite=False,
+        )
+    ]
     db.rows["transcode_tasks"] = [
         TranscodeTask(
             id="txt_other",
@@ -403,6 +415,33 @@ def test_apply_overwrite_true_clears_collision(signing_key: bytes, tmp_path: Pat
         )
     assert r.status_code == 200
     assert r.json()["session_application"]["overwrite"] is True
+
+
+def test_apply_overwrite_true_unowned_task_still_409s(signing_key: bytes, tmp_path: Path) -> None:
+    """Fix 76-5: overwrite=True must NOT clear a collision whose owning
+    session_application is missing (existing_job_id can't be resolved) —
+    an unowned task is treated as cross-job, always reported, never
+    evicted, even under overwrite."""
+    db = FakeSession()
+    _seed(db)
+    db.rows["transcode_tasks"] = [
+        TranscodeTask(
+            id="txt_other",
+            session_application_id="sap_missing",  # no matching session_applications row
+            source_track_id="trk_other",
+            status=TranscodeTaskStatus.QUEUED,
+            output_path="Iron Man (2008)/Iron Man - plex-1080p-h-265.mkv",
+        )
+    ]
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x", "overwrite": True},
+            headers=_auth(token),
+        )
+    assert r.status_code == 409
+    assert r.json()["detail"]["collisions"][0]["existing_task_id"] == "txt_other"
 
 
 def test_apply_filesystem_collision_detected(signing_key: bytes, tmp_path: Path) -> None:
@@ -484,6 +523,65 @@ def test_manual_apply_media_mismatch_is_422(signing_key: bytes, tmp_path: Path) 
     assert "music" in detail
     assert db.rows["transcode_tasks"] == []
     assert db.rows["session_applications"] == []
+
+
+def test_manual_apply_media_mismatch_does_not_requery_router_side(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fix 76-7: the router must build the 422 detail from
+    `outcome.error_detail` (computed once inside apply_session_internal at
+    the media_mismatch guard site), not by re-SELECTing the Session and
+    bare-asserting it's non-None — a concurrent delete (or `python -O`,
+    which strips asserts) would turn that re-query path into a 500. Pin the
+    structural change two ways: (1) jobs.py no longer imports
+    `media_mismatch_detail` at all (asserted here directly against the
+    module), and (2) `select` is never called from within the apply_session
+    endpoint after apply_session_internal returns a media_mismatch outcome
+    (the only pre-fix call site for the re-query)."""
+    from arm_backend.routers import jobs as jobs_router_module
+
+    assert not hasattr(jobs_router_module, "media_mismatch_detail"), (
+        "jobs.py must not import media_mismatch_detail: the router reads outcome.error_detail instead (Fix 76-7)"
+    )
+
+    real_select = jobs_router_module.select
+    select_calls_after_mismatch: list[object] = []
+    mismatch_reached = False
+
+    def _tracking_select(*args: object, **kwargs: object) -> object:
+        if mismatch_reached:
+            select_calls_after_mismatch.append(args)
+        return real_select(*args, **kwargs)
+
+    db = FakeSession()
+    _seed(db)
+    db.rows["jobs"][0].media_type = MediaType.MUSIC
+    db.rows["sessions"][0].media_type = MediaType.MOVIE
+    app, token = _make_app(signing_key, db, tmp_path)
+
+    real_apply_session_internal = jobs_router_module.apply_session_internal
+
+    async def _wrapped_apply(*args: object, **kwargs: object) -> object:
+        nonlocal mismatch_reached
+        outcome = await real_apply_session_internal(*args, **kwargs)  # type: ignore[arg-type]
+        mismatch_reached = outcome.skipped_reason == "media_mismatch"
+        return outcome
+
+    monkeypatch.setattr(jobs_router_module, "select", _tracking_select)
+    monkeypatch.setattr(jobs_router_module, "apply_session_internal", _wrapped_apply)
+
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422
+    assert select_calls_after_mismatch == []
+    detail = r.json()["detail"]
+    assert "not compatible with" in detail
+    assert "movie" in detail
+    assert "music" in detail
 
 
 def test_manual_apply_tv_session_on_movie_job_succeeds(signing_key: bytes, tmp_path: Path) -> None:
