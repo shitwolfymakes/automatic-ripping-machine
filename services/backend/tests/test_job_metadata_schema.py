@@ -78,7 +78,7 @@ def _load_reshape():
     import importlib.util
     from pathlib import Path
 
-    path = Path(__file__).resolve().parents[1] / "migrations" / "versions" / "0031_job_metadata_sections.py"
+    path = Path(__file__).resolve().parents[1] / "migrations" / "versions" / "0032_job_metadata_sections.py"
     spec = importlib.util.spec_from_file_location("mig_0031", path)
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
@@ -127,7 +127,7 @@ def _load_strip_mirror_keys():
     import importlib.util
     from pathlib import Path
 
-    path = Path(__file__).resolve().parents[1] / "migrations" / "versions" / "0032_drop_metadata_mirrors.py"
+    path = Path(__file__).resolve().parents[1] / "migrations" / "versions" / "0033_drop_metadata_mirrors.py"
     spec = importlib.util.spec_from_file_location("mig_0032", path)
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)

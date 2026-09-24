@@ -200,10 +200,12 @@ is taken on; the root-equivalent risk is already accepted in
 
 ## What disappears
 
-- The **"stop the live ripper"** dance in the smoke script — ephemeral workers
-  have unique hostnames + unique log names and never touch `/dev/sr0`, so there's
-  no interaction with `arm-ripper-sr0` at all. (The script's "same drive_id"
-  rationale was already inaccurate — different hostnames, different drive_ids.)
+- The **"pause the enrolled drive's managed container"** dance in the smoke
+  script — ephemeral workers have unique hostnames + unique log names and never
+  touch a real `/dev/sr*` node, so there's no interaction with the enrolled
+  drive's `arm-ripper-<serial>` container at all. (The script's "same
+  drive_id" rationale was already inaccurate — different hostnames, different
+  drive_ids.)
 - The **idle-forever** container and the bespoke **`docker run`** block.
 - The original **compose-overlay** idea from our discussion. An ephemeral worker
   isn't a compose service, so there's no `docker-compose.iso.yml` — exactly like
