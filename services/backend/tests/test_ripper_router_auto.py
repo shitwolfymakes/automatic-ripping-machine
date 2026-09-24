@@ -16,7 +16,7 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
 import pytest  # noqa: E402
 
-from arm_backend.auto_session import maybe_auto_apply_session  # noqa: E402
+from arm_backend.auto_session import after_rip, maybe_auto_apply_session  # noqa: E402
 from arm_common import (  # noqa: E402
     Config,
     ContainerFormat,
@@ -33,6 +33,7 @@ from arm_common import (  # noqa: E402
     RipPreset,
     Session,
     SessionApplication,
+    SessionApplicationStatus,
     Track,
     TrackKind,
     TrackSelection,
@@ -251,3 +252,71 @@ async def test_collision_logs_skipped_reason_and_no_op(tmp_path: Path, caplog: p
     assert [r for r in db.added if isinstance(r, SessionApplication)] == []
     assert hub.events == []
     assert any("skipped reason=collisions" in rec.message for rec in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_after_rip_promoted_parked_application_suppresses_drive_default(tmp_path: Path) -> None:
+    """Fix 75-4: a parked application Y (explicit, applied before rip-start)
+    that the drain successfully promotes to queued IS the operator's choice
+    winning -- the drive default X must NOT also auto-apply, even though
+    auto_transcode_on_idle is on. Before the fix, after_rip always ran
+    maybe_auto_apply_session unconditionally after the drain, so both Y's
+    and X's tasks would exist side by side.
+    """
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db, drive_default_session_id="ses_x", auto_transcode_on_idle=True)
+
+    # Session Y: a second session/preset pair, parked as waiting_identify on
+    # this job (as if applied manually before the rip started). Its template
+    # differs from X's so their output paths -- and therefore which tasks
+    # exist afterward -- are trivially distinguishable.
+    db.rows["rip_presets"].append(
+        RipPreset(
+            id="rpr_y",
+            name="Movie archive",
+            media_type=MediaType.MOVIE,
+            is_builtin=True,
+            track_selection=TrackSelection.MAIN_FEATURE,
+            identification_mode=IdentificationMode.REQUIRED,
+            output_mode=OutputMode.TRACKS,
+        )
+    )
+    db.rows["sessions"].append(
+        Session(
+            id="ses_y",
+            name="Archive copy",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_y",
+            transcode_preset_id="tpr_x",
+            output_path_template="Archive/{title} ({year})/{title} - {transcode_slug}.{ext}",
+        )
+    )
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_y",
+            session_id="ses_y",
+            job_id=job.id,
+            status=SessionApplicationStatus.WAITING_IDENTIFY,
+            overwrite=False,
+        )
+    ]
+    hub = CapturingHub()
+
+    outcomes = await after_rip(db, job, hub)  # type: ignore[arg-type]
+
+    assert len(outcomes) == 1
+    assert outcomes[0].skipped_reason is None
+    assert outcomes[0].application.session_id == "ses_y"
+
+    apps = db.rows["session_applications"]
+    assert {a.session_id for a in apps} == {"ses_y"}  # no ses_x application created
+    assert apps[0].status == SessionApplicationStatus.QUEUED
+
+    tasks = db.rows["transcode_tasks"]
+    assert len(tasks) == 1
+    assert tasks[0].output_path.startswith("Archive/")  # Y's template, not X's
+    queued_events = [e for e in hub.events if e["event_type"] == "session.queued"]
+    assert len(queued_events) == 1
+    assert queued_events[0]["payload"]["session_id"] == "ses_y"
