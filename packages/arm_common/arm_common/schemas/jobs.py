@@ -292,9 +292,7 @@ class RipStartResponse(BaseModel):
 # "media_mismatch" — the session's media_type is incompatible with the
 # job's drive/disc-type routing (see `_media_types_compatible`); fanning
 # out would apply the wrong session to the wrong kind of disc.
-ApplySkippedReason = Literal[
-    "collisions", "template", "session_missing", "no_tracks", "no_outputs", "media_mismatch"
-]
+ApplySkippedReason = Literal["collisions", "template", "session_missing", "no_tracks", "no_outputs", "media_mismatch"]
 
 
 class ResolveFanOutOutcomeView(BaseModel):
