@@ -87,6 +87,53 @@ class RipPresetUnavailable(Exception):
         self.detail = detail
 
 
+async def _load_routed_session(db: AsyncSession, job: Job) -> Session | None:
+    """Resolve + load the job's ROUTED session row in one shot.
+
+    Fix 75-8: the single query rip-start (and resume) needs — every other
+    resolver in this module is now a pure derivation over the `Session |
+    None` this returns, so a request thread only ever pays for one
+    `resolve_routed_session_id` call and one `Session` SELECT, instead of
+    re-resolving from scratch per field. Returns None when nothing routes,
+    or when a routed id's Session row is gone (deleted between trigger and
+    rip) — logged once here so callers don't each emit their own warning.
+    """
+    routed_id = await resolve_routed_session_id(db, job)
+    if routed_id is None:
+        return None
+    sess = (await db.execute(select(Session).where(col(Session.id) == routed_id))).scalar_one_or_none()
+    if sess is None:
+        logger.warning(
+            "routed session %s missing for job_id=%s; falling back to disc-type default",
+            routed_id,
+            job.id,
+        )
+    return sess
+
+
+def _rip_preset_id_from_session(sess: Session | None, disc_type: DiscType) -> str:
+    """Pure derivation: routed session's preset id, else the disc-type default."""
+    if sess is not None:
+        return sess.rip_preset_id
+    preset_id = _DEFAULT_RIP_PRESET_BY_DISC_TYPE.get(disc_type)
+    if preset_id is None:
+        raise RipPresetUnavailable("no_default", f"no default rip preset for disc_type={disc_type.value}")
+    return preset_id
+
+
+def _min_length_override_from_session(sess: Session | None) -> int | None:
+    """Pure derivation: `sess.overrides_json["min_length_seconds"]` when a
+    valid non-negative int, else None (defensive against bad/legacy data)."""
+    if sess is None or not sess.overrides_json:
+        return None
+    raw = sess.overrides_json.get("min_length_seconds")
+    if isinstance(raw, bool):  # bool is an int subclass — reject explicitly
+        return None
+    if isinstance(raw, int) and raw >= 0:
+        return raw
+    return None
+
+
 async def resolve_rip_preset_id_for_job(db: AsyncSession, job: Job) -> str:
     """The one place that decides WHICH rip preset governs a job's rip.
 
@@ -105,21 +152,13 @@ async def resolve_rip_preset_id_for_job(db: AsyncSession, job: Job) -> str:
     the preset row: rip-start's crash-resume and status-check paths answer
     without it, and "not_seeded" only surfaces when track selection actually
     needs the preset.
+
+    Single-caller convenience wrapper over `_load_routed_session` +
+    `_rip_preset_id_from_session` — rip-start/resume call those two
+    directly so one request only resolves the routed session once (Fix 75-8).
     """
-    routed_id = await resolve_routed_session_id(db, job)
-    if routed_id is not None:
-        sess = (await db.execute(select(Session).where(col(Session.id) == routed_id))).scalar_one_or_none()
-        if sess is not None:
-            return sess.rip_preset_id
-        logger.warning(
-            "routed session %s missing for job_id=%s; falling back to disc-type default",
-            routed_id,
-            job.id,
-        )
-    preset_id = _DEFAULT_RIP_PRESET_BY_DISC_TYPE.get(job.disc_type)
-    if preset_id is None:
-        raise RipPresetUnavailable("no_default", f"no default rip preset for disc_type={job.disc_type.value}")
-    return preset_id
+    sess = await _load_routed_session(db, job)
+    return _rip_preset_id_from_session(sess, job.disc_type)
 
 
 async def resolve_rip_preset_for_job(db: AsyncSession, job: Job) -> RipPreset:
@@ -147,19 +186,12 @@ async def _resolve_min_length_override(db: AsyncSession, job: Job) -> int | None
     ROUTED session (explicit per-rip choice, else the drive default),
     returning None when no override applies. The ripper falls back to its
     host-side `ARM_MIN_LENGTH_SECONDS` baseline when this is None.
+
+    Single-caller convenience wrapper over `_load_routed_session` +
+    `_min_length_override_from_session` — see `resolve_rip_preset_id_for_job`.
     """
-    sess_id = await resolve_routed_session_id(db, job)
-    if sess_id is None:
-        return None
-    sess = (await db.execute(select(Session).where(col(Session.id) == sess_id))).scalar_one_or_none()
-    if sess is None or not sess.overrides_json:
-        return None
-    raw = sess.overrides_json.get("min_length_seconds")
-    if isinstance(raw, bool):  # bool is an int subclass — reject explicitly
-        return None
-    if isinstance(raw, int) and raw >= 0:
-        return raw
-    return None
+    sess = await _load_routed_session(db, job)
+    return _min_length_override_from_session(sess)
 
 
 async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -> None:
@@ -628,10 +660,19 @@ async def rip_start(
     session: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> RipStartResponse:
+    # Fix 75-8: resolve the routed session ONCE for this request — the preset
+    # choice and the min-length override both derive from the same `sess`
+    # (previously each of resolve_rip_preset_id_for_job,
+    # resolve_rip_preset_for_job, and _resolve_min_length_override
+    # independently re-ran resolve_routed_session_id + its own Session
+    # SELECT, up to three times per request with three warning emissions on
+    # a missing routed row).
+    sess = await _load_routed_session(session, job)
     try:
-        preset_id = await resolve_rip_preset_id_for_job(session, job)
+        preset_id = _rip_preset_id_from_session(sess, job.disc_type)
     except RipPresetUnavailable as exc:
         raise _rip_preset_or_http(exc) from exc
+    min_length_seconds = _min_length_override_from_session(sess)
 
     existing = (
         (await session.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index))))
@@ -655,7 +696,7 @@ async def rip_start(
             job_id=job.id,
             rip_preset_id=preset_id,
             tracks=[TrackView.model_validate(t) for t in existing],
-            min_length_seconds=await _resolve_min_length_override(session, job),
+            min_length_seconds=min_length_seconds,
         )
 
     # IDENTIFIED is the normal pre-rip state; AWAITING_REVIEW reaches here only
@@ -678,10 +719,9 @@ async def rip_start(
         )
     scan = ScanResult.model_validate(scan_dict)
 
-    try:
-        preset = await resolve_rip_preset_for_job(session, job)
-    except RipPresetUnavailable as exc:
-        raise _rip_preset_or_http(exc) from exc
+    preset = (await session.execute(select(RipPreset).where(col(RipPreset.id) == preset_id))).scalar_one_or_none()
+    if preset is None:
+        raise _rip_preset_or_http(RipPresetUnavailable("not_seeded", f"built-in rip preset {preset_id} not seeded"))
 
     new_tracks = select_tracks(job.id, scan, preset)
     if not new_tracks:
@@ -727,7 +767,7 @@ async def rip_start(
         job_id=job.id,
         rip_preset_id=preset_id,
         tracks=[TrackView.model_validate(t) for t in refreshed],
-        min_length_seconds=await _resolve_min_length_override(session, job),
+        min_length_seconds=min_length_seconds,
     )
 
 
@@ -748,10 +788,13 @@ async def resume(
             detail=f"job not in ripping state: status={job.status.value}",
         )
 
+    # Fix 75-8: one routed-session resolution for this request (see rip_start).
+    sess = await _load_routed_session(session, job)
     try:
-        preset_id = await resolve_rip_preset_id_for_job(session, job)
+        preset_id = _rip_preset_id_from_session(sess, job.disc_type)
     except RipPresetUnavailable as exc:
         raise _rip_preset_or_http(exc) from exc
+    min_length_seconds = _min_length_override_from_session(sess)
 
     await reset_job_for_recovery(session, job)
     await session.commit()
@@ -781,7 +824,7 @@ async def resume(
         job_id=job.id,
         rip_preset_id=preset_id,
         tracks=[TrackView.model_validate(t) for t in refreshed],
-        min_length_seconds=await _resolve_min_length_override(session, job),
+        min_length_seconds=min_length_seconds,
     )
 
 

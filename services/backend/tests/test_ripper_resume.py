@@ -142,6 +142,33 @@ def test_resume_idempotent_does_not_inflate_attempts() -> None:
     assert db.rows["tracks"][0].attempts == 2
 
 
+def test_resume_resolves_routed_session_exactly_once() -> None:
+    """Fix 75-8 regression: resume must resolve the routed session ONE time
+    per request, mirroring rip-start. Before the fix, resolve_rip_preset_id_for_job
+    and _resolve_min_length_override each independently called
+    resolve_routed_session_id."""
+    db = FakeSession()
+    _seed(db)
+
+    calls: list[str] = []
+    orig = ripper_router.resolve_routed_session_id
+
+    async def _counting(db_arg: Any, job_arg: Any) -> Any:
+        calls.append(job_arg.id)
+        return await orig(db_arg, job_arg)
+
+    ripper_router.resolve_routed_session_id = _counting  # type: ignore[assignment]
+    try:
+        app = _make_app(db, hub=_CapturingHub())
+        with TestClient(app) as client:
+            r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resume", headers=_service_headers())
+    finally:
+        ripper_router.resolve_routed_session_id = orig  # type: ignore[assignment]
+
+    assert r.status_code == 200, r.text
+    assert len(calls) == 1
+
+
 def test_resume_on_non_ripping_job_returns_409() -> None:
     db = FakeSession()
     _seed(db, job_status=JobStatus.RIPPED)
