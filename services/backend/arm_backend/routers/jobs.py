@@ -918,6 +918,11 @@ async def resolve(
     md = JobMetadata.model_validate(job.metadata_json or {})
     if req.music is not None:
         md.music = req.music
+    # Fix 75-5: "external_ids" sent (even as {} or with some fields null) is
+    # the operator editing identity; each MEMBER field then follows
+    # omitted=keep / explicit-null=clears, via model_fields_set rather than
+    # `is not None` (which can't tell "sent null" from "not sent" once
+    # Pydantic has already collapsed both to None).
     if req.external_ids is not None:
         if md.identity is None:
             md.identity = JobIdentity(provider="manual")
@@ -926,13 +931,14 @@ async def resolve(
         # Re-assigned (not just mutated) so exclude_unset picks up
         # external_ids as set even when identity was just freshly created.
         existing_ids = md.identity.external_ids
-        if req.external_ids.imdb is not None:
+        ids_set = req.external_ids.model_fields_set
+        if "imdb" in ids_set:
             existing_ids.imdb = req.external_ids.imdb
-        if req.external_ids.tmdb is not None:
+        if "tmdb" in ids_set:
             existing_ids.tmdb = req.external_ids.tmdb
-        if req.external_ids.tvdb is not None:
+        if "tvdb" in ids_set:
             existing_ids.tvdb = req.external_ids.tvdb
-        if req.external_ids.musicbrainz_release is not None:
+        if "musicbrainz_release" in ids_set:
             existing_ids.musicbrainz_release = req.external_ids.musicbrainz_release
         md.identity.external_ids = existing_ids
     new_metadata = md.model_dump(mode="json", exclude_unset=True)
@@ -941,19 +947,28 @@ async def resolve(
     job.year = req.year
     job.disc_number = req.disc_number
     job.disc_total = req.disc_total
-    # media_type/season are classifications, not part of the identity
-    # statement: omitted = keep (a title-only fix must not wipe them).
-    if req.media_type is not None:
+    # Fix 75-5: media_type/season are classifications, not part of the
+    # identity statement -- omitted keeps the stored value, but an EXPLICIT
+    # null clears it (the operator saying "this isn't a season" or "clear
+    # the kind"). model_fields_set is the only way to tell "sent null" from
+    # "not sent" here, since both collapse to req.media_type is None.
+    fields_set = req.model_fields_set
+    if "media_type" in fields_set:
         job.media_type = req.media_type
-    if req.season is not None:
+    if "season" in fields_set:
         job.season = req.season
     was_ripped_placeholder = job.status == JobStatus.RIPPED_AWAITING_IDENTIFY
+    # Fix 75-6: the spent `unidentified` flag (flags section + the pre-0031
+    # top-level key) must be cleared on BOTH branches, not just PROMOTE. A
+    # resolved RIPPED_PARTIAL placeholder stays in PRESERVE (partiality wins
+    # over the placeholder status — see rip-complete) but has just as much
+    # identity landed as a PROMOTE job; leaving flags.unidentified=true
+    # forever would misreport it after the operator has already identified
+    # it.
+    new_metadata.pop("unidentified", None)
+    if isinstance(new_metadata.get("flags"), dict):
+        new_metadata["flags"] = {k: v for k, v in new_metadata["flags"].items() if k != "unidentified"}
     if job.status in _RESOLVABLE_STATUSES_PROMOTE:
-        # Identity has landed; the flag that parked the job is spent
-        # (flags section + the pre-0031 top-level key).
-        new_metadata.pop("unidentified", None)
-        if isinstance(new_metadata.get("flags"), dict):
-            new_metadata["flags"] = {k: v for k, v in new_metadata["flags"].items() if k != "unidentified"}
         # A placeholder whose rip already finished becomes RIPPED, not
         # IDENTIFIED — its rip is done (G-09).
         job.status = JobStatus.RIPPED if was_ripped_placeholder else JobStatus.IDENTIFIED
