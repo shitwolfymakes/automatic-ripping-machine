@@ -1814,6 +1814,44 @@ def test_rip_complete_partial_unidentified_stays_ripped_partial(
     assert r.json()["status"] == "ripped_partial"
 
 
+def test_rip_complete_partial_unidentified_does_not_run_after_rip(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Fix 75-3 regression: a RIPPED_PARTIAL placeholder (identify missed,
+    block_on_miss=false) must NOT run after_rip. Before the fix the
+    unidentified-flag gate only covered the failed==0 (RIPPED) branch, so a
+    partial placeholder fell through unconditionally and fanned out
+    transcodes with paths built from the raw volume label under the wrong
+    identity. Status handling is unchanged (still RIPPED_PARTIAL); the
+    parked application must stay parked and drain normally once resolve
+    supplies the real identity."""
+    from arm_backend import config as bcfg
+
+    bcfg.settings.MEDIA_ROOT = str(tmp_path)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"unidentified": True})]
+    db.rows["drives"] = [_drive()]
+    failed_track = _track("t2", status=TrackStatus.FAILED, index=2)
+    # Excluded from transcode-output resolution (compute_outputs skips
+    # excluded tracks) so it can't collide on output_path with t1's -- the
+    # movie template doesn't key on track index, only the failed COUNT
+    # matters for RIPPED_PARTIAL here, not which tracks fan out.
+    failed_track.excluded = True
+    db.rows["tracks"] = [
+        _track("t1", status=TrackStatus.DONE, index=1),
+        failed_track,
+    ]
+    _seed_parked_session(db)
+    hub = _Hub()
+    r = _rip_complete(db, hub, monkeypatch)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ripped_partial"
+    # No fan-out, no auto-apply: the parked application is untouched.
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
+    assert not any(e["event_type"] == "session.queued" for e in hub.events)
+
+
 # --- identify records the identified kind + pending session (step 2 / G-03) --
 
 

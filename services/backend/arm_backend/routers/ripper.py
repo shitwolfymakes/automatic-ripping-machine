@@ -1083,7 +1083,17 @@ async def rip_complete(
     )
     await session.commit()
 
-    if job.status in (JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL):
+    # Fix 75-3: the unidentified-flag gate must cover BOTH ripped outcomes,
+    # not just the failed==0 (RIPPED) branch. A RIPPED_PARTIAL placeholder
+    # (identify missed, block_on_miss=false) was falling through to
+    # after_rip unconditionally, fanning out transcodes with paths built
+    # from the raw volume label under the wrong identity. Status handling is
+    # unchanged (partial stays RIPPED_PARTIAL either way) — only after_rip
+    # is gated; a parked application still drains safely once resolve lands
+    # (Fix 75-2 makes that ordering safe).
+    if job.status in (JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL) and not flag_is_set(
+        job.metadata_json, "unidentified"
+    ):
         # Rip done, identity known: drain parked applications (an explicit
         # operator choice wins over the drive default), then auto-apply.
         # RIPPED_AWAITING_IDENTIFY deliberately skips this — transcode is
