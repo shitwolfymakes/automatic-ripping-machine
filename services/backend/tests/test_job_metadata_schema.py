@@ -52,14 +52,14 @@ def test_with_flags_sets_section_and_removes_legacy_key() -> None:
 def test_flag_is_set_prefers_section_over_legacy() -> None:
     assert flag_is_set({"flags": {"unidentified": True}}, "unidentified") is True
     assert flag_is_set({"flags": {"unidentified": False}, "unidentified": True}, "unidentified") is False
-    assert flag_is_set({"unidentified": True}, "unidentified") is True  # pre-0031 rows
+    assert flag_is_set({"unidentified": True}, "unidentified") is True  # pre-0032 rows (no flags section yet)
     assert flag_is_set(None, "unidentified") is False
 
 
 def test_job_metadata_round_trips_unknown_keys() -> None:
-    """extra="allow" everywhere: pre-0031 rows and pre-0032 rows that still
-    carry the (now-retired) pending_session_id mirror must survive a
-    validate -> dump round-trip unchanged."""
+    """extra="allow" everywhere: pre-0032 rows (no typed sections yet) and
+    pre-0033 rows that still carry the (now-retired) pending_session_id
+    mirror must survive a validate -> dump round-trip unchanged."""
     raw = {
         "scan_result": None,
         "pending_session_id": "ses_x",
@@ -79,14 +79,14 @@ def _load_reshape():
     from pathlib import Path
 
     path = Path(__file__).resolve().parents[1] / "migrations" / "versions" / "0032_job_metadata_sections.py"
-    spec = importlib.util.spec_from_file_location("mig_0031", path)
+    spec = importlib.util.spec_from_file_location("mig_0032", path)
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod._reshape
 
 
-def test_migration_0031_reshape_lifts_legacy_rows() -> None:
+def test_migration_0032_reshape_lifts_legacy_rows() -> None:
     reshape = _load_reshape()
     md = {
         "scan_result": {"disc_type": "dvd"},
@@ -112,7 +112,7 @@ def test_migration_0031_reshape_lifts_legacy_rows() -> None:
         assert stray not in out
 
 
-def test_migration_0031_reshape_is_idempotent() -> None:
+def test_migration_0032_reshape_is_idempotent() -> None:
     reshape = _load_reshape()
     clean = {
         "scan_result": {"disc_type": "dvd"},
@@ -128,14 +128,14 @@ def _load_strip_mirror_keys():
     from pathlib import Path
 
     path = Path(__file__).resolve().parents[1] / "migrations" / "versions" / "0033_drop_metadata_mirrors.py"
-    spec = importlib.util.spec_from_file_location("mig_0032", path)
+    spec = importlib.util.spec_from_file_location("mig_0033", path)
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod.strip_mirror_keys
 
 
-def test_migration_0032_strip_mirror_keys_removes_lifted_columns() -> None:
+def test_migration_0033_strip_mirror_keys_removes_lifted_columns() -> None:
     strip_mirror_keys = _load_strip_mirror_keys()
     md = {
         "scan_result": {"disc_type": "dvd"},
@@ -156,7 +156,7 @@ def test_migration_0032_strip_mirror_keys_removes_lifted_columns() -> None:
     assert md["pending_session_id"] == "ses_x"
 
 
-def test_migration_0032_strip_mirror_keys_is_idempotent() -> None:
+def test_migration_0033_strip_mirror_keys_is_idempotent() -> None:
     strip_mirror_keys = _load_strip_mirror_keys()
     clean = {
         "scan_result": {"disc_type": "dvd"},

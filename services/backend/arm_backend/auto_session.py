@@ -60,6 +60,10 @@ _RIPPED_STATUSES: frozenset[JobStatus] = frozenset(
     {JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL, JobStatus.RIPPED_AWAITING_IDENTIFY}
 )
 _NO_TRACKS_DETAIL = "no tracks yet: the rip has not started; the application fans out when the rip completes"
+_NO_OUTPUTS_DETAIL = (
+    "tracks exist but none resolved an output for this session (excluded, or none match its "
+    "media_type/track routing); the application stays parked"
+)
 
 
 def _media_types_compatible(job_mt: MediaType, sess_mt: MediaType) -> bool:
@@ -307,6 +311,13 @@ async def _apply_session_internal(
             job.id,
             source,
         )
+    elif outcome.skipped_reason == "no_outputs":
+        logger.info(
+            "apply: parked session_id=%s job_id=%s (tracks exist but none resolved an output; stays parked) source=%s",
+            session_id,
+            job.id,
+            source,
+        )
     else:
         logger.info(
             "apply session_id=%s job_id=%s tasks=%d overwrite=%s source=%s",
@@ -388,7 +399,19 @@ async def _fan_out_tasks_for_application(
 
     resolved = compute_outputs(job, tracks, sess, transcode_preset)
 
-    if not resolved and job.status not in _RIPPED_STATUSES:
+    # Fix 75-7: park-for-later must be keyed on whether TRACKS exist yet
+    # (the pre-rip semantics this branch exists for), not on whether
+    # compute_outputs resolved any OUTPUTS. Those are different questions:
+    # `not tracks` means the ripper hasn't persisted Track rows yet (apply
+    # was made between identify and rip-start, or the disc is still
+    # counting down in review) — re-applying at rip-complete/resolve, once
+    # the tracks exist, is a completely different — and likely different —
+    # outcome. `not resolved` alone can ALSO be true with tracks already
+    # present (every track excluded, or none match the session's
+    # media_type/track-kind routing) — parking as "no_tracks" there would
+    # promise a fan-out at rip-complete that will never come, because the
+    # rip is already done and the tracks that exist simply don't qualify.
+    if not tracks and job.status not in _RIPPED_STATUSES:
         # The ripper persists Track rows at rip-start, so a session applied
         # between identify and rip-start (or resolved before the rip) has
         # nothing to fan out yet. Park the application with no tasks instead
@@ -410,6 +433,31 @@ async def _fan_out_tasks_for_application(
             collisions=[],
             idempotent=False,
             skipped_reason="no_tracks",
+        )
+
+    if not resolved:
+        # Tracks exist but none resolved to an output (excluded, or none
+        # match the session's media_type/track-kind routing). This is its
+        # own honest, terminal outcome — never promote an empty QUEUED husk
+        # that no drain will ever fill, and never claim "no_tracks" (which
+        # promises a rip-complete fan-out that can't happen: the tracks are
+        # already here and already don't qualify).
+        if application is None:
+            application = SessionApplication(
+                session_id=sess.id,
+                job_id=job.id,
+                status=SessionApplicationStatus.WAITING_IDENTIFY,
+                overwrite=overwrite,
+                created_by_user_id=created_by_user_id,
+            )
+            db.add(application)
+            await db.flush()
+        return ApplySessionOutcome(
+            application=application,
+            tasks=[],
+            collisions=[],
+            idempotent=False,
+            skipped_reason="no_outputs",
         )
 
     paths = [r.output_path for r in resolved]
@@ -613,6 +661,17 @@ async def fan_out_waiting_identify_applications(
             )
             continue
 
+        if outcome.skipped_reason == "no_outputs":
+            outcomes.append(
+                ResolveFanOutOutcome(
+                    application=app,
+                    tasks=[],
+                    skipped_reason="no_outputs",
+                    error_detail=_NO_OUTPUTS_DETAIL,
+                )
+            )
+            continue
+
         assert outcome.application is not None
         outcomes.append(
             ResolveFanOutOutcome(
@@ -633,8 +692,18 @@ async def after_rip(db: AsyncSession, job: Job, hub: WSHub) -> list[ResolveFanOu
     already identified, and `resolve` when a `ripped_awaiting_identify`
     placeholder gains its identity. Never raises; returns the drain's
     outcomes so resolve can report them.
+
+    Fix 75-4: if the drain promoted at least one parked application to
+    QUEUED-with-tasks, that IS the operator's explicit choice winning — skip
+    the drive-default auto-apply entirely rather than also queueing it
+    alongside. Without this, a disc with both a parked session (explicit,
+    pre-rip apply) and a drive default (auto_transcode_on_idle) would fan
+    out tasks for both, even though a promoted parked application already
+    represents a deliberate operator decision for this disc.
     """
     outcomes = await drain_parked_applications_after_rip(db, job, hub)
+    if any(outcome.skipped_reason is None for outcome in outcomes):
+        return outcomes
     await maybe_auto_apply_session(db, job, hub)
     return outcomes
 
