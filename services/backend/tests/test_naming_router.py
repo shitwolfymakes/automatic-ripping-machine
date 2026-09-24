@@ -174,6 +174,53 @@ def test_job_naming_preview_renders_filenames(signing_key: bytes) -> None:
     assert body["job_output_name"] == "Iron Man"
 
 
+def test_job_naming_preview_session_id_overrides_effective_session(signing_key: bytes) -> None:
+    """The Apply dialog previews the session the operator is choosing, not the
+    job's pending/default one."""
+    db = FakeSession()
+    _seed(db)
+    _seed_job(db)
+    db.rows["sessions"].append(
+        Session(
+            id="ses_flat",
+            name="Flat",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_x",
+            transcode_preset_id=None,
+            output_path_template="flat/{title}.mkv",
+        )
+    )
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{_JOB_ID_1}/naming-preview", params={"session_id": "ses_flat"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["items"][0]["output_path"] == "flat/Iron Man.mkv"
+
+
+def test_job_naming_preview_unknown_session_id_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    _seed_job(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{_JOB_ID_1}/naming-preview", params={"session_id": "ses_nope"}, headers=_auth(token))
+    assert r.status_code == 404
+    assert "unknown session_id" in r.json()["detail"]
+
+
+def test_job_naming_preview_missing_year_422_names_the_token(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    _seed_job(db)
+    db.rows["jobs"][0].year = None
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{_JOB_ID_1}/naming-preview", headers=_auth(token))
+    assert r.status_code == 422
+    assert "token {year} resolved empty" in r.json()["detail"]
+
+
 def test_job_naming_preview_unknown_job_404(signing_key: bytes) -> None:
     db = FakeSession()
     _seed(db)

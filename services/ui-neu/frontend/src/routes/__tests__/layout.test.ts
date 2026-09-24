@@ -148,6 +148,18 @@ describe("Layout", () => {
     });
   });
 
+  it("hides the resource stats surfaces when the Interface preference is off", async () => {
+    const { setUiPref } = await import("$lib/stores/uiPrefs");
+    setUiPref("showStats", true);
+    const { unmount } = renderComponent(Layout, { props: { children: childSnippet() } });
+    expect(document.querySelector('[data-testid="bottom-stats-bar"]')).not.toBeNull();
+    unmount();
+    setUiPref("showStats", false);
+    renderComponent(Layout, { props: { children: childSnippet() } });
+    expect(document.querySelector('[data-testid="bottom-stats-bar"]')).toBeNull();
+    setUiPref("showStats", true);
+  });
+
   it("renders navigation links for v3-supported screens", () => {
     renderComponent(Layout, { props: { children: childSnippet() } });
     expect(screen.getByText("Dashboard")).toBeInTheDocument();

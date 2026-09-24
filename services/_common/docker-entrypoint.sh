@@ -109,6 +109,84 @@ require_writable() {
     return 1
 }
 
+# ---------------------------------------------------------------- functions
+
+# Grant the arm user access to /dev/dri render nodes BEFORE the gosu drop —
+# gosu resets supplementary groups, so a docker --group-add would not survive;
+# membership must be written to /etc/group here.
+#
+# Resolution order:
+#   1. Explicit RENDER_GID env (dispatcher override / legacy configs) — wins.
+#   2. Self-derive: stat every mounted renderD* node. Device nodes keep their
+#      HOST gid inside the container, so this is correct on whichever host the
+#      container actually runs (local or remote offload) with zero config.
+# No nodes and no RENDER_GID → silent no-op (backend/ripper/ui/CPU/NVENC).
+# ARM_RENDER_NODE_DIR is a test seam; production always uses /dev/dri.
+setup_render_access() {
+    local dri_dir="${ARM_RENDER_NODE_DIR:-/dev/dri}"
+    if [[ -n "${RENDER_GID:-}" ]]; then
+        if [[ "${RENDER_GID}" == "0" ]]; then
+            echo "render access: refusing explicit RENDER_GID=0 — never adding arm to gid 0" >&2
+            return 0
+        fi
+        _join_render_gid "${RENDER_GID}" "render-host"
+        echo "render access: RENDER_GID=${RENDER_GID} (explicit)"
+        return 0
+    fi
+    local node gid g seen failed=0 found=0
+    local gids=()
+    for node in "${dri_dir}"/renderD*; do
+        [[ -e "$node" ]] || continue
+        found=1
+        if ! gid="$(stat -c '%g' "$node" 2>/dev/null)"; then
+            echo "render access: FAILED — cannot stat ${node}" >&2
+            failed=1
+            continue
+        fi
+        if [[ "$gid" == "0" ]]; then
+            echo "render access: skipping ${node} (group root) — refusing to add arm to gid 0" >&2
+            continue
+        fi
+        seen=0
+        for g in "${gids[@]}"; do [[ "$g" == "$gid" ]] && seen=1; done
+        [[ "$seen" == "1" ]] && continue
+        gids+=("$gid")
+        _join_render_gid "$gid" "render-host-${gid}"
+    done
+    if [[ "${#gids[@]}" -gt 0 ]]; then
+        echo "render access: derived gid(s) ${gids[*]} from ${dri_dir}/renderD*"
+    elif [[ "${ARM_GPU_DEVICE:-}" == /dev/dri/* ]]; then
+        # The dispatcher assigned a render-node GPU but no usable gid was
+        # derived — HandBrake will fail encoder init; make the cause greppable.
+        # (Per-node stat failures already printed their own FAILED line.)
+        if [[ "$found" == "0" ]]; then
+            echo "render access: FAILED — ARM_GPU_DEVICE=${ARM_GPU_DEVICE} set but no ${dri_dir}/renderD* visible" >&2
+        elif [[ "$failed" == "0" ]]; then
+            echo "render access: FAILED — ARM_GPU_DEVICE=${ARM_GPU_DEVICE} set but no usable render gid (node group is root)" >&2
+        fi
+    fi
+    return 0
+}
+
+# _join_render_gid <gid> <fallback_name>: adopt an existing group by gid, else
+# create <fallback_name> with that gid; then append arm. Mirrors the
+# CDROM_GID / docker.sock adopt-by-gid handling below.
+_join_render_gid() {
+    local gid="$1" fallback_name="$2" group
+    group="$(getent group "${gid}" | cut -d: -f1 || true)"
+    if [[ -z "${group}" ]]; then
+        groupadd --gid "${gid}" "${fallback_name}"
+        group="${fallback_name}"
+    fi
+    usermod --append --groups "${group}" arm
+}
+
+# Test seam: lets services/_common/test-entrypoint-render.sh source the
+# functions above without executing the entrypoint (mirrors install.sh's
+# ARM_INSTALL_SOURCE_ONLY). The sourced-ness check makes a leaked env var
+# harmless when the entrypoint is EXECUTED (top-level `return` would abort).
+[[ -n "${ARM_ENTRYPOINT_SOURCE_ONLY:-}" && "${BASH_SOURCE[0]}" != "$0" ]] && return 0
+
 # ---------------------------------------------------------------- optical nodes
 # The ripper is NOT given its drive via a compose/docker `devices:` bind. Docker
 # resolves those at container-create time, so an absent drive fails creation
@@ -159,10 +237,18 @@ if [[ -f /etc/ssl/arm/arm-ca.crt ]]; then
     update-ca-certificates >/dev/null
 fi
 
-if ! getent group arm >/dev/null; then
-    groupadd --gid "${PGID}" arm
-else
-    groupmod --gid "${PGID}" arm
+# Give the arm user primary gid PGID. If that gid ALREADY exists in the image
+# (gid 100 `users` — a common primary gid on SUSE/Synology hosts — or any
+# Debian system gid), adopt the existing group instead: groupadd/groupmod
+# refuse a duplicate gid and the service would crash-loop. useradd/usermod
+# below take the numeric gid directly, whatever group name owns it. Mirrors
+# the CDROM_GID/RENDER_GID adopt-by-gid handling further down.
+if ! getent group "${PGID}" >/dev/null; then
+    if getent group arm >/dev/null; then
+        groupmod --gid "${PGID}" arm
+    else
+        groupadd --gid "${PGID}" arm
+    fi
 fi
 
 if ! id -u arm >/dev/null 2>&1; then
@@ -189,19 +275,9 @@ if [[ -n "${ARM_DRIVE_ID:-}" ]]; then
     precreate_optical_nodes /dev "${ARM_OPTICAL_SR_MAX:-7}" "${ARM_OPTICAL_SG_MAX:-15}" "${cdrom_group:-root}"
 fi
 
-# Transcode-only path: VAAPI/QSV transcoders get the host's /dev/dri render node
-# (root:render 0660) passed in by the dispatcher. The node is group-owned, so the
-# `arm` user must join that group IN /etc/group — `gosu` resets supplementary
-# groups to the user's membership, dropping any docker --group-add. Mirrors the
-# CDROM_GID handling above. No-op when RENDER_GID is unset (CPU / NVENC / ripper).
-if [[ -n "${RENDER_GID:-}" ]]; then
-    render_group="$(getent group "${RENDER_GID}" | cut -d: -f1 || true)"
-    if [[ -z "${render_group}" ]]; then
-        groupadd --gid "${RENDER_GID}" render-host
-        render_group="render-host"
-    fi
-    usermod --append --groups "${render_group}" arm
-fi
+# Transcode-only path: VAAPI/QSV render-node access (see setup_render_access
+# above — explicit RENDER_GID wins, else derived from the mounted nodes).
+setup_render_access
 
 # Backend-only path: when /var/run/docker.sock is bind-mounted in so the
 # transcode dispatcher can spawn arm-transcode-* containers, the socket's
