@@ -58,8 +58,10 @@ _DOCKER_LABEL_KEY = "arm.task_id"
 
 # A dead docker-over-SSH transport (idle paramiko connection reset by the
 # remote end) surfaces as one of these, either raw or wrapped inside
-# docker-py's APIError cause chain.
-_TRANSPORT_DEAD_ERRORS = (SSHException, ConnectionResetError, BrokenPipeError)
+# docker-py's APIError cause chain. EOFError is included because paramiko
+# commonly surfaces a dead transport that way (the read side hits EOF when
+# the remote end has silently closed the connection).
+_TRANSPORT_DEAD_ERRORS = (SSHException, ConnectionResetError, BrokenPipeError, EOFError)
 
 
 def _is_transport_death(exc: BaseException) -> bool:
@@ -420,7 +422,18 @@ class TranscodeDispatcher:
                     )
                     continue
                 try:
-                    self._spawn_container(task, assignment=assignment)
+                    # `_spawn_container` is a blocking call: a plain docker
+                    # socket round-trip normally, but on the SSH-transport-
+                    # rebuild path (see `_is_transport_death`) it also does a
+                    # blocking TCP+SSH handshake that can take tens of
+                    # seconds against a black-holed remote host. Run it off
+                    # the event loop so a stuck spawn doesn't freeze
+                    # HTTP/WS/ripper callbacks for the whole tick.
+                    # `_spawn_container` touches only `self._docker`,
+                    # `self._docker_factory`, `self._settings`, and its own
+                    # locals/args (never the AsyncSession), so moving it to a
+                    # thread doesn't put any DB access off the loop.
+                    await asyncio.to_thread(self._spawn_container, task, assignment=assignment)
                     spawned += 1
                     self.last_spawn_error = None
                 except Exception as exc:
