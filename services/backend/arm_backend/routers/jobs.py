@@ -960,6 +960,19 @@ async def resolve(
     job.metadata_json = new_metadata
     session.add(job)
 
+    # Fix 75-2: commit the resolve's job mutations (title/year/status/etc.)
+    # BEFORE running after_rip / fan_out_waiting_identify_applications.
+    # after_rip's drain half (drain_parked_applications_after_rip) rolls back
+    # the session on any exception -- with the old ordering that rollback
+    # silently discarded the operator's just-applied resolve, yet the
+    # endpoint still returned 200 built from the (rolled-back, but
+    # still-mutated-in-Python) job object. Committing first mirrors
+    # rip-complete, which also commits its status change before invoking
+    # after_rip; a subsequent after_rip failure can then only affect fan-out,
+    # never the resolve itself.
+    await session.commit()
+    await session.refresh(job)
+
     if was_ripped_placeholder:
         # Rip done + identity just landed: run the same post-rip pass
         # rip-complete runs for identified jobs — drain parked applications
@@ -997,9 +1010,10 @@ async def resolve(
         session=session,
     )
 
-    # Single commit lands the job update, fan-out task rows, the fan-out's
-    # session.queued events, and identify.resolved + rip.identify_resolved
-    # events atomically.
+    # Second commit lands the fan-out's task rows (when after_rip/fan-out did
+    # not already commit or roll back on its own) plus the
+    # identify.resolved + rip.identify_resolved events. The resolve itself is
+    # already durable from the commit above.
     await session.commit()
     await session.refresh(job)
     for outcome in fan_out_outcomes:

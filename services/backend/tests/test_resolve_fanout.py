@@ -524,6 +524,63 @@ def test_resolve_before_rip_keeps_application_parked(signing_key: bytes, tmp_pat
     assert not any(e["event_type"] == "session.queued" for e in hub.events)
 
 
+def test_resolve_commits_identity_before_after_rip_drain_raises(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fix 75-2 regression: a drain exception inside after_rip must not
+    destroy the operator's resolve.
+
+    `drain_parked_applications_after_rip` wraps `fan_out_waiting_identify_applications`
+    in try/except and calls `db.rollback()` on any exception. Before the fix,
+    resolve ran the job identity mutations (title/status) and after_rip in
+    the same uncommitted transaction, so that rollback would discard the
+    resolve too -- yet the endpoint still returned 200 built from the
+    in-Python (but no-longer-durable) job object. Forcing the drain to raise
+    here and asserting the resolve committed BEFORE the drain ran (and that
+    the response reflects the resolved title) pins the fix.
+    """
+    db = FakeSession()
+    hub = _CapturingHub()
+    _seed(db, job_status=JobStatus.RIPPED_AWAITING_IDENTIFY)
+    db.rows["jobs"][0].metadata_json = {"unidentified": True}
+    app, token = _make_app(signing_key, db, tmp_path, hub)
+
+    commits_before_drain: list[int] = []
+
+    async def _raising_fan_out(*args: object, **kwargs: object) -> None:
+        # Record how many commits had already landed by the time the drain
+        # ran, then blow up -- exactly what drain_parked_applications_after_rip
+        # catches and rolls back from.
+        commits_before_drain.append(db.committed)
+        raise RuntimeError("boom: simulated drain failure")
+
+    monkeypatch.setattr(
+        "arm_backend.auto_session.fan_out_waiting_identify_applications",
+        _raising_fan_out,
+    )
+
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Iron Man", "year": 2008},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # The resolve landed: RIPPED_AWAITING_IDENTIFY -> RIPPED, title applied.
+    assert body["job"]["status"] == "ripped"
+    assert body["job"]["title"] == "Iron Man"
+    # The drain found at least one commit already on the books before it ran
+    # (the resolve's own commit) -- pre-fix, this would be 0.
+    assert commits_before_drain == [1]
+    # The fan-out itself failed and stayed parked; no outcome promoted.
+    assert body["fan_out"] == []
+
+    job_row = db.rows["jobs"][0]
+    assert job_row.status == JobStatus.RIPPED
+    assert job_row.title == "Iron Man"
+
+
 def test_resolve_ripped_placeholder_promotes_to_ripped_and_runs_after_rip(signing_key: bytes, tmp_path: Path) -> None:
     """G-09: resolving a ripped_awaiting_identify placeholder promotes it to
     RIPPED (its rip is done — IDENTIFIED would claim otherwise), clears the
