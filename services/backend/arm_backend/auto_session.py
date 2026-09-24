@@ -115,6 +115,14 @@ class ApplySessionOutcome(NamedTuple):
     collisions: list[CollisionInfo]
     idempotent: bool
     skipped_reason: SkippedReason | None
+    # Human-readable detail for the caller's error response, populated only
+    # for skipped_reason="media_mismatch" (Fix 76-7). Computed once here, at
+    # the guard site where `job`/`sess` are both in hand, so the manual-apply
+    # router (jobs.py) can build its 422 straight from this field instead of
+    # re-SELECTing the Session and asserting it's non-None — a re-query that
+    # a concurrent delete (or `python -O`, which strips asserts) could turn
+    # into a 500 instead of the intended 422.
+    error_detail: str | None = None
 
 
 class ResolveFanOutOutcome(NamedTuple):
@@ -395,6 +403,7 @@ async def _fan_out_tasks_for_application(
             collisions=[],
             idempotent=False,
             skipped_reason="media_mismatch",
+            error_detail=media_mismatch_detail(job, sess),
         )
 
     resolved = compute_outputs(job, tracks, sess, transcode_preset)
@@ -678,7 +687,7 @@ async def fan_out_waiting_identify_applications(
                     application=app,
                     tasks=[],
                     skipped_reason="media_mismatch",
-                    error_detail=media_mismatch_detail(job, sess),
+                    error_detail=outcome.error_detail or media_mismatch_detail(job, sess),
                 )
             )
             continue

@@ -16,7 +16,6 @@ from arm_backend.auto_session import (
     apply_session_internal,
     after_rip,
     fan_out_waiting_identify_applications,
-    media_mismatch_detail,
 )
 from arm_backend.config import settings
 from arm_backend.db import get_session
@@ -1097,11 +1096,9 @@ async def apply_session(
         )
 
     if outcome.skipped_reason == "media_mismatch":
-        sess = (await db.execute(select(Session).where(col(Session.id) == req.session_id))).scalar_one_or_none()
-        assert sess is not None  # apply_session_internal already resolved it to reach this branch
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=media_mismatch_detail(job, sess),
+            detail=outcome.error_detail or "session media type is not compatible with job media type",
         )
 
     assert outcome.application is not None
