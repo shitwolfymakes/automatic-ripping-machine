@@ -207,6 +207,135 @@ describe('ApplySessionDialog', () => {
 		});
 	});
 
+	it('appends "in job <short-id>" to a collision row whose existing_job_id differs from the current job, and hides Overwrite', async () => {
+		fetchSessionsMock.mockResolvedValue([createSession({ id: 'ses_movie', name: 'Movie MKV' })]);
+		const collisions: CollisionInfo[] = [
+			{
+				output_path: '/m/x.mkv',
+				existing_task_id: 'txt_1',
+				on_filesystem: false,
+				reason: 'existing_task',
+				existing_job_id: 'job_01JZXR7K3M5Q8N4VWA0000000J'
+			}
+		];
+		applySessionMock.mockRejectedValue(
+			new ApiError(409, 'API 409: Conflict', {
+				detail: { message: 'collision', collisions }
+			})
+		);
+		const job = createJob({ id: 'job_1', disc_type: 'bluray' });
+		renderComponent(ApplySessionDialog, {
+			props: { job, onclose: vi.fn(), onapplied: vi.fn() }
+		});
+
+		await waitFor(() => expect(screen.getByText(/Movie MKV/)).toBeInTheDocument());
+		await fireEvent.change(screen.getByTestId('apply-session-select'), {
+			target: { value: 'ses_movie' }
+		});
+		await fireEvent.click(screen.getByTestId('apply-session-apply'));
+
+		await waitFor(() => {
+			expect(screen.getByText('/m/x.mkv')).toBeInTheDocument();
+			expect(screen.getByText(/queued\/done in DB in job 0000000J/)).toBeInTheDocument();
+		});
+
+		// I3: the backend refuses overwrite unconditionally on a cross-job
+		// collision — offering the control would just loop the user into a
+		// 409 every time, so it must be hidden with explanatory copy instead.
+		expect(screen.queryByTestId('apply-session-overwrite')).not.toBeInTheDocument();
+		expect(screen.getByTestId('cross-job-collision-notice')).toHaveTextContent(
+			"Some outputs are owned by another job. Cancel, or delete that job's output first."
+		);
+	});
+
+	it('keeps the Overwrite flow for a collision owned by the current job only', async () => {
+		fetchSessionsMock.mockResolvedValue([createSession({ id: 'ses_movie', name: 'Movie MKV' })]);
+		const collisions: CollisionInfo[] = [
+			{
+				output_path: '/m/mine.mkv',
+				existing_task_id: 'txt_1',
+				on_filesystem: false,
+				reason: 'existing_task',
+				existing_job_id: 'job_1'
+			}
+		];
+		applySessionMock
+			.mockRejectedValueOnce(
+				new ApiError(409, 'API 409: Conflict', {
+					detail: { message: 'collision', collisions }
+				})
+			)
+			.mockResolvedValueOnce(makeApplyResp());
+		const onapplied = vi.fn();
+		const job = createJob({ id: 'job_1', disc_type: 'bluray' });
+		renderComponent(ApplySessionDialog, {
+			props: { job, onclose: vi.fn(), onapplied }
+		});
+
+		await waitFor(() => expect(screen.getByText(/Movie MKV/)).toBeInTheDocument());
+		await fireEvent.change(screen.getByTestId('apply-session-select'), {
+			target: { value: 'ses_movie' }
+		});
+		await fireEvent.click(screen.getByTestId('apply-session-apply'));
+
+		await waitFor(() => {
+			expect(screen.getByText('/m/mine.mkv')).toBeInTheDocument();
+		});
+
+		const overwrite = screen.getByTestId('apply-session-overwrite');
+		expect(overwrite).toBeInTheDocument();
+		expect(screen.queryByTestId('cross-job-collision-notice')).not.toBeInTheDocument();
+		await fireEvent.click(overwrite);
+
+		await waitFor(() => {
+			expect(applySessionMock).toHaveBeenLastCalledWith('job_1', {
+				session_id: 'ses_movie',
+				overwrite: true
+			});
+			expect(onapplied).toHaveBeenCalledTimes(1);
+		});
+	});
+
+	it('does not append an owner suffix when existing_job_id matches the current job or is unset', async () => {
+		fetchSessionsMock.mockResolvedValue([createSession({ id: 'ses_movie', name: 'Movie MKV' })]);
+		const collisions: CollisionInfo[] = [
+			{
+				output_path: '/m/mine.mkv',
+				existing_task_id: 'txt_1',
+				on_filesystem: false,
+				reason: 'existing_task',
+				existing_job_id: 'job_1'
+			},
+			{
+				output_path: '/m/unknown.mkv',
+				existing_task_id: null,
+				on_filesystem: true,
+				reason: 'on_disk',
+				existing_job_id: null
+			}
+		];
+		applySessionMock.mockRejectedValue(
+			new ApiError(409, 'API 409: Conflict', {
+				detail: { message: 'collision', collisions }
+			})
+		);
+		const job = createJob({ id: 'job_1', disc_type: 'bluray' });
+		renderComponent(ApplySessionDialog, {
+			props: { job, onclose: vi.fn(), onapplied: vi.fn() }
+		});
+
+		await waitFor(() => expect(screen.getByText(/Movie MKV/)).toBeInTheDocument());
+		await fireEvent.change(screen.getByTestId('apply-session-select'), {
+			target: { value: 'ses_movie' }
+		});
+		await fireEvent.click(screen.getByTestId('apply-session-apply'));
+
+		await waitFor(() => {
+			expect(screen.getByText('/m/mine.mkv')).toBeInTheDocument();
+		});
+		expect(screen.queryByText(/in job/)).not.toBeInTheDocument();
+	});
+
 	it('hides the Overwrite button and shows the explanation for a duplicate_in_request collision', async () => {
 		fetchSessionsMock.mockResolvedValue([createSession({ id: 'ses_movie', name: 'Movie MKV' })]);
 		const collisions: CollisionInfo[] = [

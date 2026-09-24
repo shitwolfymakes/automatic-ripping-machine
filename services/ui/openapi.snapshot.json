@@ -2651,6 +2651,167 @@
         }
       }
     },
+    "/api/session-routes": {
+      "get": {
+        "tags": [
+          "session-routes"
+        ],
+        "summary": "List Session Routes",
+        "operationId": "list_session_routes_api_session_routes_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SessionRouteView"
+                  },
+                  "title": "Response List Session Routes Api Session Routes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "session-routes"
+        ],
+        "summary": "Upsert Session Route",
+        "operationId": "upsert_session_route_api_session_routes_put",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionRouteUpsert"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionRouteView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session-routes/{route_id}": {
+      "delete": {
+        "tags": [
+          "session-routes"
+        ],
+        "summary": "Delete Session Route",
+        "operationId": "delete_session_route_api_session_routes__route_id__delete",
+        "parameters": [
+          {
+            "name": "route_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Route Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/rip-presets": {
       "get": {
         "tags": [
@@ -7800,6 +7961,17 @@
               "duplicate_in_request"
             ],
             "title": "Reason"
+          },
+          "existing_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Existing Job Id"
           }
         },
         "type": "object",
@@ -11976,7 +12148,8 @@
                   "collisions",
                   "template",
                   "session_missing",
-                  "no_tracks"
+                  "no_tracks",
+                  "media_mismatch"
                 ]
               },
               {
@@ -12778,6 +12951,92 @@
           "output_path_template"
         ],
         "title": "SessionCreateRequest"
+      },
+      "SessionRouteUpsert": {
+        "properties": {
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "disc_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "media_type",
+          "session_id"
+        ],
+        "title": "SessionRouteUpsert"
+      },
+      "SessionRouteView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "disc_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "media_type",
+          "disc_type",
+          "session_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SessionRouteView"
       },
       "SessionUpdateRequest": {
         "properties": {

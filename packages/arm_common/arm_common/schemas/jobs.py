@@ -265,7 +265,7 @@ class RipStartResponse(BaseModel):
 # The one definition of apply/fan-out skip reasons — the backend engine
 # (arm_backend.auto_session) imports this rather than re-declaring it, so the
 # wire schema and the engine can never drift.
-ApplySkippedReason = Literal["collisions", "template", "session_missing", "no_tracks"]
+ApplySkippedReason = Literal["collisions", "template", "session_missing", "no_tracks", "media_mismatch"]
 
 
 class ResolveFanOutOutcomeView(BaseModel):

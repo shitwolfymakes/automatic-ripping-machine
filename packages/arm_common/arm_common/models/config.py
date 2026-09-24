@@ -87,6 +87,13 @@ class Config(SQLModel, table=True):
         sa_column=Column(Boolean, nullable=False, server_default="false"),
     )
     session_signing_key: bytes | None = Field(sa_column=Column(LargeBinary, nullable=True))
+    # One-shot marker (I1): built-in session_routes are seeded only when this
+    # is false AND the table is empty; seeding then flips it true. Without
+    # this, "seed when table empty" would silently resurrect a route a user
+    # deliberately deleted on every backend restart. See migration
+    # 0034_session_routes_seed_marker for why it defaults true on any
+    # already-deployed Postgres DB.
+    session_routes_seeded: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
     updated_by_user_id: str | None = Field(
         sa_column=Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     )

@@ -179,12 +179,31 @@ async def find_collisions(
         return []
 
     stmt = (
-        select(TranscodeTask.id, TranscodeTask.output_path)
+        select(TranscodeTask.id, TranscodeTask.output_path, TranscodeTask.session_application_id)
         .where(col(TranscodeTask.output_path).in_(paths))
         .where(col(TranscodeTask.status).in_(LIVE_STATES))
     )
     result = await db.execute(stmt)
-    db_hits: dict[str, str] = {row.output_path: row.id for row in result.all() if row.output_path}
+    db_hits: dict[str, str] = {}
+    hit_application_ids: dict[str, str] = {}
+    for row in result.all():
+        if not row.output_path:
+            continue
+        db_hits[row.output_path] = row.id
+        if row.session_application_id:
+            hit_application_ids[row.output_path] = row.session_application_id
+
+    # Batch-resolve the owning job id for every colliding task in one extra
+    # query (task -> session_application -> job_id), rather than one query
+    # per collision.
+    application_ids = sorted(set(hit_application_ids.values()))
+    job_id_by_application: dict[str, str] = {}
+    if application_ids:
+        app_stmt = select(SessionApplication.id, SessionApplication.job_id).where(
+            col(SessionApplication.id).in_(application_ids)
+        )
+        app_result = await db.execute(app_stmt)
+        job_id_by_application = {row.id: row.job_id for row in app_result.all()}
 
     collisions: list[CollisionInfo] = []
     seen: set[str] = set()
@@ -195,12 +214,15 @@ async def find_collisions(
         existing_id = db_hits.get(path)
         on_fs = (media_root / path).exists() if path else False
         if existing_id is not None:
+            application_id = hit_application_ids.get(path)
+            existing_job_id = job_id_by_application.get(application_id) if application_id else None
             collisions.append(
                 CollisionInfo(
                     output_path=path,
                     existing_task_id=existing_id,
                     on_filesystem=False,
                     reason="existing_task",
+                    existing_job_id=existing_job_id,
                 )
             )
         elif on_fs:
