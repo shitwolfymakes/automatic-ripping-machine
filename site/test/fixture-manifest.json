@@ -1,0 +1,15 @@
+{
+  "repo": "uprightbass360/arm-v3",
+  "repoAliases": ["automatic-ripping-machine/automatic-ripping-machine"],
+  "sections": [
+    { "id": "guide", "label": "Guide", "wiki": "arm_wiki", "sidebar": "arm_wiki/_Sidebar.md" },
+    {
+      "id": "dev",
+      "label": "Developers",
+      "groups": [
+        { "label": "Architecture", "files": ["docs/arch/README.md", "docs/arch/[0-9]*.md"] },
+        { "label": "Contributing", "files": ["CONTRIBUTING.md"] }
+      ]
+    }
+  ]
+}

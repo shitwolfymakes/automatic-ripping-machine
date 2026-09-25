@@ -1,6 +1,7 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export function makeTree(files) {
 	const root = mkdtempSync(join(tmpdir(), 'arm-docs-'));
@@ -12,21 +13,7 @@ export function makeTree(files) {
 	return root;
 }
 
-export const MANIFEST = {
-	repo: 'uprightbass360/arm-v3',
-	repoAliases: ['automatic-ripping-machine/automatic-ripping-machine'],
-	sections: [
-		{ id: 'guide', label: 'Guide', wiki: 'arm_wiki', sidebar: 'arm_wiki/_Sidebar.md' },
-		{
-			id: 'dev',
-			label: 'Developers',
-			groups: [
-				{ label: 'Architecture', files: ['docs/arch/README.md', 'docs/arch/[0-9]*.md'] },
-				{ label: 'Contributing', files: ['CONTRIBUTING.md'] }
-			]
-		}
-	]
-};
+export const MANIFEST = JSON.parse(readFileSync(fileURLToPath(new URL('./fixture-manifest.json', import.meta.url)), 'utf8'));
 
 const UPSTREAM = 'https://github.com/automatic-ripping-machine/automatic-ripping-machine';
 
