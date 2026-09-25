@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
-import ApplySessionDialog from '../ApplySessionDialog.svelte';
+import ApplySessionDialog, { isPassthroughSession } from '../ApplySessionDialog.svelte';
 import { createJob } from '../__fixtures__/job';
 import { fetchSessions } from '$lib/api/sessions';
 import { fetchRipPresets } from '$lib/api/ripPresets';
 import { fetchTranscodePresets } from '$lib/api/transcodePresets';
 import { applySession, fetchNamingPreview } from '$lib/api/jobs';
 import { ApiError } from '$lib/api/client';
+import { setTranscodeRuntimeEnabled } from '$lib/stores/config';
 import type { SessionView, ApplySessionResponse, CollisionInfo, RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
 
 vi.mock('$lib/api/sessions', () => ({
@@ -461,6 +462,100 @@ describe('ApplySessionDialog', () => {
 		await waitFor(() => {
 			expect(screen.getByTestId('recipe-preview')).toBeInTheDocument();
 			expect(screen.getByTestId('recipe-transcode-preset')).toHaveTextContent('No transcode');
+		});
+	});
+
+	describe('isPassthroughSession', () => {
+		it('is true for a session with no transcode preset', () => {
+			expect(isPassthroughSession({ transcode_preset_id: null }, new Map())).toBe(true);
+		});
+
+		it("is true for a session whose preset's tool is 'none' (passthrough)", () => {
+			const presetToolById = new Map([['tx_1', 'none']]);
+			expect(isPassthroughSession({ transcode_preset_id: 'tx_1' }, presetToolById)).toBe(true);
+		});
+
+		it('is false for a session whose preset uses an encoding tool', () => {
+			const presetToolById = new Map([['tx_1', 'handbrake']]);
+			expect(isPassthroughSession({ transcode_preset_id: 'tx_1' }, presetToolById)).toBe(false);
+		});
+
+		it('is false for a session whose preset id is not in the map', () => {
+			expect(isPassthroughSession({ transcode_preset_id: 'tx_missing' }, new Map())).toBe(false);
+		});
+	});
+
+	describe('runtime-disabled transcoding (passthrough-only picker)', () => {
+		afterEach(() => setTranscodeRuntimeEnabled(true));
+
+		it('filters out encode sessions and shows the hint when transcoding is runtime-disabled', async () => {
+			setTranscodeRuntimeEnabled(false);
+			fetchSessionsMock.mockResolvedValue([
+				createSession({ id: 'ses_encode', name: 'Encode Session', transcode_preset_id: 'tx_1' }),
+				createSession({ id: 'ses_passthrough', name: 'Passthrough Session', transcode_preset_id: null })
+			]);
+			fetchTranscodePresetsMock.mockResolvedValue([
+				createTranscodePreset({ id: 'tx_1', name: 'H.265 1080p', tool: 'handbrake' })
+			]);
+			const job = createJob({ id: 'job_1', disc_type: 'bluray' });
+			renderComponent(ApplySessionDialog, {
+				props: { job, onclose: vi.fn(), onapplied: vi.fn() }
+			});
+
+			await waitFor(() => expect(screen.getByText(/Passthrough Session/)).toBeInTheDocument());
+			expect(screen.queryByText(/Encode Session/)).not.toBeInTheDocument();
+			expect(screen.getByTestId('apply-session-passthrough-hint')).toHaveTextContent(
+				'Transcoding is disabled; only passthrough sessions are listed.'
+			);
+		});
+
+		it("lists a session whose preset's tool is 'none' as passthrough-compatible when runtime-disabled", async () => {
+			setTranscodeRuntimeEnabled(false);
+			fetchSessionsMock.mockResolvedValue([
+				createSession({ id: 'ses_none_tool', name: 'None Tool Session', transcode_preset_id: 'tx_none' })
+			]);
+			fetchTranscodePresetsMock.mockResolvedValue([
+				createTranscodePreset({ id: 'tx_none', name: 'No-op', tool: 'none' })
+			]);
+			const job = createJob({ id: 'job_1', disc_type: 'bluray' });
+			renderComponent(ApplySessionDialog, {
+				props: { job, onclose: vi.fn(), onapplied: vi.fn() }
+			});
+
+			await waitFor(() => expect(screen.getByText(/None Tool Session/)).toBeInTheDocument());
+		});
+
+		it('does not show the hint and lists all matching sessions when transcoding is runtime-enabled', async () => {
+			fetchSessionsMock.mockResolvedValue([
+				createSession({ id: 'ses_encode', name: 'Encode Session', transcode_preset_id: 'tx_1' })
+			]);
+			const job = createJob({ id: 'job_1', disc_type: 'bluray' });
+			renderComponent(ApplySessionDialog, {
+				props: { job, onclose: vi.fn(), onapplied: vi.fn() }
+			});
+
+			await waitFor(() => expect(screen.getByText(/Encode Session/)).toBeInTheDocument());
+			expect(screen.queryByTestId('apply-session-passthrough-hint')).not.toBeInTheDocument();
+		});
+	});
+
+	it('surfaces a 422 "transcoding is disabled" detail string from the apply call verbatim', async () => {
+		fetchSessionsMock.mockResolvedValue([createSession({ id: 'ses_movie', name: 'Movie MKV' })]);
+		const detail = 'transcoding is disabled (Settings > Transcoding); only passthrough sessions can be applied';
+		applySessionMock.mockRejectedValue(new ApiError(422, detail, { detail }));
+		const job = createJob({ id: 'job_1', disc_type: 'bluray' });
+		renderComponent(ApplySessionDialog, {
+			props: { job, onclose: vi.fn(), onapplied: vi.fn() }
+		});
+
+		await waitFor(() => expect(screen.getByText(/Movie MKV/)).toBeInTheDocument());
+		await fireEvent.change(screen.getByTestId('apply-session-select'), {
+			target: { value: 'ses_movie' }
+		});
+		await fireEvent.click(screen.getByTestId('apply-session-apply'));
+
+		await waitFor(() => {
+			expect(screen.getByTestId('apply-session-error')).toHaveTextContent(detail);
 		});
 	});
 });
