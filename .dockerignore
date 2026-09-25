@@ -34,6 +34,9 @@
 **/dist/
 **/.vite/
 **/*.tsbuildinfo
+# docs site build output; the ui-neu docs stage rebuilds it
+site/build/
+site/.cache/
 
 # ---- Environment / secrets -------------------------------------------
 **/.env

@@ -10,6 +10,7 @@ import { createResolver, checkFragments } from './links.mjs';
 import { createRenderer } from './render.mjs';
 import { buildSearchIndex } from './search.mjs';
 import { writeApp } from './write-app.mjs';
+import { writeSite } from './write-site.mjs';
 
 const siteDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -83,13 +84,15 @@ async function main() {
 	const search = buildSearchIndex(rendered);
 	const common = { armRoot, rendered, nav: resolvedNav, meta, manifest, search };
 	const out = resolve(values.out);
-	if (target === 'site') {
-		console.error('error: site target not implemented yet');
-		process.exit(1);
+	if (target !== 'app') {
+		writeSite({ ...common, siteDir, outDir: join(out, 'site') });
+		console.log(`site: ${join(out, 'site')}`);
 	}
-	const appOut = resolve(values['app-out'] ?? join(out, 'app'));
-	writeApp({ ...common, outDir: appOut });
-	console.log(`app: ${appOut}`);
+	if (target !== 'site') {
+		const appOut = resolve(values['app-out'] ?? join(out, 'app'));
+		writeApp({ ...common, outDir: appOut });
+		console.log(`app: ${appOut}`);
+	}
 }
 
 main().catch((e) => {

@@ -43,3 +43,30 @@ test('a missing ARM root is a clear error', () => {
 	assert.equal(res.status, 1);
 	assert.match(res.stderr, /ARM root not found at \/nonexistent\/arm \(set ARM_ROOT\)/);
 });
+
+test('site build against the real ARM tree: relative URLs only, css compiled from ui-neu tokens', () => {
+	const out = mkdtempSync(join(tmpdir(), 'arm-docs-out-'));
+	const res = run(['--target', 'site', '--out', out]);
+	assert.equal(res.status, 0, res.stdout + res.stderr);
+	const site = join(out, 'site');
+	const htmlFiles = ['index.html', ...readdirSync(join(site, 'guide')).map((f) => `guide/${f}`), ...readdirSync(join(site, 'dev')).map((f) => `dev/${f}`)];
+	assert.ok(htmlFiles.length > 20);
+	for (const f of htmlFiles) {
+		const html = readFileSync(join(site, f), 'utf8');
+		assert.match(html, /<title>[^<]+<\/title>/, f);
+		assert.doesNotMatch(html, /(href|src)="\//, `${f} has a root-absolute URL`);
+		assert.doesNotMatch(html, /@@doc(link|asset)|\{\{\w+\}\}/, f);
+	}
+	const index = readFileSync(join(site, 'index.html'), 'utf8');
+	assert.match(index, /href="site\.css"/);
+	assert.match(index, /class="nav-item" href="index\.html" data-active="true"/);
+	const page = readFileSync(join(site, 'guide/getting-started.html'), 'utf8');
+	assert.match(page, /href="\.\.\/site\.css"/);
+	const css = readFileSync(join(site, 'site.css'), 'utf8');
+	assert.match(css, /--color-page/);
+	assert.match(css, /\.docs-prose/);
+	assert.doesNotMatch(css, /url\(["']?\//, 'root-absolute url() in css');
+	assert.ok(existsSync(join(site, 'fonts/rajdhani-700-latin.woff2')));
+	assert.match(readFileSync(join(site, 'js/search-index.js'), 'utf8'), /^window\.ARM_DOCS_SEARCH = \{/);
+	assert.match(readFileSync(join(site, 'js/minisearch.js'), 'utf8'), /MiniSearch/);
+});
