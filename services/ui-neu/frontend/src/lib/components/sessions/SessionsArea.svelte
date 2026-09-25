@@ -18,9 +18,32 @@
 		deleteTranscodePreset,
 	} from '$lib/api/transcodePresets';
 	import { addToast } from '$lib/stores/toast.svelte';
-	import type { RipPresetView, SessionView, TranscodePresetView } from '$lib/types/api.gen';
+	import { transcoderEnabled } from '$lib/stores/config';
+	import { isPassthroughSession, presetToolMap, PASSTHROUGH_TOOL } from '$lib/utils/sessions';
+	import type { MediaType, RipPresetView, SessionView, TranscodePresetView } from '$lib/types/api.gen';
 
 	const data = createSessionsData();
+
+	// A ripper-only deployment (not transcode-capable) can never run encode
+	// work, so the hub, the builder's transcode picker and the transcode preset
+	// library show only passthrough sessions/presets (neu-style hide). Keyed on
+	// capability, not the runtime toggle: a capable-but-disabled box keeps its
+	// encode sessions editable for when transcoding is switched back on.
+	const shownSessions = $derived(
+		$transcoderEnabled
+			? data.sessions()
+			: data.sessions().filter((s) => isPassthroughSession(s, presetToolMap(data.transcodePresets())))
+	);
+	const shownTranscodePresets = $derived(
+		$transcoderEnabled ? data.transcodePresets() : data.transcodePresets().filter((p) => p.tool === PASSTHROUGH_TOOL)
+	);
+	const SESSION_MEDIA_TYPES: MediaType[] = ['movie', 'tv', 'music', 'data', 'iso'];
+	const shownTypeCounts = $derived.by(() => {
+		if ($transcoderEnabled) return data.typeCounts();
+		const counts: Record<string, number> = { all: shownSessions.length };
+		for (const m of SESSION_MEDIA_TYPES) counts[m] = shownSessions.filter((s) => s.media_type === m).length;
+		return counts;
+	});
 
 	// Active sub-tab: sessions hub, or one of the two preset libraries
 	let view = $state<'sessions' | 'rip' | 'transcode'>('sessions');
@@ -260,8 +283,8 @@
 	<!-- Main content area -->
 	{#if view === 'sessions'}
 		<SessionsHub
-			sessions={data.sessions()}
-			typeCounts={data.typeCounts()}
+			sessions={shownSessions}
+			typeCounts={shownTypeCounts}
 			loading={data.loading()}
 			onnew={openNewSession}
 			onedit={openEditSession}
@@ -272,7 +295,7 @@
 		<PresetLibrary
 			kind={view}
 			ripPresets={data.ripPresets()}
-			transcodePresets={data.transcodePresets()}
+			transcodePresets={shownTranscodePresets}
 			ripUsage={data.ripUsage}
 			transcodeUsage={data.transcodeUsage}
 			loading={data.loading()}
@@ -307,7 +330,7 @@
 				<SessionBuilder
 					session={editing}
 					ripPresets={data.ripPresets()}
-					transcodePresets={data.transcodePresets()}
+					transcodePresets={shownTranscodePresets}
 					oncreaterip={() => { inlineKind = 'rip'; inlinePreset = null; }}
 					oncreatetranscode={() => { inlineKind = 'transcode'; inlinePreset = null; }}
 					onsaved={handleBuilderSaved}

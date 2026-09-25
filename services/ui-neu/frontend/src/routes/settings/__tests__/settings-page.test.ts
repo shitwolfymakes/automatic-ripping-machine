@@ -4,7 +4,8 @@ import SettingsPage from '../+page.svelte';
 import { fetchSettings } from '$lib/api/settings';
 import { fetchDrives, fetchDriveDiagnostic } from '$lib/api/drives';
 import { fetchGpus } from '$lib/api/gpus';
-import { setTranscoderEnabled } from '$lib/stores/config';
+import { get } from 'svelte/store';
+import { setTranscoderEnabled, setTranscodeRuntimeEnabled, transcodeRuntimeEnabled } from '$lib/stores/config';
 import type { DriveView } from '$lib/types/api.gen';
 
 function drive(over: Partial<DriveView> = {}): DriveView {
@@ -78,7 +79,9 @@ const mockConfig = {
 	tmdb_api_key: '<hidden>',
 	auto_rip_on_insert: true,
 	block_on_miss: true,
-	transcode_enabled: false,
+	// The column's real default: a ripper-only box still has it true, so the
+	// not-capable branch must render the locked toggle off regardless.
+	transcode_enabled: true,
 	transcode_capable: true,
 	auto_transcode_on_idle: false,
 	max_parallel_transcodes: 2,
@@ -253,6 +256,7 @@ describe('Settings Page', () => {
 		// transcoderEnabled is a real (unmocked) store shared across tests in
 		// this file; reset to the capable default so it doesn't leak.
 		setTranscoderEnabled(true);
+		setTranscodeRuntimeEnabled(true);
 	});
 
 	// Render the page and wait for the tab bar to settle. Metadata is the
@@ -572,10 +576,47 @@ describe('Settings Page', () => {
 			await waitFor(() => {
 				expect(screen.getByText('This deployment is ripper-only; transcoding cannot be enabled here.')).toBeInTheDocument();
 			});
-			expect(screen.getByRole('switch', { name: 'Enable transcoding' })).toBeDisabled();
+			// Locked OFF even though the backend column is true (fixture
+			// default): the column is meaningless without capability.
+			const locked = screen.getByRole('switch', { name: 'Enable transcoding' });
+			expect(locked).toBeDisabled();
+			expect(locked).toHaveAttribute('aria-checked', 'false');
 			expect(screen.queryByRole('checkbox', { name: /auto-transcode on idle/i })).not.toBeInTheDocument();
 			expect(screen.queryByTestId('gpus-card')).not.toBeInTheDocument();
 			expect(fetchGpus).not.toHaveBeenCalled();
+		});
+
+		it('saving the Transcoding form refreshes the app-wide runtime toggle (off, then back on)', async () => {
+			const { saveArmConfig } = await import('$lib/api/settings');
+			vi.mocked(saveArmConfig).mockClear();
+			setTranscoderEnabled(true);
+			setTranscodeRuntimeEnabled(true);
+			await renderAndOpenTab('Transcoding');
+			const toggle = await screen.findByRole('checkbox', { name: /enable transcoding/i });
+
+			await fireEvent.click(toggle);
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
+			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ transcode_enabled: false }));
+			await waitFor(() => expect(get(transcodeRuntimeEnabled)).toBe(false));
+
+			// Re-enable in the same visit: the form must diff against the saved
+			// value (false), not the stale original (true), or nothing is sent.
+			await fireEvent.click(screen.getByRole('checkbox', { name: /enable transcoding/i }));
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
+			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenLastCalledWith({ transcode_enabled: true }));
+			await waitFor(() => expect(get(transcodeRuntimeEnabled)).toBe(true));
+		});
+
+		it('a Transcoding save without transcode_enabled leaves the runtime toggle alone', async () => {
+			const { saveArmConfig } = await import('$lib/api/settings');
+			vi.mocked(saveArmConfig).mockClear();
+			setTranscoderEnabled(true);
+			setTranscodeRuntimeEnabled(false);
+			await renderAndOpenTab('Transcoding');
+			await fireEvent.click(await screen.findByRole('checkbox', { name: /auto-transcode on idle/i }));
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
+			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ auto_transcode_on_idle: true }));
+			expect(get(transcodeRuntimeEnabled)).toBe(false);
 		});
 	});
 });

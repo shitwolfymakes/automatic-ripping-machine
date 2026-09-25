@@ -1,15 +1,3 @@
-<script module lang="ts">
-	// Exported for tests. A session is passthrough-compatible when it has no
-	// transcode preset at all, or its preset's tool is the explicit 'none'
-	// (passthrough) tool.
-	export function isPassthroughSession(
-		s: { transcode_preset_id: string | null },
-		presetToolById: Map<string, string>
-	): boolean {
-		return s.transcode_preset_id === null || presetToolById.get(s.transcode_preset_id) === 'none';
-	}
-</script>
-
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { fetchSessions } from '$lib/api/sessions';
@@ -18,6 +6,7 @@
 	import { applySession, fetchNamingPreview } from '$lib/api/jobs';
 	import { ApiError } from '$lib/api/client';
 	import { transcodeRuntimeEnabled } from '$lib/stores/config';
+	import { isPassthroughSession, presetToolMap } from '$lib/utils/sessions';
 	import type {
 		ApplySessionResponse,
 		CollisionInfo,
@@ -66,7 +55,7 @@
 	// undefined until transcodePresets has loaded, which only excludes
 	// preset-backed sessions from the filtered list until then (a session
 	// with no preset at all is unaffected).
-	const presetToolById = $derived(new Map(transcodePresets.map((p) => [p.id, p.tool])));
+	const presetToolById = $derived(presetToolMap(transcodePresets));
 
 	const filteredSessions = $derived.by(() => {
 		const mt = discTypeToMediaType(job.disc_type);
