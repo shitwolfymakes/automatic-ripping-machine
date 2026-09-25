@@ -234,3 +234,158 @@ async def test_persistently_failing_encode_spawn_does_not_abort_passthrough(tmp_
             await engine.dispose()
     finally:
         _restore_column_types(saved_types)
+
+
+async def test_failed_per_task_commit_does_not_abort_tick(tmp_path: Path) -> None:
+    """A REAL failed flush/commit inside one passthrough task's
+    `execute_passthrough_task` must not abort the tick.
+
+    When a commit's flush raises (here: a genuine SQLite UNIQUE violation
+    on a duplicate primary key injected into that one commit), SQLAlchemy
+    puts the session into "pending rollback" state and every
+    identity-mapped object becomes unreadable until `rollback()` runs: an
+    attribute read such as `task.id` raises `PendingRollbackError` there.
+    `spawn_pending`'s per-task `except` block therefore must not read any
+    ORM attribute before its `await db.rollback()`; if it does, that
+    second exception escapes the `except`, `spawn_pending` raises, and the
+    passthrough task queued behind the failing one never runs.
+
+    Pinned against aiosqlite: the failure is a real DB-level
+    IntegrityError raised from inside `Session.commit()`'s flush, so the
+    session state after it is SQLAlchemy's own, not a simulation.
+    """
+    saved_types = _retype_pg_columns_to_json()
+    try:
+        engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path}/x.db")
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(SQLModel.metadata.create_all)
+            session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+            now = datetime.now(UTC)
+            rows: list[SQLModel] = [
+                TranscodePreset(
+                    id="tpr_none",
+                    name="none",
+                    media_type=MediaType.MOVIE,
+                    is_builtin=True,
+                    tool=TranscodeTool.NONE,
+                    preset_ref="",
+                    container=ContainerFormat.MKV,
+                ),
+                Session(
+                    id="ses_pt",
+                    name="ISO dump",
+                    media_type=MediaType.MOVIE,
+                    is_builtin=True,
+                    rip_preset_id="rpr",
+                    transcode_preset_id="tpr_none",
+                    output_path_template="{title}.mkv",
+                ),
+                # Never loaded by the dispatcher; re-adding it under the same
+                # primary key is what makes the injected commit fail for real.
+                Session(
+                    id="ses_dup",
+                    name="dup",
+                    media_type=MediaType.MOVIE,
+                    is_builtin=True,
+                    rip_preset_id="rpr",
+                    output_path_template="{title}.mkv",
+                ),
+            ]
+            for n in (1, 2):
+                raw = tmp_path / "raw" / f"p{n}.mkv"
+                raw.parent.mkdir(parents=True, exist_ok=True)
+                raw.write_bytes(b"passthrough-data")
+                rows += [
+                    SessionApplication(
+                        id=f"sap_pt{n}",
+                        session_id="ses_pt",
+                        job_id=f"job_01JZXR7K3M5Q8N4VWA0000000{n}",
+                        status=SessionApplicationStatus.QUEUED,
+                        overwrite=False,
+                    ),
+                    Track(
+                        id=f"trk_p{n}",
+                        job_id=f"job_01JZXR7K3M5Q8N4VWA0000000{n}",
+                        kind=TrackKind.VIDEO_TITLE,
+                        index=1,
+                        source_ref="t0",
+                        output_path=str(raw),
+                    ),
+                    TranscodeTask(
+                        id=f"txt_pt{n}",
+                        session_application_id=f"sap_pt{n}",
+                        source_track_id=f"trk_p{n}",
+                        status=TranscodeTaskStatus.QUEUED,
+                        attempts=0,
+                        progress_pct=0,
+                        output_path=f"Docs/p{n}.mkv",
+                        created_at=now + timedelta(seconds=n),
+                    ),
+                ]
+            async with session_factory() as db:
+                db.add_all(rows)
+                await db.commit()
+
+            settings = Settings.model_construct(
+                DATABASE_URL="x",
+                ARM_SERVICE_TOKEN="tok-service",
+                MAX_PARALLEL_TRANSCODES=2,
+                ARM_TRANSCODE_IMAGE="arm-transcode:latest",
+                ARM_HOST_RAW_PATH="/raw",
+                ARM_HOST_MEDIA_PATH="/media",
+                ARM_HOST_LOGS_PATH="/logs",
+                ARM_HOST_CERTS_PATH="/certs",
+                ARM_DOCKER_NETWORK="armv3_default",
+                ARM_TRANSCODE_DISPATCH_INTERVAL_SECONDS=5,
+                MEDIA_ROOT=str(tmp_path / "media"),
+                ARM_TRANSCODE_DOCKER_HOST="",
+                ARM_TRANSCODE_BACKEND_URL="",
+                ARM_LOG_LEVEL="INFO",
+                ARM_TRANSCODE_PUID="",
+                ARM_TRANSCODE_PGID="",
+                ARM_RENDER_GID="",
+            )
+            disp = TranscodeDispatcher(settings, session_factory, None, WSHub())
+
+            async with session_factory() as db:
+                real_commit = db.commit
+                injected: list[bool] = []
+
+                async def commit_failing_once() -> None:
+                    # Fail the first commit that carries txt_pt1's claim.
+                    claiming_pt1 = any(
+                        isinstance(obj, TranscodeTask) and obj.id == "txt_pt1" for obj in db.sync_session.dirty
+                    )
+                    if claiming_pt1 and not injected:
+                        injected.append(True)
+                        db.add(
+                            Session(
+                                id="ses_dup",
+                                name="dup",
+                                media_type=MediaType.MOVIE,
+                                is_builtin=True,
+                                rip_preset_id="rpr",
+                                output_path_template="{title}.mkv",
+                            )
+                        )
+                    await real_commit()
+
+                db.commit = commit_failing_once  # type: ignore[method-assign]
+                await disp.spawn_pending(db)  # must not raise
+
+            assert injected, "the failing commit was never injected"
+
+            async with session_factory() as db:
+                pt1 = (await db.execute(select(TranscodeTask).where(TranscodeTask.id == "txt_pt1"))).scalar_one()
+                pt2 = (await db.execute(select(TranscodeTask).where(TranscodeTask.id == "txt_pt2"))).scalar_one()
+
+            # The failed claim was rolled back; the task stays QUEUED for retry.
+            assert pt1.status == TranscodeTaskStatus.QUEUED
+            # The task queued behind it was never blocked.
+            assert pt2.status == TranscodeTaskStatus.DONE
+        finally:
+            await engine.dispose()
+    finally:
+        _restore_column_types(saved_types)
