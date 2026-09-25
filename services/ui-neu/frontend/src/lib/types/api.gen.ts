@@ -2900,7 +2900,7 @@ export type ResolveFanOutOutcomeView = {
     /**
      * Skipped Reason
      */
-    skipped_reason?: 'collisions' | 'template' | 'session_missing' | 'no_tracks' | 'no_outputs' | 'media_mismatch' | null;
+    skipped_reason?: 'collisions' | 'template' | 'session_missing' | 'no_tracks' | 'no_outputs' | 'media_mismatch' | 'transcode_disabled' | null;
     /**
      * Error Detail
      */

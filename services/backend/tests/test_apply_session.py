@@ -18,6 +18,7 @@ from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import jobs as jobs_router  # noqa: E402
 from arm_common import (  # noqa: E402
+    Config,
     ContainerFormat,
     DiscType,
     HwPreference,
@@ -109,6 +110,10 @@ def _seed(db: FakeSession, *, job_status: JobStatus = JobStatus.RIPPED) -> None:
     db.rows["transcode_tasks"] = []
     db.rows["session_applications"] = []
     db.rows["drives"] = []
+
+
+def _seed_config(db: FakeSession, *, transcode_enabled: bool | None) -> None:
+    db.rows["config"] = [Config(id=1, transcode_enabled=transcode_enabled)]
 
 
 class _CapturingHub:
@@ -809,3 +814,100 @@ def test_apply_ripped_with_all_tracks_excluded_parks_as_no_outputs_not_no_tracks
     assert outcomes[0].application.status == SessionApplicationStatus.WAITING_IDENTIFY
     assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
     assert db.rows["transcode_tasks"] == []
+
+
+def test_encode_apply_refused_when_disabled(signing_key: bytes, tmp_path: Path) -> None:
+    """An encode-preset session (HANDBRAKE) is refused with a typed 422 when
+    the operator has turned transcoding off; no application row is created."""
+    db = FakeSession()
+    _seed(db)
+    _seed_config(db, transcode_enabled=False)
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422, r.text
+    assert "transcoding is disabled" in r.json()["detail"]
+    assert db.rows["session_applications"] == []
+
+
+def test_passthrough_apply_flows_when_disabled(signing_key: bytes, tmp_path: Path) -> None:
+    """A passthrough preset (TranscodeTool.NONE) is never gated by the toggle."""
+    db = FakeSession()
+    _seed(db)
+    db.rows["transcode_presets"].append(
+        TranscodePreset(
+            id="tpr_pass",
+            name="Passthrough",
+            media_type=MediaType.MOVIE,
+            is_builtin=True,
+            tool=TranscodeTool.NONE,
+            container=ContainerFormat.MKV,
+            hw_preference=HwPreference.CPU_ONLY,
+        )
+    )
+    db.rows["sessions"].append(
+        Session(
+            id="ses_pass",
+            name="Passthrough",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_x",
+            transcode_preset_id="tpr_pass",
+            output_path_template="{title} ({year})/{title} - {transcode_slug}.{ext}",
+        )
+    )
+    _seed_config(db, transcode_enabled=False)
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_pass"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+
+
+def test_no_preset_session_flows_when_disabled(signing_key: bytes, tmp_path: Path) -> None:
+    """`transcode_preset_id=None` is passthrough by definition (worker main.py:198)."""
+    db = FakeSession()
+    _seed(db)
+    db.rows["sessions"].append(
+        Session(
+            id="ses_nopreset",
+            name="No preset",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_x",
+            transcode_preset_id=None,
+            output_path_template="{title} ({year})/{title}.mkv",
+        )
+    )
+    _seed_config(db, transcode_enabled=False)
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_nopreset"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+
+
+def test_null_toggle_column_means_enabled(signing_key: bytes, tmp_path: Path) -> None:
+    """`config.transcode_enabled = None` (pre-backfill row) reads as enabled;
+    an encode apply must still succeed."""
+    db = FakeSession()
+    _seed(db)
+    _seed_config(db, transcode_enabled=None)
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text

@@ -30,7 +30,7 @@ from sqlmodel import col, select
 
 from arm_backend.config import settings
 from arm_backend.path_template import TemplateValidationError
-from arm_backend.transcode_apply import compute_outputs, find_collisions
+from arm_backend.transcode_apply import compute_outputs, find_collisions, is_passthrough_preset, transcode_enabled_now
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
@@ -63,6 +63,9 @@ _NO_TRACKS_DETAIL = "no tracks yet: the rip has not started; the application fan
 _NO_OUTPUTS_DETAIL = (
     "tracks exist but none resolved an output for this session (excluded, or none match its "
     "media_type/track routing); the application stays parked"
+)
+_TRANSCODE_DISABLED_DETAIL = (
+    "transcoding is disabled (Settings > Transcoding); only passthrough sessions can be applied"
 )
 
 
@@ -281,6 +284,16 @@ async def _apply_session_internal(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"session references missing transcode_preset_id={sess.transcode_preset_id}",
             )
+
+    if not is_passthrough_preset(transcode_preset) and not await transcode_enabled_now(db):
+        return ApplySessionOutcome(
+            application=None,
+            tasks=[],
+            collisions=[],
+            idempotent=False,
+            skipped_reason="transcode_disabled",
+            error_detail=_TRANSCODE_DISABLED_DETAIL,
+        )
 
     tracks = list(
         (await db.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index)))).scalars().all()
@@ -632,6 +645,17 @@ async def fan_out_waiting_identify_applications(
                     )
                 )
                 continue
+
+        if not is_passthrough_preset(transcode_preset) and not await transcode_enabled_now(db):
+            outcomes.append(
+                ResolveFanOutOutcome(
+                    application=app,
+                    tasks=[],
+                    skipped_reason="transcode_disabled",
+                    error_detail=_TRANSCODE_DISABLED_DETAIL,
+                )
+            )
+            continue
 
         try:
             outcome = await _fan_out_tasks_for_application(
