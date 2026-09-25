@@ -13615,7 +13615,8 @@
                   "session_missing",
                   "no_tracks",
                   "no_outputs",
-                  "media_mismatch"
+                  "media_mismatch",
+                  "transcode_disabled"
                 ]
               },
               {

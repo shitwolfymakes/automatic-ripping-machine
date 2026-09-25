@@ -23,6 +23,7 @@ from arm_backend.path_sanitize import sanitize_path_component
 from arm_backend.path_template import TemplateValidationError, expand_template, referenced_tokens
 from arm_backend.slugify import slugify
 from arm_common import (
+    Config,
     Job,
     MediaType,
     Session,
@@ -30,7 +31,7 @@ from arm_common import (
     TrackKind,
     TranscodePreset,
 )
-from arm_common.enums import SessionApplicationStatus, TranscodeTaskStatus
+from arm_common.enums import SessionApplicationStatus, TranscodeTaskStatus, TranscodeTool
 from arm_common.models import SessionApplication, TranscodeTask
 from arm_common.schemas import CollisionInfo
 
@@ -269,6 +270,29 @@ def stat_exists(media_root: Path, relative: str) -> bool:
 _TERMINAL_TASK_STATES: frozenset[TranscodeTaskStatus] = frozenset(
     {TranscodeTaskStatus.DONE, TranscodeTaskStatus.FAILED}
 )
+
+
+def is_passthrough_preset(preset: TranscodePreset | None) -> bool:
+    """No preset means passthrough by definition: the transcode worker maps a
+    missing preset to TranscodeTool.NONE (arm_transcode/main.py), and the
+    in-process executor mirrors that."""
+    return preset is None or preset.tool == TranscodeTool.NONE
+
+
+async def transcode_enabled_now(db: AsyncSession) -> bool:
+    """May encode work happen right now? False when the deployment is not
+    transcode-capable (a ripper-only box with a stale true column must still
+    refuse encode applies, or tasks would queue unrunnable forever), else
+    the runtime switch (Settings > Transcoding). NULL (a row predating
+    migration 0037, before the seeder's backfill) reads as enabled so
+    upgrades change nothing."""
+    from arm_backend.config import effective_transcode_capable, settings  # noqa: PLC0415 - avoid module cycle
+    from arm_backend.seeders import CONFIG_SINGLETON_ID  # noqa: PLC0415 - avoid module cycle
+
+    if not effective_transcode_capable(settings):
+        return False
+    cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    return cfg is None or cfg.transcode_enabled is not False
 
 
 class AggregateOutcome(NamedTuple):
