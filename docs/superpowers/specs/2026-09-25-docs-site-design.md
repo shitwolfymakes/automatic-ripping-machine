@@ -101,10 +101,11 @@ The ARM root defaults to the parent of `site/` and can be overridden with the
   `links` like any other link.
 - *Developers* section (`dev`): `docs/arch/*.md` (ordered by `NN-` prefix,
   `README.md` first as the section landing page), `docs/ops/*.md`,
-  `docs/dev-setup.md`, `CONTRIBUTING.md`, `docs/ui-neu-style-guide.md`,
+  `CONTRIBUTING.md`, `docs/ui-neu-style-guide.md`,
   `docs/ui-neu-theming.md`, `docs/contributors/*.md`.
 - `slug` is the lowercased filename stem (arch files keep their `NN-`
-  prefix).
+  prefix); a `README.md` takes its directory's name (`docs/arch/README.md`
+  is `dev/arch`).
 - Title: first `# ` heading, else the stem de-slugged.
 - A manifest entry that matches no files, or two sources mapping to the same
   `id`, is a build error.
@@ -122,11 +123,13 @@ write time:
 
 - Wiki-style bare targets (`Getting-Started`, `Getting-Started#install`)
   resolve against `arm_wiki/`.
-- Absolute wiki URLs for this project
-  (`github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/<Page>`
-  and the `uprightbass360/arm-v3` equivalent) are treated as wiki targets.
-- Relative repo paths (`../docs/arch/README.md`, `./ui-neu-theming.md`) and
-  absolute blob URLs to this repo's `main` resolve against the ARM root.
+- GitHub URLs whose owner/repo is the configured repo or one of its
+  aliases (`automatic-ripping-machine/automatic-ripping-machine`,
+  `shitwolfymakes/automatic-ripping-machine`, the docs link to upstream):
+  `/wiki/<Page>` is a wiki target, `/blob/main/<path>` is a repo path.
+- Relative repo paths (`../docs/arch/README.md`, `./ui-neu-theming.md`)
+  resolve against the source file's directory. A path naming a directory
+  resolves to its `README.md`.
 - Target file missing on disk: **error** with `src:line`.
 - Fragment on a published page that does not match a generated heading id:
   **error**.
@@ -157,7 +160,9 @@ adds it as a dependency.
 
 - `build/site/`: one HTML file per page (`index.html`, `guide/<slug>.html`,
   `dev/<slug>.html`) from `template.html`, compiled CSS, client JS,
-  `fonts/`, `assets/`, `search.json`.
+  `fonts/`, `assets/`, and `js/search-index.js` (the index assigned to a
+  global, loaded as a classic script so search works from `file://`, where
+  `fetch` and ES modules are blocked).
 - `build/app/`: `nav.json` (sections, groups, items with ids and labels),
   `pages/<section>/<slug>.json`
   (`{ id, title, html, toc, source, editUrl }`), `assets/`, `search.json`,
@@ -167,7 +172,10 @@ adds it as a dependency.
 ui-neu's `tokens.css`, `base.css`, `layout.css`, `utilities.css` and the
 blocks the site uses (`panel`, `button`, `alert`, `badge`, `code-block`,
 `table`, `nav`, `field`, `text`, `docs-prose`), then site-chrome layout.
-Compiled with the Tailwind v4 CLI (the ui-neu sheets use `@theme`/`@apply`).
+Compiled with the Tailwind v4 CLI (the ui-neu sheets use `@theme` and
+`@variant`). ui-neu's `base.css` declares the Rajdhani `@font-face` with
+absolute `/fonts/` URLs; the build rewrites them to relative `fonts/` in
+the compiled CSS.
 Rajdhani is copied from `services/ui-neu/frontend/static/fonts/`.
 
 ## ui-neu integration
@@ -191,10 +199,12 @@ the style lint. The style guide's block table gains a `docs-prose` row.
 - `{@html}` is acceptable here: the HTML is produced at image build time from
   the repo's own markdown, served same-origin, and contains no scripts. This
   is stated in a comment at the injection site.
-- Internal link clicks inside the fragment are intercepted and routed with
-  `goto` (client-side navigation); fragment links scroll within the page.
+- Internal links in the fragment are plain `/help/...` hrefs; SvelteKit's
+  router already handles same-origin anchor clicks client-side. After the
+  content renders, the route scrolls to `location.hash` if present (the
+  content arrives after SvelteKit's own hash scroll).
 - Search box in the docs nav, backed by `search.json` via MiniSearch, results
-  link to `/help/<id>#<heading>`.
+  link to `/help/<id>`.
 - The app's nav gains a "Help" entry (`/help`) with a Lucide help glyph,
   available to guests.
 - Colour schemes need no work: the route is ordinary app DOM.
@@ -304,8 +314,8 @@ and logs a console warning, never a crash.
     page has a `<title>`; no `href`/`src` in `build/site` starts with `/`;
     every `nav.json` item has a page file.
 - ui-neu vitest: `/help` load with fixture JSON (page, empty slug, missing
-  page, SPA-fallback HTML response), internal link interception, search
-  wiring.
+  page, SPA-fallback HTML response), rendered internal links are `/help/`
+  hrefs, search wiring.
 - Manual verification with Playwright before calling it done:
   1. `build/site/index.html` from `file://` navigates and searches.
   2. `build/site` served under `/arm-v3/` (mimicking Pages): navigation,
