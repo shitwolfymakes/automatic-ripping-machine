@@ -18,6 +18,7 @@ import logging
 from dataclasses import dataclass
 
 from arm_ripper.drive_poll import DriveState, read_drive_status
+from arm_ripper.scan.matrix256_fp import probe_matrix256
 from arm_ripper.scan.thediscdb_hash import probe_thediscdb_hash
 from arm_ripper.source import is_iso_source
 
@@ -33,6 +34,7 @@ DEVICE_READY_TIMEOUT_SECONDS = 6.0
 class DiscProbe:
     crc64: str | None
     thediscdb: str | None = None
+    matrix256: str | None = None
 
 
 async def await_device_ready(device_path: str) -> bool:
@@ -86,14 +88,17 @@ async def probe_disc(device_path: str) -> DiscProbe:
     either probe. Never raises.
     """
     if not await await_device_ready(device_path):
-        return DiscProbe(crc64=None, thediscdb=None)
+        return DiscProbe(crc64=None, thediscdb=None, matrix256=None)
     crc64 = await asyncio.to_thread(_compute_crc, device_path)
     if crc64:
         logger.info("dvd crc64 device=%s value=%s", device_path, crc64)
     thediscdb = await asyncio.to_thread(probe_thediscdb_hash, device_path)
     if thediscdb:
         logger.info("thediscdb hash device=%s value=%s", device_path, thediscdb)
-    return DiscProbe(crc64=crc64, thediscdb=thediscdb)
+    matrix256 = await asyncio.to_thread(probe_matrix256, device_path)
+    if matrix256:
+        logger.info("matrix256 device=%s value=%s", device_path, matrix256)
+    return DiscProbe(crc64=crc64, thediscdb=thediscdb, matrix256=matrix256)
 
 
 def _compute_crc(device_path: str) -> str | None:

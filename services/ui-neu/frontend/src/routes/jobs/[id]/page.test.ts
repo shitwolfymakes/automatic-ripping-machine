@@ -211,7 +211,10 @@ describe('Job detail page (v3)', () => {
 				metadata_json: { music: { tracks: [{ title: 'Opening', length_ms: 95000 }] } }
 			}),
 			tracks: [createTrack({ id: 'trk_1', kind: 'audio_track', status: 'done' })],
-			fingerprints: [{ algo: 'crc64', value: 'ABCDEF0123456789' }]
+			fingerprints: [
+				{ algo: 'crc64', value: 'ABCDEF0123456789' },
+				{ algo: 'matrix256', value: 'c0ffee' + 'ab'.repeat(29) }
+			]
 		});
 		mockFetchNamingPreview.mockResolvedValue({
 			job_output_dir: 'Album',
@@ -234,6 +237,9 @@ describe('Job detail page (v3)', () => {
 			expect(screen.getByText('Disc fingerprints')).toBeInTheDocument();
 		});
 		expect(screen.getByText('ABCDEF0123456789')).toBeInTheDocument();
+		// matrix256 rides the same generic algo/value table as every other algo.
+		expect(screen.getByText('matrix256')).toBeInTheDocument();
+		expect(screen.getByText('c0ffee' + 'ab'.repeat(29))).toBeInTheDocument();
 
 		// Filename cell renders the naming-preview output_name.
 		expect(screen.getByText('01 Opening.flac')).toBeInTheDocument();
