@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Channel } from '$lib/types/notifications';
-	import { ChevronRight, Send } from 'lucide-svelte';
+	import { ChevronRight, Send, Pencil } from 'lucide-svelte';
 	import StatusDot from './StatusDot.svelte';
 	import ServiceGlyph from './ServiceGlyph.svelte';
 	import Toggle from './Toggle.svelte';
@@ -12,7 +12,8 @@
 		expanded = false,
 		ontoggle,
 		ontest,
-		onexpand
+		onexpand,
+		onedit
 	}: {
 		channel: Channel;
 		serviceName: string;
@@ -20,11 +21,14 @@
 		ontoggle?: () => void;
 		ontest?: () => void;
 		onexpand?: () => void;
+		onedit?: () => void;
 	} = $props();
 
 	const status = $derived(channelStatus(channel));
 	const secondary = $derived(
-		`${typeLabel(channel.type)} | ${channel.subscribed_events.length} events`
+		channel.type === 'bash'
+			? `${typeLabel(channel.type)} | ${(channel.config as { script?: string }).script ?? ''} | ${channel.subscribed_events.length} events`
+			: `${typeLabel(channel.type)} | ${channel.subscribed_events.length} events`
 	);
 </script>
 
@@ -67,6 +71,15 @@
 			class="rounded p-1.5 text-gray-500 hover:bg-primary/10 hover:text-primary"
 		>
 			<Send size={14} />
+		</button>
+		<button
+			type="button"
+			aria-label="Edit"
+			title="Edit"
+			onclick={(e) => { e.stopPropagation(); onedit?.(); }}
+			class="rounded p-1.5 text-gray-500 hover:bg-primary/10 hover:text-primary"
+		>
+			<Pencil size={14} />
 		</button>
 		<button
 			type="button"

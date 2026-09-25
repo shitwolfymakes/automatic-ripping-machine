@@ -247,6 +247,7 @@
 				ontoggle={handleToggle}
 				ontest={handleTestSaved}
 				onexpand={toggleExpand}
+				onedit={toggleExpand}
 				oneditorsave={handleEditorSave}
 				oneditortest={handleEditorTest}
 				ondelete={(c) => (deleteTarget = c)}

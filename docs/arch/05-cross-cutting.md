@@ -286,7 +286,7 @@ v3 ships **Apprise with a native pass-through config**. Users paste Apprise URLs
 Rationale: v2 hand-maintained a 30-service dictionary mapping ARM-specific keys to Apprise URLs and went stale — new services (Signal, Home Assistant, MQTT, Pushover, Fluxer) piled up as feature requests, and bug reports accumulated around URL-assembly edge cases. Passing URLs through verbatim means every service Apprise supports works the day it supports it, with no PR to ARM.
 
 - Backend emits typed events to the `events` table and on WS topics.
-- `NotificationDispatcher` interface in the Backend; v3.0 ships one implementation (`AppriseDispatcher`) that iterates `config.notification_apprise_urls` on each event.
+- `MessageDispatcher` in the Backend hands each notable event to a list of listeners: `AppriseListener` (Apprise URLs from `notification_channels`), `BashListener` (runs a hook script from the `/scripts` mount with declared inputs; see [docs/ops/notification-scripts.md](../ops/notification-scripts.md)), and `InboxListener` (the UI bell).
 - Event naming convention: `<domain>.<verb_past_tense>` (e.g. `rip.completed`, `transcode.failed`).
 - Event payloads share an envelope: `{event_id, event_type, emitted_at, job_id?, track_id?, data: {...}}`. New payload shapes are added by emitting new event types, never by mutating the shape of an existing type.
 
