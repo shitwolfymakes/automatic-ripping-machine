@@ -96,6 +96,10 @@ from arm_common.schemas.ripper import (
     SdfStatusReport,
     TrackUpdateRequest,
 )
+from arm_common.schemas.session_routes import (
+    SessionRouteUpsert,
+    SessionRouteView,
+)
 from arm_common.schemas.sessions import (
     ApplySessionRequest,
     ApplySessionResponse,
@@ -289,6 +293,8 @@ __all__ = [
     "SessionApplicationView",
     "SessionCloneRequest",
     "SessionCreateRequest",
+    "SessionRouteUpsert",
+    "SessionRouteView",
     "SessionUpdateRequest",
     "SessionView",
     "SettingsGroup",

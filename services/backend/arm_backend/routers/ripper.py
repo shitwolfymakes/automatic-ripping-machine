@@ -183,9 +183,11 @@ def _rip_preset_or_http(exc: RipPresetUnavailable) -> HTTPException:
 
 async def _resolve_min_length_override(db: AsyncSession, job: Job) -> int | None:
     """Look up `Session.overrides_json["min_length_seconds"]` for the job's
-    ROUTED session (explicit per-rip choice, else the drive default),
-    returning None when no override applies. The ripper falls back to its
-    host-side `ARM_MIN_LENGTH_SECONDS` baseline when this is None.
+    ROUTED session (explicit per-rip choice, else the compatibility-gated
+    drive default, else a `session_routes` match - see
+    `resolve_routed_session_id`), returning None when no override applies.
+    The ripper falls back to its host-side `ARM_MIN_LENGTH_SECONDS` baseline
+    when this is None.
 
     Single-caller convenience wrapper over `_load_routed_session` +
     `_min_length_override_from_session` — see `resolve_rip_preset_id_for_job`.

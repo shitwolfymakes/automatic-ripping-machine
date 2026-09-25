@@ -1095,6 +1095,12 @@ async def apply_session(
             },
         )
 
+    if outcome.skipped_reason == "media_mismatch":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=outcome.error_detail or "session media type is not compatible with job media type",
+        )
+
     assert outcome.application is not None
     return ApplySessionResponse(
         session_application=SessionApplicationView.model_validate(outcome.application),
