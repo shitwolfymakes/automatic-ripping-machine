@@ -69,7 +69,16 @@ vi.mock('$lib/api/logs', () => ({
 	fetchStructuredLogContent: vi.fn(() => Promise.resolve({ entries: [] })),
 	fetchStructuredTranscoderLogContent: vi.fn(() => Promise.resolve({ entries: [] })),
 	fetchTranscoderLogForArmJob: vi.fn(() => Promise.resolve({ found: false })),
-	fetchLogContent: vi.fn(() => Promise.resolve({ content: '' }))
+	fetchLogContent: vi.fn(() => Promise.resolve({ content: '' })),
+	fetchJobLog: vi.fn(() => Promise.resolve([])),
+	jobLogDownloadUrl: (id: string) => `/api/logs/${id}.zip`
+}));
+
+// The job log panel opens its own WS subscription for an active job (this
+// suite's fixture job is 'ripped', a terminal status, so it never subscribes
+// in practice) - stub the client so no real WebSocket gets created in jsdom.
+vi.mock('$lib/api/ws', () => ({
+	wsClient: { subscribe: vi.fn(() => vi.fn()), start: vi.fn(), stop: vi.fn() }
 }));
 
 vi.mock('$lib/api/settings', () => ({
@@ -115,6 +124,13 @@ describe('Job detail page (v3)', () => {
 		});
 		// Source column was replaced by Kind + Filename; assert on the Kind header.
 		expect(screen.getByRole('columnheader', { name: 'Kind' })).toBeInTheDocument();
+	});
+
+	it('renders the JobLogPanel with a link to the full job log', async () => {
+		renderComponent(Page);
+		await waitFor(() => {
+			expect(screen.getByTestId('job-log-open')).toHaveAttribute('href', '/logs/job_42');
+		});
 	});
 
 	it('redirects to home on 404', async () => {
@@ -192,7 +208,7 @@ describe('Job detail page (v3)', () => {
 				title: 'Test Album',
 				disc_type: 'cd',
 				status: 'ripped',
-				metadata_json: { tracks: [{ title: 'Opening', duration_ms: 95000 }] }
+				metadata_json: { music: { tracks: [{ title: 'Opening', length_ms: 95000 }] } }
 			}),
 			tracks: [createTrack({ id: 'trk_1', kind: 'audio_track', status: 'done' })],
 			fingerprints: [{ algo: 'crc64', value: 'ABCDEF0123456789' }]
@@ -234,7 +250,7 @@ describe('Job detail page (v3)', () => {
 				title: 'Test Album',
 				disc_type: 'cd',
 				status: 'ripped',
-				metadata_json: { tracks: [{ title: 'Opening', duration_ms: 95000 }] }
+				metadata_json: { music: { tracks: [{ title: 'Opening', length_ms: 95000 }] } }
 			}),
 			tracks: [],
 			fingerprints: []
@@ -255,7 +271,10 @@ describe('Job detail page (v3)', () => {
 				id: 'job_42',
 				title: 'Test Movie',
 				status: 'ripped',
-				metadata_json: { imdb_id: 'tt9999999', scan_result: { titles: [{ index: 0 }] } }
+				metadata_json: {
+					imdb_id: 'tt9999999',
+					scan_result: { disc_type: 'bluray', titles: [{ index: 0, duration_seconds: 0 }] }
+				}
 			}),
 			tracks: [],
 			fingerprints: []
@@ -357,7 +376,10 @@ describe('Job detail page (v3)', () => {
 				title: 'Test Movie',
 				status: 'ripped',
 				disc_type: 'bluray',
-				metadata_json: { imdb_id: 'tt7777777', multi_title: true, source_type: 'iso' }
+				metadata_json: {
+					identity: { provider: 'tmdb', external_ids: { imdb: 'tt7777777' } },
+					provider_raw: { arm_server: { multi_title: true, source_type: 'iso' } }
+				}
 			}),
 			tracks: [],
 			fingerprints: []
@@ -423,11 +445,11 @@ describe('Job detail page (v3)', () => {
 			fingerprints: []
 		} as any);
 		renderComponent(Page);
-		// The track's Transcode cell shows an em-dash (no transcode task yet).
+		// The track's Transcode cell shows a dash (no transcode task yet).
 		// Scope to the Transcode <td> (data-label="Transcode") — other cells also
-		// render "—", so a global getByText('—') is ambiguous.
+		// render "-", so a global getByText('—') is ambiguous.
 		await waitFor(() => expect(screen.getByText('Done')).toBeInTheDocument());
 		const transcodeCell = document.querySelector('td[data-label="Transcode"]');
-		expect(transcodeCell?.textContent?.trim()).toBe('—');
+		expect(transcodeCell?.textContent?.trim()).toBe('-');
 	});
 });

@@ -30,19 +30,19 @@
     │                                              │                          │
     │                                     docker-py ▼ /var/run/docker.sock    │
     │                                     spawns arm-transcode                │
-    └──────┬────────────────────────┬────────────────────────┬────────────────┘
-           │                        │                        │
-           │                        │                        │ (ephemeral)
-           │ HTTPS + WSS            │ HTTPS + WSS            ▼
-    ┌──────▼─────────┐       ┌──────▼─────────┐       ┌──────────────────┐
-    │ arm-ripper-sr0 │       │ arm-ripper-sr1 │       │ arm-transcode-*  │
-    │  Python        │       │  Python        │       │  Python wrapper  │
-    │  MakeMKV       │       │  MakeMKV       │       │  around HandBrake│
-    │  /dev/sr0      │       │  /dev/sr1      │       │  (GPU optional)  │
-    └──────┬─────────┘       └──────┬─────────┘       └──────┬───────────┘
-           │                        │                        │
-           │        writes raw      │                        │ reads raw, writes transcoded
-           ▼                        ▼                        ▼
+    └─────┬──────────────────────────────┬──────────────────────────────┬─────┘
+          │                              │                              │
+          │                              │                              │ (ephemeral)
+          │ HTTPS + WSS                  │ HTTPS + WSS                  ▼
+    ┌─────▼───────────────┐        ┌─────▼───────────────┐        ┌──────────────────┐
+    │ arm-ripper-<serial> │        │ arm-ripper-<serial> │        │ arm-transcode-*  │
+    │  Python             │        │  Python             │        │  Python wrapper  │
+    │  MakeMKV            │        │  MakeMKV            │        │  around HandBrake│
+    │  /dev/sr0           │        │  /dev/sr1           │        │  (GPU optional)  │
+    └─────┬───────────────┘        └─────┬───────────────┘        └─────┬────────────┘
+          │                              │                              │
+          │ writes raw                   │                              │ reads raw, writes transcoded
+          ▼                              ▼                              ▼
     ┌─────────────────────────────────────────────────────────────────────┐
     │                 /raw   (shared volume, flat tree)                    │
     │                 /media (shared volume, Plex-friendly tree)           │
@@ -76,7 +76,7 @@
 
 ### `arm-ripper-<drive>`
 - **Image:** custom, Python 3.14 + MakeMKV + libdvdcss + abcde.
-- **Replicas:** one per optical drive. Declared explicitly as separate services in `docker-compose.yml` — e.g. `arm-ripper-sr0`, `arm-ripper-sr1`.
+- **Replicas:** one ripper container per drive, created by the backend on enroll (label `arm.drive_id`) — not declared as separate services in `docker-compose.yml`.
 - **Inputs:** polled `ioctl(CDROM_DRIVE_STATUS)` on passed-through `/dev/sr*`; REST/WS config from Backend.
 - **Outputs:** raw media files under `/raw/<job-id>/`; REST status updates + WS progress to Backend.
 - **State:** ephemeral. All persistent state is pushed to Backend.

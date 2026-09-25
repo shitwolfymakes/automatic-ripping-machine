@@ -62,8 +62,7 @@ describe('JobInfoForm', () => {
 			title: 'Star Knight',
 			year: 1986,
 			disc_number: null,
-			disc_total: null,
-			metadata: {}
+			disc_total: null
 		});
 		await waitFor(() => expect(onrefresh).toHaveBeenCalled());
 	});
@@ -77,8 +76,7 @@ describe('JobInfoForm', () => {
 			title: 'Star Knight',
 			year: 1985,
 			disc_number: 2,
-			disc_total: 3,
-			metadata: {}
+			disc_total: 3
 		}));
 	});
 

@@ -26,9 +26,9 @@ describe('buildMetadataFields', () => {
 			expect(findField(fields, 'Disc Type')?.value).toBe('Blu-ray');
 		});
 
-		it('Status shows the raw v3 status', () => {
+		it('Status shows the proper-cased status label', () => {
 			const fields = buildMetadataFields(createJob({ status: 'ripped' }));
-			expect(findField(fields, 'Status')?.value).toBe('ripped');
+			expect(findField(fields, 'Status')?.value).toBe('Ripped');
 		});
 
 		it('Year shows the numeric year as a string', () => {

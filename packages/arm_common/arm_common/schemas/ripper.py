@@ -35,14 +35,16 @@ class SdfStatusReport(BaseModel):
 
 
 class RegisterRequest(BaseModel):
+    """POST /api/ripper/register. Keyed on the Drive row the backend handed
+    this container (ARM_DRIVE_ID); `by_id_name` is the udev link the ripper
+    is bound to (None for a port-identity drive) and must match the row."""
+
+    drive_id: str
     hostname: str
     device_path: str
     ripper_version: str
     hw_caps: dict[str, Any] = Field(default_factory=dict)
-    # Hardware serial (udev ID_SERIAL_SHORT), when the drive exposes one.
-    # Lets the backend detect a physical drive swap behind an unchanged
-    # hostname/srN slot instead of silently rebinding it.
-    serial: str | None = None
+    by_id_name: str | None = None
 
 
 class RipperHeartbeatRequest(BaseModel):
@@ -95,8 +97,9 @@ class IdentifyRequest(BaseModel):
     drive_id: str
     scan_result: ScanResult
     # Set by the ripper when it's running a manual-trigger flow; backend
-    # stamps it into job.metadata_json so `maybe_auto_apply_session` can
-    # prefer it over the drive's persistent default_session_id.
+    # stamps it into the job's `pending_session_id` column so
+    # `maybe_auto_apply_session` can prefer it over the drive's persistent
+    # default_session_id.
     pending_session_id: str | None = None
 
 

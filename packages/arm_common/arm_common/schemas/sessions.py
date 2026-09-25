@@ -213,6 +213,10 @@ class CollisionInfo(BaseModel):
     # file on disk under MEDIA_ROOT, or two tracks in the same apply request
     # resolving to the same path (template missing `{track}` for a multi-track rip).
     reason: Literal["existing_task", "on_disk", "duplicate_in_request"]
+    # The job that owns the colliding task (via task -> session_application ->
+    # job_id), populated only for reason="existing_task". Lets the UI say
+    # "this path is claimed by job <X>" instead of a bare path string.
+    existing_job_id: str | None = None
 
 
 class ApplySessionResponse(BaseModel):

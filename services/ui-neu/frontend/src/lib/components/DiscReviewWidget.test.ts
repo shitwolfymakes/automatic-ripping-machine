@@ -282,16 +282,14 @@ describe('DiscReviewWidget', () => {
 			mockFetchJob.mockResolvedValue(detail({ status: 'ripped', title: 'MysterySuspense', disc_type: 'dvd' }));
 			renderWidget({ id: 'job_z', status: 'ripped', title: 'MysterySuspense', disc_type: 'dvd' });
 			await waitFor(() => {
-				expect(screen.getByText('RIPPED · NEEDS SESSION')).toBeInTheDocument();
+				expect(screen.getByText('RIPPED | NEEDS SESSION')).toBeInTheDocument();
 			});
 		});
 
-		it('shows RIPPED · NEEDS TITLE when post-rip job has a pending session but no title', async () => {
-			mockFetchJob.mockResolvedValue(
-				detail({ status: 'ripped', title: null, metadata_json: { pending_session_id: 'sess_x' } })
-			);
-			renderWidget({ status: 'ripped', title: null, metadata_json: { pending_session_id: 'sess_x' } });
-			await waitFor(() => expect(screen.getByText('RIPPED · NEEDS TITLE')).toBeInTheDocument());
+		it('shows RIPPED | NEEDS TITLE when post-rip job has a pending session but no title', async () => {
+			mockFetchJob.mockResolvedValue(detail({ status: 'ripped', title: null, pending_session_id: 'sess_x' }));
+			renderWidget({ status: 'ripped', title: null, pending_session_id: 'sess_x' });
+			await waitFor(() => expect(screen.getByText('RIPPED | NEEDS TITLE')).toBeInTheDocument());
 		});
 
 		it('unidentified disc shows a clean fallback, not "Untitled"', async () => {
@@ -343,10 +341,16 @@ describe('DiscReviewWidget', () => {
 					disc_type: 'bluray',
 					disc_number: 1,
 					disc_total: 3,
+					season: 2,
 					metadata_json: {
-						video_type: 'series',
-						season: '2',
-						scan_result: { titles: [{ index: 0 }, { index: 1 }] }
+						provider_raw: { arm_server: { video_type: 'series' } },
+						scan_result: {
+							disc_type: 'bluray',
+							titles: [
+								{ index: 0, duration_seconds: 0 },
+								{ index: 1, duration_seconds: 0 }
+							]
+						}
 					}
 				})
 			);
@@ -354,7 +358,7 @@ describe('DiscReviewWidget', () => {
 			await waitFor(() => expect(screen.getByText('Series')).toBeInTheDocument());
 			expect(screen.getByText('Disc 1/3')).toBeInTheDocument();
 			expect(screen.getByText('2 titles')).toBeInTheDocument();
-			expect(screen.getByText('S2')).toBeInTheDocument();
+			expect(screen.getByText('S02')).toBeInTheDocument();
 		});
 
 		it('renders no metadata chips for a bare disc', async () => {
@@ -375,9 +379,7 @@ describe('DiscReviewWidget', () => {
 			vi.mocked(fetchSessions).mockResolvedValueOnce([
 				{ id: 'sess_42', name: '4K Remux', media_type: 'movie' } as never
 			]);
-			mockFetchJob.mockResolvedValueOnce(
-				detail({ status: 'awaiting_review', metadata_json: { pending_session_id: 'sess_42' } })
-			);
+			mockFetchJob.mockResolvedValueOnce(detail({ status: 'awaiting_review', pending_session_id: 'sess_42' }));
 			renderWidget({ status: 'awaiting_review' });
 			await waitFor(() => expect(screen.getByText('Session: 4K Remux')).toBeInTheDocument());
 		});
@@ -386,10 +388,10 @@ describe('DiscReviewWidget', () => {
 			const { fetchSessions } = await import('$lib/api/sessions');
 			vi.mocked(fetchSessions).mockResolvedValueOnce([]);
 			mockFetchJob.mockResolvedValueOnce(
-				detail({ status: 'awaiting_review', metadata_json: { pending_session_id: 'sess_0123456789ABCDEF' } })
+				detail({ status: 'awaiting_review', pending_session_id: 'sess_0123456789ABCDEF' })
 			);
 			renderWidget({ status: 'awaiting_review' });
-			await waitFor(() => expect(screen.getByText(/^Session: sess_0123456789…$/)).toBeInTheDocument());
+			await waitFor(() => expect(screen.getByText(/^Session: sess_0123456789\.\.\.$/)).toBeInTheDocument());
 		});
 
 		it('shows no session chip when none is pinned', async () => {

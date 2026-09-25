@@ -1,24 +1,61 @@
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
-from arm_common.enums import DiscType, JobStatus, SessionApplicationStatus, TrackKind, TrackStatus, TranscodeTaskStatus
+from arm_common.enums import (
+    DiscType,
+    JobStatus,
+    MediaType,
+    SessionApplicationStatus,
+    TrackKind,
+    TrackStatus,
+    TranscodeTaskStatus,
+)
+from arm_common.schemas.job_metadata import ExternalIds, JobMetadata, MusicMeta
 
 
 class ResolveRequest(BaseModel):
+    """POST /api/jobs/{id}/resolve body.
+
+    title/year/disc_number/disc_total are the full identity statement: every
+    resolve restates them, so there is no "omitted" case for these four --
+    whatever value is sent (including null) is exactly what lands.
+
+    media_type/season are classifications, not part of that statement, and
+    follow different semantics: **omitted = keep** the stored value (a
+    title-only fix must not wipe them), **explicit null = clear** it (the
+    operator saying "this isn't a season" / "clear the kind"). The same
+    omitted=keep / explicit-null=clears rule applies per-field inside
+    `external_ids`: sending `external_ids` at all starts an identity edit,
+    and each of its member fields (imdb/tmdb/tvdb/musicbrainz_release) that
+    is explicitly present -- even as `null` -- clears that one id, while a
+    member field left out of the payload keeps its previously stored value.
+    Distinguishing "sent null" from "not sent" requires Pydantic's
+    `model_fields_set`, not an `is not None` check, since both collapse to
+    the same `None` once parsed.
+    """
+
+    # Unknown keys are a caller bug: the free-form metadata bag is gone (G-03/§3.4).
+    model_config = ConfigDict(extra="forbid")
+
     title: str
     year: int | None = None
     disc_number: int | None = None
     disc_total: int | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    media_type: MediaType | None = None
+    season: int | None = None
+    # Typed replacements for the last free-form uses.
+    music: MusicMeta | None = None
+    external_ids: ExternalIds | None = None
 
 
 class ManualTriggerRequest(BaseModel):
     """POST /api/jobs/manual — kick off a rip on a drive that already has a
     disc in the tray. The ripper picks it up via WS command and runs the
     normal scan→identify→rip flow; the optional `session_id` is stamped on
-    the resulting Job's metadata so `rip-complete` auto-applies it.
+    the resulting Job's `pending_session_id` column so `rip-complete`
+    auto-applies it.
     """
 
     drive_id: str
@@ -36,6 +73,19 @@ class AbandonJobRequest(BaseModel):
     rips on disk. The DB row stays (status=abandoned) for audit."""
 
     delete_raw: bool = False
+
+
+class BulkDeleteJobsRequest(BaseModel):
+    """DELETE /api/jobs body (optional). Filters which terminal jobs are
+    deleted:
+      - `job_ids` set  -> delete only those jobs (still terminal-guarded)
+      - `status` set   -> delete only terminal jobs in that JobStatus
+      - neither set    -> delete ALL terminal jobs (legacy behavior)
+    `job_ids` takes precedence over `status` if both are sent.
+    """
+
+    job_ids: list[str] | None = None
+    status: str | None = None
 
 
 class BulkDeleteJobsResponse(BaseModel):
@@ -105,12 +155,17 @@ class JobView(BaseModel):
     status: JobStatus
     title: str | None
     year: int | None
+    # Identity columns (step 2): the identified kind, the user-supplied TV
+    # season, and the explicit per-rip session choice.
+    media_type: MediaType | None = None
+    season: int | None = None
+    pending_session_id: str | None = None
     disc_number: int | None = None
     disc_total: int | None = None
     # Computed at identify; UI prefers `poster_url_manual` if set.
     poster_url: str | None = None
     poster_url_manual: str | None = None
-    metadata_json: dict[str, Any]
+    metadata_json: JobMetadata
     resumed_from_crash: bool
     # Timed review gate: when the countdown started (AWAITING_REVIEW). Drives the
     # ripper's remaining-delay calc + the UI's cosmetic countdown. Null otherwise.
@@ -225,6 +280,21 @@ class RipStartResponse(BaseModel):
     min_length_seconds: int | None = None
 
 
+# The one definition of apply/fan-out skip reasons — the backend engine
+# (arm_backend.auto_session) imports this rather than re-declaring it, so the
+# wire schema and the engine can never drift.
+#
+# "no_tracks" — no Track rows exist yet (pre-rip-start apply); fans out once
+# rip-complete/resolve drains it. "no_outputs" (Fix 75-7) — Track rows DO
+# exist but none qualify for this session's media_type/exclusion, so
+# compute_outputs legitimately resolves zero paths; re-applying after the
+# rip won't change that outcome the way "no_tracks" implies it will.
+# "media_mismatch" — the session's media_type is incompatible with the
+# job's drive/disc-type routing (see `_media_types_compatible`); fanning
+# out would apply the wrong session to the wrong kind of disc.
+ApplySkippedReason = Literal["collisions", "template", "session_missing", "no_tracks", "no_outputs", "media_mismatch"]
+
+
 class ResolveFanOutOutcomeView(BaseModel):
     """One waiting_identify application's post-resolve outcome.
 
@@ -232,13 +302,15 @@ class ResolveFanOutOutcomeView(BaseModel):
     promoted and `task_count` newly-created transcode tasks are queued.
     Anything else → the application stays parked in `waiting_identify`
     and `error_detail` carries the reason for the UI to surface.
+    `skipped_reason='no_tracks'` is the benign case: the rip has not started
+    yet (no Track rows exist), so the application fans out at rip-complete.
     """
 
     session_application_id: str
     session_id: str
     status: SessionApplicationStatus
     task_count: int
-    skipped_reason: Literal["collisions", "template", "session_missing"] | None = None
+    skipped_reason: ApplySkippedReason | None = None
     error_detail: str | None = None
 
 

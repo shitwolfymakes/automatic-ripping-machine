@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -14,6 +14,7 @@ from arm_backend.auth import require_jwt, require_writer
 from arm_backend.auto_session import (
     SessionNotFoundError,
     apply_session_internal,
+    after_rip,
     fan_out_waiting_identify_applications,
 )
 from arm_backend.config import settings
@@ -43,6 +44,7 @@ from arm_common.schemas import (
     AbandonJobRequest,
     ApplySessionRequest,
     ApplySessionResponse,
+    BulkDeleteJobsRequest,
     BulkDeleteJobsResponse,
     DiscFingerprintView,
     JobDetailView,
@@ -61,6 +63,7 @@ from arm_common.schemas import (
     TranscodeTaskView,
 )
 from arm_common.enums import NON_TERMINAL_JOB_STATUSES, TERMINAL_JOB_STATUSES
+from arm_common.schemas.job_metadata import JobIdentity, JobMetadata
 from arm_common.ulid import is_valid_id
 
 logger = logging.getLogger("arm_backend.routers.jobs")
@@ -83,7 +86,10 @@ _MEDIA_STATUS_DETAIL: dict[DriveMediaStatus, str] = {
     DriveMediaStatus.NO_DISC: "no disc loaded in the drive",
     DriveMediaStatus.TRAY_OPEN: "drive tray is open — close it before starting a rip",
     DriveMediaStatus.NOT_READY: "drive is busy / spinning up — try again in a moment",
-    DriveMediaStatus.UNAVAILABLE: "drive device node is gone — check the host /dev mount",
+    DriveMediaStatus.DETACHED: "drive is detached — reconnect it before starting a rip",
+    DriveMediaStatus.UNAVAILABLE: (
+        "drive node exists but could not be opened — check the device cgroup rule and CDROM_GID"
+    ),
 }
 
 
@@ -673,25 +679,44 @@ async def delete_job(
 @router.delete("", response_model=BulkDeleteJobsResponse)
 async def delete_all_jobs(
     delete_raw: bool = Query(default=False),
+    req: BulkDeleteJobsRequest | None = Body(default=None),
     _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> BulkDeleteJobsResponse:
-    """Hard-delete every job in a terminal status. Non-terminal jobs are
-    skipped and reported in `skipped_non_terminal` so the caller can
-    abandon-then-retry them.
+    """Hard-delete terminal jobs. An optional body filters the set:
+    `job_ids` (only those), `status` (only that JobStatus), or neither
+    (all terminal jobs — legacy). `job_ids` wins over `status`. Non-terminal
+    jobs are always skipped and reported in `skipped_non_terminal`.
 
     `delete_raw=true` runs the filesystem cleanup (raw rmtree + media file
     unlink + empty-parent prune) for each deleted job. Cleanups are
     independent — a failure on one job is logged and the next continues.
     """
+    req = req or BulkDeleteJobsRequest()
+
+    target_status: JobStatus | None = None
+    if req.status:
+        try:
+            target_status = JobStatus(req.status)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"invalid status: {req.status}") from exc
+
     rows = (await db.execute(select(Job))).scalars().all()
+
+    if req.job_ids:
+        wanted = set(req.job_ids)
+        candidates = [j for j in rows if j.id in wanted]
+    elif target_status is not None:
+        candidates = [j for j in rows if j.status == target_status]
+    else:
+        candidates = list(rows)
 
     raw_root = Path(settings.RAW_ROOT)
     media_root = Path(settings.MEDIA_ROOT)
     deleted_ids: list[str] = []
     skipped: list[str] = []
     totals = {"raw_dir_removed": 0, "media_files_removed": 0, "media_dirs_pruned": 0}
-    for job in rows:
+    for job in candidates:
         if job.status not in TERMINAL_JOB_STATUSES:
             skipped.append(job.id)
             continue
@@ -735,7 +760,8 @@ async def manual_trigger(
     """Kick the ripper to run a job on a drive that already has a disc in
     the tray. The ripper handles the WS command, scans the disc, and
     threads `pending_session_id` through identify so the resulting Job's
-    metadata carries it. `rip-complete` then auto-applies that session.
+    `pending_session_id` column carries it. `rip-complete` then auto-applies
+    that session.
     """
     drive = (await db.execute(select(Drive).where(col(Drive.id) == req.drive_id))).scalar_one_or_none()
     if drive is None:
@@ -884,23 +910,92 @@ async def resolve(
             detail=f"job {job_id} is in status {job.status.value}, not in an identify-resolvable status",
         )
 
-    # Merge semantics: req.metadata is overlaid on existing metadata_json, not a replacement.
-    # The partial-edit case ("just fix the title") sends `metadata: {}` and must NOT wipe
-    # auto-identified artist/album/scan_result keys. Callers that DO want to replace a field
-    # send it explicitly (None clears, missing leaves alone).
-    new_metadata = dict(job.metadata_json or {})
-    new_metadata.update(req.metadata)
+    # Typed merge (G-03/§3.4): req.music / req.external_ids overlay the
+    # matching typed sections of the existing metadata_json; everything else
+    # (scan_result, provider_raw, etc.) round-trips untouched. The
+    # partial-edit case ("just fix the title") sends neither field and must
+    # NOT wipe auto-identified sections.
+    md = JobMetadata.model_validate(job.metadata_json or {})
+    if req.music is not None:
+        md.music = req.music
+    # Fix 75-5: "external_ids" sent (even as {} or with some fields null) is
+    # the operator editing identity; each MEMBER field then follows
+    # omitted=keep / explicit-null=clears, via model_fields_set rather than
+    # `is not None` (which can't tell "sent null" from "not sent" once
+    # Pydantic has already collapsed both to None).
+    if req.external_ids is not None:
+        if md.identity is None:
+            md.identity = JobIdentity(provider="manual")
+        # Per-field overlay, not a wholesale replace: a request that only
+        # sets tmdb must not wipe a previously stored imdb/tvdb/etc.
+        # Re-assigned (not just mutated) so exclude_unset picks up
+        # external_ids as set even when identity was just freshly created.
+        existing_ids = md.identity.external_ids
+        ids_set = req.external_ids.model_fields_set
+        if "imdb" in ids_set:
+            existing_ids.imdb = req.external_ids.imdb
+        if "tmdb" in ids_set:
+            existing_ids.tmdb = req.external_ids.tmdb
+        if "tvdb" in ids_set:
+            existing_ids.tvdb = req.external_ids.tvdb
+        if "musicbrainz_release" in ids_set:
+            existing_ids.musicbrainz_release = req.external_ids.musicbrainz_release
+        md.identity.external_ids = existing_ids
+    new_metadata = md.model_dump(mode="json", exclude_unset=True)
 
     job.title = req.title
     job.year = req.year
     job.disc_number = req.disc_number
     job.disc_total = req.disc_total
-    job.metadata_json = new_metadata
+    # Fix 75-5: media_type/season are classifications, not part of the
+    # identity statement -- omitted keeps the stored value, but an EXPLICIT
+    # null clears it (the operator saying "this isn't a season" or "clear
+    # the kind"). model_fields_set is the only way to tell "sent null" from
+    # "not sent" here, since both collapse to req.media_type is None.
+    fields_set = req.model_fields_set
+    if "media_type" in fields_set:
+        job.media_type = req.media_type
+    if "season" in fields_set:
+        job.season = req.season
+    was_ripped_placeholder = job.status == JobStatus.RIPPED_AWAITING_IDENTIFY
+    # Fix 75-6: the spent `unidentified` flag (flags section + the pre-0031
+    # top-level key) must be cleared on BOTH branches, not just PROMOTE. A
+    # resolved RIPPED_PARTIAL placeholder stays in PRESERVE (partiality wins
+    # over the placeholder status — see rip-complete) but has just as much
+    # identity landed as a PROMOTE job; leaving flags.unidentified=true
+    # forever would misreport it after the operator has already identified
+    # it.
+    new_metadata.pop("unidentified", None)
+    if isinstance(new_metadata.get("flags"), dict):
+        new_metadata["flags"] = {k: v for k, v in new_metadata["flags"].items() if k != "unidentified"}
     if job.status in _RESOLVABLE_STATUSES_PROMOTE:
-        job.status = JobStatus.IDENTIFIED
+        # A placeholder whose rip already finished becomes RIPPED, not
+        # IDENTIFIED — its rip is done (G-09).
+        job.status = JobStatus.RIPPED if was_ripped_placeholder else JobStatus.IDENTIFIED
+    job.metadata_json = new_metadata
     session.add(job)
 
-    fan_out_outcomes = await fan_out_waiting_identify_applications(session, job=job, hub=hub)
+    # Fix 75-2: commit the resolve's job mutations (title/year/status/etc.)
+    # BEFORE running after_rip / fan_out_waiting_identify_applications.
+    # after_rip's drain half (drain_parked_applications_after_rip) rolls back
+    # the session on any exception -- with the old ordering that rollback
+    # silently discarded the operator's just-applied resolve, yet the
+    # endpoint still returned 200 built from the (rolled-back, but
+    # still-mutated-in-Python) job object. Committing first mirrors
+    # rip-complete, which also commits its status change before invoking
+    # after_rip; a subsequent after_rip failure can then only affect fan-out,
+    # never the resolve itself.
+    await session.commit()
+    await session.refresh(job)
+
+    if was_ripped_placeholder:
+        # Rip done + identity just landed: run the same post-rip pass
+        # rip-complete runs for identified jobs — drain parked applications
+        # (fan-out uses the just-resolved title) and then the auto-apply
+        # hook. `after_rip` commits its own work and never raises.
+        fan_out_outcomes = await after_rip(session, job, hub)
+    else:
+        fan_out_outcomes = await fan_out_waiting_identify_applications(session, job=job, hub=hub)
 
     logger.info(
         "resolve job_id=%s -> identified title=%s fan_out=%d",
@@ -930,9 +1025,10 @@ async def resolve(
         session=session,
     )
 
-    # Single commit lands the job update, fan-out task rows, the fan-out's
-    # session.queued events, and identify.resolved + rip.identify_resolved
-    # events atomically.
+    # Second commit lands the fan-out's task rows (when after_rip/fan-out did
+    # not already commit or roll back on its own) plus the
+    # identify.resolved + rip.identify_resolved events. The resolve itself is
+    # already durable from the commit above.
     await session.commit()
     await session.refresh(job)
     for outcome in fan_out_outcomes:
@@ -958,7 +1054,7 @@ async def resolve(
 async def apply_session(
     job_id: JobIdParam,
     req: ApplySessionRequest,
-    _: User = Depends(require_writer),
+    user: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> ApplySessionResponse:
@@ -972,7 +1068,7 @@ async def apply_session(
             job=job,
             session_id=req.session_id,
             overwrite=req.overwrite,
-            created_by_user_id=None,
+            created_by_user_id=user.id,
             source="manual",
             hub=hub,
         )
@@ -997,6 +1093,12 @@ async def apply_session(
                 "message": "output_path collisions detected",
                 "collisions": [c.model_dump() for c in outcome.collisions],
             },
+        )
+
+    if outcome.skipped_reason == "media_mismatch":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=outcome.error_detail or "session media type is not compatible with job media type",
         )
 
     assert outcome.application is not None

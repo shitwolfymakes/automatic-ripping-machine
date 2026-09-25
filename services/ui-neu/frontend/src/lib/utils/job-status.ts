@@ -87,7 +87,7 @@ export function reviewPhaseBadge(job: BadgeJob): { label: string; accent: string
 		return { label: 'IDENTIFY', accent: 'var(--color-cyan-500, #06b6d4)' };
 	if (s === 'identified') return { label: 'READY', accent: 'var(--color-primary)' };
 	if (s === 'ripped' || s === 'ripped_partial')
-		return { label: 'RIPPED · NEEDS SESSION', accent: 'var(--color-violet-500, #8b5cf6)' };
+		return { label: 'RIPPED | NEEDS SESSION', accent: 'var(--color-violet-500, #8b5cf6)' };
 	return { label: s.toUpperCase(), accent: 'var(--color-primary)' };
 }
 
@@ -111,7 +111,7 @@ export function transcodeColumnStatus(
 			return { label: 'Transcode failed', badgeStatus: 'transcode_failed' };
 		case 'transcoding':
 			return tasks_failed > 0
-				? { label: `Failed — retrying ${tasks_done}/${tasks_total}`, badgeStatus: 'transcode_failed' }
+				? { label: `Failed, retrying ${tasks_done}/${tasks_total}`, badgeStatus: 'transcode_failed' }
 				: { label: `Transcoding ${tasks_done}/${tasks_total}`, badgeStatus: 'transcoding' };
 		default:
 			return null;

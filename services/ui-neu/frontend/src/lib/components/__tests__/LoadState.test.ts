@@ -27,9 +27,10 @@ describe('LoadState', () => {
                 transitionKey: 'test-1'
             }
         });
-        expect(screen.queryByText('LOADING')).toBeNull();
+        // Before minDelay the skeleton is in flow (space reserved) but hidden.
+        expect(screen.getByText('LOADING').closest('[aria-hidden="true"]')).not.toBeNull();
         await vi.advanceTimersByTimeAsync(200);
-        expect(screen.getByText('LOADING')).toBeInTheDocument();
+        expect(screen.getByText('LOADING').closest('[aria-hidden="true"]')).toBeNull();
         vi.useRealTimers();
     });
 
@@ -119,9 +120,9 @@ describe('LoadState', () => {
             }
         });
         await vi.advanceTimersByTimeAsync(300);
-        expect(screen.queryByText('LOADING')).toBeNull();
+        expect(screen.getByText('LOADING').closest('[aria-hidden="true"]')).not.toBeNull();
         await vi.advanceTimersByTimeAsync(300);
-        expect(screen.getByText('LOADING')).toBeInTheDocument();
+        expect(screen.getByText('LOADING').closest('[aria-hidden="true"]')).toBeNull();
         vi.useRealTimers();
     });
 

@@ -258,13 +258,134 @@
         }
       }
     },
+    "/api/ripper/drives/{drive_id}": {
+      "get": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Get Drive",
+        "description": "This ripper's own row. Port-identity rippers read `device_path` from\nit while their drive is absent \u2014 the scanner keeps that current by port\n(spec \u00a72), and the ripper cannot see a renumbering by itself without a\nby-id link. Returns the table model: the ripper validates it as `Drive`.",
+        "operationId": "get_drive_api_ripper_drives__drive_id__get",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Drive"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ripper/drives/{drive_id}/device-path": {
+      "patch": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Update Device Path",
+        "description": "Ripper \u2192 backend on a node move (replug under a new srN), so the UI\nnever shows a stale node. Identity is untouched \u2014 only where it lives.",
+        "operationId": "update_device_path_api_ripper_drives__drive_id__device_path_patch",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriveDevicePathUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ripper/makemkv-key-status": {
       "post": {
         "tags": [
           "ripper"
         ],
         "summary": "Makemkv Key Status",
-        "description": "A ripper reports its disc-free makemkv probe outcome. Global fact \u2014\nwritten to the Config singleton (last writer wins across multiple rippers,\nby design). test-key / preflight / config-view read it back.",
+        "description": "A ripper reports its disc-free makemkv probe outcome. Global fact \u2014\nwritten to the Config singleton (last writer wins across multiple rippers,\nby design). the key check, preflight and config view read it back.",
         "operationId": "makemkv_key_status_api_ripper_makemkv_key_status_post",
         "parameters": [
           {
@@ -423,6 +544,7 @@
           "ripper"
         ],
         "summary": "Register",
+        "description": "A ripper container announcing itself for the row the backend spawned\nit for (ARM_DRIVE_ID). Keyed on the id \u2014 hostname is written as the\nownership token every X-ARM-Hostname check compares, never used to look\nthe row up. Identity is checked, never rewritten: a by-id mismatch means\nthe container is bound to a different physical drive than the row, so\nthe row goes ERROR and the container is left running for diagnosis\n(spec \u00a71, \u00a73).",
         "operationId": "register_api_ripper_register_post",
         "parameters": [
           {
@@ -1258,7 +1380,7 @@
           "jobs"
         ],
         "summary": "Delete All Jobs",
-        "description": "Hard-delete every job in a terminal status. Non-terminal jobs are\nskipped and reported in `skipped_non_terminal` so the caller can\nabandon-then-retry them.\n\n`delete_raw=true` runs the filesystem cleanup (raw rmtree + media file\nunlink + empty-parent prune) for each deleted job. Cleanups are\nindependent \u2014 a failure on one job is logged and the next continues.",
+        "description": "Hard-delete terminal jobs. An optional body filters the set:\n`job_ids` (only those), `status` (only that JobStatus), or neither\n(all terminal jobs \u2014 legacy). `job_ids` wins over `status`. Non-terminal\njobs are always skipped and reported in `skipped_non_terminal`.\n\n`delete_raw=true` runs the filesystem cleanup (raw rmtree + media file\nunlink + empty-parent prune) for each deleted job. Cleanups are\nindependent \u2014 a failure on one job is logged and the next continues.",
         "operationId": "delete_all_jobs_api_jobs_delete",
         "parameters": [
           {
@@ -1288,6 +1410,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/BulkDeleteJobsRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Req"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1763,7 +1902,7 @@
           "jobs"
         ],
         "summary": "Manual Trigger",
-        "description": "Kick the ripper to run a job on a drive that already has a disc in\nthe tray. The ripper handles the WS command, scans the disc, and\nthreads `pending_session_id` through identify so the resulting Job's\nmetadata carries it. `rip-complete` then auto-applies that session.",
+        "description": "Kick the ripper to run a job on a drive that already has a disc in\nthe tray. The ripper handles the WS command, scans the disc, and\nthreads `pending_session_id` through identify so the resulting Job's\n`pending_session_id` column carries it. `rip-complete` then auto-applies\nthat session.",
         "operationId": "manual_trigger_api_jobs_manual_post",
         "parameters": [
           {
@@ -2014,6 +2153,7 @@
           "drives"
         ],
         "summary": "Drive Diagnostic",
+        "description": "\"Look for issues\": every drive row judged against the lifecycle model,\nplus the health of the parts that make the model work (scanner, ripper\nmanager, the host's by-id mount). Never 503s \u2014 a missing subsystem is\nitself a finding.",
         "operationId": "drive_diagnostic_api_drives_diagnostic_get",
         "parameters": [
           {
@@ -2063,9 +2203,21 @@
           "drives"
         ],
         "summary": "Rescan Drives",
-        "description": "Reconcile drive freshness from heartbeats. Backend-side only: the\nripper owns hardware re-enumeration; this surfaces which registered drives\nare live vs stale based on their last media-status update.\n\nKept as POST (not GET) even though it currently only reads: a real rescan\ntriggers ripper-side hardware re-enumeration (a non-idempotent side effect),\nwhich a follow-up will add behind this same verb.",
+        "description": "Run the host drive scan now (spec \u00a72) and report the reconciled table.\nAlso keeps the pre-existing heartbeat-freshness counts so the UI's\nonline/stale badge is unchanged. `force` = Force Rescan: the prune window\nis zero, so absent detected rows are removed immediately; enrolled and\nignored rows are untouched.",
         "operationId": "rescan_drives_api_drives_rescan_post",
         "parameters": [
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Prune detected drives that are not present right now (admin only).",
+              "default": false,
+              "title": "Force"
+            },
+            "description": "Prune detected drives that are not present right now (admin only)."
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -2210,6 +2362,244 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drives/{drive_id}/enroll": {
+      "post": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Enroll Drive",
+        "description": "detected|ignored -> enrolled (spec \u00a71): the operator says \"this is\nARM's\". Creates (or adopts) the ripper container (spec \u00a73). A docker\nfailure reverts the row and surfaces the error in `last_error` + the\nresponse.\n\nSerialized per-drive (see `_drive_lock`): a second enroll/unenroll on the\nsame drive_id while this one is still running its docker call waits for\nit to finish and commit, instead of reading + clobbering a stale row.",
+        "operationId": "enroll_drive_api_drives__drive_id__enroll_post",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drives/{drive_id}/ignore": {
+      "post": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Ignore Drive",
+        "description": "detected -> ignored: \"not ARM's\". Persisted so the scanner never re-nags,\nand never pruned.",
+        "operationId": "ignore_drive_api_drives__drive_id__ignore_post",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drives/{drive_id}/unignore": {
+      "post": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Unignore Drive",
+        "operationId": "unignore_drive_api_drives__drive_id__unignore_post",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drives/{drive_id}/unenroll": {
+      "post": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Unenroll Drive",
+        "description": "enrolled -> detected (still plugged in) or gone (row deleted). Refused\nmid-rip. Stops (or removes) the ripper container (spec \u00a73) before the\nlifecycle changes; a docker failure leaves the row `enrolled`.\n\nSerialized per-drive (see `_drive_lock`) for the same reason as enroll.",
+        "operationId": "unenroll_drive_api_drives__drive_id__unenroll_post",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveView"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Drive row deleted (detected-origin drive)"
           },
           "422": {
             "description": "Validation Error",
@@ -2620,6 +3010,167 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session-routes": {
+      "get": {
+        "tags": [
+          "session-routes"
+        ],
+        "summary": "List Session Routes",
+        "operationId": "list_session_routes_api_session_routes_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SessionRouteView"
+                  },
+                  "title": "Response List Session Routes Api Session Routes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "session-routes"
+        ],
+        "summary": "Upsert Session Route",
+        "operationId": "upsert_session_route_api_session_routes_put",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionRouteUpsert"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionRouteView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session-routes/{route_id}": {
+      "delete": {
+        "tags": [
+          "session-routes"
+        ],
+        "summary": "Delete Session Route",
+        "operationId": "delete_session_route_api_session_routes__route_id__delete",
+        "parameters": [
+          {
+            "name": "route_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Route Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -4148,6 +4699,80 @@
         }
       }
     },
+    "/api/config/keys/{name}/check": {
+      "post": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Check Key",
+        "operationId": "check_key_api_config_keys__name__check_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "tmdb",
+                "omdb",
+                "tvdb",
+                "makemkv"
+              ],
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyCheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyCheckResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/diagnostics": {
       "get": {
         "tags": [
@@ -4180,70 +4805,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DiagnosticsResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/metadata/test-key": {
-      "get": {
-        "tags": [
-          "metadata"
-        ],
-        "summary": "Test Key",
-        "operationId": "test_key_api_metadata_test_key_get",
-        "parameters": [
-          {
-            "name": "provider",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "enum": [
-                "omdb",
-                "tmdb",
-                "tvdb",
-                "makemkv"
-              ],
-              "type": "string",
-              "title": "Provider"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MetadataKeyTestResponse"
                 }
               }
             }
@@ -4728,6 +5289,24 @@
               "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
             }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Preview this session instead of the job's effective one",
+              "title": "Session Id"
+            },
+            "description": "Preview this session instead of the job's effective one"
           },
           {
             "name": "authorization",
@@ -6884,6 +7463,58 @@
         }
       }
     },
+    "/api/system/thediscdb/refresh": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Thediscdb Refresh Now",
+        "description": "Rebuild the TheDiscDB snapshot index from GitHub, on demand.",
+        "operationId": "thediscdb_refresh_now_api_system_thediscdb_refresh_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Thediscdb Refresh Now Api System Thediscdb Refresh Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/files/roots": {
       "get": {
         "tags": [
@@ -7917,6 +8548,38 @@
         ],
         "title": "Body_upload_theme_api_themes_post"
       },
+      "BulkDeleteJobsRequest": {
+        "properties": {
+          "job_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Ids"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "title": "BulkDeleteJobsRequest",
+        "description": "DELETE /api/jobs body (optional). Filters which terminal jobs are\ndeleted:\n  - `job_ids` set  -> delete only those jobs (still terminal-guarded)\n  - `status` set   -> delete only terminal jobs in that JobStatus\n  - neither set    -> delete ALL terminal jobs (legacy behavior)\n`job_ids` takes precedence over `status` if both are sent."
+      },
       "BulkDeleteJobsResponse": {
         "properties": {
           "deleted_ids": {
@@ -8125,6 +8788,17 @@
               "duplicate_in_request"
             ],
             "title": "Reason"
+          },
+          "existing_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Existing Job Id"
           }
         },
         "type": "object",
@@ -8372,6 +9046,28 @@
             ],
             "title": "Community Keydb Enabled"
           },
+          "drive_scan_interval_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drive Scan Interval Seconds"
+          },
+          "drive_detected_prune_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drive Detected Prune Days"
+          },
           "makemkv_sdf_enabled": {
             "anyOf": [
               {
@@ -8382,6 +9078,28 @@
               }
             ],
             "title": "Makemkv Sdf Enabled"
+          },
+          "thediscdb_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thediscdb Enabled"
+          },
+          "thediscdb_refresh_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thediscdb Refresh Days"
           },
           "ripping_paused": {
             "anyOf": [
@@ -8515,9 +9233,25 @@
             "type": "boolean",
             "title": "Community Keydb Enabled"
           },
+          "drive_scan_interval_seconds": {
+            "type": "integer",
+            "title": "Drive Scan Interval Seconds"
+          },
+          "drive_detected_prune_days": {
+            "type": "integer",
+            "title": "Drive Detected Prune Days"
+          },
           "makemkv_sdf_enabled": {
             "type": "boolean",
             "title": "Makemkv Sdf Enabled"
+          },
+          "thediscdb_enabled": {
+            "type": "boolean",
+            "title": "Thediscdb Enabled"
+          },
+          "thediscdb_refresh_days": {
+            "type": "integer",
+            "title": "Thediscdb Refresh Days"
           },
           "ripping_paused": {
             "type": "boolean",
@@ -8618,7 +9352,11 @@
           "auto_rip_on_insert",
           "block_on_miss",
           "community_keydb_enabled",
+          "drive_scan_interval_seconds",
+          "drive_detected_prune_days",
           "makemkv_sdf_enabled",
+          "thediscdb_enabled",
+          "thediscdb_refresh_days",
           "ripping_paused",
           "hold_for_review",
           "manual_wait_seconds",
@@ -8811,6 +9549,80 @@
               }
             ],
             "title": "Serial"
+          },
+          "by_id_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By Id Name"
+          },
+          "sysfs_port": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sysfs Port"
+          },
+          "identity_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveIdentityKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lifecycle": {
+            "$ref": "#/components/schemas/DriveLifecycle",
+            "default": "enrolled"
+          },
+          "present": {
+            "type": "boolean",
+            "title": "Present",
+            "default": true
+          },
+          "vendor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
           },
           "display_name": {
             "anyOf": [
@@ -9021,11 +9833,49 @@
         ],
         "title": "DriveCurrentJobView"
       },
+      "DriveDevicePathUpdateRequest": {
+        "properties": {
+          "device_path": {
+            "type": "string",
+            "title": "Device Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "device_path"
+        ],
+        "title": "DriveDevicePathUpdateRequest",
+        "description": "Ripper \u2192 backend: the drive now occupies this node (replug under a\nnew srN). Keeps the UI's node current without a re-register."
+      },
       "DriveDiagnosticItem": {
         "properties": {
           "id": {
             "type": "string",
             "title": "Id"
+          },
+          "lifecycle": {
+            "$ref": "#/components/schemas/DriveLifecycle"
+          },
+          "present": {
+            "type": "boolean",
+            "title": "Present"
+          },
+          "identity_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveIdentityKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "device_path": {
+            "type": "string",
+            "title": "Device Path"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DriveStatus"
           },
           "media_status": {
             "anyOf": [
@@ -9049,6 +9899,28 @@
             ],
             "title": "Media Status At"
           },
+          "container": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Container"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
           "healthy": {
             "type": "boolean",
             "title": "Healthy"
@@ -9064,12 +9936,20 @@
         "type": "object",
         "required": [
           "id",
+          "lifecycle",
+          "present",
+          "identity_kind",
+          "device_path",
+          "status",
           "media_status",
           "media_status_at",
+          "container",
+          "last_error",
           "healthy",
           "notes"
         ],
-        "title": "DriveDiagnosticItem"
+        "title": "DriveDiagnosticItem",
+        "description": "One row of GET /api/drives/diagnostic's \"Look for issues\" panel: the\nlifecycle model's own verdict on a drive, not just heartbeat staleness."
       },
       "DriveDiagnosticResponse": {
         "properties": {
@@ -9079,6 +9959,13 @@
             },
             "type": "array",
             "title": "Drives"
+          },
+          "system": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "System"
           }
         },
         "type": "object",
@@ -9086,6 +9973,25 @@
           "drives"
         ],
         "title": "DriveDiagnosticResponse"
+      },
+      "DriveIdentityKind": {
+        "type": "string",
+        "enum": [
+          "by_id",
+          "port"
+        ],
+        "title": "DriveIdentityKind",
+        "description": "What a Drive row's identity is keyed on. BY_ID is the udev\n/dev/disk/by-id link name (stable across replug and renumbering); PORT\nis the sysfs device path \u2014 the degraded fallback for drives that expose\nno serial, and the UI says so."
+      },
+      "DriveLifecycle": {
+        "type": "string",
+        "enum": [
+          "detected",
+          "ignored",
+          "enrolled"
+        ],
+        "title": "DriveLifecycle",
+        "description": "Operator-owned state of a physical optical drive the backend has seen.\nPresence (plugged in right now) is a separate, orthogonal fact."
       },
       "DriveMediaStatus": {
         "type": "string",
@@ -9095,7 +10001,8 @@
           "tray_open",
           "not_ready",
           "unavailable",
-          "unknown"
+          "unknown",
+          "detached"
         ],
         "title": "DriveMediaStatus",
         "description": "What the drive thinks is in its tray. Reported by each ripper\non a heartbeat so the backend can fail manual-trigger requests\nfast when the user clicks Start without loading a disc."
@@ -9117,6 +10024,31 @@
           "stale": {
             "type": "integer",
             "title": "Stale"
+          },
+          "detected": {
+            "type": "integer",
+            "title": "Detected",
+            "default": 0
+          },
+          "ignored": {
+            "type": "integer",
+            "title": "Ignored",
+            "default": 0
+          },
+          "enrolled": {
+            "type": "integer",
+            "title": "Enrolled",
+            "default": 0
+          },
+          "absent": {
+            "type": "integer",
+            "title": "Absent",
+            "default": 0
+          },
+          "pruned": {
+            "type": "integer",
+            "title": "Pruned",
+            "default": 0
           }
         },
         "type": "object",
@@ -9415,6 +10347,78 @@
             ],
             "title": "Updated At"
           },
+          "lifecycle": {
+            "$ref": "#/components/schemas/DriveLifecycle"
+          },
+          "present": {
+            "type": "boolean",
+            "title": "Present"
+          },
+          "identity_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveIdentityKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
+          "by_id_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By Id Name"
+          },
+          "vendor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
           "current_job": {
             "anyOf": [
               {
@@ -9445,7 +10449,15 @@
           "prescan_retries",
           "disc_enum_timeout",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "lifecycle",
+          "present",
+          "identity_kind",
+          "serial",
+          "by_id_name",
+          "vendor",
+          "model",
+          "last_error"
         ],
         "title": "DriveView"
       },
@@ -9484,6 +10496,57 @@
           "default_body"
         ],
         "title": "EventTypeInfo"
+      },
+      "ExternalIds": {
+        "properties": {
+          "imdb": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imdb"
+          },
+          "tmdb": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tmdb"
+          },
+          "tvdb": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tvdb"
+          },
+          "musicbrainz_release": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Musicbrainz Release"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "ExternalIds"
       },
       "FailTaskRequest": {
         "properties": {
@@ -9865,6 +10928,38 @@
             ],
             "title": "Year"
           },
+          "media_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MediaType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Season"
+          },
+          "pending_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Session Id"
+          },
           "disc_number": {
             "anyOf": [
               {
@@ -9992,6 +11087,7 @@
           "drive_id",
           "disc_type",
           "year",
+          "season",
           "disc_number",
           "disc_total",
           "poster_url",
@@ -10038,6 +11134,124 @@
           "tracks"
         ],
         "title": "JobDetailView"
+      },
+      "JobFlags": {
+        "properties": {
+          "unidentified": {
+            "type": "boolean",
+            "title": "Unidentified",
+            "default": false
+          },
+          "dispatch_timeout": {
+            "type": "boolean",
+            "title": "Dispatch Timeout",
+            "default": false
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "JobFlags"
+      },
+      "JobIdentity": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "external_ids": {
+            "$ref": "#/components/schemas/ExternalIds"
+          },
+          "overview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overview"
+          },
+          "identified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identified At"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "provider"
+        ],
+        "title": "JobIdentity",
+        "description": "What identification concluded. Title/year/media_type/poster live on\nthe Job row itself \u2014 this records where they came from and the ids that\nlet a UI link out or re-query."
+      },
+      "JobMetadata": {
+        "properties": {
+          "scan_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScanResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobIdentity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "music": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MusicMeta"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "thediscdb": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thediscdb"
+          },
+          "flags": {
+            "$ref": "#/components/schemas/JobFlags"
+          },
+          "provider_raw": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Provider Raw"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "JobMetadata"
       },
       "JobNamingPreviewResponse": {
         "properties": {
@@ -10222,6 +11436,38 @@
             ],
             "title": "Year"
           },
+          "media_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MediaType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Season"
+          },
+          "pending_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Session Id"
+          },
           "disc_number": {
             "anyOf": [
               {
@@ -10267,9 +11513,7 @@
             "title": "Poster Url Manual"
           },
           "metadata_json": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Metadata Json"
+            "$ref": "#/components/schemas/JobMetadata"
           },
           "resumed_from_crash": {
             "type": "boolean",
@@ -10325,6 +11569,72 @@
           "resumed_from_crash"
         ],
         "title": "JobView"
+      },
+      "KeyCheckRequest": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "title": "KeyCheckRequest",
+        "description": "Body for POST /api/config/keys/{name}/check. `value` is an unsaved\ncandidate key to probe; when omitted (None), the stored key is used."
+      },
+      "KeyCheckResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "invalid",
+              "missing",
+              "error",
+              "unknown"
+            ],
+            "title": "Status"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "status"
+        ],
+        "title": "KeyCheckResponse"
       },
       "KeydbState": {
         "type": "string",
@@ -10430,7 +11740,7 @@
           "probe_failed"
         ],
         "title": "MakemkvKeyState",
-        "description": "Outcome of the ripper's disc-free `makemkvcon info disc:9999` probe.\nStored on the Config singleton and read by test-key / preflight / config view.\n\nVALID                   \u2014 clean probe, key accepted.\nUNREGISTERED_OR_EXPIRED \u2014 MSG:5052/5055 (evaluation expired / no valid key).\nBINARY_EXPIRED          \u2014 MSG:5021 (60-day kill-switch; no key overrides it).\nFORMAT_INVALID          \u2014 configured key fails the M-/T- serial regex (pre-probe).\nPROBE_FAILED            \u2014 binary missing / timeout / undeterminable (\u2192 valid=null)."
+        "description": "Outcome of the ripper's disc-free `makemkvcon info disc:9999` probe.\nStored on the Config singleton and read by the key check, preflight and config view.\n\nVALID                   \u2014 clean probe, key accepted.\nUNREGISTERED_OR_EXPIRED \u2014 MSG:5052/5055 (evaluation expired / no valid key).\nBINARY_EXPIRED          \u2014 MSG:5021 (60-day kill-switch; no key overrides it).\nFORMAT_INVALID          \u2014 configured key fails the M-/T- serial regex (pre-probe).\nPROBE_FAILED            \u2014 binary missing / timeout / undeterminable (\u2192 valid=null)."
       },
       "MakemkvKeyStatusReport": {
         "properties": {
@@ -10491,7 +11801,7 @@
           "drive_id"
         ],
         "title": "ManualTriggerRequest",
-        "description": "POST /api/jobs/manual \u2014 kick off a rip on a drive that already has a\ndisc in the tray. The ripper picks it up via WS command and runs the\nnormal scan\u2192identify\u2192rip flow; the optional `session_id` is stamped on\nthe resulting Job's metadata so `rip-complete` auto-applies it."
+        "description": "POST /api/jobs/manual \u2014 kick off a rip on a drive that already has a\ndisc in the tray. The ripper picks it up via WS command and runs the\nnormal scan\u2192identify\u2192rip flow; the optional `session_id` is stamped on\nthe resulting Job's `pending_session_id` column so `rip-complete`\nauto-applies it."
       },
       "ManualTriggerResponse": {
         "properties": {
@@ -10662,60 +11972,6 @@
           "kind"
         ],
         "title": "MetadataCandidate"
-      },
-      "MetadataKeyTestResponse": {
-        "properties": {
-          "provider": {
-            "type": "string",
-            "enum": [
-              "omdb",
-              "tmdb",
-              "tvdb",
-              "makemkv"
-            ],
-            "title": "Provider"
-          },
-          "valid": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Valid"
-          },
-          "detail": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Detail"
-          },
-          "checked_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Checked At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "provider",
-          "valid"
-        ],
-        "title": "MetadataKeyTestResponse"
       },
       "MetadataReleaseDetail": {
         "properties": {
@@ -10975,6 +12231,89 @@
           "dest_subpath"
         ],
         "title": "MoveRequest"
+      },
+      "MusicMeta": {
+        "properties": {
+          "artist": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artist"
+          },
+          "album": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Album"
+          },
+          "tracks": {
+            "items": {
+              "$ref": "#/components/schemas/MusicTrackMeta"
+            },
+            "type": "array",
+            "title": "Tracks"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "MusicMeta"
+      },
+      "MusicTrackMeta": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "length_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Length Ms"
+          },
+          "disc_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Number"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "MusicTrackMeta"
       },
       "NamingPreviewItem": {
         "properties": {
@@ -11817,6 +13156,10 @@
       },
       "RegisterRequest": {
         "properties": {
+          "drive_id": {
+            "type": "string",
+            "title": "Drive Id"
+          },
           "hostname": {
             "type": "string",
             "title": "Hostname"
@@ -11834,7 +13177,7 @@
             "type": "object",
             "title": "Hw Caps"
           },
-          "serial": {
+          "by_id_name": {
             "anyOf": [
               {
                 "type": "string"
@@ -11843,16 +13186,18 @@
                 "type": "null"
               }
             ],
-            "title": "Serial"
+            "title": "By Id Name"
           }
         },
         "type": "object",
         "required": [
+          "drive_id",
           "hostname",
           "device_path",
           "ripper_version"
         ],
-        "title": "RegisterRequest"
+        "title": "RegisterRequest",
+        "description": "POST /api/ripper/register. Keyed on the Drive row the backend handed\nthis container (ARM_DRIVE_ID); `by_id_name` is the udev link the ripper\nis bound to (None for a port-identity drive) and must match the row."
       },
       "RegisterTranscoderRequest": {
         "properties": {
@@ -11965,7 +13310,10 @@
                 "enum": [
                   "collisions",
                   "template",
-                  "session_missing"
+                  "session_missing",
+                  "no_tracks",
+                  "no_outputs",
+                  "media_mismatch"
                 ]
               },
               {
@@ -11994,7 +13342,7 @@
           "task_count"
         ],
         "title": "ResolveFanOutOutcomeView",
-        "description": "One waiting_identify application's post-resolve outcome.\n\n`status='queued'` + `skipped_reason=None` \u2192 the application was\npromoted and `task_count` newly-created transcode tasks are queued.\nAnything else \u2192 the application stays parked in `waiting_identify`\nand `error_detail` carries the reason for the UI to surface."
+        "description": "One waiting_identify application's post-resolve outcome.\n\n`status='queued'` + `skipped_reason=None` \u2192 the application was\npromoted and `task_count` newly-created transcode tasks are queued.\nAnything else \u2192 the application stays parked in `waiting_identify`\nand `error_detail` carries the reason for the UI to surface.\n`skipped_reason='no_tracks'` is the benign case: the rip has not started\nyet (no Track rows exist), so the application fans out at rip-complete."
       },
       "ResolveRequest": {
         "properties": {
@@ -12035,17 +13383,55 @@
             ],
             "title": "Disc Total"
           },
-          "metadata": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Metadata"
+          "media_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MediaType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Season"
+          },
+          "music": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MusicMeta"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "external_ids": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExternalIds"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "title"
         ],
-        "title": "ResolveRequest"
+        "title": "ResolveRequest",
+        "description": "POST /api/jobs/{id}/resolve body.\n\ntitle/year/disc_number/disc_total are the full identity statement: every\nresolve restates them, so there is no \"omitted\" case for these four --\nwhatever value is sent (including null) is exactly what lands.\n\nmedia_type/season are classifications, not part of that statement, and\nfollow different semantics: **omitted = keep** the stored value (a\ntitle-only fix must not wipe them), **explicit null = clear** it (the\noperator saying \"this isn't a season\" / \"clear the kind\"). The same\nomitted=keep / explicit-null=clears rule applies per-field inside\n`external_ids`: sending `external_ids` at all starts an identity edit,\nand each of its member fields (imdb/tmdb/tvdb/musicbrainz_release) that\nis explicitly present -- even as `null` -- clears that one id, while a\nmember field left out of the payload keeps its previously stored value.\nDistinguishing \"sent null\" from \"not sent\" requires Pydantic's\n`model_fields_set`, not an `is not None` check, since both collapse to\nthe same `None` once parsed."
       },
       "ResolveResponse": {
         "properties": {
@@ -12777,6 +14163,92 @@
           "output_path_template"
         ],
         "title": "SessionCreateRequest"
+      },
+      "SessionRouteUpsert": {
+        "properties": {
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "disc_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "media_type",
+          "session_id"
+        ],
+        "title": "SessionRouteUpsert"
+      },
+      "SessionRouteView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "disc_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "media_type",
+          "disc_type",
+          "session_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SessionRouteView"
       },
       "SessionUpdateRequest": {
         "properties": {

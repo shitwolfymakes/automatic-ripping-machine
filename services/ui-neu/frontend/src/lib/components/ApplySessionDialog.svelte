@@ -3,13 +3,13 @@
 	import { fetchSessions } from '$lib/api/sessions';
 	import { fetchRipPresets } from '$lib/api/ripPresets';
 	import { fetchTranscodePresets } from '$lib/api/transcodePresets';
-	import { applySession } from '$lib/api/jobs';
+	import { applySession, fetchNamingPreview } from '$lib/api/jobs';
 	import { ApiError } from '$lib/api/client';
-	import { resolveSample } from '$lib/components/sessions/sampleTokens';
 	import type {
 		ApplySessionResponse,
 		CollisionInfo,
 		DiscType,
+		JobNamingPreviewResponse,
 		JobView,
 		MediaType,
 		RipPresetView,
@@ -53,10 +53,25 @@
 		collisions.some((c) => c.reason === 'duplicate_in_request')
 	);
 
+	// I3: the backend refuses overwrite unconditionally when any collision is
+	// owned by a DIFFERENT job (see _evict_colliding_tasks / G-08) — eviction
+	// only ever removes tasks owned by the applying job. Offering Overwrite
+	// here would loop the user into a 409 every time, so hide it and explain
+	// instead. Same-job-only (or ownership-unknown) collisions keep the
+	// normal Overwrite flow.
+	const hasCrossJobCollision = $derived(
+		collisions.some((c) => c.existing_job_id != null && c.existing_job_id !== job.id)
+	);
+
 	function collisionLabel(reason: CollisionInfo['reason']): string {
 		if (reason === 'existing_task') return 'queued/done in DB';
 		if (reason === 'on_disk') return 'exists on disk';
 		return 'duplicate within this apply';
+	}
+
+	function collisionOwnerSuffix(c: CollisionInfo): string {
+		if (!c.existing_job_id || c.existing_job_id === job.id) return '';
+		return ` in job ${c.existing_job_id.slice(-8)}`;
 	}
 
 	const selectedSession = $derived(sessions.find((s) => s.id === selected) ?? null);
@@ -72,11 +87,72 @@
 			? (tcById.get(selectedSession.transcode_preset_id) ?? null)
 			: null
 	);
-	const resolvedOutputPath = $derived(
-		selectedSession
-			? resolveSample(selectedSession.output_path_template, selectedSession.media_type)
-			: null
-	);
+	// Real output paths for THIS job with the chosen session, from the same
+	// resolver the apply path uses. A missing token (e.g. the job has no year)
+	// comes back as a 422 naming it; explain it and block Apply, since apply
+	// would fail the same way.
+	let preview = $state<JobNamingPreviewResponse | null>(null);
+	let previewLoading = $state(false);
+	let previewProblem = $state<string | null>(null);
+	let previewToken = $state<string | null>(null);
+
+	const TOKEN_WORDS: Record<string, string> = {
+		title: 'a title',
+		year: 'a year',
+		show: 'a show name',
+		season: 'a season',
+		episode: 'an episode number',
+		episode_title: 'an episode title',
+		artist: 'an artist',
+		album: 'an album',
+		disc: 'a disc number',
+		track_title: 'track titles',
+		transcode_slug: 'a transcode preset',
+		ext: 'a transcode preset'
+	};
+
+	function explainProblem(message: string): void {
+		const m = /token \{(\w+)\}/.exec(message);
+		previewToken = m ? m[1] : null;
+		if (previewToken === 'transcode_slug' || previewToken === 'ext') {
+			previewProblem = `This session has no transcode preset, so {${previewToken}} in its output path cannot be filled. Give the session a transcode preset or choose another session.`;
+		} else if (previewToken) {
+			const what = (TOKEN_WORDS[previewToken] ?? `a value for {${previewToken}}`).replace(/^an? /, '');
+			previewProblem = `This job has no ${what}, so {${previewToken}} in the output path cannot be filled. Add it in the job's details, or choose a session whose output path does not use {${previewToken}}.`;
+		} else {
+			previewProblem = message;
+		}
+	}
+
+	// Only the job's id matters here. The parent hands us a fresh `job` object
+	// on every dashboard poll; depending on the object would re-run this and
+	// flash "Resolving..." every tick.
+	const jobId = $derived(job.id);
+
+	$effect(() => {
+		const sessionId = selected;
+		const id = jobId;
+		preview = null;
+		previewProblem = null;
+		previewToken = null;
+		if (!sessionId) return;
+		previewLoading = true;
+		let cancelled = false;
+		fetchNamingPreview(id, sessionId)
+			.then((p) => {
+				if (!cancelled) preview = p;
+			})
+			.catch((e) => {
+				if (cancelled) return;
+				explainProblem(e instanceof Error ? e.message : 'Preview failed');
+			})
+			.finally(() => {
+				if (!cancelled) previewLoading = false;
+			});
+		return () => {
+			cancelled = true;
+		};
+	});
 
 	onMount(async () => {
 		// Sessions drive the picker; the rip/transcode preset lists only enrich the
@@ -187,17 +263,36 @@
 								{selectedTranscodePreset?.name ?? 'No transcode'}
 							</dd>
 						</div>
-						<div class="flex gap-1">
+						<div class="flex flex-col gap-1">
 							<dt class="shrink-0">Output:</dt>
-							<dd
-								data-testid="recipe-output-path"
-								class="truncate font-mono text-xs text-gray-900 dark:text-gray-100"
-							>
-								{resolvedOutputPath}
+							<dd data-testid="recipe-output-path" class="font-mono text-xs text-gray-900 dark:text-gray-100">
+								{#if previewLoading}
+									<span class="text-gray-400">Resolving...</span>
+								{:else if preview}
+									<ul class="space-y-0.5">
+										{#each preview.items as item (item.track_id)}
+											<li class="truncate" title={item.output_path}>{item.output_path}</li>
+										{/each}
+									</ul>
+									{#if preview.items.length === 0}
+										<span class="text-gray-400">No tracks to transcode with this session.</span>
+									{/if}
+								{/if}
 							</dd>
 						</div>
 					</dl>
 				</div>
+				{#if previewProblem}
+					<p
+						data-testid="recipe-output-problem"
+						class="mt-2 flex items-start gap-1.5 text-sm text-amber-700 dark:text-amber-400"
+					>
+						<svg class="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+						</svg>
+						<span>{previewProblem}</span>
+					</p>
+				{/if}
 			{/if}
 
 			<div class="mt-4 flex justify-end gap-3">
@@ -211,7 +306,7 @@
 				<button
 					type="button"
 					data-testid="apply-session-apply"
-					disabled={!selected || submitting}
+					disabled={!selected || submitting || previewLoading || previewProblem !== null}
 					onclick={() => applyOnce(false)}
 					class="confirm-btn-primary rounded-lg px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
 				>
@@ -226,12 +321,18 @@
 				{#each collisions as c (c.output_path + c.reason)}
 					<li>
 						<code class="text-gray-900 dark:text-gray-100">{c.output_path}</code>
-						<span class="text-gray-500 dark:text-gray-400">({collisionLabel(c.reason)})</span>
+						<span class="text-gray-500 dark:text-gray-400"
+							>({collisionLabel(c.reason)}{collisionOwnerSuffix(c)})</span
+						>
 					</li>
 				{/each}
 			</ul>
 
-			{#if hasDuplicateInRequest}
+			{#if hasCrossJobCollision}
+				<p class="mt-3 text-sm text-gray-500 dark:text-gray-400" data-testid="cross-job-collision-notice">
+					Some outputs are owned by another job. Cancel, or delete that job's output first.
+				</p>
+			{:else if hasDuplicateInRequest}
 				<p class="mt-3 text-sm text-gray-500 dark:text-gray-400">
 					Two or more tracks resolve to the same output path - the session's template doesn't
 					differentiate per track. Pick a session whose template includes <code>{'{track}'}</code>
@@ -253,7 +354,7 @@
 				>
 					Cancel
 				</button>
-				{#if !hasDuplicateInRequest}
+				{#if !hasCrossJobCollision && !hasDuplicateInRequest}
 					<button
 						type="button"
 						data-testid="apply-session-overwrite"

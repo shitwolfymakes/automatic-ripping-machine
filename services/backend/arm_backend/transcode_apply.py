@@ -14,7 +14,7 @@ each candidate path under `MEDIA_ROOT` to surface filesystem-only hits
 
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -64,10 +64,14 @@ def _build_track_ctx(
     metadata: dict[str, object] = job.metadata_json or {}
     track_index_padded = f"{track.index:02d}"
 
-    # Best-effort per-track music title: job.metadata_json["tracks"] is populated
-    # by the music identification flow (separate phase); we read it if present.
+    # Music naming reads the typed `music` section (§3.4); the bare
+    # top-level keys are the pre-0031 fallback.
+    raw_music = metadata.get("music")
+    music_meta: dict[str, Any] = raw_music if isinstance(raw_music, dict) else {}
+
+    # Best-effort per-track music title from the music track list.
     track_title = ""
-    tracks_meta = metadata.get("tracks")
+    tracks_meta = music_meta.get("tracks") or metadata.get("tracks")
     if isinstance(tracks_meta, list) and 0 <= track.index - 1 < len(tracks_meta):
         entry = tracks_meta[track.index - 1]
         if isinstance(entry, dict):
@@ -90,14 +94,23 @@ def _build_track_ctx(
         "title": sanitize_path_component(eff_title),
         "year": str(eff_year) if eff_year is not None else "",
         "show": sanitize_path_component(job.title or ""),
-        "season": sanitize_path_component(str(metadata.get("season") or "")),
-        "disc": sanitize_path_component(str(metadata.get("disc") or "")),
+        # G-14: the job columns (season, disc_number) are authoritative now.
+        # The metadata.get() fallbacks below are belt-and-braces for rows
+        # written before those columns existed / before the metadata-mirror
+        # scrub (migration 0032) — not an active lift path. Ints are
+        # zero-padded to match the S{NN}D{NN} convention (docs/arch/02 § TV).
+        "season": sanitize_path_component(
+            f"{job.season:02d}" if job.season is not None else str(metadata.get("season") or "")
+        ),
+        "disc": sanitize_path_component(
+            f"{job.disc_number:02d}" if job.disc_number is not None else str(metadata.get("disc") or "")
+        ),
         "track": track_index_padded,
         "episode": episode,
         "episode_title": sanitize_path_component(track.episode_name or ""),
         "duration_human": _format_duration_human(track.expected_duration_seconds or track.duration_seconds),
-        "artist": sanitize_path_component(str(metadata.get("artist") or "")),
-        "album": sanitize_path_component(str(metadata.get("album") or "")),
+        "artist": sanitize_path_component(str(music_meta.get("artist") or metadata.get("artist") or "")),
+        "album": sanitize_path_component(str(music_meta.get("album") or metadata.get("album") or "")),
         "track_title": sanitize_path_component(track_title),
         "transcode_slug": slugify(transcode_preset.name) if transcode_preset is not None else "",
         "ext": transcode_preset.container.value if transcode_preset is not None else "",
@@ -166,12 +179,31 @@ async def find_collisions(
         return []
 
     stmt = (
-        select(TranscodeTask.id, TranscodeTask.output_path)
+        select(TranscodeTask.id, TranscodeTask.output_path, TranscodeTask.session_application_id)
         .where(col(TranscodeTask.output_path).in_(paths))
         .where(col(TranscodeTask.status).in_(LIVE_STATES))
     )
     result = await db.execute(stmt)
-    db_hits: dict[str, str] = {row.output_path: row.id for row in result.all() if row.output_path}
+    db_hits: dict[str, str] = {}
+    hit_application_ids: dict[str, str] = {}
+    for row in result.all():
+        if not row.output_path:
+            continue
+        db_hits[row.output_path] = row.id
+        if row.session_application_id:
+            hit_application_ids[row.output_path] = row.session_application_id
+
+    # Batch-resolve the owning job id for every colliding task in one extra
+    # query (task -> session_application -> job_id), rather than one query
+    # per collision.
+    application_ids = sorted(set(hit_application_ids.values()))
+    job_id_by_application: dict[str, str] = {}
+    if application_ids:
+        app_stmt = select(SessionApplication.id, SessionApplication.job_id).where(
+            col(SessionApplication.id).in_(application_ids)
+        )
+        app_result = await db.execute(app_stmt)
+        job_id_by_application = {row.id: row.job_id for row in app_result.all()}
 
     collisions: list[CollisionInfo] = []
     seen: set[str] = set()
@@ -182,12 +214,15 @@ async def find_collisions(
         existing_id = db_hits.get(path)
         on_fs = (media_root / path).exists() if path else False
         if existing_id is not None:
+            application_id = hit_application_ids.get(path)
+            existing_job_id = job_id_by_application.get(application_id) if application_id else None
             collisions.append(
                 CollisionInfo(
                     output_path=path,
                     existing_task_id=existing_id,
                     on_filesystem=False,
                     reason="existing_task",
+                    existing_job_id=existing_job_id,
                 )
             )
         elif on_fs:

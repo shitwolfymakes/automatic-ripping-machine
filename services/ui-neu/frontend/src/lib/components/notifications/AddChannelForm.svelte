@@ -8,6 +8,7 @@
 	import ServiceDropdown from './ServiceDropdown.svelte';
 	import BashTestPanel from './BashTestPanel.svelte';
 	import { missingRequirements } from './channelHelpers';
+	import Glyph from '$lib/components/Glyph.svelte';
 
 	export interface AddChannelBody {
 		type: ChannelType;
@@ -72,7 +73,7 @@
 <div class="rounded-xl border border-primary/25 bg-surface shadow-xl dark:border-primary/30 dark:bg-surface-dark">
 	<div class="flex items-center justify-between border-b border-primary/20 px-5 py-4">
 		<h3 class="text-sm font-semibold text-primary">Add notification channel</h3>
-		<button type="button" onclick={oncancel} class="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">✕ Cancel</button>
+		<button type="button" onclick={oncancel} class="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"><Glyph name="x" /> Cancel</button>
 	</div>
 
 	<div class="space-y-5 p-5">
@@ -103,8 +104,8 @@
 	</div>
 
 	<div class="flex items-center justify-between border-t border-primary/20 px-5 py-3.5">
-		<span class="text-xs {ready ? 'text-status-success' : 'text-gray-500 dark:text-gray-400'}">
-			{ready ? '✓ Ready to save' : `Needs: ${missing.join(', ')}`}
+		<span class="flex items-center gap-1 text-xs {ready ? 'text-status-success' : 'text-gray-500 dark:text-gray-400'}">
+			{#if ready}<Glyph name="check" class="h-3.5 w-3.5" /> Ready to save{:else}Needs: {missing.join(', ')}{/if}
 		</span>
 		<div class="flex gap-2">
 			<button type="button" onclick={oncancel} class="rounded-md px-4 py-2 text-sm text-gray-600 hover:bg-primary/10 dark:text-gray-300">Cancel</button>

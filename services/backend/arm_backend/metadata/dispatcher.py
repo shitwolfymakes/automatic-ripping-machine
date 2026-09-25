@@ -16,6 +16,14 @@ from arm_common.schemas import ScanResult
 logger = logging.getLogger("arm_backend.metadata.dispatcher")
 
 PROVIDER_TIMEOUT_SECONDS = 8.0
+
+# _call labels are "<provider>[_<operation>]"; arm_server's prefix is "arm".
+_PROVIDER_BY_LABEL_PREFIX = {
+    "tmdb": "tmdb",
+    "omdb": "omdb",
+    "arm": "arm_server",
+    "musicbrainz": "musicbrainz",
+}
 DISPATCH_TIMEOUT_SECONDS = 25.0
 
 _YEAR_SUFFIX_RE = re.compile(r"[\s_\-.]*\(?\d{4}\)?\s*$")
@@ -33,6 +41,11 @@ _NTSC_TOKEN_RE = re.compile(r"_NTSC(?=[_.\s\-]|$)", re.IGNORECASE)
 _BLURAY_BRANDING_RE = re.compile(r"[\s_\-]*blu[\s_\-]?ray(?:\s*(?:tm|™))?", re.IGNORECASE)
 # `_BD` (Blu-ray Disc) token, mirroring the `_NTSC` treatment.
 _BD_TOKEN_RE = re.compile(r"_BD(?=[_.\s\-]|$)", re.IGNORECASE)
+
+# MusicBrainz 403s any User-Agent that doesn't follow their etiquette guide's
+# `AppName/version ( contact )` shape. No longer operator-configurable (Config.
+# musicbrainz_user_agent is dormant — see config_metadata.py); hardcoded here.
+MUSICBRAINZ_USER_AGENT = "ARM/3.0.0 ( https://github.com/automatic-ripping-machine/automatic-ripping-machine )"
 
 
 def _normalize_volume_label(label: str) -> tuple[str, int | None]:
@@ -71,14 +84,14 @@ class MetadataDispatcher:
             return None
 
         if scan.disc_type == DiscType.CD:
-            return await self._identify_cd(scan, cfg)
+            return await self._identify_cd(scan)
 
         return await self._identify_video(scan, cfg)
 
-    async def _identify_cd(self, scan: ScanResult, cfg: Config) -> MetadataResult | None:
-        if not scan.musicbrainz_disc_id or not cfg.musicbrainz_user_agent:
+    async def _identify_cd(self, scan: ScanResult) -> MetadataResult | None:
+        if not scan.musicbrainz_disc_id:
             return None
-        client = MusicBrainzClient(cfg.musicbrainz_user_agent, self._http)
+        client = MusicBrainzClient(MUSICBRAINZ_USER_AGENT, self._http)
         return await self._call("musicbrainz", client.lookup_disc_id(scan.musicbrainz_disc_id))
 
     async def _identify_video(self, scan: ScanResult, cfg: Config) -> MetadataResult | None:
@@ -120,9 +133,23 @@ class MetadataDispatcher:
 
         return None
 
+    async def identify_from_imdb(self, imdb_id: str, cfg: Config) -> MetadataResult | None:
+        """Exact-ID identify for a TheDiscDB-matched disc. TMDb's /find
+        endpoint resolves an IMDb id for both movies and TV; requires a TMDb
+        key. Returns None (caller falls back to fuzzy identify) otherwise."""
+        if not imdb_id or not cfg.tmdb_api_key:
+            return None
+        tmdb = TMDBClient(cfg.tmdb_api_key, self._http)
+        return await self._call("tmdb_find_imdb", tmdb.find_by_imdb_id(imdb_id))
+
     async def _call(self, label: str, coro) -> MetadataResult | None:  # type: ignore[no-untyped-def]
         try:
-            return await asyncio.wait_for(coro, timeout=PROVIDER_TIMEOUT_SECONDS)
+            result: MetadataResult | None = await asyncio.wait_for(coro, timeout=PROVIDER_TIMEOUT_SECONDS)
+            if result is not None:
+                # "tmdb_movie"/"tmdb_tv"/"tmdb_find_imdb" → "tmdb"; the
+                # canonical name keys provider_raw and identity.provider.
+                result.provider = _PROVIDER_BY_LABEL_PREFIX.get(label.split("_", 1)[0], label)
+            return result
         except asyncio.TimeoutError:
             logger.info("metadata.%s timeout", label)
             return None

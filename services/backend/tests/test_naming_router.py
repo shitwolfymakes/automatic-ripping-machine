@@ -142,7 +142,8 @@ def _seed_job(db: FakeSession) -> None:
             status=JobStatus.IDENTIFIED,
             title="Iron Man",
             year=2008,
-            metadata_json={"pending_session_id": _SES_ID},
+            metadata_json={},
+            pending_session_id=_SES_ID,
         )
     ]
     db.rows["tracks"] = [
@@ -172,6 +173,53 @@ def test_job_naming_preview_renders_filenames(signing_key: bytes) -> None:
     assert set(items[0]) == {"track_id", "track_number", "output_path", "output_dir", "output_name"}
     assert "job_output_dir" in body
     assert body["job_output_name"] == "Iron Man"
+
+
+def test_job_naming_preview_session_id_overrides_effective_session(signing_key: bytes) -> None:
+    """The Apply dialog previews the session the operator is choosing, not the
+    job's pending/default one."""
+    db = FakeSession()
+    _seed(db)
+    _seed_job(db)
+    db.rows["sessions"].append(
+        Session(
+            id="ses_flat",
+            name="Flat",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_x",
+            transcode_preset_id=None,
+            output_path_template="flat/{title}.mkv",
+        )
+    )
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{_JOB_ID_1}/naming-preview", params={"session_id": "ses_flat"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["items"][0]["output_path"] == "flat/Iron Man.mkv"
+
+
+def test_job_naming_preview_unknown_session_id_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    _seed_job(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{_JOB_ID_1}/naming-preview", params={"session_id": "ses_nope"}, headers=_auth(token))
+    assert r.status_code == 404
+    assert "unknown session_id" in r.json()["detail"]
+
+
+def test_job_naming_preview_missing_year_422_names_the_token(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    _seed_job(db)
+    db.rows["jobs"][0].year = None
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{_JOB_ID_1}/naming-preview", headers=_auth(token))
+    assert r.status_code == 422
+    assert "token {year} resolved empty" in r.json()["detail"]
 
 
 def test_job_naming_preview_unknown_job_404(signing_key: bytes) -> None:
@@ -254,7 +302,8 @@ def test_job_naming_preview_with_transcode_preset(signing_key: bytes) -> None:
             status=JobStatus.IDENTIFIED,
             title="Iron Man",
             year=2008,
-            metadata_json={"pending_session_id": _SES_ID},
+            metadata_json={},
+            pending_session_id=_SES_ID,
         )
     ]
     db.rows["tracks"] = [
@@ -300,7 +349,8 @@ def test_job_naming_preview_bad_template_422(signing_key: bytes) -> None:
             status=JobStatus.IDENTIFIED,
             title="Iron Man",
             year=None,  # year missing → {year} resolves to "" → TemplateValidationError
-            metadata_json={"pending_session_id": _SES_ID},
+            metadata_json={},
+            pending_session_id=_SES_ID,
         )
     ]
     db.rows["tracks"] = [
@@ -352,7 +402,8 @@ def test_naming_preview_split_and_job_fields(signing_key: bytes) -> None:
             status=JobStatus.IDENTIFIED,
             title="Battlestar",
             year=2004,
-            metadata_json={"pending_session_id": _SES_ID_2, "season": "01"},
+            metadata_json={"season": "01"},
+            pending_session_id=_SES_ID_2,
         )
     ]
     db.rows["tracks"] = [
@@ -425,7 +476,8 @@ def test_naming_preview_flat_template(signing_key: bytes) -> None:
             status=JobStatus.IDENTIFIED,
             title="Iron Man",
             year=2008,
-            metadata_json={"pending_session_id": _SES_ID_3},
+            metadata_json={},
+            pending_session_id=_SES_ID_3,
         )
     ]
     db.rows["tracks"] = [
@@ -445,6 +497,58 @@ def test_naming_preview_flat_template(signing_key: bytes) -> None:
     assert body["job_output_dir"] == ""
     assert body["items"][0]["output_dir"] == ""
     assert body["items"][0]["output_name"] == body["items"][0]["output_path"]
+
+
+def test_preview_falls_back_to_drive_default_session(signing_key: bytes) -> None:
+    """No pending_session_id: the preview must resolve the drive's default
+    session when Config.auto_transcode_on_idle is on — the same resolution
+    the real apply path (auto_session.maybe_auto_apply_session) performs."""
+    db = FakeSession()
+    _seed(db)
+    _seed_job(db)
+    db.rows["jobs"][0].metadata_json = {}
+    db.rows["drives"] = [Drive(id="drv_x", hostname="h", device_path="/dev/sr0", default_session_id=_SES_ID)]
+    db.rows["config"] = [Config(id=1, auto_transcode_on_idle=True)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{_JOB_ID_1}/naming-preview", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["items"]
+
+
+def test_preview_drive_default_session_ignores_auto_idle_flag(signing_key: bytes) -> None:
+    """G-01 (§5.1): the flag gates unattended QUEUEING only. The drive
+    default is still the routed session — it shapes the rip and is what an
+    operator's Apply would use — so the preview must show it."""
+    db = FakeSession()
+    _seed(db)
+    _seed_job(db)
+    db.rows["jobs"][0].metadata_json = {}
+    db.rows["drives"] = [Drive(id="drv_x", hostname="h", device_path="/dev/sr0", default_session_id=_SES_ID)]
+    db.rows["config"] = [Config(id=1, auto_transcode_on_idle=False)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{_JOB_ID_1}/naming-preview", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["items"]
+
+
+def test_preview_orders_items_by_track_index(signing_key: bytes) -> None:
+    """Items must come back in track-index order (the apply path's order),
+    not DB insertion order."""
+    db = FakeSession()
+    _seed(db)
+    _seed_job(db)
+    db.rows["tracks"] = [
+        Track(id=_TRK_ID_2, job_id=_JOB_ID_1, kind=TrackKind.VIDEO_TITLE, index=2, source_ref="2"),
+        Track(id=_TRK_ID_1, job_id=_JOB_ID_1, kind=TrackKind.VIDEO_TITLE, index=1, source_ref="1"),
+    ]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{_JOB_ID_1}/naming-preview", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    numbers = [i["track_number"] for i in r.json()["items"]]
+    assert numbers == [1, 2]
 
 
 def test_naming_validate_ok(signing_key: bytes) -> None:
@@ -575,56 +679,6 @@ def test_naming_preview_requires_auth() -> None:
     with TestClient(app) as client:
         r = client.post("/api/naming/preview", json={"template": "x", "media_type": "movie"})
     assert r.status_code == 200
-
-
-def test_preview_falls_back_to_drive_default_session(signing_key: bytes) -> None:
-    """No pending_session_id: the preview must resolve the drive's default
-    session when Config.auto_transcode_on_idle is on — the same resolution
-    the real apply path (auto_session.maybe_auto_apply_session) performs."""
-    db = FakeSession()
-    _seed(db)
-    _seed_job(db)
-    db.rows["jobs"][0].metadata_json = {}
-    db.rows["drives"] = [Drive(id="drv_x", hostname="h", device_path="/dev/sr0", default_session_id=_SES_ID)]
-    db.rows["config"] = [Config(id=1, auto_transcode_on_idle=True)]
-    app, token = _make_app(signing_key, db)
-    with TestClient(app) as client:
-        r = client.get(f"/api/jobs/{_JOB_ID_1}/naming-preview", headers=_auth(token))
-    assert r.status_code == 200, r.text
-    assert r.json()["items"]
-
-
-def test_preview_default_session_needs_auto_idle_flag(signing_key: bytes) -> None:
-    """Drive default alone is not enough — auto_transcode_on_idle=False means
-    the apply path would not use it, so neither may the preview."""
-    db = FakeSession()
-    _seed(db)
-    _seed_job(db)
-    db.rows["jobs"][0].metadata_json = {}
-    db.rows["drives"] = [Drive(id="drv_x", hostname="h", device_path="/dev/sr0", default_session_id=_SES_ID)]
-    db.rows["config"] = [Config(id=1, auto_transcode_on_idle=False)]
-    app, token = _make_app(signing_key, db)
-    with TestClient(app) as client:
-        r = client.get(f"/api/jobs/{_JOB_ID_1}/naming-preview", headers=_auth(token))
-    assert r.status_code == 409
-
-
-def test_preview_orders_items_by_track_index(signing_key: bytes) -> None:
-    """Items must come back in track-index order (the apply path's order),
-    not DB insertion order."""
-    db = FakeSession()
-    _seed(db)
-    _seed_job(db)
-    db.rows["tracks"] = [
-        Track(id=_TRK_ID_2, job_id=_JOB_ID_1, kind=TrackKind.VIDEO_TITLE, index=2, source_ref="2"),
-        Track(id=_TRK_ID_1, job_id=_JOB_ID_1, kind=TrackKind.VIDEO_TITLE, index=1, source_ref="1"),
-    ]
-    app, token = _make_app(signing_key, db)
-    with TestClient(app) as client:
-        r = client.get(f"/api/jobs/{_JOB_ID_1}/naming-preview", headers=_auth(token))
-    assert r.status_code == 200, r.text
-    numbers = [i["track_number"] for i in r.json()["items"]]
-    assert numbers == [1, 2]
 
 
 def test_naming_validate_rejects_empty_template(signing_key: bytes) -> None:

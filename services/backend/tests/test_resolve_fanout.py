@@ -276,8 +276,9 @@ def test_resolve_fans_out_multiple_waiting_identify_applications(signing_key: by
 
 
 def test_resolve_ripped_awaiting_identify_status_fans_out(signing_key: bytes, tmp_path: Path) -> None:
-    """Confirms fan-out isn't gated on AWAITING_USER_ID specifically — the
-    other resolvable status works the same way."""
+    """Fan-out isn't gated on AWAITING_USER_ID specifically — a ripped
+    placeholder drains the same way, promoting to RIPPED (its rip is done;
+    G-09) rather than IDENTIFIED."""
     db = FakeSession()
     hub = _CapturingHub()
     _seed(db, job_status=JobStatus.RIPPED_AWAITING_IDENTIFY)
@@ -290,7 +291,7 @@ def test_resolve_ripped_awaiting_identify_status_fans_out(signing_key: bytes, tm
         )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["job"]["status"] == "identified"
+    assert body["job"]["status"] == "ripped"
     assert len(body["fan_out"]) == 1
     assert body["fan_out"][0]["status"] == "queued"
 
@@ -440,6 +441,43 @@ def test_resolve_fan_out_session_missing_returns_outcome(signing_key: bytes, tmp
     assert "ses_x" in (out["error_detail"] or "")
 
 
+def test_resolve_media_mismatch_keeps_application_parked(signing_key: bytes, tmp_path: Path) -> None:
+    """G-04: resolve sets `job.media_type` from the identify call, then
+    drains parked applications. A session applied before identity was known
+    (e.g. a movie session routed to what turns out to be a music CD) must
+    stay parked with `skipped_reason='media_mismatch'` instead of fanning
+    out a movie transcode against a music job."""
+    db = FakeSession()
+    hub = _CapturingHub()
+    _seed(db)
+    db.rows["sessions"][0].media_type = MediaType.MOVIE
+    app, token = _make_app(signing_key, db, tmp_path, hub)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Various Artists", "year": 2008, "media_type": "music"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["job"]["media_type"] == "music"
+
+    assert len(body["fan_out"]) == 1
+    out = body["fan_out"][0]
+    assert out["session_application_id"] == "sap_x"
+    assert out["status"] == "waiting_identify"
+    assert out["task_count"] == 0
+    assert out["skipped_reason"] == "media_mismatch"
+    assert out["error_detail"] is not None
+    assert "movie" in out["error_detail"]
+    assert "music" in out["error_detail"]
+
+    app_row = next(a for a in db.rows["session_applications"] if a.id == "sap_x")
+    assert app_row.status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
+    assert not any(e["event_type"] == "session.queued" for e in hub.events)
+
+
 def test_resolve_fan_out_session_without_transcode_preset(signing_key: bytes, tmp_path: Path) -> None:
     """A session with `transcode_preset_id=None` (rip-only, no transcode
     pass) is a real production case — the fan-out must promote it without
@@ -484,3 +522,131 @@ def test_resolve_fan_out_transcode_preset_missing_returns_outcome(signing_key: b
     out = body["fan_out"][0]
     assert out["skipped_reason"] == "session_missing"
     assert "tpr_x" in (out["error_detail"] or "")
+
+
+def test_resolve_before_rip_keeps_application_parked(signing_key: bytes, tmp_path: Path) -> None:
+    """Resolve on a job whose rip has not started yet.
+
+    The ripper persists Track rows at rip-start, so at this point there is
+    nothing to fan out. The parked application must survive (still
+    `waiting_identify`, drained later by rip-complete) instead of being
+    promoted to an empty `queued` husk that never gets any tasks.
+    """
+    db = FakeSession()
+    hub = _CapturingHub()
+    _seed(db)
+    db.rows["tracks"] = []
+    app, token = _make_app(signing_key, db, tmp_path, hub)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Iron Man", "year": 2008},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["job"]["status"] == "identified"
+
+    assert len(body["fan_out"]) == 1
+    out = body["fan_out"][0]
+    assert out["session_application_id"] == "sap_x"
+    assert out["status"] == "waiting_identify"
+    assert out["task_count"] == 0
+    assert out["skipped_reason"] == "no_tracks"
+    assert out["error_detail"] is not None and "rip" in out["error_detail"]
+
+    app_row = next(a for a in db.rows["session_applications"] if a.id == "sap_x")
+    assert app_row.status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
+    assert not any(e["event_type"] == "session.queued" for e in hub.events)
+
+
+def test_resolve_commits_identity_before_after_rip_drain_raises(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fix 75-2 regression: a drain exception inside after_rip must not
+    destroy the operator's resolve.
+
+    `drain_parked_applications_after_rip` wraps `fan_out_waiting_identify_applications`
+    in try/except and calls `db.rollback()` on any exception. Before the fix,
+    resolve ran the job identity mutations (title/status) and after_rip in
+    the same uncommitted transaction, so that rollback would discard the
+    resolve too -- yet the endpoint still returned 200 built from the
+    in-Python (but no-longer-durable) job object. Forcing the drain to raise
+    here and asserting the resolve committed BEFORE the drain ran (and that
+    the response reflects the resolved title) pins the fix.
+    """
+    db = FakeSession()
+    hub = _CapturingHub()
+    _seed(db, job_status=JobStatus.RIPPED_AWAITING_IDENTIFY)
+    db.rows["jobs"][0].metadata_json = {"unidentified": True}
+    app, token = _make_app(signing_key, db, tmp_path, hub)
+
+    commits_before_drain: list[int] = []
+
+    async def _raising_fan_out(*args: object, **kwargs: object) -> None:
+        # Record how many commits had already landed by the time the drain
+        # ran, then blow up -- exactly what drain_parked_applications_after_rip
+        # catches and rolls back from.
+        commits_before_drain.append(db.committed)
+        raise RuntimeError("boom: simulated drain failure")
+
+    monkeypatch.setattr(
+        "arm_backend.auto_session.fan_out_waiting_identify_applications",
+        _raising_fan_out,
+    )
+
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Iron Man", "year": 2008},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # The resolve landed: RIPPED_AWAITING_IDENTIFY -> RIPPED, title applied.
+    assert body["job"]["status"] == "ripped"
+    assert body["job"]["title"] == "Iron Man"
+    # The drain found at least one commit already on the books before it ran
+    # (the resolve's own commit) -- pre-fix, this would be 0.
+    assert commits_before_drain == [1]
+    # The fan-out itself failed and stayed parked; no outcome promoted.
+    assert body["fan_out"] == []
+
+    job_row = db.rows["jobs"][0]
+    assert job_row.status == JobStatus.RIPPED
+    assert job_row.title == "Iron Man"
+
+
+def test_resolve_ripped_placeholder_promotes_to_ripped_and_runs_after_rip(signing_key: bytes, tmp_path: Path) -> None:
+    """G-09: resolving a ripped_awaiting_identify placeholder promotes it to
+    RIPPED (its rip is done — IDENTIFIED would claim otherwise), clears the
+    spent `unidentified` flag, and runs the same post-rip pass rip-complete
+    runs: the parked application fans out against the just-resolved title."""
+    db = FakeSession()
+    hub = _CapturingHub()
+    _seed(db, job_status=JobStatus.RIPPED_AWAITING_IDENTIFY)
+    db.rows["jobs"][0].metadata_json = {"unidentified": True}
+    app, token = _make_app(signing_key, db, tmp_path, hub)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Iron Man", "year": 2008},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["job"]["status"] == "ripped"
+    assert body["job"]["metadata_json"].get("unidentified") is None
+
+    assert len(body["fan_out"]) == 1
+    out = body["fan_out"][0]
+    assert out["status"] == "queued"
+    assert out["task_count"] == 1
+    assert out["skipped_reason"] is None
+
+    app_row = next(a for a in db.rows["session_applications"] if a.id == "sap_x")
+    assert app_row.status == SessionApplicationStatus.QUEUED
+    tasks = [t for t in db.rows["transcode_tasks"] if t.session_application_id == "sap_x"]
+    assert len(tasks) == 1
+    assert any(e["event_type"] == "session.queued" for e in hub.events)

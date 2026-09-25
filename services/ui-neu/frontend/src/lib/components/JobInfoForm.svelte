@@ -55,8 +55,7 @@
 				title: title.trim(),
 				year: num(year),
 				disc_number: num(discNumber),
-				disc_total: num(discTotal),
-				metadata: {}
+				disc_total: num(discTotal)
 			});
 			touched = {};
 			feedback = { type: 'success', message: 'Saved' };
@@ -77,7 +76,7 @@
 <div class="border-t border-primary/20 p-4 dark:border-primary/20">
 	{#if !resolvable}
 		<p class="mb-3 text-xs text-gray-500 dark:text-gray-400">
-			Identity is locked once the disc is identified — use Search to re-identify.
+			Identity is locked once the disc is identified. Use Search to re-identify.
 		</p>
 	{/if}
 
@@ -122,7 +121,7 @@
 				bind:value={discNumber}
 				oninput={() => (touched = { ...touched, discNumber: true })}
 				disabled={!resolvable}
-				placeholder="—"
+				placeholder="-"
 				class="mt-1 w-full rounded-md border border-primary/25 bg-primary/5 px-2 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary disabled:opacity-50 dark:border-primary/30 dark:bg-primary/10 dark:text-white"
 			/>
 		</div>
@@ -135,7 +134,7 @@
 				bind:value={discTotal}
 				oninput={() => (touched = { ...touched, discTotal: true })}
 				disabled={!resolvable}
-				placeholder="—"
+				placeholder="-"
 				class="mt-1 w-full rounded-md border border-primary/25 bg-primary/5 px-2 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary disabled:opacity-50 dark:border-primary/30 dark:bg-primary/10 dark:text-white"
 			/>
 		</div>
@@ -153,7 +152,7 @@
 					disabled={saving || !title.trim()}
 					class="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-on-primary hover:bg-primary/90 disabled:opacity-50"
 				>
-					{saving ? 'Saving…' : 'Save'}
+					{saving ? 'Saving...' : 'Save'}
 				</button>
 				<button
 					onclick={resetInfo}

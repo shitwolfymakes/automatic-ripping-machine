@@ -76,6 +76,12 @@ describe('fetchNamingPreview', () => {
 		expect(result.job_output_name).toBe('Test Show S01E01');
 		expect(result.items).toHaveLength(1);
 	});
+
+	it('passes an explicit session_id through as a query param', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ job_output_dir: '', job_output_name: '', items: [] }));
+		await fetchNamingPreview('job_42', 'ses_9');
+		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/job_42/naming-preview?session_id=ses_9', expect.anything());
+	});
 });
 
 describe('namingPreview', () => {
@@ -120,21 +126,21 @@ describe('fetchNamingVariables', () => {
 // ---------------------------------------------------------------------------
 
 describe('resolveJob', () => {
-	it('POSTs /api/jobs/{id}/resolve with {title, year, metadata} (video case)', async () => {
+	it('POSTs /api/jobs/{id}/resolve with {title, year} and no music (video case)', async () => {
 		mockFetch.mockResolvedValue(jsonResponse({ job: { id: 'job_1' }, fan_out: [] }));
-		await resolveJob('job_1', { title: 'X', year: 2020, metadata: {} });
+		await resolveJob('job_1', { title: 'X', year: 2020 });
 		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/job_1/resolve', expect.objectContaining({
 			method: 'POST',
-			body: JSON.stringify({ title: 'X', year: 2020, disc_number: null, disc_total: null, metadata: {} })
+			body: JSON.stringify({ title: 'X', year: 2020, disc_number: null, disc_total: null })
 		}));
 	});
 
-	it('POSTs the music case with a metadata payload and defaults year to null', async () => {
+	it('POSTs the music case with a typed music payload and defaults year to null', async () => {
 		mockFetch.mockResolvedValue(jsonResponse({ job: { id: 'job_2' }, fan_out: [] }));
-		await resolveJob('job_2', { title: 'Album', metadata: { artist: 'A', tracks: [{ title: 'T1' }] } });
+		await resolveJob('job_2', { title: 'Album', music: { artist: 'A', tracks: [{ title: 'T1' }] } });
 		expect(mockFetch).toHaveBeenCalledWith('/api/jobs/job_2/resolve', expect.objectContaining({
 			method: 'POST',
-			body: JSON.stringify({ title: 'Album', year: null, disc_number: null, disc_total: null, metadata: { artist: 'A', tracks: [{ title: 'T1' }] } })
+			body: JSON.stringify({ title: 'Album', year: null, disc_number: null, disc_total: null, music: { artist: 'A', tracks: [{ title: 'T1' }] } })
 		}));
 	});
 });

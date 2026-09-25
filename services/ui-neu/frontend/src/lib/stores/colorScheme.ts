@@ -719,6 +719,32 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 			'--color-surface-dark': 'rgb(132, 28, 81)',      // rose dark
 			'--radius': '0.5rem'
 		}
+	},
+	{
+		id: 'winamp-97',
+		label: 'Winamp 97',
+		swatch: '#00ff00',
+		mode: 'dark',
+		author: 'Gemini',
+		description: 'Classic Winamp chassis: steel panels, equalizer titlebars, hardware buttons, LED meters, Silkscreen bitmap type',
+		tokens: {
+			'--color-primary': 'rgb(0, 255, 0)',
+			'--color-primary-hover': 'rgb(51, 255, 51)',
+			'--color-primary-dark': 'rgb(0, 180, 0)',
+			'--color-primary-light-bg': 'rgb(24, 26, 42)',
+			'--color-primary-light-bg-dark': 'rgb(18, 20, 34)',
+			'--color-primary-text': 'rgb(0, 255, 0)',
+			'--color-primary-text-dark': 'rgb(0, 255, 0)',
+			'--color-primary-border': 'rgb(0, 0, 255)',
+			'--color-on-primary': 'rgb(0, 0, 0)',
+			'--color-page': 'rgb(14, 15, 24)',
+			'--color-page-dark': 'rgb(14, 15, 24)',
+			'--color-surface': 'rgb(34, 36, 56)',
+			'--color-surface-dark': 'rgb(34, 36, 56)',
+			'--radius': '0px',
+			'--font-family': "'Silkscreen', 'Trebuchet MS', Tahoma, sans-serif",
+			'--logo-filter': 'brightness(0) invert(58.5%) sepia(100%) saturate(400%) hue-rotate(9deg) brightness(93%)' // solid #D4AA04
+		}
 	}
 ];
 

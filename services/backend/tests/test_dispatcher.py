@@ -1,6 +1,7 @@
 """Dispatcher routing rules — uses respx to mock all three providers."""
 
 import httpx
+import pytest
 import respx
 
 from arm_backend.metadata.dispatcher import MetadataDispatcher, _normalize_volume_label
@@ -178,6 +179,32 @@ async def test_omdb_config_key_used_by_dispatcher():
     assert omdb_route.calls.last.request.url.params["apikey"] == "from-config"
 
 
+async def test_identify_from_imdb_uses_tmdb_find(monkeypatch):
+    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata.base import MetadataResult
+
+    class FakeTMDB:
+        def __init__(self, api_key, http):  # matches TMDBClient signature
+            pass
+
+        async def find_by_imdb_id(self, imdb_id):
+            assert imdb_id == "tt0090557"
+            return MetadataResult(title="Round Midnight", year=1986, kind="movie")
+
+    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        hit = await dispatcher.identify_from_imdb("tt0090557", _config())
+        assert hit is not None
+        assert hit.title == "Round Midnight"
+
+        hit_nokey = await dispatcher.identify_from_imdb("tt0090557", _config(tmdb_api_key=None))
+        assert hit_nokey is None
+
+        hit_noid = await dispatcher.identify_from_imdb("", _config())
+        assert hit_noid is None
+
+
 @respx.mock
 async def test_omdb_skipped_when_config_key_empty():
     """When cfg.omdb_api_key is None the OMDb branch is skipped entirely."""
@@ -197,3 +224,32 @@ async def test_omdb_skipped_when_config_key_empty():
         result = await dispatcher.identify(scan, _config(omdb_api_key=None))
     assert result is None
     assert omdb_route.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_call_stamps_canonical_provider() -> None:
+    """_call is the one place that knows which client produced a hit; it
+    stamps MetadataResult.provider with the canonical name so identity and
+    provider_raw key on it (step 2 §3.4)."""
+    from arm_backend.metadata.base import MetadataResult
+
+    dispatcher = MetadataDispatcher(httpx.AsyncClient())
+
+    async def _hit() -> MetadataResult:
+        return MetadataResult(title="X", year=None, kind="movie", payload={})
+
+    for label, expected in (
+        ("tmdb_movie", "tmdb"),
+        ("tmdb_find_imdb", "tmdb"),
+        ("omdb_movie", "omdb"),
+        ("arm_server", "arm_server"),
+        ("musicbrainz", "musicbrainz"),
+    ):
+        result = await dispatcher._call(label, _hit())
+        assert result is not None and result.provider == expected, label
+
+    async def _miss() -> None:
+        return None
+
+    assert await dispatcher._call("tmdb_movie", _miss()) is None
+    await dispatcher.aclose()
