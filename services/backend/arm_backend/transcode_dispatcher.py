@@ -538,10 +538,37 @@ class TranscodeDispatcher:
                 except Exception as exc:
                     self.last_spawn_error = f"{type(exc).__name__}: {exc}"[:300]
                     logger.exception("transcode spawn failed task_id=%s: %s", task.id, exc)
-                    # Release the GPU claim so the task can retry on a later tick.
+                    # A raise here can come from `_spawn_container` itself
+                    # (the container never started) OR from the commit right
+                    # above (the container IS running but the GPU-claim
+                    # commit failed) -- either way, mirroring the passthrough
+                    # except block, roll back first: a raise from inside a
+                    # flush/commit leaves the session in "pending rollback"
+                    # state, and the NEXT statement issued for the NEXT
+                    # queued task would raise PendingRollbackError outside
+                    # any try/except and abort the whole tick.
+                    await db.rollback()
+                    # Release the GPU claim so the task can retry claiming a
+                    # GPU on a later tick. A real SQLAlchemy session's
+                    # rollback (expire_on_rollback=True by default) already
+                    # discards whatever uncommitted BUSY assignment
+                    # `_claim_gpu_for_task` made and expires the gpu object
+                    # back to its last-committed value, but relying on that
+                    # implicit expire-on-rollback behavior for correctness is
+                    # fragile (and the in-memory test fake doesn't model it
+                    # at all), so the revert is re-applied explicitly here,
+                    # AFTER the rollback -- applying it before would just
+                    # have the rollback above discard it again. It's
+                    # committed immediately rather than deferred to the
+                    # trailing end-of-loop commit: an uncommitted revert
+                    # sitting in the shared session for the rest of the loop
+                    # is exactly the hazard this fix round closes for
+                    # passthrough (N1) -- a LATER task's own rollback would
+                    # discard it again.
                     if assignment.gpu is not None:
                         assignment.gpu.status = GpuStatus.AVAILABLE
                         assignment.gpu.claimed_by_task_id = None
+                        await db.commit()
         if held_encode:
             logger.debug(
                 "%d encode task(s) held (enabled=%s docker=%s)", held_encode, enabled, self._docker is not None

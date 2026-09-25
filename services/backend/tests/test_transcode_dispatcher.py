@@ -27,6 +27,9 @@ from arm_backend.ws import WSHub  # noqa: E402
 from arm_common import (  # noqa: E402
     Config,
     ContainerFormat,
+    Gpu,
+    GpuStatus,
+    GpuVendor,
     MediaType,
     Session,
     SessionApplication,
@@ -36,6 +39,7 @@ from arm_common import (  # noqa: E402
     TranscodeTask,
     TranscodeTaskStatus,
     TranscodeTool,
+    VideoCodec,
 )
 from arm_common.enums import TrackKind  # noqa: E402
 from tests._fakes import FakeSession  # noqa: E402
@@ -1394,6 +1398,123 @@ async def test_encode_row_deleted_before_its_turn_skips_cleanly() -> None:
     docker.containers.run.assert_called_once()
     by_id = {t.id: t for t in db.rows["transcode_tasks"]}
     assert "txt_enc_b" not in by_id  # deleted, never resurrected, no crash
+
+
+async def test_encode_claim_commit_raises_once_rolls_back_and_releases_gpu() -> None:
+    """Closes a residual from the N1 fix round: the encode success path's
+    own prompt commit (`await db.commit()` right after a successful
+    container spawn) can itself raise -- the container IS running, but the
+    GPU-claim commit failed. That must not poison the session for the next
+    queued task (mirrors the passthrough except block's rollback), and the
+    GPU must not be left BUSY/claimed_by the task whose claim never made it
+    to disk -- the revert has to survive past the rollback that discarded
+    the original (failed) commit attempt.
+    """
+    db = FakeSession()
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_enc",
+            session_id="ses_enc",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
+            status=SessionApplicationStatus.QUEUED,
+            overwrite=False,
+        )
+    ]
+    db.rows["sessions"] = [
+        Session(
+            id="ses_enc",
+            name="Movie to Plex",
+            media_type=MediaType.MOVIE,
+            is_builtin=True,
+            rip_preset_id="rpr_x",
+            transcode_preset_id="tpr_x",
+            output_path_template="{title}/{title}.mkv",
+        )
+    ]
+    db.rows["transcode_presets"] = [
+        TranscodePreset(
+            id="tpr_x",
+            name="Plex 1080p",
+            media_type=MediaType.MOVIE,
+            is_builtin=True,
+            tool=TranscodeTool.HANDBRAKE,
+            preset_ref="H.265 MKV 1080p30",
+            container=ContainerFormat.MKV,
+            codec=VideoCodec.H265,
+            hw_preference=None,
+        )
+    ]
+    db.rows["gpus"] = [
+        Gpu(
+            id="gpu_1",
+            vendor=GpuVendor.VAAPI,
+            device_path="/dev/dri/renderD128",
+            encoder_kinds=["h265"],
+            status=GpuStatus.AVAILABLE,
+            claimed_by_task_id=None,
+        )
+    ]
+    now = datetime.now(UTC)
+    db.rows["transcode_tasks"] = [
+        TranscodeTask(
+            id="txt_enc_a",
+            session_application_id="sap_enc",
+            source_track_id="trk_a",
+            status=TranscodeTaskStatus.QUEUED,
+            attempts=0,
+            progress_pct=0,
+            output_path="a.mkv",
+            created_at=now,
+        ),
+        TranscodeTask(
+            id="txt_enc_b",
+            session_application_id="sap_enc",
+            source_track_id="trk_b",
+            status=TranscodeTaskStatus.QUEUED,
+            attempts=0,
+            progress_pct=0,
+            output_path="b.mkv",
+            created_at=now + timedelta(seconds=1),
+        ),
+    ]
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(MAX_PARALLEL_TRANSCODES=2), _db_factory(db), docker, WSHub())
+
+    real_commit = db.commit
+    calls = {"n": 0}
+
+    async def _commit_boom_once() -> None:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("db gone")
+        await real_commit()
+
+    db.commit = _commit_boom_once  # type: ignore[method-assign]
+
+    rollback_calls: list[int] = []
+    real_rollback = db.rollback
+
+    async def _spy_rollback() -> None:
+        rollback_calls.append(1)
+        await real_rollback()
+
+    db.rollback = _spy_rollback  # type: ignore[method-assign]
+
+    spawned = await disp.spawn_pending(db)  # must not raise
+
+    # txt_enc_a's container really did start (docker.containers.run was
+    # called for it) even though its GPU-claim commit failed -- spawned
+    # still counts it. txt_enc_b's own claim + spawn + commit succeed
+    # normally afterward, proving the session recovered.
+    assert spawned == 2
+    assert docker.containers.run.call_count == 2
+    assert rollback_calls == [1]
+
+    gpu = db.rows["gpus"][0]
+    # The GPU ends up claimed by txt_enc_b, not dangling as BUSY for
+    # txt_enc_a's dead (never-committed) claim.
+    assert gpu.status == GpuStatus.BUSY
+    assert gpu.claimed_by_task_id == "txt_enc_b"
 
 
 # ---- stale-claim sweep -------------------------------------------------------
