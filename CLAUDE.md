@@ -57,9 +57,13 @@ Run from the repo root.
 ### Dev setup / run
 
 ```bash
-bash devtools/setup-dev.sh     # uv sync, certs, .env (idempotent)
-docker compose up -d           # bring up the stack; UI at https://localhost:8081
+bash devtools/setup-dev.sh up    # setup (uv sync, certs, .env; idempotent) + build + start; UI at https://localhost:8081
+bash devtools/setup-dev.sh down  # stop the stack AND the backend-spawned ripper/transcoder containers
 ```
+
+Always spin the stack up/down through `setup-dev.sh` — a bare `docker compose
+down` strands the backend-spawned per-drive ripper and per-task transcoder
+containers (they are not compose services).
 
 ### Tests
 
