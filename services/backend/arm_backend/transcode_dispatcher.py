@@ -586,9 +586,9 @@ class TranscodeDispatcher:
                     # committed immediately rather than deferred to the
                     # trailing end-of-loop commit: an uncommitted revert
                     # sitting in the shared session for the rest of the loop
-                    # is exactly the hazard this fix round closes for
-                    # passthrough (N1) -- a LATER task's own rollback would
-                    # discard it again.
+                    # would be discarded again by a LATER task's own rollback
+                    # (the same hazard the passthrough branch's per-task
+                    # commits guard against).
                     if assignment.gpu is not None:
                         assignment.gpu.status = GpuStatus.AVAILABLE
                         assignment.gpu.claimed_by_task_id = None

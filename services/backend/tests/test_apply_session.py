@@ -834,6 +834,28 @@ def test_encode_apply_refused_when_disabled(signing_key: bytes, tmp_path: Path) 
     assert db.rows["session_applications"] == []
 
 
+@pytest.mark.parametrize("job_status", [JobStatus.AWAITING_USER_ID, JobStatus.RIPPED_AWAITING_IDENTIFY])
+def test_encode_apply_refused_when_disabled_even_for_identity_pending_job(
+    signing_key: bytes, tmp_path: Path, job_status: JobStatus
+) -> None:
+    """Identity-pending jobs normally park an apply as WAITING_IDENTIFY; the
+    transcode_enabled gate runs first, so an encode apply is still refused
+    with the typed 422 instead of being accepted-and-parked."""
+    db = FakeSession()
+    _seed(db, job_status=job_status)
+    _seed_config(db, transcode_enabled=False)
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422, r.text
+    assert "transcoding is disabled" in r.json()["detail"]
+    assert db.rows["session_applications"] == []
+
+
 def test_passthrough_apply_flows_when_disabled(signing_key: bytes, tmp_path: Path) -> None:
     """A passthrough preset (TranscodeTool.NONE) is never gated by the toggle."""
     db = FakeSession()

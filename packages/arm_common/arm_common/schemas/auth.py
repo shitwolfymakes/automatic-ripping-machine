@@ -57,7 +57,8 @@ class ConfigView(BaseModel):
     # tick (moved from the MAX_PARALLEL_TRANSCODES env var, which now only
     # seeds this on first boot).
     max_parallel_transcodes: int
-    # Runtime transcode switch + deployment capability (read-only, from env
+    # transcode_enabled: the runtime switch (a Config DB column, editable).
+    # transcode_capable: the deployment capability (read-only, derived from env
     # Settings, not a Config column). capable=False renders the toggle locked.
     transcode_enabled: bool
     transcode_capable: bool

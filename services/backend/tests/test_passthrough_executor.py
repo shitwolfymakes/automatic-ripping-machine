@@ -3,7 +3,8 @@
 `execute_passthrough_task` runs one QUEUED passthrough (TranscodeTool.NONE)
 task to completion in the backend process instead of spawning a transcoder
 container. The lifecycle must mirror `routers/transcoder.py`'s complete/fail
-endpoints exactly (claim fields, task.completed/task.failed WS events,
+endpoints exactly (claim fields, application QUEUED -> RUNNING,
+session.started/task.started/task.completed/task.failed WS events,
 aggregate_session_application + its event emit) so the UI and session
 rollups cannot tell the difference.
 """
@@ -115,20 +116,96 @@ async def test_success_moves_file_and_completes(tmp_path: Path) -> None:
     application = db.rows["session_applications"][0]
     assert application.status == SessionApplicationStatus.DONE
 
-    assert len(sent) == 2
-    assert sent[0]["event_type"] == "task.completed"
-    assert sent[0]["payload"]["task_id"] == "txt_1"
-    assert sent[0]["payload"]["output_path"] == "Title (2020)/t0.mkv"
-    assert sent[0]["payload"]["size_bytes"] == 4
+    assert [e["event_type"] for e in sent] == [
+        "session.started",
+        "task.started",
+        "task.completed",
+        "session.completed",
+    ]
+    assert sent[2]["payload"]["task_id"] == "txt_1"
+    assert sent[2]["payload"]["output_path"] == "Title (2020)/t0.mkv"
+    assert sent[2]["payload"]["size_bytes"] == 4
     # Pin the exact event_type aggregate_session_application returns for the
     # all-done case (see arm_backend.transcode_apply.aggregate_session_application).
-    assert sent[1]["event_type"] == "session.completed"
-    assert sent[1]["payload"]["session_application_id"] == "sap_x"
-    assert sent[1]["payload"]["status"] == "done"
+    assert sent[3]["payload"]["session_application_id"] == "sap_x"
+    assert sent[3]["payload"]["status"] == "done"
+
+
+async def test_claim_mirrors_claim_router_side_effects(tmp_path: Path, monkeypatch: Any) -> None:
+    """The in-process claim performs the same side effects as the container
+    path's POST /tasks/{id}/claim: the application flips QUEUED -> RUNNING
+    (with session.started) and task.started carries claimed_by + attempts,
+    all before the move runs, with progress reset to 0."""
+    raw = tmp_path / "raw" / "job1" / "t0.mkv"
+    raw.parent.mkdir(parents=True)
+    raw.write_bytes(b"data")
+    media_root = tmp_path / "media"
+
+    db = _db(track_output_path=str(raw), task_output_path="Title (2020)/t0.mkv", task_attempts=1)
+    task = db.rows["transcode_tasks"][0]
+    task.progress_pct = 37
+    hub, sent = _hub_with_recorder()
+    application = db.rows["session_applications"][0]
+
+    import arm_backend.passthrough_executor as mod
+
+    seen_during_move: dict[str, Any] = {}
+    real_transcode_none = mod.transcode_none
+
+    def _spy(input_path: Path, output_path: Path) -> int:
+        seen_during_move["app_status"] = application.status
+        seen_during_move["progress_pct"] = task.progress_pct
+        seen_during_move["events"] = [e["event_type"] for e in sent]
+        return real_transcode_none(input_path, output_path)
+
+    monkeypatch.setattr(mod, "transcode_none", _spy)
+
+    ok = await execute_passthrough_task(db, task, hub, _settings(MEDIA_ROOT=str(media_root)))
+
+    assert ok is True
+    assert seen_during_move == {
+        "app_status": SessionApplicationStatus.RUNNING,
+        "progress_pct": 0,
+        "events": ["session.started", "task.started"],
+    }
+    assert sent[0]["topic"] == "transcode.events"
+    assert sent[0]["payload"] == {
+        "session_application_id": "sap_x",
+        "session_id": "ses_x",
+        "job_id": "job_01JZXR7K3M5Q8N4VWA00000001",
+    }
+    assert sent[0]["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001"
+    assert sent[1]["payload"] == {
+        "task_id": "txt_1",
+        "session_application_id": "sap_x",
+        "claimed_by": IN_PROCESS_CLAIMANT,
+        "attempts": 2,
+    }
+    assert sent[1]["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001"
+    assert sent[1]["track_id"] == "trk_1"
+
+
+async def test_claim_on_already_running_application_skips_session_started(tmp_path: Path) -> None:
+    """A sibling task already moved the application to RUNNING: only
+    task.started is emitted at claim time (router parity)."""
+    raw = tmp_path / "raw" / "job1" / "t0.mkv"
+    raw.parent.mkdir(parents=True)
+    raw.write_bytes(b"data")
+    media_root = tmp_path / "media"
+
+    db = _db(track_output_path=str(raw), task_output_path="Title (2020)/t0.mkv")
+    db.rows["session_applications"][0].status = SessionApplicationStatus.RUNNING
+    hub, sent = _hub_with_recorder()
+    task = db.rows["transcode_tasks"][0]
+
+    ok = await execute_passthrough_task(db, task, hub, _settings(MEDIA_ROOT=str(media_root)))
+
+    assert ok is True
+    assert [e["event_type"] for e in sent] == ["task.started", "task.completed", "session.completed"]
 
 
 async def test_row_already_deleted_before_claim_skips_cleanly(tmp_path: Path) -> None:
-    """N1 part 1: the tick's initial FOR UPDATE SKIP LOCKED select can grab
+    """The tick's initial FOR UPDATE SKIP LOCKED select can grab
     this row minutes before this task's turn in the loop (an earlier task's
     move can run long); by the time we get here a concurrent
     DELETE /api/transcodes/{id} may already have removed it. Attempting the
@@ -190,9 +267,9 @@ async def test_missing_source_fails_task_not_loop(tmp_path: Path) -> None:
     application = db.rows["session_applications"][0]
     assert application.status == SessionApplicationStatus.FAILED
 
-    assert sent[0]["event_type"] == "task.failed"
-    assert sent[0]["payload"]["last_error"] == task.last_error
-    assert sent[1]["event_type"] == "session.failed"
+    assert sent[2]["event_type"] == "task.failed"
+    assert sent[2]["payload"]["last_error"] == task.last_error
+    assert sent[3]["event_type"] == "session.failed"
 
 
 async def test_empty_track_output_path_fails_cleanly(tmp_path: Path) -> None:
@@ -206,7 +283,7 @@ async def test_empty_track_output_path_fails_cleanly(tmp_path: Path) -> None:
     assert ok is False
     assert task.status == TranscodeTaskStatus.FAILED
     assert task.last_error == "source track has no output_path on disk; rip not complete or raw deleted"
-    assert sent[0]["event_type"] == "task.failed"
+    assert sent[2]["event_type"] == "task.failed"
 
 
 async def test_none_task_output_path_fails_cleanly(tmp_path: Path) -> None:
@@ -224,7 +301,7 @@ async def test_none_task_output_path_fails_cleanly(tmp_path: Path) -> None:
     assert ok is False
     assert task.status == TranscodeTaskStatus.FAILED
     assert task.last_error == "task has no output_path"
-    assert sent[0]["event_type"] == "task.failed"
+    assert sent[2]["event_type"] == "task.failed"
     # Source file must be left untouched — nothing to move it to.
     assert raw.exists()
 
@@ -251,11 +328,11 @@ async def test_oserror_from_move_is_captured_as_last_error(tmp_path: Path, monke
     assert ok is False
     assert task.status == TranscodeTaskStatus.FAILED
     assert task.last_error == "OSError: disk full"
-    assert sent[0]["event_type"] == "task.failed"
+    assert sent[2]["event_type"] == "task.failed"
 
 
 async def test_claim_is_committed_before_the_move_runs(tmp_path: Path, monkeypatch: Any) -> None:
-    """I1: the IN_PROGRESS claim must be durably committed before the
+    """The IN_PROGRESS claim must be durably committed before the
     (possibly slow, cross-mount) move starts, so the tick's FOR UPDATE row
     locks are released before any blocking I/O, not held across it."""
     raw = tmp_path / "raw" / "job1" / "t0.mkv"
@@ -286,7 +363,7 @@ async def test_claim_is_committed_before_the_move_runs(tmp_path: Path, monkeypat
 
 
 async def test_row_deleted_mid_move_skips_terminal_update_cleanly(tmp_path: Path, monkeypatch: Any) -> None:
-    """I1/O3: cancel_running runs in a different session and can delete the
+    """cancel_running runs in a different session and can delete the
     task row while the move is in flight (after the claim commit). The
     terminal-state write must be skipped cleanly rather than resurrecting a
     row a concurrent cancel already removed."""
@@ -315,7 +392,8 @@ async def test_row_deleted_mid_move_skips_terminal_update_cleanly(tmp_path: Path
 
     assert ok is True  # the move itself succeeded (error is None)
     assert db.rows["transcode_tasks"] == []  # row stays deleted, not resurrected
-    assert sent == []  # no task.completed/failed event for a cancelled task
+    # Only the claim-time events; no task.completed/failed for a cancelled task.
+    assert [e["event_type"] for e in sent] == ["session.started", "task.started"]
     assert (media_root / "Title (2020)" / "t0.mkv").exists()  # the move still happened
 
 
@@ -390,7 +468,7 @@ async def test_chown_failure_is_best_effort_and_does_not_fail_task(tmp_path: Pat
 
     assert ok is True
     assert task.status == TranscodeTaskStatus.DONE
-    assert sent[0]["event_type"] == "task.completed"
+    assert sent[2]["event_type"] == "task.completed"
 
 
 async def test_attempts_incremented_on_each_run(tmp_path: Path) -> None:
@@ -437,16 +515,15 @@ async def test_aggregate_still_running_emits_no_second_event(tmp_path: Path) -> 
 
     assert ok is True
     application = db.rows["session_applications"][0]
-    assert application.status == SessionApplicationStatus.QUEUED  # unchanged, still has a live task
-    assert len(sent) == 1
-    assert sent[0]["event_type"] == "task.completed"
+    assert application.status == SessionApplicationStatus.RUNNING  # claim flipped it; a sibling is still live
+    assert [e["event_type"] for e in sent] == ["session.started", "task.started", "task.completed"]
 
 
 async def test_no_application_row_skips_aggregate(tmp_path: Path) -> None:
     """Defensive: session_application_id points nowhere (shouldn't happen in
     practice, but the row lookup can legitimately miss under a hard
     FakeSession/test setup). The task itself still completes and only the
-    task.completed event is emitted."""
+    task-level events are emitted."""
     raw = tmp_path / "raw" / "job1" / "t0.mkv"
     raw.parent.mkdir(parents=True)
     raw.write_bytes(b"data")
@@ -460,5 +537,4 @@ async def test_no_application_row_skips_aggregate(tmp_path: Path) -> None:
     ok = await execute_passthrough_task(db, task, hub, _settings(MEDIA_ROOT=str(media_root)))
 
     assert ok is True
-    assert len(sent) == 1
-    assert sent[0]["event_type"] == "task.completed"
+    assert [e["event_type"] for e in sent] == ["task.started", "task.completed"]
