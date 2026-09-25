@@ -10,7 +10,6 @@ from pathlib import Path
 import httpx
 import uvicorn
 from fastapi import FastAPI
-from sqlalchemy import delete
 from sqlmodel import col, select
 
 from arm_backend.config import settings
@@ -31,6 +30,7 @@ from arm_backend.notifications.bash_listener import BashListener
 from arm_backend.notifications.inbox_listener import InboxListener
 from arm_backend.ripper_manager import RipperManager, reconcile_enrolled_rippers
 from arm_backend.routers import (
+    gpus as gpus_router,
     auth,
     config as config_router,
     diagnostics,
@@ -85,16 +85,25 @@ async def _run_seeders() -> None:
 
 
 async def _refresh_gpu_inventory(hub: WSHub) -> None:
-    """Load the install-time GPU inventory, truncate `gpus`, repopulate.
+    """Seed the `gpus` table from `ARM_GPUS` - but only when it is empty.
 
-    Emit `transcode.hw_unavailable` on empty. The descriptor comes from the
-    `ARM_GPUS` env (host-side detection at install time); the backend does not
-    probe hardware. `load_configured_gpus` degrades to `[]` on malformed input.
+    The table is DB-authoritative: operators manage devices from Settings >
+    GPUs (enable/disable/delete), and those edits must survive restarts, so
+    an already-populated table is left untouched. Deleting every row and
+    restarting the backend is the deliberate re-seed path (the GPUs card
+    documents it). The env descriptor comes from host-side detection at
+    install time (or is hand-written for remote transcode hosts); the
+    backend does not probe hardware. `load_configured_gpus` degrades to `[]`
+    on malformed input. Emits `transcode.hw_unavailable` when the inventory
+    ends up empty.
     """
-    probed = load_configured_gpus(settings.ARM_GPUS)
     now = datetime.now(UTC)
     async with SessionLocal() as session:
-        await session.execute(delete(Gpu))
+        existing = (await session.execute(select(Gpu))).scalars().all()
+        if existing:
+            logger.info("gpu inventory: %d device(s) in DB (authoritative); ARM_GPUS not consulted", len(existing))
+            return
+        probed = load_configured_gpus(settings.ARM_GPUS)
         for g in probed:
             session.add(
                 Gpu(
@@ -105,7 +114,9 @@ async def _refresh_gpu_inventory(hub: WSHub) -> None:
                     last_seen_at=now,
                 )
             )
-        if not probed:
+        if probed:
+            logger.info("gpu inventory: seeded %d device(s) from ARM_GPUS into an empty table", len(probed))
+        else:
             await hub.emit(
                 topic="transcode.events",
                 event_type="transcode.hw_unavailable",
@@ -186,8 +197,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.thediscdb = SnapshotStore(Path(settings.ARM_THEDISCDB_PATH))
     thediscdb_refresh_task = asyncio.create_task(_thediscdb_refresh_loop(app))
 
-    # GPU probe — truncate-and-fill the gpus table so the dispatcher's first
-    # tick sees a consistent inventory. Runs before the dispatcher starts.
+    # GPU inventory — seed the gpus table from ARM_GPUS only when empty
+    # (DB-authoritative thereafter). Runs before the dispatcher starts.
     await _refresh_gpu_inventory(app.state.ws_hub)
 
     # Phase 9 — reset every RIPPING job's tracks to queued and stamp
@@ -343,6 +354,7 @@ app.include_router(rip_presets.router)
 app.include_router(transcode_presets.router)
 app.include_router(transcoder.router)
 app.include_router(transcodes.router)
+app.include_router(gpus_router.router)
 app.include_router(config_router.router)
 app.include_router(diagnostics.router)
 app.include_router(metadata_router.router)

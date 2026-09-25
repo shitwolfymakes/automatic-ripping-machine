@@ -567,6 +567,10 @@ export type ConfigUpdateRequest = {
      */
     drive_detected_prune_days?: number | null;
     /**
+     * Max Parallel Transcodes
+     */
+    max_parallel_transcodes?: number | null;
+    /**
      * Makemkv Sdf Enabled
      */
     makemkv_sdf_enabled?: boolean | null;
@@ -650,6 +654,10 @@ export type ConfigView = {
      * Drive Detected Prune Days
      */
     drive_detected_prune_days: number;
+    /**
+     * Max Parallel Transcodes
+     */
+    max_parallel_transcodes: number;
     /**
      * Makemkv Sdf Enabled
      */
@@ -1366,6 +1374,63 @@ export type FixPermsResponse = {
      * Fixed
      */
     fixed: number;
+};
+
+/**
+ * GpuStatus
+ */
+export type GpuStatus = 'available' | 'busy';
+
+/**
+ * GpuUpdateRequest
+ *
+ * PATCH body for a GPU row - the enable/disable switch only. Vendor,
+ * path and encoder kinds describe hardware; they are re-seeded, not edited.
+ */
+export type GpuUpdateRequest = {
+    /**
+     * Enabled
+     */
+    enabled: boolean;
+};
+
+/**
+ * GpuVendor
+ */
+export type GpuVendor = 'vaapi' | 'nvenc' | 'qsv';
+
+/**
+ * GpuView
+ *
+ * One row of the DB-authoritative GPU inventory (Settings > GPUs).
+ */
+export type GpuView = {
+    /**
+     * Id
+     */
+    id: string;
+    vendor: GpuVendor;
+    /**
+     * Device Path
+     */
+    device_path: string;
+    /**
+     * Encoder Kinds
+     */
+    encoder_kinds: Array<string>;
+    status: GpuStatus;
+    /**
+     * Enabled
+     */
+    enabled: boolean;
+    /**
+     * Claimed By Task Id
+     */
+    claimed_by_task_id?: string | null;
+    /**
+     * Last Seen At
+     */
+    last_seen_at?: string | null;
 };
 
 /**
@@ -6763,6 +6828,111 @@ export type DeleteTranscodeApiTranscodesTaskIdDeleteResponses = {
 };
 
 export type DeleteTranscodeApiTranscodesTaskIdDeleteResponse = DeleteTranscodeApiTranscodesTaskIdDeleteResponses[keyof DeleteTranscodeApiTranscodesTaskIdDeleteResponses];
+
+export type ListGpusApiGpusGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/gpus';
+};
+
+export type ListGpusApiGpusGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListGpusApiGpusGetError = ListGpusApiGpusGetErrors[keyof ListGpusApiGpusGetErrors];
+
+export type ListGpusApiGpusGetResponses = {
+    /**
+     * Response List Gpus Api Gpus Get
+     *
+     * Successful Response
+     */
+    200: Array<GpuView>;
+};
+
+export type ListGpusApiGpusGetResponse = ListGpusApiGpusGetResponses[keyof ListGpusApiGpusGetResponses];
+
+export type DeleteGpuApiGpusGpuIdDeleteData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Gpu Id
+         */
+        gpu_id: string;
+    };
+    query?: never;
+    url: '/api/gpus/{gpu_id}';
+};
+
+export type DeleteGpuApiGpusGpuIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteGpuApiGpusGpuIdDeleteError = DeleteGpuApiGpusGpuIdDeleteErrors[keyof DeleteGpuApiGpusGpuIdDeleteErrors];
+
+export type DeleteGpuApiGpusGpuIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteGpuApiGpusGpuIdDeleteResponse = DeleteGpuApiGpusGpuIdDeleteResponses[keyof DeleteGpuApiGpusGpuIdDeleteResponses];
+
+export type UpdateGpuApiGpusGpuIdPatchData = {
+    body: GpuUpdateRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Gpu Id
+         */
+        gpu_id: string;
+    };
+    query?: never;
+    url: '/api/gpus/{gpu_id}';
+};
+
+export type UpdateGpuApiGpusGpuIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateGpuApiGpusGpuIdPatchError = UpdateGpuApiGpusGpuIdPatchErrors[keyof UpdateGpuApiGpusGpuIdPatchErrors];
+
+export type UpdateGpuApiGpusGpuIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: GpuView;
+};
+
+export type UpdateGpuApiGpusGpuIdPatchResponse = UpdateGpuApiGpusGpuIdPatchResponses[keyof UpdateGpuApiGpusGpuIdPatchResponses];
 
 export type GetConfigApiConfigGetData = {
     body?: never;

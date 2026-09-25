@@ -29,9 +29,10 @@ from paramiko.ssh_exception import SSHException  # type: ignore[import-untyped]
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
 
-from arm_backend.config import Settings
+from arm_backend.config import Settings, settings
 from arm_backend.docker_probe import TtlProbe, probe_docker
 from arm_common import (
+    Config,
     Gpu,
     GpuStatus,
     GpuVendor,
@@ -91,6 +92,19 @@ class GpuAssignment(NamedTuple):
     action: Literal["spawn", "queue"]
 
 
+async def max_parallel_transcodes(db: AsyncSession, *, default: int | None = None) -> int:
+    """The dispatcher parallelism cap from operator config (Settings >
+    Transcoding). Falls back to `default` (the caller's env-derived value)
+    only while the config row predates the column (the seeder backfills it
+    on the next boot)."""
+    from arm_backend.seeders import CONFIG_SINGLETON_ID  # noqa: PLC0415 — avoid module cycle
+
+    cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    if cfg is None or cfg.max_parallel_transcodes is None:
+        return default if default is not None else settings.MAX_PARALLEL_TRANSCODES
+    return cfg.max_parallel_transcodes
+
+
 async def release_gpu_for_task(db: AsyncSession, task_id: str) -> None:
     """Flip every GPU row claimed by this task back to AVAILABLE.
 
@@ -130,7 +144,7 @@ class TranscodeDispatcher:
 
     async def run(self) -> None:
         logger.info(
-            "transcode dispatcher starting: max_parallel=%d image=%s tick=%ds",
+            "transcode dispatcher starting: max_parallel=db-config (env seed %d) image=%s tick=%ds",
             self._settings.MAX_PARALLEL_TRANSCODES,
             self._settings.ARM_TRANSCODE_IMAGE,
             self._tick_interval,
@@ -362,8 +376,11 @@ class TranscodeDispatcher:
     # --- spawn loop ---------------------------------------------------------
 
     async def spawn_pending(self, db: AsyncSession) -> int:
-        """Spawn new transcoder containers up to MAX_PARALLEL_TRANSCODES.
+        """Spawn new transcoder containers up to `config.max_parallel_transcodes`.
 
+        The cap is operator config, read from the DB each tick so a Settings
+        change applies on the next tick without a restart (the env var only
+        seeds the column on first boot).
         Counts in_progress rows live (cheap). For each available slot,
         dequeues one queued task and spawns. Returns the spawn count.
         """
@@ -380,7 +397,7 @@ class TranscodeDispatcher:
             .scalars()
             .all()
         )
-        slots = self._settings.MAX_PARALLEL_TRANSCODES - len(in_progress)
+        slots = await max_parallel_transcodes(db, default=self._settings.MAX_PARALLEL_TRANSCODES) - len(in_progress)
         if slots <= 0:
             return 0
 
@@ -482,14 +499,22 @@ class TranscodeDispatcher:
         # Filter in Python — `text[]` ANY predicates are awkward to express in
         # SQLAlchemy ORM and the in-memory test fake doesn't grok them. The
         # gpus table is small (1-4 rows on real hosts) so the cost is trivial.
+        # Disabled rows (Settings > GPUs switch) never participate.
         all_gpus = (await db.execute(select(Gpu))).scalars().all()
-        matching = [g for g in all_gpus if codec in (g.encoder_kinds or [])]
+        matching = [g for g in all_gpus if g.enabled and codec in (g.encoder_kinds or [])]
         if not matching:
-            # No silicon on this host advertises the requested codec — CPU.
+            # No enabled silicon on this host advertises the requested codec — CPU.
             return GpuAssignment(gpu=None, codec=codec, action="spawn")
 
         available = [g for g in matching if g.status == GpuStatus.AVAILABLE]
         if available:
+            # Deterministic pick instead of row order (G-30, first half):
+            # vendors in HandBrake-support-quality order, then device path,
+            # so a mixed-vendor host always prefers the same silicon and a
+            # redeploy can't silently flip which GPU a preset lands on.
+            # (Per-preset vendor pinning is the registered second half.)
+            vendor_rank = {GpuVendor.NVENC: 0, GpuVendor.QSV: 1, GpuVendor.VAAPI: 2}
+            available.sort(key=lambda g: (vendor_rank.get(g.vendor, 99), g.device_path))
             gpu = available[0]
             gpu.status = GpuStatus.BUSY
             gpu.claimed_by_task_id = task.id

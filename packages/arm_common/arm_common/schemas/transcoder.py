@@ -8,8 +8,9 @@ encoder, and these schemas carry the state-machine transitions.
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
+from arm_common.enums import GpuStatus, GpuVendor
 from arm_common.schemas.jobs import TrackView
 from arm_common.schemas.sessions import (
     SessionView,
@@ -79,6 +80,28 @@ class TranscodeStatsView(BaseModel):
     gpus_total: int
     gpus_available: int
     max_parallel: int
+
+
+class GpuView(BaseModel):
+    """One row of the DB-authoritative GPU inventory (Settings > GPUs)."""
+
+    id: str
+    vendor: GpuVendor
+    device_path: str
+    encoder_kinds: list[str]
+    status: GpuStatus
+    enabled: bool
+    claimed_by_task_id: str | None = None
+    last_seen_at: datetime | None = None
+
+
+class GpuUpdateRequest(BaseModel):
+    """PATCH body for a GPU row - the enable/disable switch only. Vendor,
+    path and encoder kinds describe hardware; they are re-seeded, not edited."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
 
 
 class TranscodeWorkerView(BaseModel):

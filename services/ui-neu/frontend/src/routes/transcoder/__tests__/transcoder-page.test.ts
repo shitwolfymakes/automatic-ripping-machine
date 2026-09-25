@@ -50,6 +50,33 @@ vi.mock('$lib/api/transcoder', () => ({
 	retranscodeTranscoderJob: vi.fn()
 }));
 
+vi.mock('$lib/api/gpus', () => ({
+	fetchGpus: vi.fn(() =>
+		Promise.resolve([
+			{
+				id: 'gpu_1',
+				vendor: 'nvenc',
+				device_path: 'nvidia://0',
+				encoder_kinds: ['h264', 'h265'],
+				status: 'busy',
+				enabled: true,
+				claimed_by_task_id: 't-1',
+				last_seen_at: null
+			},
+			{
+				id: 'gpu_2',
+				vendor: 'vaapi',
+				device_path: '/dev/dri/renderD128',
+				encoder_kinds: ['h264'],
+				status: 'available',
+				enabled: false,
+				claimed_by_task_id: null,
+				last_seen_at: null
+			}
+		])
+	)
+}));
+
 vi.mock('$lib/api/logs', () => ({
 	fetchStructuredTranscoderLogContent: vi.fn(() => Promise.resolve({ entries: [] })),
 	fetchStructuredLogContent: vi.fn(() => Promise.resolve({ entries: [] }))
@@ -119,4 +146,15 @@ describe('Transcoder Page', () => {
 			expect(screen.getByText('No job')).toBeInTheDocument();
 		});
 	});
+});
+
+it('renders per-GPU inventory rows with status and a manage link', async () => {
+	renderComponent(TranscoderPage);
+	await waitFor(() => expect(screen.getByTestId('gpu-rows')).toBeInTheDocument());
+	const rows = screen.getByTestId('gpu-rows');
+	expect(rows.textContent).toContain('NVENC');
+	expect(rows.textContent).toContain('busy');
+	expect(rows.textContent).toContain('VAAPI');
+	expect(rows.textContent).toContain('disabled');
+	expect(screen.getByText('Manage GPUs in Settings')).toBeInTheDocument();
 });
