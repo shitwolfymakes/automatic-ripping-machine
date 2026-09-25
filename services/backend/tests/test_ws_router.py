@@ -148,6 +148,20 @@ def test_origin_not_allowed_closes(monkeypatch: pytest.MonkeyPatch) -> None:
                 ws.receive_json()
 
 
+def test_same_origin_accepted_without_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
+    """G-28: an Origin matching the host the socket was opened against passes
+    the gate with an empty allowlist (TestClient connects as ws://testserver)."""
+    settings.ARM_ALLOWED_ORIGINS = []
+    db = FakeSession()
+    db.rows["users"] = [_guest_user()]
+    app = _make_app(db, _Hub(), monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws", headers={"origin": "http://testserver"}) as ws:
+            ws.send_json({"op": "auth", "token": ""})
+            ack = ws.receive_json()
+            assert ack["op"] == "ack"
+
+
 # --- auth handshake failures -------------------------------------------------
 
 

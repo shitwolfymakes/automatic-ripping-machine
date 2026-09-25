@@ -41,3 +41,87 @@ def test_browser_origin_with_empty_allowlist_rejected() -> None:
     """Phase 4 default: empty allowlist means service-token only."""
     settings.ARM_ALLOWED_ORIGINS = []
     assert _origin_allowed("https://arm.local:8081", []) is False
+
+
+# --- same-origin default (G-28) ----------------------------------------------
+
+
+def test_same_origin_via_request_host_accepted() -> None:
+    settings.ARM_ALLOWED_ORIGINS = []
+    assert _origin_allowed("https://192.168.1.85:8082", [], request_host="192.168.1.85:8082") is True
+
+
+def test_same_origin_via_forwarded_host_accepted() -> None:
+    """ui-neu's nginx rewrites Host to arm-backend but forwards the real one."""
+    settings.ARM_ALLOWED_ORIGINS = []
+    assert (
+        _origin_allowed(
+            "https://nas.lan:8082",
+            [],
+            request_host="arm-backend",
+            forwarded_host="nas.lan:8082",
+            forwarded_proto="https",
+        )
+        is True
+    )
+
+
+def test_forwarded_host_wins_over_request_host() -> None:
+    settings.ARM_ALLOWED_ORIGINS = []
+    assert (
+        _origin_allowed(
+            "https://arm-backend",
+            [],
+            request_host="arm-backend",
+            forwarded_host="nas.lan:8082",
+        )
+        is False
+    )
+
+
+def test_same_origin_scheme_mismatch_rejected() -> None:
+    settings.ARM_ALLOWED_ORIGINS = []
+    assert _origin_allowed("http://nas.lan:8082", [], request_host="nas.lan:8082", request_scheme="https") is False
+
+
+def test_same_origin_forwarded_proto_http_accepted() -> None:
+    """vite dev serves plain http and forwards proto accordingly."""
+    settings.ARM_ALLOWED_ORIGINS = []
+    assert (
+        _origin_allowed(
+            "http://localhost:5173",
+            [],
+            request_host="localhost:8443",
+            forwarded_host="localhost:5173",
+            forwarded_proto="http",
+        )
+        is True
+    )
+
+
+def test_same_origin_port_mismatch_rejected() -> None:
+    settings.ARM_ALLOWED_ORIGINS = []
+    assert _origin_allowed("https://nas.lan:9999", [], request_host="nas.lan:8082") is False
+
+
+def test_same_origin_case_insensitive() -> None:
+    settings.ARM_ALLOWED_ORIGINS = []
+    assert _origin_allowed("https://NAS.lan:8082", [], request_host="nas.LAN:8082") is True
+
+
+def test_forwarded_host_chain_uses_first_element() -> None:
+    settings.ARM_ALLOWED_ORIGINS = []
+    assert (
+        _origin_allowed(
+            "https://nas.lan:8082",
+            [],
+            forwarded_host="nas.lan:8082, arm-backend",
+            forwarded_proto="https, https",
+        )
+        is True
+    )
+
+
+def test_allowlist_still_covers_split_origin() -> None:
+    settings.ARM_ALLOWED_ORIGINS = ["https://arm.example.com"]
+    assert _origin_allowed("https://arm.example.com", [], request_host="backend.internal:8443") is True

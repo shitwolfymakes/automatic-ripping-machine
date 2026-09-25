@@ -21,7 +21,18 @@ export default defineConfig(({ mode }) => {
 					target: backendWs,
 					changeOrigin: true,
 					ws: true,
-					secure: false
+					secure: false,
+					// changeOrigin rewrites Host to the backend's, which would fail
+					// the backend's same-origin WS check (Origin is the dev server's).
+					// Forward the browser's real host the same way the prod nginx does.
+					configure: (proxy) => {
+						proxy.on('proxyReqWs', (proxyReq, req) => {
+							if (req.headers.host !== undefined) {
+								proxyReq.setHeader('x-forwarded-host', req.headers.host);
+							}
+							proxyReq.setHeader('x-forwarded-proto', 'http');
+						});
+					}
 				}
 			}
 		}
