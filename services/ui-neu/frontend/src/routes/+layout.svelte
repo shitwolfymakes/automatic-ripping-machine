@@ -20,6 +20,7 @@
 	import { logout as apiLogout } from '$lib/api/auth';
 	import { countRipping } from '$lib/utils/job-status';
 	import BottomStatsBar from '$lib/components/BottomStatsBar.svelte';
+	import LiveUpdatesBanner from '$lib/components/LiveUpdatesBanner.svelte';
 	import SidebarStats from '$lib/components/SidebarStats.svelte';
 	import MobileStatsPanel from '$lib/components/MobileStatsPanel.svelte';
 	let { children } = $props();
@@ -406,6 +407,7 @@
 
 		<!-- Page content -->
 		<main class="flex-1 overflow-y-auto p-4 lg:p-6">
+			<LiveUpdatesBanner />
 			{@render children()}
 		</main>
 	</div>

@@ -8,7 +8,9 @@ vi.mock('$lib/api/client', () => ({
 	getToken: () => getTokenMock()
 }));
 
-import { wsClient, type WSEnvelope } from '$lib/api/ws';
+import { get } from 'svelte/store';
+
+import { wsClient, wsStatus, type WSEnvelope } from '$lib/api/ws';
 
 // Minimal fake WebSocket capturing sends + exposing the listener hooks so the
 // test can drive open/message/close.
@@ -142,5 +144,65 @@ describe('wsClient', () => {
 		ws.emit('message', { data: 'not json' });
 		ws.emit('message', { data: JSON.stringify({ op: 'something-else' }) });
 		expect(handler).not.toHaveBeenCalled();
+	});
+});
+
+describe('wsStatus (G-28 live-updates state)', () => {
+	beforeEach(() => {
+		FakeWS.instances = [];
+		getTokenMock.mockReturnValue('aaa.bbb.ccc');
+		vi.stubGlobal('WebSocket', FakeWS as unknown as typeof WebSocket);
+		vi.stubGlobal('window', {
+			location: { protocol: 'https:', host: 'localhost:8888' }
+		} as unknown as Window & typeof globalThis);
+		vi.useFakeTimers();
+	});
+
+	afterEach(() => {
+		wsClient.stop();
+		vi.runOnlyPendingTimers();
+		vi.useRealTimers();
+		vi.unstubAllGlobals();
+	});
+
+	it('idle before start, connecting after, online after the auth ack', () => {
+		expect(get(wsStatus)).toBe('idle');
+		wsClient.start();
+		expect(get(wsStatus)).toBe('connecting');
+		authAck(FakeWS.instances[0]);
+		expect(get(wsStatus)).toBe('online');
+	});
+
+	it('a single drop stays connecting; repeated failures go offline; recovery goes online', () => {
+		wsClient.start();
+		authAck(FakeWS.instances[0]);
+		expect(get(wsStatus)).toBe('online');
+
+		// First drop: a blip, not an outage. No banner.
+		FakeWS.instances[0].emit('close', {});
+		expect(get(wsStatus)).toBe('connecting');
+
+		// The reconnect attempt also fails: now it is an outage.
+		vi.advanceTimersByTime(1000);
+		expect(FakeWS.instances).toHaveLength(2);
+		FakeWS.instances[1].emit('close', {});
+		expect(get(wsStatus)).toBe('offline');
+
+		// Still offline while further attempts fail (no flapping back to connecting).
+		vi.advanceTimersByTime(2000);
+		FakeWS.instances[2].emit('close', {});
+		expect(get(wsStatus)).toBe('offline');
+
+		// A successful reconnect + auth ack clears the state.
+		vi.advanceTimersByTime(4000);
+		authAck(FakeWS.instances[3]);
+		expect(get(wsStatus)).toBe('online');
+	});
+
+	it('stop() returns the status to idle', () => {
+		wsClient.start();
+		authAck(FakeWS.instances[0]);
+		wsClient.stop();
+		expect(get(wsStatus)).toBe('idle');
 	});
 });
