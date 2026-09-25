@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt, require_writer
-from arm_backend.config import settings
+from arm_backend.config import effective_transcode_capable, settings
 from arm_backend.db import get_session
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
@@ -71,6 +71,9 @@ def _to_view(cfg: Config) -> ConfigView:
         drive_scan_interval_seconds=int(cfg.drive_scan_interval_seconds or 30),
         drive_detected_prune_days=int(cfg.drive_detected_prune_days or 7),
         max_parallel_transcodes=int(cfg.max_parallel_transcodes) if cfg.max_parallel_transcodes is not None else 1,
+        # None-coerce covers rows/fixtures predating the column (NULL = enabled).
+        transcode_enabled=cfg.transcode_enabled is not False,
+        transcode_capable=effective_transcode_capable(settings),
         default_retention_policy=cfg.default_retention_policy,
         notification_apprise_urls=list(cfg.notification_apprise_urls or []),
         notifications_enabled=cfg.notifications_enabled,
@@ -136,6 +139,12 @@ async def update_config(
     for key in ("drive_scan_interval_seconds", "drive_detected_prune_days", "max_parallel_transcodes"):
         if key in fields and (fields[key] is None or fields[key] < 1):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must be a positive integer")
+    if fields.get("transcode_enabled") is True and not effective_transcode_capable(settings):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="cannot enable transcoding: this deployment is ripper-only "
+            "(ARM_TRANSCODE_CAPABLE=false and no ARM_TRANSCODE_DOCKER_HOST)",
+        )
     # Detect un-pause (ripping_paused ON -> OFF) before applying, so we can give
     # held review-gate discs a FRESH countdown rather than resuming an already-
     # expired one (which would auto-rip the instant ripping resumes — surprising

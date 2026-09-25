@@ -9249,6 +9249,17 @@
             ],
             "title": "Max Parallel Transcodes"
           },
+          "transcode_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcode Enabled"
+          },
           "makemkv_sdf_enabled": {
             "anyOf": [
               {
@@ -9426,6 +9437,14 @@
             "type": "integer",
             "title": "Max Parallel Transcodes"
           },
+          "transcode_enabled": {
+            "type": "boolean",
+            "title": "Transcode Enabled"
+          },
+          "transcode_capable": {
+            "type": "boolean",
+            "title": "Transcode Capable"
+          },
           "makemkv_sdf_enabled": {
             "type": "boolean",
             "title": "Makemkv Sdf Enabled"
@@ -9540,6 +9559,8 @@
           "drive_scan_interval_seconds",
           "drive_detected_prune_days",
           "max_parallel_transcodes",
+          "transcode_enabled",
+          "transcode_capable",
           "makemkv_sdf_enabled",
           "thediscdb_enabled",
           "thediscdb_refresh_days",
