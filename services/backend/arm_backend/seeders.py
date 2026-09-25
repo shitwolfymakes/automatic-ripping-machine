@@ -117,6 +117,7 @@ async def _seed_config_singleton(session: AsyncSession) -> None:
                 default_retention_policy=RetentionPolicy.KEEP_FOREVER,
                 notification_apprise_urls=[],
                 session_signing_key=secrets.token_bytes(32),
+                transcode_enabled=True,
             )
         )
         await session.flush()
@@ -136,6 +137,13 @@ async def _seed_config_singleton(session: AsyncSession) -> None:
         from arm_backend.config import settings  # noqa: PLC0415 — avoid import cycle at module load
 
         existing.max_parallel_transcodes = settings.MAX_PARALLEL_TRANSCODES
+        session.add(existing)
+        await session.flush()
+
+    # One-shot backfill for the transcode toggle: NULL means the row predates
+    # the column. Existing deployments keep transcoding exactly as before.
+    if existing.transcode_enabled is None:
+        existing.transcode_enabled = True
         session.add(existing)
         await session.flush()
 

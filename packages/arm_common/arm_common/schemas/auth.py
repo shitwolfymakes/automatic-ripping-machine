@@ -57,6 +57,10 @@ class ConfigView(BaseModel):
     # tick (moved from the MAX_PARALLEL_TRANSCODES env var, which now only
     # seeds this on first boot).
     max_parallel_transcodes: int
+    # Runtime transcode switch + deployment capability (read-only, from env
+    # Settings, not a Config column). capable=False renders the toggle locked.
+    transcode_enabled: bool
+    transcode_capable: bool
     makemkv_sdf_enabled: bool
     thediscdb_enabled: bool
     thediscdb_refresh_days: int
@@ -87,6 +91,7 @@ class ConfigUpdateRequest(BaseModel):
     drive_scan_interval_seconds: int | None = None
     drive_detected_prune_days: int | None = None
     max_parallel_transcodes: int | None = None
+    transcode_enabled: bool | None = None
     makemkv_sdf_enabled: bool | None = None
     thediscdb_enabled: bool | None = None
     thediscdb_refresh_days: int | None = None
