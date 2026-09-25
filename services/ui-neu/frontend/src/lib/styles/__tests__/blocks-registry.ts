@@ -59,5 +59,6 @@ export const BLOCKS: Record<string, string[]> = {
 	'status-dot': ['.status-dot'],
 	'section-frame': ['.section-frame', '.section-frame-bar-top', '.section-frame-bar-bottom', '.section-frame-body'],
 	'code-block': ['.code-block', '.code-block-scroll'],
+	'docs-prose': ['.docs-prose'],
 	text: ['.eyebrow', '.mono', '.kbd']
 };

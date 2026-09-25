@@ -1,0 +1,38 @@
+/* docs-prose: rendered markdown documentation, shared by the /help route
+   and the public docs site (site/). The content is generated HTML, so
+   element selectors under .docs-prose are this block's vocabulary; the
+   renderer also emits the alert, table and code-block blocks inside it.
+   Tailwind's preflight strips heading sizes, list markers and margins, so
+   every element the renderer emits is re-established here.
+   Elements: docs-alert (an alert block holding a callout), docs-table-scroll
+   (horizontal scroll wrapper around a table), .shiki (a highlighted
+   code-block whose token colours arrive as --shiki-light/--shiki-dark). */
+@layer components {
+	.docs-prose { font-size: 0.9375rem; line-height: 1.7; color: var(--color-text-secondary); overflow-wrap: break-word; }
+	.docs-prose > :first-child { margin-top: 0; }
+	.docs-prose h1, .docs-prose h2, .docs-prose h3, .docs-prose h4 { color: var(--color-text); font-weight: 700; line-height: 1.25; scroll-margin-top: 4.5rem; }
+	.docs-prose h1 { margin: 0 0 1rem; font-family: var(--font-display); font-size: 2.25rem; letter-spacing: 0.02em; }
+	.docs-prose h2 { margin: 2.5rem 0 0.75rem; padding-bottom: 0.375rem; border-bottom: 1px solid var(--color-border); font-family: var(--font-display); font-size: 1.625rem; letter-spacing: 0.02em; }
+	.docs-prose h3 { margin: 2rem 0 0.5rem; font-size: 1.125rem; }
+	.docs-prose h4 { margin: 1.5rem 0 0.5rem; font-size: 1rem; }
+	.docs-prose p, .docs-prose ul, .docs-prose ol, .docs-prose blockquote, .docs-prose .code-block, .docs-prose .docs-table-scroll, .docs-prose .docs-alert { margin: 0 0 1rem; }
+	.docs-prose ul { list-style: disc; padding-left: 1.5rem; }
+	.docs-prose ol { list-style: decimal; padding-left: 1.5rem; }
+	.docs-prose li + li { margin-top: 0.25rem; }
+	.docs-prose li > ul, .docs-prose li > ol, .docs-prose li > p { margin: 0.25rem 0 0; }
+	.docs-prose a { color: var(--color-primary-text); text-decoration: underline; text-decoration-color: var(--color-border-strong); text-underline-offset: 2px; }
+	.docs-prose a:hover { text-decoration-color: currentColor; }
+	.docs-prose strong { color: var(--color-text); font-weight: 600; }
+	.docs-prose hr { margin: 2rem 0; border: 0; border-top: 1px solid var(--color-border); }
+	.docs-prose img { max-width: 100%; height: auto; border-radius: var(--radius-md); }
+	.docs-prose :not(pre) > code { padding: 0.1rem 0.3rem; border-radius: var(--radius-sm); background: var(--color-primary-tint-2); font-family: var(--font-mono); font-size: 0.85em; color: var(--color-text); }
+	.docs-prose blockquote { padding-left: 1rem; border-left: 3px solid var(--color-border-strong); color: var(--color-text-muted); }
+	.docs-prose .docs-alert p { margin: 0.25rem 0 0; }
+	.docs-prose .docs-alert > p:first-child { margin-top: 0; }
+	.docs-prose .docs-table-scroll { overflow-x: auto; }
+	.docs-prose .docs-table-scroll .table { width: auto; min-width: 100%; }
+	.docs-prose .table-cell { vertical-align: top; }
+	.docs-prose .code-block { font-size: 0.8125rem; }
+	.docs-prose .shiki span { color: var(--shiki-light); }
+	.dark .docs-prose .shiki span { color: var(--shiki-dark); }
+}

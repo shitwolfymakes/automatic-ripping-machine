@@ -180,6 +180,7 @@ comment is the block's contract (name, elements, modifiers, state). Summary:
 | `card` | -header, -title, -body, -footer, -accent | -status | [data-status], [data-selected] |
 | `chip` | | -danger, -warning, -success, -info, -sm | [aria-pressed], [data-selected] |
 | `code-block` | | -scroll | |
+| `docs-prose` | docs-alert, docs-table-scroll | | |
 | `field` | -label, -help, -error, -control | -row | [aria-invalid], :disabled, :focus-visible |
 | `flyout` | -item, -divider | | [data-placement] |
 | `glyph` | | -sm, -md, -lg; -danger, -warning, -success, -info | [data-glyph] |
