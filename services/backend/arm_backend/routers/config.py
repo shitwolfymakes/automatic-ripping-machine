@@ -70,6 +70,7 @@ def _to_view(cfg: Config) -> ConfigView:
         manual_wait_seconds=int(cfg.manual_wait_seconds) if cfg.manual_wait_seconds is not None else 60,
         drive_scan_interval_seconds=int(cfg.drive_scan_interval_seconds or 30),
         drive_detected_prune_days=int(cfg.drive_detected_prune_days or 7),
+        max_parallel_transcodes=int(cfg.max_parallel_transcodes) if cfg.max_parallel_transcodes is not None else 1,
         default_retention_policy=cfg.default_retention_policy,
         notification_apprise_urls=list(cfg.notification_apprise_urls or []),
         notifications_enabled=cfg.notifications_enabled,
@@ -132,7 +133,7 @@ async def update_config(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"invalid metadata_provider: {fields['metadata_provider']!r} (must be 'tmdb' or 'omdb')",
         )
-    for key in ("drive_scan_interval_seconds", "drive_detected_prune_days"):
+    for key in ("drive_scan_interval_seconds", "drive_detected_prune_days", "max_parallel_transcodes"):
         if key in fields and (fields[key] is None or fields[key] < 1):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must be a positive integer")
     # Detect un-pause (ripping_paused ON -> OFF) before applying, so we can give

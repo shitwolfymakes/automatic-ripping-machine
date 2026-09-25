@@ -33,6 +33,7 @@
 	import UsersCard from '$lib/components/settings/UsersCard.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import SessionRoutesCard from '$lib/components/settings/SessionRoutesCard.svelte';
+	import GpusCard from '$lib/components/settings/GpusCard.svelte';
 
 	let settings = $state<SettingsData | null>(null);
 	let settingsLoading = $state(true);
@@ -332,7 +333,10 @@
 
 		<!-- Transcoding Tab (single auto_transcode_on_idle toggle, schema-driven) -->
 		{#if activeTab === 'transcoding' && $transcoderEnabled && transcodingGroup}
-			<SchemaConfigForm group={transcodingGroup} config={settings.config} />
+			<div class="space-y-6">
+				<SchemaConfigForm group={transcodingGroup} config={settings.config} />
+				<GpusCard />
+			</div>
 		{/if}
 
 		{#if activeTab === 'sessions'}
