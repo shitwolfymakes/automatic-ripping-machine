@@ -327,6 +327,8 @@ async def scan_disc(device_path: str) -> ScanResult:
         fingerprints.append(DiscFingerprintInput(algo="crc64", value=probe.crc64))
     if probe.thediscdb:
         fingerprints.append(DiscFingerprintInput(algo="thediscdb", value=probe.thediscdb))
+    if probe.matrix256:
+        fingerprints.append(DiscFingerprintInput(algo="matrix256", value=probe.matrix256))
 
     return ScanResult(
         disc_type=disc_type,
