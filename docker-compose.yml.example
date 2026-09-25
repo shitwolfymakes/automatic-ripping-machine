@@ -106,6 +106,11 @@ services:
       # read-only. Symlinks only — no device nodes, no cgroup rule; the
       # backend can list drives but provably cannot open one.
       - /dev/disk:/host-disk:ro
+      # Backend data that must survive recreates: the TheDiscDB snapshot
+      # (/data/cache/thediscdb, re-downloaded from scratch without it) and
+      # the poster image cache (/data/cache/images). Without this volume the
+      # refresh loop dies with EACCES on a fresh root-owned /data.
+      - arm-data:/data
     # Uncomment to reach Backend directly from the host for verification curl:
     # ports:
     #   - "8443:8443"
@@ -166,3 +171,6 @@ services:
       - ./arm/certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
       - ./arm/certs/arm-ui.crt:/etc/ssl/arm/tls.crt:ro
       - ./arm/certs/arm-ui.key:/etc/ssl/arm/tls.key:ro
+
+volumes:
+  arm-data:
