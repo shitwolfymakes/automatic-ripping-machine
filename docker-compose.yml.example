@@ -62,6 +62,10 @@ services:
       ARM_HOST_LOGS_PATH: ${ARM_HOST_LOGS_PATH:-${PWD}/arm/logs}
       ARM_HOST_CERTS_PATH: ${ARM_HOST_CERTS_PATH:-${PWD}/arm/certs}
       ARM_DOCKER_NETWORK: ${ARM_DOCKER_NETWORK:-armv3_default}
+      # Drive lifecycle — the backend creates one ripper container per
+      # enrolled drive (spec §3). Same PUID/PGID/CDROM_GID as every service.
+      CDROM_GID: ${CDROM_GID:-44}
+      ARM_RIPPER_IMAGE: ${ARM_RIPPER_IMAGE:-arm-ripper:latest}
       # Phase 7b — GPUs detected host-side by setup-dev.sh into ARM_GPUS. The
       # GPU-free backend reads this to fill the gpus table; the dispatcher
       # injects device access into each ephemeral transcoder. [] => CPU-only.

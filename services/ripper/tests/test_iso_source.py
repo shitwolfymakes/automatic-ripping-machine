@@ -23,6 +23,7 @@ import pytest
 # to load without these vars. Set placeholders before any arm_ripper.*
 # import so importing main.py (for the heartbeat test) doesn't blow up.
 os.environ.setdefault("ARM_DRIVE_DEV", "/dev/sr0")
+os.environ.setdefault("ARM_DRIVE_ID", "drv_test")
 os.environ.setdefault("ARM_BACKEND_URL", "https://backend.invalid")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "test-token")
 
