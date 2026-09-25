@@ -158,6 +158,12 @@ class FakeSession:
         self.flushed = 0
         self.commit_raises: Exception | None = None
 
+    async def __aenter__(self) -> "FakeSession":
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
     def add(self, obj: Any) -> None:
         self.added.append(obj)
         # Auto-extend the relevant table so subsequent reads see the new row.
