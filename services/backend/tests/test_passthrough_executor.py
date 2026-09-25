@@ -209,6 +209,71 @@ async def test_oserror_from_move_is_captured_as_last_error(tmp_path: Path, monke
     assert sent[0]["event_type"] == "task.failed"
 
 
+async def test_claim_is_committed_before_the_move_runs(tmp_path: Path, monkeypatch: Any) -> None:
+    """I1: the IN_PROGRESS claim must be durably committed before the
+    (possibly slow, cross-mount) move starts, so the tick's FOR UPDATE row
+    locks are released before any blocking I/O, not held across it."""
+    raw = tmp_path / "raw" / "job1" / "t0.mkv"
+    raw.parent.mkdir(parents=True)
+    raw.write_bytes(b"data")
+    media_root = tmp_path / "media"
+
+    db = _db(track_output_path=str(raw), task_output_path="Title (2020)/t0.mkv")
+    hub, _sent = _hub_with_recorder()
+    task = db.rows["transcode_tasks"][0]
+
+    import arm_backend.passthrough_executor as mod
+
+    commits_before_move: list[int] = []
+    real_transcode_none = mod.transcode_none
+
+    def _spy_transcode_none(input_path: Path, output_path: Path) -> int:
+        commits_before_move.append(db.committed)
+        return real_transcode_none(input_path, output_path)
+
+    monkeypatch.setattr(mod, "transcode_none", _spy_transcode_none)
+
+    ok = await execute_passthrough_task(db, task, hub, _settings(MEDIA_ROOT=str(media_root)))
+
+    assert ok is True
+    assert commits_before_move == [1]  # claim already committed by the time the move ran
+    assert db.committed == 2  # claim commit + terminal-state commit
+
+
+async def test_row_deleted_mid_move_skips_terminal_update_cleanly(tmp_path: Path, monkeypatch: Any) -> None:
+    """I1/O3: cancel_running runs in a different session and can delete the
+    task row while the move is in flight (after the claim commit). The
+    terminal-state write must be skipped cleanly rather than resurrecting a
+    row a concurrent cancel already removed."""
+    raw = tmp_path / "raw" / "job1" / "t0.mkv"
+    raw.parent.mkdir(parents=True)
+    raw.write_bytes(b"data")
+    media_root = tmp_path / "media"
+
+    db = _db(track_output_path=str(raw), task_output_path="Title (2020)/t0.mkv")
+    hub, sent = _hub_with_recorder()
+    task = db.rows["transcode_tasks"][0]
+
+    import arm_backend.passthrough_executor as mod
+
+    real_transcode_none = mod.transcode_none
+
+    def _delete_row_then_move(input_path: Path, output_path: Path) -> int:
+        # Simulate a concurrent cancel_running deleting the row (from a
+        # different session) while this move is in flight.
+        db.rows["transcode_tasks"] = [t for t in db.rows["transcode_tasks"] if t.id != task.id]
+        return real_transcode_none(input_path, output_path)
+
+    monkeypatch.setattr(mod, "transcode_none", _delete_row_then_move)
+
+    ok = await execute_passthrough_task(db, task, hub, _settings(MEDIA_ROOT=str(media_root)))
+
+    assert ok is True  # the move itself succeeded (error is None)
+    assert db.rows["transcode_tasks"] == []  # row stays deleted, not resurrected
+    assert sent == []  # no task.completed/failed event for a cancelled task
+    assert (media_root / "Title (2020)" / "t0.mkv").exists()  # the move still happened
+
+
 async def test_chown_applied_when_transcode_puid_configured(tmp_path: Path, monkeypatch: Any) -> None:
     raw = tmp_path / "raw" / "job1" / "t0.mkv"
     raw.parent.mkdir(parents=True)
