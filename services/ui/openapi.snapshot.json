@@ -4593,6 +4593,176 @@
         }
       }
     },
+    "/api/gpus": {
+      "get": {
+        "tags": [
+          "gpus"
+        ],
+        "summary": "List Gpus",
+        "operationId": "list_gpus_api_gpus_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GpuView"
+                  },
+                  "title": "Response List Gpus Api Gpus Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/gpus/{gpu_id}": {
+      "patch": {
+        "tags": [
+          "gpus"
+        ],
+        "summary": "Update Gpu",
+        "operationId": "update_gpu_api_gpus__gpu_id__patch",
+        "parameters": [
+          {
+            "name": "gpu_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Gpu Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GpuUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GpuView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "gpus"
+        ],
+        "summary": "Delete Gpu",
+        "operationId": "delete_gpu_api_gpus__gpu_id__delete",
+        "parameters": [
+          {
+            "name": "gpu_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Gpu Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/config": {
       "get": {
         "tags": [
@@ -9068,6 +9238,17 @@
             ],
             "title": "Drive Detected Prune Days"
           },
+          "max_parallel_transcodes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Parallel Transcodes"
+          },
           "makemkv_sdf_enabled": {
             "anyOf": [
               {
@@ -9241,6 +9422,10 @@
             "type": "integer",
             "title": "Drive Detected Prune Days"
           },
+          "max_parallel_transcodes": {
+            "type": "integer",
+            "title": "Max Parallel Transcodes"
+          },
           "makemkv_sdf_enabled": {
             "type": "boolean",
             "title": "Makemkv Sdf Enabled"
@@ -9354,6 +9539,7 @@
           "community_keydb_enabled",
           "drive_scan_interval_seconds",
           "drive_detected_prune_days",
+          "max_parallel_transcodes",
           "makemkv_sdf_enabled",
           "thediscdb_enabled",
           "thediscdb_refresh_days",
@@ -10705,6 +10891,101 @@
           "fixed"
         ],
         "title": "FixPermsResponse"
+      },
+      "GpuStatus": {
+        "type": "string",
+        "enum": [
+          "available",
+          "busy"
+        ],
+        "title": "GpuStatus"
+      },
+      "GpuUpdateRequest": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "GpuUpdateRequest",
+        "description": "PATCH body for a GPU row - the enable/disable switch only. Vendor,\npath and encoder kinds describe hardware; they are re-seeded, not edited."
+      },
+      "GpuVendor": {
+        "type": "string",
+        "enum": [
+          "vaapi",
+          "nvenc",
+          "qsv"
+        ],
+        "title": "GpuVendor"
+      },
+      "GpuView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "vendor": {
+            "$ref": "#/components/schemas/GpuVendor"
+          },
+          "device_path": {
+            "type": "string",
+            "title": "Device Path"
+          },
+          "encoder_kinds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Encoder Kinds"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GpuStatus"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "claimed_by_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed By Task Id"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "vendor",
+          "device_path",
+          "encoder_kinds",
+          "status",
+          "enabled"
+        ],
+        "title": "GpuView",
+        "description": "One row of the DB-authoritative GPU inventory (Settings > GPUs)."
       },
       "HTTPValidationError": {
         "properties": {

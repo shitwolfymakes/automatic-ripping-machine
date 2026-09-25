@@ -161,3 +161,26 @@ async def test_refresh_gpu_inventory_empty_emits_unavailable(monkeypatch: pytest
     hub = _Hub()
     await main_mod._refresh_gpu_inventory(hub)
     assert hub.events == ["transcode.hw_unavailable"]
+
+
+async def test_refresh_gpu_inventory_respects_existing_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DB-authoritative: an already-populated gpus table is left untouched
+    and ARM_GPUS is not even parsed (operator edits must survive restarts)."""
+    from arm_common import Gpu
+    from arm_common.enums import GpuVendor
+
+    from tests._fakes import FakeSession
+
+    db = FakeSession()
+    db.rows["gpus"] = [Gpu(vendor=GpuVendor.NVENC, device_path="nvidia://0", encoder_kinds=["h265"], enabled=False)]
+    monkeypatch.setattr(main_mod, "SessionLocal", lambda: _SessionCtx(db))
+
+    def _boom(_raw: object) -> list:
+        raise AssertionError("ARM_GPUS must not be consulted when rows exist")
+
+    monkeypatch.setattr(main_mod, "load_configured_gpus", _boom)
+    hub = _Hub()
+    await main_mod._refresh_gpu_inventory(hub)
+    assert [r for r in db.added if type(r).__name__ == "Gpu"] == []
+    assert db.rows["gpus"][0].enabled is False  # operator switch untouched
+    assert hub.events == []
