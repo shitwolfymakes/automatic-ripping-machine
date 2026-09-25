@@ -47,57 +47,90 @@ async def execute_passthrough_task(db: AsyncSession, task: TranscodeTask, hub: "
 
     Mirrors the container path's lifecycle exactly (claim fields,
     task.completed / task.failed WS events, application aggregation).
-    Returns True on DONE, False on FAILED. Caller commits.
+    Returns True on DONE, False on FAILED.
+
+    Commits internally at two points instead of leaving the commit to the
+    caller: once right after the claim (before the move), and once after
+    the terminal state + events are written. The dispatcher tick's
+    `SELECT ... FOR UPDATE SKIP LOCKED` holds row locks on every queued row
+    it fetched; under the shipped compose layout /raw and /media are
+    separate bind mounts, so the "move" is actually a full cross-mount copy
+    (`os.rename` fails EXDEV, `transcode_none` falls back to copy+unlink),
+    slow enough that holding those locks (and a long-open transaction) across
+    it would stall a freshly spawned encode container's `/claim` call past
+    its HTTP timeout. Committing the claim first ends that locking
+    transaction before any blocking I/O runs.
+
+    Because the claim is durably committed before the move, the row can be
+    deleted out from under this function by a concurrent `cancel_running`
+    (a different session) while the copy is in flight. Before writing the
+    terminal state we re-fetch the row by id; if it's gone, we log and
+    return cleanly instead of resurrecting a cancelled task.
     """
     application = (
         await db.execute(select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id))
     ).scalar_one_or_none()
     job_id = application.job_id if application is not None else None
-    with with_log_context(
-        job_id=job_id, track_id=task.source_track_id, session_application_id=task.session_application_id
-    ):
-        track = (await db.execute(select(Track).where(col(Track.id) == task.source_track_id))).scalar_one_or_none()
+    task_id = task.id
+    source_track_id = task.source_track_id
+    session_application_id = task.session_application_id
+    with with_log_context(job_id=job_id, track_id=source_track_id, session_application_id=session_application_id):
+        track = (await db.execute(select(Track).where(col(Track.id) == source_track_id))).scalar_one_or_none()
+        track_output_path = track.output_path if track is not None else None
+        task_output_path = task.output_path
 
         task.status = TranscodeTaskStatus.IN_PROGRESS
         task.claimed_by = IN_PROCESS_CLAIMANT
         task.claim_heartbeat_at = datetime.now(UTC)
         task.attempts += 1
-        await db.flush()
+        # Commit the claim before the (possibly slow, cross-mount) file
+        # move so the tick's FOR UPDATE row locks aren't held across
+        # blocking I/O (see docstring).
+        await db.commit()
 
         error: str | None = None
         size: int | None = None
-        if track is None or not track.output_path:
+        if track is None or not track_output_path:
             error = "source track has no output_path on disk; rip not complete or raw deleted"
-        elif not task.output_path:
+        elif not task_output_path:
             error = "task has no output_path"
         else:
-            final = Path(settings.MEDIA_ROOT) / task.output_path
+            final = Path(settings.MEDIA_ROOT) / task_output_path
             try:
-                size = await asyncio.to_thread(transcode_none, Path(track.output_path), final)
+                size = await asyncio.to_thread(transcode_none, Path(track_output_path), final)
                 if settings.ARM_TRANSCODE_PUID:
                     _best_effort_chown(final, settings)
             except OSError as exc:
                 error = f"{type(exc).__name__}: {exc}"[:300]
 
+        # Re-fetch: cancel_running (a different session) may have deleted
+        # this row while the move was in flight.
+        fresh_task = (
+            await db.execute(select(TranscodeTask).where(col(TranscodeTask.id) == task_id))
+        ).scalar_one_or_none()
+        if fresh_task is None:
+            logger.info("passthrough task_id=%s deleted mid-move; skipping terminal update", task_id)
+            return error is None
+
         if error is None:
-            task.status = TranscodeTaskStatus.DONE
-            task.progress_pct = 100
-            task.last_error = None
-            event_type, payload_extra = "task.completed", {"output_path": task.output_path, "size_bytes": size}
-            logger.info("passthrough complete task_id=%s output=%s", task.id, task.output_path)
+            fresh_task.status = TranscodeTaskStatus.DONE
+            fresh_task.progress_pct = 100
+            fresh_task.last_error = None
+            event_type, payload_extra = "task.completed", {"output_path": task_output_path, "size_bytes": size}
+            logger.info("passthrough complete task_id=%s output=%s", task_id, task_output_path)
         else:
-            task.status = TranscodeTaskStatus.FAILED
-            task.last_error = error
+            fresh_task.status = TranscodeTaskStatus.FAILED
+            fresh_task.last_error = error
             event_type, payload_extra = "task.failed", {"last_error": error}
-            logger.error("passthrough failed task_id=%s: %s", task.id, error)
+            logger.error("passthrough failed task_id=%s: %s", task_id, error)
         await db.flush()
 
         await hub.emit(
             topic="transcode.events",
             event_type=event_type,
-            payload={"task_id": task.id, "session_application_id": task.session_application_id, **payload_extra},
+            payload={"task_id": task_id, "session_application_id": session_application_id, **payload_extra},
             job_id=job_id,
-            track_id=task.source_track_id,
+            track_id=source_track_id,
             session=db,
         )
         if application is not None:
@@ -117,6 +150,9 @@ async def execute_passthrough_task(db: AsyncSession, task: TranscodeTask, hub: "
                     job_id=job_id,
                     session=db,
                 )
+        # Commit the terminal state (+ any aggregate transition) as its own
+        # transaction, separate from the claim commit above.
+        await db.commit()
         return error is None
 
 

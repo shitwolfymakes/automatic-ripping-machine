@@ -57,10 +57,11 @@ logger = logging.getLogger("arm_backend.transcode_dispatcher")
 _CANCEL_GRACE_SECONDS = 10
 _DOCKER_LABEL_KEY = "arm.task_id"
 
-# Per-tick cap on how many queued rows spawn_pending examines. Passthrough
-# tasks execute unconditionally (never counted against encode slots), so the
-# old `.limit(slots)` (slots could be 0) would starve passthrough behind a
-# full encode queue; scan a generous fixed window instead.
+# Per-tick cap on how many ENCODE rows spawn_pending examines (spawn
+# attempts, GPU claim checks, etc). Passthrough tasks are exempt from this
+# cap entirely and the queued scan itself is unbounded, so a run of 50+
+# held/queued encode rows at the head of the FIFO queue can never crowd a
+# passthrough task further back out of the scan window.
 _QUEUE_SCAN_LIMIT = 50
 
 # A dead docker-over-SSH transport (idle paramiko connection reset by the
@@ -391,6 +392,16 @@ class TranscodeDispatcher:
         `config.transcode_enabled` (held in QUEUED when off) and by having a
         docker client + host paths at all (a ripper-only deployment has
         neither); held tasks stay queued for a later tick, never dropped.
+
+        The queued scan is unbounded (no LIMIT) so a run of held encode
+        tasks at the head of the FIFO queue can never crowd passthrough
+        tasks further back out of this tick entirely; `_QUEUE_SCAN_LIMIT`
+        instead caps how many ENCODE tasks are examined per tick (a
+        passthrough task never counts against that cap either). Each
+        passthrough task commits its own claim + terminal state internally
+        (see `execute_passthrough_task`), so the `FOR UPDATE SKIP LOCKED`
+        row locks from the initial select are released well before any
+        (possibly slow, cross-mount) file move runs.
         """
         from arm_backend.passthrough_executor import execute_passthrough_task
         from arm_backend.transcode_apply import is_passthrough_preset, transcode_enabled_now
@@ -410,24 +421,21 @@ class TranscodeDispatcher:
             in_progress
         )
 
-        queued_all = (
+        queued = (
             (
                 await db.execute(
                     select(TranscodeTask)
                     .where(col(TranscodeTask.status) == TranscodeTaskStatus.QUEUED)
                     .order_by(col(TranscodeTask.created_at).asc())
-                    .limit(_QUEUE_SCAN_LIMIT)
                     .with_for_update(skip_locked=True)
                 )
             )
             .scalars()
             .all()
         )
-        # `.limit(_QUEUE_SCAN_LIMIT)` is honoured by Postgres but the
-        # in-memory test fake returns the full set; cap defensively here.
-        queued = list(queued_all)[:_QUEUE_SCAN_LIMIT]
         spawned = 0
         held_encode = 0
+        encode_examined = 0
         for task in queued:
             # Load the owning application once so the spawn log lines carry
             # job_id for the per-job log view (Phase 12).
@@ -440,11 +448,24 @@ class TranscodeDispatcher:
             with with_log_context(job_id=job_id, session_application_id=task.session_application_id):
                 preset = await self._resolve_preset_for_task(db, task)
                 if is_passthrough_preset(preset):
-                    # Never counted against encode_slots and never held by
-                    # the disabled/docker-less gates below: a file move
-                    # needs neither a container nor an encode slot.
-                    await execute_passthrough_task(db, task, self._hub, self._settings)
+                    # Never counted against encode_slots/encode_examined and
+                    # never held by the disabled/docker-less gates below: a
+                    # file move needs neither a container nor an encode slot.
+                    # Isolated per-task try/except: a raise here (hub.emit,
+                    # aggregate, or an unexpected DB error) must never abort
+                    # the tick and roll back other tasks' already-committed
+                    # work or in-flight GPU claims (see execute_passthrough_task
+                    # for the commit-per-task structure that makes this safe).
+                    try:
+                        await execute_passthrough_task(db, task, self._hub, self._settings)
+                    except Exception as exc:
+                        logger.exception("passthrough execution failed task_id=%s: %s", task.id, exc)
                     continue
+                if encode_examined >= _QUEUE_SCAN_LIMIT:
+                    # Encode-only cap; passthrough tasks further back in the
+                    # queue are still scanned and still run.
+                    continue
+                encode_examined += 1
                 if not enabled:
                     held_encode += 1
                     continue
