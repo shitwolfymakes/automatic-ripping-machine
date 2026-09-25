@@ -53,7 +53,9 @@ const mockSchema = {
 			name: 'Transcoding',
 			fields: [
 				{ key: 'transcode_enabled', group: 'Transcoding', tier: 'operator', label: 'Enable transcoding', help: '', type: 'bool', editable: true, enum_values: null },
-				{ key: 'auto_transcode_on_idle', group: 'Transcoding', tier: 'operator', label: 'Auto-transcode on idle', help: '', type: 'bool', editable: true, enum_values: null }
+				{ key: 'transcode_capable', group: 'Transcoding', tier: 'infra', label: 'Transcode capable', help: '', type: 'bool', editable: false, enum_values: null },
+				{ key: 'auto_transcode_on_idle', group: 'Transcoding', tier: 'operator', label: 'Auto-transcode on idle', help: '', type: 'bool', editable: true, enum_values: null },
+				{ key: 'max_parallel_transcodes', group: 'Transcoding', tier: 'operator', label: 'Max parallel transcodes', help: '', type: 'int', editable: true, enum_values: null }
 			]
 		},
 		{
@@ -77,7 +79,9 @@ const mockConfig = {
 	auto_rip_on_insert: true,
 	block_on_miss: true,
 	transcode_enabled: false,
+	transcode_capable: true,
 	auto_transcode_on_idle: false,
+	max_parallel_transcodes: 2,
 	notifications_enabled: false
 };
 
@@ -552,6 +556,13 @@ describe('Settings Page', () => {
 				expect(screen.getByTestId('gpus-card')).toBeInTheDocument();
 			});
 			expect(fetchGpus).toHaveBeenCalled();
+			// transcode_capable is a non-editable bool (an infra fact, not a
+			// setting) - it must render read-only, not as a clickable checkbox
+			// that silently no-ops on save.
+			expect(screen.queryByRole('checkbox', { name: /transcode capable/i })).not.toBeInTheDocument();
+			const capableField = screen.getByTestId('setting-transcode_capable');
+			expect(capableField).toHaveTextContent('Transcode capable');
+			expect(capableField).toHaveTextContent('True');
 		});
 
 		it('not capable: shows only a locked transcode_enabled toggle with a hint, hides auto_transcode_on_idle and the GPU card', async () => {
