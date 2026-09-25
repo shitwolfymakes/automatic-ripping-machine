@@ -525,6 +525,36 @@ describe('ApplySessionDialog', () => {
 			await waitFor(() => expect(screen.getByText(/None Tool Session/)).toBeInTheDocument());
 		});
 
+		it('shows a loading affordance (not an empty list) while presets are still pending, then lists a preset-backed passthrough session once they resolve', async () => {
+			setTranscodeRuntimeEnabled(false);
+			fetchSessionsMock.mockResolvedValue([
+				createSession({ id: 'ses_none_tool', name: 'None Tool Session', transcode_preset_id: 'tx_none' })
+			]);
+			let resolvePresets!: (v: TranscodePresetView[]) => void;
+			fetchTranscodePresetsMock.mockImplementation(
+				() => new Promise<TranscodePresetView[]>((resolve) => { resolvePresets = resolve; })
+			);
+			const job = createJob({ id: 'job_1', disc_type: 'bluray' });
+			renderComponent(ApplySessionDialog, {
+				props: { job, onclose: vi.fn(), onapplied: vi.fn() }
+			});
+
+			// Sessions have resolved (mocked immediately) but presets are still
+			// pending: the picker must show a loading affordance, not an empty
+			// filtered list indistinguishable from "no passthrough sessions".
+			await waitFor(() =>
+				expect(screen.getByTestId('apply-session-presets-loading')).toBeInTheDocument()
+			);
+			expect(screen.queryByTestId('apply-session-select')).not.toBeInTheDocument();
+			expect(screen.queryByTestId('apply-session-passthrough-hint')).not.toBeInTheDocument();
+
+			resolvePresets([createTranscodePreset({ id: 'tx_none', name: 'No-op', tool: 'none' })]);
+
+			await waitFor(() => expect(screen.getByText(/None Tool Session/)).toBeInTheDocument());
+			expect(screen.queryByTestId('apply-session-presets-loading')).not.toBeInTheDocument();
+			expect(screen.getByTestId('apply-session-passthrough-hint')).toBeInTheDocument();
+		});
+
 		it('does not show the hint and lists all matching sessions when transcoding is runtime-enabled', async () => {
 			fetchSessionsMock.mockResolvedValue([
 				createSession({ id: 'ses_encode', name: 'Encode Session', transcode_preset_id: 'tx_1' })
