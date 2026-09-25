@@ -252,3 +252,16 @@ async def test_probe_disc_skips_thediscdb_when_not_ready(monkeypatch: pytest.Mon
     monkeypatch.setattr(disc_probe, "probe_thediscdb_hash", _boom)
     probe = await disc_probe.probe_disc("/dev/sr0")
     assert probe.thediscdb is None
+
+
+@pytest.mark.asyncio
+async def test_probe_disc_carries_matrix256(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _ready(_dev: str) -> bool:
+        return True
+
+    monkeypatch.setattr(disc_probe, "await_device_ready", _ready)
+    monkeypatch.setattr(disc_probe, "_compute_crc", lambda _dev: None)
+    monkeypatch.setattr(disc_probe, "probe_thediscdb_hash", lambda _dev: None)
+    monkeypatch.setattr(disc_probe, "probe_matrix256", lambda _dev: "ab" * 32)
+    probe = await disc_probe.probe_disc("/dev/sr0")
+    assert probe.matrix256 == "ab" * 32
