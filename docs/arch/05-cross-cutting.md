@@ -65,6 +65,7 @@ Two tiers:
 | `PUID` | Numeric UID the ripper and transcoder drop to before writing `/raw` and `/media`. Should match the UID that owns the host-side mount (or the UID the user's media server runs as). Default `1000`. |
 | `PGID` | Numeric GID shared by ripper and transcoder so group-writable handoff on `/raw` works. Should match the group that owns the host-side mount. Default `1000`. |
 | `CDROM_GID` | Numeric GID of the host's optical group (`stat -c %g /dev/sr0`). Passed to ripper containers via `group_add` so the PUID-dropped process can read `/dev/sr*`. Default `44` (Debian/Ubuntu `cdrom`). Installer detects and writes this on first boot. |
+| `ARM_TRANSCODE_CAPABLE` | Deployment fact: can this backend get a transcode container run anywhere (local socket or `ARM_TRANSCODE_DOCKER_HOST`)? Default `true`. `devtools/setup-dev.sh --ripper-only` writes `false` — no `arm-transcode` image is built and encode work is impossible by construction. A configured `ARM_TRANSCODE_DOCKER_HOST` implies capable regardless of this flag; the contradictory combo logs a startup warning, not a boot failure. Gates whether `config.transcode_enabled` may be switched on at all — see [02-job-lifecycle.md § Transcode capability and the disabled state](02-job-lifecycle.md#transcode-capability-and-the-disabled-state). |
 
 **What compose derives and injects per-service:**
 
@@ -77,7 +78,7 @@ Two tiers:
 
 **Crucially, Ripper and Transcode containers have no DB env vars.** They talk only to Backend via the shared service token.
 
-**Tier 2 — runtime (DB).** Everything the user tweaks in the UI: third-party API keys, retention policy, auto-transcode flag, Apprise URLs. Stored in the `config` table as plaintext; UI writes, Backend reads.
+**Tier 2 — runtime (DB).** Everything the user tweaks in the UI: third-party API keys, retention policy, auto-transcode flag, Apprise URLs. Stored in the `config` table as plaintext; UI writes, Backend reads. Includes `transcode_enabled` (the Settings → Transcoding toggle) — the runtime half of the transcode two-layer switch described in [02-job-lifecycle.md § Transcode capability and the disabled state](02-job-lifecycle.md#transcode-capability-and-the-disabled-state); the Backend refuses to enable it (`422`) when `ARM_TRANSCODE_CAPABLE` (Tier 1) says the deployment can't run a transcode container at all.
 
 No YAML files. No mounted `/etc/arm/*.conf`. The v2 `arm.yaml` pattern is retired.
 
