@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { get } from 'svelte/store';
 	import { fade } from 'svelte/transition';
 	import { fetchTranscoderJobs, retryTranscoderJob, deleteTranscoderJob } from '$lib/api/transcoder';
 	import type { TranscodeTaskView } from '$lib/types/api.gen';
@@ -14,6 +15,7 @@
 	import type { GpuView } from '$lib/types/api.gen';
 	import { sortTranscodeTasks } from '$lib/utils/transcode-sort';
 	import { isAdmin } from '$lib/stores/auth';
+	import { transcoderEnabled, transcodeRuntimeEnabled } from '$lib/stores/config';
 
 	const emptyJobs: TranscodeTaskView[] = [];
 
@@ -134,6 +136,10 @@
 	}
 
 	onMount(() => {
+		// Ripper-only deployments (transcoder not capable): the nav hides this
+		// route, but the URL still resolves (deep link), so the page must
+		// render a full-page empty state below instead of fetching task data.
+		if (!get(transcoderEnabled)) return;
 		stats.start();
 		workers.start();
 		loadGpus();
@@ -157,8 +163,28 @@
 	<title>ARM - Transcoder</title>
 </svelte:head>
 
+{#if !$transcoderEnabled}
+	<!-- Ripper-only deployment: nav hides /transcoder, but the URL still
+	     resolves as a deep link. No task data is fetched (see onMount). -->
+	<div class="stack stack-lg">
+		<h1 class="page-title">Transcoder</h1>
+		<div class="panel transcoder-page-unavailable" data-testid="transcoder-unavailable">
+			<p class="transcoder-page-unavailable-text">
+				Transcoding is not available on this deployment (ripper-only install).
+			</p>
+		</div>
+	</div>
+{:else}
 <div class="stack stack-lg">
 	<h1 class="page-title">Transcoder</h1>
+
+	{#if !$transcodeRuntimeEnabled}
+		<!-- Runtime-disabled (capable, but turned off in Settings > Transcoding):
+		     content stays visible - drain semantics need the held queue visible. -->
+		<div class="alert alert-warning" role="status" data-testid="transcode-runtime-disabled-banner">
+			Transcoding is disabled. Queued tasks are held and resume when it is re-enabled.
+		</div>
+	{/if}
 
 	<!-- API error -->
 	{#if $statsError}
@@ -428,6 +454,7 @@
 		</LoadState>
 	</section>
 </div>
+{/if}
 
 <style>
 	/* the original tab strip had no overflow-x-auto and its buttons had no
@@ -481,6 +508,11 @@
 	.transcoder-page-dismiss { margin-left: 0.5rem; }
 	.transcoder-page-dismiss:hover { opacity: 0.75; }
 	.transcoder-page-empty { padding: 2rem 0; text-align: center; color: var(--color-text-faint); }
+	/* Full-page ripper-only empty state - same centered-muted-text idiom as
+	   .transcoder-page-empty / the dashboard's "No jobs found.", inside a
+	   .panel since it stands alone rather than sitting under a section title. */
+	.transcoder-page-unavailable { padding: 2rem; text-align: center; }
+	.transcoder-page-unavailable-text { color: var(--color-text-faint); }
 	/* card-status colours its left accent from data-status, but this card
 	   never sets that attribute - the original was always primary blue.
 	   style:--card-accent + this scoped rule (which already compiles

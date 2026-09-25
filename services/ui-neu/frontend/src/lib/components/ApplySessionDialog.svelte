@@ -1,3 +1,15 @@
+<script module lang="ts">
+	// Exported for tests. A session is passthrough-compatible when it has no
+	// transcode preset at all, or its preset's tool is the explicit 'none'
+	// (passthrough) tool.
+	export function isPassthroughSession(
+		s: { transcode_preset_id: string | null },
+		presetToolById: Map<string, string>
+	): boolean {
+		return s.transcode_preset_id === null || presetToolById.get(s.transcode_preset_id) === 'none';
+	}
+</script>
+
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { fetchSessions } from '$lib/api/sessions';
@@ -5,6 +17,7 @@
 	import { fetchTranscodePresets } from '$lib/api/transcodePresets';
 	import { applySession, fetchNamingPreview } from '$lib/api/jobs';
 	import { ApiError } from '$lib/api/client';
+	import { transcodeRuntimeEnabled } from '$lib/stores/config';
 	import type {
 		ApplySessionResponse,
 		CollisionInfo,
@@ -44,9 +57,23 @@
 		return null;
 	}
 
+	// id -> tool for the passthrough filter below; presetToolById.get(id) is
+	// undefined until transcodePresets has loaded, which only excludes
+	// preset-backed sessions from the filtered list until then (a session
+	// with no preset at all is unaffected).
+	const presetToolById = $derived(new Map(transcodePresets.map((p) => [p.id, p.tool])));
+
 	const filteredSessions = $derived.by(() => {
 		const mt = discTypeToMediaType(job.disc_type);
-		return sessions.filter((s) => mt === null || s.media_type === mt || s.media_type === 'tv');
+		const byMediaType = sessions.filter(
+			(s) => mt === null || s.media_type === mt || s.media_type === 'tv'
+		);
+		// Encode sessions can only be applied while transcoding is running;
+		// when it's disabled, only passthrough-compatible sessions are offered.
+		if (!$transcodeRuntimeEnabled) {
+			return byMediaType.filter((s) => isPassthroughSession(s, presetToolById));
+		}
+		return byMediaType;
 	});
 
 	const hasDuplicateInRequest = $derived(
@@ -234,6 +261,12 @@
 					{/each}
 				</select>
 			</label>
+
+			{#if !$transcodeRuntimeEnabled}
+				<p class="field-help" data-testid="apply-session-passthrough-hint">
+					Transcoding is disabled; only passthrough sessions are listed.
+				</p>
+			{/if}
 
 			{#if selectedSession}
 				<div
