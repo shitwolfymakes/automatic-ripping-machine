@@ -4,8 +4,9 @@ import { fetchConfig } from '$lib/api/config';
 // Subsystem AVAILABILITY: whether this deployment can run transcode
 // containers at all (a deployment fact, fixed at install time). Existing
 // consumers (nav filter, EmptyDashboardPanel, SettingsReviewStep, the
-// /transcoder route guard) hide transcoder UI entirely when this is false -
-// neu-style hide, not a disabled control.
+// /transcoder page's own full-page empty state for a ripper-only deep link)
+// hide transcoder UI entirely when this is false - neu-style hide, not a
+// disabled control.
 const _transcoderEnabled = writable<boolean>(true);
 // Runtime toggle: capable AND turned on (Settings > Transcoding "Enable
 // transcoding"). Encode sessions can only be applied while this is true;
