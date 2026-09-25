@@ -1101,6 +1101,12 @@ async def apply_session(
             detail=outcome.error_detail or "session media type is not compatible with job media type",
         )
 
+    if outcome.skipped_reason == "transcode_disabled":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=outcome.error_detail or "transcoding is disabled",
+        )
+
     assert outcome.application is not None
     return ApplySessionResponse(
         session_application=SessionApplicationView.model_validate(outcome.application),

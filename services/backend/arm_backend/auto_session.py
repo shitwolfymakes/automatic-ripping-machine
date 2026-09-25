@@ -30,7 +30,7 @@ from sqlmodel import col, select
 
 from arm_backend.config import settings
 from arm_backend.path_template import TemplateValidationError
-from arm_backend.transcode_apply import compute_outputs, find_collisions
+from arm_backend.transcode_apply import compute_outputs, find_collisions, is_passthrough_preset, transcode_enabled_now
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
@@ -63,6 +63,9 @@ _NO_TRACKS_DETAIL = "no tracks yet: the rip has not started; the application fan
 _NO_OUTPUTS_DETAIL = (
     "tracks exist but none resolved an output for this session (excluded, or none match its "
     "media_type/track routing); the application stays parked"
+)
+_TRANSCODE_DISABLED_DETAIL = (
+    "transcoding is disabled (Settings > Transcoding); only passthrough sessions can be applied"
 )
 
 
@@ -230,6 +233,32 @@ async def _apply_session_internal(
                 skipped_reason=None,
             )
 
+    transcode_preset: TranscodePreset | None = None
+    if sess.transcode_preset_id is not None:
+        transcode_preset = (
+            await db.execute(select(TranscodePreset).where(col(TranscodePreset.id) == sess.transcode_preset_id))
+        ).scalar_one_or_none()
+        if transcode_preset is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"session references missing transcode_preset_id={sess.transcode_preset_id}",
+            )
+
+    # The transcode_enabled gate runs before the WAITING_IDENTIFY park so an
+    # encode apply is refused (422 on the manual route) in every job state,
+    # not accepted-and-parked for jobs still awaiting identity. It sits below
+    # the auto idempotency block on purpose: a repeat auto apply of an
+    # already-existing application returns that application unchanged.
+    if not is_passthrough_preset(transcode_preset) and not await transcode_enabled_now(db):
+        return ApplySessionOutcome(
+            application=None,
+            tasks=[],
+            collisions=[],
+            idempotent=False,
+            skipped_reason="transcode_disabled",
+            error_detail=_TRANSCODE_DISABLED_DETAIL,
+        )
+
     # `awaiting_user_id` → park as `waiting_identify` with no tasks.
     # In practice this only happens via the manual route. A placeholder rip
     # that completed without identity (RIPPED_AWAITING_IDENTIFY) parks the
@@ -270,17 +299,6 @@ async def _apply_session_internal(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"session references missing rip_preset_id={sess.rip_preset_id}",
         )
-
-    transcode_preset: TranscodePreset | None = None
-    if sess.transcode_preset_id is not None:
-        transcode_preset = (
-            await db.execute(select(TranscodePreset).where(col(TranscodePreset.id) == sess.transcode_preset_id))
-        ).scalar_one_or_none()
-        if transcode_preset is None:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"session references missing transcode_preset_id={sess.transcode_preset_id}",
-            )
 
     tracks = list(
         (await db.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index)))).scalars().all()
@@ -633,6 +651,17 @@ async def fan_out_waiting_identify_applications(
                 )
                 continue
 
+        if not is_passthrough_preset(transcode_preset) and not await transcode_enabled_now(db):
+            outcomes.append(
+                ResolveFanOutOutcome(
+                    application=app,
+                    tasks=[],
+                    skipped_reason="transcode_disabled",
+                    error_detail=_TRANSCODE_DISABLED_DETAIL,
+                )
+            )
+            continue
+
         try:
             outcome = await _fan_out_tasks_for_application(
                 db,
@@ -740,7 +769,9 @@ async def after_rip(db: AsyncSession, job: Job, hub: WSHub) -> list[ResolveFanOu
 async def drain_parked_applications_after_rip(
     db: AsyncSession,
     job: Job,
-    hub: WSHub,
+    hub: WSHub | None,
+    *,
+    trigger: str = "after-rip",
 ) -> list[ResolveFanOutOutcome]:
     """First half of `after_rip`.
 
@@ -749,6 +780,10 @@ async def drain_parked_applications_after_rip(
     rows at rip-start. Now that the rip has landed its tracks, promote every
     parked application on the job. Per-application problems stay parked and
     log at WARN; nothing here may break the caller.
+
+    Also reused when transcoding is switched back on (`trigger` labels the
+    log lines): encode applications that hit this drain while the toggle was
+    off stayed parked with reason `transcode_disabled`.
     """
     try:
         outcomes = await fan_out_waiting_identify_applications(db, job=job, hub=hub)
@@ -757,19 +792,21 @@ async def drain_parked_applications_after_rip(
         await db.commit()
     except Exception:  # noqa: BLE001 - hook must never break rip-complete
         await db.rollback()
-        logger.exception("after-rip: draining parked session_applications failed job_id=%s", job.id)
+        logger.exception("%s: draining parked session_applications failed job_id=%s", trigger, job.id)
         return []
     for outcome in outcomes:
         if outcome.skipped_reason is None:
             logger.info(
-                "after-rip: fanned out parked session_application=%s job_id=%s tasks=%d",
+                "%s: fanned out parked session_application=%s job_id=%s tasks=%d",
+                trigger,
                 outcome.application.id,
                 job.id,
                 len(outcome.tasks),
             )
         else:
             logger.warning(
-                "after-rip: parked session_application=%s job_id=%s stays parked reason=%s: %s",
+                "%s: parked session_application=%s job_id=%s stays parked reason=%s: %s",
+                trigger,
                 outcome.application.id,
                 job.id,
                 outcome.skipped_reason,

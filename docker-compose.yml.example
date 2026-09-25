@@ -89,6 +89,9 @@ services:
       ARM_TRANSCODE_BACKEND_URL: ${ARM_TRANSCODE_BACKEND_URL:-}
       ARM_TRANSCODE_PUID: ${ARM_TRANSCODE_PUID:-}
       ARM_TRANSCODE_PGID: ${ARM_TRANSCODE_PGID:-}
+      # Ripper-only deployments: setup-dev.sh --ripper-only writes this false
+      # in .env. See ARM_TRANSCODE_CAPABLE in .env.example.
+      ARM_TRANSCODE_CAPABLE: ${ARM_TRANSCODE_CAPABLE:-true}
     volumes:
       - ./arm/logs:/logs
       - ./arm/media:/media

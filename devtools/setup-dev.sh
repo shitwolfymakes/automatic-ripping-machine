@@ -7,6 +7,16 @@
 #         bash devtools/setup-dev.sh up       # setup, then build + start the stack
 #         bash devtools/setup-dev.sh down     # stop the stack + spawned containers
 #
+#         --ripper-only   # ripper-only profile: skip the arm-transcode image
+#                          # build, the HW-encoder probe, and host GPU
+#                          # detection; write ARM_TRANSCODE_CAPABLE=false to
+#                          # .env (ARM_GPUS is written as `[]`). Combine with
+#                          # any action, e.g. `setup-dev.sh up --ripper-only`.
+#                          # Not sticky: every run WITHOUT the flag writes
+#                          # ARM_TRANSCODE_CAPABLE=true and (with `up`) builds
+#                          # the arm-transcode image, so re-running without it
+#                          # is how a ripper-only box becomes transcode-capable.
+#
 # Host overlays (NFS repoints, port changes, remote-transcode env) layer in via
 # COMPOSE_FILE in the repo-root .env — docker compose reads it natively, so this
 # script needs no per-host knowledge.
@@ -15,14 +25,18 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-ACTION="${1:-setup}"
-case "${ACTION}" in
-    setup|up|down) ;;
-    *)
-        echo "Usage: bash devtools/setup-dev.sh [up|down]" >&2
-        exit 2
-        ;;
-esac
+RIPPER_ONLY=0
+ACTION="setup"
+for arg in "$@"; do
+    case "${arg}" in
+        --ripper-only) RIPPER_ONLY=1 ;;
+        setup|up|down) ACTION="${arg}" ;;
+        *)
+            echo "Usage: bash devtools/setup-dev.sh [up|down] [--ripper-only]" >&2
+            exit 2
+            ;;
+    esac
+done
 
 # Runtime/data dirs (db, raw, media, logs, certs) live under ./arm/ to keep the
 # repo root tidy — the dev mirror of production's ~/arm prefix. The compose file
@@ -316,8 +330,19 @@ fi
 # host: then ARM_GPUS describes the REMOTE machine's GPUs (the dispatcher
 # injects device access where the container actually runs), and probing this
 # host would overwrite a hand-set remote GPU list with the wrong hardware.
+# --ripper-only also skips detection (and therefore the encoder-probe docker
+# run inside it): a ripper-only install never spawns a local transcoder, so
+# there's nothing to advertise GPUs for.
 if grep -qE '^ARM_TRANSCODE_DOCKER_HOST=..*' "${ENV_FILE}"; then
     echo "==> ARM_TRANSCODE_DOCKER_HOST set — keeping .env's ARM_GPUS (remote transcode host owns the GPUs)"
+elif [[ "${RIPPER_ONLY}" -eq 1 ]]; then
+    ARM_GPUS_VALUE="[]"
+    if grep -q '^ARM_GPUS=' "${ENV_FILE}"; then
+        sed -i "s|^ARM_GPUS=.*|ARM_GPUS=${ARM_GPUS_VALUE}|" "${ENV_FILE}"
+    else
+        printf 'ARM_GPUS=%s\n' "${ARM_GPUS_VALUE}" >> "${ENV_FILE}"
+    fi
+    echo "==> --ripper-only: skipping encoder probe + GPU detection, ARM_GPUS=[]"
 else
     ARM_GPUS_VALUE="$(detect_gpus)"
     if grep -q '^ARM_GPUS=' "${ENV_FILE}"; then
@@ -342,9 +367,30 @@ else
     echo "==> detected render group GID for ARM_RENDER_GID: ${RENDER_GID_VALUE:-(none)}"
 fi
 
+# ARM_TRANSCODE_CAPABLE is derived from the flag on every run (like ARM_GPUS),
+# not preserved like a secret: --ripper-only writes `false`, a run without it
+# writes `true`. Re-running without the flag is the supported way to turn a
+# ripper-only box back into a transcode-capable one (it also builds the
+# arm-transcode image on `up`); the Settings toggle then switches encode work on.
+if [[ "${RIPPER_ONLY}" -eq 1 ]]; then
+    ARM_TRANSCODE_CAPABLE_VALUE=false
+    echo "==> --ripper-only: writing ARM_TRANSCODE_CAPABLE=false"
+else
+    ARM_TRANSCODE_CAPABLE_VALUE=true
+    echo "==> writing ARM_TRANSCODE_CAPABLE=true (pass --ripper-only for a ripper-only install)"
+fi
+if grep -q '^ARM_TRANSCODE_CAPABLE=' "${ENV_FILE}"; then
+    sed -i "s|^ARM_TRANSCODE_CAPABLE=.*|ARM_TRANSCODE_CAPABLE=${ARM_TRANSCODE_CAPABLE_VALUE}|" "${ENV_FILE}"
+elif grep -q '^#ARM_TRANSCODE_CAPABLE=' "${ENV_FILE}"; then
+    sed -i "s|^#ARM_TRANSCODE_CAPABLE=.*|ARM_TRANSCODE_CAPABLE=${ARM_TRANSCODE_CAPABLE_VALUE}|" "${ENV_FILE}"
+else
+    printf 'ARM_TRANSCODE_CAPABLE=%s\n' "${ARM_TRANSCODE_CAPABLE_VALUE}" >> "${ENV_FILE}"
+fi
+
 # The transcode image is built by `docker compose up -d --build` like every other
 # service (the arm-transcode service has deploy.replicas:0 — built, never run), so
-# there's no separate build step here.
+# there's no separate build step here. --ripper-only skips it explicitly below by
+# naming the services to build/start (everything except arm-transcode).
 
 # Prevent the host's udisks2/gvfs from auto-mounting optical drives ARM
 # wants to drive. Without this, post-rip `eject` from the ripper
@@ -398,8 +444,22 @@ ensure_udev_rule
 
 if [[ "${ACTION}" == "up" ]]; then
     remove_spawned_containers
-    echo "==> building + starting the stack"
-    compose up -d --build
+    if [[ "${RIPPER_ONLY}" -eq 1 ]]; then
+        # `compose up -d --build` with no service args builds every service
+        # with a `build:` key, including arm-transcode (deploy.replicas:0 —
+        # never started, but still built). Name every OTHER service explicitly
+        # so the fat HW transcode image is skipped entirely.
+        echo "==> --ripper-only: building + starting the stack (skipping arm-transcode image build)"
+        UP_SERVICES=()
+        while IFS= read -r svc; do
+            [[ "${svc}" == "arm-transcode" ]] && continue
+            UP_SERVICES+=("${svc}")
+        done < <(compose config --services)
+        compose up -d --build "${UP_SERVICES[@]}"
+    else
+        echo "==> building + starting the stack"
+        compose up -d --build
+    fi
     cat <<EOF
 
 stack is up — open https://localhost:8081 → Drives → Enroll each drive you want ARM to use

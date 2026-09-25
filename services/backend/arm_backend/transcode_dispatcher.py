@@ -57,6 +57,13 @@ logger = logging.getLogger("arm_backend.transcode_dispatcher")
 _CANCEL_GRACE_SECONDS = 10
 _DOCKER_LABEL_KEY = "arm.task_id"
 
+# Per-tick cap on how many ENCODE rows spawn_pending examines (spawn
+# attempts, GPU claim checks, etc). Passthrough tasks are exempt from this
+# cap entirely and the queued scan itself is unbounded, so a run of 50+
+# held/queued encode rows at the head of the FIFO queue can never crowd a
+# passthrough task further back out of the scan window.
+_QUEUE_SCAN_LIMIT = 50
+
 # A dead docker-over-SSH transport (idle paramiko connection reset by the
 # remote end) surfaces as one of these, either raw or wrapped inside
 # docker-py's APIError cause chain. EOFError is included because paramiko
@@ -376,17 +383,48 @@ class TranscodeDispatcher:
     # --- spawn loop ---------------------------------------------------------
 
     async def spawn_pending(self, db: AsyncSession) -> int:
-        """Spawn new transcoder containers up to `config.max_parallel_transcodes`.
+        """Execute queued passthrough tasks in-process and spawn transcoder
+        containers for encode tasks up to `config.max_parallel_transcodes`.
 
-        The cap is operator config, read from the DB each tick so a Settings
-        change applies on the next tick without a restart (the env var only
-        seeds the column on first boot).
-        Counts in_progress rows live (cheap). For each available slot,
-        dequeues one queued task and spawns. Returns the spawn count.
+        Passthrough (no preset, or TranscodeTool.NONE) never spawns a
+        container and is not counted against encode slots; it always runs
+        when queued, FIFO. Encode tasks are additionally gated by
+        `config.transcode_enabled` (held in QUEUED when off) and by having a
+        docker client + host paths at all (a ripper-only deployment has
+        neither); held tasks stay queued for a later tick, never dropped.
+
+        The queued scan is unbounded (no LIMIT) so a run of held encode
+        tasks at the head of the FIFO queue can never crowd passthrough
+        tasks further back out of this tick entirely; `_QUEUE_SCAN_LIMIT`
+        instead caps how many ENCODE tasks are examined per tick (a
+        passthrough task never counts against that cap either). Each
+        passthrough task commits its own claim + terminal state internally
+        (see `execute_passthrough_task`), so the `FOR UPDATE SKIP LOCKED`
+        row locks from the initial select are released well before any
+        (possibly slow, cross-mount) file move runs.
+
+        Only task ids are kept from that initial batch select. Every task's
+        SQLAlchemy identity-map object is expired by ANY commit or rollback
+        that happens earlier in this same loop (the session's
+        `expire_on_commit=False` only suppresses expiry after OUR OWN
+        commits above the ORM layer; `Session.rollback()` always expires
+        the whole identity map, and a plain `db.commit()` for a DIFFERENT
+        row still ends the transaction those FOR UPDATE locks were taken
+        under). A plain attribute read on an expired object triggers an
+        async lazy load outside any `await` we control, raising
+        `sqlalchemy.exc.MissingGreenlet` -- unprotected, aborting the whole
+        tick (FakeSession's no-op rollback hides this entirely; it only
+        reproduces against a real session). Worse, even a NOT-expired but
+        stale object (this session's identity map hasn't been told about a
+        concurrent writer's committed change) would silently reuse
+        out-of-date state without `populate_existing`. So every iteration
+        re-loads its own row fresh, locked, and forced to repopulate from
+        the current row before touching a single attribute of it.
         """
-        if not self.host_paths_set():
-            logger.warning("transcode dispatcher disabled: ARM_HOST_*_PATH not set (set them via .env)")
-            return 0
+        from arm_backend.passthrough_executor import execute_passthrough_task
+        from arm_backend.transcode_apply import is_passthrough_preset, transcode_enabled_now
+
+        enabled = await transcode_enabled_now(db)
 
         in_progress = (
             (
@@ -397,29 +435,44 @@ class TranscodeDispatcher:
             .scalars()
             .all()
         )
-        slots = await max_parallel_transcodes(db, default=self._settings.MAX_PARALLEL_TRANSCODES) - len(in_progress)
-        if slots <= 0:
-            return 0
+        encode_slots = await max_parallel_transcodes(db, default=self._settings.MAX_PARALLEL_TRANSCODES) - len(
+            in_progress
+        )
 
-        queued_all = (
+        queued_rows = (
             (
                 await db.execute(
                     select(TranscodeTask)
                     .where(col(TranscodeTask.status) == TranscodeTaskStatus.QUEUED)
                     .order_by(col(TranscodeTask.created_at).asc())
-                    .limit(slots)
                     .with_for_update(skip_locked=True)
                 )
             )
             .scalars()
             .all()
         )
-        # `.limit(slots)` is honoured by Postgres but the in-memory test fake
-        # returns the full set; cap defensively here so the cap test passes
-        # without leaking SQL-only behaviour into the test fixture.
-        queued = list(queued_all)[:slots]
+        queued_ids = [row.id for row in queued_rows]
         spawned = 0
-        for task in queued:
+        held_encode = 0
+        encode_examined = 0
+        for task_id in queued_ids:
+            # Fresh, locked, forcibly-repopulated load of this row's CURRENT
+            # state -- never the batch-select object above (see docstring).
+            # `populate_existing=True` is required even though the row is
+            # also `with_for_update()`-locked here: an identity-map hit that
+            # ISN'T expired would otherwise silently keep serving whatever
+            # attributes it already had cached, ignoring this query's result.
+            task = (
+                await db.execute(
+                    select(TranscodeTask)
+                    .where(col(TranscodeTask.id) == task_id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).scalar_one_or_none()
+            if task is None or task.status != TranscodeTaskStatus.QUEUED:
+                logger.debug("task_id=%s no longer claimable (gone or status changed); skipping", task_id)
+                continue
             # Load the owning application once so the spawn log lines carry
             # job_id for the per-job log view (Phase 12).
             application = (
@@ -430,6 +483,50 @@ class TranscodeDispatcher:
             job_id = application.job_id if application is not None else None
             with with_log_context(job_id=job_id, session_application_id=task.session_application_id):
                 preset = await self._resolve_preset_for_task(db, task)
+                if is_passthrough_preset(preset):
+                    # Never counted against encode_slots/encode_examined and
+                    # never held by the disabled/docker-less gates below: a
+                    # file move needs neither a container nor an encode slot.
+                    # Isolated per-task try/except: a raise here (hub.emit,
+                    # aggregate, or an unexpected DB error) must never abort
+                    # the tick and roll back other tasks' already-committed
+                    # work or in-flight GPU claims (see execute_passthrough_task
+                    # for the commit-per-task structure that makes this safe).
+                    # `db.rollback()` on the way out is required, not optional:
+                    # a raise from inside a flush/commit leaves the session in
+                    # "pending rollback" state, and the NEXT statement this
+                    # function issues (for the next queued task) would raise
+                    # PendingRollbackError outside any try/except and abort the
+                    # whole tick. The log line uses the loop variable
+                    # `task_id`, never `task.id`: after a failed flush/commit
+                    # every identity-mapped object is unreadable until the
+                    # rollback, so an ORM attribute read here would raise
+                    # PendingRollbackError out of this except block.
+                    try:
+                        await execute_passthrough_task(db, task, self._hub, self._settings)
+                    except Exception as exc:
+                        logger.exception("passthrough execution failed task_id=%s: %s", task_id, exc)
+                        await db.rollback()
+                    continue
+                if encode_examined >= _QUEUE_SCAN_LIMIT:
+                    # Encode-only cap; passthrough tasks further back in the
+                    # queue are still scanned and still run.
+                    continue
+                encode_examined += 1
+                if not enabled:
+                    held_encode += 1
+                    continue
+                if self._docker is None or not self.host_paths_set():
+                    held_encode += 1
+                    continue
+                if encode_slots - spawned <= 0:
+                    # No free slot this tick; later passthrough tasks in the
+                    # queue must still run, so `continue` (not `break`).
+                    continue
+                # No separate re-verify needed here: the fresh,
+                # `populate_existing`-forced, FOR UPDATE-locked load at the
+                # top of this iteration already confirmed `task` is
+                # current and still QUEUED, right before we act on it.
                 assignment = await self._claim_gpu_for_task(db, task, preset)
                 if assignment.action == "queue":
                     logger.info(
@@ -453,13 +550,53 @@ class TranscodeDispatcher:
                     await asyncio.to_thread(self._spawn_container, task, assignment=assignment)
                     spawned += 1
                     self.last_spawn_error = None
+                    # Commit this task's GPU claim promptly, per-task, right
+                    # after its container is confirmed running: a later
+                    # task's exception (and rollback, see the passthrough
+                    # branch above) must never be able to revert a GPU claim
+                    # whose container already exists.
+                    await db.commit()
                 except Exception as exc:
                     self.last_spawn_error = f"{type(exc).__name__}: {exc}"[:300]
-                    logger.exception("transcode spawn failed task_id=%s: %s", task.id, exc)
-                    # Release the GPU claim so the task can retry on a later tick.
+                    # `task_id` (loop variable), never `task.id`: see the
+                    # passthrough except block above for why no ORM
+                    # attribute may be read before the rollback below.
+                    logger.exception("transcode spawn failed task_id=%s: %s", task_id, exc)
+                    # A raise here can come from `_spawn_container` itself
+                    # (the container never started) OR from the commit right
+                    # above (the container IS running but the GPU-claim
+                    # commit failed) -- either way, mirroring the passthrough
+                    # except block, roll back first: a raise from inside a
+                    # flush/commit leaves the session in "pending rollback"
+                    # state, and the NEXT statement issued for the NEXT
+                    # queued task would raise PendingRollbackError outside
+                    # any try/except and abort the whole tick.
+                    await db.rollback()
+                    # Release the GPU claim so the task can retry claiming a
+                    # GPU on a later tick. A real SQLAlchemy session's
+                    # rollback (expire_on_rollback=True by default) already
+                    # discards whatever uncommitted BUSY assignment
+                    # `_claim_gpu_for_task` made and expires the gpu object
+                    # back to its last-committed value, but relying on that
+                    # implicit expire-on-rollback behavior for correctness is
+                    # fragile (and the in-memory test fake doesn't model it
+                    # at all), so the revert is re-applied explicitly here,
+                    # AFTER the rollback -- applying it before would just
+                    # have the rollback above discard it again. It's
+                    # committed immediately rather than deferred to the
+                    # trailing end-of-loop commit: an uncommitted revert
+                    # sitting in the shared session for the rest of the loop
+                    # would be discarded again by a LATER task's own rollback
+                    # (the same hazard the passthrough branch's per-task
+                    # commits guard against).
                     if assignment.gpu is not None:
                         assignment.gpu.status = GpuStatus.AVAILABLE
                         assignment.gpu.claimed_by_task_id = None
+                        await db.commit()
+        if held_encode:
+            logger.debug(
+                "%d encode task(s) held (enabled=%s docker=%s)", held_encode, enabled, self._docker is not None
+            )
         await db.commit()
         return spawned
 
@@ -537,7 +674,12 @@ class TranscodeDispatcher:
     def probe(self) -> tuple[bool, str | None]:
         """Can this dispatcher actually run a transcode right now? Pings the
         docker host and checks the image exists there. Never raises; cached
-        for docker_probe.PROBE_TTL_SECONDS (see there for why)."""
+        for docker_probe.PROBE_TTL_SECONDS (see there for why). A ripper-only
+        deployment (no docker client at all) can't run encode tasks; that's
+        not a probe failure to retry, just a fixed fact, so short-circuit
+        before touching `self._probe`."""
+        if self._docker is None:
+            return (False, "no docker client (ripper-only deployment or docker unavailable)")
         return self._probe()
 
     def _spawn_container(self, task: TranscodeTask, *, assignment: GpuAssignment | None = None) -> Any:
@@ -776,8 +918,10 @@ class TranscodeDispatcher:
             track_id = row.source_track_id
 
         # Force-stop the container if the transcoder didn't honour the WS
-        # cancel inside the grace window.
-        if still_running:
+        # cancel inside the grace window. No docker client (ripper-only
+        # deployment) means there's no container to stop; the row delete
+        # below still runs.
+        if still_running and self._docker is not None:
             try:
                 survivors = self._docker.containers.list(filters={"label": f"{_DOCKER_LABEL_KEY}={task_id}"})
                 for container in survivors:

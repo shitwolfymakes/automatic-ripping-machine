@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor } from '$lib/test-utils';
 import TranscoderPage from '../+page.svelte';
+import { setTranscoderEnabled, setTranscodeRuntimeEnabled } from '$lib/stores/config';
+import { fetchTranscoderJobs, fetchTranscoderStats } from '$lib/api/transcoder';
+import { fetchGpus } from '$lib/api/gpus';
 
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');
@@ -144,6 +147,53 @@ describe('Transcoder Page', () => {
 			expect(links[0]).toHaveAttribute('href', '/jobs/job_abc');
 			expect(document.querySelector('a[href="/jobs/sap_1"]')).toBeNull();
 			expect(screen.getByText('No job')).toBeInTheDocument();
+		});
+	});
+
+	describe('disabled / not-capable states', () => {
+		afterEach(() => {
+			setTranscoderEnabled(true);
+			setTranscodeRuntimeEnabled(true);
+		});
+
+		it('shows the disabled banner and keeps content visible when capable but runtime-disabled', async () => {
+			setTranscodeRuntimeEnabled(false);
+			renderComponent(TranscoderPage);
+			expect(
+				screen.getByText(
+					'Transcoding is disabled. Queued tasks are held and resume when it is re-enabled.'
+				)
+			).toBeInTheDocument();
+			// Drain semantics: the held queue must stay visible, not be hidden.
+			await waitFor(() => expect(screen.getByText('movie1.mkv')).toBeInTheDocument());
+		});
+
+		it('does not show the disabled banner when transcoding is capable and enabled', () => {
+			renderComponent(TranscoderPage);
+			expect(
+				screen.queryByText(
+					'Transcoding is disabled. Queued tasks are held and resume when it is re-enabled.'
+				)
+			).not.toBeInTheDocument();
+		});
+
+		it('renders a full-page empty state and fetches no task data when not capable (ripper-only deep link)', async () => {
+			setTranscoderEnabled(false);
+			// Earlier tests in this file already invoked these fetchers; clear
+			// their call history so this assertion only reflects this render.
+			vi.mocked(fetchTranscoderJobs).mockClear();
+			vi.mocked(fetchTranscoderStats).mockClear();
+			vi.mocked(fetchGpus).mockClear();
+			renderComponent(TranscoderPage);
+			expect(
+				screen.getByText('Transcoding is not available on this deployment (ripper-only install).')
+			).toBeInTheDocument();
+			expect(screen.queryByText('Transcode Jobs')).not.toBeInTheDocument();
+			// Let any pending microtasks flush, then confirm nothing was fetched.
+			await new Promise((r) => setTimeout(r, 0));
+			expect(fetchTranscoderJobs).not.toHaveBeenCalled();
+			expect(fetchTranscoderStats).not.toHaveBeenCalled();
+			expect(fetchGpus).not.toHaveBeenCalled();
 		});
 	});
 });

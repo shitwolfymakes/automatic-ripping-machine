@@ -42,7 +42,8 @@ import os
 #     for a real SQLite one before the lifespan opens a connection.
 #   - ARM_SERVICE_TOKEN: "tok-service" — the value the service-token tests
 #     (e.g. test_transcoder_router) hard-code in their auth headers.
-# Empty ARM_HOST_* + no docker socket => transcode dispatcher stays disabled.
+# Empty ARM_HOST_* + no docker client => the transcode dispatcher still starts
+# and ticks live (sweeps + in-process passthrough), but never spawns a container.
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
@@ -134,10 +135,12 @@ def app_client(_sqlite_url: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     monkeypatch.setattr(db_mod, "SessionLocal", test_sessionmaker)
     monkeypatch.setattr(main_mod, "SessionLocal", test_sessionmaker)
 
-    # Force the docker-less lifespan path deterministically: the transcode
-    # dispatcher needs a real docker socket, which the SQLite e2e tier can't
-    # provide. Without this the lifespan would branch on whatever the host
-    # happens to have, making main.py coverage environment-dependent.
+    # Force the docker-less lifespan path deterministically: container spawns
+    # need a real docker socket, which the SQLite e2e tier can't provide. The
+    # dispatcher still starts and runs live ticks against the test DB with
+    # docker None (sweeps + in-process passthrough only). Without this the
+    # lifespan would branch on whatever the host happens to have, making
+    # main.py coverage environment-dependent.
     monkeypatch.setattr(main_mod, "_build_docker_client", lambda _docker_host="", **_kw: None)
 
     # Deterministic GPU inventory: ARM_GPUS is unset under test, so the loader
