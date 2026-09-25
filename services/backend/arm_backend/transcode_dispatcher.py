@@ -402,6 +402,24 @@ class TranscodeDispatcher:
         (see `execute_passthrough_task`), so the `FOR UPDATE SKIP LOCKED`
         row locks from the initial select are released well before any
         (possibly slow, cross-mount) file move runs.
+
+        Only task ids are kept from that initial batch select. Every task's
+        SQLAlchemy identity-map object is expired by ANY commit or rollback
+        that happens earlier in this same loop (the session's
+        `expire_on_commit=False` only suppresses expiry after OUR OWN
+        commits above the ORM layer; `Session.rollback()` always expires
+        the whole identity map, and a plain `db.commit()` for a DIFFERENT
+        row still ends the transaction those FOR UPDATE locks were taken
+        under). A plain attribute read on an expired object triggers an
+        async lazy load outside any `await` we control, raising
+        `sqlalchemy.exc.MissingGreenlet` -- unprotected, aborting the whole
+        tick (FakeSession's no-op rollback hides this entirely; it only
+        reproduces against a real session). Worse, even a NOT-expired but
+        stale object (this session's identity map hasn't been told about a
+        concurrent writer's committed change) would silently reuse
+        out-of-date state without `populate_existing`. So every iteration
+        re-loads its own row fresh, locked, and forced to repopulate from
+        the current row before touching a single attribute of it.
         """
         from arm_backend.passthrough_executor import execute_passthrough_task
         from arm_backend.transcode_apply import is_passthrough_preset, transcode_enabled_now
@@ -421,7 +439,7 @@ class TranscodeDispatcher:
             in_progress
         )
 
-        queued = (
+        queued_rows = (
             (
                 await db.execute(
                     select(TranscodeTask)
@@ -433,10 +451,28 @@ class TranscodeDispatcher:
             .scalars()
             .all()
         )
+        queued_ids = [row.id for row in queued_rows]
         spawned = 0
         held_encode = 0
         encode_examined = 0
-        for task in queued:
+        for task_id in queued_ids:
+            # Fresh, locked, forcibly-repopulated load of this row's CURRENT
+            # state -- never the batch-select object above (see docstring).
+            # `populate_existing=True` is required even though the row is
+            # also `with_for_update()`-locked here: an identity-map hit that
+            # ISN'T expired would otherwise silently keep serving whatever
+            # attributes it already had cached, ignoring this query's result.
+            task = (
+                await db.execute(
+                    select(TranscodeTask)
+                    .where(col(TranscodeTask.id) == task_id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).scalar_one_or_none()
+            if task is None or task.status != TranscodeTaskStatus.QUEUED:
+                logger.debug("task_id=%s no longer claimable (gone or status changed); skipping", task_id)
+                continue
             # Load the owning application once so the spawn log lines carry
             # job_id for the per-job log view (Phase 12).
             application = (
@@ -483,29 +519,10 @@ class TranscodeDispatcher:
                     # No free slot this tick; later passthrough tasks in the
                     # queue must still run, so `continue` (not `break`).
                     continue
-                # Re-verify: the FOR UPDATE lock this row was selected under
-                # may already be gone by now. ANY earlier passthrough task's
-                # claim commit releases every lock the tick's initial select
-                # held (COMMIT is transaction-scoped), not just that task's
-                # own row, and a concurrent delete/status-change since then
-                # must never reach `_claim_gpu_for_task` (which would point
-                # a GPU's `claimed_by_task_id` at a row that no longer
-                # exists, an IntegrityError at commit time) or spawn a
-                # container for a task nobody can claim any more. Checked
-                # unconditionally, not only after a commit has happened this
-                # tick, to keep the invariant simple: every task's current
-                # DB state is confirmed once, right before we act on it,
-                # the same rule `execute_passthrough_task` follows.
-                current = (
-                    await db.execute(select(TranscodeTask).where(col(TranscodeTask.id) == task.id).with_for_update())
-                ).scalar_one_or_none()
-                if current is None or current.status != TranscodeTaskStatus.QUEUED:
-                    logger.debug(
-                        "encode task_id=%s no longer claimable (gone or status changed); skipping",
-                        task.id,
-                    )
-                    continue
-                task = current
+                # No separate re-verify needed here: the fresh,
+                # `populate_existing`-forced, FOR UPDATE-locked load at the
+                # top of this iteration already confirmed `task` is
+                # current and still QUEUED, right before we act on it.
                 assignment = await self._claim_gpu_for_task(db, task, preset)
                 if assignment.action == "queue":
                     logger.info(
