@@ -497,11 +497,15 @@ class TranscodeDispatcher:
                     # "pending rollback" state, and the NEXT statement this
                     # function issues (for the next queued task) would raise
                     # PendingRollbackError outside any try/except and abort the
-                    # whole tick.
+                    # whole tick. The log line uses the loop variable
+                    # `task_id`, never `task.id`: after a failed flush/commit
+                    # every identity-mapped object is unreadable until the
+                    # rollback, so an ORM attribute read here would raise
+                    # PendingRollbackError out of this except block.
                     try:
                         await execute_passthrough_task(db, task, self._hub, self._settings)
                     except Exception as exc:
-                        logger.exception("passthrough execution failed task_id=%s: %s", task.id, exc)
+                        logger.exception("passthrough execution failed task_id=%s: %s", task_id, exc)
                         await db.rollback()
                     continue
                 if encode_examined >= _QUEUE_SCAN_LIMIT:
@@ -554,7 +558,10 @@ class TranscodeDispatcher:
                     await db.commit()
                 except Exception as exc:
                     self.last_spawn_error = f"{type(exc).__name__}: {exc}"[:300]
-                    logger.exception("transcode spawn failed task_id=%s: %s", task.id, exc)
+                    # `task_id` (loop variable), never `task.id`: see the
+                    # passthrough except block above for why no ORM
+                    # attribute may be read before the rollback below.
+                    logger.exception("transcode spawn failed task_id=%s: %s", task_id, exc)
                     # A raise here can come from `_spawn_container` itself
                     # (the container never started) OR from the commit right
                     # above (the container IS running but the GPU-claim
