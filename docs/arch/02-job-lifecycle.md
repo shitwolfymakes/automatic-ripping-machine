@@ -136,6 +136,23 @@ Session Applications are the runtime record of "apply this session to this job";
 
 `queued → in_progress → (done | failed | stale)`, with per-task claims and heartbeats — see `transcode_tasks.claimed_by` / `claim_heartbeat_at` in [04-data-model.md](04-data-model.md#transcode_tasks). Unlike the rip side, multiple ephemeral transcoder containers really do compete for queued tasks, so the claim mechanism is load-bearing here. The stale-claim sweep applies; HandBrake can't resume mid-transcode either, so `stale → queued` means "re-transcode that file from scratch" — but already-`done` sibling tasks in the same session application keep their output.
 
+### Transcode capability and the disabled state
+
+Whether encode work can happen at all is a **two-layer switch**:
+
+- **Tier 1 — `ARM_TRANSCODE_CAPABLE` (env, deployment fact).** Default `true`. A ripper-only install (`devtools/setup-dev.sh --ripper-only` in dev; the installer rewrite's equivalent in production) writes `false` — this box cannot run a transcode container, full stop. A configured `ARM_TRANSCODE_DOCKER_HOST` implies capability regardless of the flag (you cannot be incapable of something you've wired a remote docker host for); the contradictory combo (`ARM_TRANSCODE_CAPABLE=false` with `ARM_TRANSCODE_DOCKER_HOST` set) logs a startup warning rather than failing to boot. See [05-cross-cutting.md § Configuration strategy](05-cross-cutting.md#configuration-strategy).
+- **Tier 2 — `config.transcode_enabled` (DB, runtime toggle).** The Settings → Transcoding switch. Enabling it is refused with `422` when the deployment isn't capable (Tier 1 gates Tier 2, not the other way round). A `NULL` column (rows that predate migration `0037_transcode_enabled`) reads as *enabled* — the seeder backfills it on next boot, so upgrading changes nothing for an existing install.
+
+**Disabled gates ENCODE work only — passthrough is unaffected.** A session with no transcode preset, or a preset whose `tool` is `TranscodeTool.NONE`, is a file move, not an encode, and always runs regardless of either switch. Concretely, when transcode is not enabled (not capable, or capable-but-toggled-off):
+
+- **Manual apply** of a session that resolves to an encode preset is refused with `422 transcoding is disabled (Settings > Transcoding); only passthrough sessions can be applied`.
+- **Auto-apply and identity-resolve fan-out** skip the same way, with `skipped_reason="transcode_disabled"` on the outcome, instead of erroring — a `drives.default_session_id` auto-queue against an encode session on a disabled deployment just doesn't fan out, rather than raising.
+- **Already-queued encode tasks are held**, not cancelled or dropped: `spawn_pending` (the dispatcher tick) leaves them in `queued` and re-checks every tick, so re-enabling `config.transcode_enabled` resumes them where the FIFO left off. A **running** container is left alone — it finishes; disabling doesn't kill in-flight work.
+
+**Passthrough always executes in-process in the Backend dispatcher, never in a container.** `spawn_pending` classifies each queued task by its preset (`is_passthrough_preset`) before checking either capability switch: passthrough tasks skip both gates entirely and are not counted against `config.max_parallel_transcodes` — a ripper-only box with `ARM_TRANSCODE_CAPABLE=false` and no docker client still drains its passthrough queue every tick. The claim (task → `in_progress`, `claimed_by="backend-inprocess"`) is committed *before* the file move runs, so the `SELECT ... FOR UPDATE SKIP LOCKED` row locks from the batch select are released before any blocking, possibly cross-mount I/O — a slow passthrough move can't stall a freshly spawned encode container's `/claim` call. The move itself lands the file via the same atomic move-or-copy (`os.rename`, falling back to copy+unlink on `EXDEV`) into `/media` at the path `compute_outputs` resolved, so passthrough and encode outputs are indistinguishable to a scanner and to the transcodes UI.
+
+**NFS / ownership note.** Because passthrough finalize runs inside the Backend process rather than a spawned container, it writes as the **Backend container's own uid** — the operator's `PUID` must have write access to `/media` (not just the transcoder's). `ARM_TRANSCODE_PUID` still governs the uid a *remote or encode* transcode container drops to, and is applied best-effort as a `chown` after an in-process move completes (a harmless no-op against a root-squashed export).
+
 ## Why rip-level restart but task-level checkpointing for transcode
 
 Two different cost models drove two different choices.

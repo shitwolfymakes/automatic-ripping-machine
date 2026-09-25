@@ -30,6 +30,7 @@ never touch; the ones you might are flagged **editable** below.
 | `ARM_LOG_LEVEL` | **Editable.** `info` (default) or `debug`. Set `debug` before reproducing a bug. |
 | `ARM_ALLOWED_ORIGINS` | **Editable.** Comma-separated allowlist of *extra* origins the WebSocket endpoint accepts from browsers. Same-origin connections are accepted automatically, so this stays empty unless the UI sits behind your own reverse proxy on a different origin — e.g. `https://arm.example.com`. |
 | `MAX_PARALLEL_TRANSCODES` | **Editable.** How many transcoder containers may run at once. Default `1` (a 1080p HandBrake job pegs every core). |
+| `ARM_TRANSCODE_CAPABLE` | **Editable.** Whether this deployment can run a transcode container at all. Default `true`. A ripper-only setup writes `false` here, see [Ripper-only installs](#ripper-only-installs) below. Encode sessions are refused while this is `false`; passthrough (no-preset) sessions still run, in-process, on the backend. Setting `ARM_TRANSCODE_DOCKER_HOST` implies `true` no matter what this is set to. |
 | `ARM_IMAGE_PREFIX` / `ARM_IMAGE_TAG` | Registry path + image tag. **Bump `ARM_IMAGE_TAG` to upgrade** — see [Upgrading](Upgrading). |
 | `ARM_TRANSCODE_IMAGE` | The image the backend spawns per transcode job. |
 | `ARM_HOST_*_PATH` | Host paths (`raw`/`media`/`logs`/`certs`) the backend hands to the Docker daemon when spawning transcoders. Default to `${PWD}/...`; only change if you move data out of the prefix. |
@@ -70,6 +71,7 @@ keys at all, but TMDb/OMDb dramatically improve naming hit rates.
 | **Auto-rip on insert** | on | Start a rip automatically when a disc is detected. Turn off to require a manual start from **Jobs → Manual**. |
 | **Block on identification miss** | on | When a video disc can't be identified, pause and ask you to confirm/search before ripping. Turn off to rip immediately to `raw/` and resolve identity later (no file is ever renamed retroactively). |
 | **Auto-transcode on idle** | off | Automatically queue a transcode session when the stack is idle, vs. waiting for you to start one. |
+| **Transcoding** | on | Master switch for encode work (Settings → Transcoding). Turning it off holds any queued encode sessions instead of dropping them, and lets already-running transcodes finish; passthrough (no-preset) sessions keep running either way. Can only be switched on if the deployment is transcode-capable, see `ARM_TRANSCODE_CAPABLE` above and [Ripper-only installs](#ripper-only-installs) below. |
 | **Default retention policy** | keep raw | What happens to the intermediate `raw/` files after a session — keep them or prune. |
 
 ### Notifications
@@ -100,6 +102,32 @@ transcoded as reusable objects you manage in the UI:
 
 ARM seeds sensible built-in presets on first boot, so you don't have to create
 any to get started. See [Web UI](Web-UI) for the pages that manage them.
+
+---
+
+## Ripper-only installs
+
+If this box only rips discs and hands the raw files off elsewhere to encode
+(no GPU, or transcoding runs on a separate machine), a dev checkout can skip
+the transcode side entirely:
+
+```bash
+bash devtools/setup-dev.sh --ripper-only
+```
+
+This skips the `arm-transcode` image build, the hardware-encoder probe, and
+GPU detection, and writes `ARM_TRANSCODE_CAPABLE=false` to `.env` (see the
+table above). Encode sessions are then refused everywhere in the UI and API;
+passthrough (no-preset, ISO/data-copy) sessions still run normally, in-process
+on the backend, so raw-and-ship workflows are unaffected. The setting is
+preserved on later plain re-runs of the script, the same as any other `.env`
+value, so a box set up once with `--ripper-only` stays ripper-only until you
+edit `ARM_TRANSCODE_CAPABLE` back to `true` by hand.
+
+The packaged `install.sh` installer does not have a ripper-only flag yet;
+until it does, a production ripper-only install means editing
+`ARM_TRANSCODE_CAPABLE=false` into `~/arm/.env` yourself and running
+`docker compose up -d`.
 
 ---
 
