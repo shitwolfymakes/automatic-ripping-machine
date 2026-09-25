@@ -667,7 +667,7 @@ async def test_spawn_successful_rebuild_closes_old_client() -> None:
     dead.close.assert_called_once()
 
 
-# ---- no-transcode-mode routing (Task 6) --------------------------------------
+# ---- no-transcode-mode routing -----------------------------------------------
 
 
 async def test_passthrough_task_executes_in_process_no_docker_call(tmp_path: Path) -> None:
@@ -957,7 +957,7 @@ def test_probe_reports_not_capable_when_docker_none() -> None:
 
 
 async def test_passthrough_runs_after_encode_held_by_slot_exhaustion(tmp_path: Path) -> None:
-    """I4(a): an encode task blocked ONLY by zero free slots (enabled=True,
+    """An encode task blocked ONLY by zero free slots (enabled=True,
     docker present, host paths set) must not stop a later-queued passthrough
     task from running. This pins the `continue` at the
     `encode_slots - spawned <= 0` check in spawn_pending: swapping it for a
@@ -1049,7 +1049,7 @@ async def test_passthrough_runs_after_encode_held_by_slot_exhaustion(tmp_path: P
 
 
 async def test_encode_scan_cap_examines_at_most_fifty() -> None:
-    """I3: `_QUEUE_SCAN_LIMIT` caps only the ENCODE subset of the per-tick
+    """`_QUEUE_SCAN_LIMIT` caps only the ENCODE subset of the per-tick
     scan (the queued select itself is unbounded so passthrough tasks can
     never be crowded out). With 51 queued encode tasks and enough parallel
     slots for all of them, only the first 50 are examined/spawned."""
@@ -1111,7 +1111,7 @@ async def test_encode_scan_cap_examines_at_most_fifty() -> None:
 
 
 async def test_passthrough_exception_does_not_abort_tick(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """I4(b): a non-OSError exception raised from execute_passthrough_task
+    """A non-OSError exception raised from execute_passthrough_task
     (e.g. hub.emit or aggregate_session_application blowing up) must not
     propagate out of spawn_pending: it's caught, logged, and the loop moves
     on to the next queued task."""
@@ -1172,7 +1172,7 @@ async def test_passthrough_exception_does_not_abort_tick(tmp_path: Path, monkeyp
 async def test_passthrough_row_deleted_before_its_turn_skips_cleanly(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """N1 test (a): a queued passthrough row can be deleted by a concurrent
+    """A queued passthrough row can be deleted by a concurrent
     writer (DELETE /api/transcodes/{id}, an overwrite eviction, a job-delete
     cascade) after the tick's initial select grabbed it but before its turn
     in the loop -- the FOR UPDATE lock protecting it was released the
@@ -1248,7 +1248,7 @@ async def test_passthrough_row_deleted_before_its_turn_skips_cleanly(
 async def test_passthrough_session_poisoning_recovers_via_rollback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """N1 test (b): a DB-level raise from inside execute_passthrough_task's
+    """A DB-level raise from inside execute_passthrough_task's
     own commit (StaleDataError, a dropped connection, ...) leaves the
     session in "pending rollback" state; without an explicit rollback the
     NEXT statement this function issues would raise PendingRollbackError
@@ -1318,7 +1318,7 @@ async def test_passthrough_session_poisoning_recovers_via_rollback(
 
 
 async def test_encode_row_deleted_before_its_turn_skips_cleanly() -> None:
-    """N1 part 1 (encode analog): a concurrent delete of a queued encode
+    """Encode analog of the passthrough pre-claim re-verify: a concurrent delete of a queued encode
     task between the tick's initial select and this task's turn in the
     loop must be caught by the encode-side re-verify instead of pointing a
     GPU's claimed_by_task_id at a row that's gone (an IntegrityError at
@@ -1401,7 +1401,7 @@ async def test_encode_row_deleted_before_its_turn_skips_cleanly() -> None:
 
 
 async def test_encode_claim_commit_raises_once_rolls_back_and_releases_gpu() -> None:
-    """Closes a residual from the N1 fix round: the encode success path's
+    """The encode success path's
     own prompt commit (`await db.commit()` right after a successful
     container spawn) can itself raise -- the container IS running, but the
     GPU-claim commit failed. That must not poison the session for the next

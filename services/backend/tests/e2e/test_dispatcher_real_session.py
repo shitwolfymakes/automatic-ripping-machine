@@ -354,9 +354,17 @@ async def test_failed_per_task_commit_does_not_abort_tick(tmp_path: Path) -> Non
                 injected: list[bool] = []
 
                 async def commit_failing_once() -> None:
-                    # Fail the first commit that carries txt_pt1's claim.
+                    # Fail the first commit that carries txt_pt1's claim. The
+                    # executor flushes the claim (to emit its claim-time
+                    # events) before committing, so look for the claimed
+                    # state in the identity map rather than in `dirty`. Read
+                    # the loaded attribute dict directly so an expired object
+                    # never triggers a lazy load inside this sync check.
                     claiming_pt1 = any(
-                        isinstance(obj, TranscodeTask) and obj.id == "txt_pt1" for obj in db.sync_session.dirty
+                        isinstance(obj, TranscodeTask)
+                        and obj.__dict__.get("id") == "txt_pt1"
+                        and obj.__dict__.get("status") == TranscodeTaskStatus.IN_PROGRESS
+                        for obj in db.sync_session.identity_map.values()
                     )
                     if claiming_pt1 and not injected:
                         injected.append(True)

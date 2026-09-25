@@ -27,6 +27,7 @@ from sqlmodel import col, select
 from arm_backend.config import Settings
 from arm_common import (
     SessionApplication,
+    SessionApplicationStatus,
     Track,
     TranscodeTask,
     TranscodeTaskStatus,
@@ -39,7 +40,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("arm_backend.passthrough_executor")
 
-# D1: the in-process claim's heartbeat is stamped once here and never
+# The in-process claim's heartbeat is stamped once here and never
 # refreshed afterward (unlike a container transcoder, which heartbeats
 # repeatedly over its run). That's safe only because `sweep_stale_claims`
 # runs on the same coroutine, in the same process, as `spawn_pending` (a
@@ -58,6 +59,7 @@ async def execute_passthrough_task(
     """Run one QUEUED passthrough task to completion in-process.
 
     Mirrors the container path's lifecycle exactly (claim fields,
+    application QUEUED -> RUNNING, session.started / task.started /
     task.completed / task.failed WS events, application aggregation).
     Returns True on DONE, False on FAILED, or None if the task could not be
     claimed at all (see below), not an error, just a lost race.
@@ -128,7 +130,40 @@ async def execute_passthrough_task(
         task.status = TranscodeTaskStatus.IN_PROGRESS
         task.claimed_by = IN_PROCESS_CLAIMANT
         task.claim_heartbeat_at = datetime.now(UTC)
-        task.attempts += 1
+        task.attempts = (task.attempts or 0) + 1
+        task.progress_pct = 0
+        await db.flush()
+        # Same claim-time side effects as the container path's
+        # POST /tasks/{id}/claim: flip the application QUEUED -> RUNNING
+        # (session.started) and announce the task (task.started), so the
+        # transcodes UI and the session rollup see an identical lifecycle.
+        if application is not None and application.status == SessionApplicationStatus.QUEUED:
+            application.status = SessionApplicationStatus.RUNNING
+            await db.flush()
+            await hub.emit(
+                topic="transcode.events",
+                event_type="session.started",
+                payload={
+                    "session_application_id": application.id,
+                    "session_id": application.session_id,
+                    "job_id": application.job_id,
+                },
+                job_id=job_id,
+                session=db,
+            )
+        await hub.emit(
+            topic="transcode.events",
+            event_type="task.started",
+            payload={
+                "task_id": task_id,
+                "session_application_id": session_application_id,
+                "claimed_by": task.claimed_by,
+                "attempts": task.attempts,
+            },
+            job_id=job_id,
+            track_id=source_track_id,
+            session=db,
+        )
         # Commit the claim before the (possibly slow, cross-mount) file
         # move so the tick's FOR UPDATE row locks aren't held across
         # blocking I/O (see docstring).
