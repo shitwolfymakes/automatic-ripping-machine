@@ -3,6 +3,8 @@ import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-
 import SettingsPage from '../+page.svelte';
 import { fetchSettings } from '$lib/api/settings';
 import { fetchDrives, fetchDriveDiagnostic } from '$lib/api/drives';
+import { fetchGpus } from '$lib/api/gpus';
+import { setTranscoderEnabled } from '$lib/stores/config';
 import type { DriveView } from '$lib/types/api.gen';
 
 function drive(over: Partial<DriveView> = {}): DriveView {
@@ -50,6 +52,7 @@ const mockSchema = {
 		{
 			name: 'Transcoding',
 			fields: [
+				{ key: 'transcode_enabled', group: 'Transcoding', tier: 'operator', label: 'Enable transcoding', help: '', type: 'bool', editable: true, enum_values: null },
 				{ key: 'auto_transcode_on_idle', group: 'Transcoding', tier: 'operator', label: 'Auto-transcode on idle', help: '', type: 'bool', editable: true, enum_values: null }
 			]
 		},
@@ -73,6 +76,7 @@ const mockConfig = {
 	tmdb_api_key: '<hidden>',
 	auto_rip_on_insert: true,
 	block_on_miss: true,
+	transcode_enabled: false,
 	auto_transcode_on_idle: false,
 	notifications_enabled: false
 };
@@ -135,6 +139,12 @@ vi.mock('$lib/api/transcodePresets', () => ({
 vi.mock('$lib/api/themes', () => ({
 	uploadTheme: vi.fn(() => Promise.resolve()),
 	deleteTheme: vi.fn(() => Promise.resolve())
+}));
+
+vi.mock('$lib/api/gpus', () => ({
+	fetchGpus: vi.fn(() => Promise.resolve([])),
+	updateGpu: vi.fn(),
+	deleteGpu: vi.fn()
 }));
 
 vi.mock('$lib/stores/theme', async () => {
@@ -236,6 +246,9 @@ describe('Settings Page', () => {
 		// which would leave the next render on a non-default tab. Reset so each
 		// test starts on the default Metadata tab.
 		window.location.hash = '';
+		// transcoderEnabled is a real (unmocked) store shared across tests in
+		// this file; reset to the capable default so it doesn't leak.
+		setTranscoderEnabled(true);
 	});
 
 	// Render the page and wait for the tab bar to settle. Metadata is the
@@ -517,6 +530,41 @@ describe('Settings Page', () => {
 			expect(row).toHaveTextContent('container: running');
 			expect(row).toHaveTextContent('media: tray open');
 			expect(row).toHaveTextContent('OK');
+		});
+	});
+
+	describe('Transcoding tab', () => {
+		it('keeps the Transcoding tab visible even when the deployment is not transcode-capable', async () => {
+			setTranscoderEnabled(false);
+			await renderAndWait();
+			expect(screen.getByRole('tab', { name: 'Transcoding' })).toBeInTheDocument();
+		});
+
+		it('capable: renders the schema-driven transcode_enabled + auto_transcode_on_idle toggles and the GPU card', async () => {
+			setTranscoderEnabled(true);
+			await renderAndOpenTab('Transcoding');
+			await waitFor(() => {
+				expect(screen.getByRole('checkbox', { name: /enable transcoding/i })).toBeInTheDocument();
+			});
+			expect(screen.getByRole('checkbox', { name: /enable transcoding/i })).not.toBeDisabled();
+			expect(screen.getByRole('checkbox', { name: /auto-transcode on idle/i })).toBeInTheDocument();
+			await waitFor(() => {
+				expect(screen.getByTestId('gpus-card')).toBeInTheDocument();
+			});
+			expect(fetchGpus).toHaveBeenCalled();
+		});
+
+		it('not capable: shows only a locked transcode_enabled toggle with a hint, hides auto_transcode_on_idle and the GPU card', async () => {
+			vi.mocked(fetchGpus).mockClear();
+			setTranscoderEnabled(false);
+			await renderAndOpenTab('Transcoding');
+			await waitFor(() => {
+				expect(screen.getByText('This deployment is ripper-only; transcoding cannot be enabled here.')).toBeInTheDocument();
+			});
+			expect(screen.getByRole('switch', { name: 'Enable transcoding' })).toBeDisabled();
+			expect(screen.queryByRole('checkbox', { name: /auto-transcode on idle/i })).not.toBeInTheDocument();
+			expect(screen.queryByTestId('gpus-card')).not.toBeInTheDocument();
+			expect(fetchGpus).not.toHaveBeenCalled();
 		});
 	});
 });

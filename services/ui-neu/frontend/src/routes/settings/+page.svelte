@@ -51,10 +51,13 @@
 	const configGroups = $derived(
 		(settings?.schema?.groups ?? []).filter((g) => (configGroupNames as readonly string[]).includes(g.name))
 	);
-	// Full visible-tab list: config groups first, then screen-tabs (drop 'transcoding' when transcoder disabled).
+	// Full visible-tab list: config groups first, then screen-tabs. The
+	// Transcoding tab always shows (even on a ripper-only, not-capable
+	// deployment) so the locked toggle + hint below is reachable; see the
+	// 'transcoding' tab body for the capable-vs-not split.
 	const visibleTabs = $derived([
 		...configGroups.map((g) => g.name),
-		...screenTabs.filter((t) => t !== 'transcoding' || $transcoderEnabled),
+		...screenTabs,
 	]);
 
 	// Schema groups by name, for the template tab bodies.
@@ -331,12 +334,27 @@
 			<SchemaConfigForm group={rippingGroup} config={settings.config} />
 		{/if}
 
-		<!-- Transcoding Tab (single auto_transcode_on_idle toggle, schema-driven) -->
-		{#if activeTab === 'transcoding' && $transcoderEnabled && transcodingGroup}
-			<div class="space-y-6">
-				<SchemaConfigForm group={transcodingGroup} config={settings.config} />
-				<GpusCard />
-			</div>
+		<!-- Transcoding Tab: schema-driven (transcode_enabled + auto_transcode_on_idle,
+			 GPU inventory) when this deployment can run transcode containers.
+			 On a ripper-only deployment (not capable), only the disabled
+			 transcode_enabled toggle + a hint shows - GpusCard and the
+			 encode-only fields (auto_transcode_on_idle, max_parallel_transcodes)
+			 stay hidden. -->
+		{#if activeTab === 'transcoding'}
+			{#if $transcoderEnabled && transcodingGroup}
+				<div class="space-y-6">
+					<SchemaConfigForm group={transcodingGroup} config={settings.config} />
+					<GpusCard />
+				</div>
+			{:else}
+				<div class="stack" id="setting-transcode_enabled" data-testid="setting-transcode_enabled">
+					<label class="field field-row settings-page-notif-toggle-row">
+						<Toggle checked={Boolean(settings.config?.transcode_enabled)} label="Enable transcoding" disabled />
+						<span class="field-label">Enable transcoding</span>
+					</label>
+					<p class="field-help">This deployment is ripper-only; transcoding cannot be enabled here.</p>
+				</div>
+			{/if}
 		{/if}
 
 		{#if activeTab === 'sessions'}
