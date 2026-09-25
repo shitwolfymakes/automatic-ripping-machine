@@ -60,17 +60,19 @@ media/
 logs/
 
 # ---- Repo metadata never read inside an image ------------------------
-docs/
+# docs/, devtools/, arm_wiki/ and .pre-commit-config.yaml stay OUT of this
+# block: the ui-neu docs stage (services/ui-neu/Dockerfile) renders
+# arm_wiki/ + docs/ into the /docs-data bundle and its link checker
+# resolves relative links from those pages into devtools/ and
+# .pre-commit-config.yaml, so all four must reach the build context even
+# though only ui-neu's Dockerfile actually reads them.
 test_fixtures/
-devtools/
 install.sh
 docker-compose*.yml
-.pre-commit-config.yaml
 .editorconfig
-# Claude Code memory + settings and the GitHub wiki mirror — pure repo
-# metadata, tracked in git but never copied into any image.
+# Claude Code memory + settings: pure repo metadata, tracked in git but
+# never copied into any image.
 .claude/
-arm_wiki/
 # Repo-root favicon is decoration; the UI image ships its own assets and
 # no build COPYs this.
 favicon.ico
@@ -83,9 +85,10 @@ favicon.ico
 **/__tests__/
 
 # ---- Markdown docs (not referenced by any build step) ----------------
-**/README.md
-**/CHANGELOG.md
-**/CONTRIBUTING.md
+# README.md, CONTRIBUTING.md and the root CHANGELOG.md are excluded from
+# this exclusion (see the comment above test_fixtures/): docs/arch/README.md
+# is dev-section page content, CONTRIBUTING.md is both a page and a link
+# target from it, and arm_wiki/Upgrading.md links straight to CHANGELOG.md.
 **/CODE_OF_CONDUCT.md
 **/SECURITY.md
 **/CLAUDE.md
