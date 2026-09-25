@@ -311,23 +311,36 @@ else
     chmod 600 "${ENV_FILE}"
 fi
 
-# Refresh ARM_GPUS from host detection in both cases (it's derived, not a secret).
-ARM_GPUS_VALUE="$(detect_gpus)"
-if grep -q '^ARM_GPUS=' "${ENV_FILE}"; then
-    sed -i "s|^ARM_GPUS=.*|ARM_GPUS=${ARM_GPUS_VALUE}|" "${ENV_FILE}"
+# Refresh ARM_GPUS from host detection in both cases (it's derived, not a
+# secret) — UNLESS the transcode dispatcher is pointed at a remote docker
+# host: then ARM_GPUS describes the REMOTE machine's GPUs (the dispatcher
+# injects device access where the container actually runs), and probing this
+# host would overwrite a hand-set remote GPU list with the wrong hardware.
+if grep -qE '^ARM_TRANSCODE_DOCKER_HOST=..*' "${ENV_FILE}"; then
+    echo "==> ARM_TRANSCODE_DOCKER_HOST set — keeping .env's ARM_GPUS (remote transcode host owns the GPUs)"
 else
-    printf 'ARM_GPUS=%s\n' "${ARM_GPUS_VALUE}" >> "${ENV_FILE}"
+    ARM_GPUS_VALUE="$(detect_gpus)"
+    if grep -q '^ARM_GPUS=' "${ENV_FILE}"; then
+        sed -i "s|^ARM_GPUS=.*|ARM_GPUS=${ARM_GPUS_VALUE}|" "${ENV_FILE}"
+    else
+        printf 'ARM_GPUS=%s\n' "${ARM_GPUS_VALUE}" >> "${ENV_FILE}"
+    fi
+    echo "==> detected GPU(s) for ARM_GPUS: ${ARM_GPUS_VALUE}"
 fi
-echo "==> detected GPU(s) for ARM_GPUS: ${ARM_GPUS_VALUE}"
 
-# Render-node group for VAAPI/QSV device access (set-or-append, like ARM_GPUS).
-RENDER_GID_VALUE="$(detect_render_gid || true)"
-if grep -q '^ARM_RENDER_GID=' "${ENV_FILE}"; then
-    sed -i "s|^ARM_RENDER_GID=.*|ARM_RENDER_GID=${RENDER_GID_VALUE}|" "${ENV_FILE}"
+# Render-node group for VAAPI/QSV device access (set-or-append, like ARM_GPUS,
+# and skipped for the same reason when transcode runs on a remote host).
+if grep -qE '^ARM_TRANSCODE_DOCKER_HOST=..*' "${ENV_FILE}"; then
+    echo "==> ARM_TRANSCODE_DOCKER_HOST set — keeping .env's ARM_RENDER_GID"
 else
-    printf 'ARM_RENDER_GID=%s\n' "${RENDER_GID_VALUE}" >> "${ENV_FILE}"
+    RENDER_GID_VALUE="$(detect_render_gid || true)"
+    if grep -q '^ARM_RENDER_GID=' "${ENV_FILE}"; then
+        sed -i "s|^ARM_RENDER_GID=.*|ARM_RENDER_GID=${RENDER_GID_VALUE}|" "${ENV_FILE}"
+    else
+        printf 'ARM_RENDER_GID=%s\n' "${RENDER_GID_VALUE}" >> "${ENV_FILE}"
+    fi
+    echo "==> detected render group GID for ARM_RENDER_GID: ${RENDER_GID_VALUE:-(none)}"
 fi
-echo "==> detected render group GID for ARM_RENDER_GID: ${RENDER_GID_VALUE:-(none)}"
 
 # The transcode image is built by `docker compose up -d --build` like every other
 # service (the arm-transcode service has deploy.replicas:0 — built, never run), so
