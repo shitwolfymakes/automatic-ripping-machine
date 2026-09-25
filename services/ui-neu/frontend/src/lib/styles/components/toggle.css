@@ -1,0 +1,26 @@
+/* toggle: an on/off switch (role="switch").
+   Elements: toggle-thumb.
+   Modifiers: toggle-sm, toggle-lg.
+   State: [aria-checked="true"], :disabled. Also matches a switch whose
+   accessible control and visual are split across two elements (a button
+   carrying role="switch" aria-checked, with a decorative aria-hidden .toggle
+   span as its child) via [role="switch"][aria-checked="true"] > .toggle. */
+@layer components {
+	.toggle { position: relative; display: inline-flex; width: 2.25rem; height: 1.25rem; flex-shrink: 0; border-radius: 9999px; background: var(--color-text-faint); border: 0; cursor: pointer; transition: background-color var(--motion-fast) var(--ease); }
+	.toggle[aria-checked="true"] { background: var(--color-primary); }
+	.toggle:disabled { opacity: 0.4; cursor: not-allowed; }
+	.toggle-thumb { position: absolute; top: 0.125rem; left: 0.125rem; width: 1rem; height: 1rem; border-radius: 9999px; background: var(--color-on-primary); box-shadow: var(--shadow-1); transition: transform var(--motion-fast) var(--ease); }
+	.toggle[aria-checked="true"] .toggle-thumb { transform: translateX(1rem); }
+	.toggle-sm { width: 1.75rem; height: 1rem; }
+	.toggle-sm .toggle-thumb { width: 0.75rem; height: 0.75rem; }
+	.toggle-sm[aria-checked="true"] .toggle-thumb { transform: translateX(0.75rem); }
+	/* toggle-lg: the settings page's Dark Mode and Resource-stats switches
+	   (h-6 w-11 track, h-5 w-5 thumb, both original bespoke markup - a
+	   second genuine consumer, so this earns a block modifier rather than
+	   a scoped copy per Settings component). */
+	.toggle-lg { width: 2.75rem; height: 1.5rem; }
+	.toggle-lg .toggle-thumb { width: 1.25rem; height: 1.25rem; }
+	.toggle-lg[aria-checked="true"] .toggle-thumb { transform: translateX(1.25rem); }
+	[role="switch"][aria-checked="true"] > .toggle { background: var(--color-primary); }
+	[role="switch"][aria-checked="true"] > .toggle .toggle-thumb { transform: translateX(1rem); }
+}

@@ -11,7 +11,7 @@
 	background: #00ff00 !important;
 	box-shadow: 0 0 10px #00ff00;
 }
-[data-scheme="vcr-osd"] aside nav a[data-active="true"] {
+[data-scheme="vcr-osd"] aside .nav-item[data-active="true"] {
 	background: white !important;
 	color: #0000bb !important;
 }

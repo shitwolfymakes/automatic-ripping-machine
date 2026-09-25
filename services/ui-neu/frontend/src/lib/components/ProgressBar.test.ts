@@ -33,16 +33,18 @@ describe('ProgressBar', () => {
 			expect(screen.getByText('0%')).toBeInTheDocument();
 		});
 
-		it('applies custom color class to fill bar', () => {
-			const { container } = renderComponent(ProgressBar, { props: { value: 50, color: 'custom-bar-color' } });
-			const fill = container.querySelector('[data-progress-fill]');
-			expect(fill).toHaveClass('custom-bar-color');
+		it('applies a custom colorVar as the --progress-color custom property', () => {
+			const { container } = renderComponent(ProgressBar, {
+				props: { value: 50, colorVar: 'var(--color-status-error)' }
+			});
+			const fill = container.querySelector('[data-progress-fill]') as HTMLElement;
+			expect(fill.style.getPropertyValue('--progress-color')).toBe('var(--color-status-error)');
 		});
 
-		it('sets fill width style based on percentage', () => {
+		it('sets the --progress custom property based on percentage', () => {
 			const { container } = renderComponent(ProgressBar, { props: { value: 75 } });
-			const fill = container.querySelector('[data-progress-fill]');
-			expect(fill).toHaveStyle({ width: '75%' });
+			const fill = container.querySelector('[data-progress-fill]') as HTMLElement;
+			expect(fill.style.getPropertyValue('--progress')).toBe('75%');
 		});
 	});
 });

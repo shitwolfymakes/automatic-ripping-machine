@@ -1,0 +1,27 @@
+/* progress: a progress bar. Keep data-progress-track / data-progress-fill
+   attributes on the elements: themes hook them.
+   Elements: progress-track, progress-fill (width from --progress, colour
+   from --progress-color when a caller sets it, else --color-primary).
+   Modifiers: progress-sm.
+   State: [data-indeterminate="true"], [data-status] colours the fill;
+   [data-bar="danger"|"warning"|"cpu"|"mem"|"disk"] colours the fill for the
+   resource-usage meters (BottomStatsBar, SidebarStats) that aren't tied to a
+   job/drive status. */
+@layer components {
+	.progress { width: 100%; }
+	/* height is 0.625rem (the original h-2.5), not 0.5rem: the bar reads
+	   thinner at 8px and the difference shows on every meter in every scheme. */
+	.progress-track { position: relative; height: 0.625rem; overflow: hidden; border-radius: 9999px; background: var(--color-primary-tint-2); }
+	.progress-sm .progress-track { height: 0.25rem; }
+	.progress-fill { height: 100%; width: var(--progress, 0%); border-radius: 9999px; background: var(--progress-color, var(--color-primary)); transition: width var(--motion-base) var(--ease); }
+	.progress-fill[data-status="transcoding"] { background: var(--color-status-transcoding); }
+	.progress-fill[data-status="ripping"] { background: var(--color-status-ripping); }
+	.progress-fill[data-status="failed"], .progress-fill[data-status="error"] { background: var(--color-status-error); }
+	.progress-fill[data-status="completed"], .progress-fill[data-status="success"] { background: var(--color-status-success); }
+	.progress-track[data-indeterminate="true"] .progress-fill { width: 25%; animation: var(--animate-indeterminate); }
+	.progress-fill[data-bar="danger"] { background: var(--color-danger); }
+	.progress-fill[data-bar="warning"] { background: var(--color-warning); }
+	.progress-fill[data-bar="cpu"] { background: var(--color-accent-4); }
+	.progress-fill[data-bar="mem"] { background: var(--color-accent-3); }
+	.progress-fill[data-bar="disk"] { background: var(--color-success); }
+}

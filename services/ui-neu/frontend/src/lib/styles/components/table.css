@@ -1,0 +1,37 @@
+/* table: tabular data.
+   Elements: table-header (th), table-row (tr in tbody), table-cell (td),
+   table-sort (a th that sorts; contains the SortIndicator).
+   Modifiers: table-compact, table-right (right-aligns a header/cell -
+   `text-right` is a banned inline utility per spec 6.4, and this recurs
+   across every table this task migrated, so it is a table-block modifier
+   rather than a per-component scoped duplicate; Task 11), responsive-table
+   (stacks to label/value cards below lg (1024px) - add data-label="Column
+   Name" to each <td> that should show a label when stacked; the <thead> is
+   hidden below lg).
+   State: [aria-sort] on table-sort, [data-selected="true"] on table-row.
+   The responsive-table media-query rules themselves live in
+   utilities.css's `@layer utilities`, not here: `table`, `table-row`, and
+   `table-cell` are also valid CSS `display` keyword values, so Tailwind v4
+   auto-generates its OWN utility class of each of those names
+   (`display: table` / `table-row` / `table-cell`). Those Tailwind
+   utilities land in Tailwind's `utilities` layer, which always outranks
+   this block's `components` layer regardless of selector specificity or
+   source order, so a bare Tailwind utility of the same name silently won
+   over any `display: block` this layer declared for `.responsive-table
+   tr`/`td` - breaking the documented mobile stacking for every consumer
+   app-wide (Task 11 fix round 1 found this; fix round 2 moved the rules to
+   the utilities layer instead of using `!important`, the more correct fix
+   per the cascade-layer rules - see utilities.css's own header). */
+@layer components {
+	.table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+	.table-header { padding: 0.5rem 0.75rem; text-align: left; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--color-text-muted); background: var(--color-surface-raised); border-bottom: 1px solid var(--color-border); }
+	.table-sort { cursor: pointer; user-select: none; }
+	.table-sort:hover { color: var(--color-text); }
+	.table-sort[aria-sort="ascending"], .table-sort[aria-sort="descending"] { color: var(--color-primary-text); }
+	.table-row { border-bottom: 1px solid var(--color-border); transition: background-color var(--motion-fast) var(--ease); }
+	.table-row:hover { background: var(--color-primary-tint-1); }
+	.table-row[data-selected="true"] { background: var(--color-primary-tint-2); }
+	.table-cell { padding: 0.5rem 0.75rem; vertical-align: middle; color: var(--color-text); }
+	.table-right { text-align: right; }
+	.table-compact .table-header, .table-compact .table-cell { padding: 0.25rem 0.5rem; }
+}

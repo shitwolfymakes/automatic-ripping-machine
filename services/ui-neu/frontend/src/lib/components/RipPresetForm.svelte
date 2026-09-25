@@ -93,19 +93,18 @@
 		}
 	}
 
-	const labelClass = 'text-sm font-medium text-gray-700 dark:text-gray-300';
-	const inputClass =
-		'mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-white';
+	// the old shared input-class constants are gone: inputs live in .field
+	// wrappers now, styled by field.css's descendant rule.
 </script>
 
-<form class="space-y-4" onsubmit={submit}>
-	<h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+<form class="stack rip-preset-form" onsubmit={submit}>
+	<h3 class="rip-preset-form-title">
 		{isBuiltin ? 'View rip preset' : editing ? 'Edit rip preset' : 'New rip preset'}
 	</h3>
 
 	{#if isBuiltin}
 		<div
-			class="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-300"
+			class="alert alert-warning"
 			data-testid="preset-builtin-note"
 			role="status"
 		>
@@ -114,11 +113,11 @@
 	{/if}
 
 	{#if error}
-		<p class="text-sm text-red-600 dark:text-red-400" data-testid="preset-error">{error}</p>
+		<p class="field-error" data-testid="preset-error">{error}</p>
 	{/if}
 
-	<div>
-		<label class={labelClass} for="preset-name">Name</label>
+	<label class="field">
+		<span class="field-label">Name</span>
 		<input
 			id="preset-name"
 			data-testid="preset-name"
@@ -126,18 +125,16 @@
 			required
 			bind:value={name}
 			disabled={submitting || isBuiltin}
-			class={inputClass}
 		/>
-	</div>
+	</label>
 
-	<div>
-		<label class={labelClass} for="preset-media-type">Media type</label>
+	<label class="field">
+		<span class="field-label">Media type</span>
 		<select
 			id="preset-media-type"
 			data-testid="preset-media-type"
 			bind:value={mediaType}
 			disabled={editing}
-			class={inputClass}
 		>
 			<option value="movie">Movie</option>
 			<option value="tv">TV</option>
@@ -145,64 +142,61 @@
 			<option value="data">Data</option>
 			<option value="iso">ISO</option>
 		</select>
-	</div>
+	</label>
 
-	<div>
-		<label class={labelClass} for="preset-track-selection">Track selection</label>
+	<label class="field">
+		<span class="field-label">Track selection</span>
 		<select
 			id="preset-track-selection"
 			data-testid="preset-track-selection"
 			bind:value={trackSelection}
 			disabled={isBuiltin}
-			class={inputClass}
 		>
 			<option value="main_feature">Main feature (longest >= 45 min)</option>
 			<option value="all_tracks">All tracks (>= 60 s)</option>
 			<option value="archive">Archive (every track)</option>
 			<option value="custom">Custom</option>
 		</select>
-	</div>
+	</label>
 
-	<div>
-		<label class={labelClass} for="preset-identification-mode">Identification mode</label>
+	<label class="field">
+		<span class="field-label">Identification mode</span>
 		<select
 			id="preset-identification-mode"
 			data-testid="preset-identification-mode"
 			bind:value={identificationMode}
 			disabled={isBuiltin}
-			class={inputClass}
 		>
 			<option value="required">Required</option>
 			<option value="skip">Skip</option>
 			<option value="deferred_placeholder">Deferred placeholder</option>
 		</select>
-	</div>
+	</label>
 
-	<div>
-		<label class={labelClass} for="preset-output-mode">Output mode</label>
+	<label class="field">
+		<span class="field-label">Output mode</span>
 		<select
 			id="preset-output-mode"
 			data-testid="preset-output-mode"
 			bind:value={outputMode}
 			disabled={isBuiltin}
-			class={inputClass}
 		>
 			<option value="tracks">Tracks</option>
 			<option value="iso">ISO</option>
 			<option value="data_copy">Data copy</option>
 		</select>
-	</div>
+	</label>
 
 	{#if showFilters}
 		<TrackFiltersEditor value={filters} onchange={(v) => (filters = v)} />
 	{/if}
 
-	<div class="flex justify-end gap-3 pt-2">
+	<div class="rip-preset-form-actions">
 		<button
 			type="button"
 			onclick={oncancel}
 			disabled={submitting}
-			class="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+			class="btn btn-ghost"
 		>
 			{isBuiltin ? 'Close' : 'Cancel'}
 		</button>
@@ -211,10 +205,15 @@
 				type="submit"
 				disabled={!canSubmit}
 				data-testid="preset-submit"
-				class="rounded-lg px-4 py-2 text-sm font-medium confirm-btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+				class="btn btn-primary"
 			>
 				{submitting ? 'Saving...' : 'Save'}
 			</button>
 		{/if}
 	</div>
 </form>
+
+<style>
+	.rip-preset-form-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-text); }
+	.rip-preset-form-actions { display: flex; justify-content: flex-end; gap: 0.75rem; padding-top: 0.5rem; }
+</style>

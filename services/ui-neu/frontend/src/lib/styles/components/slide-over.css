@@ -1,0 +1,7 @@
+/* slide-over: a right-anchored panel over a scrim.
+   Elements: slide-over-panel, slide-over-header. */
+@layer components {
+	.slide-over { position: fixed; inset: 0; z-index: 50; display: flex; justify-content: flex-end; background: var(--color-backdrop); }
+	.slide-over-panel { width: 100%; max-width: 32rem; height: 100%; overflow: auto; background: var(--color-surface); border-left: 1px solid var(--color-border-strong); box-shadow: var(--shadow-2); }
+	.slide-over-header { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--color-border); }
+}

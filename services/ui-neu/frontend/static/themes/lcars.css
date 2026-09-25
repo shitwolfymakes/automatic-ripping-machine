@@ -1,16 +1,65 @@
+/* LCARS. Retargeted onto the block vocabulary and the semantic tokens
+   (docs/ui-neu-theming.md). Every rule below selects either a block class,
+   a state attribute the block contract publishes, a real element, or one of
+   this theme's own decorative pseudo-elements. Nothing selects a
+   component-local class.
+
+   The literal colours here are the LCARS palette itself and stay literal:
+   a theme sheet is the one place a scheme's own colours live.
+     #f90 orange   #fc3 gold      #fca peach
+     #99f periwinkle  #c9c mauve  #ff8b8b salmon
+     #8bd3c2 aqua     #666 slate  #000 canvas */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Tokens.
+
+   NOTE ON PRECEDENCE (see docs/ui-neu-theming.md): the roles a scheme lists
+   in its COLOR_SCHEMES `tokens` map are written as an INLINE style on
+   <html>, which outranks every selector here. For lcars that map already
+   owns --color-primary, --color-primary-hover, --color-primary-text,
+   --color-on-primary, --color-page, --color-surface and --radius, so this
+   sheet must not restate them; it sets only the roles the map leaves alone.
+   ───────────────────────────────────────────────────────────────────────── */
+:root[data-scheme="lcars"],
+:root[data-scheme="lcars"].dark {
+	/* Panels/flyouts/modals sit on a solid lifted plate, not the pure-black
+	   page: a translucent surface over black reads as black-on-black. */
+	--color-surface-raised: #1a1a2e;
+
+	--color-border: rgba(153, 153, 255, 0.2);
+	--color-border-strong: rgba(153, 153, 255, 0.2);
+
+	--color-text: #fff;
+	--color-text-secondary: #fca;
+	--color-text-muted: #fca;
+	--color-text-faint: #999;
+
+	/* Flat plates: LCARS has no drop shadows. */
+	--shadow-1: none;
+	--shadow-2: none;
+}
+
 [data-scheme="lcars"] {
 	font-family: 'Arial Narrow', 'Arial', Helvetica, sans-serif;
 	text-transform: uppercase;
 	letter-spacing: 1px;
 }
 
-[data-scheme="lcars"] .w-64 {
-	width: 22rem;
+[data-scheme="lcars"] body {
+	background: #000;
+	color: #fff;
 }
 
-[data-scheme="lcars"] aside {
+/* ─────────────────────────────────────────────────────────────────────────
+   Sidebar. The LCARS elbow: a curved plate along the top, a stack of
+   coloured blocks down the left gutter, a curved plate along the bottom.
+   Pure decoration on the .sidebar/aside shell and the .nav block.
+   ───────────────────────────────────────────────────────────────────────── */
+[data-scheme="lcars"][data-scheme] aside {
+	width: 22rem;
 	position: relative;
-	border-color: transparent !important;
+	background: #000;
+	border-color: transparent;
 	padding: 15px;
 	overflow: hidden;
 }
@@ -27,8 +76,8 @@
 	background: linear-gradient(to right, #c9c 0, #c9c 100px, transparent 100px, transparent 115px, #c9c 115px);
 }
 
-[data-scheme="lcars"] aside [data-logo] {
-	display: flex !important;
+[data-scheme="lcars"] aside .nav-logo {
+	display: flex;
 	position: absolute;
 	top: 12px;
 	left: 14px;
@@ -40,9 +89,9 @@
 	justify-content: center;
 }
 
-[data-scheme="lcars"] aside [data-logo] img {
-	height: 32px !important;
-	width: 32px !important;
+[data-scheme="lcars"] aside .nav-logo img {
+	height: 32px;
+	width: 32px;
 }
 
 [data-scheme="lcars"] aside::after {
@@ -91,9 +140,22 @@
 	display: none;
 }
 
-[data-scheme="lcars"] aside nav a[href] {
+/* Nav links are LCARS command buttons: right-aligned coloured pills. */
+/* The .nav block is a flex column, where adjacent margins do NOT
+   collapse (the original block-level <nav> let them). This scheme's
+   inter-link spacing therefore rides the nav's own gap instead of a
+   margin on each link, which would otherwise double. */
+[data-scheme="lcars"] aside .nav {
+	gap: 3px;
+	/* the link margin also sat above the first link and below the
+	   last one, which a gap does not reproduce */
+	padding-top: calc(1rem + 3px);
+	padding-bottom: calc(1rem + 3px);
+}
+
+[data-scheme="lcars"] aside .nav-item {
 	background: #99f;
-	color: #000 !important;
+	color: #000;
 	font-weight: bold;
 	font-size: 0.85rem;
 	letter-spacing: 0.1em;
@@ -101,1006 +163,425 @@
 	text-align: right;
 	justify-content: flex-end;
 	padding: 0.5rem 1rem;
-	margin: 3px 0;
 	transition: all 0.2s;
 }
 
-[data-scheme="lcars"] aside nav a[href] svg {
+[data-scheme="lcars"] aside .nav-item svg {
 	display: none;
 }
 
-[data-scheme="lcars"] aside nav a[href]:hover {
-	background: #fff !important;
-	color: #000 !important;
-	transform: translateX(5px);
-}
-
-[data-scheme="lcars"] aside nav a[href][data-active="true"] {
-	background: #fca !important;
-	color: #000 !important;
-}
-
-[data-scheme="lcars"] aside nav a[href]:nth-child(2) {
+/* Per-position colour rotation, then the state rules. All three have the
+   same specificity, so source order is what decides which wins: the state
+   rules must come last or an inactive position would beat the active one.
+   (The original sheet forced this with !important instead.) */
+[data-scheme="lcars"] aside .nav-item:nth-child(2) {
 	background: #fca;
 }
 
-[data-scheme="lcars"] aside nav a[href]:nth-child(3) {
+[data-scheme="lcars"] aside .nav-item:nth-child(3) {
 	background: #f90;
 }
 
-[data-scheme="lcars"] aside nav a[href]:nth-child(4) {
+[data-scheme="lcars"] aside .nav-item:nth-child(4) {
 	background: #c9c;
 }
 
-[data-scheme="lcars"] aside [data-stats] {
-	border-top: 4px solid #f90 !important;
-	border-left: none !important;
-	border-right: none !important;
-	border-bottom: none !important;
-	background: transparent;
-	padding-top: 0.75rem;
+[data-scheme="lcars"] aside .nav-item[data-active="true"] {
+	background: #fca;
+	color: #000;
 }
 
-[data-scheme="lcars"] aside [data-stats] .flex.rounded {
-	background: #222 !important;
-	border-radius: 20px !important;
-	padding: 3px !important;
-	gap: 3px;
+[data-scheme="lcars"] aside .nav-item:hover {
+	background: #fff;
+	color: #000;
+	transform: translateX(5px);
 }
 
-[data-scheme="lcars"] aside [data-stats] .flex.rounded > button {
-	border-radius: 20px !important;
-	color: #000 !important;
-	background: #666 !important;
-	font-weight: bold !important;
-	padding: 0.25rem 0.75rem !important;
+/* The notification count is LCARS orange, not the amber --color-warning
+   carries. */
+[data-scheme="lcars"] aside .nav-badge {
+	background: #f90;
+	color: #fff;
 }
 
-[data-scheme="lcars"] aside [data-stats] .flex.rounded > button.bg-primary\/20,
-
-[data-scheme="lcars"] aside [data-stats] .flex.rounded > button.dark\:bg-primary\/25 {
-	background: #f90 !important;
-	color: #000 !important;
-}
-
-[data-scheme="lcars"] [data-progress-track] {
-	background: #222 !important;
-	border-radius: 0 6px 6px 0 !important;
-	height: 12px !important;
-}
-
-[data-scheme="lcars"] [data-progress-fill] {
-	border-radius: 0 !important;
-	background: #f90 !important;
-	animation: lcars-scan 2s infinite ease-in-out;
-}
-
-[data-scheme="lcars"] [data-stats] .space-y-2 > div:nth-child(1) [data-progress-fill] {
-	background: #f90 !important;
-}
-
-[data-scheme="lcars"] [data-stats] .space-y-2 > div:nth-child(2) [data-progress-fill] {
-	background: #99f !important;
-}
-
-[data-scheme="lcars"] [data-stats] .mt-3 [data-progress-fill] {
-	background: #c9c !important;
-}
-
-[data-scheme="lcars"] aside .text-gray-400,
-
-[data-scheme="lcars"] aside .text-gray-500,
-
-[data-scheme="lcars"] aside .text-gray-600,
-
-[data-scheme="lcars"] aside .dark\:text-gray-300,
-
-[data-scheme="lcars"] aside .dark\:text-gray-400,
-
-[data-scheme="lcars"] aside .dark\:text-gray-500 {
-	color: #fca !important;
+[data-scheme="lcars"] aside .eyebrow,
+[data-scheme="lcars"] aside .field-help,
+[data-scheme="lcars"] aside .panel-hint {
+	color: #fca;
 	letter-spacing: 0.1em;
 	font-weight: bold;
 }
 
-[data-scheme="lcars"] aside .text-orange-500 {
-	color: #ff8b8b !important;
+/* ─────────────────────────────────────────────────────────────────────────
+   Progress meters. Squared-off orange scan bars on a black track.
+   ───────────────────────────────────────────────────────────────────────── */
+[data-scheme="lcars"] [data-progress-track] {
+	background: #222;
+	border-radius: 0 6px 6px 0;
+	height: 12px;
 }
 
-[data-scheme="lcars"] body {
-	background: #000 !important;
-	color: #fff !important;
+[data-scheme="lcars"] [data-progress-fill] {
+	border-radius: 0;
+	background: #f90;
+	animation: lcars-scan 2s infinite ease-in-out;
 }
 
+[data-scheme="lcars"] [data-progress-fill][data-bar="cpu"] {
+	background: #f90;
+}
+
+[data-scheme="lcars"] [data-progress-fill][data-bar="mem"] {
+	background: #99f;
+}
+
+[data-scheme="lcars"] [data-progress-fill][data-bar="disk"] {
+	background: #c9c;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Header. A black bar carrying one continuous run of butted colour cells
+   with black text, separated by thin black breaks, running edge to edge.
+   The stats bar and the action cluster are the two flex children.
+   ───────────────────────────────────────────────────────────────────────── */
+/* Lift the whole content column off the top edge so the header run floats,
+   LCARS-style, rather than butting against the viewport. The wrapper is the
+   layout's own arrangement-utility div (flex/flex-1 are allowed inline
+   families, so this is stable markup, not a component-local class). */
 [data-scheme="lcars"] .flex.h-screen > div.flex-1 {
 	padding-top: 15px;
 }
 
 [data-scheme="lcars"] header {
-	background: #000 !important;
-	border-color: #000 !important;
-	border-bottom: none !important;
-	height: 60px !important;
-	min-height: 60px !important;
-	padding-left: 0 !important;  /* run flush to the left edge */
-	padding-right: 0 !important; /* run flush to the right edge */
-}
-
-[data-scheme="lcars"] header button {
-	color: #000 !important;
-}
-
-[data-scheme="lcars"] header .dark\:bg-white\/30 {
-	background: #000 !important;
-}
-
-/* ── LCARS stats bar: one continuous run of rectangular, butted colour cells
-   with black text, separated by thin black breaks. Scoped to the header stats
-   bar ONLY — the rounded-pill language elsewhere (sidebar, headings, badges)
-   is a separate visual element and is left untouched. Colours rotate across
-   ALL items as a single run (the two groups don't reset the rotation). ───── */
-[data-scheme="lcars"] header .lg\:flex {
-	gap: 0 !important;
+	background: #000;
+	border-color: #000;
+	border-bottom: none;
 	height: 60px;
-	flex: 1 1 auto; /* stretch the run toward the right-side action cluster */
+	min-height: 60px;
+	padding-left: 0;
+	padding-right: 0;
 }
 
-[data-scheme="lcars"] header .lg\:flex > div {
-	gap: 0 !important;
+[data-scheme="lcars"] header > .hidden.lg\:flex {
+	gap: 0;
+	height: 60px;
+	flex: 1 1 auto;
+}
+
+[data-scheme="lcars"] header > .hidden.lg\:flex > div {
+	gap: 0;
 	height: 100%;
 }
 
-/* The last stat cell stretches to fill the gap up to the action buttons,
-   carrying the run flush to the right edge. */
-[data-scheme="lcars"] header .lg\:flex > div:last-child {
-	flex: 1 1 auto;
-}
-[data-scheme="lcars"] header .lg\:flex > div:last-child > :last-child {
+/* The last group stretches so the run reaches the action cluster. */
+[data-scheme="lcars"] header > .hidden.lg\:flex > div:last-child,
+[data-scheme="lcars"] header > .hidden.lg\:flex > div:last-child > :last-child {
 	flex: 1 1 auto;
 }
 
-[data-scheme="lcars"] header .lg\:flex > div > a,
-[data-scheme="lcars"] header .lg\:flex > div > span {
-	color: #000 !important;
-	display: flex !important;
+[data-scheme="lcars"] header > .hidden.lg\:flex > div > a,
+[data-scheme="lcars"] header > .hidden.lg\:flex > div > span {
+	color: #000;
+	display: flex;
 	align-items: center;
 	height: 100%;
-	padding: 0 16px !important;
-	border-radius: 0 !important;
-	border-right: 8px solid #000 !important; /* the black break between cells */
-	font-weight: 600 !important;
-	line-height: 1 !important;
+	padding: 0 16px;
+	border-radius: 0;
+	border-right: 8px solid #000;
+	font-weight: 600;
+	line-height: 1;
 	white-space: nowrap;
 }
 
+/* Continuous colour rotation across BOTH groups, listed in document order
+   (4 health cells, then the activity counts) so the run is unbroken. */
+[data-scheme="lcars"] header > .hidden.lg\:flex > div:first-child > a:nth-child(1) { background: #f90; }
+[data-scheme="lcars"] header > .hidden.lg\:flex > div:first-child > a:nth-child(2) { background: #fcb98b; }
+[data-scheme="lcars"] header > .hidden.lg\:flex > div:first-child > a:nth-child(3) { background: #c9c; }
+[data-scheme="lcars"] header > .hidden.lg\:flex > div:first-child > a:nth-child(4) { background: #fc3; }
+[data-scheme="lcars"] header > .hidden.lg\:flex > div:last-child > :nth-child(1) { background: #fcb98b; }
+[data-scheme="lcars"] header > .hidden.lg\:flex > div:last-child > :nth-child(2) { background: #f90; }
+[data-scheme="lcars"] header > .hidden.lg\:flex > div:last-child > :nth-child(3) { background: #a9c0c4; }
+[data-scheme="lcars"] header > .hidden.lg\:flex > div:last-child > :nth-child(4) { background: #ff8b8b; }
+[data-scheme="lcars"] header > .hidden.lg\:flex > div:last-child > :nth-child(5) { background: #fc3; }
 
-/* Continuous colour rotation across BOTH groups. Listing the items in document
-   order (4 health pills, then the activity counts) as a flat sequence keeps the
-   run unbroken — no nth-child reset at the divider. */
-[data-scheme="lcars"] header .lg\:flex > div:first-child > a:nth-child(1) { background: #f90 !important; }   /* ARM          orange */
-[data-scheme="lcars"] header .lg\:flex > div:first-child > a:nth-child(2) { background: #fcb98b !important; } /* DB           peach  */
-[data-scheme="lcars"] header .lg\:flex > div:first-child > a:nth-child(3) { background: #c9c !important; }   /* TRANSCODE    mauve  */
-[data-scheme="lcars"] header .lg\:flex > div:first-child > a:nth-child(4) { background: #fc3 !important; }   /* KEY          gold   */
-/* activity group continues the run: peach, orange, slate, salmon … */
-[data-scheme="lcars"] header .lg\:flex > div:last-child > :nth-child(1) { background: #fcb98b !important; } /* 1 DRIVE        peach  */
-[data-scheme="lcars"] header .lg\:flex > div:last-child > :nth-child(2) { background: #f90 !important; }   /* 8 RIPPING      orange */
-[data-scheme="lcars"] header .lg\:flex > div:last-child > :nth-child(3) { background: #a9c0c4 !important; } /* 4 TRANSCODING  slate  */
-[data-scheme="lcars"] header .lg\:flex > div:last-child > :nth-child(4) { background: #ff8b8b !important; } /* 1 NOTIFICATION salmon */
-[data-scheme="lcars"] header .lg\:flex > div:last-child > :nth-child(5) { background: #fc3 !important; }   /* (queued, if shown) gold */
-
-/* Last stat cell: keep a trailing break, because the run continues into the
-   right-side action cluster (below) so the colour reaches the screen edge. */
-[data-scheme="lcars"] header .lg\:flex > div:last-child > :last-child {
-	border-right: 5px solid #000 !important;
+[data-scheme="lcars"] header > .hidden.lg\:flex > div:last-child > :last-child {
+	border-right: 5px solid #000;
 }
 
-/* Carry the run's terminating colour through the right-side action cluster
-   (Auto-Start + icon buttons) all the way to the screen's right edge, so the
-   coloured strip is unbroken edge-to-edge. */
+/* Carry the terminating colour through the action cluster to the right edge. */
 [data-scheme="lcars"] header > .ml-auto {
-	background: #c9c !important; /* same mauve as the last stat cell */
+	background: #c9c;
 	height: 100%;
-	padding-right: 16px !important;
-	padding-left: 16px !important;
+	padding-right: 16px;
+	padding-left: 16px;
 }
 
-/* The status dot inside each health cell stays as a live signal; ring it so it
-   reads on the coloured block. */
-[data-scheme="lcars"] header .lg\:flex > div > a > div.rounded-full {
+/* Health dots stay live signals; ring them so they read on the colour block. */
+[data-scheme="lcars"] header > .hidden.lg\:flex .status-dot {
 	box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
 }
 
-/* Hide the vertical divider — the butted cells already form the run. */
-[data-scheme="lcars"] header .lg\:flex > div.w-px,
-[data-scheme="lcars"] header .lg\:flex > .h-6.w-px {
-	display: none !important;
+/* The butted cells already form the run, so the hairline divider between
+   the health group and the activity group is redundant. It is an empty
+   <div> between the two groups, matched structurally rather than by the
+   layout's own class name. */
+[data-scheme="lcars"] header > .hidden.lg\:flex > div:empty {
+	display: none;
 }
 
-[data-scheme="lcars"] header .text-gray-700,
-[data-scheme="lcars"] header .text-gray-600,
-[data-scheme="lcars"] header .text-gray-200,
-[data-scheme="lcars"] header .text-gray-300 {
-	color: #000 !important;
+/* Everything sitting on the header's coloured run reads black. The labels
+   and counts are component-local text, so this sets the roles they paint
+   from for the header subtree instead of naming their classes. */
+/* Scoped to the cell run itself, not the whole header: the action cluster
+   to its right keeps the normal roles, so the Auto-Start pill still reads
+   its own primary-text / on-warning-soft colours in both states. */
+[data-scheme="lcars"] header > .hidden.lg\:flex {
+	--color-text: #000;
+	--color-text-secondary: #000;
+	--color-text-muted: #000;
+	--color-text-faint: #000;
+	--color-primary-text: #000;
+	--color-status-ripping: #000;
+	--color-status-transcoding: #000;
+	--color-status-waiting: #000;
+	--color-warning: #000;
 }
 
-[data-scheme="lcars"] header button:not(.fixed):hover {
-	background: rgba(0, 0, 0, 0.15) !important;
+[data-scheme="lcars"] header .btn,
+[data-scheme="lcars"] header .btn-icon {
+	color: #000;
 }
 
-/* Action-cluster icons sit on the mauve fill now — black reads, not white. */
-[data-scheme="lcars"] header > div:last-child button {
-	color: #000 !important;
+/* The Auto-Start pill is the one text-bearing action button in the cluster,
+   and its label is white rather than the black the cell run to its left
+   uses. */
+[data-scheme="lcars"] header > .ml-auto .btn:not(.btn-icon) {
+	color: #fff;
 }
 
-/* …but the Auto-Start button's label is white (the text-bearing action button,
-   not the icon-only ones). */
-[data-scheme="lcars"] header > div:last-child button.text-sm.font-medium {
-	color: #fff !important;
+/* Its switch is LCARS orange, not the command blue that primary carries,
+   and the knob stays white: .toggle-thumb paints from --color-on-primary,
+   which this scheme sets to black for text on a primary fill. */
+[data-scheme="lcars"] header .toggle[aria-checked="true"],
+[data-scheme="lcars"] header [role="switch"][aria-checked="true"] > .toggle {
+	background: #f90;
 }
 
-/* Quick-actions flyout (the cog dropdown) renders on the dark surface panel, so
-   its menu items must be WHITE — the header's black-text rule above would
-   otherwise make them black-on-dark. Scoped to items inside the flyout panel. */
-[data-scheme="lcars"] header > div:last-child .z-50.bg-surface button,
-[data-scheme="lcars"] header > div:last-child .z-50.bg-surface a,
-[data-scheme="lcars"] header > div:last-child .z-50.dark\:bg-surface-dark button,
-[data-scheme="lcars"] header > div:last-child .z-50.dark\:bg-surface-dark a {
-	color: #fff !important;
+/* Every toggle knob, not just the header's: the settings switches had white
+   knobs in the baseline too, and --color-on-primary is black here. */
+[data-scheme="lcars"] .toggle-thumb {
+	background: #fff;
 }
 
-[data-scheme="lcars"] .absolute.rounded-lg.bg-surface,
-[data-scheme="lcars"] .absolute.rounded-lg.dark\:bg-surface-dark,
-[data-scheme="lcars"] .absolute.z-50.bg-surface,
-[data-scheme="lcars"] .absolute.z-50.dark\:bg-surface-dark,
-/* The header Quick-actions flyout is position:fixed (no .absolute class) — match
-   it by its .z-50.rounded-lg.bg-surface signature so it gets the same dark panel
-   + orange frame as the other LCARS dropdowns. */
-[data-scheme="lcars"] .z-50.rounded-lg.bg-surface,
-[data-scheme="lcars"] .z-50.rounded-lg.dark\:bg-surface-dark {
-	border-radius: 8px !important;
-	background-color: #1a1a2e !important;
-	border: 1px solid rgb(255, 153, 0) !important;
+/* The pill itself sits on a dark scrim over the header plate: the
+   original's enabled fill was primary-light-bg-dark at 30%, which this
+   scheme sets to a near-black navy. The tint role the block reaches for
+   is a light blue wash and loses that. */
+[data-scheme="lcars"] header .btn[data-active="true"] {
+	background: rgba(30, 30, 60, 0.3);
 }
 
+[data-scheme="lcars"] header .btn:hover {
+	background: rgba(0, 0, 0, 0.15);
+}
+
+/* Quick-actions flyout renders on the dark raised surface, so its items
+   must be white; the header's black-text rule above would hide them. */
+[data-scheme="lcars"] .flyout .flyout-item {
+	color: #fff;
+}
+
+/* Dropdowns/flyouts: solid dark panel in an orange frame. */
+[data-scheme="lcars"] .flyout {
+	border-radius: 8px;
+	background-color: #1a1a2e;
+	border: 1px solid #f90;
+}
+
+[data-scheme="lcars"] [data-dialog],
+[data-scheme="lcars"] .modal-panel {
+	border: 2px solid #99f;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Main content.
+   ───────────────────────────────────────────────────────────────────────── */
 [data-scheme="lcars"] main {
-	padding-left: 10px !important;
-	padding-right: 40px !important;
+	padding-left: 10px;
+	padding-right: 40px;
 	scrollbar-width: thin;
 	scrollbar-color: #c9c #000;
 }
 
-[data-scheme="lcars"] main .shadow-xs,
-
-[data-scheme="lcars"] main .shadow-md,
-
-[data-scheme="lcars"] main .hover\:shadow-md:hover {
-	box-shadow: none !important;
-}
-
-[data-scheme="lcars"] main > .space-y-6 > .flex.items-center.justify-between {
+/* Page and section headings sit on peach/gold LCARS plates.
+   A page header row (the layout `page-header` helper, or the bare
+   flex/justify-between row the dashboard uses) becomes one full-width
+   plate carrying the title and its actions; a title with no such row
+   becomes a plate of its own. */
+[data-scheme="lcars"] main .page-header,
+[data-scheme="lcars"] main .stack > .flex.items-center.justify-between:first-child {
 	background: #fca;
 	border-radius: 21px;
+	/* 0.5rem vertical, the baseline's own value; an earlier pass wrote
+	   0.625rem, making the plate 4px taller than the original. */
 	padding: 0.5rem 1.5rem;
-	margin-bottom: 1rem;
+	/* the plate's own rounded box already separates it from the section
+	   below, so pull the stack's 1.5rem gap back to the original 1rem */
+	margin-bottom: -0.5rem;
 }
 
-[data-scheme="lcars"] main h1 {
-	color: #000 !important;
-	font-size: 1.8rem !important;
-	font-weight: 700 !important;
-	border-bottom: none !important;
-	padding-bottom: 0;
-	margin-bottom: 0;
-}
-
-[data-scheme="lcars"] main h1.text-2xl.font-bold {
-	color: #000 !important;
-}
-
-[data-scheme="lcars"] main > .space-y-6 > .flex.items-center.justify-between button {
-	background: rgba(0, 0, 0, 0.2) !important;
-	color: #000 !important;
-	border-radius: 21px !important;
-}
-
-[data-scheme="lcars"] main > .space-y-6 > h1:first-child,
-
-[data-scheme="lcars"] main > div > h1:first-child {
+[data-scheme="lcars"] main .page-title {
 	display: inline-block;
+	/* a .stack is a column flexbox, whose items stretch to full width by
+	   default: the plate has to hug its own text */
+	align-self: flex-start;
 	background: #fca;
-	color: #000 !important;
-	font-size: 1.8rem !important;
+	color: #000;
+	font-size: 1.8rem;
+	/* 2.375rem (38px): the plate is 54px tall in the original, and its
+	   padding accounts for 16 of that. `normal` leading for this font
+	   stack gives 34 and leaves the plate 4px short, which then shifts
+	   everything below it down the page. */
+	line-height: 2.375rem;
 	padding: 0.5rem 1.5rem;
 	border-radius: 21px;
 	border-bottom: none;
-	margin-bottom: 1rem;
+	/* the plate sits in a .stack-lg, whose own 1.5rem gap already exceeds
+	   the 1rem the original left below the heading; pull it back rather
+	   than adding to it */
+	margin-bottom: -0.5rem;
 }
 
-[data-scheme="lcars"] main h2 {
-	display: inline-block;
-	background: #fca;
-	color: #000 !important;
-	font-size: 1.2rem !important;
-	padding: 4px 20px;
-	border-radius: 20px;
-	margin-bottom: 15px;
-}
-
-[data-scheme="lcars"] main h2[class] {
-	color: #000 !important;
-}
-
-/* Sub-text spans inside an h2 pill (e.g. "Tracklist (13 tracks via
-   MusicBrainz)") carry their own gray text class, so the h2's black colour
-   doesn't reach them — they wash out on the gold/peach pill. Force black.
-   Needs the gray text classes in the selector to out-specify the generic
-   `.text-sm.text-gray-400 → #fca` rule. */
-[data-scheme="lcars"] main h2 span.text-gray-500.dark\:text-gray-400,
-[data-scheme="lcars"] main h2 span.text-sm.dark\:text-gray-400,
-[data-scheme="lcars"] main h2 span.text-sm.text-gray-500 {
-	color: #000 !important;
-}
-
-[data-scheme="lcars"] main section > .mb-3.flex.items-center {
-	display: inline-flex;
-	background: #fca;
-	padding: 4px 20px;
-	border-radius: 20px;
-	margin-bottom: 15px;
-}
-
-[data-scheme="lcars"] main section > .mb-3.flex.items-center h2 {
+/* Inside a plate the title is just text: the plate carries the fill. */
+[data-scheme="lcars"] main .page-header .page-title,
+[data-scheme="lcars"] main .stack > .flex.items-center.justify-between:first-child .page-title {
 	background: transparent;
 	padding: 0;
-	margin: 0;
+	margin-bottom: 0;
 	border-radius: 0;
 }
 
-[data-scheme="lcars"] main section > .mb-3.flex.items-center span {
-	color: #000 !important;
+[data-scheme="lcars"] main .page-header .btn,
+[data-scheme="lcars"] main .stack > .flex.items-center.justify-between:first-child .btn {
+	background: rgba(0, 0, 0, 0.2);
+	color: #000;
+	border-radius: 21px;
+	border-color: transparent;
+}
+
+/* Section headings are gold/peach LCARS plates. The scheme attribute is
+   doubled so the rule outranks a component's own scoped h2 class (0-2-0);
+   `main h2` alone is 0-1-1 and loses. line-height is pinned for the same
+   reason: those classes size their leading for their own type scale, and
+   at this plate's 1.2rem that leaves the pill several px too tall. */
+[data-scheme="lcars"][data-scheme] main h2 {
+	display: inline-block;
+	background: #fca;
+	color: #000;
+	font-size: 1.2rem;
+	/* the baseline plate took its leading from the ambient text-lg ratio
+	   (29.87px at this 19.2px type); `normal` resolved ~7px shorter and
+	   pulled every band below it up the page. */
+	line-height: calc(1.75 / 1.125);
+	padding: 4px 20px;
+	border-radius: 20px;
+	margin-bottom: 15px;
+}
+
+/* Same stack-stretch problem .page-title solves above: in the original the
+   settings tab panes were block flow (space-y-6), so inline-block shrank the
+   plate to its text; the migrated panes are .stack column flexboxes, whose
+   items stretch to full width regardless of display. Scoped to direct stack
+   children: h2s in row flexboxes (the dashboard's "All Jobs") must not get
+   an align-self that would shift them vertically instead. */
+[data-scheme="lcars"][data-scheme] main .stack > h2 {
+	align-self: flex-start;
+	/* in block flow the 15px margin-bottom collapsed into space-y's 24px
+	   sibling margin (max wins); flex gaps do not collapse, so keeping it
+	   would add 15px the original never showed */
+	margin-bottom: 0;
+}
+
+[data-scheme="lcars"] main h2 span {
+	color: #000;
+}
+
+[data-scheme="lcars"][data-scheme] main section h2 {
+	background: #fc3;
+	color: #000;
+	border-bottom: none;
 }
 
 [data-scheme="lcars"] main h3 {
-	color: #fff !important;
+	color: #fff;
 }
 
 [data-scheme="lcars"] main p {
 	color: #fca;
 }
 
-[data-scheme="lcars"] main .bg-surface,
-
-[data-scheme="lcars"] main .dark\:bg-surface-dark {
-	--frame-accent: #99f;
-	background: rgba(153, 153, 255, 0.15) !important;
-	border-radius: 21px !important;
-	border: none !important;
-	box-shadow: none !important;
-}
-
-/* Files-page file-list panel: the translucent periwinkle surface above reads as
-   near-black over the page. Give the file browser a SOLID lifted panel so it's
-   a distinct surface, not black-on-black. Scoped to the file-list container
-   (overflow-hidden rounded-lg bg-surface). */
-[data-scheme="lcars"] main .overflow-hidden.rounded-lg.bg-surface,
-[data-scheme="lcars"] main .overflow-hidden.rounded-lg.dark\:bg-surface-dark {
-	background: #1a1a2e !important;
-}
-
-[data-scheme="lcars"] [data-dialog] {
-	border: 2px solid #99f !important;
-}
-
-[data-scheme="lcars"] main .grid-cols-3 > :nth-child(2) { --frame-accent: #c9c; }
-
-[data-scheme="lcars"] main .grid-cols-3 > :nth-child(3) { --frame-accent: #fca; }
-
-[data-scheme="lcars"] main .lg\:grid-cols-5 > :nth-child(1) { --frame-accent: #f90; }
-
-[data-scheme="lcars"] main .lg\:grid-cols-5 > :nth-child(3) { --frame-accent: #8bd3c2; }
-
-[data-scheme="lcars"] main .lg\:grid-cols-5 > :nth-child(4) { --frame-accent: #ff8b8b; }
-
-[data-scheme="lcars"] main .lg\:grid-cols-5 > :nth-child(5) { --frame-accent: #666; }
-
-[data-scheme="lcars"] main .grid-cols-3 > .bg-surface,
-
-[data-scheme="lcars"] main .grid-cols-3 > .dark\:bg-surface-dark,
-
-[data-scheme="lcars"] main .lg\:grid-cols-5 > .bg-surface,
-
-[data-scheme="lcars"] main .lg\:grid-cols-5 > .dark\:bg-surface-dark {
-	background: var(--frame-accent, #99f) !important;
-	box-shadow: none !important;
-	padding-bottom: 0.75em !important;
-	padding-left: 2rem !important;
-}
-
-[data-scheme="lcars"] main .grid-cols-3 > .bg-surface::before,
-
-[data-scheme="lcars"] main .grid-cols-3 > .bg-surface::after,
-
-[data-scheme="lcars"] main .lg\:grid-cols-5 > .bg-surface::before,
-
-[data-scheme="lcars"] main .lg\:grid-cols-5 > .bg-surface::after {
-	display: none !important;
-}
-
-[data-scheme="lcars"] main .grid-cols-3 > .bg-surface p,
-
-[data-scheme="lcars"] main .grid-cols-3 > .bg-surface span,
-
-[data-scheme="lcars"] main .grid-cols-3 > .bg-surface svg,
-
-[data-scheme="lcars"] main .lg\:grid-cols-5 > .bg-surface p,
-
-[data-scheme="lcars"] main .lg\:grid-cols-5 > .bg-surface span,
-
-[data-scheme="lcars"] main .lg\:grid-cols-5 > .bg-surface svg {
-	color: #000 !important;
-}
-
-[data-scheme="lcars"] main .h-10.w-10.bg-primary-light-bg,
-
-[data-scheme="lcars"] main .h-10.w-10.dark\:bg-primary-light-bg-dark\/30,
-
-[data-scheme="lcars"] main .bg-indigo-100,
-
-[data-scheme="lcars"] main .dark\:bg-indigo-900\/30,
-
-[data-scheme="lcars"] main .bg-emerald-100,
-
-[data-scheme="lcars"] main .dark\:bg-emerald-900\/30 {
-	background: transparent !important;
-	border-radius: 0 !important;
-}
-
-[data-scheme="lcars"] main p.text-2xl.font-bold,
-
-[data-scheme="lcars"] main p.text-3xl.font-bold,
-
-[data-scheme="lcars"] main span.text-2xl.font-bold,
-
-[data-scheme="lcars"] main span.text-3xl.font-bold {
-	color: #000 !important;
-}
-
-[data-scheme="lcars"] main .text-sm.text-gray-500,
-
-[data-scheme="lcars"] main .dark\:text-gray-400 {
-	color: #fca !important;
-}
-
-[data-scheme="lcars"] main .text-gray-900,
-
-[data-scheme="lcars"] main .dark\:text-white,
-
-[data-scheme="lcars"] main .text-white {
-	color: #fff !important;
-}
-
-[data-scheme="lcars"] main .text-gray-300,
-
-[data-scheme="lcars"] main .text-gray-400,
-
-[data-scheme="lcars"] main .text-gray-500,
-
-[data-scheme="lcars"] main .text-gray-600,
-
-[data-scheme="lcars"] main .text-gray-700,
-
-[data-scheme="lcars"] main .dark\:text-gray-300,
-
-[data-scheme="lcars"] main .dark\:text-gray-400,
-
-[data-scheme="lcars"] main .dark\:text-gray-500 {
-	color: #fca !important;
-}
-
-[data-scheme="lcars"] main .text-blue-700,
-
-[data-scheme="lcars"] main .dark\:text-blue-400 {
-	color: #99f !important;
-}
-
-[data-scheme="lcars"] main .text-green-700,
-
-[data-scheme="lcars"] main .dark\:text-green-400 {
-	color: #8bd3c2 !important;
-}
-
-[data-scheme="lcars"] main .text-purple-700,
-
-[data-scheme="lcars"] main .dark\:text-purple-400 {
-	color: #c9c !important;
-}
-
-[data-scheme="lcars"] main .text-indigo-700,
-
-[data-scheme="lcars"] main .dark\:text-indigo-400 {
-	color: #c9c !important;
-}
-
-[data-scheme="lcars"] main .bg-blue-100,
-
-[data-scheme="lcars"] main .dark\:bg-blue-900\/30 {
-	background: rgba(153, 153, 255, 0.2) !important;
-	color: #99f !important;
-}
-
-[data-scheme="lcars"] main .bg-green-100,
-
-[data-scheme="lcars"] main .dark\:bg-green-900\/30 {
-	background: rgba(0, 204, 51, 0.15) !important;
-	color: #8bd3c2 !important;
-}
-
-[data-scheme="lcars"] main .bg-purple-100,
-
-[data-scheme="lcars"] main .dark\:bg-purple-900\/30 {
-	background: rgba(204, 153, 204, 0.2) !important;
-	color: #c9c !important;
-}
-
-[data-scheme="lcars"] main .bg-amber-100,
-
-[data-scheme="lcars"] main .dark\:bg-amber-900\/30 {
-	background: rgba(255, 153, 0, 0.15) !important;
-	color: #f90 !important;
-}
-
-[data-scheme="lcars"] main .text-amber-700,
-
-[data-scheme="lcars"] main .dark\:text-amber-400 {
-	color: #f90 !important;
-}
-
-/* Top status bar (header) — the live-activity counts ("8 ripping",
-   "4 transcoding", "1 notification") keep their raw Tailwind blue/indigo/amber
-   because the main-scoped overrides above don't reach <header>. The header bar
-   sits on the light-purple LCARS plate (#c9c), so it needs DARK, saturated
-   tints (the opposite of the light tints main uses on its dark canvas) to read.
-   Keep the colour-coding intent, just make each legible on #c9c. */
-[data-scheme="lcars"] header .text-blue-600,
-[data-scheme="lcars"] header .dark\:text-blue-400 {
-	color: #1f2a6b !important; /* deep LCARS blue */
-}
-
-[data-scheme="lcars"] header .text-indigo-600,
-[data-scheme="lcars"] header .dark\:text-indigo-400 {
-	color: #5a1a52 !important; /* deep plum — distinct from the purple bar */
-}
-
-[data-scheme="lcars"] header .text-amber-600,
-[data-scheme="lcars"] header .dark\:text-amber-400 {
-	color: #7a3800 !important; /* dark amber — warm alert, reads on #c9c */
-}
-
-[data-scheme="lcars"] main .overflow-x-auto.rounded-lg {
-	border-radius: 0 !important;
-}
-
-[data-scheme="lcars"] main table {
-	width: 100%;
-	border-collapse: collapse;
-}
-
-[data-scheme="lcars"] main thead,
-
-[data-scheme="lcars"] main thead tr {
-	background: #c9c !important;
-}
-
-[data-scheme="lcars"] main th {
-	text-align: left;
-	color: #000 !important;
-	background: #c9c !important;
-	font-weight: bold;
-	padding: 10px 10px 10px 16px !important;
-}
-
-/* Round the header bar into the LCARS "elbow" language: the top-left and
-   top-right corners curve like .section-frame-bar-top (40px 0 0 0). The wrapper
-   already clips with border-radius + overflow-y:hidden, so this reads as a
-   framed header panel rather than a flat strip. */
-[data-scheme="lcars"] main thead th:first-child {
-	border-top-left-radius: 20px !important;
-}
-
-[data-scheme="lcars"] main thead th:last-child {
-	border-top-right-radius: 20px !important;
-}
-
-/* Visually separate the rounded header from the rows below. */
-[data-scheme="lcars"] main thead tr {
-	box-shadow: 0 4px 0 #000;
-}
-
-[data-scheme="lcars"] main td {
-	background: rgba(255, 255, 255, 0.05) !important;
-	color: #fca !important;
-	padding: 12px 10px !important;
-	border-bottom: 4px solid #000 !important;
-}
-
-[data-scheme="lcars"] main thead .bg-page,
-[data-scheme="lcars"] main thead.bg-page,
-[data-scheme="lcars"] main thead.dark\:bg-primary\/5 {
-	background: #c9c !important;
-	border-radius: 0 !important;
-	padding: 0 !important;
-}
-
-[data-scheme="lcars"] main div.bg-page,
-
-[data-scheme="lcars"] main .dark\:bg-primary\/5:not(thead) {
-	background: rgba(153, 153, 255, 0.05) !important;
-	border: none !important;
-	border-radius: 21px !important;
-	padding: 1.5rem 2rem !important;
-}
-
-[data-scheme="lcars"] main .bg-surface button.hover\:bg-page,
-
-[data-scheme="lcars"] main .bg-surface button.dark\:hover\:bg-primary\/15 {
-	background: transparent !important;
-	padding-left: 2.5rem !important;
-	padding-right: 2.5rem !important;
-}
-
-[data-scheme="lcars"] main .bg-surface button.hover\:bg-page:hover,
-
-[data-scheme="lcars"] main .bg-surface button.dark\:hover\:bg-primary\/15:hover {
-	background: transparent !important;
-}
-
-[data-scheme="lcars"] main .bg-surface > .border-t.px-4.py-3 {
-	padding-left: 2.5rem !important;
-	padding-right: 2.5rem !important;
-	padding-bottom: 2rem !important;
-}
-
-[data-scheme="lcars"] main .bg-surface .border-t,
-
-[data-scheme="lcars"] main .bg-surface .border-b,
-
-[data-scheme="lcars"] main .bg-surface hr {
-	border-color: transparent !important;
-}
-
-[data-scheme="lcars"] main .overflow-x-auto {
-	border-radius: 20px !important;
-	border-color: transparent !important;
-	/* Keep horizontal scrolling for wide tables — the LCARS th/td padding makes
-	   them wider than the container, so `overflow: hidden` clipped the trailing
-	   columns. Clip only the vertical axis for the rounded corners. */
-	overflow-x: auto !important;
-	overflow-y: hidden !important;
-}
-
-[data-scheme="lcars"] main tbody.divide-y > tr,
-
-[data-scheme="lcars"] main .divide-y > * {
-	border-color: transparent !important;
-}
-
-[data-scheme="lcars"] main tr:hover td {
-	background: rgba(255, 255, 255, 0.1) !important;
-}
-
-[data-scheme="lcars"] main button,
-
-[data-scheme="lcars"] main a[class*="rounded-lg"][class*="px-3"] {
-	border-radius: 20px !important;
-	font-weight: bold;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
-}
-
-[data-scheme="lcars"] main .bg-primary {
-	background: #99f !important;
-	color: #000 !important;
-}
-
-[data-scheme="lcars"] main .bg-primary:hover {
-	background: #bbf !important;
-}
-
-[data-scheme="lcars"] main .bg-emerald-100,
-
-[data-scheme="lcars"] main .dark\:bg-emerald-900\/30 {
-	background: #fc3 !important;
-	color: #000 !important;
-}
-
-[data-scheme="lcars"] main .bg-red-600 {
-	background: #ff8b8b !important;
-	color: #fff !important;
-}
-
-[data-scheme="lcars"] main .bg-primary\/15,
-
-[data-scheme="lcars"] main .dark\:bg-primary\/15 {
-	background: rgba(153, 153, 255, 0.15) !important;
-	color: #99f !important;
-}
-
-[data-scheme="lcars"] main [class*="border-amber"] {
-	background: rgba(255, 153, 0, 0.08) !important;
-	border: none !important;
-	border-radius: 63px !important;
-	box-shadow: inset 6px 0 0 0 #f90 !important;
-}
-
-[data-scheme="lcars"] main [class*="border-red"] {
-	background: rgba(204, 51, 51, 0.08) !important;
-	border: none !important;
-	border-radius: 63px !important;
-	box-shadow: inset 6px 0 0 0 #ff8b8b !important;
-}
-
-[data-scheme="lcars"] main [class*="border-yellow"] {
-	background: rgba(255, 204, 51, 0.08) !important;
-	border: none !important;
-	border-radius: 63px !important;
-	box-shadow: inset 6px 0 0 0 #fc3 !important;
-}
-
-/* Borderless warning/error BANNERS (bg-red-50 / bg-red-900/20 / bg-amber-50)
-   miss the border-* pill rules above. Give callouts the same LCARS framed-pill
-   treatment so error/warning messages match the rest of the theme. Scoped to
-   block-level rounded-md banners so small inline badges aren't pill-barred. */
-[data-scheme="lcars"] main .rounded-md.bg-red-50,
-[data-scheme="lcars"] main .rounded-md[class*="bg-red-900\/"] {
-	background: rgba(204, 51, 51, 0.08) !important;
-	border: none !important;
-	border-radius: 63px !important;
-	box-shadow: inset 6px 0 0 0 #ff8b8b !important;
-}
-
-[data-scheme="lcars"] main .rounded-md.bg-amber-50,
-[data-scheme="lcars"] main .rounded-md[class*="bg-amber-900\/"] {
-	background: rgba(255, 153, 0, 0.1) !important;
-	border: none !important;
-	border-radius: 63px !important;
-	box-shadow: inset 6px 0 0 0 #f90 !important;
-}
-
-/* Files-page "Modify at your own risk" warning: the base theme paints it with
-   an 8%-translucent periwinkle fill, so it reads as a faint outline. Make it a
-   SOLID LCARS caution banner — solid gold fill, black text. Scoped to the
-   primary-light-bg warning banner (border-primary + text-primary-dark). */
-[data-scheme="lcars"] main .rounded-lg.bg-primary-light-bg.text-primary-dark,
-[data-scheme="lcars"] main .rounded-lg.bg-primary-light-bg.dark\:text-primary-text-dark {
-	background: #fc3 !important;
-	color: #000 !important;
-	border: none !important;
-	box-shadow: inset 8px 0 0 0 #f90 !important;
-}
-[data-scheme="lcars"] main .rounded-lg.bg-primary-light-bg.text-primary-dark .font-semibold,
-[data-scheme="lcars"] main .rounded-lg.bg-primary-light-bg.dark\:text-primary-text-dark .font-semibold {
-	color: #000 !important;
-}
-
-/* Small inline warning chips (Stale / N custom / etc.) — just normalize the
-   tint + text to LCARS orange, no pill bar. */
-[data-scheme="lcars"] main [class*="bg-amber-500\/"] {
-	background: rgba(255, 153, 0, 0.15) !important;
-	color: #f90 !important;
-}
-
-[data-scheme="lcars"] main div[class*="border-primary\/25"][class*="rounded-lg"] {
-	background: rgba(102, 102, 102, 0.08) !important;
-	border: none !important;
-	border-radius: 63px !important;
-	box-shadow: inset 6px 0 0 0 #666 !important;
-}
-
-[data-scheme="lcars"] main .text-amber-800,
-
-[data-scheme="lcars"] main .dark\:text-amber-300,
-
-[data-scheme="lcars"] main .text-amber-700,
-
-[data-scheme="lcars"] main .dark\:text-amber-400 {
-	color: #f90 !important;
-}
-
-[data-scheme="lcars"] main .text-red-700,
-
-[data-scheme="lcars"] main .dark\:text-red-400 {
-	color: #ff8b8b !important;
+[data-scheme="lcars"] main .field-label,
+[data-scheme="lcars"] main label {
+	color: #fff;
 }
-
-[data-scheme="lcars"] main .text-yellow-800,
-
-[data-scheme="lcars"] main .dark\:text-yellow-300 {
-	color: #fc3 !important;
-}
-
-[data-scheme="lcars"] main .bg-green-500 {
-	background: #8bd3c2 !important;
-}
-
-[data-scheme="lcars"] main .bg-yellow-500 {
-	background: #f90 !important;
-	color: #000 !important;
-}
-
-[data-scheme="lcars"] main .text-yellow-600,
-
-[data-scheme="lcars"] main .dark\:text-yellow-400 {
-	color: #f90 !important;
-}
-
-[data-scheme="lcars"] main .text-blue-600,
-
-[data-scheme="lcars"] main .dark\:text-blue-400 {
-	color: #99f !important;
-}
-
-[data-scheme="lcars"] main .text-green-600,
-
-[data-scheme="lcars"] main .dark\:text-green-400 {
-	color: #8bd3c2 !important;
-}
-
-[data-scheme="lcars"] main .text-red-600,
-
-[data-scheme="lcars"] main .dark\:text-red-400 {
-	color: #ff8b8b !important;
-}
-
-[data-scheme="lcars"] main .bg-primary.text-on-primary {
-	background: #fc3 !important;
-	color: #000 !important;
-	border-radius: 20px !important;
-}
-
-[data-scheme="lcars"] main [class*="border-l-4"] {
-	border-left: none !important;
-}
-
-[data-scheme="lcars"] main .border-l-indigo-500 { --frame-accent: #c9c; }
-
-[data-scheme="lcars"] main a.text-primary-text,
 
-[data-scheme="lcars"] main a.dark\:text-primary-text-dark {
-	color: #99f !important;
+[data-scheme="lcars"] main .mono {
+	color: #fca;
 }
 
 [data-scheme="lcars"] main svg {
-	color: #fca !important;
+	color: #fca;
 }
 
-[data-scheme="lcars"] main .text-primary svg,
-
-[data-scheme="lcars"] main .dark\:text-primary-text-dark svg { color: #99f !important; }
-
-[data-scheme="lcars"] main .text-indigo-600 svg,
-
-[data-scheme="lcars"] main .dark\:text-indigo-400 svg { color: #c9c !important; }
-
-[data-scheme="lcars"] main .text-emerald-600 svg,
-
-[data-scheme="lcars"] main .dark\:text-emerald-400 svg { color: #8bd3c2 !important; }
-
-[data-scheme="lcars"] main .text-yellow-500 svg { color: #f90 !important; }
-
-[data-scheme="lcars"] main .text-blue-500 svg { color: #99f !important; }
-
-[data-scheme="lcars"] main .text-green-500 svg { color: #8bd3c2 !important; }
-
-[data-scheme="lcars"] main .text-red-500 svg { color: #ff8b8b !important; }
-
-[data-scheme="lcars"] main .text-gray-400 svg { color: #666 !important; }
-
-[data-scheme="lcars"] main .bg-primary.dark\:bg-primary-dark {
-	background: #ff8b8b !important;
-	border-radius: 0 !important;
+/* Panels, cards and stat tiles are rounded LCARS plates: no border, no
+   shadow. The fill comes from --color-surface (the lifted plate this
+   scheme sets in its COLOR_SCHEMES tokens map). */
+[data-scheme="lcars"] main .panel,
+[data-scheme="lcars"] main .card,
+[data-scheme="lcars"] main .stat {
+	--frame-accent: #99f;
+	border-radius: 21px;
+	border: none;
+	box-shadow: none;
 }
 
-[data-scheme="lcars"] main .border-2.border-primary {
-	border-color: #f90 !important;
-	border-radius: 0 !important;
-	border-width: 2px !important;
-	overflow: hidden;
+[data-scheme="lcars"] main .panel-section {
+	background: rgba(153, 153, 255, 0.05);
+	border-radius: 21px;
+	/* no padding override: the block's own padding matches the originals
+	   (the users rows were p-2.5 mini-rows; a 1.5rem/2rem pad here made
+	   every one of them 26px taller than baseline) */
 }
 
-[data-scheme="lcars"] main .bg-primary-light-bg\/50,
-
-[data-scheme="lcars"] main .dark\:bg-primary-light-bg-dark\/10 {
-	background: rgba(255, 153, 0, 0.05) !important;
+/* Stat tiles are solid accent plates with black content. */
+[data-scheme="lcars"] main .stat {
+	background: var(--frame-accent, #99f);
+	padding-bottom: 0.75em;
+	padding-left: 2rem;
 }
 
-[data-scheme="lcars"] main .bg-emerald-600,
+[data-scheme="lcars"] main .grid-3 > .stat:nth-child(2) { --frame-accent: #c9c; }
+[data-scheme="lcars"] main .grid-3 > .stat:nth-child(3) { --frame-accent: #fca; }
+[data-scheme="lcars"] main .stat:nth-child(1) { --frame-accent: #f90; }
+[data-scheme="lcars"] main .stat:nth-child(3) { --frame-accent: #8bd3c2; }
+[data-scheme="lcars"] main .stat:nth-child(4) { --frame-accent: #ff8b8b; }
+[data-scheme="lcars"] main .stat:nth-child(5) { --frame-accent: #666; }
 
-[data-scheme="lcars"] main .dark\:bg-emerald-700 {
-	background: #fc3 !important;
-	color: #000 !important;
-	border-radius: 20px !important;
+[data-scheme="lcars"] main .stat .stat-label,
+[data-scheme="lcars"] main .stat .stat-value,
+[data-scheme="lcars"] main .stat p,
+[data-scheme="lcars"] main .stat span,
+[data-scheme="lcars"] main .stat svg {
+	color: #000;
 }
 
-[data-scheme="lcars"] main .text-red-600[class*="ring-1"],
-
-[data-scheme="lcars"] main .dark\:text-red-400[class*="ring-1"] {
-	background: #ff8b8b !important;
-	color: #fff !important;
-	border-radius: 20px !important;
-	box-shadow: none !important;
+/* Cards keep the LCARS plate shape; the status accent becomes the fill hue. */
+[data-scheme="lcars"] main .card-status {
+	border-left: none;
 }
 
-[data-scheme="lcars"] main button[class*="ring-primary"] {
-	border-radius: 20px !important;
-	background: rgba(153, 153, 255, 0.1) !important;
-	color: #99f !important;
-}
-
-[data-scheme="lcars"] main .bg-blue-500 { background: #99f !important; color: #000 !important; }
-
-[data-scheme="lcars"] main .bg-indigo-500 { background: #c9c !important; color: #000 !important; }
-
-[data-scheme="lcars"] main .bg-red-500 { background: #ff8b8b !important; }
-
-[data-scheme="lcars"] main .bg-gray-500 { background: #666 !important; }
-
-[data-scheme="lcars"] main .rounded-full.text-xs.font-medium {
-	border-radius: 20px !important;
-}
-
-[data-scheme="lcars"] main img[alt*="Poster"],
-
-[data-scheme="lcars"] main img.object-cover {
-	border: 2px solid #f90 !important;
-	border-radius: 0 !important;
-}
-
-[data-scheme="lcars"] main .animate-indeterminate {
-	background: #f90 !important;
-	border-radius: 0 !important;
-	animation: lcars-scan 2s infinite ease-in-out, indeterminate 1.5s infinite ease-in-out !important;
-}
-
-[data-scheme="lcars"] main .bg-primary\/15 .animate-indeterminate {
-	background: #f90 !important;
-}
-
-[data-scheme="lcars"] main .bg-primary\/10,
-
-[data-scheme="lcars"] main .dark\:bg-primary\/15 {
-	background: rgba(153, 153, 255, 0.15) !important;
-	color: #99f !important;
-}
-
-[data-scheme="lcars"] main .text-primary-text,
-
-[data-scheme="lcars"] main .dark\:text-primary-text-dark {
-	color: #99f !important;
-}
-
-[data-scheme="lcars"] main .bg-yellow-400 {
-	background: #fc3 !important;
-	color: #000 !important;
-}
-
-[data-scheme="lcars"] main .font-mono {
-	color: #fca !important;
-}
-
-[data-scheme="lcars"] main .text-on-primary {
-	color: #000 !important;
-}
-
-[data-scheme="lcars"] main .border-primary\/20,
-
-[data-scheme="lcars"] main .dark\:border-primary\/20,
-
-[data-scheme="lcars"] main .border-primary\/25,
-
-[data-scheme="lcars"] main .dark\:border-primary\/30 {
-	border-color: rgba(153, 153, 255, 0.2) !important;
-}
-
+/* Section frames keep the elbow language. */
 [data-scheme="lcars"] .section-frame {
 	position: relative;
 	max-width: 100%;
@@ -1124,8 +605,13 @@
 	letter-spacing: 0.1em;
 }
 
+/* The page-section frames are LCARS orange. Their callers pass
+   --frame-accent inline (an inline custom property no selector can
+   outrank), and this scheme's primary is the command BLUE, so the bar
+   states its own colour rather than inheriting the accent. */
 [data-scheme="lcars"] .section-frame[data-frame-variant="full"] .section-frame-bar-top {
 	margin-left: -110px;
+	background: #f90;
 }
 
 [data-scheme="lcars"] .section-frame-bar-bottom {
@@ -1134,11 +620,13 @@
 	background: var(--frame-accent, #99f);
 	border-radius: 0 0 0 40px;
 	margin-top: 5px;
+	opacity: 1;
 }
 
 [data-scheme="lcars"] .section-frame[data-frame-variant="full"] .section-frame-bar-bottom {
 	width: calc(100% + 110px);
 	margin-left: -110px;
+	background: #f90;
 }
 
 [data-scheme="lcars"] .section-frame-sidebar {
@@ -1154,7 +642,7 @@
 }
 
 [data-scheme="lcars"] .section-frame-block-a {
-	background: var(--frame-accent, #f90);
+	background: #f90;
 	height: 60px;
 	flex: none;
 }
@@ -1195,236 +683,255 @@
 	margin-top: 3px;
 }
 
-[data-scheme="lcars"] .section-frame-body .bg-surface,
-
-[data-scheme="lcars"] .section-frame-body .dark\:bg-surface-dark {
-	border-radius: 0 !important;
-	box-shadow: none !important;
-	padding-top: 1rem !important;
-	overflow: visible !important;
-}
-
-[data-scheme="lcars"] .section-frame-body .bg-surface::before,
-
-[data-scheme="lcars"] .section-frame-body .bg-surface::after,
-
-[data-scheme="lcars"] .section-frame-body .dark\:bg-surface-dark::before,
-
-[data-scheme="lcars"] .section-frame-body .dark\:bg-surface-dark::after {
-	display: none !important;
+[data-scheme="lcars"] .section-frame-body .panel,
+[data-scheme="lcars"] .section-frame-body .card {
+	border-radius: 0;
+	box-shadow: none;
+	padding-top: 1rem;
+	overflow: visible;
 }
 
 [data-scheme="lcars"] main section {
-	border-radius: 0 !important;
+	border-radius: 0;
 }
 
-[data-scheme="lcars"] main .border-b.border-primary\/20 {
-	border-bottom: none !important;
+/* ─────────────────────────────────────────────────────────────────────────
+   Tables. Mauve header bar with rounded top corners, translucent rows
+   separated by thick black rules.
+   ───────────────────────────────────────────────────────────────────────── */
+[data-scheme="lcars"] main .overflow-x-auto {
+	border-radius: 20px;
+	border-color: transparent;
+	/* Wide tables still scroll horizontally: the LCARS cell padding makes
+	   them wider than the container, so clip only the vertical axis. */
+	overflow-x: auto;
+	overflow-y: hidden;
 }
 
-[data-scheme="lcars"] main nav.-mb-px {
-	display: flex;
-	gap: 6px;
-	margin-bottom: 0;
-	border-bottom: none !important;
+[data-scheme="lcars"] main thead,
+[data-scheme="lcars"] main thead tr {
+	background: #c9c;
 }
 
-[data-scheme="lcars"] main nav.-mb-px button[type="button"] {
-	flex: 1;
-	border: none !important;
-	border-bottom: none !important;
-	border-radius: 20px !important;
-	padding: 0.6rem 1.25rem !important;
-	font-weight: bold !important;
-	text-transform: uppercase !important;
-	letter-spacing: 0.1em !important;
-	text-align: center !important;
-	color: #000 !important;
-	background: #99f !important;
-	transition: all 0.2s;
-}
-
-[data-scheme="lcars"] main nav.-mb-px button[type="button"]:nth-child(2) {
-	background: #fca !important;
-}
-
-[data-scheme="lcars"] main nav.-mb-px button[type="button"]:nth-child(3) {
-	background: #c9c !important;
-}
-
-[data-scheme="lcars"] main nav.-mb-px button[type="button"]:hover {
-	background: #fff !important;
-	color: #000 !important;
-}
-
-[data-scheme="lcars"] main nav.-mb-px button[type="button"].border-primary {
-	background: #fc3 !important;
-	color: #000 !important;
-}
-
-[data-scheme="lcars"] main .bg-primary-light-bg {
-	background: rgba(153, 153, 255, 0.08) !important;
-	border-left: 10px solid #99f !important;
-	border-color: #99f !important;
-}
-
-[data-scheme="lcars"] main .dark\:bg-primary-light-bg-dark\/20 {
-	background: rgba(153, 153, 255, 0.08) !important;
-}
-
-[data-scheme="lcars"] main .text-primary-dark {
-	color: #fff !important;
-}
-
-[data-scheme="lcars"] main .bg-primary-light-bg strong,
-
-[data-scheme="lcars"] main [class*="bg-primary-light-bg"] strong {
-	color: #fc3 !important;
-}
-
-[data-scheme="lcars"] main label {
-	color: #fff !important;
-}
-
-/* "Show dismissed" toggle label (notifications) sits on the peach page-header
-   plate, so its muted grey is illegible — force black. Scoped to checkbox
-   labels carrying the gray-600/400 text classes. Needs .text-sm too so it
-   out-specifies the generic `.text-sm.text-gray-600 → #ccc` rule. */
-[data-scheme="lcars"] main label.text-sm.text-gray-600,
-[data-scheme="lcars"] main label.text-sm.dark\:text-gray-400 {
-	color: #000 !important;
-}
-
-[data-scheme="lcars"] main p.text-xs.text-gray-400,
-
-[data-scheme="lcars"] main .mt-1.text-xs.text-gray-400 {
-	color: #999 !important;
-}
-
-[data-scheme="lcars"] main .text-sm.text-gray-600,
-
-[data-scheme="lcars"] main .dark\:text-gray-400.text-sm {
-	color: #ccc !important;
-}
-
-[data-scheme="lcars"] main li .text-gray-600,
-
-[data-scheme="lcars"] main li .dark\:text-gray-400 {
-	color: #ccc !important;
-}
-
-[data-scheme="lcars"] main span.text-xs.font-medium.text-gray-400 {
-	color: #999 !important;
-}
-
-[data-scheme="lcars"] main section h2 {
-	background: #fc3;
-	color: #000 !important;
+[data-scheme="lcars"] main .table-header {
+	text-align: left;
+	color: #000;
+	background: #c9c;
+	font-weight: bold;
+	padding: 10px 10px 10px 16px;
 	border-bottom: none;
 }
 
-[data-scheme="lcars"] main .bg-primary\/30,
-
-[data-scheme="lcars"] main .dark\:bg-primary\/20 {
-	background: rgba(153, 153, 255, 0.2) !important;
+/* Round the header bar into the LCARS elbow language. */
+[data-scheme="lcars"] main thead .table-header:first-child {
+	border-top-left-radius: 20px;
 }
 
-[data-scheme="lcars"] main .border-b:not(.border-primary\/20) {
-	border-color: #f90 !important;
+[data-scheme="lcars"] main thead .table-header:last-child {
+	border-top-right-radius: 20px;
 }
 
-[data-scheme="lcars"] main .border-b-2 {
-	border-color: #fc3 !important;
+/* Separate the rounded header from the rows below. */
+[data-scheme="lcars"] main thead tr {
+	box-shadow: 0 4px 0 #000;
 }
 
-/* Filter-tab rows (e.g. transcoder ALL/QUEUED/IN_PROGRESS/DONE/FAILED) render
-   as hollow underline pills — only a coloured bottom border on a transparent
-   button. Make them SOLID LCARS pills like the rest of the theme: filled
-   background, black text, no underline. Active = gold (matches the section
-   heading), inactive = periwinkle. */
-[data-scheme="lcars"] main .border-b.flex > button.border-b-2.capitalize,
-[data-scheme="lcars"] main .flex.gap-1.border-b > button.border-b-2.capitalize,
-[data-scheme="lcars"] main .flex > button.border-b-2.capitalize {
-	border: none !important;
-	border-radius: 20px !important;
-	background: #99f !important; /* inactive fill */
-	color: #000 !important;
-	font-weight: 700 !important;
-	padding: 4px 18px !important;
+[data-scheme="lcars"] main .table-cell {
+	background: rgba(255, 255, 255, 0.05);
+	color: #fca;
+	padding: 12px 10px;
+	border-bottom: 4px solid #000;
 }
 
-/* Active tab: the markup tags it with the primary-text colour classes. Match
-   the same parent chain as the base rule above (.flex.gap-1.border-b) plus the
-   active class so this out-specifies it. */
-[data-scheme="lcars"] main .flex.gap-1.border-b > button.border-b-2.capitalize.text-primary-text,
-[data-scheme="lcars"] main .flex.gap-1.border-b > button.border-b-2.capitalize.border-primary {
-	background: #fc3 !important; /* active fill — gold */
-	color: #000 !important;
+[data-scheme="lcars"] main .table-row {
+	border-color: transparent;
 }
 
-/* The tab row's own bottom rule (the underline track) is redundant now. */
-[data-scheme="lcars"] main .flex.gap-1.border-b,
-[data-scheme="lcars"] main .flex.border-b:has(> button.border-b-2.capitalize) {
-	border-bottom: none !important;
+[data-scheme="lcars"] main .table-row:hover .table-cell {
+	background: rgba(255, 255, 255, 0.1);
 }
 
-[data-scheme="lcars"] .lcars-input,
-
-[data-scheme="lcars"] main input[type="text"],
-
-[data-scheme="lcars"] main input[type="number"],
-
-[data-scheme="lcars"] main input[type="password"],
-
-[data-scheme="lcars"] main select {
-	background: #99f !important;
-	border: none !important;
-	border-radius: 20px !important;
-	color: #fff !important;
-	padding: 0.5rem 2.75rem 0.5rem 2.25rem !important;
-	font-weight: bold !important;
-	cursor: pointer !important;
-	appearance: none !important;
-	-webkit-appearance: none !important;
-	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='white' d='M2 4l4 4 4-4'/%3E%3C/svg%3E") !important;
-	background-repeat: no-repeat !important;
-	background-position: right 1.25rem center !important;
-	background-size: 12px !important;
+/* ─────────────────────────────────────────────────────────────────────────
+   Controls. Everything clickable is an LCARS pill.
+   ───────────────────────────────────────────────────────────────────────── */
+[data-scheme="lcars"] main .btn {
+	border-radius: 20px;
+	font-weight: bold;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	border-color: transparent;
 }
 
-[data-scheme="lcars"] .lcars-input:not(select),
-[data-scheme="lcars"] main input[type="text"],
-[data-scheme="lcars"] main input[type="number"],
-[data-scheme="lcars"] main input[type="password"] {
-	background-image: none !important;
-	appearance: auto !important;
-	-webkit-appearance: auto !important;
-	padding: 0.5rem 2.25rem !important;
+[data-scheme="lcars"] main .btn-primary {
+	background: #99f;
+	color: #000;
+	border-color: #99f;
 }
 
-[data-scheme="lcars"] .lcars-input::placeholder,
-
-[data-scheme="lcars"] main input::placeholder {
-	color: rgba(0, 0, 0, 0.4) !important;
+[data-scheme="lcars"] main .btn-primary:hover {
+	background: #bbf;
+	border-color: #bbf;
 }
 
-[data-scheme="lcars"] .lcars-input:focus,
+[data-scheme="lcars"] main .btn-danger {
+	background: #ff8b8b;
+	color: #fff;
+}
 
-[data-scheme="lcars"] main input[type="text"]:focus,
+[data-scheme="lcars"] main .btn-warning {
+	background: #fc3;
+	color: #000;
+}
 
-[data-scheme="lcars"] main input[type="number"]:focus,
+[data-scheme="lcars"] main .btn[aria-pressed="true"] {
+	background: rgba(153, 153, 255, 0.1);
+	color: #99f;
+}
 
-[data-scheme="lcars"] main input[type="password"]:focus,
+/* Tabs become solid LCARS pills: gold when selected, periwinkle otherwise. */
+[data-scheme="lcars"] main .tabs:not(.tabs-pills) {
+	display: flex;
+	gap: 6px;
+	/* keep the block's own 8px margin-bottom: the baseline strip sat 8px
+	   above the pane heading, and zeroing it here pulled every settings
+	   pane up by that much */
+	border-bottom: none;
+}
 
-[data-scheme="lcars"] main select:focus {
-	background: #fff !important;
-	color: #000 !important;
-	outline: none !important;
-	box-shadow: 0 0 0 1px #fc3 !important;
-	border-color: #fc3 !important;
+[data-scheme="lcars"] main .tabs:not(.tabs-pills) .tabs-tab {
+	flex: 1;
+	margin-bottom: 0;
+	border: none;
+	border-radius: 20px;
+	padding: 0.6rem 1.25rem;
+	font-weight: bold;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	text-align: center;
+	color: #000;
+	background: #99f;
+	transition: all 0.2s;
+}
+
+[data-scheme="lcars"] main .tabs:not(.tabs-pills) .tabs-tab:nth-child(2) {
+	background: #fca;
+}
+
+[data-scheme="lcars"] main .tabs:not(.tabs-pills) .tabs-tab:nth-child(3) {
+	background: #c9c;
+}
+
+[data-scheme="lcars"] main .tabs:not(.tabs-pills) .tabs-tab:hover {
+	background: #fff;
+	color: #000;
+}
+
+[data-scheme="lcars"] main .tabs:not(.tabs-pills) .tabs-tab[aria-selected="true"] {
+	background: #fc3;
+	color: #000;
+}
+
+/* Chips and badges keep the pill radius. */
+[data-scheme="lcars"] main .chip,
+[data-scheme="lcars"] main .badge {
+	border-radius: 20px;
+}
+
+[data-scheme="lcars"] main .chip[aria-pressed="true"],
+[data-scheme="lcars"] main .chip[data-selected="true"] {
+	background: #fc3;
+	color: #000;
+}
+
+/* Alerts become LCARS framed callouts: an inset colour bar, no border. */
+[data-scheme="lcars"] main .alert {
+	background: rgba(153, 153, 255, 0.08);
+	border: none;
+	border-radius: 63px;
+	box-shadow: inset 6px 0 0 0 #99f;
+}
+
+[data-scheme="lcars"] main .alert-danger {
+	background: rgba(204, 51, 51, 0.08);
+	box-shadow: inset 6px 0 0 0 #ff8b8b;
+}
+
+[data-scheme="lcars"] main .alert-warning {
+	background: rgba(255, 153, 0, 0.1);
+	box-shadow: inset 6px 0 0 0 #f90;
+}
+
+[data-scheme="lcars"] main .alert-success {
+	background: rgba(0, 204, 51, 0.15);
+	box-shadow: inset 6px 0 0 0 #8bd3c2;
+}
+
+/* List rows lose their hairlines; the plate carries the grouping. */
+[data-scheme="lcars"] main .list-row {
+	border-color: transparent;
+}
+
+/* Posters and cover art get a hard orange frame. data-poster is the
+   PosterImage theme hook; the old img.object-cover selector died with the
+   utility classes and img[alt*="Poster"] only ever matched untitled jobs. */
+[data-scheme="lcars"] main [data-poster] {
+	border: 2px solid #f90;
+	border-radius: 0;
+}
+
+/* Any indeterminate shimmer's fill goes solid LCARS orange, matching the
+   baseline .animate-indeterminate reach; the bare-attribute branch catches
+   JobCard's own shimmer, whose fill otherwise renders a 60% periwinkle mix. */
+[data-scheme="lcars"] main .progress-track[data-indeterminate="true"] .progress-fill,
+[data-scheme="lcars"] main [data-indeterminate="true"] > div {
+	background: #f90;
+	border-radius: 0;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Form controls. Solid periwinkle pills with a custom caret.
+   ───────────────────────────────────────────────────────────────────────── */
+[data-scheme="lcars"] main .field input:not([type="checkbox"]):not([type="radio"]),
+[data-scheme="lcars"] main .field select,
+[data-scheme="lcars"] main .field textarea,
+[data-scheme="lcars"] main .field-control {
+	background: #99f;
+	border: none;
+	border-radius: 20px;
+	color: #fff;
+	padding: 0.5rem 2.25rem;
+	font-weight: bold;
+}
+
+[data-scheme="lcars"] main .field select,
+[data-scheme="lcars"] main select.field-control {
+	cursor: pointer;
+	appearance: none;
+	-webkit-appearance: none;
+	padding-right: 2.75rem;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='white' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 1.25rem center;
+	background-size: 12px;
+}
+
+[data-scheme="lcars"] main .field input::placeholder,
+[data-scheme="lcars"] main .field-control::placeholder {
+	color: rgba(0, 0, 0, 0.4);
+}
+
+[data-scheme="lcars"] main .field input:focus,
+[data-scheme="lcars"] main .field select:focus,
+[data-scheme="lcars"] main .field textarea:focus,
+[data-scheme="lcars"] main .field-control:focus {
+	background: #fff;
+	color: #000;
+	outline: none;
+	box-shadow: 0 0 0 1px #fc3;
+	border-color: #fc3;
 }
 
 [data-scheme="lcars"] select option {
-	background-color: #111 !important;
-	color: #fca !important;
+	background-color: #111;
+	color: #fca;
 }

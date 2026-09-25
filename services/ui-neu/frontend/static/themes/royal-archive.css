@@ -9,7 +9,7 @@
 [data-scheme="royal-archive"] [data-progress-fill] {
 	background: linear-gradient(90deg, #b45309, #fbbf24) !important;
 }
-[data-scheme="royal-archive"] aside nav a[data-active="true"] {
+[data-scheme="royal-archive"] aside .nav-item[data-active="true"] {
 	color: #fbbf24 !important;
 	font-weight: 900;
 }

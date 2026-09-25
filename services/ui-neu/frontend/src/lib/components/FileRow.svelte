@@ -60,21 +60,21 @@
 		{/each}
 	</tr>
 {:else}
-<tr class="border-b border-gray-100 hover:bg-gray-50 dark:border-gray-700/50 dark:hover:bg-gray-800/50 {selected ? 'bg-primary/5 dark:bg-primary/10' : ''}">
+<tr class="table-row" data-selected={selected}>
 	<!-- Checkbox -->
-	<td class="w-10 px-3 py-2">
+	<td class="table-cell w-10">
 		{#if showActions}
 			<input
 				type="checkbox"
 				checked={selected}
 				onchange={() => ontoggle?.(fullPath)}
-				class="h-4 w-4 rounded border-gray-300 text-primary accent-primary dark:border-gray-600"
+				class="file-row-checkbox"
 			/>
 		{/if}
 	</td>
 
 	<!-- Name -->
-	<td class="px-3 py-2">
+	<td class="table-cell">
 		{#if editing}
 			<div class="flex items-center gap-2">
 				<FileIcon category={entry.category} />
@@ -82,12 +82,12 @@
 					type="text"
 					bind:value={editName}
 					onkeydown={handleKeydown}
-					class="flex-1 rounded border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+					class="field-control flex-1 file-row-edit-input"
 				/>
 				<button
 					type="button"
 					onclick={confirmRename}
-					class="rounded p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20"
+					class="btn btn-icon file-row-confirm-btn"
 					title="Confirm"
 				>
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -97,7 +97,7 @@
 				<button
 					type="button"
 					onclick={cancelRename}
-					class="rounded p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+					class="btn btn-icon"
 					title="Cancel"
 				>
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -109,33 +109,34 @@
 			<button
 				type="button"
 				onclick={handleClick}
-				class="flex items-center gap-2 {entry.type === 'directory' ? 'cursor-pointer hover:text-primary dark:hover:text-primary-dark' : 'cursor-default'}"
+				class="file-row-name-btn"
+				data-clickable={entry.type === 'directory'}
 			>
 				<FileIcon category={entry.category} />
-				<span class="text-sm text-gray-900 dark:text-white">{entry.name}</span>
+				<span class="file-row-name">{entry.name}</span>
 			</button>
 		{/if}
 	</td>
 
 	<!-- Permissions -->
-	<td class="hidden px-3 py-2 lg:table-cell">
+	<td class="table-cell file-row-cell-lg">
 		{#if entry.permissions}
-			<code class="text-xs text-gray-400 dark:text-gray-500">{entry.permissions}</code>
+			<code class="mono file-row-permissions">{entry.permissions}</code>
 		{/if}
 	</td>
 
 	<!-- Size -->
-	<td class="px-3 py-2 text-right text-sm text-gray-500 dark:text-gray-400">
+	<td class="table-cell table-right file-row-muted">
 		{entry.size ? formatBytes(entry.size) : '--'}
 	</td>
 
 	<!-- Modified -->
-	<td class="hidden px-3 py-2 text-sm text-gray-500 dark:text-gray-400 md:table-cell">
+	<td class="table-cell file-row-muted file-row-cell-md">
 		{formatDateTime(entry.modified)}
 	</td>
 
 	<!-- Actions -->
-	<td class="px-3 py-2 text-right">
+	<td class="table-cell table-right">
 		{#if showActions}
 			<div class="flex items-center justify-end gap-1">
 				<!-- Fix permissions -->
@@ -143,7 +144,7 @@
 					type="button"
 					onclick={() => onfixpermissions?.(fullPath, entry.name)}
 					disabled={ro}
-					class="rounded p-1.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400 disabled:opacity-30 disabled:pointer-events-none"
+					class="btn btn-icon file-row-action-btn file-row-action-btn-info"
 					title={ro ? 'Read-only mount' : 'Fix permissions'}
 				>
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -155,7 +156,7 @@
 					type="button"
 					onclick={startRename}
 					disabled={ro}
-					class="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300 disabled:opacity-30 disabled:pointer-events-none"
+					class="btn btn-icon file-row-action-btn"
 					title={ro ? 'Read-only mount' : 'Rename'}
 				>
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -167,7 +168,7 @@
 					type="button"
 					onclick={() => ondelete?.(fullPath, entry.name)}
 					disabled={ro}
-					class="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 disabled:opacity-30 disabled:pointer-events-none"
+					class="btn btn-icon file-row-action-btn file-row-action-btn-danger"
 					title={ro ? 'Read-only mount' : 'Delete'}
 				>
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -179,3 +180,34 @@
 	</td>
 </tr>
 {/if}
+
+<style>
+	.file-row-checkbox { height: 1rem; width: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--color-border-strong); accent-color: var(--color-primary); }
+	.file-row-edit-input { width: auto; }
+	/* the confirm/cancel icon buttons keep .btn-icon's box but need their
+	   own tone (green/muted), not .btn-icon's default primary hover */
+	.file-row-confirm-btn { color: var(--color-success); }
+	.file-row-confirm-btn:hover { background: var(--color-success-soft); color: var(--color-success); }
+	.file-row-name-btn { display: flex; align-items: center; gap: 0.5rem; cursor: default; }
+	.file-row-name-btn[data-clickable="true"] { cursor: pointer; }
+	.file-row-name-btn[data-clickable="true"]:hover .file-row-name { color: var(--color-primary); }
+	.file-row-name { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text); }
+	.file-row-permissions { color: var(--color-text-faint); }
+	.file-row-muted { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	.file-row-action-btn:disabled { opacity: 0.3; pointer-events: none; }
+	.file-row-action-btn-info:hover { background: var(--color-info-soft); color: var(--color-info); }
+	.file-row-action-btn-danger:hover { background: var(--color-danger-soft); color: var(--color-danger); }
+	/* replaces the banned inline `hidden lg:table-cell` (table/table-row/
+	   table-cell are Tailwind display-utility names, banned outright by
+	   the lint per Task 11 fix round 3 - only the table block's own
+	   classes may set that display value) */
+	.file-row-cell-lg { display: none; }
+	@media (min-width: 1024px) {
+		.file-row-cell-lg { display: table-cell; }
+	}
+	/* replaces the banned inline `hidden md:table-cell` */
+	.file-row-cell-md { display: none; }
+	@media (min-width: 768px) {
+		.file-row-cell-md { display: table-cell; }
+	}
+</style>

@@ -1,0 +1,9 @@
+/* skeleton: loading placeholder.
+   Modifiers: skeleton-text (one line), skeleton-block (rectangle), skeleton-card. */
+@layer components {
+	.skeleton { border-radius: var(--radius-sm); background: var(--color-primary-tint-2); animation: skeleton-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+	.skeleton-text { height: 1rem; }
+	.skeleton-block { height: 2.5rem; }
+	.skeleton-card { height: 6rem; border-radius: var(--radius-lg); }
+	@keyframes skeleton-pulse { 50% { opacity: 0.5; } }
+}

@@ -228,8 +228,6 @@ precreate_optical_nodes() {  # <dev_dir> <sr_max> <sg_max> <group>
 # harmless when the entrypoint is EXECUTED (top-level `return` would abort).
 [[ -n "${ARM_ENTRYPOINT_SOURCE_ONLY:-}" && "${BASH_SOURCE[0]}" != "$0" ]] && return 0
 
-
-
 if [[ -f /etc/ssl/arm/arm-ca.crt ]]; then
     cp /etc/ssl/arm/arm-ca.crt /usr/local/share/ca-certificates/arm-ca.crt
     update-ca-certificates >/dev/null

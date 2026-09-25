@@ -18,14 +18,29 @@
 	];
 </script>
 
-<div class="inline-flex gap-1 rounded-md border border-primary/15 bg-page p-0.5 dark:border-primary/20 dark:bg-primary/5">
+<div class="filter-pills inline-flex gap-1">
 	{#each pills as p}
-		<button
-			type="button"
-			onclick={() => onselect?.(p.key)}
-			class="rounded px-2.5 py-1 text-xs font-medium {active === p.key
-				? 'bg-primary/15 text-primary'
-				: 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'}"
-		>{p.label} | {counts[p.key]}</button>
+		<button type="button" onclick={() => onselect?.(p.key)} aria-pressed={active === p.key} class="chip">
+			{p.label} | {counts[p.key]}
+		</button>
 	{/each}
 </div>
+
+<style>
+	.filter-pills { border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-page); padding: 0.125rem; }
+	/* Inside this bordered pill-group the chip block's default looks (tint-2
+	   background at rest, solid-fill white-on-blue when pressed, and a smaller
+	   padding than this group's pills ever had) are too loud next to the
+	   group's own border: pills here keep their original px-2.5 py-1 text-xs
+	   size, stay plain text at rest, and get only a light primary-tint-3
+	   highlight (not a solid fill) when active. */
+	.filter-pills .chip {
+		padding: 0.25rem 0.625rem;
+		font-size: 0.75rem;
+		line-height: 1rem;
+		background: none;
+		color: var(--color-text-muted);
+	}
+	.filter-pills .chip:hover { background: var(--color-primary-tint-2); color: var(--color-text); }
+	.filter-pills .chip[aria-pressed="true"] { background: var(--color-primary-tint-3); color: var(--color-primary); }
+</style>
