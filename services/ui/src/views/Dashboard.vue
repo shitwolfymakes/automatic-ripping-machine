@@ -123,7 +123,7 @@ onUnmounted(() => {
   <div class="card">
     <h3 style="margin-top: 0">Active rips</h3>
     <p v-if="activeJobs.length === 0" class="muted">
-      No rips in flight. Insert a disc — or click "+ Manual rip" — to start one.
+      No rips in flight. Insert a disc, or click "+ Manual rip", to start one.
     </p>
     <div v-else class="job-card-grid">
       <JobCard
@@ -167,10 +167,10 @@ onUnmounted(() => {
               </div>
               <span>{{ progressOf(t.id, t.progress_pct) }}%</span>
             </div>
-            <span v-else class="muted">—</span>
+            <span v-else class="muted">-</span>
           </td>
           <td>
-            <code>{{ t.output_path ?? '—' }}</code>
+            <code>{{ t.output_path ?? '-' }}</code>
           </td>
         </tr>
       </tbody>
@@ -198,11 +198,11 @@ onUnmounted(() => {
           <td>
             <code>{{ d.device_path }}</code>
           </td>
-          <td>{{ d.display_name ?? '—' }}</td>
+          <td>{{ d.display_name ?? '-' }}</td>
           <td>
             <span :class="statusClasses(d)">{{ driveStatusLabel(d) }}</span>
           </td>
-          <td>{{ d.last_seen_at ?? '—' }}</td>
+          <td>{{ d.last_seen_at ?? '-' }}</td>
         </tr>
       </tbody>
     </table>
@@ -249,7 +249,7 @@ onUnmounted(() => {
             <RouterLink :to="`/jobs/${j.id}`">{{ j.id.slice(0, 12) }}…</RouterLink>
           </td>
           <td>
-            {{ j.title ?? '—' }}<span v-if="j.year"> ({{ j.year }})</span>
+            {{ j.title ?? '-' }}<span v-if="j.year"> ({{ j.year }})</span>
           </td>
           <td>{{ j.disc_type }}</td>
           <td>

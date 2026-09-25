@@ -7,7 +7,7 @@ PATCH endpoint and any future helpers can share validation rules.
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from arm_common.enums import DriveIdentityKind, DriveLifecycle, DriveMediaStatus, DriveMode, DriveStatus, JobStatus
 
@@ -74,17 +74,31 @@ class DriveUpdateRequest(BaseModel):
 
 
 class DriveDiagnosticItem(BaseModel):
+    """One row of GET /api/drives/diagnostic's "Look for issues" panel: the
+    lifecycle model's own verdict on a drive, not just heartbeat staleness."""
+
     id: str
+    lifecycle: DriveLifecycle
+    present: bool
+    identity_kind: DriveIdentityKind | None
+    device_path: str
+    status: DriveStatus
     # DriveMediaStatus is a StrEnum, so this serializes to its string value
     # (e.g. "loaded") in the JSON response.
     media_status: DriveMediaStatus | None
     media_status_at: datetime | None
+    # Enrolled only: "running" | "exited" | "missing" | "stale-image" |
+    # "unknown"; None for detected/ignored rows (no ripper container).
+    container: str | None
+    last_error: str | None
     healthy: bool
     notes: list[str]
 
 
 class DriveDiagnosticResponse(BaseModel):
     drives: list[DriveDiagnosticItem]
+    # Scanner / manager / host-disk level notes — not tied to any one drive.
+    system: list[str] = Field(default_factory=list)
 
 
 class DriveRescanResponse(BaseModel):

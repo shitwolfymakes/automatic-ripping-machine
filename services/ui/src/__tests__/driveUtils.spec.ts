@@ -60,11 +60,11 @@ describe('driveStatusLabel', () => {
   it('renders detached from the media status', () => {
     expect(
       driveStatusLabel(drive({ status: 'offline', media_status: 'detached', present: false })),
-    ).toBe('○ detached — reconnect the drive')
+    ).toBe('○ detached: reconnect the drive')
   })
   it('renders detached from offline+absent even without a media status', () => {
     expect(driveStatusLabel(drive({ status: 'offline', present: false }))).toBe(
-      '○ detached — reconnect the drive',
+      '○ detached: reconnect the drive',
     )
   })
   it('keeps a plain offline (present, stale heartbeat) as offline', () => {
@@ -120,7 +120,7 @@ describe('identityLine / serialLabel', () => {
   it('says no serial when there is none', () => {
     expect(identityLine(drive({ serial: null }))).toBe('BD-RW BDR-S12JX · no serial · /dev/sr0')
     expect(serialLabel(drive({ serial: null, identity_kind: 'port' }))).toEqual({
-      text: 'no serial — identified by port',
+      text: 'no serial, identified by port',
       warn: true,
     })
     expect(serialLabel(drive())).toEqual({ text: 'AAAABBBB000E', warn: false })

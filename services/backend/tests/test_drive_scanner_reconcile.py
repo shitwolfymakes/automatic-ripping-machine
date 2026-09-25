@@ -186,6 +186,24 @@ async def test_enrolled_port_row_adopting_by_id_logs_warning(caplog) -> None:
     assert any("drv_enrolled" in m and PORT in m and BY_ID in m for m in messages)
 
 
+async def test_prune_window_zero_prunes_absent_detected_rows_now() -> None:
+    """Force Rescan passes prune_days=0 straight through to reconcile_drives:
+    every DETECTED row that is not present right now is pruned immediately —
+    IGNORED and ENROLLED rows are never pruned, regardless of the window."""
+    db = FakeSession()
+    stale = _row(
+        id="drv_gone", lifecycle=DriveLifecycle.DETECTED, present=False, last_seen_at=NOW - timedelta(minutes=5)
+    )
+    ignored = _row(id="drv_ign", lifecycle=DriveLifecycle.IGNORED, present=False, last_seen_at=NOW - timedelta(days=30))
+    enrolled = _row(
+        id="drv_enr", lifecycle=DriveLifecycle.ENROLLED, present=False, last_seen_at=NOW - timedelta(days=30)
+    )
+    db.rows["drives"] = [stale, ignored, enrolled]
+    summary = await reconcile_drives(db, [], now=NOW, prune_days=0)
+    assert summary.pruned == 1
+    assert [r.id for r in db.rows["drives"]] == ["drv_ign", "drv_enr"]
+
+
 async def test_two_new_rows_on_the_same_node_across_ticks_get_distinct_hostnames() -> None:
     """A node-keyed placeholder (scan-{node}) collides across ticks: a swap on
     sr0 (or an ignored row that's never pruned, so the old by-id stays out of
