@@ -1,0 +1,21 @@
+{
+  "name": "arm-docs-site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.14" },
+  "scripts": {
+    "build": "node src/build.mjs",
+    "build:app": "node src/build.mjs --target app",
+    "serve": "node src/serve.mjs",
+    "test": "node --test \"test/**/*.test.mjs\""
+  },
+  "dependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "github-slugger": "^2.0.0",
+    "markdown-it": "^15.0.2",
+    "minisearch": "^7.2.0",
+    "shiki": "^4.4.3",
+    "tailwindcss": "^4.3.3"
+  }
+}
