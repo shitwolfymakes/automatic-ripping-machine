@@ -176,7 +176,7 @@ describe('TitleSearch', () => {
 				expect(mockResolve).toHaveBeenCalledWith('job_7', {
 					title: 'The Matrix',
 					year: 1999,
-					metadata: { video_type: 'movie' }
+					media_type: 'movie'
 				});
 				expect(mockUpdateTitle).toHaveBeenCalledWith('job_7', { poster_url_manual: 'https://img/m.jpg' });
 			});
