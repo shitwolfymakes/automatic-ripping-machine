@@ -127,6 +127,51 @@ async def test_success_moves_file_and_completes(tmp_path: Path) -> None:
     assert sent[1]["payload"]["status"] == "done"
 
 
+async def test_row_already_deleted_before_claim_skips_cleanly(tmp_path: Path) -> None:
+    """N1 part 1: the tick's initial FOR UPDATE SKIP LOCKED select can grab
+    this row minutes before this task's turn in the loop (an earlier task's
+    move can run long); by the time we get here a concurrent
+    DELETE /api/transcodes/{id} may already have removed it. Attempting the
+    claim UPDATE against a gone row raises StaleDataError, so the pre-claim
+    re-select must catch this and skip instead."""
+    raw = tmp_path / "raw" / "job1" / "t0.mkv"
+    raw.parent.mkdir(parents=True)
+    raw.write_bytes(b"data")
+    media_root = tmp_path / "media"
+
+    db = _db(track_output_path=str(raw), task_output_path="Title (2020)/t0.mkv")
+    hub, sent = _hub_with_recorder()
+    task = db.rows["transcode_tasks"][0]
+    db.rows["transcode_tasks"] = []  # simulate the concurrent delete
+
+    ok = await execute_passthrough_task(db, task, hub, _settings(MEDIA_ROOT=str(media_root)))
+
+    assert ok is None
+    assert sent == []  # never claimed, so no task.completed/failed event
+    assert not (media_root / "Title (2020)" / "t0.mkv").exists()  # move never ran
+    assert raw.exists()  # source untouched
+
+
+async def test_row_no_longer_queued_before_claim_skips_cleanly(tmp_path: Path) -> None:
+    """Same as above but the row still exists and was merely repurposed
+    (status changed by a concurrent writer) rather than deleted outright."""
+    raw = tmp_path / "raw" / "job1" / "t0.mkv"
+    raw.parent.mkdir(parents=True)
+    raw.write_bytes(b"data")
+    media_root = tmp_path / "media"
+
+    db = _db(track_output_path=str(raw), task_output_path="Title (2020)/t0.mkv")
+    hub, sent = _hub_with_recorder()
+    task = db.rows["transcode_tasks"][0]
+    db.rows["transcode_tasks"][0].status = TranscodeTaskStatus.FAILED  # no longer QUEUED
+
+    ok = await execute_passthrough_task(db, task, hub, _settings(MEDIA_ROOT=str(media_root)))
+
+    assert ok is None
+    assert sent == []
+    assert raw.exists()
+
+
 async def test_missing_source_fails_task_not_loop(tmp_path: Path) -> None:
     media_root = tmp_path / "media"
     missing = tmp_path / "raw" / "job1" / "gone.mkv"

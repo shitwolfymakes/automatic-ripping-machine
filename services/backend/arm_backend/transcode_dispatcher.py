@@ -456,10 +456,17 @@ class TranscodeDispatcher:
                     # the tick and roll back other tasks' already-committed
                     # work or in-flight GPU claims (see execute_passthrough_task
                     # for the commit-per-task structure that makes this safe).
+                    # `db.rollback()` on the way out is required, not optional:
+                    # a raise from inside a flush/commit leaves the session in
+                    # "pending rollback" state, and the NEXT statement this
+                    # function issues (for the next queued task) would raise
+                    # PendingRollbackError outside any try/except and abort the
+                    # whole tick.
                     try:
                         await execute_passthrough_task(db, task, self._hub, self._settings)
                     except Exception as exc:
                         logger.exception("passthrough execution failed task_id=%s: %s", task.id, exc)
+                        await db.rollback()
                     continue
                 if encode_examined >= _QUEUE_SCAN_LIMIT:
                     # Encode-only cap; passthrough tasks further back in the
@@ -476,6 +483,29 @@ class TranscodeDispatcher:
                     # No free slot this tick; later passthrough tasks in the
                     # queue must still run, so `continue` (not `break`).
                     continue
+                # Re-verify: the FOR UPDATE lock this row was selected under
+                # may already be gone by now. ANY earlier passthrough task's
+                # claim commit releases every lock the tick's initial select
+                # held (COMMIT is transaction-scoped), not just that task's
+                # own row, and a concurrent delete/status-change since then
+                # must never reach `_claim_gpu_for_task` (which would point
+                # a GPU's `claimed_by_task_id` at a row that no longer
+                # exists, an IntegrityError at commit time) or spawn a
+                # container for a task nobody can claim any more. Checked
+                # unconditionally, not only after a commit has happened this
+                # tick, to keep the invariant simple: every task's current
+                # DB state is confirmed once, right before we act on it,
+                # the same rule `execute_passthrough_task` follows.
+                current = (
+                    await db.execute(select(TranscodeTask).where(col(TranscodeTask.id) == task.id).with_for_update())
+                ).scalar_one_or_none()
+                if current is None or current.status != TranscodeTaskStatus.QUEUED:
+                    logger.debug(
+                        "encode task_id=%s no longer claimable (gone or status changed); skipping",
+                        task.id,
+                    )
+                    continue
+                task = current
                 assignment = await self._claim_gpu_for_task(db, task, preset)
                 if assignment.action == "queue":
                     logger.info(
@@ -499,6 +529,12 @@ class TranscodeDispatcher:
                     await asyncio.to_thread(self._spawn_container, task, assignment=assignment)
                     spawned += 1
                     self.last_spawn_error = None
+                    # Commit this task's GPU claim promptly, per-task, right
+                    # after its container is confirmed running: a later
+                    # task's exception (and rollback, see the passthrough
+                    # branch above) must never be able to revert a GPU claim
+                    # whose container already exists.
+                    await db.commit()
                 except Exception as exc:
                     self.last_spawn_error = f"{type(exc).__name__}: {exc}"[:300]
                     logger.exception("transcode spawn failed task_id=%s: %s", task.id, exc)

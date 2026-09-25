@@ -39,15 +39,28 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("arm_backend.passthrough_executor")
 
+# D1: the in-process claim's heartbeat is stamped once here and never
+# refreshed afterward (unlike a container transcoder, which heartbeats
+# repeatedly over its run). That's safe only because `sweep_stale_claims`
+# runs on the same coroutine, in the same process, as `spawn_pending` (a
+# single dispatcher, no worker pool): the claim is never "stale" from the
+# sweep's point of view during the (synchronous, from the sweep's
+# perspective) window this function is running. If a second sweeper or a
+# multi-replica backend is ever introduced, it must either exclude
+# `IN_PROCESS_CLAIMANT` rows from staleness sweeping or this function must
+# start refreshing the heartbeat periodically during the move.
 IN_PROCESS_CLAIMANT = "backend-inprocess"
 
 
-async def execute_passthrough_task(db: AsyncSession, task: TranscodeTask, hub: "WSHub", settings: Settings) -> bool:
+async def execute_passthrough_task(
+    db: AsyncSession, task: TranscodeTask, hub: "WSHub", settings: Settings
+) -> bool | None:
     """Run one QUEUED passthrough task to completion in-process.
 
     Mirrors the container path's lifecycle exactly (claim fields,
     task.completed / task.failed WS events, application aggregation).
-    Returns True on DONE, False on FAILED.
+    Returns True on DONE, False on FAILED, or None if the task could not be
+    claimed at all (see below), not an error, just a lost race.
 
     Commits internally at two points instead of leaving the commit to the
     caller: once right after the claim (before the move), and once after
@@ -61,17 +74,39 @@ async def execute_passthrough_task(db: AsyncSession, task: TranscodeTask, hub: "
     its HTTP timeout. Committing the claim first ends that locking
     transaction before any blocking I/O runs.
 
-    Because the claim is durably committed before the move, the row can be
-    deleted out from under this function by a concurrent `cancel_running`
-    (a different session) while the copy is in flight. Before writing the
-    terminal state we re-fetch the row by id; if it's gone, we log and
+    Because the tick's initial select may have grabbed this row minutes
+    earlier (an earlier task's move can run long) and ANY earlier
+    passthrough task's claim commit releases every lock that transaction
+    held (COMMIT is transaction-scoped, not row-scoped), not just its
+    own row's; a concurrent writer (`DELETE /api/transcodes/{id}`, an
+    `overwrite` eviction, a job-delete cascade) can remove or repurpose
+    this row before we get to it. Re-select it by id, locked, and bail out
+    cleanly if it's gone or no longer QUEUED instead of attempting a claim
+    UPDATE against a row that isn't there (which raises
+    `sqlalchemy.orm.exc.StaleDataError`).
+
+    Because the claim is durably committed before the move, the row can
+    also be deleted out from under this function by a concurrent
+    `cancel_running` while the copy itself is in flight. Before writing the
+    terminal state we re-fetch the row by id again; if it's gone, we log and
     return cleanly instead of resurrecting a cancelled task.
     """
+    task_id = task.id
+    current = (
+        await db.execute(select(TranscodeTask).where(col(TranscodeTask.id) == task_id).with_for_update())
+    ).scalar_one_or_none()
+    if current is None or current.status != TranscodeTaskStatus.QUEUED:
+        logger.debug(
+            "passthrough task_id=%s no longer claimable (gone or status changed); skipping",
+            task_id,
+        )
+        return None
+    task = current
+
     application = (
         await db.execute(select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id))
     ).scalar_one_or_none()
     job_id = application.job_id if application is not None else None
-    task_id = task.id
     source_track_id = task.source_track_id
     session_application_id = task.session_application_id
     with with_log_context(job_id=job_id, track_id=source_track_id, session_application_id=session_application_id):

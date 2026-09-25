@@ -1165,6 +1165,237 @@ async def test_passthrough_exception_does_not_abort_tick(tmp_path: Path, monkeyp
     assert by_id["txt_pt_b"].status == TranscodeTaskStatus.DONE
 
 
+async def test_passthrough_row_deleted_before_its_turn_skips_cleanly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """N1 test (a): a queued passthrough row can be deleted by a concurrent
+    writer (DELETE /api/transcodes/{id}, an overwrite eviction, a job-delete
+    cascade) after the tick's initial select grabbed it but before its turn
+    in the loop -- the FOR UPDATE lock protecting it was released the
+    moment an EARLIER passthrough task in this same tick committed its
+    claim (COMMIT is transaction-scoped). The loop must skip the now-gone
+    row cleanly, without raising, and keep going: a still-later queued
+    passthrough task must still run."""
+    db, _raw_a = _passthrough_db(tmp_path, output_path="Docs/a.iso")
+    db.rows["transcode_tasks"][0].id = "txt_pt_a"
+    db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
+
+    raw_c = tmp_path / "raw" / "t2.mkv"
+    raw_c.parent.mkdir(parents=True, exist_ok=True)
+    raw_c.write_bytes(b"data-c")
+    db.rows["tracks"].append(
+        Track(
+            id="trk_c",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
+            kind=TrackKind.VIDEO_TITLE,
+            index=3,
+            source_ref="t2",
+            output_path=str(raw_c),
+        )
+    )
+    db.rows["transcode_tasks"].append(
+        TranscodeTask(
+            id="txt_pt_b",
+            session_application_id="sap_x",
+            source_track_id="trk_b_missing",
+            status=TranscodeTaskStatus.QUEUED,
+            attempts=0,
+            progress_pct=0,
+            output_path="Docs/b.iso",
+            created_at=datetime.now(UTC) + timedelta(seconds=1),
+        )
+    )
+    db.rows["transcode_tasks"].append(
+        TranscodeTask(
+            id="txt_pt_c",
+            session_application_id="sap_x",
+            source_track_id="trk_c",
+            status=TranscodeTaskStatus.QUEUED,
+            attempts=0,
+            progress_pct=0,
+            output_path="Docs/c.iso",
+            created_at=datetime.now(UTC) + timedelta(seconds=2),
+        )
+    )
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(MEDIA_ROOT=str(tmp_path / "media")), _db_factory(db), docker, WSHub())
+
+    import arm_backend.passthrough_executor as pt_mod
+
+    real_transcode_none = pt_mod.transcode_none
+
+    def _delete_b_then_move(input_path: Path, output_path: Path) -> int:
+        # Simulate a concurrent delete of txt_pt_b (a different session)
+        # while txt_pt_a's move is in flight.
+        db.rows["transcode_tasks"] = [t for t in db.rows["transcode_tasks"] if t.id != "txt_pt_b"]
+        return real_transcode_none(input_path, output_path)
+
+    monkeypatch.setattr(pt_mod, "transcode_none", _delete_b_then_move)
+
+    spawned = await disp.spawn_pending(db)  # must not raise
+
+    assert spawned == 0
+    by_id = {t.id: t for t in db.rows["transcode_tasks"]}
+    assert by_id["txt_pt_a"].status == TranscodeTaskStatus.DONE
+    assert "txt_pt_b" not in by_id  # deleted, never resurrected
+    assert by_id["txt_pt_c"].status == TranscodeTaskStatus.DONE
+
+
+async def test_passthrough_session_poisoning_recovers_via_rollback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """N1 test (b): a DB-level raise from inside execute_passthrough_task's
+    own commit (StaleDataError, a dropped connection, ...) leaves the
+    session in "pending rollback" state; without an explicit rollback the
+    NEXT statement this function issues would raise PendingRollbackError
+    outside any try/except and abort the whole tick. spawn_pending's except
+    block must roll back so the next queued task still runs."""
+    db, _raw_a = _passthrough_db(tmp_path, output_path="Docs/a.iso")
+    db.rows["transcode_tasks"][0].id = "txt_pt_a"
+    db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
+
+    raw_b = tmp_path / "raw" / "t1.mkv"
+    raw_b.parent.mkdir(parents=True, exist_ok=True)
+    raw_b.write_bytes(b"data-b")
+    db.rows["tracks"].append(
+        Track(
+            id="trk_2",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
+            kind=TrackKind.VIDEO_TITLE,
+            index=2,
+            source_ref="t1",
+            output_path=str(raw_b),
+        )
+    )
+    db.rows["transcode_tasks"].append(
+        TranscodeTask(
+            id="txt_pt_b",
+            session_application_id="sap_x",
+            source_track_id="trk_2",
+            status=TranscodeTaskStatus.QUEUED,
+            attempts=0,
+            progress_pct=0,
+            output_path="Docs/b.iso",
+            created_at=datetime.now(UTC) + timedelta(seconds=1),
+        )
+    )
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(MEDIA_ROOT=str(tmp_path / "media")), _db_factory(db), docker, WSHub())
+
+    real_commit = db.commit
+    calls = {"n": 0}
+
+    async def _commit_boom_once() -> None:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("db gone")
+        await real_commit()
+
+    db.commit = _commit_boom_once  # type: ignore[method-assign]
+
+    rollback_calls: list[int] = []
+    real_rollback = db.rollback
+
+    async def _spy_rollback() -> None:
+        rollback_calls.append(1)
+        await real_rollback()
+
+    db.rollback = _spy_rollback  # type: ignore[method-assign]
+
+    spawned = await disp.spawn_pending(db)  # must not raise
+
+    assert spawned == 0
+    assert rollback_calls == [1]
+    by_id = {t.id: t for t in db.rows["transcode_tasks"]}
+    # txt_pt_a's claim commit was the one that raised; txt_pt_b's own claim
+    # + terminal commits both succeed afterward, proving the session
+    # recovered.
+    assert by_id["txt_pt_b"].status == TranscodeTaskStatus.DONE
+
+
+async def test_encode_row_deleted_before_its_turn_skips_cleanly() -> None:
+    """N1 part 1 (encode analog): a concurrent delete of a queued encode
+    task between the tick's initial select and this task's turn in the
+    loop must be caught by the encode-side re-verify instead of pointing a
+    GPU's claimed_by_task_id at a row that's gone (an IntegrityError at
+    commit) or spawning a container for a task nobody can claim any more."""
+    db = FakeSession()
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_enc",
+            session_id="ses_enc",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
+            status=SessionApplicationStatus.QUEUED,
+            overwrite=False,
+        )
+    ]
+    db.rows["sessions"] = [
+        Session(
+            id="ses_enc",
+            name="Movie to Plex",
+            media_type=MediaType.MOVIE,
+            is_builtin=True,
+            rip_preset_id="rpr_x",
+            transcode_preset_id="tpr_x",
+            output_path_template="{title}/{title}.mkv",
+        )
+    ]
+    db.rows["transcode_presets"] = [
+        TranscodePreset(
+            id="tpr_x",
+            name="Plex 1080p",
+            media_type=MediaType.MOVIE,
+            is_builtin=True,
+            tool=TranscodeTool.HANDBRAKE,
+            preset_ref="H.265 MKV 1080p30",
+            container=ContainerFormat.MKV,
+            codec=None,
+            hw_preference=None,
+        )
+    ]
+    now = datetime.now(UTC)
+    db.rows["transcode_tasks"] = [
+        TranscodeTask(
+            id="txt_enc_a",
+            session_application_id="sap_enc",
+            source_track_id="trk_a",
+            status=TranscodeTaskStatus.QUEUED,
+            attempts=0,
+            progress_pct=0,
+            output_path="a.mkv",
+            created_at=now,
+        ),
+        TranscodeTask(
+            id="txt_enc_b",
+            session_application_id="sap_enc",
+            source_track_id="trk_b",
+            status=TranscodeTaskStatus.QUEUED,
+            attempts=0,
+            progress_pct=0,
+            output_path="b.mkv",
+            created_at=now + timedelta(seconds=1),
+        ),
+    ]
+    docker = MagicMock()
+
+    def _spawn_side_effect(**kwargs: Any) -> Any:
+        # Simulate a concurrent delete of txt_enc_b (a different session)
+        # while txt_enc_a's container is being created.
+        if kwargs.get("labels", {}).get("arm.task_id") == "txt_enc_a":
+            db.rows["transcode_tasks"] = [t for t in db.rows["transcode_tasks"] if t.id != "txt_enc_b"]
+        return MagicMock()
+
+    docker.containers.run.side_effect = _spawn_side_effect
+
+    disp = TranscodeDispatcher(_settings(MAX_PARALLEL_TRANSCODES=2), _db_factory(db), docker, WSHub())
+    spawned = await disp.spawn_pending(db)  # must not raise
+
+    assert spawned == 1  # only txt_enc_a spawned
+    docker.containers.run.assert_called_once()
+    by_id = {t.id: t for t in db.rows["transcode_tasks"]}
+    assert "txt_enc_b" not in by_id  # deleted, never resurrected, no crash
+
+
 # ---- stale-claim sweep -------------------------------------------------------
 
 
