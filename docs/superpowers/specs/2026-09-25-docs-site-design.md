@@ -217,11 +217,9 @@ FROM node:26-slim AS docs
 WORKDIR /repo/site
 COPY site/package.json site/package-lock.json ./
 RUN npm ci
-COPY site/ ./
-COPY arm_wiki/ /repo/arm_wiki/
-COPY docs/ /repo/docs/
-COPY CONTRIBUTING.md VERSION /repo/
-COPY services/ui-neu/frontend/src/lib/styles/ /repo/services/ui-neu/frontend/src/lib/styles/
+# the whole context, not just the docs: link validation checks that
+# linked repo files (services/..., devtools/..., LICENSE) exist
+COPY . /repo/
 ARG ARM_COMMIT=unknown
 RUN ARM_COMMIT=$ARM_COMMIT npm run build:app
 # ...
