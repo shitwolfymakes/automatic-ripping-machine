@@ -1,12 +1,28 @@
 #!/usr/bin/env bash
-# One-shot dev-environment setup for the walking skeleton.
+# One-shot dev-environment setup for the walking skeleton, and the stack's
+# up/down entry point.
 # Idempotent — rerunning skips work already done and leaves existing .env alone.
 #
-# Usage:  bash devtools/setup-dev.sh
+# Usage:  bash devtools/setup-dev.sh          # setup only (uv sync, certs, .env)
+#         bash devtools/setup-dev.sh up       # setup, then build + start the stack
+#         bash devtools/setup-dev.sh down     # stop the stack + spawned containers
+#
+# Host overlays (NFS repoints, port changes, remote-transcode env) layer in via
+# COMPOSE_FILE in the repo-root .env — docker compose reads it natively, so this
+# script needs no per-host knowledge.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+ACTION="${1:-setup}"
+case "${ACTION}" in
+    setup|up|down) ;;
+    *)
+        echo "Usage: bash devtools/setup-dev.sh [up|down]" >&2
+        exit 2
+        ;;
+esac
 
 # Runtime/data dirs (db, raw, media, logs, certs) live under ./arm/ to keep the
 # repo root tidy — the dev mirror of production's ~/arm prefix. The compose file
@@ -21,6 +37,35 @@ require() {
         exit 1
     fi
 }
+
+compose() {
+    (cd "${ROOT_DIR}" && docker compose "$@")
+}
+
+# The backend spawns one ripper container per enrolled drive (label
+# `arm.drive_id`, ripper_manager.py) and one transcoder per local task (label
+# `arm.task_id`, transcode_dispatcher.py). They are not compose services, so
+# `docker compose down` leaves them behind — still holding the old image, the
+# compose network, and the optical device nodes across a redeploy.
+remove_spawned_containers() {
+    local ids
+    ids="$( { docker ps -aq --filter "label=arm.drive_id"; docker ps -aq --filter "label=arm.task_id"; } | sort -u )"
+    if [[ -n "${ids}" ]]; then
+        echo "==> removing backend-spawned ripper/transcoder containers"
+        # shellcheck disable=SC2086  # ids is a list of container ids by design
+        docker rm -f ${ids} >/dev/null
+    else
+        echo "==> no backend-spawned ripper/transcoder containers to remove"
+    fi
+}
+
+if [[ "${ACTION}" == "down" ]]; then
+    require docker "Install docker first."
+    remove_spawned_containers
+    echo "==> stopping the compose stack"
+    compose down
+    exit 0
+fi
 
 # Load nvm if the user manages Node that way. nvm only wires `node`/`npm` onto
 # PATH in interactive shells, so a non-interactive `bash devtools/setup-dev.sh`
@@ -266,23 +311,36 @@ else
     chmod 600 "${ENV_FILE}"
 fi
 
-# Refresh ARM_GPUS from host detection in both cases (it's derived, not a secret).
-ARM_GPUS_VALUE="$(detect_gpus)"
-if grep -q '^ARM_GPUS=' "${ENV_FILE}"; then
-    sed -i "s|^ARM_GPUS=.*|ARM_GPUS=${ARM_GPUS_VALUE}|" "${ENV_FILE}"
+# Refresh ARM_GPUS from host detection in both cases (it's derived, not a
+# secret) — UNLESS the transcode dispatcher is pointed at a remote docker
+# host: then ARM_GPUS describes the REMOTE machine's GPUs (the dispatcher
+# injects device access where the container actually runs), and probing this
+# host would overwrite a hand-set remote GPU list with the wrong hardware.
+if grep -qE '^ARM_TRANSCODE_DOCKER_HOST=..*' "${ENV_FILE}"; then
+    echo "==> ARM_TRANSCODE_DOCKER_HOST set — keeping .env's ARM_GPUS (remote transcode host owns the GPUs)"
 else
-    printf 'ARM_GPUS=%s\n' "${ARM_GPUS_VALUE}" >> "${ENV_FILE}"
+    ARM_GPUS_VALUE="$(detect_gpus)"
+    if grep -q '^ARM_GPUS=' "${ENV_FILE}"; then
+        sed -i "s|^ARM_GPUS=.*|ARM_GPUS=${ARM_GPUS_VALUE}|" "${ENV_FILE}"
+    else
+        printf 'ARM_GPUS=%s\n' "${ARM_GPUS_VALUE}" >> "${ENV_FILE}"
+    fi
+    echo "==> detected GPU(s) for ARM_GPUS: ${ARM_GPUS_VALUE}"
 fi
-echo "==> detected GPU(s) for ARM_GPUS: ${ARM_GPUS_VALUE}"
 
-# Render-node group for VAAPI/QSV device access (set-or-append, like ARM_GPUS).
-RENDER_GID_VALUE="$(detect_render_gid || true)"
-if grep -q '^ARM_RENDER_GID=' "${ENV_FILE}"; then
-    sed -i "s|^ARM_RENDER_GID=.*|ARM_RENDER_GID=${RENDER_GID_VALUE}|" "${ENV_FILE}"
+# Render-node group for VAAPI/QSV device access (set-or-append, like ARM_GPUS,
+# and skipped for the same reason when transcode runs on a remote host).
+if grep -qE '^ARM_TRANSCODE_DOCKER_HOST=..*' "${ENV_FILE}"; then
+    echo "==> ARM_TRANSCODE_DOCKER_HOST set — keeping .env's ARM_RENDER_GID"
 else
-    printf 'ARM_RENDER_GID=%s\n' "${RENDER_GID_VALUE}" >> "${ENV_FILE}"
+    RENDER_GID_VALUE="$(detect_render_gid || true)"
+    if grep -q '^ARM_RENDER_GID=' "${ENV_FILE}"; then
+        sed -i "s|^ARM_RENDER_GID=.*|ARM_RENDER_GID=${RENDER_GID_VALUE}|" "${ENV_FILE}"
+    else
+        printf 'ARM_RENDER_GID=%s\n' "${RENDER_GID_VALUE}" >> "${ENV_FILE}"
+    fi
+    echo "==> detected render group GID for ARM_RENDER_GID: ${RENDER_GID_VALUE:-(none)}"
 fi
-echo "==> detected render group GID for ARM_RENDER_GID: ${RENDER_GID_VALUE:-(none)}"
 
 # The transcode image is built by `docker compose up -d --build` like every other
 # service (the arm-transcode service has deploy.replicas:0 — built, never run), so
@@ -338,11 +396,27 @@ ensure_udev_rule() {
 
 ensure_udev_rule
 
+if [[ "${ACTION}" == "up" ]]; then
+    remove_spawned_containers
+    echo "==> building + starting the stack"
+    compose up -d --build
+    cat <<EOF
+
+stack is up — open https://localhost:8081 → Drives → Enroll each drive you want ARM to use
+(spin it down with: bash devtools/setup-dev.sh down)
+
+  optional — trust the local CA so browsers/curl skip the self-signed warning:
+    bash devtools/trust-ca.sh
+EOF
+    exit 0
+fi
+
 cat <<EOF
 
 done — next:
-  docker compose -f ${ROOT_DIR}/docker-compose.yml up -d --build
+  bash devtools/setup-dev.sh up      # build + start the stack (or: docker compose up -d --build)
   then open https://localhost:8081 → Drives → Enroll each drive you want ARM to use
+  spin it down (stack + spawned ripper/transcoder containers): bash devtools/setup-dev.sh down
 
   optional — trust the local CA so browsers/curl skip the self-signed warning:
     bash devtools/trust-ca.sh
