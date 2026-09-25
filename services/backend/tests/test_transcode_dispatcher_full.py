@@ -21,13 +21,18 @@ from arm_backend import transcode_dispatcher as tdmod  # noqa: E402
 from arm_backend.transcode_dispatcher import TranscodeDispatcher  # noqa: E402
 from arm_backend.ws import WSHub  # noqa: E402
 from arm_common import (  # noqa: E402
+    ContainerFormat,
     Gpu,
     GpuStatus,
     GpuVendor,
+    MediaType,
+    Session,
     SessionApplication,
     SessionApplicationStatus,
+    TranscodePreset,
     TranscodeTask,
     TranscodeTaskStatus,
+    TranscodeTool,
 )
 
 from tests._fakes import FakeSession  # noqa: E402
@@ -218,8 +223,9 @@ async def test_run_loop_tick_ok_then_timeout_then_stop(monkeypatch: pytest.Monke
 
 
 async def test_spawn_pending_cpu_path_no_gpu() -> None:
-    """A queued task with no GPUs in the inventory → assignment is None →
-    the GPU-env block is skipped (384->386)."""
+    """A queued ENCODE task (real HANDBRAKE preset, so it isn't routed
+    through the passthrough executor) with no GPUs in the inventory →
+    assignment is None → the GPU-env block is skipped (384->386)."""
     db = FakeSession()
     db.rows["session_applications"] = [
         SessionApplication(
@@ -228,6 +234,30 @@ async def test_spawn_pending_cpu_path_no_gpu() -> None:
             job_id="job_01JZXR7K3M5Q8N4VWA00000001",
             status=SessionApplicationStatus.RUNNING,
             overwrite=False,
+        )
+    ]
+    db.rows["sessions"] = [
+        Session(
+            id="ses_x",
+            name="Movie to Plex",
+            media_type=MediaType.MOVIE,
+            is_builtin=True,
+            rip_preset_id="rpr_x",
+            transcode_preset_id="tpr_x",
+            output_path_template="{title}/{title}.mkv",
+        )
+    ]
+    db.rows["transcode_presets"] = [
+        TranscodePreset(
+            id="tpr_x",
+            name="Plex 1080p",
+            media_type=MediaType.MOVIE,
+            is_builtin=True,
+            tool=TranscodeTool.HANDBRAKE,
+            preset_ref="H.265 MKV 1080p30",
+            container=ContainerFormat.MKV,
+            codec=None,
+            hw_preference=None,
         )
     ]
     db.rows["gpus"] = []
