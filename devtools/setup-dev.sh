@@ -12,11 +12,10 @@
 #                          # detection; write ARM_TRANSCODE_CAPABLE=false to
 #                          # .env (ARM_GPUS is written as `[]`). Combine with
 #                          # any action, e.g. `setup-dev.sh up --ripper-only`.
-#                          # Persistent: an existing ARM_TRANSCODE_CAPABLE in
-#                          # .env is otherwise left alone on re-run (same as
-#                          # secrets), so a box set up once with --ripper-only
-#                          # STAYS ripper-only on later plain re-runs — flip it
-#                          # back by hand-editing .env, not by omitting the flag.
+#                          # Not sticky: every run WITHOUT the flag writes
+#                          # ARM_TRANSCODE_CAPABLE=true and (with `up`) builds
+#                          # the arm-transcode image, so re-running without it
+#                          # is how a ripper-only box becomes transcode-capable.
 #
 # Host overlays (NFS repoints, port changes, remote-transcode env) layer in via
 # COMPOSE_FILE in the repo-root .env — docker compose reads it natively, so this
@@ -368,22 +367,17 @@ else
     echo "==> detected render group GID for ARM_RENDER_GID: ${RENDER_GID_VALUE:-(none)}"
 fi
 
-# ARM_TRANSCODE_CAPABLE: --ripper-only always forces `false` (explicit operator
-# request to declare this install can't run transcode containers). Without the
-# flag, PRESERVE whatever's already in .env — a prior --ripper-only run, or a
-# hand-edited value — the same way secrets are preserved on re-run; only a
-# brand-new/missing key defaults to `true`. This means a box set up once with
-# --ripper-only stays ripper-only on a later plain re-run: flip it back by
-# editing .env directly, not by omitting the flag.
+# ARM_TRANSCODE_CAPABLE is derived from the flag on every run (like ARM_GPUS),
+# not preserved like a secret: --ripper-only writes `false`, a run without it
+# writes `true`. Re-running without the flag is the supported way to turn a
+# ripper-only box back into a transcode-capable one (it also builds the
+# arm-transcode image on `up`); the Settings toggle then switches encode work on.
 if [[ "${RIPPER_ONLY}" -eq 1 ]]; then
     ARM_TRANSCODE_CAPABLE_VALUE=false
     echo "==> --ripper-only: writing ARM_TRANSCODE_CAPABLE=false"
-elif grep -qE '^ARM_TRANSCODE_CAPABLE=.+' "${ENV_FILE}"; then
-    ARM_TRANSCODE_CAPABLE_VALUE="$(sed -nE 's/^ARM_TRANSCODE_CAPABLE=(.*)$/\1/p' "${ENV_FILE}" | head -n1)"
-    echo "==> keeping .env's existing ARM_TRANSCODE_CAPABLE=${ARM_TRANSCODE_CAPABLE_VALUE}"
 else
     ARM_TRANSCODE_CAPABLE_VALUE=true
-    echo "==> ARM_TRANSCODE_CAPABLE not set — defaulting to true"
+    echo "==> writing ARM_TRANSCODE_CAPABLE=true (pass --ripper-only for a ripper-only install)"
 fi
 if grep -q '^ARM_TRANSCODE_CAPABLE=' "${ENV_FILE}"; then
     sed -i "s|^ARM_TRANSCODE_CAPABLE=.*|ARM_TRANSCODE_CAPABLE=${ARM_TRANSCODE_CAPABLE_VALUE}|" "${ENV_FILE}"

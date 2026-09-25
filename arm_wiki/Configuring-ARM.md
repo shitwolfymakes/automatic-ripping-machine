@@ -119,15 +119,32 @@ This skips the `arm-transcode` image build, the hardware-encoder probe, and
 GPU detection, and writes `ARM_TRANSCODE_CAPABLE=false` to `.env` (see the
 table above). Encode sessions are then refused everywhere in the UI and API;
 passthrough (no-preset, ISO/data-copy) sessions still run normally, in-process
-on the backend, so raw-and-ship workflows are unaffected. The setting is
-preserved on later plain re-runs of the script, the same as any other `.env`
-value, so a box set up once with `--ripper-only` stays ripper-only until you
-edit `ARM_TRANSCODE_CAPABLE` back to `true` by hand.
+on the backend, so raw-and-ship workflows are unaffected.
 
-The packaged `install.sh` installer does not have a ripper-only flag yet;
-until it does, a production ripper-only install means editing
-`ARM_TRANSCODE_CAPABLE=false` into `~/arm/.env` yourself and running
-`docker compose up -d`.
+The flag is not sticky. Every run of the script without `--ripper-only`
+writes `ARM_TRANSCODE_CAPABLE=true` and (with `up`) builds the
+`arm-transcode` image, so to turn a ripper-only box into a transcode-capable
+one, re-run the script without the flag, then switch **Transcoding** on in
+Settings. Keep passing `--ripper-only` on every re-run for as long as the box
+should stay ripper-only.
+
+The packaged `install.sh` installer does not have a ripper-only flag yet, and
+the `docker-compose.yml` it generates does not pass `ARM_TRANSCODE_CAPABLE`
+through to the backend, so setting it in `~/arm/.env` alone has no effect.
+Until the installer rewrite lands, a production ripper-only install needs
+both:
+
+1. `ARM_TRANSCODE_CAPABLE=false` in `~/arm/.env`, and
+2. this line added under the `arm-backend` service's `environment:` block in
+   `~/arm/docker-compose.yml`:
+
+   ```yaml
+         ARM_TRANSCODE_CAPABLE: ${ARM_TRANSCODE_CAPABLE:-true}
+   ```
+
+then `docker compose up -d` from `~/arm`. Re-running `install.sh` regenerates
+`docker-compose.yml` and drops the added line, so re-apply it after any
+reinstall or upgrade.
 
 ---
 
