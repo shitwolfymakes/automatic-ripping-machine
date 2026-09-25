@@ -9,7 +9,7 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 import pytest  # noqa: E402
 
 from arm_backend.ripper_manager import ReconcileSummary, RipperManagerError, reconcile_enrolled_rippers  # noqa: E402
-from arm_common import Drive, DriveLifecycle, DriveStatus  # noqa: E402
+from arm_common import DiscType, Drive, DriveLifecycle, DriveStatus, Job, JobStatus  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -18,9 +18,11 @@ class _StubManager:
     def __init__(self, summary: ReconcileSummary | Exception) -> None:
         self._summary = summary
         self.seen: list[list[str]] = []
+        self.busy: frozenset[str] = frozenset()
 
-    def reconcile(self, enrolled):  # sync, like the real one (runs under to_thread)
+    def reconcile(self, enrolled, *, busy=frozenset()):  # sync, like the real one (runs under to_thread)
         self.seen.append([d.id for d in enrolled])
+        self.busy = busy
         if isinstance(self._summary, Exception):
             raise self._summary
         return self._summary
@@ -79,3 +81,16 @@ async def test_boot_reconcile_logs_and_returns_none_when_the_daemon_is_unlistabl
     with caplog.at_level(logging.ERROR, logger="arm_backend.ripper_manager"):
         assert await reconcile_enrolled_rippers(manager, _factory(db)) is None  # type: ignore[arg-type]
     assert "no socket" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_boot_reconcile_passes_ripping_drives_as_busy() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_row("drv_a", DriveLifecycle.ENROLLED), _row("drv_b", DriveLifecycle.ENROLLED)]
+    db.rows["jobs"] = [
+        Job(id="job_1", drive_id="drv_a", status=JobStatus.RIPPING, disc_type=DiscType.DVD),
+        Job(id="job_2", drive_id="drv_b", status=JobStatus.RIPPED, disc_type=DiscType.DVD),
+    ]
+    manager = _StubManager(ReconcileSummary(adopted=["drv_a", "drv_b"]))
+    await reconcile_enrolled_rippers(manager, _factory(db))  # type: ignore[arg-type]
+    assert manager.busy == frozenset({"drv_a"})

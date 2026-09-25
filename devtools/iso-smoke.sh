@@ -16,21 +16,23 @@
 #      accepts, perma or beta), then a single forum-scrape attempt.
 #      The forum sits behind Cloudflare and rate-limits / 525s under
 #      load, so an explicit key keeps the smoke deterministic.
-#   3. The live `arm-ripper-sr0` service is stopped (poll-loop ripper
-#      and ISO-mode ripper conflict on the same drive_id registration).
-#   4. One-shot `docker run` of the ripper image (unprivileged, matching
-#      the compose service) with ARM_MANUAL_TRIGGER_ISO and the ISO
-#      bind-mounted at /corpus. MakeMKV and the pydvdid CRC64 both read the
-#      ISO file directly — no loop-mount, so no --privileged.
+#   3. Admin JWT acquired (env vars or interactive prompt) FIRST — the smoke
+#      borrows an ENROLLED drive: its manager-created container
+#      (label arm.drive_id=<id>) is stopped for the run because two rippers
+#      cannot register the same drive_id. Pick one with ARM_SMOKE_DRIVE_ID;
+#      default = the first enrolled drive from GET /api/drives.
+#   4. One-shot `docker run` of the ripper image with ARM_DRIVE_ID /
+#      ARM_DRIVE_BY_ID copied from that drive row, ARM_MANUAL_TRIGGER_ISO and
+#      the ISO bind-mounted at /corpus. MakeMKV and the pydvdid CRC64 both
+#      read the ISO file directly — no loop-mount, so no --privileged.
 #      Logs are tailed until `rip-complete`. The ISO ripper idles
 #      forever by design, so once rip-complete lands its work is done
 #      and the container is stopped right away (transcoding is the
 #      backend's job, not the ripper's). `--no-cleanup` keeps it up.
-#   5. Admin JWT acquired (env vars or interactive prompt) and the
-#      GPU-preferred Plex H.265 session applied to the job. Transcode
-#      tasks are polled until all are done|failed.
-#   6. Cleanup: restart the live arm-ripper-sr0 service. Opt out with
-#      `--no-cleanup`.
+#   5. The GPU-preferred Plex H.265 session applied to the job (JWT already
+#      acquired in step 3). Transcode tasks are polled until all are
+#      done|failed.
+#   6. Cleanup: `docker start` the paused managed ripper. Opt out with --no-cleanup.
 #
 # Idempotent. Safe to re-run.
 
@@ -76,10 +78,11 @@ configure_iso() {
     ISO_PATH="${CACHE_DIR}/${ISO_NAME}"
 }
 
-RIPPER_IMAGE="armv3-arm-ripper-sr0"
+RIPPER_IMAGE="${ARM_RIPPER_IMAGE:-arm-ripper:latest}"
 RIPPER_CTR="armv3-ripper-iso"
-RIPPER_SERVICE="arm-ripper-sr0"
+RIPPER_SERVICE="arm-ripper"          # compose build-only service (image source)
 COMPOSE_NETWORK="armv3_default"
+DATA_DIR="${ROOT_DIR}/arm"           # raw/media/logs/certs live under ./arm/
 MAKEMKV_FORUM_URL="https://forum.makemkv.com/forum/viewtopic.php?f=5&t=1053"
 
 API_BASE="${ARM_API_BASE:-https://localhost:8081}"
@@ -115,8 +118,11 @@ Options:
                       (default: ses_builtin_movie_plex_1080p_gpu —
                       NVENC-preferred Plex H.265 1080p).
   --no-cleanup        Leave the ISO ripper idling (skip the rip-complete
-                      teardown) and the live arm-ripper-sr0 stopped for
-                      manual inspection.
+                      teardown) and the borrowed drive's managed ripper
+                      stopped for manual inspection.
+                      Note: a backend restart while the ISO ripper is up
+                      will `docker start` the paused managed container and
+                      two rippers will register the same drive_id.
   --rebuild           Force a fresh `docker compose build` of the ripper
                       image before launching. Use after editing
                       services/ripper/ — otherwise the in-flight image
@@ -132,6 +138,8 @@ Environment variables:
   ARM_ADMIN_PASSWORD  Admin password. If unset, the script prompts
                       interactively at JWT-acquire time.
   ARM_API_BASE        Backend / UI base URL (default: https://localhost:8081).
+  ARM_SMOKE_DRIVE_ID  Enrolled drive id to borrow (default: the first
+                      enrolled drive from GET /api/drives).
 EOF
 }
 
@@ -275,34 +283,105 @@ require_ripper_image() {
     ok "ripper image present: ${RIPPER_IMAGE}"
 }
 
-stop_live_ripper() {
-    if docker ps --format '{{.Names}}' | grep -qx "armv3-ripper-sr0"; then
-        log "stopping the live arm-ripper-sr0 (conflicts with the ISO-mode ripper on the same drive_id)"
-        ( cd "${ROOT_DIR}" && "${COMPOSE[@]}" stop "${RIPPER_SERVICE}" >/dev/null )
-        ok "armv3-ripper-sr0 stopped"
+# ---- Drive selection ------------------------------------------------------
+
+pick_enrolled_drive() {
+    # Prints "<drive_id>\t<by_id_name>" for the drive the smoke will borrow.
+    local jwt="$1"
+    local body http_code
+    body=$(curl -sk --max-time 10 "${API_BASE}/api/drives" -H "Authorization: Bearer ${jwt}" \
+        -w '\n%{http_code}' 2>/dev/null) || true
+    http_code="${body##*$'\n'}"
+    body="${body%$'\n'*}"
+    if [[ "${http_code}" != "200" ]]; then
+        err "GET /api/drives HTTP ${http_code}: ${body:0:200}"
+        exit 1
     fi
-    # Clean up a prior ISO-mode container if one is still running.
+    local picked
+    # Prints "RIPPING" (and nothing else) when ARM_SMOKE_DRIVE_ID names an
+    # enrolled drive that's mid-rip right now — a distinct, actionable error
+    # from the generic "no enrolled drive" case below. Otherwise prints
+    # "<id>\t<by_id_name>" for the picked drive, filtering out any drive
+    # that's currently ripping (two rippers cannot register one drive_id,
+    # and the smoke would be fighting a real rip in progress).
+    picked=$(printf '%s' "${body}" | python3 -c '
+import json, os, sys
+want = os.environ.get("ARM_SMOKE_DRIVE_ID")
+enrolled = [d for d in json.load(sys.stdin) if d.get("lifecycle") == "enrolled"]
+if want:
+    named = [d for d in enrolled if d["id"] == want]
+    if named and (named[0].get("current_job") or {}).get("status") == "ripping":
+        print("RIPPING")
+        sys.exit()
+rows = [d for d in enrolled if (d.get("current_job") or {}).get("status") != "ripping"]
+if want:
+    rows = [d for d in rows if d["id"] == want]
+if rows:
+    d = rows[0]
+    print(d["id"] + "\t" + (d.get("by_id_name") or ""))
+' 2>/dev/null || true)
+    if [[ "${picked}" == "RIPPING" ]]; then
+        err "drive ${ARM_SMOKE_DRIVE_ID} is ripping right now — wait or pick another with ARM_SMOKE_DRIVE_ID"
+        exit 1
+    fi
+    if [[ -z "${picked}" ]]; then
+        err "no enrolled drive to borrow (ARM_SMOKE_DRIVE_ID=${ARM_SMOKE_DRIVE_ID:-unset})"
+        err "  enroll a drive on the Drives page first — the smoke registers as that drive"
+        exit 1
+    fi
+    printf '%s\n' "${picked}"
+}
+
+managed_ripper_ctr() {  # prints the manager-created container name for a drive id, if any
+    docker ps -a --filter "label=arm.drive_id=$1" --format '{{.Names}}' | head -n 1
+}
+
+pause_managed_ripper() {
+    local drive_id="$1" ctr
+    ctr=$(managed_ripper_ctr "${drive_id}")
+    if [[ -n "${ctr}" ]] && docker ps --format '{{.Names}}' | grep -qx "${ctr}"; then
+        log "stopping the managed ripper ${ctr} for drive ${drive_id} (two rippers cannot register one drive_id)"
+        docker stop "${ctr}" >/dev/null
+        ok "${ctr} stopped"
+    fi
     if docker ps -a --format '{{.Names}}' | grep -qx "${RIPPER_CTR}"; then
         log "removing prior ${RIPPER_CTR}"
         docker rm -f "${RIPPER_CTR}" >/dev/null
     fi
 }
 
+RESUMED=0
+resume_managed_ripper() {
+    if (( RESUMED == 1 )); then
+        return
+    fi
+    local drive_id="$1" ctr
+    ctr=$(managed_ripper_ctr "${drive_id}")
+    if [[ -z "${ctr}" ]]; then
+        warn "no managed ripper container for ${drive_id}; the backend recreates it at its next boot"
+        RESUMED=1
+        return
+    fi
+    log "starting ${ctr}"
+    docker start "${ctr}" >/dev/null && ok "${ctr} back up"
+    RESUMED=1
+}
+
 # ---- Run ----------------------------------------------------------------
 
 run_iso_ripper() {
-    local key="$1"
-
-    # The compose .env holds ARM_SERVICE_TOKEN; the backend container
-    # expects the same value.
+    local key="$1" drive_id="$2" by_id="$3"
     # shellcheck disable=SC1091
     . "${ROOT_DIR}/.env"
-
-    log "launching one-shot ripper: ${RIPPER_CTR}"
+    local by_id_flag=()
+    [[ -n "${by_id}" ]] && by_id_flag=(-e "ARM_DRIVE_BY_ID=${by_id}")
+    log "launching one-shot ripper: ${RIPPER_CTR} as drive ${drive_id}"
     docker run --rm -d \
         --name "${RIPPER_CTR}" \
         --network "${COMPOSE_NETWORK}" \
         --hostname "arm-ripper-iso" \
+        -e ARM_DRIVE_ID="${drive_id}" \
+        "${by_id_flag[@]}" \
         -e ARM_DRIVE_DEV=/dev/sr0 \
         -e ARM_BACKEND_URL=https://arm-backend:8443 \
         -e ARM_SERVICE_TOKEN="${ARM_SERVICE_TOKEN}" \
@@ -311,11 +390,9 @@ run_iso_ripper() {
         -e MAKEMKV_KEY="${key}" \
         -e PUID="${PUID:-1000}" -e PGID="${PGID:-1000}" -e CDROM_GID="${CDROM_GID:-24}" \
         -v "${CACHE_DIR}:/corpus:ro" \
-        -v "${ROOT_DIR}/raw:/raw" \
-        -v "${ROOT_DIR}/logs:/logs" \
-        -v "${ROOT_DIR}/certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro" \
-        -v "${ROOT_DIR}/certs/arm-ripper-sr0.crt:/etc/ssl/arm/tls.crt:ro" \
-        -v "${ROOT_DIR}/certs/arm-ripper-sr0.key:/etc/ssl/arm/tls.key:ro" \
+        -v "${ROOT_DIR}/arm/raw:/raw" \
+        -v "${DATA_DIR}/logs:/logs" \
+        -v "${DATA_DIR}/certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro" \
         "${RIPPER_IMAGE}" >/dev/null
     ok "${RIPPER_CTR} up"
 }
@@ -362,9 +439,11 @@ watch_until_rip_complete() {
 # as the rip lands instead of letting it idle through the transcode wait
 # (or, under --no-transcode, indefinitely; that idle ripper is what gets
 # left running for hours). Launched with `--rm`, so stopping removes it.
+ISO_RIPPER_DOWN=0
 kill_iso_ripper() {
     log "stopping ${RIPPER_CTR} (rip done — ripper has no further work)"
     docker stop "${RIPPER_CTR}" >/dev/null 2>&1 || true
+    ISO_RIPPER_DOWN=1
     ok "${RIPPER_CTR} stopped"
 }
 
@@ -516,17 +595,33 @@ PYEOF
 
 # ---- Cleanup ------------------------------------------------------------
 
-cleanup_stack() {
-    # The ISO ripper was already stopped at rip-complete (kill_iso_ripper);
-    # cleanup just restores the live drive service.
-    log "restarting ${RIPPER_SERVICE}"
-    if ! ( cd "${ROOT_DIR}" && "${COMPOSE[@]}" up -d "${RIPPER_SERVICE}" >/dev/null 2>&1 ); then
-        warn "${RIPPER_SERVICE} did not come up cleanly; check /dev/sr0 is present on the host"
-        warn "  bring it back manually once the drive is attached:"
-        warn "    cd ${ROOT_DIR} && docker compose up -d ${RIPPER_SERVICE}"
+# Installed as `trap on_exit EXIT` right after pause_managed_ripper, so it
+# fires on every exit path (success, error, or an explicit `exit 1` —
+# including the watch-deadline timeout) and the borrowed drive's managed
+# ripper never stays paused just because a later step blew up. Two cases
+# deliberately skip the resume and print the `docker start` hint instead:
+# the operator opted out (--no-cleanup, which also sets DO_CLEANUP=0 under
+# --no-transcode), or the ISO ripper itself is still up — ISO_RIPPER_DOWN
+# only flips to 1 once kill_iso_ripper actually ran, so this also covers
+# --no-cleanup's KILL_RIPPER=0 and the watch-deadline path that leaves it
+# running for inspection. Resuming the managed ripper while the ISO ripper
+# is still up would let the backend `docker start` it too and register the
+# same drive_id twice.
+on_exit() {
+    if [[ -z "${SMOKE_DRIVE_ID:-}" ]]; then
         return
     fi
-    ok "${RIPPER_SERVICE} back up"
+    if (( DO_CLEANUP == 0 )) || (( ISO_RIPPER_DOWN == 0 )); then
+        local ctr
+        ctr=$(managed_ripper_ctr "${SMOKE_DRIVE_ID}")
+        echo "    cleanup when done:"
+        if (( ISO_RIPPER_DOWN == 0 )); then
+            echo "      docker stop ${RIPPER_CTR}"
+        fi
+        echo "      docker start ${ctr:-<managed-ripper-container>}"
+        return
+    fi
+    resume_managed_ripper "${SMOKE_DRIVE_ID}"
 }
 
 # ---- Summary ------------------------------------------------------------
@@ -535,7 +630,7 @@ final_summary() {
     local job_id="$1"
     local rip_secs="$2"
     local transcode_secs="${3:-}"
-    local raw_dir="${ROOT_DIR}/raw/${job_id}"
+    local raw_dir="${DATA_DIR}/raw/${job_id}"
     local raw_total
     raw_total=$(du -cb "${raw_dir}"/*.mkv 2>/dev/null | tail -1 | awk '{print $1}' || echo 0)
     echo
@@ -548,7 +643,7 @@ final_summary() {
         # know the exact title path without an API roundtrip, so just
         # report the most-recently-modified GPU-preferred batch.
         local media_dir
-        media_dir=$(find "${ROOT_DIR}/media" -name '*-gpu-preferred.mkv' -newer "${raw_dir}" \
+        media_dir=$(find "${DATA_DIR}/media" -name '*-gpu-preferred.mkv' -newer "${raw_dir}" \
             -printf '%h\n' 2>/dev/null | sort -u | head -1)
         if [[ -n "${media_dir}" ]]; then
             local media_total media_count
@@ -567,10 +662,14 @@ require_stack_up
 require_ripper_image
 ensure_iso
 key=$(resolve_makemkv_key)
-stop_live_ripper
+jwt=$(acquire_jwt)
+IFS=$'\t' read -r SMOKE_DRIVE_ID SMOKE_BY_ID < <(pick_enrolled_drive "${jwt}")
+ok "borrowing drive ${SMOKE_DRIVE_ID} (${SMOKE_BY_ID:-port identity})"
+pause_managed_ripper "${SMOKE_DRIVE_ID}"
+trap on_exit EXIT
 
 rip_start=$(date +%s)
-run_iso_ripper "${key}"
+run_iso_ripper "${key}" "${SMOKE_DRIVE_ID}" "${SMOKE_BY_ID}"
 job_id=$(watch_until_rip_complete)
 rip_end=$(date +%s)
 rip_secs=$(( rip_end - rip_start ))
@@ -593,26 +692,17 @@ if (( DO_TRANSCODE == 0 )); then
     echo "        -H \"Authorization: Bearer \$JWT\" -H 'Content-Type: application/json' \\"
     echo "        -d '{\"session_id\":\"${SESSION_ID}\",\"overwrite\":false}'"
     echo
-    if (( KILL_RIPPER == 1 )); then
-        echo "    cleanup when done (ISO ripper already stopped):"
-        echo "      cd ${ROOT_DIR} && docker compose up -d ${RIPPER_SERVICE}"
-    else
-        echo "    cleanup when done:"
-        echo "      docker stop ${RIPPER_CTR}"
-        echo "      cd ${ROOT_DIR} && docker compose up -d ${RIPPER_SERVICE}"
-    fi
+    # --no-transcode always sets DO_CLEANUP=0; on_exit (trap) prints the
+    # matching `docker start`/`docker stop` cleanup hint on the way out.
     exit 0
 fi
 
-jwt=$(acquire_jwt)
 sap_id=$(apply_transcode "${jwt}" "${job_id}" "${SESSION_ID}")
 transcode_start=$(date +%s)
 watch_transcode "${jwt}" "${sap_id}"
 transcode_end=$(date +%s)
 transcode_secs=$(( transcode_end - transcode_start ))
 
-if (( DO_CLEANUP == 1 )); then
-    cleanup_stack
-fi
-
+# DO_CLEANUP==1 here resumes the managed ripper via on_exit (trap); ==0
+# (--no-cleanup) leaves it stopped and on_exit prints the `docker start` hint.
 final_summary "${job_id}" "${rip_secs}" "${transcode_secs}"
