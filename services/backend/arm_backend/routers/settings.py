@@ -27,7 +27,8 @@ _INFRA_KEYS = [
     "RAW_ROOT",
     "ISO_INGRESS_ROOT",
     "BIND_PORT",
-    "MAX_PARALLEL_TRANSCODES",
+    # MAX_PARALLEL_TRANSCODES moved to config.max_parallel_transcodes
+    # (operator setting, Settings > Transcoding); the env var only seeds it.
     "ARM_DOCKER_NETWORK",
     "ARM_GPUS",
 ]
