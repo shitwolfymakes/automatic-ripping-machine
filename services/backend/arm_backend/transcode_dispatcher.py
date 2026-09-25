@@ -57,6 +57,12 @@ logger = logging.getLogger("arm_backend.transcode_dispatcher")
 _CANCEL_GRACE_SECONDS = 10
 _DOCKER_LABEL_KEY = "arm.task_id"
 
+# Per-tick cap on how many queued rows spawn_pending examines. Passthrough
+# tasks execute unconditionally (never counted against encode slots), so the
+# old `.limit(slots)` (slots could be 0) would starve passthrough behind a
+# full encode queue; scan a generous fixed window instead.
+_QUEUE_SCAN_LIMIT = 50
+
 # A dead docker-over-SSH transport (idle paramiko connection reset by the
 # remote end) surfaces as one of these, either raw or wrapped inside
 # docker-py's APIError cause chain. EOFError is included because paramiko
@@ -376,17 +382,20 @@ class TranscodeDispatcher:
     # --- spawn loop ---------------------------------------------------------
 
     async def spawn_pending(self, db: AsyncSession) -> int:
-        """Spawn new transcoder containers up to `config.max_parallel_transcodes`.
+        """Execute queued passthrough tasks in-process and spawn transcoder
+        containers for encode tasks up to `config.max_parallel_transcodes`.
 
-        The cap is operator config, read from the DB each tick so a Settings
-        change applies on the next tick without a restart (the env var only
-        seeds the column on first boot).
-        Counts in_progress rows live (cheap). For each available slot,
-        dequeues one queued task and spawns. Returns the spawn count.
+        Passthrough (no preset, or TranscodeTool.NONE) never spawns a
+        container and is not counted against encode slots; it always runs
+        when queued, FIFO. Encode tasks are additionally gated by
+        `config.transcode_enabled` (held in QUEUED when off) and by having a
+        docker client + host paths at all (a ripper-only deployment has
+        neither); held tasks stay queued for a later tick, never dropped.
         """
-        if not self.host_paths_set():
-            logger.warning("transcode dispatcher disabled: ARM_HOST_*_PATH not set (set them via .env)")
-            return 0
+        from arm_backend.passthrough_executor import execute_passthrough_task
+        from arm_backend.transcode_apply import is_passthrough_preset, transcode_enabled_now
+
+        enabled = await transcode_enabled_now(db)
 
         in_progress = (
             (
@@ -397,9 +406,9 @@ class TranscodeDispatcher:
             .scalars()
             .all()
         )
-        slots = await max_parallel_transcodes(db, default=self._settings.MAX_PARALLEL_TRANSCODES) - len(in_progress)
-        if slots <= 0:
-            return 0
+        encode_slots = await max_parallel_transcodes(db, default=self._settings.MAX_PARALLEL_TRANSCODES) - len(
+            in_progress
+        )
 
         queued_all = (
             (
@@ -407,18 +416,18 @@ class TranscodeDispatcher:
                     select(TranscodeTask)
                     .where(col(TranscodeTask.status) == TranscodeTaskStatus.QUEUED)
                     .order_by(col(TranscodeTask.created_at).asc())
-                    .limit(slots)
+                    .limit(_QUEUE_SCAN_LIMIT)
                     .with_for_update(skip_locked=True)
                 )
             )
             .scalars()
             .all()
         )
-        # `.limit(slots)` is honoured by Postgres but the in-memory test fake
-        # returns the full set; cap defensively here so the cap test passes
-        # without leaking SQL-only behaviour into the test fixture.
-        queued = list(queued_all)[:slots]
+        # `.limit(_QUEUE_SCAN_LIMIT)` is honoured by Postgres but the
+        # in-memory test fake returns the full set; cap defensively here.
+        queued = list(queued_all)[:_QUEUE_SCAN_LIMIT]
         spawned = 0
+        held_encode = 0
         for task in queued:
             # Load the owning application once so the spawn log lines carry
             # job_id for the per-job log view (Phase 12).
@@ -430,6 +439,22 @@ class TranscodeDispatcher:
             job_id = application.job_id if application is not None else None
             with with_log_context(job_id=job_id, session_application_id=task.session_application_id):
                 preset = await self._resolve_preset_for_task(db, task)
+                if is_passthrough_preset(preset):
+                    # Never counted against encode_slots and never held by
+                    # the disabled/docker-less gates below: a file move
+                    # needs neither a container nor an encode slot.
+                    await execute_passthrough_task(db, task, self._hub, self._settings)
+                    continue
+                if not enabled:
+                    held_encode += 1
+                    continue
+                if self._docker is None or not self.host_paths_set():
+                    held_encode += 1
+                    continue
+                if encode_slots - spawned <= 0:
+                    # No free slot this tick; later passthrough tasks in the
+                    # queue must still run, so `continue` (not `break`).
+                    continue
                 assignment = await self._claim_gpu_for_task(db, task, preset)
                 if assignment.action == "queue":
                     logger.info(
@@ -460,6 +485,10 @@ class TranscodeDispatcher:
                     if assignment.gpu is not None:
                         assignment.gpu.status = GpuStatus.AVAILABLE
                         assignment.gpu.claimed_by_task_id = None
+        if held_encode:
+            logger.debug(
+                "%d encode task(s) held (enabled=%s docker=%s)", held_encode, enabled, self._docker is not None
+            )
         await db.commit()
         return spawned
 
@@ -537,7 +566,12 @@ class TranscodeDispatcher:
     def probe(self) -> tuple[bool, str | None]:
         """Can this dispatcher actually run a transcode right now? Pings the
         docker host and checks the image exists there. Never raises; cached
-        for docker_probe.PROBE_TTL_SECONDS (see there for why)."""
+        for docker_probe.PROBE_TTL_SECONDS (see there for why). A ripper-only
+        deployment (no docker client at all) can't run encode tasks; that's
+        not a probe failure to retry, just a fixed fact, so short-circuit
+        before touching `self._probe`."""
+        if self._docker is None:
+            return (False, "no docker client (ripper-only deployment or docker unavailable)")
         return self._probe()
 
     def _spawn_container(self, task: TranscodeTask, *, assignment: GpuAssignment | None = None) -> Any:
@@ -776,8 +810,10 @@ class TranscodeDispatcher:
             track_id = row.source_track_id
 
         # Force-stop the container if the transcoder didn't honour the WS
-        # cancel inside the grace window.
-        if still_running:
+        # cancel inside the grace window. No docker client (ripper-only
+        # deployment) means there's no container to stop; the row delete
+        # below still runs.
+        if still_running and self._docker is not None:
             try:
                 survivors = self._docker.containers.list(filters={"label": f"{_DOCKER_LABEL_KEY}={task_id}"})
                 for container in survivors:
