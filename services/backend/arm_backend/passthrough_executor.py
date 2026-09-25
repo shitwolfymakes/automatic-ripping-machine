@@ -92,8 +92,19 @@ async def execute_passthrough_task(
     return cleanly instead of resurrecting a cancelled task.
     """
     task_id = task.id
+    # `populate_existing=True` is required in addition to `with_for_update()`:
+    # if `task` (or another reference to the same row) is already in this
+    # session's identity map and ISN'T expired, a plain re-select would
+    # silently return the cached, possibly-stale object without overwriting
+    # its attributes from this query's result -- exactly the gap that let a
+    # concurrent writer's committed status change go unnoticed.
     current = (
-        await db.execute(select(TranscodeTask).where(col(TranscodeTask.id) == task_id).with_for_update())
+        await db.execute(
+            select(TranscodeTask)
+            .where(col(TranscodeTask.id) == task_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
     ).scalar_one_or_none()
     if current is None or current.status != TranscodeTaskStatus.QUEUED:
         logger.debug(
@@ -139,9 +150,14 @@ async def execute_passthrough_task(
                 error = f"{type(exc).__name__}: {exc}"[:300]
 
         # Re-fetch: cancel_running (a different session) may have deleted
-        # this row while the move was in flight.
+        # this row while the move was in flight. `populate_existing=True`
+        # for the same reason as the claim re-select above -- force a
+        # refresh from the current row rather than silently reusing
+        # whatever this identity-mapped object already had cached.
         fresh_task = (
-            await db.execute(select(TranscodeTask).where(col(TranscodeTask.id) == task_id))
+            await db.execute(
+                select(TranscodeTask).where(col(TranscodeTask.id) == task_id).execution_options(populate_existing=True)
+            )
         ).scalar_one_or_none()
         if fresh_task is None:
             logger.info("passthrough task_id=%s deleted mid-move; skipping terminal update", task_id)
