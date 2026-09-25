@@ -7,9 +7,9 @@ Run order:
 4. Pick the encoder by `transcode_preset.tool`:
    - HANDBRAKE → `handbrake.transcode_handbrake`
    - ABCDE → `ffmpeg_audio.transcode_audio`
-   - NONE → `passthrough.transcode_none` (no atomic-rename needed)
-5. Wrap the output write in `atomic.atomic_output` so partial files land
-   as `*.arm-inprogress` and only get renamed on success.
+   - NONE → `arm_common.fileops.transcode_none` (no atomic-rename needed)
+5. Wrap the output write in `arm_common.fileops.atomic_output` so partial
+   files land as `*.arm-inprogress` and only get renamed on success.
 6. PATCH /complete with size + duration metadata.
 7. On exception or cancel: PATCH /fail with the error string.
 
@@ -33,15 +33,14 @@ from arm_common.schemas import (
     WSEnvelope,
 )
 from arm_common.enums import TranscodeTool
+from arm_common.fileops import atomic_output, transcode_none
 
 from arm_transcode.api_client import BackendClient
-from arm_transcode.atomic import atomic_output
 from arm_transcode.config import TranscoderConfig
 from arm_transcode.encoder_probe import probe_encoders
 from arm_transcode.ffmpeg_audio import transcode_audio
 from arm_transcode.handbrake import transcode_handbrake
 from arm_transcode.heartbeat import HeartbeatPump, ProgressState
-from arm_transcode.passthrough import transcode_none
 from arm_transcode.ws_client import WSClient
 
 
