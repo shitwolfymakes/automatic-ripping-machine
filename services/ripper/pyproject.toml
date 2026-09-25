@@ -7,6 +7,10 @@ dependencies = [
     "httpx>=0.27",
     "pydantic-settings>=2.5",
     "discid>=1.2",
+    # Reference implementation of the matrix256v1 disc fingerprint; the scan
+    # feeds it a sparse skeleton of the pycdlib-enumerated tree (see
+    # arm_ripper.scan.matrix256_fp).
+    "matrix256>=1.0.3",
     "pydvdid-m>=1.1",
     "pycdlib",
     "websockets>=12",
