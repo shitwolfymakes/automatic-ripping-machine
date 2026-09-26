@@ -103,6 +103,23 @@ def test_default_run_joins_stdout_and_stderr_tail(monkeypatch):
     assert "stderr line 1" in out
 
 
+@pytest.mark.parametrize(
+    ("stdout", "stderr", "expected"),
+    [
+        ("", "encoder init failed\n", "encoder init failed"),
+        ("progress\n\n", "", "progress"),
+        ("a\n  \n\nb\n", "\n\nc\n", "a | b | c"),
+        ("", "", ""),
+    ],
+)
+def test_default_run_drops_empty_lines(monkeypatch, stdout, stderr, expected):
+    def fake_run(argv, **kwargs):
+        return _FakeCompletedProcess(1, stdout=stdout, stderr=stderr)
+
+    monkeypatch.setattr(device_probe.subprocess, "run", fake_run)
+    assert device_probe._default_run(["ffmpeg"], 5.0) == (1, expected)
+
+
 def test_default_run_timeout_returns_124(monkeypatch):
     def fake_run(argv, **kwargs):
         raise subprocess.TimeoutExpired(cmd=argv, timeout=kwargs.get("timeout", 5.0))

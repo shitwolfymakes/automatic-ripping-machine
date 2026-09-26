@@ -36,8 +36,8 @@ def _default_run(argv: list[str], timeout: float) -> tuple[int, str]:
         # per-encoder error rather than an uncaught traceback that would break
         # the --probe-device exit-code contract.
         return 126, str(exc)
-    tail = (proc.stdout + "\n" + proc.stderr).strip().splitlines()[-5:]
-    return proc.returncode, " | ".join(tail)
+    lines = [line.strip() for line in (proc.stdout + "\n" + proc.stderr).splitlines()]
+    return proc.returncode, " | ".join([line for line in lines if line][-5:])
 
 
 def probe_command(spec: EncoderSpec, clip: Path, out: Path, device: str) -> list[str]:
