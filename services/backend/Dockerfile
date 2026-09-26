@@ -39,6 +39,21 @@ COPY VERSION /app/VERSION
 
 RUN uv sync --frozen --package arm_backend --no-dev
 
+# Bake the /data tree so a fresh arm-data named volume seeds owned and
+# group-writable instead of arriving root-owned. Docker copies an image
+# directory's content AND ownership into an empty named volume on first
+# mount, so this ships the tree pre-owned by the eventual arm user.
+# The shared entrypoint creates arm with --no-create-home at PUID:PGID
+# (default 1000:1000; see docker-entrypoint.sh) rather than at build time,
+# so we chown to the matching numeric 1000:1000 here, same convention as
+# the ripper image's /home/arm (services/ripper/Dockerfile). setgid (2775)
+# keeps files written later group-writable regardless of which PUID wrote
+# them, as long as PGID stays 1000. Paths mirror arm_backend/config.py's
+# ARM_IMAGE_CACHE_PATH / ARM_THEDISCDB_PATH / ARM_THEMES_PATH defaults.
+RUN mkdir -p /data/cache/images /data/cache/thediscdb /data/themes \
+    && chown -R 1000:1000 /data \
+    && chmod -R 2775 /data
+
 COPY services/_common/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
