@@ -8,7 +8,7 @@ ffmpeg against the raw input, writes the output through the
 
 ## Image contents
 
-`python:3.14-slim-bookworm` plus:
+`python:3.14-slim-trixie` plus:
 
 - `tini` — PID 1; reaps the encoder subprocess.
 - `gosu` — drops to PUID/PGID before exec.

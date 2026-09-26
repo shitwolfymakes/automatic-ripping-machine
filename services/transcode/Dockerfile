@@ -5,9 +5,12 @@
 # x265/SVT-AV1 software), so we compile HandBrakeCLI from source with the HW
 # encoders enabled: --enable-nvenc (NVIDIA), --enable-qsv (Intel), --enable-vce
 # (AMD VCN). The runtime stage below copies this binary over Debian's, reusing
-# Debian's dependency closure. Bookworm builder so sonames match the runtime.
+# Debian's dependency closure. Trixie builder so sonames match the runtime
+# (both stages move together: bookworm's intel-media-va-driver-non-free 23.1 /
+# libmfx-gen 23.x predate Intel Arc Battlemage (B580); trixie ships 25.2.3 /
+# 25.1.4, which support it).
 # Pinned to a release tag; bump HANDBRAKE_VERSION to upgrade.
-FROM debian:bookworm AS handbrake-builder
+FROM debian:trixie AS handbrake-builder
 ARG HANDBRAKE_VERSION=1.11.1
 # nv-codec-headers pin. HandBrake 1.11.x defaults to 13.0.19.0, whose NVENC API
 # (13.0) demands NVIDIA driver >= 570. Stable distros lag: Debian 13 (trixie)
@@ -58,7 +61,7 @@ RUN ./configure --launch-jobs="$(nproc)" --launch --disable-gtk \
     && strip build/HandBrakeCLI
 
 # ---- runtime image --------------------------------------------------------
-FROM python:3.14-slim-bookworm
+FROM python:3.14-slim-trixie
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -77,7 +80,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 #   - libva2 / libva-drm2 / vainfo — the VAAPI loader + a probe tool.
 #   - mesa-va-drivers           — AMD (VAAPI/VCN).
 #   - intel-media-va-driver-non-free + i965-va-driver — Intel QSV (modern +
-#     legacy iGPUs). The newer driver lives in Debian `non-free`.
+#     legacy iGPUs). The newer driver lives in Debian `non-free`. Trixie ships
+#     intel-media-va-driver-non-free 25.2.3 / libmfx-gen 25.1.4, which add
+#     support for Intel Arc Battlemage (B580); bookworm's 23.1 / 23.x predate it.
 #   - libvpl2 + libmfx-gen1.2   — oneVPL dispatcher (libvpl2) AND the modern
 #     oneVPL GPU runtime (libmfx-gen). The GPU runtime is REQUIRED on Gen12+
 #     Intel (Alder Lake / N-series, iHD 23.x): without it, oneVPL falls back to
@@ -89,12 +94,23 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # runtime by the host's NVIDIA Container Toolkit. The kernel device nodes
 # (/dev/dri/*, /dev/nvidia*) are passed in per-container by the dispatcher.
 #
-# `python:3.14-slim-bookworm` ships its base sources in deb822 format with an
-# explicit `Signed-By:` directive; legacy lines we add must carry the matching
-# `[signed-by=…]` option or apt errors with "Conflicting values ... Signed-By".
-RUN echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware' \
-        > /etc/apt/sources.list.d/non-free.list \
-    && apt-get update \
+# `python:3.14-slim-trixie` ships its base sources in deb822 format, split
+# into a trixie/trixie-updates stanza and a trixie-security stanza, each with
+# `Components: main` only. Intel's QSV/VAAPI userspace lives in `contrib`,
+# `non-free` and `non-free-firmware`, so widen every stanza's Components line
+# in place (preserving the image's own URIs/Suites/Signed-By) rather than
+# appending a hand-written legacy sources.list line: a legacy line would need
+# a matching `[signed-by=…]` option to avoid a "Conflicting values ...
+# Signed-By" apt error against this file's `Signed-By:` directive. The `test`
+# below asserts the rewrite touched every `Components:` stanza in the file, so
+# a future base-image change that reshapes debian.sources fails the build
+# loudly instead of silently apt-installing from `main` only.
+RUN set -eux; \
+    sed -i 's/^Components: main$/Components: main contrib non-free non-free-firmware/' \
+        /etc/apt/sources.list.d/debian.sources; \
+    test "$(grep -c '^Components: main contrib non-free non-free-firmware$' /etc/apt/sources.list.d/debian.sources)" \
+        = "$(grep -c '^Components:' /etc/apt/sources.list.d/debian.sources)"
+RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         tini \
         gosu \
