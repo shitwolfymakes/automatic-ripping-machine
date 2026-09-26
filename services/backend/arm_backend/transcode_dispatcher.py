@@ -64,6 +64,9 @@ logger = logging.getLogger("arm_backend.transcode_dispatcher")
 # gracefully before falling back to `docker stop`.
 _CANCEL_GRACE_SECONDS = 10
 _DOCKER_LABEL_KEY = "arm.task_id"
+# Why a deployment cannot run encode work (or a GPU probe) at all: shared by
+# `probe()` and the GPU probe endpoints so both report the same reason.
+NO_DOCKER_CLIENT_DETAIL = "no docker client (ripper-only deployment or docker unavailable)"
 
 # Per-tick cap on how many ENCODE rows spawn_pending examines (spawn
 # attempts, GPU claim checks, etc). Passthrough tasks are exempt from this
@@ -175,6 +178,13 @@ class TranscodeDispatcher:
         # querying live; it is only ever stale for the window between a GPU
         # being enabled and the next tick or claim.
         self._enabled_gpu_vendors: set[GpuVendor] = set()
+
+    @property
+    def docker_client(self) -> Any:
+        """The current docker client (None for a ripper-only deployment). A
+        property rather than a cached reference: a dead ssh transport can
+        rebuild it during a spawn."""
+        return self._docker
 
     def stop(self) -> None:
         self._stop.set()
@@ -798,7 +808,7 @@ class TranscodeDispatcher:
         vendor build without it ever showing up as a failure.
         """
         if self._docker is None:
-            return (False, "no docker client (ripper-only deployment or docker unavailable)")
+            return (False, NO_DOCKER_CLIENT_DETAIL)
         ok, detail = self._probe()
         if not ok:
             return ok, detail

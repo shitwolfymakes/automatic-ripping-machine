@@ -16,6 +16,7 @@ from arm_backend.config import effective_transcode_capable, settings
 from arm_backend.crash_recovery import sweep_in_flight_jobs
 from arm_backend.db import SessionLocal
 from arm_backend.gpu_probe import load_configured_gpus
+from arm_backend.gpu_probe_runner import GpuProbeRunner
 from arm_backend import image_cache
 from arm_backend.disk_refresh import DiskRefresher
 from arm_backend.drive_scanner import DriveScanner
@@ -93,10 +94,12 @@ async def _refresh_gpu_inventory(hub: WSHub) -> None:
     an already-populated table is left untouched. Deleting every row and
     restarting the backend is the deliberate re-seed path (the GPUs card
     documents it). The env descriptor comes from host-side detection at
-    install time (or is hand-written for remote transcode hosts); the
-    backend does not probe hardware. `load_configured_gpus` degrades to `[]`
-    on malformed input. Emits `transcode.hw_unavailable` when the inventory
-    ends up empty.
+    install time (or is hand-written for remote transcode hosts). Its
+    `encoder_kinds` are hints only: seeded rows start with no verified
+    encoders and `probed_at` NULL, and the boot probe pass
+    (`GpuProbeRunner.probe_unprobed`) verifies each device. `load_configured_gpus`
+    degrades to `[]` on malformed input. Emits `transcode.hw_unavailable` when
+    the inventory ends up empty.
     """
     now = datetime.now(UTC)
     async with SessionLocal() as session:
@@ -110,9 +113,10 @@ async def _refresh_gpu_inventory(hub: WSHub) -> None:
                 Gpu(
                     vendor=g.vendor,
                     device_path=g.device_path,
-                    encoder_kinds=g.encoder_kinds,
+                    encoder_kinds=[],
                     status=GpuStatus.AVAILABLE,
                     last_seen_at=now,
+                    probed_at=None,
                 )
             )
         if probed:
@@ -260,6 +264,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.exception("startup orphaned-application sweep failed: %s", exc)
     dispatcher_task = asyncio.create_task(transcode_dispatcher.run())
     app.state.transcode_dispatcher = transcode_dispatcher
+    # Per-device GPU probes: the boot pass verifies every enabled, never-probed
+    # row in the background (a no-op without a docker client), and the
+    # /api/gpus re-probe endpoints schedule through the same runner.
+    gpu_probe_runner = GpuProbeRunner(settings, SessionLocal, transcode_dispatcher, app.state.ws_hub)
+    app.state.gpu_probe_runner = gpu_probe_runner
+    gpu_probe_boot_task = asyncio.create_task(gpu_probe_runner.probe_unprobed())
 
     # Drive lifecycle Plan 3 — ripper manager (spec §3). Always the LOCAL
     # daemon and always its OWN client: the drives are plugged into this
@@ -350,6 +360,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await asyncio.wait_for(notification_task, timeout=10.0)
         except asyncio.TimeoutError:  # pragma: no cover — only if the dispatcher hangs >10s on shutdown
             notification_task.cancel()
+        gpu_probe_boot_task.cancel()
+        gpu_probe_runner.cancel_pending()
+        with contextlib.suppress(asyncio.CancelledError):
+            await gpu_probe_boot_task
         # transcode_dispatcher/dispatcher_task are unconditionally set above
         # (the dispatcher always runs, docker or not).
         transcode_dispatcher.stop()

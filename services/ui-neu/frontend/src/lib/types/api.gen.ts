@@ -1440,6 +1440,32 @@ export type FixPermsResponse = {
 };
 
 /**
+ * GpuProbeAllScheduled
+ *
+ * 202 body for a re-probe of every enabled, idle row: the ids whose
+ * background probe was scheduled.
+ */
+export type GpuProbeAllScheduled = {
+    /**
+     * Scheduled
+     */
+    scheduled: Array<string>;
+};
+
+/**
+ * GpuProbeScheduled
+ *
+ * 202 body for a single-row re-probe: the probe runs in the background
+ * and the row updates when `gpu.probed` arrives on `transcode.events`.
+ */
+export type GpuProbeScheduled = {
+    /**
+     * Scheduled
+     */
+    scheduled: boolean;
+};
+
+/**
  * GpuStatus
  */
 export type GpuStatus = 'available' | 'busy';
@@ -7000,6 +7026,73 @@ export type UpdateGpuApiGpusGpuIdPatchResponses = {
 };
 
 export type UpdateGpuApiGpusGpuIdPatchResponse = UpdateGpuApiGpusGpuIdPatchResponses[keyof UpdateGpuApiGpusGpuIdPatchResponses];
+
+export type ProbeAllGpusApiGpusProbePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/gpus/probe';
+};
+
+export type ProbeAllGpusApiGpusProbePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProbeAllGpusApiGpusProbePostError = ProbeAllGpusApiGpusProbePostErrors[keyof ProbeAllGpusApiGpusProbePostErrors];
+
+export type ProbeAllGpusApiGpusProbePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: GpuProbeAllScheduled;
+};
+
+export type ProbeAllGpusApiGpusProbePostResponse = ProbeAllGpusApiGpusProbePostResponses[keyof ProbeAllGpusApiGpusProbePostResponses];
+
+export type ProbeGpuApiGpusGpuIdProbePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Gpu Id
+         */
+        gpu_id: string;
+    };
+    query?: never;
+    url: '/api/gpus/{gpu_id}/probe';
+};
+
+export type ProbeGpuApiGpusGpuIdProbePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProbeGpuApiGpusGpuIdProbePostError = ProbeGpuApiGpusGpuIdProbePostErrors[keyof ProbeGpuApiGpusGpuIdProbePostErrors];
+
+export type ProbeGpuApiGpusGpuIdProbePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: GpuProbeScheduled;
+};
+
+export type ProbeGpuApiGpusGpuIdProbePostResponse = ProbeGpuApiGpusGpuIdProbePostResponses[keyof ProbeGpuApiGpusGpuIdProbePostResponses];
 
 export type ListEncodersApiEncodersGetData = {
     body?: never;

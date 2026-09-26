@@ -107,6 +107,20 @@ class GpuUpdateRequest(BaseModel):
     enabled: bool
 
 
+class GpuProbeScheduled(BaseModel):
+    """202 body for a single-row re-probe: the probe runs in the background
+    and the row updates when `gpu.probed` arrives on `transcode.events`."""
+
+    scheduled: bool
+
+
+class GpuProbeAllScheduled(BaseModel):
+    """202 body for a re-probe of every enabled, idle row: the ids whose
+    background probe was scheduled."""
+
+    scheduled: list[str]
+
+
 class EncoderAvailabilityView(BaseModel):
     """One `arm_common.encoders.ENCODERS` catalog entry, with availability
     computed server-side from the live `gpus` inventory (GET /api/encoders).

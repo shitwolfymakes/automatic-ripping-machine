@@ -121,6 +121,8 @@ from arm_common.schemas.sessions import (
     TranscodeTaskView,
 )
 from arm_common.schemas.transcoder import (
+    GpuProbeAllScheduled,
+    GpuProbeScheduled,
     GpuUpdateRequest,
     GpuView,
     ClaimTaskResponse,
@@ -330,6 +332,8 @@ __all__ = [
     "TranscodePresetUpdateRequest",
     "TranscodePresetView",
     "TranscodeProgressSummary",
+    "GpuProbeAllScheduled",
+    "GpuProbeScheduled",
     "GpuUpdateRequest",
     "GpuView",
     "EncoderAvailabilityView",

@@ -128,3 +128,109 @@ def test_delete_claimed_gpu_409() -> None:
         r = c.delete("/api/gpus/gpu_1", headers=_auth(token))
     assert r.status_code == 409
     assert len(db.rows["gpus"]) == 1  # row survives
+
+
+# --- re-probe endpoints ------------------------------------------------------
+
+
+class _Runner:
+    """Stands in for GpuProbeRunner: records what the endpoints schedule."""
+
+    def __init__(self, *, capable: bool = True, probing: set[str] | None = None) -> None:
+        self._capable = capable
+        self.probing = probing or set()
+        self.started: list[str] = []
+
+    def capable(self) -> bool:
+        return self._capable
+
+    def start_probe(self, gpu_id: str) -> bool:
+        if gpu_id in self.probing:
+            return False
+        self.probing.add(gpu_id)
+        self.started.append(gpu_id)
+        return True
+
+
+def test_probe_one_schedules_202() -> None:
+    app, token, _db = _app([_gpu()])
+    runner = _Runner()
+    app.state.gpu_probe_runner = runner
+    with TestClient(app) as c:
+        r = c.post("/api/gpus/gpu_1/probe", headers=_auth(token))
+    assert r.status_code == 202, r.text
+    assert r.json() == {"scheduled": True}
+    assert runner.started == ["gpu_1"]
+
+
+def test_probe_one_unknown_404() -> None:
+    app, token, _db = _app([])
+    app.state.gpu_probe_runner = _Runner()
+    with TestClient(app) as c:
+        r = c.post("/api/gpus/gpu_missing/probe", headers=_auth(token))
+    assert r.status_code == 404
+
+
+def test_probe_one_busy_409() -> None:
+    app, token, _db = _app([_gpu(status=GpuStatus.BUSY, claimed_by_task_id="tt_running")])
+    runner = _Runner()
+    app.state.gpu_probe_runner = runner
+    with TestClient(app) as c:
+        r = c.post("/api/gpus/gpu_1/probe", headers=_auth(token))
+    assert r.status_code == 409
+    assert r.json()["detail"] == "gpu is in use by a running transcode"
+    assert runner.started == []
+
+
+def test_probe_one_not_capable_409() -> None:
+    app, token, _db = _app([_gpu()])
+    app.state.gpu_probe_runner = _Runner(capable=False)
+    with TestClient(app) as c:
+        r = c.post("/api/gpus/gpu_1/probe", headers=_auth(token))
+    assert r.status_code == 409
+    assert r.json()["detail"] == "no docker client (ripper-only deployment or docker unavailable)"
+
+
+def test_probe_one_without_a_runner_is_not_capable_409() -> None:
+    app, token, _db = _app([_gpu()])
+    with TestClient(app) as c:
+        r = c.post("/api/gpus/gpu_1/probe", headers=_auth(token))
+    assert r.status_code == 409
+    assert r.json()["detail"] == "no docker client (ripper-only deployment or docker unavailable)"
+
+
+def test_probe_one_already_probing_409() -> None:
+    app, token, _db = _app([_gpu()])
+    app.state.gpu_probe_runner = _Runner(probing={"gpu_1"})
+    with TestClient(app) as c:
+        r = c.post("/api/gpus/gpu_1/probe", headers=_auth(token))
+    assert r.status_code == 409
+    assert r.json()["detail"] == "gpu probe already running"
+
+
+def test_probe_all_skips_busy_disabled_and_already_probing() -> None:
+    app, token, _db = _app(
+        [
+            _gpu("gpu_free"),
+            _gpu("gpu_busy", status=GpuStatus.BUSY, claimed_by_task_id="tt_running"),
+            _gpu("gpu_off", enabled=False),
+            _gpu("gpu_probing"),
+            _gpu("gpu_free2", GpuVendor.NVENC, device_path="nvidia://0"),
+        ]
+    )
+    runner = _Runner(probing={"gpu_probing"})
+    app.state.gpu_probe_runner = runner
+    with TestClient(app) as c:
+        r = c.post("/api/gpus/probe", headers=_auth(token))
+    assert r.status_code == 202, r.text
+    assert r.json() == {"scheduled": ["gpu_free", "gpu_free2"]}
+    assert runner.started == ["gpu_free", "gpu_free2"]
+
+
+def test_probe_all_not_capable_409() -> None:
+    app, token, _db = _app([_gpu()])
+    app.state.gpu_probe_runner = _Runner(capable=False)
+    with TestClient(app) as c:
+        r = c.post("/api/gpus/probe", headers=_auth(token))
+    assert r.status_code == 409
+    assert r.json()["detail"] == "no docker client (ripper-only deployment or docker unavailable)"

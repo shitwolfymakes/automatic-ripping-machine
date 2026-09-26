@@ -4763,6 +4763,115 @@
         }
       }
     },
+    "/api/gpus/probe": {
+      "post": {
+        "tags": [
+          "gpus"
+        ],
+        "summary": "Probe All Gpus",
+        "description": "Re-probe every enabled row that isn't running a transcode. Rows already\nbeing probed are left to that probe and not listed.",
+        "operationId": "probe_all_gpus_api_gpus_probe_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GpuProbeAllScheduled"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/gpus/{gpu_id}/probe": {
+      "post": {
+        "tags": [
+          "gpus"
+        ],
+        "summary": "Probe Gpu",
+        "description": "Re-probe one row (enabled or not: a disabled row may be re-probed\nbefore an operator turns it back on).",
+        "operationId": "probe_gpu_api_gpus__gpu_id__probe_post",
+        "parameters": [
+          {
+            "name": "gpu_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Gpu Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GpuProbeScheduled"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/encoders": {
       "get": {
         "tags": [
@@ -11047,6 +11156,37 @@
           "fixed"
         ],
         "title": "FixPermsResponse"
+      },
+      "GpuProbeAllScheduled": {
+        "properties": {
+          "scheduled": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scheduled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scheduled"
+        ],
+        "title": "GpuProbeAllScheduled",
+        "description": "202 body for a re-probe of every enabled, idle row: the ids whose\nbackground probe was scheduled."
+      },
+      "GpuProbeScheduled": {
+        "properties": {
+          "scheduled": {
+            "type": "boolean",
+            "title": "Scheduled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scheduled"
+        ],
+        "title": "GpuProbeScheduled",
+        "description": "202 body for a single-row re-probe: the probe runs in the background\nand the row updates when `gpu.probed` arrives on `transcode.events`."
       },
       "GpuStatus": {
         "type": "string",
