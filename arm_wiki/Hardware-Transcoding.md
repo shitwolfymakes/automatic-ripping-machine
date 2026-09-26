@@ -109,11 +109,14 @@ probed"): the row shows a probed timestamp but an empty verified list, plus
 `probe_error` when the probe process itself failed. The two most common
 causes:
 
-- **AMD**: the AMD path is ffmpeg through Mesa's VAAPI driver, not
-  HandBrake's own AMD encoder. It needs the `amd` transcode image variant
-  (`mesa-va-drivers`) actually present on the docker host; on the base image
-  alone, an AMD row verifies nothing. See [Image variants](#image-variants)
-  below.
+- **AMD**: HandBrakeCLI is in fact compiled with its own AMD encoder
+  (VCE/AMF), the same as QSV and NVENC, but it never runs in any of these
+  images: AMD's proprietary AMF runtime isn't packaged for Debian, so it
+  isn't installed anywhere, and supporting it is deferred pending hardware
+  testing. That's why the AMD path is ffmpeg through Mesa's VAAPI driver
+  instead. It needs the `amd` transcode image variant (`mesa-va-drivers`)
+  actually present on the docker host; on the base image alone, an AMD row
+  verifies nothing. See [Image variants](#image-variants) below.
 - **Intel Gen 9 through 11** (Skylake through Ice Lake): these need Intel's
   legacy Media SDK runtime (`libmfx1`), which trixie no longer ships and this
   image does not install. These rows verify nothing on any current image;
@@ -128,7 +131,11 @@ nothing) records one of these in `probe_error`:
   vendor or device it needed.
 - otherwise, a message telling you to rebuild or pull the image, plus a tail
   of the container's stderr: usually a transcode image that predates the
-  `--probe-device` worker mode.
+  `--probe-device` worker mode. This is also what you get for an exit code
+  that would otherwise read as "misconfigured" but whose stderr mentions
+  "unrecognized": that shape means an old worker's argument parser rejected
+  `--probe-device` outright, which is the stale-image case, not a
+  vendor/device misconfiguration.
 
 ## Image variants
 

@@ -159,16 +159,23 @@ for the full claim, queue and refusal rules.
 Engine dispatch reads the catalog id: `qsv_*` and `nvenc_*` run through
 HandBrake with `--encoder <engine_encoder>` appended after `--preset`;
 `vaapi_*` runs through the ffmpeg VAAPI engine
-(`arm_transcode/engines/ffmpeg_vaapi.py`), since HandBrake has no generic AMD
-encoder in this image. Verify with the spawned container's logs:
+(`arm_transcode/engines/ffmpeg_vaapi.py`) instead. HandBrakeCLI is in fact
+compiled with its own AMD encoder (VCE/AMF) built in, same as QSV and
+NVENC, but it can't run in any of these images: AMD's proprietary AMF
+runtime isn't packaged for Debian, so it's not installed anywhere.
+Supporting it is deferred pending hardware testing (a catalog and image
+change only, no claim/model change). That gap is exactly why AMD is routed
+through ffmpeg's VAAPI encoder on Mesa instead. Verify with the spawned
+container's logs:
 
 ```sh
 docker compose logs arm-transcode-<id> | grep -iE "HandBrakeCLI launching|ffmpeg_vaapi start"
 ```
 
-The QSV/NVENC encoders are built into HandBrakeCLI itself (see
-`services/transcode/Dockerfile`, compiled with `--enable-qsv --enable-nvenc`);
-whether one actually initializes depends on the matching vendor image variant
+The QSV/NVENC/AMD encoders are all built into HandBrakeCLI itself (see
+`services/transcode/Dockerfile`, compiled with
+`--enable-qsv --enable-nvenc --enable-vce`); whether QSV or NVENC actually
+initializes depends on the matching vendor image variant
 being present (`intel` / `base`, see [Image contents](#image-contents)) and
 the device being passed through. There is no silent CPU fallback at the
 encoder layer for a vendor-pinned encoder: a GPU is only chosen when the
