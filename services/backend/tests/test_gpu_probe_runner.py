@@ -255,19 +255,15 @@ async def test_nothing_verified_without_errors_still_explains() -> None:
 @pytest.mark.parametrize(
     ("status", "stdout", "stderr", "expected"),
     [
-        # An argument parser rejecting the unknown mode.
-        (
-            2,
-            b"",
-            b"usage: main.py\nmain.py: error: unrecognized arguments: --probe-device\n",
-            STALE.format(n=2) + "; stderr: usage: main.py | main.py: error: unrecognized arguments: --probe-device",
-        ),
-        # An old worker ignoring the flag and running a transcode without a task.
+        # An old worker ignoring the flag: its config validation rejects the
+        # missing task env and the process exits 1.
         (
             1,
             b"Traceback (most recent call last):\n",
-            b"Traceback (most recent call last):\nKeyError: 'ARM_TRANSCODE_TASK_ID'\n",
-            STALE.format(n=1) + "; stderr: Traceback (most recent call last): | KeyError: 'ARM_TRANSCODE_TASK_ID'",
+            b"Traceback (most recent call last):\npydantic_core._pydantic_core.ValidationError: "
+            b"1 validation error for TranscoderConfig\n",
+            STALE.format(n=1) + "; stderr: Traceback (most recent call last): | "
+            "pydantic_core._pydantic_core.ValidationError: 1 validation error for TranscoderConfig",
         ),
         (0, b"not json at all", b"", STALE.format(n=0)),
         (0, b"{}", b"", STALE.format(n=0)),  # the legacy --probe-encoders shape
@@ -381,6 +377,30 @@ async def test_container_that_cannot_start_is_recorded() -> None:
     assert error is not None
     assert error.startswith("probe container could not start: image not found")
     assert len(error) == 500
+
+
+async def test_container_created_but_not_started_is_removed() -> None:
+    runner, db, docker, _hub, dispatcher = _build([_gpu()])
+    assert docker is not None
+    created = _Container(labels={"arm.gpu_probe": "gpu_1"})
+    docker.containers.existing = [created]
+    docker.containers.run_exc = RuntimeError("error gathering device information")
+    await runner.probe_gpu("gpu_1")
+    assert docker.containers.list_calls == [{"all": True, "filters": {"label": "arm.gpu_probe=gpu_1"}}]
+    assert created.removed == [True]
+    assert db.rows["gpus"][0].probe_error == "probe container could not start: error gathering device information"
+    assert dispatcher.probing_gpu_ids == set()
+
+
+async def test_unstarted_container_cleanup_failure_is_logged(caplog: pytest.LogCaptureFixture) -> None:
+    runner, db, docker, *_ = _build([_gpu()])
+    assert docker is not None
+    docker.containers.list_exc = RuntimeError("daemon unreachable")
+    docker.containers.run_exc = RuntimeError("start failed")
+    with caplog.at_level("WARNING", logger="arm_backend.gpu_probe_runner"):
+        await runner.probe_gpu("gpu_1")
+    assert "daemon unreachable" in caplog.text
+    assert db.rows["gpus"][0].probe_error == "probe container could not start: start failed"
 
 
 async def test_remove_failure_is_logged_not_raised(caplog: pytest.LogCaptureFixture) -> None:

@@ -120,10 +120,11 @@ def probe_failure_error(status_code: int, stderr: bytes | str) -> str:
     tail = _stderr_tail(stderr)
     if status_code == 3:
         message = "probe could not create its test clip" + (f": {tail}" if tail else "")
-    elif status_code == 2 and "unrecognized" not in tail.lower():
+    elif status_code == 2:
         message = "probe misconfigured" + (f": {tail}" if tail else "")
     else:
-        # Includes an argument parser rejecting --probe-device outright.
+        # An image that predates --probe-device exits 1: it starts as a
+        # normal transcode worker and fails its config validation.
         message = STALE_IMAGE_ERROR.format(code=status_code) + (f"; stderr: {tail}" if tail else "")
     return _truncate(message)
 
@@ -379,6 +380,9 @@ class GpuProbeRunner:
         try:
             container = await asyncio.to_thread(lambda: docker.containers.run(**kwargs))
         except Exception as exc:  # noqa: BLE001 - reported on the row
+            # `run` creates the container before starting it, so a start
+            # failure leaves a Created container behind with no handle to it.
+            await self._remove_probe_containers(docker, gpu.id)
             return [], _truncate(f"probe container could not start: {exc}")
         try:
             try:
@@ -400,6 +404,18 @@ class GpuProbeRunner:
                 await asyncio.to_thread(container.remove, force=True)
             except Exception as exc:  # noqa: BLE001 - best-effort cleanup
                 logger.warning("gpu probe: could not remove the probe container for %s: %s", gpu.id, exc)
+
+    async def _remove_probe_containers(self, docker: Any, gpu_id: str) -> None:
+        """Remove every container labelled as this row's probe. Only called
+        while this probe holds the row's reservation. Never raises."""
+        try:
+            containers = await asyncio.to_thread(
+                lambda: docker.containers.list(all=True, filters={"label": f"{PROBE_LABEL_KEY}={gpu_id}"})
+            )
+            for container in containers:
+                await asyncio.to_thread(container.remove, force=True)
+        except Exception as exc:  # noqa: BLE001 - best-effort cleanup
+            logger.warning("gpu probe: could not remove the unstarted probe container for %s: %s", gpu_id, exc)
 
     async def _write(self, gpu_id: str, verified: list[str], error: str | None) -> None:
         async with self._db_factory() as db:

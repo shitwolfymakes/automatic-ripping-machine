@@ -151,8 +151,10 @@ for example `qsv_h265`, `any_h265`, `cpu_h265`), not a codec plus a
 `hw_preference` switch. The dispatcher resolves the id to a GPU claim (or a
 CPU spawn) and injects `ARM_TRANSCODE_ENCODER=<id>` into this container;
 `ARM_GPU_VENDOR`, `ARM_GPU_DEVICE` and `ARM_GPU_CODEC` are also set for a
-GPU claim, kept for one release so an older worker image still selects its
-encoder, but this worker prefers `ARM_TRANSCODE_ENCODER`. See
+GPU claim. They are a harmless fallback, not an upgrade path: an image older
+than `--probe-device` can never verify a row, so it is never handed a GPU in
+the first place. This worker reads `ARM_TRANSCODE_ENCODER`; to upgrade a
+host, rebuild or pull the transcode image. See
 [docs/arch/02-job-lifecycle.md § Encoder claim and apply-time refusal](../../docs/arch/02-job-lifecycle.md#encoder-claim-and-apply-time-refusal)
 for the full claim, queue and refusal rules.
 

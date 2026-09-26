@@ -144,11 +144,7 @@ nothing) records one of these in `probe_error`:
   vendor or device it needed.
 - otherwise, a message telling you to rebuild or pull the image, plus a tail
   of the container's stderr: usually a transcode image that predates the
-  `--probe-device` worker mode. This is also what you get for an exit code
-  that would otherwise read as "misconfigured" but whose stderr mentions
-  "unrecognized": that shape means an old worker's argument parser rejected
-  `--probe-device` outright, which is the stale-image case, not a
-  vendor/device misconfiguration.
+  `--probe-device` worker mode.
 
 ## Image variants
 

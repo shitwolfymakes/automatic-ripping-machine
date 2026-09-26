@@ -1035,8 +1035,10 @@ class TranscodeDispatcher:
         }
         extra_run_kwargs: dict[str, Any] = {}
         if assignment is not None and assignment.encoder is not None:
-            # The worker resolves everything from the catalog id; the
-            # ARM_GPU_* vars below are kept for workers that predate it.
+            # The worker resolves everything from the catalog id. The
+            # ARM_GPU_* vars below are a harmless fallback only: an image that
+            # predates --probe-device can never verify a row, so it is never
+            # handed a GPU; the upgrade path is rebuilding or pulling it.
             env["ARM_TRANSCODE_ENCODER"] = assignment.encoder.id
         if assignment is not None and assignment.gpu is not None:
             env["ARM_GPU_VENDOR"] = assignment.gpu.vendor.value
