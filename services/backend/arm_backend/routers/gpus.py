@@ -61,7 +61,7 @@ async def update_gpu(
     # Enabling a never-probed row also schedules its probe. When a probe can't
     # start (the row is busy or already being probed, or this host can't run
     # probes) the update still succeeds and the row stays unprobed.
-    gpu =(await db.execute(select(Gpu).where(col(Gpu.id) == gpu_id))).scalar_one_or_none()
+    gpu = (await db.execute(select(Gpu).where(col(Gpu.id) == gpu_id))).scalar_one_or_none()
     if gpu is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="gpu not found")
     newly_enabled = body.enabled and not gpu.enabled
