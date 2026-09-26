@@ -3,7 +3,7 @@
 // (https://<owner>.github.io/arm-v3/). Verification only.
 import { createServer } from 'node:http';
 import { createReadStream, existsSync, statSync } from 'node:fs';
-import { dirname, extname, join, normalize, resolve } from 'node:path';
+import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
@@ -18,8 +18,15 @@ createServer((req, res) => {
 		res.writeHead(302, { location: base });
 		return res.end();
 	}
-	let file = normalize(join(root, decodeURIComponent(pathname.slice(base.length))));
-	if (!file.startsWith(root)) {
+	let decoded;
+	try {
+		decoded = decodeURIComponent(pathname.slice(base.length));
+	} catch {
+		res.writeHead(400);
+		return res.end();
+	}
+	let file = normalize(join(root, decoded));
+	if (!(file === root || file.startsWith(root + sep))) {
 		res.writeHead(403);
 		return res.end();
 	}
@@ -30,4 +37,4 @@ createServer((req, res) => {
 	}
 	res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
 	createReadStream(file).pipe(res);
-}).listen(Number(values.port), () => console.log(`http://localhost:${values.port}${base}`));
+}).listen(Number(values.port), '127.0.0.1', () => console.log(`http://localhost:${values.port}${base}`));

@@ -28,7 +28,9 @@ function readMeta(armRoot) {
 	return { version, commit: /^[0-9a-f]{40}$/.test(commit) ? commit.slice(0, 12) : commit, builtAt: new Date().toISOString() };
 }
 
-function resolveNav(nav, resolver, errors) {
+const NAV_SCHEMES = new Set(['http', 'https', 'mailto']);
+
+function resolveNav(nav, resolver, errors, headingIdsById) {
 	return nav.map((section) => ({
 		...section,
 		groups: section.groups.map((g) => ({
@@ -38,6 +40,14 @@ function resolveNav(nav, resolver, errors) {
 				const resolved = resolver.resolve(item.target, item.from);
 				if (resolved.kind === 'error') {
 					errors.push(`${item.from}:${item.line}: ${resolved.message}`);
+					return [];
+				}
+				if (resolved.kind === 'external' && !NAV_SCHEMES.has(resolved.url.split(':')[0].toLowerCase())) {
+					errors.push(`${item.from}:${item.line}: unsupported link scheme: ${item.target}`);
+					return [];
+				}
+				if (resolved.kind === 'page' && resolved.fragment && !headingIdsById.get(resolved.id)?.has(resolved.fragment)) {
+					errors.push(`${item.from}:${item.line}: missing anchor #${resolved.fragment} in ${resolved.id}`);
 					return [];
 				}
 				return [{ label: item.label, resolved }];
@@ -69,7 +79,8 @@ async function main() {
 	const renderer = await createRenderer();
 	const rendered = pages.map((p) => renderer.render(p, resolver));
 	errors.push(...rendered.flatMap((r) => r.errors), ...checkFragments(rendered));
-	const resolvedNav = resolveNav(nav, resolver, errors);
+	const headingIdsById = new Map(rendered.map((r) => [r.page.id, r.headingIds]));
+	const resolvedNav = resolveNav(nav, resolver, errors, headingIdsById);
 	if (errors.length) {
 		for (const e of errors) console.error(`error: ${e}`);
 		console.error(`${errors.length} error(s); nothing written`);

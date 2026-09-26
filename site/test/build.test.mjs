@@ -38,6 +38,21 @@ test('broken links fail the build with every error reported', () => {
 	assert.match(res.stderr, /arm_wiki\/Bad\.md:5: missing anchor #nowhere in guide\/getting-started/);
 });
 
+test('a nav link with an unsupported scheme fails the build', () => {
+	const armRoot = fixtureTree({
+		'arm_wiki/_Sidebar.md': [
+			'**[Home](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki)**',
+			'',
+			'**Getting Started**',
+			'  - [x](javascript:alert(1))',
+			''
+		].join('\n')
+	});
+	const res = run(['--target', 'app', '--out', mkdtempSync(join(tmpdir(), 'arm-docs-out-'))], { ARM_ROOT: armRoot, DOCS_MANIFEST: join(siteDir, 'test/fixture-manifest.json') });
+	assert.equal(res.status, 1);
+	assert.match(res.stderr, /arm_wiki\/_Sidebar\.md:4: unsupported link scheme: javascript:alert\(1/);
+});
+
 test('a missing ARM root is a clear error', () => {
 	const res = run(['--target', 'app'], { ARM_ROOT: '/nonexistent/arm' });
 	assert.equal(res.status, 1);

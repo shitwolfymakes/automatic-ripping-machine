@@ -63,6 +63,13 @@ test('collectPages: two sources with the same id is an error', () => {
 	]);
 });
 
+test('collectPages: an id with characters outside the app id rule is an error, not added as a page', () => {
+	const root = fixtureTree({ 'arm_wiki/Foo.Bar.md': '# Foo Bar\n' });
+	const { pages, errors } = collectPages(root, MANIFEST);
+	assert.deepEqual(errors, ['invalid page id guide/foo.bar from arm_wiki/Foo.Bar.md (slugs may use a-z, 0-9, _ and -)']);
+	assert.ok(!pages.some((p) => p.srcPath === 'arm_wiki/Foo.Bar.md'));
+});
+
 test('collectPages: a missing sidebar is an error, not a crash', () => {
 	const root = fixtureTree();
 	const manifest = structuredClone(MANIFEST);

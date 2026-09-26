@@ -6,6 +6,9 @@ import { join, posix, sep } from 'node:path';
 
 const toPosix = (p) => p.split(sep).join('/');
 
+// Must match the app's id rule (services/ui-neu/frontend/src/lib/docs/api.ts).
+const ID_RE = /^[a-z0-9_-]+\/[a-z0-9_-]+$/;
+
 export function loadManifest(siteDir) {
 	return JSON.parse(readFileSync(join(siteDir, 'manifest.json'), 'utf8'));
 }
@@ -65,6 +68,10 @@ export function collectPages(armRoot, manifest) {
 	const add = (section, srcPath) => {
 		const slug = slugFor(srcPath);
 		const id = `${section}/${slug}`;
+		if (!ID_RE.test(id)) {
+			errors.push(`invalid page id ${id} from ${srcPath} (slugs may use a-z, 0-9, _ and -)`);
+			return null;
+		}
 		if (byId.has(id)) {
 			errors.push(`duplicate page id ${id}: ${byId.get(id).srcPath} and ${srcPath}`);
 			return null;
