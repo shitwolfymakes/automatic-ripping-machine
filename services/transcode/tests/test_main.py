@@ -68,9 +68,9 @@ def _handbrake_preset(*, preset_ref: str | None, extra_args: str | None = None) 
 
 @pytest.mark.asyncio
 async def test_run_encoder_ffmpeg_vaapi_routes_without_preset_ref(monkeypatch, tmp_path) -> None:
-    """Review Focus 2: a HandBrake-tool preset with a vaapi encoder and no
-    preset_ref routes to transcode_ffmpeg_vaapi instead of raising the
-    "requires a preset_ref" guard meant for HandBrake/ABCDE."""
+    """A HandBrake-tool preset with a vaapi encoder and no preset_ref routes
+    to transcode_ffmpeg_vaapi instead of raising the "requires a preset_ref"
+    guard meant for HandBrake/ABCDE."""
     import arm_transcode.main as m
 
     monkeypatch.setenv("ARM_TRANSCODE_ENCODER", "vaapi_h265")
