@@ -38,6 +38,8 @@ from arm_common.fileops import atomic_output, transcode_none
 from arm_transcode.api_client import BackendClient
 from arm_transcode.config import TranscoderConfig
 from arm_transcode.encoder_probe import probe_encoders
+from arm_transcode.engines import selected_encoder
+from arm_transcode.engines.handbrake_engine import encoder_args as handbrake_encoder_args
 from arm_transcode.ffmpeg_audio import transcode_audio
 from arm_transcode.handbrake import transcode_handbrake
 from arm_transcode.heartbeat import HeartbeatPump, ProgressState
@@ -120,6 +122,7 @@ async def _run_encoder(
                 output_path=tmp,
                 preset_ref=preset.preset_ref,
                 extra_args=preset.extra_args,
+                encoder_args=handbrake_encoder_args(selected_encoder()),
                 progress_callback=_on_progress,
             )
         state.pct = 100
