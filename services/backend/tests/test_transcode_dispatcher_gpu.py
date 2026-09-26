@@ -876,6 +876,20 @@ async def test_env_for_pinned_gpu_claim_carries_encoder_and_legacy_gpu_vars() ->
     assert env["ARM_GPU_CODEC"] == "h265"
 
 
+async def test_env_for_any_encoder_on_an_amd_row_resolves_vaapi_and_the_amd_image() -> None:
+    db = _build_db(
+        encoder="any_h265",
+        gpus=[(GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h264", "h265"], None)],
+    )
+    docker = MagicMock()  # every image "exists"
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+    assert await disp.spawn_pending(db) == 1
+    kwargs = docker.containers.run.call_args.kwargs
+    assert kwargs["environment"]["ARM_TRANSCODE_ENCODER"] == "vaapi_h265"
+    assert kwargs["environment"]["ARM_GPU_VENDOR"] == "vaapi"
+    assert kwargs["image"] == "arm-transcode:latest-amd"
+
+
 async def test_env_for_any_encoder_cpu_fallback_has_no_gpu_vars() -> None:
     db = _build_db(encoder="any_h265", gpus=[])
     docker = MagicMock()
