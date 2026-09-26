@@ -27,13 +27,16 @@ services:
       - ./arm/certs/arm-db.key:/etc/ssl/arm/tls.key:ro
 
   arm-backend:
-    build:
+    build: &backend-build
       context: .
       dockerfile: services/backend/Dockerfile
     container_name: armv3-backend
     restart: unless-stopped
     depends_on:
-      - arm-db
+      arm-db:
+        condition: service_started
+      arm-data-init:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@arm-db:5432/${POSTGRES_DB}?sslmode=verify-full&sslrootcert=/etc/ssl/arm/arm-ca.crt
       ARM_SERVICE_TOKEN: ${ARM_SERVICE_TOKEN}
@@ -111,12 +114,77 @@ services:
       - /dev/disk:/host-disk:ro
       # Backend data that must survive recreates: the TheDiscDB snapshot
       # (/data/cache/thediscdb, re-downloaded from scratch without it) and
-      # the poster image cache (/data/cache/images). Without this volume the
-      # refresh loop dies with EACCES on a fresh root-owned /data.
+      # the poster image cache (/data/cache/images). The backend image seeds
+      # /data owned 1000:1000 2775, and the arm-data-init service below
+      # re-owns the volume to PUID:PGID before this container starts, so a
+      # custom PGID, a PUID/PGID change, or a root-owned volume from an older
+      # release needs no manual chown. The entrypoint's boot guard still
+      # fails fast and names /data if it is somehow left unwritable.
       - arm-data:/data
     # Uncomment to reach Backend directly from the host for verification curl:
     # ports:
     #   - "8443:8443"
+
+  # One-shot, root, before arm-backend: makes the arm-data named volume owned
+  # by PUID:PGID. The backend's entrypoint only VERIFIES /data (it never
+  # chowns), so this is what handles a PGID other than 1000, a PUID/PGID
+  # change on an existing install, or a root-owned volume from an older
+  # release. arm-data is an ARM-owned named volume, not a user bind mount, so
+  # managing its ownership here does not break the never-chown invariant
+  # (docs/arch/06-deployment.md). It reuses the backend's build (all layers
+  # cached, nothing extra to pull) with the entrypoint replaced, so the shared
+  # entrypoint's gosu drop and /data guard never run here. Owner already
+  # right: logs and exits 0 without walking the tree. Otherwise: re-owns the
+  # contents, makes them group-writable with setgid dirs, and re-owns /data
+  # itself last, so /data's owner marks a completed run and an interrupted one
+  # is retried on the next start. PUID or PGID 0 is refused. Any failure exits
+  # non-zero and arm-backend does not start (service_completed_successfully).
+  arm-data-init:
+    build: *backend-build
+    container_name: armv3-data-init
+    user: "0:0"
+    restart: "no"
+    network_mode: none
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        puid="$${PUID:-1000}"
+        pgid="$${PGID:-1000}"
+        for id in "$$puid" "$$pgid"; do
+          case "$$id" in
+            ''|*[!0-9]*)
+              echo "arm-data-init: FATAL: PUID and PGID must be numeric (got $$puid:$$pgid)" >&2
+              exit 1 ;;
+          esac
+        done
+        if [ "$$puid" -eq 0 ] || [ "$$pgid" -eq 0 ]; then
+          echo "arm-data-init: FATAL: refusing PUID:PGID $$puid:$$pgid; never handing arm-data to uid or gid 0" >&2
+          exit 1
+        fi
+        target="$$puid:$$pgid"
+        cu="$$(stat -c '%u' /data)"
+        cg="$$(stat -c '%g' /data)"
+        if [ "$$cu" -eq "$$puid" ] && [ "$$cg" -eq "$$pgid" ]; then
+          echo "arm-data-init: arm-data already owned by $$target"
+          exit 0
+        fi
+        echo "arm-data-init: /data owned by $$cu:$$cg, re-owning to $$target"
+        # /data's own owner is the commit marker: contents first, /data last,
+        # so an interrupted or failed run leaves the old owner and the next
+        # start retries the whole repair.
+        find /data -mindepth 1 -exec chown -h "$$target" {} +
+        find /data -mindepth 1 ! -type l -exec chmod g+rwX {} +
+        find /data -mindepth 1 -type d -exec chmod g+s {} +
+        chmod g+rwxs /data
+        chown "$$target" /data
+        echo "arm-data-init: arm-data now owned by $$target (group-writable, setgid dirs)"
+    volumes:
+      - arm-data:/data
 
   # The fat HW transcode image. `deploy.replicas: 0` means `docker compose up`
   # BUILDS it (so a plain `up -d --build` tags arm-transcode:latest) but starts
