@@ -776,3 +776,66 @@ async def test_max_parallel_falls_back_to_env_when_unseeded() -> None:
     disp = TranscodeDispatcher(_settings(MAX_PARALLEL_TRANSCODES=1), _db_factory(db), docker, WSHub())
     spawned = await disp.spawn_pending(db)
     assert spawned == 1
+
+
+# --- per-vendor image selection -------------------------------------------------
+
+
+async def test_qsv_spawn_uses_derived_variant_when_it_exists() -> None:
+    db = _build_db(
+        encoder="any_h265",
+        gpus=[(GpuVendor.QSV, GpuStatus.AVAILABLE, ["h264", "h265"], None)],
+    )
+    docker = MagicMock()  # every image "exists" (default MagicMock never raises)
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+    await disp.spawn_pending(db)
+    assert docker.containers.run.call_args.kwargs["image"] == "arm-transcode:latest-intel"
+
+
+async def test_vaapi_spawn_falls_back_to_base_when_variant_missing() -> None:
+    import docker.errors as docker_errors
+
+    db = _build_db(
+        encoder="any_h265",
+        gpus=[(GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h264", "h265"], None)],
+    )
+    docker_client = MagicMock()
+    docker_client.images.get.side_effect = docker_errors.ImageNotFound("nope")
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker_client, WSHub())
+    await disp.spawn_pending(db)
+    assert docker_client.containers.run.call_args.kwargs["image"] == "arm-transcode:latest"
+
+
+async def test_nvenc_spawn_uses_base_image_and_never_checks_a_variant() -> None:
+    db = _build_db(
+        encoder="any_h265",
+        gpus=[(GpuVendor.NVENC, GpuStatus.AVAILABLE, ["h264", "h265"], None)],
+    )
+    docker_client = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker_client, WSHub())
+    await disp.spawn_pending(db)
+    assert docker_client.containers.run.call_args.kwargs["image"] == "arm-transcode:latest"
+    # NVENC has no derived variant, so the image-exists probe never runs.
+    docker_client.images.get.assert_not_called()
+
+
+async def test_cpu_spawn_uses_base_image() -> None:
+    db = _build_db(encoder="preset", gpus=[])
+    docker_client = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker_client, WSHub())
+    await disp.spawn_pending(db)
+    assert docker_client.containers.run.call_args.kwargs["image"] == "arm-transcode:latest"
+
+
+async def test_qsv_spawn_uses_override_without_checking_variant_exists() -> None:
+    db = _build_db(
+        encoder="any_h265",
+        gpus=[(GpuVendor.QSV, GpuStatus.AVAILABLE, ["h264", "h265"], None)],
+    )
+    docker_client = MagicMock()
+    disp = TranscodeDispatcher(
+        _settings(ARM_TRANSCODE_IMAGE_QSV="custom-qsv:latest"), _db_factory(db), docker_client, WSHub()
+    )
+    await disp.spawn_pending(db)
+    assert docker_client.containers.run.call_args.kwargs["image"] == "custom-qsv:latest"
+    docker_client.images.get.assert_not_called()

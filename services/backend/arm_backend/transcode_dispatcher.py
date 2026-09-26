@@ -31,6 +31,7 @@ from sqlmodel import col, select
 
 from arm_backend.config import Settings, settings
 from arm_backend.docker_probe import TtlProbe, probe_docker
+from arm_backend.transcode_images import VARIANT_SUFFIX, image_for, variant_image, vendor_override
 from arm_common import (
     Config,
     Gpu,
@@ -162,6 +163,15 @@ class TranscodeDispatcher:
         # GPU rows currently running a device probe; the claim never hands
         # one of these to a task.
         self.probing_gpu_ids: set[str] = set()
+        # Per-image TtlProbe cache for `image_exists` (one entry per distinct
+        # variant image ever checked, e.g. the derived "-intel"/"-amd" tag).
+        self._image_probes: dict[str, TtlProbe] = {}
+        # Vendors seen holding an enabled GPU row, refreshed whenever
+        # `_claim_gpu_for_task` loads the gpus table for a GPU-eligible
+        # encoder. `probe()` is synchronous (no DB access), so it reads this
+        # cache rather than querying live; it is only ever stale for the
+        # window between a GPU being enabled and the next such claim.
+        self._enabled_gpu_vendors: set[GpuVendor] = set()
 
     def stop(self) -> None:
         self._stop.set()
@@ -682,6 +692,7 @@ class TranscodeDispatcher:
         # SQLAlchemy ORM and the in-memory test fake doesn't grok them. The
         # gpus table is small (1-4 rows on real hosts) so the cost is trivial.
         all_gpus = (await db.execute(select(Gpu))).scalars().all()
+        self._enabled_gpu_vendors = {g.vendor for g in all_gpus if g.enabled}
         eligible = [
             g for g in all_gpus if gpu_is_eligible(g, codec) and (spec.kind == "any" or g.vendor == spec.vendor)
         ]
@@ -753,14 +764,60 @@ class TranscodeDispatcher:
 
     def probe(self) -> tuple[bool, str | None]:
         """Can this dispatcher actually run a transcode right now? Pings the
-        docker host and checks the image exists there. Never raises; cached
-        for docker_probe.PROBE_TTL_SECONDS (see there for why). A ripper-only
-        deployment (no docker client at all) can't run encode tasks; that's
-        not a probe failure to retry, just a fixed fact, so short-circuit
-        before touching `self._probe`."""
+        docker host and checks the BASE image exists there. Never raises;
+        cached for docker_probe.PROBE_TTL_SECONDS (see there for why). A
+        ripper-only deployment (no docker client at all) can't run encode
+        tasks; that's not a probe failure to retry, just a fixed fact, so
+        short-circuit before touching `self._probe`.
+
+        The base image is the gate for `ok`; a missing per-vendor variant
+        never fails the probe, since `image_for` falls back to the base
+        image automatically. When `ok` and a vendor with an enabled GPU row
+        (per `self._enabled_gpu_vendors`, see its docstring for how that's
+        kept current) lacks its derived variant image, that's noted in the
+        detail so an operator who built the split images can see a stale
+        vendor build without it ever showing up as a failure.
+        """
         if self._docker is None:
             return (False, "no docker client (ripper-only deployment or docker unavailable)")
-        return self._probe()
+        ok, detail = self._probe()
+        if not ok:
+            return ok, detail
+        notes = self._missing_variant_notes()
+        return ok, "; ".join(notes) if notes else detail
+
+    def image_exists(self, image: str) -> bool:
+        """Cached `probe_docker` check for a specific image reference (the
+        base image or a derived per-vendor variant). False when there's no
+        docker client at all (ripper-only deployment)."""
+        if self._docker is None:
+            return False
+        cached = self._image_probes.get(image)
+        if cached is None:
+            # `image` is this call's own local (not a loop variable), so a
+            # plain closure captures the right value with no late-binding
+            # hazard; each distinct image gets its own TtlProbe + closure.
+            cached = TtlProbe(lambda: probe_docker(self._docker, image))
+            self._image_probes[image] = cached
+        ok, _ = cached()
+        return ok
+
+    def _missing_variant_notes(self) -> list[str]:
+        """One note per vendor that has an enabled GPU row, has a derivable
+        variant, isn't overridden, and whose variant image isn't present on
+        this docker host right now."""
+        notes: list[str] = []
+        for vendor in sorted(self._enabled_gpu_vendors, key=lambda v: v.value):
+            if vendor_override(self._settings, vendor):
+                continue
+            suffix = VARIANT_SUFFIX.get(vendor)
+            if suffix is None:
+                continue
+            candidate = variant_image(self._settings.ARM_TRANSCODE_IMAGE, suffix)
+            if candidate is None or self.image_exists(candidate):
+                continue
+            notes.append(f"{vendor.value} variant image {candidate} not present; falling back to base image")
+        return notes
 
     def _spawn_container(self, task: TranscodeTask, *, assignment: GpuAssignment | None = None) -> Any:
         remote = bool(self._settings.ARM_TRANSCODE_DOCKER_HOST)
@@ -818,8 +875,10 @@ class TranscodeDispatcher:
         # for `docker ps` and unique enough that two simultaneous transcoders
         # never collide.
         hostname = f"arm-transcode-{task.id[-12:]}"
+        gpu_vendor = assignment.gpu.vendor if assignment is not None and assignment.gpu is not None else None
+        image = image_for(self._settings, gpu_vendor, exists=self.image_exists)
         run_kwargs: dict[str, Any] = dict(
-            image=self._settings.ARM_TRANSCODE_IMAGE,
+            image=image,
             name=hostname,
             hostname=hostname,
             labels={_DOCKER_LABEL_KEY: task.id},
@@ -879,7 +938,7 @@ class TranscodeDispatcher:
             "transcode spawned task_id=%s container=%s image=%s gpu=%s",
             task.id,
             hostname,
-            self._settings.ARM_TRANSCODE_IMAGE,
+            image,
             assignment.gpu.device_path if assignment and assignment.gpu else "cpu",
         )
         return container

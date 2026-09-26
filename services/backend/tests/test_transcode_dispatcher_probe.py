@@ -22,6 +22,7 @@ import docker.errors  # noqa: E402
 
 from arm_common import (  # noqa: E402
     ContainerFormat,
+    GpuVendor,
     MediaType,
     Session,
     SessionApplication,
@@ -115,6 +116,99 @@ def test_probe_order_pins_unreachable_host_detail_before_image_check() -> None:
     assert ok is False
     assert detail is not None and "unreachable" in detail
     d._docker.images.get.assert_not_called()
+
+
+def test_image_exists_false_when_docker_none() -> None:
+    from arm_backend.transcode_dispatcher import TranscodeDispatcher
+    from arm_backend.ws import WSHub
+    from tests.test_transcode_dispatcher import _db_factory, _settings
+
+    disp = TranscodeDispatcher(_settings(), _db_factory(FakeSession()), None, WSHub())
+    assert disp.image_exists("arm-transcode:latest-intel") is False
+
+
+def test_image_exists_true_and_cached_across_calls() -> None:
+    d = _make_dispatcher()
+    d._docker.ping.return_value = True
+    assert d.image_exists("arm-transcode:test-intel") is True
+    assert d.image_exists("arm-transcode:test-intel") is True
+    assert d._docker.images.get.call_count == 1
+
+
+def test_image_exists_false_and_cached_per_image_independently() -> None:
+    d = _make_dispatcher()
+    d._docker.ping.return_value = True
+    d._docker.images.get.side_effect = docker.errors.ImageNotFound("nope")
+    assert d.image_exists("arm-transcode:test-intel") is False
+    assert d.image_exists("arm-transcode:test-amd") is False
+    # Two distinct images -> two distinct TtlProbe cache entries.
+    assert d._docker.images.get.call_count == 2
+
+
+def test_probe_notes_missing_qsv_variant_for_vendor_with_enabled_gpu() -> None:
+    d = _make_dispatcher()
+    d._enabled_gpu_vendors = {GpuVendor.QSV}
+
+    def _images_get(image: str) -> object:
+        if image == "arm-transcode:test":
+            return object()
+        raise docker.errors.ImageNotFound("nope")
+
+    d._docker.ping.return_value = True
+    d._docker.images.get.side_effect = _images_get
+    ok, detail = d.probe()
+    assert ok is True
+    assert detail is not None
+    assert "qsv" in detail
+    assert "arm-transcode:test-intel" in detail
+
+
+def test_probe_has_no_note_when_variant_exists() -> None:
+    d = _make_dispatcher()
+    d._enabled_gpu_vendors = {GpuVendor.QSV}
+    d._docker.ping.return_value = True
+    d._docker.images.get.return_value = object()
+    assert d.probe() == (True, None)
+
+
+def test_probe_has_no_note_when_vendor_overridden() -> None:
+    """An override always wins in `image_for`, so a missing variant image
+    is never a problem for that vendor, so no note even though it's missing."""
+    d = _disp(FakeSession(), ARM_TRANSCODE_IMAGE="arm-transcode:test", ARM_TRANSCODE_IMAGE_QSV="custom-qsv:latest")
+    d._enabled_gpu_vendors = {GpuVendor.QSV}
+
+    def _images_get(image: str) -> object:
+        if image == "arm-transcode:test":
+            return object()
+        raise docker.errors.ImageNotFound("nope")
+
+    d._docker.ping.return_value = True
+    d._docker.images.get.side_effect = _images_get
+    assert d.probe() == (True, None)
+
+
+def test_probe_has_no_note_when_no_enabled_gpu_vendors() -> None:
+    d = _make_dispatcher()
+    d._docker.ping.return_value = True
+    d._docker.images.get.return_value = object()
+    assert d.probe() == (True, None)
+
+
+def test_probe_reports_multiple_missing_variants() -> None:
+    d = _make_dispatcher()
+    d._enabled_gpu_vendors = {GpuVendor.QSV, GpuVendor.VAAPI}
+
+    def _images_get(image: str) -> object:
+        if image == "arm-transcode:test":
+            return object()
+        raise docker.errors.ImageNotFound("nope")
+
+    d._docker.ping.return_value = True
+    d._docker.images.get.side_effect = _images_get
+    ok, detail = d.probe()
+    assert ok is True
+    assert detail is not None
+    assert "qsv" in detail and "vaapi" in detail
 
 
 def test_last_spawn_error_defaults_none() -> None:
