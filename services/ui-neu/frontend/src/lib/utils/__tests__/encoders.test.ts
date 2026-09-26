@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import { ENCODER_OPTIONS, encoderSummary } from '../encoders';
+import { encoderSummary } from '../encoders';
 
 it('summarizes the tool-own encoder as nothing', () => {
 	expect(encoderSummary('preset')).toBe('');
@@ -14,10 +14,4 @@ it('summarizes a catalog encoder by its label', () => {
 
 it('falls back to the raw id for an encoder the list does not know', () => {
 	expect(encoderSummary('future_x')).toBe('future_x');
-});
-
-it('lists every id once', () => {
-	const ids = ENCODER_OPTIONS.map((o) => o.id);
-	expect(new Set(ids).size).toBe(ids.length);
-	expect(ids).toHaveLength(16);
 });

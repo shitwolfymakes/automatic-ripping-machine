@@ -6,14 +6,32 @@
 	// arm_common.encoders catalog id. preset_json is not exposed.
 	import { onMount } from 'svelte';
 	import { createTranscodePreset, updateTranscodePreset } from '$lib/api/transcodePresets';
-	import { fetchGpus } from '$lib/api/gpus';
-	import { ENCODER_OPTIONS, PRESET_ENCODER_ID } from '$lib/utils/encoders';
+	import { fetchEncoders } from '$lib/api/encoders';
+	import { PRESET_ENCODER_ID } from '$lib/utils/encoders';
 	import type {
 		ContainerFormat,
+		EncoderAvailabilityView,
 		MediaType,
 		TranscodePresetView,
 		TranscodeTool
 	} from '$lib/types/api.gen';
+
+	// Encoder optgroup order and headings; a group is only rendered when the
+	// catalog response has an entry for it.
+	const GROUP_ORDER: EncoderAvailabilityView['group'][] = ['preset', 'cpu', 'any', 'qsv', 'nvenc', 'vaapi'];
+	const GROUP_LABELS: Record<EncoderAvailabilityView['group'], string> = {
+		preset: "HandBrake preset's own",
+		cpu: 'CPU',
+		any: 'Any GPU',
+		qsv: 'Intel QSV',
+		nvenc: 'NVIDIA NVENC',
+		vaapi: 'AMD VAAPI'
+	};
+
+	// A HandBrake preset name that names a hardware encoder (a common
+	// convention in preset libraries) does nothing on its own. HandBrake
+	// only attaches a GPU when the Encoder field above asks for one.
+	const HARDWARE_HINT_PATTERN = /QSV|NVENC|VCN|VCE/i;
 
 	let {
 		preset = null,
@@ -35,27 +53,48 @@
 	let container = $state<ContainerFormat>(preset?.container ?? 'mkv');
 	let encoder = $state<string>(preset?.encoder ?? PRESET_ENCODER_ID);
 
-
-	// Live inventory context (G-30 awareness): what silicon "Any" will actually
-	// use, shown where hardware intent is expressed. Soft-fails to no hint.
-	let gpuHint = $state<string | null>(null);
+	// Availability-aware encoder catalog (GET /api/encoders), in catalog
+	// order. Soft-fails to an empty list; the picker just shows nothing but
+	// the tool/container fields still work.
+	let encoders = $state<EncoderAvailabilityView[]>([]);
 	onMount(async () => {
 		try {
-			const gpus = await fetchGpus();
-			if (gpus.length === 0) {
-				gpuHint = 'This host has no GPUs configured; hardware presets fall back to CPU.';
-				return;
-			}
-			const parts = gpus.map((g) => {
-				const dev = g.device_path.split('/').pop() ?? g.device_path;
-				const base = `${g.vendor.toUpperCase()} ${dev} (${g.encoder_kinds.join(', ')})`;
-				return g.enabled ? base : `${base} disabled`;
-			});
-			gpuHint = `This host: ${parts.join(' + ')}`;
+			encoders = await fetchEncoders();
 		} catch {
-			gpuHint = null;
+			encoders = [];
 		}
 	});
+
+	let groupedEncoders = $derived(
+		(() => {
+			const groups = new Map<string, EncoderAvailabilityView[]>();
+			for (const enc of encoders) {
+				const list = groups.get(enc.group);
+				if (list) list.push(enc);
+				else groups.set(enc.group, [enc]);
+			}
+			return groups;
+		})()
+	);
+
+	// abcde/none presets can't carry a codec encoder (only handbrake presets
+	// can); force it back to the tool's own encoder so saving never 422s.
+	let encoderLocked = $derived(tool === 'abcde' || tool === 'none');
+	$effect(() => {
+		if (encoderLocked && !isBuiltin) encoder = PRESET_ENCODER_ID;
+	});
+
+	let selectedEncoder = $derived(encoders.find((e) => e.id === encoder));
+	// vaapi_* encoders run over ffmpeg directly; the HandBrake preset name
+	// plays no part, and extra_args are ffmpeg CLI flags, not HandBrake ones.
+	let usesFfmpegVaapi = $derived(selectedEncoder?.engine === 'ffmpeg_vaapi');
+
+	let encoderHint = $derived(
+		encoder === PRESET_ENCODER_ID && HARDWARE_HINT_PATTERN.test(presetRef)
+			? 'This HandBrake preset uses a hardware encoder; choose the matching encoder above or ARM will not attach a GPU.'
+			: null
+	);
+
 	let extraArgs = $state(preset?.extra_args ?? '');
 
 	let submitting = $state(false);
@@ -174,6 +213,9 @@
 			bind:value={presetRef}
 			disabled={isBuiltin}
 		/>
+		{#if usesFfmpegVaapi}
+			<p class="field-help" data-testid="tp-preset-ref-note">Not used by this encoder.</p>
+		{/if}
 	</label>
 
 	<label class="field">
@@ -201,19 +243,27 @@
 			id="tp-encoder"
 			data-testid="tp-encoder"
 			bind:value={encoder}
-			disabled={isBuiltin}
+			disabled={isBuiltin || encoderLocked}
 		>
-			{#each ENCODER_OPTIONS as opt (opt.id)}
-				<option value={opt.id}>{opt.label}</option>
+			{#each GROUP_ORDER as g (g)}
+				{#if groupedEncoders.get(g)?.length}
+					<optgroup label={GROUP_LABELS[g]}>
+						{#each groupedEncoders.get(g) ?? [] as enc (enc.id)}
+							<option value={enc.id} disabled={!enc.available} title={enc.reason ?? undefined}>
+								{enc.label}{enc.reason ? ` (${enc.reason})` : ''}
+							</option>
+						{/each}
+					</optgroup>
+				{/if}
 			{/each}
 		</select>
-		{#if gpuHint}
-			<span class="transcode-preset-form-gpu-hint" data-testid="tp-gpu-hint">{gpuHint}</span>
+		{#if encoderHint}
+			<p class="field-help" data-testid="tp-encoder-hint">{encoderHint}</p>
 		{/if}
 	</label>
 
 	<label class="field">
-		<span class="field-label">Extra args</span>
+		<span class="field-label">{usesFfmpegVaapi ? 'ffmpeg arguments' : 'Extra args'}</span>
 		<input
 			id="tp-extra-args"
 			data-testid="tp-extra-args"
@@ -248,11 +298,4 @@
 <style>
 	.transcode-preset-form-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-text); }
 	.transcode-preset-form-actions { display: flex; justify-content: flex-end; gap: 0.75rem; padding-top: 0.5rem; }
-
-	.transcode-preset-form-gpu-hint {
-		display: block;
-		margin-top: 0.25rem;
-		font-size: 0.75rem;
-		color: var(--color-text-muted);
-	}
 </style>

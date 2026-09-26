@@ -2,38 +2,88 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import TranscodePresetForm from '../TranscodePresetForm.svelte';
 import { createTranscodePreset, updateTranscodePreset } from '$lib/api/transcodePresets';
-import type { TranscodePresetView } from '$lib/types/api.gen';
+import type { EncoderAvailabilityView, TranscodePresetView } from '$lib/types/api.gen';
 
 vi.mock('$lib/api/transcodePresets', () => ({
 	createTranscodePreset: vi.fn(),
 	updateTranscodePreset: vi.fn()
 }));
 
-const mockFetchGpus = vi.fn(() =>
-	Promise.resolve([
-		{
-			id: 'gpu_1',
-			vendor: 'qsv',
-			device_path: '/dev/dri/renderD128',
-			encoder_kinds: ['h264', 'h265'],
-			status: 'available',
-			enabled: true,
-			claimed_by_task_id: null,
-			last_seen_at: null
-		},
-		{
-			id: 'gpu_2',
-			vendor: 'vaapi',
-			device_path: '/dev/dri/renderD129',
-			encoder_kinds: ['h264'],
-			status: 'available',
-			enabled: false,
-			claimed_by_task_id: null,
-			last_seen_at: null
-		}
-	])
-);
-vi.mock('$lib/api/gpus', () => ({ fetchGpus: () => mockFetchGpus() }));
+// One entry per group, in catalog order, standing in for the full
+// arm_common.encoders catalog: qsv_h264 unavailable (no verified device),
+// any_h265 available but would currently fall back to the CPU, vaapi_h264
+// runs over ffmpeg directly rather than a HandBrake preset.
+const ENCODERS: EncoderAvailabilityView[] = [
+	{
+		id: 'preset',
+		label: "HandBrake preset's own encoder",
+		group: 'preset',
+		engine: 'handbrake',
+		kind: 'preset',
+		vendor: null,
+		codec: null,
+		available: true,
+		reason: null
+	},
+	{
+		id: 'cpu_h264',
+		label: 'CPU H.264',
+		group: 'cpu',
+		engine: 'handbrake',
+		kind: 'cpu',
+		vendor: null,
+		codec: 'h264',
+		available: true,
+		reason: null
+	},
+	{
+		id: 'any_h265',
+		label: 'Any GPU H.265',
+		group: 'any',
+		engine: 'handbrake',
+		kind: 'any',
+		vendor: null,
+		codec: 'h265',
+		available: true,
+		reason: 'no verified GPU; runs on the CPU'
+	},
+	{
+		id: 'qsv_h264',
+		label: 'Intel QSV H.264',
+		group: 'qsv',
+		engine: 'handbrake',
+		kind: 'gpu',
+		vendor: 'qsv',
+		codec: 'h264',
+		available: false,
+		reason: 'no enabled device has verified qsv_h264'
+	},
+	{
+		id: 'nvenc_h264',
+		label: 'NVIDIA NVENC H.264',
+		group: 'nvenc',
+		engine: 'handbrake',
+		kind: 'gpu',
+		vendor: 'nvenc',
+		codec: 'h264',
+		available: true,
+		reason: null
+	},
+	{
+		id: 'vaapi_h264',
+		label: 'AMD VAAPI H.264',
+		group: 'vaapi',
+		engine: 'ffmpeg_vaapi',
+		kind: 'gpu',
+		vendor: 'vaapi',
+		codec: 'h264',
+		available: true,
+		reason: null
+	}
+];
+
+const mockFetchEncoders = vi.fn(() => Promise.resolve(ENCODERS));
+vi.mock('$lib/api/encoders', () => ({ fetchEncoders: () => mockFetchEncoders() }));
 
 const createMock = vi.mocked(createTranscodePreset);
 const updateMock = vi.mocked(updateTranscodePreset);
@@ -68,7 +118,7 @@ describe('TranscodePresetForm', () => {
 	});
 
 	describe('create mode', () => {
-		it('renders all selects with enum options and an enabled media_type', () => {
+		it('renders all selects with enum options and an enabled media_type', async () => {
 			renderComponent(TranscodePresetForm, {
 				props: { preset: null, onsaved: vi.fn(), oncancel: vi.fn() }
 			});
@@ -86,14 +136,17 @@ describe('TranscodePresetForm', () => {
 			expect(optionValues(container)).toEqual([
 				'mkv', 'mp4', 'webm', 'flac', 'mp3', 'ogg', 'iso', 'none'
 			]);
-			expect(optionValues(encoder)).toEqual([
-				'preset',
-				'cpu_h264', 'cpu_h265', 'cpu_av1',
-				'any_h264', 'any_h265', 'any_av1',
-				'qsv_h264', 'qsv_h265', 'qsv_av1',
-				'nvenc_h264', 'nvenc_h265', 'nvenc_av1',
-				'vaapi_h264', 'vaapi_h265', 'vaapi_av1'
-			]);
+
+			await waitFor(() =>
+				expect(optionValues(encoder)).toEqual([
+					'preset',
+					'cpu_h264',
+					'any_h265',
+					'qsv_h264',
+					'nvenc_h264',
+					'vaapi_h264'
+				])
+			);
 			expect(encoder.value).toBe('preset');
 		});
 
@@ -130,9 +183,12 @@ describe('TranscodePresetForm', () => {
 				props: { preset: null, onsaved: vi.fn(), oncancel: vi.fn() }
 			});
 
+			const encoder = screen.getByTestId('tp-encoder') as HTMLSelectElement;
+			await waitFor(() => expect(encoder.querySelector('option[value="any_h265"]')).not.toBeNull());
+
 			await fireEvent.input(screen.getByTestId('tp-name'), { target: { value: 'Full' } });
 			await fireEvent.input(screen.getByTestId('tp-preset-ref'), { target: { value: 'Fast 1080p30' } });
-			await fireEvent.change(screen.getByTestId('tp-encoder'), { target: { value: 'any_h265' } });
+			await fireEvent.change(encoder, { target: { value: 'any_h265' } });
 			await fireEvent.input(screen.getByTestId('tp-extra-args'), { target: { value: '--turbo' } });
 			await fireEvent.click(screen.getByTestId('tp-submit'));
 
@@ -157,7 +213,7 @@ describe('TranscodePresetForm', () => {
 				id: 'tpr_99',
 				name: 'Existing',
 				media_type: 'music',
-				tool: 'abcde',
+				tool: 'handbrake',
 				preset_ref: 'flac',
 				container: 'flac',
 				encoder: 'cpu_h264',
@@ -173,7 +229,9 @@ describe('TranscodePresetForm', () => {
 			expect(name.value).toBe('Existing');
 			expect(mediaType.value).toBe('music');
 			expect(mediaType).toBeDisabled();
-			expect((screen.getByTestId('tp-encoder') as HTMLSelectElement).value).toBe('cpu_h264');
+
+			const encoderSelect = screen.getByTestId('tp-encoder') as HTMLSelectElement;
+			await waitFor(() => expect(encoderSelect.value).toBe('cpu_h264'));
 
 			await fireEvent.input(name, { target: { value: 'Renamed' } });
 			await fireEvent.click(screen.getByTestId('tp-submit'));
@@ -181,7 +239,7 @@ describe('TranscodePresetForm', () => {
 			await waitFor(() => {
 				expect(updateMock).toHaveBeenCalledWith('tpr_99', {
 					name: 'Renamed',
-					tool: 'abcde',
+					tool: 'handbrake',
 					preset_ref: 'flac',
 					container: 'flac',
 					encoder: 'cpu_h264',
@@ -190,6 +248,34 @@ describe('TranscodePresetForm', () => {
 			});
 			const body = updateMock.mock.calls[0][1];
 			expect('media_type' in body).toBe(false);
+		});
+
+		it('corrects a stale non-preset encoder to preset for an abcde/none preset before saving', async () => {
+			updateMock.mockResolvedValue(resultPreset());
+			const preset = makePreset({
+				id: 'tpr_100',
+				tool: 'abcde',
+				container: 'flac',
+				encoder: 'cpu_h264',
+				is_builtin: false
+			});
+			renderComponent(TranscodePresetForm, {
+				props: { preset, onsaved: vi.fn(), oncancel: vi.fn() }
+			});
+
+			const encoderSelect = screen.getByTestId('tp-encoder') as HTMLSelectElement;
+			await waitFor(() => expect(encoderSelect.querySelector('option[value="preset"]')).not.toBeNull());
+			expect(encoderSelect).toBeDisabled();
+			expect(encoderSelect.value).toBe('preset');
+
+			await fireEvent.click(screen.getByTestId('tp-submit'));
+
+			await waitFor(() =>
+				expect(updateMock).toHaveBeenCalledWith(
+					'tpr_100',
+					expect.objectContaining({ encoder: 'preset' })
+				)
+			);
 		});
 	});
 
@@ -255,30 +341,106 @@ describe('TranscodePresetForm', () => {
 	});
 });
 
-describe('GPU awareness (G-30/G-31)', () => {
+describe('encoder picker', () => {
 	afterEach(() => cleanup());
 
-	it('labels the preset choice as the HandBrake preset encoder, not default', () => {
-		renderComponent(TranscodePresetForm, { props: { preset: makePreset(), oncancel: vi.fn(), onsaved: vi.fn() } });
+	it('groups options into optgroups in catalog order', async () => {
+		renderComponent(TranscodePresetForm, { props: { preset: null, oncancel: vi.fn(), onsaved: vi.fn() } });
 		const encoder = screen.getByTestId('tp-encoder') as HTMLSelectElement;
-		const labels = Array.from(encoder.options).map((o) => o.textContent);
-		expect(labels).toContain("HandBrake preset's own encoder");
-		expect(labels).not.toContain('(default)');
+		await waitFor(() => expect(encoder.querySelectorAll('optgroup')).toHaveLength(6));
+		const groupLabels = Array.from(encoder.querySelectorAll('optgroup')).map((g) => g.label);
+		expect(groupLabels).toEqual([
+			"HandBrake preset's own",
+			'CPU',
+			'Any GPU',
+			'Intel QSV',
+			'NVIDIA NVENC',
+			'AMD VAAPI'
+		]);
 	});
 
-	it('shows the live inventory hint under the encoder', async () => {
-		renderComponent(TranscodePresetForm, { props: { preset: makePreset(), oncancel: vi.fn(), onsaved: vi.fn() } });
-		await waitFor(() => expect(screen.getByTestId('tp-gpu-hint')).toBeInTheDocument());
-		const hint = screen.getByTestId('tp-gpu-hint').textContent ?? '';
-		expect(hint).toContain('QSV renderD128 (h264, h265)');
-		expect(hint).toContain('VAAPI renderD129 (h264) disabled');
+	it('disables an unavailable encoder option and shows its reason', async () => {
+		renderComponent(TranscodePresetForm, { props: { preset: null, oncancel: vi.fn(), onsaved: vi.fn() } });
+		const encoder = screen.getByTestId('tp-encoder') as HTMLSelectElement;
+		await waitFor(() => expect(encoder.querySelector('option[value="qsv_h264"]')).not.toBeNull());
+		const option = encoder.querySelector('option[value="qsv_h264"]') as HTMLOptionElement;
+		expect(option.disabled).toBe(true);
+		expect(option.textContent).toContain('no enabled device has verified qsv_h264');
 	});
 
-	it('says CPU fallback when the host has no GPUs', async () => {
-		mockFetchGpus.mockResolvedValueOnce([]);
-		renderComponent(TranscodePresetForm, { props: { preset: makePreset(), oncancel: vi.fn(), onsaved: vi.fn() } });
-		await waitFor(() =>
-			expect(screen.getByTestId('tp-gpu-hint').textContent).toContain('no GPUs configured')
+	it('locks the encoder to preset and disables it when the tool is abcde', async () => {
+		renderComponent(TranscodePresetForm, { props: { preset: null, oncancel: vi.fn(), onsaved: vi.fn() } });
+		await fireEvent.change(screen.getByTestId('tp-tool'), { target: { value: 'abcde' } });
+		const encoder = screen.getByTestId('tp-encoder') as HTMLSelectElement;
+		expect(encoder).toBeDisabled();
+		expect(encoder.value).toBe('preset');
+	});
+
+	it('locks the encoder to preset and disables it when the tool is none', async () => {
+		renderComponent(TranscodePresetForm, { props: { preset: null, oncancel: vi.fn(), onsaved: vi.fn() } });
+		await fireEvent.change(screen.getByTestId('tp-tool'), { target: { value: 'none' } });
+		const encoder = screen.getByTestId('tp-encoder') as HTMLSelectElement;
+		expect(encoder).toBeDisabled();
+		expect(encoder.value).toBe('preset');
+	});
+
+	it('resets a chosen encoder back to preset when the tool changes to abcde', async () => {
+		renderComponent(TranscodePresetForm, { props: { preset: null, oncancel: vi.fn(), onsaved: vi.fn() } });
+		const encoder = screen.getByTestId('tp-encoder') as HTMLSelectElement;
+		await waitFor(() => expect(encoder.querySelector('option[value="any_h265"]')).not.toBeNull());
+		await fireEvent.change(encoder, { target: { value: 'any_h265' } });
+		expect(encoder.value).toBe('any_h265');
+
+		await fireEvent.change(screen.getByTestId('tp-tool'), { target: { value: 'abcde' } });
+		expect(encoder.value).toBe('preset');
+		expect(encoder).toBeDisabled();
+	});
+
+	it('shows the "not used by this encoder" note and relabels extra args for a vaapi encoder', async () => {
+		renderComponent(TranscodePresetForm, { props: { preset: null, oncancel: vi.fn(), onsaved: vi.fn() } });
+		const encoder = screen.getByTestId('tp-encoder') as HTMLSelectElement;
+		await waitFor(() => expect(encoder.querySelector('option[value="vaapi_h264"]')).not.toBeNull());
+		expect(screen.queryByTestId('tp-preset-ref-note')).not.toBeInTheDocument();
+		expect(screen.queryByText('ffmpeg arguments')).not.toBeInTheDocument();
+
+		await fireEvent.change(encoder, { target: { value: 'vaapi_h264' } });
+
+		expect(screen.getByTestId('tp-preset-ref-note').textContent).toContain('Not used by this encoder');
+		expect(screen.getByText('ffmpeg arguments')).toBeInTheDocument();
+	});
+});
+
+describe('hardware-name hint', () => {
+	afterEach(() => cleanup());
+
+	it('shows the hint when the preset name mentions a hardware encoder and the encoder is preset', async () => {
+		renderComponent(TranscodePresetForm, { props: { preset: null, oncancel: vi.fn(), onsaved: vi.fn() } });
+		await fireEvent.input(screen.getByTestId('tp-preset-ref'), { target: { value: 'H.265 NVENC 1080p' } });
+		expect(screen.getByTestId('tp-encoder-hint').textContent).toBe(
+			'This HandBrake preset uses a hardware encoder; choose the matching encoder above or ARM will not attach a GPU.'
 		);
+	});
+
+	it('matches QSV/VCN/VCE case-insensitively', async () => {
+		renderComponent(TranscodePresetForm, { props: { preset: null, oncancel: vi.fn(), onsaved: vi.fn() } });
+		await fireEvent.input(screen.getByTestId('tp-preset-ref'), { target: { value: 'fast 1080p qsv' } });
+		expect(screen.getByTestId('tp-encoder-hint')).toBeInTheDocument();
+	});
+
+	it('does not show the hint for a plain preset name', async () => {
+		renderComponent(TranscodePresetForm, { props: { preset: null, oncancel: vi.fn(), onsaved: vi.fn() } });
+		await fireEvent.input(screen.getByTestId('tp-preset-ref'), { target: { value: 'Fast 1080p30' } });
+		expect(screen.queryByTestId('tp-encoder-hint')).not.toBeInTheDocument();
+	});
+
+	it('does not show the hint once a matching encoder is chosen', async () => {
+		renderComponent(TranscodePresetForm, { props: { preset: null, oncancel: vi.fn(), onsaved: vi.fn() } });
+		const encoder = screen.getByTestId('tp-encoder') as HTMLSelectElement;
+		await waitFor(() => expect(encoder.querySelector('option[value="nvenc_h264"]')).not.toBeNull());
+		await fireEvent.input(screen.getByTestId('tp-preset-ref'), { target: { value: 'H.264 NVENC 1080p' } });
+		expect(screen.getByTestId('tp-encoder-hint')).toBeInTheDocument();
+
+		await fireEvent.change(encoder, { target: { value: 'nvenc_h264' } });
+		expect(screen.queryByTestId('tp-encoder-hint')).not.toBeInTheDocument();
 	});
 });
