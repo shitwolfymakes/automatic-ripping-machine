@@ -1236,6 +1236,57 @@ export type DriveView = {
 };
 
 /**
+ * EncoderAvailabilityView
+ *
+ * One `arm_common.encoders.ENCODERS` catalog entry, with availability
+ * computed server-side from the live `gpus` inventory (GET /api/encoders).
+ *
+ * `group` buckets `preset`/`cpu`/`any` kinds by themselves and `gpu` kinds
+ * by vendor, so the transcode preset picker can render sections without
+ * re-deriving the grouping client-side. `available` is always true for
+ * `preset`/`cpu`/`any` (an `any_*` encoder falls back to CPU at dispatch
+ * time); for a vendor-pinned `gpu` encoder it reflects whether any enabled
+ * device's probe currently verifies that vendor/codec. `reason` explains
+ * an unavailable `gpu` entry, or an `any_*` entry that would currently run
+ * on the CPU for lack of a verified GPU; it is `None` otherwise.
+ */
+export type EncoderAvailabilityView = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Group
+     */
+    group: 'preset' | 'cpu' | 'any' | 'qsv' | 'nvenc' | 'vaapi';
+    /**
+     * Engine
+     */
+    engine: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    vendor: GpuVendor | null;
+    /**
+     * Codec
+     */
+    codec: string | null;
+    /**
+     * Available
+     */
+    available: boolean;
+    /**
+     * Reason
+     */
+    reason: string | null;
+};
+
+/**
  * EventTypeInfo
  */
 export type EventTypeInfo = {
@@ -2903,7 +2954,7 @@ export type ResolveFanOutOutcomeView = {
     /**
      * Skipped Reason
      */
-    skipped_reason?: 'collisions' | 'template' | 'session_missing' | 'no_tracks' | 'no_outputs' | 'media_mismatch' | 'transcode_disabled' | null;
+    skipped_reason?: 'collisions' | 'template' | 'session_missing' | 'no_tracks' | 'no_outputs' | 'media_mismatch' | 'transcode_disabled' | 'encoder_unavailable' | null;
     /**
      * Error Detail
      */
@@ -6949,6 +7000,39 @@ export type UpdateGpuApiGpusGpuIdPatchResponses = {
 };
 
 export type UpdateGpuApiGpusGpuIdPatchResponse = UpdateGpuApiGpusGpuIdPatchResponses[keyof UpdateGpuApiGpusGpuIdPatchResponses];
+
+export type ListEncodersApiEncodersGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/encoders';
+};
+
+export type ListEncodersApiEncodersGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListEncodersApiEncodersGetError = ListEncodersApiEncodersGetErrors[keyof ListEncodersApiEncodersGetErrors];
+
+export type ListEncodersApiEncodersGetResponses = {
+    /**
+     * Response List Encoders Api Encoders Get
+     *
+     * Successful Response
+     */
+    200: Array<EncoderAvailabilityView>;
+};
+
+export type ListEncodersApiEncodersGetResponse = ListEncodersApiEncodersGetResponses[keyof ListEncodersApiEncodersGetResponses];
 
 export type GetConfigApiConfigGetData = {
     body?: never;

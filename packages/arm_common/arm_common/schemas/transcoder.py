@@ -7,6 +7,7 @@ encoder, and these schemas carry the state-machine transitions.
 """
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -104,6 +105,31 @@ class GpuUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool
+
+
+class EncoderAvailabilityView(BaseModel):
+    """One `arm_common.encoders.ENCODERS` catalog entry, with availability
+    computed server-side from the live `gpus` inventory (GET /api/encoders).
+
+    `group` buckets `preset`/`cpu`/`any` kinds by themselves and `gpu` kinds
+    by vendor, so the transcode preset picker can render sections without
+    re-deriving the grouping client-side. `available` is always true for
+    `preset`/`cpu`/`any` (an `any_*` encoder falls back to CPU at dispatch
+    time); for a vendor-pinned `gpu` encoder it reflects whether any enabled
+    device's probe currently verifies that vendor/codec. `reason` explains
+    an unavailable `gpu` entry, or an `any_*` entry that would currently run
+    on the CPU for lack of a verified GPU; it is `None` otherwise.
+    """
+
+    id: str
+    label: str
+    group: Literal["preset", "cpu", "any", "qsv", "nvenc", "vaapi"]
+    engine: str
+    kind: str
+    vendor: GpuVendor | None
+    codec: str | None
+    available: bool
+    reason: str | None
 
 
 class TranscodeWorkerView(BaseModel):

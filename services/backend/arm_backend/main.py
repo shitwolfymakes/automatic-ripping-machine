@@ -31,6 +31,7 @@ from arm_backend.notifications.inbox_listener import InboxListener
 from arm_backend.ripper_manager import RipperManager, reconcile_enrolled_rippers
 from arm_backend.routers import (
     gpus as gpus_router,
+    encoders as encoders_router,
     auth,
     config as config_router,
     diagnostics,
@@ -372,6 +373,7 @@ app.include_router(transcode_presets.router)
 app.include_router(transcoder.router)
 app.include_router(transcodes.router)
 app.include_router(gpus_router.router)
+app.include_router(encoders_router.router)
 app.include_router(config_router.router)
 app.include_router(diagnostics.router)
 app.include_router(metadata_router.router)

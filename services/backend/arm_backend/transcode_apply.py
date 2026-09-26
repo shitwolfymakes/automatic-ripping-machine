@@ -24,6 +24,7 @@ from arm_backend.path_template import TemplateValidationError, expand_template, 
 from arm_backend.slugify import slugify
 from arm_common import (
     Config,
+    Gpu,
     Job,
     MediaType,
     Session,
@@ -31,6 +32,7 @@ from arm_common import (
     TrackKind,
     TranscodePreset,
 )
+from arm_common.encoders import get_encoder, gpu_is_eligible
 from arm_common.enums import SessionApplicationStatus, TranscodeTaskStatus, TranscodeTool
 from arm_common.models import SessionApplication, TranscodeTask
 from arm_common.schemas import CollisionInfo
@@ -293,6 +295,25 @@ async def transcode_enabled_now(db: AsyncSession) -> bool:
         return False
     cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     return cfg is None or cfg.transcode_enabled is not False
+
+
+async def encoder_available(db: AsyncSession, encoder_id: str) -> bool:
+    """May an apply proceed with this preset's catalog encoder right now?
+
+    `preset`/`cpu`/`any` never depend on hardware — an `any_<codec>` encoder
+    falls back to the CPU at dispatch time when nothing eligible shows up
+    (`TranscodeDispatcher._claim_gpu_for_task`), so it's never refused here.
+    A vendor-pinned `gpu` encoder needs at least one enabled `Gpu` row whose
+    probe verified this codec for that vendor (`gpu_is_eligible`); dispatch
+    would otherwise fail the task once it reached the front of the queue,
+    so apply-time refuses it up front instead.
+    """
+    spec = get_encoder(encoder_id)
+    if spec.kind != "gpu":
+        return True
+    codec = str(spec.codec)
+    all_gpus = (await db.execute(select(Gpu))).scalars().all()
+    return any(gpu_is_eligible(g, codec) and g.vendor == spec.vendor for g in all_gpus)
 
 
 class AggregateOutcome(NamedTuple):
