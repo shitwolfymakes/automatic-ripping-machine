@@ -123,7 +123,7 @@ Controls encoding: which tool, which preset, which container. Built-ins wrap Han
 - `preset_ref` (text, nullable — HandBrake built-in preset name (e.g. `"H.265 MKV 1080p30"`, `"Apple 2160p60 4K HEVC Surround"`) or an abcde config profile key. Null for `tool=none`.)
 - `preset_json` (jsonb, nullable — inline custom HandBrake preset when the user's configuration isn't in the built-in catalog)
 - `container` (enum: mkv | mp4 | webm | flac | mp3 | ogg | iso | none)
-- `hw_preference` (enum, nullable — same semantics as old sessions field: `NULL` = "prefer HW, queue if all busy, CPU only if no GPU is present anywhere"; `cpu_only` forces CPU; `any` = "don't queue for HW, CPU is fine")
+- `encoder` (text, not null, default `"preset"`: a catalog id from `arm_common.encoders`, validated in the app layer, not a Postgres enum. Replaces the old `codec` + `hw_preference` columns (migration `0038_encoder_first`). `preset` means "HandBrake's own preset encoder, as-is"; `cpu_<codec>` forces software encode; `any_<codec>` prefers a verified GPU, queues if all are busy, and falls back to CPU only if this host has no eligible device for that codec at all; `qsv_<codec>` / `nvenc_<codec>` / `vaapi_<codec>` pin to that vendor and are refused at apply, or fail the task, when no device of that vendor has verified the codec. `NONE` and `ABCDE` presets must carry `encoder = "preset"`. See [02-job-lifecycle.md § Encoder claim and apply-time refusal](02-job-lifecycle.md#encoder-claim-and-apply-time-refusal).)
 - `extra_args` (text, nullable — raw CLI args appended to the tool invocation; escape hatch)
 - `created_by_user_id` (nullable FK — null for built-ins)
 - `created_at`, `updated_at`
@@ -176,17 +176,20 @@ A user (or auto-transcode) says "apply session S to job J." This is the durable 
 - `created_at`, `completed_at`
 
 ### `gpus`
-Runtime inventory of hardware encoders the Backend detected on startup. The table is **truncated and repopulated on every Backend boot** — it is not user-editable and not persistent across restarts. The Backend container gets full host HW access in compose and probes directly.
+DB-authoritative GPU inventory, editable in Settings > GPUs. The `ARM_GPUS` env descriptor only **seeds an empty table** at Backend boot (each seeded row starts `encoder_kinds: []`, `probed_at: NULL`); once rows exist, the table is never truncated or re-derived from the env var, so an operator's `enabled` toggle and probe history survive a restart. The Backend container gets full host HW access in compose to run the per-device probe (below), not to detect devices itself: device discovery still happens host-side at install time (`install.sh` / `devtools/setup-dev.sh`).
 
 - `id` (ULID)
 - `vendor` (enum: vaapi | nvenc | qsv)
-- `device_path` (text — e.g. `/dev/dri/renderD128` for VAAPI, `nvidia://0` for NVENC)
-- `encoder_kinds` (text[] — codecs this device advertises, e.g. `['h264','h265','av1']`)
+- `device_path` (text: e.g. `/dev/dri/renderD128` for VAAPI/QSV, `nvidia://0` for NVENC)
+- `encoder_kinds` (text[]: codecs the last probe actually verified with a real test encode, e.g. `['h264','h265']`; empty until the first probe, or if the probe verified nothing)
 - `status` (enum: available | busy)
+- `enabled` (bool, default true: operator switch; the dispatcher's claim and the probe both skip a disabled row, but it stays in the inventory)
 - `claimed_by_task_id` (FK → `transcode_tasks.id`, nullable)
+- `probed_at` (timestamptz, nullable: set by every probe attempt, success or failure; `NULL` means "never probed," which alone makes the row ineligible for any GPU work regardless of `encoder_kinds`)
+- `probe_error` (text, nullable: set when the probe process itself failed, or when it ran but verified nothing; `NULL` when the last probe verified at least one codec)
 - `last_seen_at`
 
-Transcode task spawn takes a row via `SELECT … FOR UPDATE SKIP LOCKED`, flips `status` to `busy`, and passes the device path to the spawned container (`ARM_GPU_DEVICE` or the NVIDIA equivalent). Release on container exit. If the table is empty (no GPUs on host), tasks fall back to CPU automatically; a single `transcode.hw_unavailable` event is emitted at Backend startup rather than per task.
+**Eligibility** (`arm_common.encoders.gpu_is_eligible`): a row can serve a codec iff `enabled AND probed_at IS NOT NULL AND codec IN encoder_kinds`. Transcode task spawn takes an eligible row via `SELECT … FOR UPDATE SKIP LOCKED`, flips `status` to `busy`, and passes the device path to the spawned container (`ARM_GPU_DEVICE` plus the matching vendor image, see [06-deployment.md](06-deployment.md)). Release on container exit. See [02-job-lifecycle.md § Encoder claim and apply-time refusal](02-job-lifecycle.md#encoder-claim-and-apply-time-refusal) for what happens with no eligible row, and [Hardware Transcoding § The per-device probe](../../arm_wiki/Hardware-Transcoding.md#the-per-device-probe) for what runs the probe and when.
 
 ### `events`
 Append-only event log. Every typed event the system emits lands here. The `NotificationDispatcher` (Apprise-backed) and the UI's activity feed both read from this.

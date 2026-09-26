@@ -153,6 +153,44 @@ Whether encode work can happen at all is a **two-layer switch**:
 
 **NFS / ownership note.** Because passthrough finalize runs inside the Backend process rather than a spawned container, it writes as the **Backend container's own uid** — the operator's `PUID` must have write access to `/media` (not just the transcoder's). `ARM_TRANSCODE_PUID` still governs the uid a *remote or encode* transcode container drops to, and is applied best-effort as a `chown` after an in-process move completes (a harmless no-op against a root-squashed export).
 
+### Encoder claim and apply-time refusal
+
+A transcode preset names one catalog **encoder** (`arm_common.encoders`), not
+a codec plus a hardware preference. The dispatcher's `_claim_gpu_for_task`
+resolves what to spawn from that id:
+
+- `preset` and `cpu_<codec>` never touch a GPU: they spawn immediately.
+- `any_<codec>` picks the best-ranked eligible device (NVENC, then QSV, then
+  VAAPI, then device path) that is free. If eligible devices exist but are
+  all busy, the task stays `queued`. **If no eligible device exists on this
+  host at all, the task runs the CPU encoder for that codec** instead of
+  waiting, so a built-in preset defaulting to `any_h265` keeps working on a
+  CPU-only install.
+- `<vendor>_<codec>` (a specific `qsv_*` / `nvenc_*` / `vaapi_*` id) only
+  ever claims a device of that vendor. All busy: queue. **None eligible at
+  apply time**: the apply is refused with `skipped_reason="encoder_unavailable"`,
+  mapped to `422` for manual apply (auto-apply and the waiting-identify
+  promotion skip the same way instead of erroring). **None eligible while a
+  task is already queued** (the device was disabled, removed, or re-probed
+  without that codec after the apply): the task fails with
+  `last_error = "no enabled device has verified <encoder id>; re-probe or
+  enable it in Settings > GPUs"`, retryable through the normal retry path.
+  `any_*`, `cpu_*` and `preset` are never refused on availability.
+- A device is **eligible** for a codec only when it is `enabled`, has been
+  probed at least once (`probed_at IS NOT NULL`), and that probe's verified
+  list includes the codec (`arm_common.encoders.gpu_is_eligible`). A device
+  that is mid-probe right now is skipped by the claim exactly like a busy
+  one, so a task queues rather than falling back to CPU while a probe is in
+  flight.
+- A preset whose stored `encoder` id is no longer in the catalog (a stale
+  row from a removed encoder) fails at apply with `422` and at dispatch with
+  `last_error = "preset <preset id> has unknown encoder '<value>'"`, failing
+  only that task, not its session siblings.
+
+See [Hardware Transcoding](../../arm_wiki/Hardware-Transcoding.md) for the
+per-device probe that populates eligibility and the vendor image variants
+the dispatcher spawns.
+
 ## Why rip-level restart but task-level checkpointing for transcode
 
 Two different cost models drove two different choices.
