@@ -111,8 +111,12 @@ services:
       - /dev/disk:/host-disk:ro
       # Backend data that must survive recreates: the TheDiscDB snapshot
       # (/data/cache/thediscdb, re-downloaded from scratch without it) and
-      # the poster image cache (/data/cache/images). Without this volume the
-      # refresh loop dies with EACCES on a fresh root-owned /data.
+      # the poster image cache (/data/cache/images). The backend image seeds
+      # /data owned arm:arm 2775, so a fresh named volume comes up writable
+      # on first mount. A volume created before this fix stays root-owned;
+      # the entrypoint's boot guard now fails fast and names /data in that
+      # case. Fix it with a one-time chown of the volume's contents, or by
+      # removing the empty volume so Docker reseeds it from the image.
       - arm-data:/data
     # Uncomment to reach Backend directly from the host for verification curl:
     # ports:
