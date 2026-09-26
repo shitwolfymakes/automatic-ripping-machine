@@ -4,8 +4,10 @@
 # Idempotent — rerunning skips work already done and leaves existing .env alone.
 #
 # Usage:  bash devtools/setup-dev.sh          # dev setup (uv sync, npm ci, certs, .env)
-#         bash devtools/setup-dev.sh up       # deploy: certs + .env, build, back up the
-#                                             # DB, then (re)start the stack + health wait
+#         bash devtools/setup-dev.sh up       # deploy: certs + .env, build, refuse if a
+#                                             # rip/transcode is ACTIVE (unless --force),
+#                                             # back up the DB, then (re)start the stack
+#                                             # + health wait
 #         bash devtools/setup-dev.sh down     # stop the stack + spawned containers
 #
 # Roles: `setup` is the dev bootstrap and needs the dev toolchain (uv, node,
@@ -14,13 +16,16 @@
 # touch the host venv or node_modules.
 #
 #         --no-backup     # `up` only: skip the pre-deploy pg_dump of the running
-#                          # arm-db into ./arm/backups/ (the newest 5 are kept,
-#                          # older pg-backup-*.sql.gz are pruned). Without it, a
-#                          # failed or empty backup aborts the deploy before
-#                          # anything is removed or restarted.
+#                          # arm-db into ./arm/backups/. Without it, a failed or
+#                          # empty backup aborts the deploy before anything is
+#                          # removed or restarted. Rotation keeps the newest 5
+#                          # script-made pg-backup-<UTC>.sql.gz files (e.g.
+#                          # pg-backup-20260926T120000Z.sql.gz) and prunes only
+#                          # older files of exactly that shape; any other file
+#                          # (e.g. a manual pg-backup-pre-*.sql.gz) is never touched.
 #         --force         # `up` only: replace backend-spawned containers even
 #                          # while they have ACTIVE work (a running transcoder,
-#                          # or a ripper running makemkvcon/abcde/ddrescue).
+#                          # or a ripper running makemkvcon, abcde or dd).
 #                          # Without it, `up` refuses and lists them. Idle
 #                          # rippers are always replaced without --force.
 #         --ripper-only   # ripper-only profile: skip the arm-transcode image
@@ -52,18 +57,22 @@ usage() {
 Usage: bash devtools/setup-dev.sh [setup|up|down] [--ripper-only] [--no-backup] [--force]
 
   setup (default)  dev bootstrap: uv sync, npm ci, certs, .env (needs uv, node, npm)
-  up               deploy: certs + .env, build images, back up the running DB,
-                   (re)start the stack, wait for the backend health check
+  up               deploy: certs + .env, build images, refuse while a rip or
+                   transcode is ACTIVE (override: --force), back up the running
+                   DB, (re)start the stack, wait for the backend health check
                    (needs docker + the compose plugin; no uv/node/npm)
   down             stop the stack + backend-spawned ripper/transcoder containers
 
   --ripper-only    skip the arm-transcode image, the encoder probe and GPU
                    detection; write ARM_TRANSCODE_CAPABLE=false (per run, not sticky)
   --no-backup      up: skip the pre-deploy pg_dump into ./arm/backups/
-                   (without it: newest 5 pg-backup-*.sql.gz kept, older pruned)
+                   (without it: the newest 5 pg-backup-<UTC>.sql.gz files, e.g.
+                   pg-backup-20260926T120000Z.sql.gz, are kept and older ones of
+                   exactly that shape pruned; other files such as
+                   pg-backup-pre-*.sql.gz are never touched)
   --force          up: replace spawned containers even with ACTIVE work (a
-                   running transcoder, or a ripper running makemkvcon/abcde/
-                   ddrescue); idle rippers never need it
+                   running transcoder, or a ripper running makemkvcon, abcde
+                   or dd); idle rippers never need it
 USAGE
 }
 
@@ -356,6 +365,7 @@ refresh_arm_gpus() {
 # ~20 bytes; a postgres:18 dump of a database with NO tables is ~400 bytes, so
 # anything under this is a failed or truncated dump, never a valid one.
 BACKUP_MIN_BYTES=256
+BACKUP_TMP=""
 
 backup_abort() {
     echo "ERROR: pre-deploy database backup failed: $1" >&2
@@ -384,30 +394,35 @@ backup_db() {
     ts="$(date -u +%Y%m%dT%H%M%SZ)"
     file="${dir}/pg-backup-${ts}.sql.gz"
     tmp="${file}.partial"
+    # Never leave a stray .partial behind: any exit before the final mv (an
+    # abort, a set -e failure in a later pipe, Ctrl-C or SIGTERM mid-dump)
+    # removes it. Signals are turned into exits so the EXIT trap runs.
+    BACKUP_TMP="${tmp}"
+    trap 'rm -f "${BACKUP_TMP:-}"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
     echo "==> backing up the ${DB_SERVICE} database to ${file}"
     # Single quotes on purpose: POSTGRES_USER/POSTGRES_DB resolve INSIDE the db
     # container, from the environment compose gave it.
     # shellcheck disable=SC2016
     if ! compose exec -T "${DB_SERVICE}" sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' | gzip > "${tmp}"; then
-        rm -f "${tmp}"
         backup_abort "pg_dump exited non-zero"
     fi
-    size="$(wc -c < "${tmp}")"
+    size="$(wc -c < "${tmp}")" || backup_abort "cannot read ${tmp}"
     if (( size < BACKUP_MIN_BYTES )); then
-        rm -f "${tmp}"
         backup_abort "dump is only ${size} bytes gzipped (expected >= ${BACKUP_MIN_BYTES}); treating it as empty"
     fi
     if ! gzip -t "${tmp}" 2>/dev/null; then
-        rm -f "${tmp}"
         backup_abort "dump is not a valid gzip stream"
     fi
     # pg_dump writes this trailer only after a complete dump.
-    tail_txt="$(gzip -dc "${tmp}" | tail -n 20)"
+    tail_txt="$(gzip -dc "${tmp}" | tail -n 20)" || backup_abort "cannot decompress ${tmp}"
     if [[ "${tail_txt}" != *"PostgreSQL database dump complete"* ]]; then
-        rm -f "${tmp}"
         backup_abort "dump has no 'PostgreSQL database dump complete' trailer (truncated?)"
     fi
-    mv "${tmp}" "${file}"
+    mv "${tmp}" "${file}" || backup_abort "cannot move ${tmp} into place"
+    BACKUP_TMP=""
+    trap - EXIT INT TERM
     echo "==> database backup OK: ${file} (${size} bytes)"
     prune_backups "${dir}"
 }
@@ -434,9 +449,13 @@ prune_backups() {
 # active rip tool, nothing when idle. The ripper image is python:*-slim with no
 # procps, so pgrep/ps are tried first and /proc/*/comm is the fallback. Exits 3
 # when none of the three is usable (detection failed, NOT "idle").
+# Tools are v3's rip commands: makemkvcon (video), abcde (audio CD) and plain
+# dd (data disc, services/ripper/arm_ripper/rip/data_rip.py). Every path
+# matches the process name EXACTLY (pgrep -x / string equality on comm), so
+# `dd` cannot false-positive on names that merely contain it.
 # shellcheck disable=SC2016  # expands inside the container, not here
 RIP_PROBE_SH='
-tools="makemkvcon abcde ddrescue"
+tools="makemkvcon abcde dd"
 if command -v pgrep >/dev/null 2>&1; then
     for t in $tools; do pgrep -x "$t" >/dev/null 2>&1 && echo "$t"; done
     exit 0
@@ -460,10 +479,11 @@ exit 0
 # ripper alone is not a reason to refuse. Refuse unless --force when:
 #   (a) any RUNNING arm.task_id container exists (a transcoder is active work
 #       by construction), or
-#   (b) a RUNNING arm.drive_id container has a rip tool (makemkvcon, abcde,
-#       ddrescue) running inside it.
-# A ripper that cannot be inspected is treated as idle, with a note: detection
-# failure never blocks a deploy.
+#   (b) a RUNNING arm.drive_id container has a rip tool running inside it:
+#       makemkvcon (video), abcde (audio CD) or dd (data disc, data_rip.py).
+# A ripper that cannot be inspected (exec error, or no answer within 15s from
+# a wedged container) is treated as idle, with a note: detection failure never
+# blocks or hangs a deploy.
 guard_running_spawned() {
     local tasks drives ctr found active=()
     tasks="$(docker ps --filter "label=arm.task_id" --filter "status=running" --format '{{.Names}}')"
@@ -476,7 +496,7 @@ guard_running_spawned() {
     if [[ -n "${drives}" ]]; then
         while IFS= read -r ctr; do
             [[ -n "${ctr}" ]] || continue
-            if found="$(docker exec "${ctr}" sh -c "${RIP_PROBE_SH}" 2>/dev/null </dev/null)"; then
+            if found="$(timeout 15 docker exec "${ctr}" sh -c "${RIP_PROBE_SH}" 2>/dev/null </dev/null)"; then
                 if [[ -n "${found}" ]]; then
                     active+=("${ctr} (ripping: $(tr '\n' ' ' <<<"${found}" | sed 's/ *$//'))")
                 fi
@@ -486,7 +506,7 @@ guard_running_spawned() {
         done <<<"${drives}"
     fi
     if [[ ${#active[@]} -eq 0 ]]; then
-        [[ -n "${drives}" ]] && echo "==> running rippers are idle (no makemkvcon/abcde/ddrescue); safe to replace"
+        [[ -n "${drives}" ]] && echo "==> running rippers are idle (no makemkvcon/abcde/dd); safe to replace"
         return 0
     fi
     if [[ "${FORCE}" -eq 1 ]]; then
@@ -520,8 +540,9 @@ published_url() {
     printf 'https://%s:%s' "${host}" "${port}"
 }
 
-HEALTH_TRIES=30        # x HEALTH_SLEEP = ~60s
+HEALTH_TIMEOUT=90      # seconds; ELAPSED-time bound on the whole wait
 HEALTH_SLEEP=2
+HEALTH_ATTEMPT_MAX=15  # seconds; hard cap on one in-container exec attempt
 HEALTH_RESULT=""       # summary line for the final banner
 
 # In-container health check for when no host port is published. Stdlib only
@@ -542,14 +563,21 @@ except Exception:
 sys.exit(0 if ok else 3)
 '
 
-# Wait up to ~60s for the backend's /api/health. Primary path: curl the host
-# port `compose port` reports for 8443 (overlay-proof). With no published port
+# Wait for the backend's /api/health, bounded by ELAPSED time: no new attempt
+# starts after HEALTH_TIMEOUT seconds, and one attempt is capped (curl
+# --max-time 5, exec by `timeout HEALTH_ATTEMPT_MAX`), so the worst case is
+# HEALTH_TIMEOUT + HEALTH_ATTEMPT_MAX. Primary path: curl the host port
+# `compose port` reports for 8443 (overlay-proof). With no published port
 # (the template default) or no curl, check from inside the backend container
 # via `compose exec` instead. Timeout prints the backend's recent logs and
 # exits 1. Only when exec itself never works while the backend IS running is
 # the wait skipped with a note.
 wait_for_backend() {
-    local base="" url mode i rc reached=0 running
+    # python_ran=1 once any in-container attempt got as far as running the
+    # Python check (exit 3 = python ran, backend not healthy yet). It says
+    # nothing about the backend answering; it only separates "the check runs
+    # but fails" from "compose exec itself cannot run".
+    local base="" url mode rc python_ran=0 running start elapsed
     base="$(published_url "${BACKEND_SERVICE}" 8443)"
     if [[ -n "${base}" ]] && command -v curl >/dev/null 2>&1; then
         mode="port"
@@ -563,25 +591,29 @@ wait_for_backend() {
             echo "==> curl not found; checking health from inside the ${BACKEND_SERVICE} container"
         fi
     fi
-    echo "==> waiting for ${url} (up to $(( HEALTH_TRIES * HEALTH_SLEEP ))s)"
-    for (( i = 1; i <= HEALTH_TRIES; i++ )); do
+    echo "==> waiting for ${url} (up to ~${HEALTH_TIMEOUT}s)"
+    start="${SECONDS}"
+    while :; do
         if [[ "${mode}" == port ]]; then
             if curl -sk -f --max-time 5 -o /dev/null "${url}"; then rc=0; else rc=3; fi
         else
             rc=0
-            compose exec -T "${BACKEND_SERVICE}" python -c "${HEALTH_PY}" </dev/null >/dev/null 2>&1 || rc=$?
+            # Same as compose() (cd to the repo root), but under `timeout` so a
+            # wedged exec cannot stall the wait past its bound.
+            (cd "${ROOT_DIR}" && timeout "${HEALTH_ATTEMPT_MAX}" docker compose \
+                exec -T "${BACKEND_SERVICE}" python -c "${HEALTH_PY}") </dev/null >/dev/null 2>&1 || rc=$?
         fi
         if [[ "${rc}" == 0 ]]; then
             echo "==> backend healthy: ${url}"
             HEALTH_RESULT="backend healthy at ${url}"
             return 0
         fi
-        [[ "${rc}" == 3 ]] && reached=1
-        if (( i < HEALTH_TRIES )); then
-            sleep "${HEALTH_SLEEP}"
-        fi
+        [[ "${rc}" == 3 ]] && python_ran=1
+        elapsed=$(( SECONDS - start ))
+        (( elapsed < HEALTH_TIMEOUT )) || break
+        sleep "${HEALTH_SLEEP}"
     done
-    if [[ "${mode}" == exec && "${reached}" == 0 ]]; then
+    if [[ "${mode}" == exec && "${python_ran}" == 0 ]]; then
         running="$(compose ps --status running --services 2>/dev/null || true)"
         if grep -qx "${BACKEND_SERVICE}" <<<"${running}"; then
             echo "==> could not run the in-container health check (compose exec failed every time); skipping the wait"
@@ -590,7 +622,7 @@ wait_for_backend() {
             return 0
         fi
     fi
-    echo "ERROR: ${BACKEND_SERVICE} did not answer ${url} within $(( HEALTH_TRIES * HEALTH_SLEEP ))s; last 20 log lines:" >&2
+    echo "ERROR: ${BACKEND_SERVICE} did not answer ${url} after $(( SECONDS - start ))s (limit ${HEALTH_TIMEOUT}s); last 20 log lines:" >&2
     compose logs --tail 20 "${BACKEND_SERVICE}" >&2 || true
     exit 1
 }
