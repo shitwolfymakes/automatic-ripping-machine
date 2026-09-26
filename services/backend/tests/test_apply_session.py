@@ -1029,6 +1029,37 @@ def test_any_encoder_apply_succeeds_without_any_gpu_rows(signing_key: bytes, tmp
     assert r.status_code == 200, r.text
 
 
+@pytest.mark.parametrize(("awaiting", "expected_status"), [(True, 200), (False, 422)])
+def test_encode_apply_with_a_device_awaiting_its_first_probe(
+    signing_key: bytes, tmp_path: Path, awaiting: bool, expected_status: int
+) -> None:
+    """A never-probed matching device whose probe is reserved or running does
+    not refuse the vendor-pinned preset: the task queues until the probe
+    decides. A never-probed device nobody is probing still refuses."""
+    from unittest.mock import MagicMock
+
+    from arm_backend import transcode_dispatcher as td
+
+    db = FakeSession()
+    _seed(db)
+    _seed_vendor_pinned_session(db, encoder="qsv_h265")
+    db.rows["gpus"] = [_gpu(probed_at=None, encoder_kinds=[])]
+    dispatcher = MagicMock()
+    dispatcher.awaiting_probe.return_value = awaiting
+    td.set_active_dispatcher(dispatcher)
+    try:
+        app, token = _make_app(signing_key, db, tmp_path)
+        with TestClient(app) as client:
+            r = client.post(
+                "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+                json={"session_id": "ses_vendor"},
+                headers=_auth(token),
+            )
+    finally:
+        td.set_active_dispatcher(None)
+    assert r.status_code == expected_status, r.text
+
+
 def test_transcode_disabled_wins_over_encoder_unavailable(signing_key: bytes, tmp_path: Path) -> None:
     """When both gates would fire (transcoding off AND no eligible device),
     the transcode_disabled gate reports first: it runs before the encoder

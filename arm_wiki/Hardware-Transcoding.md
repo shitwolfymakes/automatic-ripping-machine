@@ -76,6 +76,13 @@ the preset's encoder:
 - If every eligible device for an encoder (including an `any_*` pick) is
   in the middle of being probed right now, the task queues rather than
   falling back to CPU. It is only unavailable for that tick.
+- If no device is eligible yet, but an enabled device that could serve the
+  encoder has never been probed and its probe is scheduled or running (the
+  boot pass, a re-probe, or enabling the row), the task queues until that
+  probe finishes, for `any_*` and vendor-pinned encoders alike, and a
+  vendor-pinned apply is not refused meanwhile. Once the probe is done, the
+  rules above apply to its result. A never-probed device that no probe is
+  scheduled for does not hold work back.
 - A preset whose stored encoder id no longer exists in the catalog (a stale
   row from a removed encoder) is refused at apply and fails at dispatch with
   `preset <id> has unknown encoder '<value>'`. Only that task fails; siblings
@@ -93,8 +100,14 @@ against it. Whatever encodes cleanly becomes that row's verified list.
 **When a probe runs:**
 
 - **At Backend boot**, a background pass probes every enabled row that was
-  never probed, or whose last probe verified nothing. This never blocks
-  startup; GPU work simply queues until each row's probe finishes.
+  never probed, or whose last probe verified nothing, one row at a time. This
+  never blocks startup. Every never-probed row the pass will visit counts as
+  awaiting its probe from the moment the Backend starts, so work that such a
+  row could serve queues until that row's probe finishes (see above) instead
+  of running on CPU or failing. This is what happens on the first boot after
+  an upgrade, when every row starts unprobed.
+- **When you enable a never-probed row** in Settings > GPUs, its probe is
+  scheduled in the background.
 - **On demand**, from Settings > GPUs: **Re-probe** on one row, or
   **Re-probe all**. Rows refresh live over the `gpu.probed` WebSocket event.
 

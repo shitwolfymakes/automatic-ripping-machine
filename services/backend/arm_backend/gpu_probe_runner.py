@@ -25,7 +25,13 @@ but not yet committed (`dispatcher.claimed_gpu_ids`), is never probed.
 Triggers: the boot pass (`start_boot_pass` -> `probe_unprobed`: removes
 probe containers orphaned by a previous process, then probes, one at a time,
 every enabled row that was never probed or has no verified encoder) and
-`start_probe` (the re-probe endpoints). Neither runs without a docker client.
+`start_probe` (the re-probe endpoints and enabling a never-probed row).
+Neither runs without a docker client.
+
+While a never-probed row waits for its probe (reserved by the boot pass in
+`dispatcher.pending_probe_gpu_ids`, or running in `probing_gpu_ids`), the
+claim queues work that row could serve instead of falling back to the CPU
+or failing (`TranscodeDispatcher.awaiting_probe`).
 """
 
 from __future__ import annotations
@@ -195,10 +201,23 @@ class GpuProbeRunner:
         return True
 
     def start_boot_pass(self) -> asyncio.Task[None]:
-        """Run `probe_unprobed` in the background; `shutdown` cancels it."""
+        """Run `probe_unprobed` in the background; `shutdown` cancels it.
+
+        When probes can run, `boot_probe_listing` is raised before this
+        returns, so a dispatcher tick that runs before the pass has listed
+        its rows already treats every never-probed row as awaiting a probe."""
+        dispatcher = self._dispatcher
+        if self.capable():
+            dispatcher.boot_probe_listing = True
         task = asyncio.create_task(self.probe_unprobed())
         self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+
+        def _done(done: asyncio.Task[None]) -> None:
+            # Also covers a task cancelled before its first step.
+            self._tasks.discard(done)
+            dispatcher.boot_probe_listing = False
+
+        task.add_done_callback(_done)
         return task
 
     def pending_tasks(self) -> list[asyncio.Task[None]]:
@@ -244,25 +263,43 @@ class GpuProbeRunner:
         return removed
 
     async def probe_unprobed(self) -> None:
-        """Boot pass: remove orphaned probe containers, then probe, one at a
-        time, every enabled row that was never probed or has no verified
-        encoder (a failed or verified-nothing row is retried every boot). A
-        no-op when probes can't run. Never raises."""
-        if not self.capable():
-            logger.info("gpu probe: boot pass skipped (no docker client for transcodes)")
-            return
-        await self.remove_orphans()
+        """Boot pass: list the targets, remove orphaned probe containers, then
+        probe, one at a time, every enabled row that was never probed or has
+        no verified encoder (a failed or verified-nothing row is retried every
+        boot). A no-op when probes can't run. Never raises.
+
+        Every target id goes into `pending_probe_gpu_ids` in the same step
+        that ends `boot_probe_listing` (no await in between), and leaves it
+        when its own probe ends or the pass ends, however it ends."""
+        dispatcher = self._dispatcher
+        pending = dispatcher.pending_probe_gpu_ids
+        reserved: list[str] = []
         try:
-            async with self._db_factory() as db:
-                rows = (await db.execute(select(Gpu).order_by(col(Gpu.vendor), col(Gpu.device_path)))).scalars().all()
-                gpu_ids = [g.id for g in rows if g.enabled and (g.probed_at is None or not g.encoder_kinds)]
-        except Exception as exc:  # noqa: BLE001 - a boot-time background pass must never crash
-            logger.exception("gpu probe: boot pass could not list GPUs: %s", exc)
-            return
-        if gpu_ids:
-            logger.info("gpu probe: boot pass probing %d unprobed or unverified GPU(s)", len(gpu_ids))
-        for gpu_id in gpu_ids:
-            await self.probe_gpu(gpu_id)
+            if not self.capable():
+                logger.info("gpu probe: boot pass skipped (no docker client for transcodes)")
+                return
+            try:
+                async with self._db_factory() as db:
+                    stmt = select(Gpu).order_by(col(Gpu.vendor), col(Gpu.device_path))
+                    rows = (await db.execute(stmt)).scalars().all()
+                    gpu_ids = [g.id for g in rows if g.enabled and (g.probed_at is None or not g.encoder_kinds)]
+            except Exception as exc:  # noqa: BLE001 - a boot-time background pass must never crash
+                logger.exception("gpu probe: boot pass could not list GPUs: %s", exc)
+                return
+            reserved = gpu_ids
+            pending.update(reserved)
+            dispatcher.boot_probe_listing = False
+            await self.remove_orphans()
+            if gpu_ids:
+                logger.info("gpu probe: boot pass probing %d unprobed or unverified GPU(s)", len(gpu_ids))
+            for gpu_id in gpu_ids:
+                try:
+                    await self.probe_gpu(gpu_id)
+                finally:
+                    pending.discard(gpu_id)
+        finally:
+            dispatcher.boot_probe_listing = False
+            pending.difference_update(reserved)
 
     async def probe_gpu(self, gpu_id: str) -> None:
         """Probe one row now and write the result. Skips a row another probe

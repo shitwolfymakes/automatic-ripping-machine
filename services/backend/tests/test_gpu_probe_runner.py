@@ -592,6 +592,105 @@ async def test_boot_pass_probes_enabled_unprobed_or_unverified_rows_sequentially
     assert by_id["gpu_e"].probed_at == probed
 
 
+async def test_boot_pass_reserves_every_target_before_the_first_probe() -> None:
+    rows = [_gpu("gpu_a"), _gpu("gpu_b", GpuVendor.VAAPI, device_path="/dev/dri/renderD129")]
+    runner, _db, docker, _hub, dispatcher = _build(rows)
+    assert docker is not None
+    pending_at_run: list[set[str]] = []
+    docker.containers.on_run = lambda _kw: pending_at_run.append(set(dispatcher.pending_probe_gpu_ids))
+
+    await runner.probe_unprobed()
+
+    assert pending_at_run == [{"gpu_a", "gpu_b"}, {"gpu_b"}]
+    assert dispatcher.pending_probe_gpu_ids == set()
+    assert dispatcher.boot_probe_listing is False
+
+
+async def test_boot_pass_releases_reservations_when_probes_fail() -> None:
+    rows = [_gpu("gpu_a"), _gpu("gpu_b", device_path="/dev/dri/renderD129")]
+    runner, db, docker, _hub, dispatcher = _build(rows)
+    assert docker is not None
+    docker.containers.run_exc = RuntimeError("start failed")
+    await runner.probe_unprobed()
+    assert dispatcher.pending_probe_gpu_ids == set()
+    assert all(g.probe_error == "probe container could not start: start failed" for g in db.rows["gpus"])
+
+
+async def test_boot_pass_releases_reservations_when_a_probe_raises() -> None:
+    runner, _db, _docker, _hub, dispatcher = _build([_gpu("gpu_a"), _gpu("gpu_b")])
+
+    async def _boom(_gpu_id: str) -> None:
+        raise RuntimeError("unexpected")
+
+    runner.probe_gpu = _boom  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError):
+        await runner.probe_unprobed()
+    assert dispatcher.pending_probe_gpu_ids == set()
+    assert dispatcher.boot_probe_listing is False
+
+
+async def test_cancelled_boot_pass_releases_reservations() -> None:
+    gate = threading.Event()
+    waiting = threading.Event()
+
+    def _blocking_wait(timeout: object = None) -> dict[str, int]:
+        waiting.set()
+        gate.wait(5)
+        return {"StatusCode": 0}
+
+    container = _Container(stdout=_payload(["h265"]))
+    container.wait = _blocking_wait  # type: ignore[method-assign]
+    runner, _db, _docker, _hub, dispatcher = _build([_gpu("gpu_a"), _gpu("gpu_b")], container)
+    runner.start_boot_pass()
+    try:
+        assert await asyncio.to_thread(waiting.wait, 5)
+        assert dispatcher.pending_probe_gpu_ids == {"gpu_a", "gpu_b"}
+        await runner.shutdown()
+    finally:
+        gate.set()
+    assert dispatcher.pending_probe_gpu_ids == set()
+    assert dispatcher.probing_gpu_ids == set()
+    assert dispatcher.boot_probe_listing is False
+
+
+async def test_start_boot_pass_marks_listing_until_rows_are_reserved() -> None:
+    runner, _db, _docker, _hub, dispatcher = _build([_gpu()])
+    task = runner.start_boot_pass()
+    assert dispatcher.boot_probe_listing is True  # set before the task's first step
+    await task
+    await asyncio.sleep(0)
+    assert dispatcher.boot_probe_listing is False
+
+
+async def test_start_boot_pass_cancelled_before_its_first_step_clears_listing() -> None:
+    runner, _db, _docker, _hub, dispatcher = _build([_gpu()])
+    task = runner.start_boot_pass()
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    await asyncio.sleep(0)
+    assert dispatcher.boot_probe_listing is False
+
+
+async def test_start_boot_pass_when_not_capable_never_marks_listing() -> None:
+    runner, _db, _docker, _hub, dispatcher = _build([_gpu()], docker=False)
+    task = runner.start_boot_pass()
+    assert dispatcher.boot_probe_listing is False
+    await task
+
+
+async def test_boot_pass_db_error_clears_listing() -> None:
+    runner, db, _docker, _hub, dispatcher = _build([_gpu()])
+
+    async def _boom(_stmt: Any) -> Any:
+        raise RuntimeError("db down")
+
+    db.execute = _boom  # type: ignore[method-assign]
+    runner.start_boot_pass()
+    await asyncio.gather(*runner.pending_tasks())
+    assert dispatcher.boot_probe_listing is False
+    assert dispatcher.pending_probe_gpu_ids == set()
+
+
 async def test_boot_pass_with_every_row_probed_spawns_nothing() -> None:
     runner, _db, docker, hub, _d = _build([_gpu(probed_at=datetime(2026, 9, 1, tzinfo=UTC), encoder_kinds=["h264"])])
     await runner.probe_unprobed()
@@ -700,7 +799,7 @@ async def test_start_boot_pass_runs_in_the_background() -> None:
 # --- orphaned probe containers ---------------------------------------------------
 
 
-async def test_boot_pass_removes_orphaned_probe_containers_first() -> None:
+async def test_boot_pass_removes_orphaned_probe_containers() -> None:
     runner, _db, docker, _hub, dispatcher = _build(
         [_gpu(probed_at=datetime(2026, 9, 1, tzinfo=UTC), encoder_kinds=["h264"])]
     )

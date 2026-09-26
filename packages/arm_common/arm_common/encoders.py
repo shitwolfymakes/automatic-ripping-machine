@@ -113,3 +113,14 @@ def gpu_is_eligible(gpu: Gpu, codec: str) -> bool:
     """The one eligibility rule (spec section 4): enabled, probed, and the probe
     verified this codec."""
     return bool(gpu.enabled) and gpu.probed_at is not None and codec in (gpu.encoder_kinds or [])
+
+
+def gpu_could_serve(gpu: Gpu, spec: EncoderSpec) -> bool:
+    """Whether an enabled row's vendor has a GPU encoder for `spec`, whatever
+    its probe has verified so far: any vendor for `any_<codec>`, the matching
+    vendor for a vendor-pinned encoder, never for `preset`/`cpu_*`."""
+    if not gpu.enabled or spec.codec is None:
+        return False
+    if spec.kind == "any":
+        return gpu_encoder_for(gpu.vendor, spec.codec) is not None
+    return spec.kind == "gpu" and gpu.vendor == spec.vendor

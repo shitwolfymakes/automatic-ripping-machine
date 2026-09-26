@@ -58,6 +58,7 @@ from arm_common.encoders import (
     EncoderSpec,
     cpu_encoder_for,
     get_encoder,
+    gpu_could_serve,
     gpu_encoder_for,
     gpu_is_eligible,
 )
@@ -121,8 +122,8 @@ class GpuAssignment(NamedTuple):
     is the claimed vendor's GPU encoder or the `cpu_<codec>` fallback; it is
     None for the `preset` encoder (HandBrake's own). `action="queue"` leaves
     the task queued for a later tick (every eligible device busy or being
-    probed); `action="fail"` means the task can never run as configured and
-    `reason` says why.
+    probed, or a device still awaiting its first probe); `action="fail"`
+    means the task can never run as configured and `reason` says why.
     """
 
     gpu: Gpu | None
@@ -157,6 +158,24 @@ async def release_gpu_for_task(db: AsyncSession, task_id: str) -> None:
         gpu.claimed_by_task_id = None
 
 
+WAITING_FOR_PROBE_REASON = "waiting for GPU probe"
+
+# The running backend's dispatcher, for code paths with no app handle (the
+# apply-time encoder gate). None outside a running backend.
+_active_dispatcher: TranscodeDispatcher | None = None
+
+
+def set_active_dispatcher(dispatcher: TranscodeDispatcher | None) -> None:
+    global _active_dispatcher  # noqa: PLW0603 - one dispatcher per backend process
+    _active_dispatcher = dispatcher
+
+
+def gpu_awaiting_probe(gpu: Gpu) -> bool:
+    """`TranscodeDispatcher.awaiting_probe` on the running dispatcher; False
+    when none is running."""
+    return _active_dispatcher is not None and _active_dispatcher.awaiting_probe(gpu)
+
+
 class TranscodeDispatcher:
     def __init__(
         self,
@@ -180,6 +199,13 @@ class TranscodeDispatcher:
         # GPU rows currently running a device probe; the claim never hands
         # one of these to a task.
         self.probing_gpu_ids: set[str] = set()
+        # GPU rows a probe pass has reserved but not yet finished (queued
+        # behind other rows of the boot pass), and whether the boot pass is
+        # still listing its rows. Together with `probing_gpu_ids` they say
+        # whether an unprobed row is about to be verified (`awaiting_probe`),
+        # so work waits for it instead of falling back to the CPU or failing.
+        self.pending_probe_gpu_ids: set[str] = set()
+        self.boot_probe_listing = False
         # GPU rows this process has claimed (BUSY in the claim's session) but
         # not yet committed or rolled back. Other sessions still read those
         # rows as AVAILABLE until the per-task commit, which only happens
@@ -616,9 +642,10 @@ class TranscodeDispatcher:
                 assignment = await self._claim_gpu_for_task(db, task, preset)
                 if assignment.action == "queue":
                     logger.info(
-                        "transcode task waiting for GPU encoder=%s task_id=%s",
+                        "transcode task waiting for GPU encoder=%s task_id=%s%s",
                         assignment.encoder.id if assignment.encoder is not None else None,
                         task.id,
+                        f" ({assignment.reason})" if assignment.reason else "",
                     )
                     continue
                 if assignment.action == "fail":
@@ -720,6 +747,13 @@ class TranscodeDispatcher:
             await db.execute(select(TranscodePreset).where(col(TranscodePreset.id) == sess.transcode_preset_id))
         ).scalar_one_or_none()
 
+    def awaiting_probe(self, gpu: Gpu) -> bool:
+        """A never-probed row whose probe is reserved, running, or about to be
+        listed by the boot pass."""
+        return gpu.probed_at is None and (
+            self.boot_probe_listing or gpu.id in self.pending_probe_gpu_ids or gpu.id in self.probing_gpu_ids
+        )
+
     async def _claim_gpu_for_task(
         self, db: AsyncSession, task: TranscodeTask, preset: TranscodePreset | None
     ) -> GpuAssignment:
@@ -732,8 +766,10 @@ class TranscodeDispatcher:
           then device path) and spawn with the resolved GPU encoder.
         - eligible devices all busy, or the only eligible ones are being
           probed right now -> queue (retry next tick).
-        - no eligible device: `any_<codec>` falls back to `cpu_<codec>`; a
-          vendor-pinned encoder fails the task.
+        - no eligible device, but a never-probed device that could serve the
+          encoder is awaiting its probe (`awaiting_probe`) -> queue.
+        - otherwise no eligible device: `any_<codec>` falls back to
+          `cpu_<codec>`; a vendor-pinned encoder fails the task.
         - an encoder id missing from the catalog fails the task.
 
         Eligibility (enabled, probed, codec verified) is `gpu_is_eligible`;
@@ -769,6 +805,10 @@ class TranscodeDispatcher:
                 # Every eligible device is mid-probe; it is only absent for
                 # this tick, so wait rather than fail or fall back to CPU.
                 return GpuAssignment(gpu=None, encoder=spec, action="queue")
+            if any(gpu_could_serve(g, spec) and self.awaiting_probe(g) for g in all_gpus):
+                # A never-probed device that could serve this encoder has a
+                # probe scheduled or running; its result decides the device.
+                return GpuAssignment(gpu=None, encoder=spec, action="queue", reason=WAITING_FOR_PROBE_REASON)
             if spec.kind == "any":
                 return GpuAssignment(gpu=None, encoder=cpu_encoder_for(codec), action="spawn")
             return GpuAssignment(

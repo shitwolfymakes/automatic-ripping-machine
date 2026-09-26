@@ -309,8 +309,12 @@ async def encoder_available(db: AsyncSession, encoder_id: str) -> bool:
     least one enabled `Gpu` row whose probe verified this codec for that
     vendor (`gpu_is_eligible`); dispatch would otherwise fail the task once
     it reached the front of the queue, so apply-time refuses it up front
-    instead.
+    instead. A matching never-probed row whose probe is reserved or running
+    (`gpu_awaiting_probe`) also counts: the task queues until the probe
+    decides, exactly as the claim does.
     """
+    from arm_backend.transcode_dispatcher import gpu_awaiting_probe  # noqa: PLC0415 - avoid module cycle
+
     try:
         spec = get_encoder(encoder_id)
     except ValueError:
@@ -319,7 +323,10 @@ async def encoder_available(db: AsyncSession, encoder_id: str) -> bool:
         return True
     codec = str(spec.codec)
     all_gpus = (await db.execute(select(Gpu))).scalars().all()
-    return any(gpu_is_eligible(g, codec) and g.vendor == spec.vendor for g in all_gpus)
+    return any(
+        g.vendor == spec.vendor and (gpu_is_eligible(g, codec) or (g.enabled and gpu_awaiting_probe(g)))
+        for g in all_gpus
+    )
 
 
 class AggregateOutcome(NamedTuple):

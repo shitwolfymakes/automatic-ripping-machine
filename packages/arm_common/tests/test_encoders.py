@@ -11,6 +11,7 @@ from arm_common.encoders import (
     encoder_allowed_for_tool,
     get_encoder,
     gpu_encoder_for,
+    gpu_could_serve,
     gpu_encoders_for_vendor,
     gpu_is_eligible,
 )
@@ -105,3 +106,13 @@ def test_eligibility() -> None:
     assert not gpu_is_eligible(_gpu(enabled=False), "h265")
     assert not gpu_is_eligible(_gpu(probed_at=None), "h265")
     assert not gpu_is_eligible(_gpu(encoder_kinds=None), "h265")
+
+
+def test_could_serve_ignores_probe_state() -> None:
+    unprobed = _gpu(probed_at=None, encoder_kinds=[])
+    assert gpu_could_serve(unprobed, get_encoder("any_h264"))
+    assert gpu_could_serve(unprobed, get_encoder("qsv_h265"))
+    assert not gpu_could_serve(unprobed, get_encoder("nvenc_h265"))
+    assert not gpu_could_serve(_gpu(enabled=False), get_encoder("any_h265"))
+    assert not gpu_could_serve(unprobed, get_encoder("cpu_h265"))
+    assert not gpu_could_serve(unprobed, get_encoder(PRESET_ENCODER_ID))

@@ -58,7 +58,7 @@ from arm_backend.routers import (
     users as users_router,
 )
 from arm_backend.seeders import CONFIG_SINGLETON_ID, run_seeders
-from arm_backend.transcode_dispatcher import TranscodeDispatcher
+from arm_backend.transcode_dispatcher import TranscodeDispatcher, set_active_dispatcher
 from arm_backend.utils import ensure_roots, default_roots
 from arm_backend.ws import WSHub
 from arm_backend.ws.router import router as ws_router
@@ -264,6 +264,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.exception("startup orphaned-application sweep failed: %s", exc)
     dispatcher_task = asyncio.create_task(transcode_dispatcher.run())
     app.state.transcode_dispatcher = transcode_dispatcher
+    set_active_dispatcher(transcode_dispatcher)
     # Per-device GPU probes: the boot pass removes orphaned probe containers
     # and verifies every enabled row that was never probed or has no verified
     # encoder, in the background (a no-op without a docker client); the
@@ -371,6 +372,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await asyncio.wait_for(dispatcher_task, timeout=10.0)
         except asyncio.TimeoutError:  # pragma: no cover, only if the dispatcher hangs >10s on shutdown
             dispatcher_task.cancel()
+        set_active_dispatcher(None)
         await app.state.dispatcher.aclose()
 
 

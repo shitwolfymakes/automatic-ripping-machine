@@ -10,6 +10,10 @@ claimed.
 | any_<codec>   | best-ranked GPU   | queue              | CPU (cpu_<codec>)    |
 | <vendor>_<c>  | that vendor's GPU | queue              | task fails           |
 
+"No eligible GPU" queues instead while a never-probed row that could serve
+the encoder is awaiting its probe (reserved, running, or the boot pass is
+still listing rows).
+
 Plus: stale-claim sweep releases the GPU it held; a spawn failure releases
 the claim; the worker env carries the resolved catalog encoder id.
 """
@@ -27,7 +31,11 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 import pytest  # noqa: E402
 
 from arm_backend.config import Settings  # noqa: E402
-from arm_backend.transcode_dispatcher import TranscodeDispatcher  # noqa: E402
+from arm_backend.transcode_dispatcher import (  # noqa: E402
+    TranscodeDispatcher,
+    gpu_awaiting_probe,
+    set_active_dispatcher,
+)
 from arm_backend.ws import WSHub  # noqa: E402
 from arm_common import (  # noqa: E402
     Gpu,
@@ -531,21 +539,118 @@ async def test_any_encoder_prefers_vendor_rank() -> None:
     assert assignment.encoder.id == "nvenc_h265"
 
 
-async def test_any_encoder_without_eligible_device_falls_back_to_cpu_encoder() -> None:
+def _never_probed_db(encoder: str) -> FakeSession:
+    """A never-probed QSV row plus an operator-disabled, never-probed VAAPI row."""
     db = _build_db(
-        encoder="any_h265",
+        encoder=encoder,
         gpus=[
-            (GpuVendor.QSV, GpuStatus.AVAILABLE, ["h265"], None),
-            (GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h265"], None),
+            (GpuVendor.QSV, GpuStatus.AVAILABLE, [], None),
+            (GpuVendor.VAAPI, GpuStatus.AVAILABLE, [], None),
         ],
     )
-    db.rows["gpus"][0].probed_at = None  # never probed
-    db.rows["gpus"][1].enabled = False  # operator-disabled
+    for gpu in db.rows["gpus"]:
+        gpu.probed_at = None
+    db.rows["gpus"][1].enabled = False
+    return db
+
+
+async def test_any_encoder_never_probed_and_not_awaiting_a_probe_falls_back_to_cpu() -> None:
+    db = _never_probed_db("any_h265")
     assignment = await _claim(db)
     assert assignment.action == "spawn"
     assert assignment.gpu is None
     assert assignment.encoder.id == "cpu_h265"
     assert all(g.status == GpuStatus.AVAILABLE for g in db.rows["gpus"])
+
+
+@pytest.mark.parametrize("state", ["pending", "probing", "listing"])
+async def test_any_encoder_never_probed_and_awaiting_a_probe_queues(state: str) -> None:
+    db = _never_probed_db("any_h265")
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    if state == "pending":
+        disp.pending_probe_gpu_ids.add("gpu_0")
+    elif state == "probing":
+        disp.probing_gpu_ids.add("gpu_0")
+    else:
+        disp.boot_probe_listing = True
+    assignment = await _claim(db, disp)
+    assert assignment.action == "queue"
+    assert assignment.gpu is None
+    assert assignment.encoder.id == "any_h265"
+    assert assignment.reason == "waiting for GPU probe"
+    assert all(g.status == GpuStatus.AVAILABLE for g in db.rows["gpus"])
+
+
+async def test_awaiting_probe_on_a_disabled_row_does_not_hold_work() -> None:
+    db = _never_probed_db("any_h265")
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    disp.pending_probe_gpu_ids.add("gpu_1")  # the disabled VAAPI row
+    assignment = await _claim(db, disp)
+    assert assignment.action == "spawn"
+    assert assignment.encoder.id == "cpu_h265"
+
+
+async def test_reprobe_of_an_already_probed_row_is_not_awaiting() -> None:
+    # A row that was probed and verified nothing for this codec is decided:
+    # re-probing it does not hold work that would otherwise run on the CPU.
+    db = _build_db(encoder="any_h265", gpus=[(GpuVendor.QSV, GpuStatus.AVAILABLE, ["h264"], None)])
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    disp.probing_gpu_ids.add("gpu_0")
+    assignment = await _claim(db, disp)
+    assert assignment.action == "spawn"
+    assert assignment.encoder.id == "cpu_h265"
+
+
+async def test_pinned_encoder_never_probed_and_awaiting_a_probe_queues() -> None:
+    db = _never_probed_db("qsv_h265")
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    disp.pending_probe_gpu_ids.add("gpu_0")
+    assignment = await _claim(db, disp)
+    assert assignment.action == "queue"
+    assert assignment.reason == "waiting for GPU probe"
+
+
+async def test_pinned_encoder_awaiting_probe_on_another_vendor_still_fails() -> None:
+    db = _never_probed_db("nvenc_h265")
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    disp.pending_probe_gpu_ids.add("gpu_0")  # QSV, cannot serve nvenc_h265
+    assignment = await _claim(db, disp)
+    assert assignment.action == "fail"
+
+
+async def test_pinned_encoder_never_probed_and_not_awaiting_a_probe_fails() -> None:
+    db = _never_probed_db("qsv_h265")
+    assignment = await _claim(db)
+    assert assignment.action == "fail"
+    assert assignment.reason == "no enabled device has verified qsv_h265; re-probe or enable it in Settings > GPUs"
+
+
+def test_gpu_awaiting_probe_reads_the_active_dispatcher() -> None:
+    db = _never_probed_db("any_h265")
+    gpu = db.rows["gpus"][0]
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    disp.pending_probe_gpu_ids.add(gpu.id)
+    assert gpu_awaiting_probe(gpu) is False  # no running dispatcher
+    set_active_dispatcher(disp)
+    try:
+        assert gpu_awaiting_probe(gpu) is True
+    finally:
+        set_active_dispatcher(None)
+    assert gpu_awaiting_probe(gpu) is False
+
+
+async def test_spawn_pending_keeps_a_task_queued_while_its_device_awaits_a_probe(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    db = _never_probed_db("qsv_h265")
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+    disp.pending_probe_gpu_ids.add("gpu_0")
+    with caplog.at_level("INFO", logger="arm_backend.transcode_dispatcher"):
+        assert await disp.spawn_pending(db) == 0
+    docker.containers.run.assert_not_called()
+    assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.QUEUED
+    assert "(waiting for GPU probe)" in caplog.text
 
 
 async def test_any_encoder_all_eligible_busy_queues() -> None:

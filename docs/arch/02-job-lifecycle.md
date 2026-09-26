@@ -182,6 +182,15 @@ resolves what to spawn from that id:
   that is mid-probe right now is skipped by the claim exactly like a busy
   one, so a task queues rather than falling back to CPU while a probe is in
   flight.
+- **Awaiting a first probe.** When no device is eligible but an enabled,
+  never-probed device that could serve the encoder is awaiting its probe
+  (`TranscodeDispatcher.awaiting_probe`: reserved by the boot pass in
+  `pending_probe_gpu_ids`, running in `probing_gpu_ids`, or the boot pass has
+  not listed its rows yet), the claim returns `queue` with reason
+  `waiting for GPU probe` for `any_*` and vendor-pinned encoders alike, and
+  the apply-time gate does not refuse a vendor-pinned encoder. A never-probed
+  device with no probe scheduled keeps the fallback bounded: `any_*` runs on
+  CPU and a vendor-pinned encoder fails as above.
 - A preset whose stored `encoder` id is no longer in the catalog (a stale
   row from a removed encoder) fails at apply with `422` and at dispatch with
   `last_error = "preset <preset id> has unknown encoder '<value>'"`, failing
