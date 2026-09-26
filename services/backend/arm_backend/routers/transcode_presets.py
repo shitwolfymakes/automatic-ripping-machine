@@ -101,7 +101,10 @@ async def update_transcode_preset(
     if req.encoder is not None or req.tool is not None:
         # Validate the pair the row will hold after the patch, so switching the
         # tool away from HandBrake cannot strand a codec encoder on it.
-        _validate_encoder(req.encoder or row.encoder, req.tool or row.tool)
+        _validate_encoder(
+            req.encoder if req.encoder is not None else row.encoder,
+            req.tool if req.tool is not None else row.tool,
+        )
 
     for key, value in fields.items():
         setattr(row, key, value)

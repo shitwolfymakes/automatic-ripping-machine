@@ -94,11 +94,23 @@ def test_0038_downgrade_restores_codec_and_hw_preference() -> None:
     conn.execute("CREATE TABLE transcode_presets (id TEXT, encoder TEXT, codec TEXT, hw_preference TEXT)")
     conn.executemany(
         "INSERT INTO transcode_presets (id, encoder) VALUES (?, ?)",
-        [("cpu", "cpu_h265"), ("any", "any_h264"), ("preset", "preset")],
+        [
+            ("cpu", "cpu_h265"),
+            ("any", "any_h264"),
+            ("preset", "preset"),
+            ("qsv", "qsv_h265"),
+            ("vaapi", "vaapi_av1"),
+        ],
     )
     conn.execute(_preset_update(sql))
     got = {r[0]: (r[1], r[2]) for r in conn.execute("SELECT id, codec, hw_preference FROM transcode_presets")}
-    assert got == {"cpu": ("h265", "cpu_only"), "any": ("h264", None), "preset": (None, None)}
+    assert got == {
+        "cpu": ("h265", "cpu_only"),
+        "any": ("h264", None),
+        "preset": (None, None),
+        "qsv": ("h265", None),
+        "vaapi": ("av1", None),
+    }
 
 
 def test_0038_matches_the_models() -> None:

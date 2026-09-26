@@ -100,7 +100,7 @@ class TranscodePresetCreateRequest(BaseModel):
     preset_ref: str | None = None
     preset_json: dict[str, Any] | None = None
     container: ContainerFormat
-    encoder: str = "preset"
+    encoder: str = Field(default="preset", min_length=1)
     extra_args: str | None = None
 
 
@@ -110,7 +110,7 @@ class TranscodePresetUpdateRequest(BaseModel):
     preset_ref: str | None = None
     preset_json: dict[str, Any] | None = None
     container: ContainerFormat | None = None
-    encoder: str | None = None
+    encoder: str | None = Field(default=None, min_length=1)
     extra_args: str | None = None
 
 

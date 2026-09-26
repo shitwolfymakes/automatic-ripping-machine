@@ -15476,6 +15476,7 @@
           },
           "encoder": {
             "type": "string",
+            "minLength": 1,
             "title": "Encoder",
             "default": "preset"
           },
@@ -15560,7 +15561,8 @@
           "encoder": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "minLength": 1
               },
               {
                 "type": "null"

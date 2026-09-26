@@ -207,6 +207,27 @@ def test_patch_null_encoder_leaves_it_unchanged(signing_key: bytes) -> None:
     assert r.json()["name"] == "renamed"
 
 
+def test_create_empty_encoder_422(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/transcode-presets", json={**_CREATE_BODY, "encoder": ""}, headers=_auth(token))
+    assert r.status_code == 422
+    assert db.rows.get("transcode_presets", []) == []
+
+
+def test_patch_empty_encoder_422_leaves_row_unchanged(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    row = _preset("tpr_empty", name="empty")
+    row.encoder = "cpu_h265"
+    db.rows["transcode_presets"] = [row]
+    with TestClient(app) as client:
+        r = client.patch("/api/transcode-presets/tpr_empty", json={"encoder": ""}, headers=_auth(token))
+    assert r.status_code == 422
+    assert db.rows["transcode_presets"][0].encoder == "cpu_h265"
+
+
 def test_patch_builtin_encoder_409(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
