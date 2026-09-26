@@ -18,15 +18,24 @@
 
 <div class="config-schema-field stack" id="setting-{field.key}" data-testid="setting-{field.key}">
 	{#if field.type === 'bool'}
-		<label class="field field-row">
-			<input
-				type="checkbox"
-				aria-label={field.label}
-				checked={boolValue}
-				onchange={(e) => (value = (e.currentTarget as HTMLInputElement).checked)}
-			/>
-			<span class="field-label">{field.label}</span>
-		</label>
+		{#if !field.editable}
+			<!-- Same read-only idiom as the string/enum branch below (a plain
+			     muted value under the label, no interactive control) rather than
+			     a disabled checkbox, so every non-editable field in this
+			     schema-driven form reads consistently regardless of type. -->
+			<div class="field-label">{field.label}</div>
+			<div class="mono config-schema-field-value">{boolValue ? 'True' : 'False'}</div>
+		{:else}
+			<label class="field field-row">
+				<input
+					type="checkbox"
+					aria-label={field.label}
+					checked={boolValue}
+					onchange={(e) => (value = (e.currentTarget as HTMLInputElement).checked)}
+				/>
+				<span class="field-label">{field.label}</span>
+			</label>
+		{/if}
 	{:else}
 		<div class="field-label">{field.label}</div>
 		{#if !field.editable}
