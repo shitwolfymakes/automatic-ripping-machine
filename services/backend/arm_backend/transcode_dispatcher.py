@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -73,13 +74,13 @@ _CANCEL_GRACE_SECONDS = 10
 _DOCKER_LABEL_KEY = "arm.task_id"
 # Why a deployment cannot run encode work (or a GPU probe) at all: shared by
 # `probe()` and the GPU probe endpoints so both report the same reason.
+NO_DOCKER_CLIENT_DETAIL = "no docker client (ripper-only deployment or docker unavailable)"
+
 # How long a failed pull of a per-vendor variant image is remembered before
 # the pull is tried again. A variant tag that exists only on a dev host (or a
 # registry that is down) would otherwise cost a registry round trip on every
-# spawn, GPU probe and diagnostics poll.
+# spawn and GPU probe.
 VARIANT_PULL_RETRY_SECONDS = 600.0
-
-NO_DOCKER_CLIENT_DETAIL = "no docker client (ripper-only deployment or docker unavailable)"
 
 # Per-tick cap on how many ENCODE rows spawn_pending examines (spawn
 # attempts, GPU claim checks, etc). Passthrough tasks are exempt from this
@@ -193,6 +194,11 @@ class TranscodeDispatcher:
         # Variant image -> time.monotonic() of its last failed pull (see
         # `variant_available`); separate from the 30 s presence cache above.
         self._variant_pull_failed: dict[str, float] = {}
+        # One lock per variant image being pulled, so concurrent callers (a
+        # spawn and a GPU probe in two worker threads) share a single pull:
+        # the second waits for the first and reuses its outcome.
+        self._pull_locks: dict[str, threading.Lock] = {}
+        self._pull_locks_guard = threading.Lock()
         # Vendors seen holding an enabled GPU row. Refreshed once per tick
         # (see `_refresh_enabled_gpu_vendors`, called from `_tick`) so it
         # reflects the current inventory even with an idle queue or a
@@ -864,6 +870,19 @@ class TranscodeDispatcher:
         ok, _ = cached()
         return ok
 
+    def _pull_failed_recently(self, image: str) -> float | None:
+        """Seconds until a failed pull of `image` may be retried, or None when
+        there is no failure inside the VARIANT_PULL_RETRY_SECONDS window."""
+        failed_at = self._variant_pull_failed.get(image)
+        if failed_at is None:
+            return None
+        remaining = VARIANT_PULL_RETRY_SECONDS - (time.monotonic() - failed_at)
+        return remaining if remaining > 0 else None
+
+    def _pull_lock(self, image: str) -> threading.Lock:
+        with self._pull_locks_guard:
+            return self._pull_locks.setdefault(image, threading.Lock())
+
     def variant_available(self, image: str) -> bool:
         """Can the per-vendor variant `image` be spawned on the docker host?
 
@@ -871,10 +890,11 @@ class TranscodeDispatcher:
         a pull of it succeeds now. A failed pull returns False and is not
         retried for VARIANT_PULL_RETRY_SECONDS, so the caller falls back to
         the base image without a registry round trip each time. A digest
-        reference has no tag to pull and is never pulled. Only derived
-        variants come through here; the base image is never pulled by this
-        path. Blocking (a pull can take minutes): callers run it off the
-        event loop."""
+        reference has no tag to pull and is never pulled. Concurrent callers
+        for the same image share one pull. Only derived variants come
+        through here; the base image is never pulled by this path. Used by
+        the spawn and GPU-probe paths only, never by diagnostics. Blocking
+        (a pull can take minutes): callers run it off the event loop."""
         if self._docker is None:
             return False
         if self.image_exists(image):
@@ -882,33 +902,39 @@ class TranscodeDispatcher:
         parts = split_reference(image)
         if parts is None:
             return False
-        now = time.monotonic()
-        failed_at = self._variant_pull_failed.get(image)
-        if failed_at is not None and now - failed_at < VARIANT_PULL_RETRY_SECONDS:
-            return False
-        repo, tag = parts
-        logger.info("variant image %s not present on the docker host; pulling it", image)
-        try:
-            self._docker.images.pull(repo, tag=tag)
-        except Exception as exc:  # noqa: BLE001 - any pull failure means "use the base image"
-            logger.warning(
-                "could not pull variant image %s (%s); using the base image, next pull attempt in %.0f s",
-                image,
-                exc,
-                VARIANT_PULL_RETRY_SECONDS,
-            )
-            self._variant_pull_failed[image] = now
-            return False
-        self._variant_pull_failed.pop(image, None)
-        # Drop the cached "absent" answer so the next presence check sees it.
-        self._image_probes.pop(image, None)
-        logger.info("pulled variant image %s", image)
-        return True
+        with self._pull_lock(image):
+            # Re-check under the lock: a concurrent caller may have just
+            # finished a pull of this image, successful or not.
+            if self._pull_failed_recently(image) is not None:
+                return False
+            if self.image_exists(image):
+                return True
+            repo, tag = parts
+            logger.info("variant image %s not present on the docker host; pulling it", image)
+            try:
+                self._docker.images.pull(repo, tag=tag)
+            except Exception as exc:  # noqa: BLE001 - any pull failure means "use the base image"
+                logger.warning(
+                    "could not pull variant image %s (%s); using the base image, next pull attempt in %.0f s",
+                    image,
+                    exc,
+                    VARIANT_PULL_RETRY_SECONDS,
+                )
+                self._variant_pull_failed[image] = time.monotonic()
+                return False
+            self._variant_pull_failed.pop(image, None)
+            # Drop the cached "absent" answer so the next presence check sees it.
+            self._image_probes.pop(image, None)
+            logger.info("pulled variant image %s", image)
+            return True
 
     def _missing_variant_notes(self) -> list[str]:
         """One note per vendor that has an enabled GPU row, has a derivable
-        variant, isn't overridden, and whose variant image is neither present
-        on this docker host nor pullable right now."""
+        variant, isn't overridden, and whose variant image isn't present on
+        this docker host. Presence-only: diagnostics never pulls, so a poll
+        costs no registry traffic and never records a pull failure that would
+        deny the next spawn its pull. The wording says whether the variant
+        will be pulled on first use or recently failed to pull."""
         notes: list[str] = []
         for vendor in sorted(self._enabled_gpu_vendors, key=lambda v: v.value):
             if vendor_override(self._settings, vendor):
@@ -917,12 +943,18 @@ class TranscodeDispatcher:
             if suffix is None:
                 continue
             candidate = variant_image(self._settings.ARM_TRANSCODE_IMAGE, suffix)
-            if candidate is None or self.variant_available(candidate):
+            if candidate is None or self.image_exists(candidate):
                 continue
-            notes.append(
-                f"{vendor.value} variant image {candidate} not present and could not be pulled; "
-                "falling back to base image"
-            )
+            retry_in = self._pull_failed_recently(candidate)
+            if retry_in is None:
+                notes.append(
+                    f"{vendor.value} variant image {candidate} not present locally; it will be pulled on first use"
+                )
+            else:
+                notes.append(
+                    f"{vendor.value} variant image {candidate} could not be pulled; "
+                    f"falling back to the base image (retry after {retry_in:.0f} s)"
+                )
         return notes
 
     def _spawn_container(self, task: TranscodeTask, *, assignment: GpuAssignment | None = None) -> Any:

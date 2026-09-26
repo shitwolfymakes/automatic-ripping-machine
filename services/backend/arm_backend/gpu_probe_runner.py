@@ -50,7 +50,9 @@ from arm_common.enums import GpuStatus, GpuVendor, VideoCodec
 logger = logging.getLogger("arm_backend.gpu_probe_runner")
 
 # Overall budget for one probe container: startup, test-clip generation, and
-# one short test encode per catalog encoder of the vendor.
+# one short test encode per catalog encoder of the vendor. Choosing the image
+# can pull a missing per-vendor variant first; that pull happens before the
+# container starts and is not counted against this timeout.
 PROBE_TIMEOUT_S = 120
 PROBE_COMMAND = ["python", "-m", "arm_transcode.main", "--probe-device"]
 # Distinct from the dispatcher's task label so the transcode orphan sweeps

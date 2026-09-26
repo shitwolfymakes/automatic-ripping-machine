@@ -145,9 +145,8 @@ def test_image_exists_false_and_cached_per_image_independently() -> None:
     assert d._docker.images.get.call_count == 2
 
 
-def test_probe_notes_missing_qsv_variant_for_vendor_with_enabled_gpu() -> None:
-    d = _make_dispatcher()
-    d._enabled_gpu_vendors = {GpuVendor.QSV}
+def _base_only(d) -> None:
+    """Base image present, every variant absent locally."""
 
     def _images_get(image: str) -> object:
         if image == "arm-transcode:test":
@@ -156,13 +155,52 @@ def test_probe_notes_missing_qsv_variant_for_vendor_with_enabled_gpu() -> None:
 
     d._docker.ping.return_value = True
     d._docker.images.get.side_effect = _images_get
-    d._docker.images.pull.side_effect = docker.errors.NotFound("no such tag")
+
+
+def test_probe_notes_missing_variant_will_be_pulled_on_first_use() -> None:
+    """Absent locally with no recorded pull failure: the note says the
+    variant will be pulled on first use, and diagnostics itself never pulls."""
+    d = _make_dispatcher()
+    d._enabled_gpu_vendors = {GpuVendor.QSV}
+    _base_only(d)
     ok, detail = d.probe()
     assert ok is True
-    assert detail is not None
-    assert "qsv" in detail
-    assert "arm-transcode:test-intel" in detail
-    assert "could not be pulled" in detail
+    assert detail == "qsv variant image arm-transcode:test-intel not present locally; it will be pulled on first use"
+    d._docker.images.pull.assert_not_called()
+    assert d._variant_pull_failed == {}
+
+
+def test_probe_notes_recent_pull_failure_with_retry_time(monkeypatch) -> None:
+    """Absent locally after a spawn-path pull failed: the note says it could
+    not be pulled and when the next attempt is allowed. Still no pull."""
+    fake_now = {"t": 8000.0}
+    monkeypatch.setattr("arm_backend.transcode_dispatcher.time.monotonic", lambda: fake_now["t"])
+    d = _make_dispatcher()
+    d._enabled_gpu_vendors = {GpuVendor.QSV}
+    _base_only(d)
+    d._variant_pull_failed["arm-transcode:test-intel"] = fake_now["t"] - 100.0
+    ok, detail = d.probe()
+    assert ok is True
+    assert detail == (
+        "qsv variant image arm-transcode:test-intel could not be pulled; "
+        "falling back to the base image (retry after 500 s)"
+    )
+    d._docker.images.pull.assert_not_called()
+
+
+def test_probe_notes_expired_pull_failure_as_pulled_on_first_use(monkeypatch) -> None:
+    """A failure older than the retry window no longer blocks a pull, so the
+    note goes back to "pulled on first use"."""
+    fake_now = {"t": 8000.0}
+    monkeypatch.setattr("arm_backend.transcode_dispatcher.time.monotonic", lambda: fake_now["t"])
+    d = _make_dispatcher()
+    d._enabled_gpu_vendors = {GpuVendor.QSV}
+    _base_only(d)
+    d._variant_pull_failed["arm-transcode:test-intel"] = fake_now["t"] - 601.0
+    ok, detail = d.probe()
+    assert ok is True
+    assert detail is not None and "it will be pulled on first use" in detail
+    d._docker.images.pull.assert_not_called()
 
 
 def test_probe_has_no_note_when_variant_exists() -> None:
@@ -171,6 +209,7 @@ def test_probe_has_no_note_when_variant_exists() -> None:
     d._docker.ping.return_value = True
     d._docker.images.get.return_value = object()
     assert d.probe() == (True, None)
+    d._docker.images.pull.assert_not_called()
 
 
 def test_probe_has_no_note_when_vendor_overridden() -> None:
@@ -178,15 +217,9 @@ def test_probe_has_no_note_when_vendor_overridden() -> None:
     is never a problem for that vendor, so no note even though it's missing."""
     d = _disp(FakeSession(), ARM_TRANSCODE_IMAGE="arm-transcode:test", ARM_TRANSCODE_IMAGE_QSV="custom-qsv:latest")
     d._enabled_gpu_vendors = {GpuVendor.QSV}
-
-    def _images_get(image: str) -> object:
-        if image == "arm-transcode:test":
-            return object()
-        raise docker.errors.ImageNotFound("nope")
-
-    d._docker.ping.return_value = True
-    d._docker.images.get.side_effect = _images_get
+    _base_only(d)
     assert d.probe() == (True, None)
+    d._docker.images.pull.assert_not_called()
 
 
 def test_probe_has_no_note_when_no_enabled_gpu_vendors() -> None:
@@ -194,6 +227,7 @@ def test_probe_has_no_note_when_no_enabled_gpu_vendors() -> None:
     d._docker.ping.return_value = True
     d._docker.images.get.return_value = object()
     assert d.probe() == (True, None)
+    d._docker.images.pull.assert_not_called()
 
 
 def test_probe_has_no_note_for_vendor_without_a_variant_suffix() -> None:
@@ -204,41 +238,28 @@ def test_probe_has_no_note_for_vendor_without_a_variant_suffix() -> None:
     d._docker.ping.return_value = True
     d._docker.images.get.return_value = object()
     assert d.probe() == (True, None)
+    d._docker.images.pull.assert_not_called()
 
 
 def test_probe_reports_multiple_missing_variants() -> None:
     d = _make_dispatcher()
     d._enabled_gpu_vendors = {GpuVendor.QSV, GpuVendor.VAAPI}
-
-    def _images_get(image: str) -> object:
-        if image == "arm-transcode:test":
-            return object()
-        raise docker.errors.ImageNotFound("nope")
-
-    d._docker.ping.return_value = True
-    d._docker.images.get.side_effect = _images_get
-    d._docker.images.pull.side_effect = docker.errors.APIError("registry down")
+    _base_only(d)
     ok, detail = d.probe()
     assert ok is True
     assert detail is not None
     assert "qsv" in detail and "vaapi" in detail
+    d._docker.images.pull.assert_not_called()
 
 
-def test_probe_has_no_note_when_missing_variant_pulls() -> None:
-    """A variant that is absent locally but pulls fine is available, so the
-    diagnostics probe reports nothing for it."""
+def test_probe_missing_base_image_never_pulls() -> None:
     d = _make_dispatcher()
     d._enabled_gpu_vendors = {GpuVendor.QSV}
-
-    def _images_get(image: str) -> object:
-        if image == "arm-transcode:test":
-            return object()
-        raise docker.errors.ImageNotFound("nope")
-
     d._docker.ping.return_value = True
-    d._docker.images.get.side_effect = _images_get
-    assert d.probe() == (True, None)
-    d._docker.images.pull.assert_called_once_with("arm-transcode", tag="test-intel")
+    d._docker.images.get.side_effect = docker.errors.ImageNotFound("nope")
+    ok, _detail = d.probe()
+    assert ok is False
+    d._docker.images.pull.assert_not_called()
 
 
 # --- variant_available: pull a missing variant on demand ----------------------
@@ -318,6 +339,57 @@ def test_variant_available_failure_cache_is_per_image() -> None:
     assert d.variant_available("arm-transcode:test-intel") is False
     assert d.variant_available("arm-transcode:test-amd") is False
     assert d._docker.images.pull.call_count == 2
+
+
+def _concurrent_callers(d, pull_outcome) -> list[bool]:
+    """Run two variant_available calls for the same image in two threads,
+    the second one arriving while the first is inside its pull."""
+    import threading
+    import time as _time
+
+    in_pull = threading.Event()
+    release = threading.Event()
+    pulled = {"done": False}
+
+    def _pull(repo: str, tag: str) -> object:
+        in_pull.set()
+        assert release.wait(5)
+        if pull_outcome is not None:
+            raise pull_outcome
+        pulled["done"] = True
+        return object()
+
+    def _images_get(image: str) -> object:
+        if pulled["done"]:
+            return object()
+        raise docker.errors.ImageNotFound("nope")
+
+    d._docker.ping.return_value = True
+    d._docker.images.get.side_effect = _images_get
+    d._docker.images.pull.side_effect = _pull
+    results: list[bool] = []
+    first = threading.Thread(target=lambda: results.append(d.variant_available("arm-transcode:test-amd")))
+    second = threading.Thread(target=lambda: results.append(d.variant_available("arm-transcode:test-amd")))
+    first.start()
+    assert in_pull.wait(5)
+    second.start()
+    _time.sleep(0.1)  # let the second caller reach the pull lock
+    release.set()
+    first.join(5)
+    second.join(5)
+    return results
+
+
+def test_variant_available_concurrent_callers_share_one_successful_pull() -> None:
+    d = _make_dispatcher()
+    assert _concurrent_callers(d, None) == [True, True]
+    assert d._docker.images.pull.call_count == 1
+
+
+def test_variant_available_concurrent_callers_share_one_failed_pull() -> None:
+    d = _make_dispatcher()
+    assert _concurrent_callers(d, docker.errors.NotFound("no such tag")) == [False, False]
+    assert d._docker.images.pull.call_count == 1
 
 
 def test_variant_available_digest_is_never_pulled() -> None:
