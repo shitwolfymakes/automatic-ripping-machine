@@ -107,7 +107,7 @@ ARM_DIR="${ROOT_DIR}/arm"
 # `compose`, so COMPOSE_FILE overlays and a repointed data prefix still apply.
 DB_SERVICE="arm-db"
 BACKEND_SERVICE="arm-backend"
-UI_SERVICE="arm-ui"
+UI_SERVICE="arm-ui-neu"
 
 require() {
     local bin="$1"
@@ -876,7 +876,7 @@ if [[ "${ACTION}" == "up" ]]; then
     wait_for_backend
 
     UI_URL="$(published_url "${UI_SERVICE}" 443)"
-    UI_URL="${UI_URL:-https://localhost:8081}"
+    UI_URL="${UI_URL:-https://localhost:8082}"
     cat <<EOF
 
 stack is up; ${HEALTH_RESULT}
@@ -894,7 +894,7 @@ cat <<EOF
 done — next:
   bash devtools/setup-dev.sh up      # build, back up the DB, (re)start the stack, wait for health
                                      # (or: docker compose up -d --build; no backup or health wait)
-  then open https://localhost:8081 → Drives → Enroll each drive you want ARM to use
+  then open https://localhost:8082 -> Drives -> Enroll each drive you want ARM to use
   spin it down (stack + spawned ripper/transcoder containers): bash devtools/setup-dev.sh down
 
   optional — trust the local CA so browsers/curl skip the self-signed warning:
