@@ -134,8 +134,10 @@ services:
   # (docs/arch/06-deployment.md). It reuses the backend's build (all layers
   # cached, nothing extra to pull) with the entrypoint replaced, so the shared
   # entrypoint's gosu drop and /data guard never run here. Owner already
-  # right: logs and exits 0 without walking the tree. Otherwise: chown -R,
-  # group-writable, setgid dirs. PUID or PGID 0 is refused. Any failure exits
+  # right: logs and exits 0 without walking the tree. Otherwise: re-owns the
+  # contents, makes them group-writable with setgid dirs, and re-owns /data
+  # itself last, so /data's owner marks a completed run and an interrupted one
+  # is retried on the next start. PUID or PGID 0 is refused. Any failure exits
   # non-zero and arm-backend does not start (service_completed_successfully).
   arm-data-init:
     build: *backend-build
@@ -165,15 +167,21 @@ services:
           exit 1
         fi
         target="$$puid:$$pgid"
-        current="$$(stat -c '%u:%g' /data)"
-        if [ "$$current" = "$$target" ]; then
+        cu="$$(stat -c '%u' /data)"
+        cg="$$(stat -c '%g' /data)"
+        if [ "$$cu" -eq "$$puid" ] && [ "$$cg" -eq "$$pgid" ]; then
           echo "arm-data-init: arm-data already owned by $$target"
           exit 0
         fi
-        echo "arm-data-init: /data owned by $$current, re-owning to $$target"
-        chown -R "$$target" /data
-        chmod -R g+rwX /data
-        find /data -type d -exec chmod g+s {} +
+        echo "arm-data-init: /data owned by $$cu:$$cg, re-owning to $$target"
+        # /data's own owner is the commit marker: contents first, /data last,
+        # so an interrupted or failed run leaves the old owner and the next
+        # start retries the whole repair.
+        find /data -mindepth 1 -exec chown -h "$$target" {} +
+        find /data -mindepth 1 ! -type l -exec chmod g+rwX {} +
+        find /data -mindepth 1 -type d -exec chmod g+s {} +
+        chmod g+rwxs /data
+        chown "$$target" /data
         echo "arm-data-init: arm-data now owned by $$target (group-writable, setgid dirs)"
     volumes:
       - arm-data:/data
