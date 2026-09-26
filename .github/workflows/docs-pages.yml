@@ -1,3 +1,12 @@
+# One-time repo setup required before this workflow can deploy (see
+# site/README.md, "Deploying"):
+#   1. Settings > Pages > Build and deployment > Source: "GitHub Actions".
+#   2. Settings > Environments > github-pages > Deployment branches and
+#      tags: allow `main` (and add a feature branch such as
+#      `feat/docs-site` only while testing via workflow_dispatch; remove
+#      it again afterwards).
+#   3. The published site is served at https://<owner>.github.io/<repo>/
+#      (for this fork: https://uprightbass360.github.io/arm-v3/).
 name: Docs site (GitHub Pages)
 
 on:

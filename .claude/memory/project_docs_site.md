@@ -6,8 +6,10 @@ metadata:
 ---
 
 The docs site is `site/` — a static-site generator (`node src/build.mjs`)
-that renders `arm_wiki/*.md` and `docs/arch/*.md` into two outputs from one
-build:
+that renders `arm_wiki/`, `docs/arch/`, `docs/ops/`, `CONTRIBUTING.md`,
+`docs/contributors/`, and the ui-neu style guide and theming docs
+(`docs/ui-neu-style-guide.md`, `docs/ui-neu-theming.md`) into two outputs
+from one build (see `site/manifest.json` for the exact source list):
 
 - `build/site` — the standalone Pages site (relative URLs everywhere, no
   `href="/`/`src="/`; served locally with `npm run serve` at `/arm-v3/` to

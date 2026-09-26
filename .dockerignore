@@ -37,6 +37,10 @@
 # docs site build output; the ui-neu docs stage rebuilds it
 site/build/
 site/.cache/
+# host-side `npm run docs` dev bundle; the ui-neu docs stage builds its own
+# and this would otherwise get copied into the image build and merged
+# under the real bundle
+services/ui-neu/frontend/static/docs-data/
 
 # ---- Environment / secrets -------------------------------------------
 **/.env

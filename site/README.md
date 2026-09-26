@@ -23,3 +23,21 @@ The build fails on any broken link, missing anchor or missing image, with
 
 In ui-neu, `npm run docs` builds the app bundle into
 `frontend/static/docs-data/` so `/help` works under `vite dev`.
+
+## Deploying
+
+`.github/workflows/docs-pages.yml` builds `build/site` and deploys it to
+GitHub Pages on every push to `main` (or manually via `workflow_dispatch`).
+One-time repo setup, done once per fork:
+
+1. Settings > Pages > Build and deployment > Source: set to "GitHub
+   Actions".
+2. Settings > Environments > `github-pages` > Deployment branches and
+   tags: allow `main` (and add a feature branch such as
+   `feat/docs-site` only while testing via `workflow_dispatch`; remove it
+   again afterwards).
+3. The published site is served at `https://<owner>.github.io/<repo>/`
+   (for this fork: https://uprightbass360.github.io/arm-v3/).
+
+`npm run serve` mimics that base path locally at
+`http://127.0.0.1:4173/arm-v3/`.
