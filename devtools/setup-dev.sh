@@ -14,14 +14,15 @@
 # touch the host venv or node_modules.
 #
 #         --no-backup     # `up` only: skip the pre-deploy pg_dump of the running
-#                          # arm-db into ./arm/backups/. Without it, a failed or
-#                          # empty backup aborts the deploy before anything is
-#                          # removed or restarted.
-#         --force         # `up` only: remove backend-spawned ripper/transcoder
-#                          # containers even when some are RUNNING (a rip or
-#                          # transcode may be in flight; every enrolled drive also
-#                          # keeps an idle ripper running). Without it, `up`
-#                          # refuses and lists them.
+#                          # arm-db into ./arm/backups/ (the newest 5 are kept,
+#                          # older pg-backup-*.sql.gz are pruned). Without it, a
+#                          # failed or empty backup aborts the deploy before
+#                          # anything is removed or restarted.
+#         --force         # `up` only: replace backend-spawned containers even
+#                          # while they have ACTIVE work (a running transcoder,
+#                          # or a ripper running makemkvcon/abcde/ddrescue).
+#                          # Without it, `up` refuses and lists them. Idle
+#                          # rippers are always replaced without --force.
 #         --ripper-only   # ripper-only profile: skip the arm-transcode image
 #                          # build, the HW-encoder probe, and host GPU
 #                          # detection; write ARM_TRANSCODE_CAPABLE=false to
@@ -59,7 +60,10 @@ Usage: bash devtools/setup-dev.sh [setup|up|down] [--ripper-only] [--no-backup] 
   --ripper-only    skip the arm-transcode image, the encoder probe and GPU
                    detection; write ARM_TRANSCODE_CAPABLE=false (per run, not sticky)
   --no-backup      up: skip the pre-deploy pg_dump into ./arm/backups/
-  --force          up: remove spawned containers even if some are running
+                   (without it: newest 5 pg-backup-*.sql.gz kept, older pruned)
+  --force          up: replace spawned containers even with ACTIVE work (a
+                   running transcoder, or a ripper running makemkvcon/abcde/
+                   ddrescue); idle rippers never need it
 USAGE
 }
 
@@ -405,30 +409,97 @@ backup_db() {
     fi
     mv "${tmp}" "${file}"
     echo "==> database backup OK: ${file} (${size} bytes)"
+    prune_backups "${dir}"
 }
 
-# Refuse to remove backend-spawned containers that are RUNNING unless --force:
-# a running ripper may be mid-disc and a running transcoder mid-encode.
+# Keep only the newest BACKUP_KEEP pg-backup-<UTC>.sql.gz files. The UTC
+# timestamp names sort chronologically, and only files matching that exact
+# pattern are ever pruned (anything else in the dir is left alone).
+BACKUP_KEEP=5
+prune_backups() {
+    local dir="$1" f backups=() n i
+    for f in "${dir}"/pg-backup-*.sql.gz; do
+        [[ -f "${f}" && "$(basename "${f}")" =~ ^pg-backup-[0-9]{8}T[0-9]{6}Z\.sql\.gz$ ]] || continue
+        backups+=("${f}")
+    done
+    n=${#backups[@]}
+    (( n > BACKUP_KEEP )) || return 0
+    echo "==> pruning $(( n - BACKUP_KEEP )) old backup(s); keeping the newest ${BACKUP_KEEP}"
+    for (( i = 0; i < n - BACKUP_KEEP; i++ )); do
+        rm -f "${backups[i]}"
+    done
+}
+
+# Run inside a ripper container (plain POSIX sh): print the name of every
+# active rip tool, nothing when idle. The ripper image is python:*-slim with no
+# procps, so pgrep/ps are tried first and /proc/*/comm is the fallback. Exits 3
+# when none of the three is usable (detection failed, NOT "idle").
+# shellcheck disable=SC2016  # expands inside the container, not here
+RIP_PROBE_SH='
+tools="makemkvcon abcde ddrescue"
+if command -v pgrep >/dev/null 2>&1; then
+    for t in $tools; do pgrep -x "$t" >/dev/null 2>&1 && echo "$t"; done
+    exit 0
+fi
+if command -v ps >/dev/null 2>&1; then
+    ps -eo comm= 2>/dev/null | while read -r c; do
+        for t in $tools; do [ "$c" = "$t" ] && echo "$t"; done
+    done | sort -u
+    exit 0
+fi
+[ -r /proc/self/comm ] || exit 3
+for f in /proc/[0-9]*/comm; do
+    c=$(cat "$f" 2>/dev/null) || continue
+    for t in $tools; do [ "$c" = "$t" ] && echo "$t"; done
+done | sort -u
+exit 0
+'
+
+# Protect ACTIVE work, not idle containers. Every enrolled drive keeps a
+# durable ripper running (and the backend respawns removed ones), so a running
+# ripper alone is not a reason to refuse. Refuse unless --force when:
+#   (a) any RUNNING arm.task_id container exists (a transcoder is active work
+#       by construction), or
+#   (b) a RUNNING arm.drive_id container has a rip tool (makemkvcon, abcde,
+#       ddrescue) running inside it.
+# A ripper that cannot be inspected is treated as idle, with a note: detection
+# failure never blocks a deploy.
 guard_running_spawned() {
-    local running names=()
-    running="$( { docker ps --filter "label=arm.drive_id" --filter "status=running" --format '{{.Names}}'
-                  docker ps --filter "label=arm.task_id" --filter "status=running" --format '{{.Names}}'; } | sort -u )"
-    if [[ -z "${running}" ]]; then
+    local tasks drives ctr found active=()
+    tasks="$(docker ps --filter "label=arm.task_id" --filter "status=running" --format '{{.Names}}')"
+    drives="$(docker ps --filter "label=arm.drive_id" --filter "status=running" --format '{{.Names}}')"
+    if [[ -n "${tasks}" ]]; then
+        while IFS= read -r ctr; do
+            [[ -n "${ctr}" ]] && active+=("${ctr} (transcoder)")
+        done <<<"${tasks}"
+    fi
+    if [[ -n "${drives}" ]]; then
+        while IFS= read -r ctr; do
+            [[ -n "${ctr}" ]] || continue
+            if found="$(docker exec "${ctr}" sh -c "${RIP_PROBE_SH}" 2>/dev/null </dev/null)"; then
+                if [[ -n "${found}" ]]; then
+                    active+=("${ctr} (ripping: $(tr '\n' ' ' <<<"${found}" | sed 's/ *$//'))")
+                fi
+            else
+                echo "==> could not inspect ${ctr} for an active rip; treating it as idle"
+            fi
+        done <<<"${drives}"
+    fi
+    if [[ ${#active[@]} -eq 0 ]]; then
+        [[ -n "${drives}" ]] && echo "==> running rippers are idle (no makemkvcon/abcde/ddrescue); safe to replace"
         return 0
     fi
-    mapfile -t names <<<"${running}"
     if [[ "${FORCE}" -eq 1 ]]; then
-        echo "==> --force: removing RUNNING backend-spawned containers:"
-        printf '      %s\n' "${names[@]}"
+        echo "==> --force: removing containers with ACTIVE work:"
+        printf '      %s\n' "${active[@]}"
         return 0
     fi
     {
-        echo "ERROR: backend-spawned ripper/transcoder containers are RUNNING:"
-        printf '         %s\n' "${names[@]}"
-        echo "       Removing them would kill any rip or transcode in progress. Images are built;"
-        echo "       nothing has been removed or restarted yet."
-        echo "       Every enrolled drive keeps an idle ripper running, so check the UI for active"
-        echo "       jobs, then re-run the same command with --force to replace them, e.g.:"
+        echo "ERROR: backend-spawned containers have ACTIVE work:"
+        printf '         %s\n' "${active[@]}"
+        echo "       Removing them would kill the rip or transcode in progress. Images are built;"
+        echo "       nothing has been backed up, removed or restarted yet."
+        echo "       Wait for the job to finish, or re-run the same command with --force, e.g.:"
         echo "         bash devtools/setup-dev.sh up --force"
     } >&2
     exit 1
@@ -451,35 +522,74 @@ published_url() {
 
 HEALTH_TRIES=30        # x HEALTH_SLEEP = ~60s
 HEALTH_SLEEP=2
-BACKEND_URL=""
+HEALTH_RESULT=""       # summary line for the final banner
 
-# Poll the backend's /api/health through its published 8443 port. Timeout
-# prints the backend's recent logs and exits 1; no published port (or no curl)
-# skips the wait with a note instead of failing.
+# In-container health check for when no host port is published. Stdlib only
+# (urllib + ssl), so it cannot break on a dependency change. TLS verification
+# is off because it dials localhost, which is not in the backend cert's SANs.
+# Exits 0 healthy, 3 reached-but-unhealthy; any other status means the exec
+# itself failed (container not running, no python, ...).
+HEALTH_PY='
+import ssl, sys, urllib.request
+ctx = ssl.create_default_context()
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
+try:
+    with urllib.request.urlopen("https://localhost:8443/api/health", context=ctx, timeout=5) as r:
+        ok = r.status == 200
+except Exception:
+    ok = False
+sys.exit(0 if ok else 3)
+'
+
+# Wait up to ~60s for the backend's /api/health. Primary path: curl the host
+# port `compose port` reports for 8443 (overlay-proof). With no published port
+# (the template default) or no curl, check from inside the backend container
+# via `compose exec` instead. Timeout prints the backend's recent logs and
+# exits 1. Only when exec itself never works while the backend IS running is
+# the wait skipped with a note.
 wait_for_backend() {
-    local base url i
+    local base="" url mode i rc reached=0 running
     base="$(published_url "${BACKEND_SERVICE}" 8443)"
-    if [[ -z "${base}" ]]; then
-        echo "==> ${BACKEND_SERVICE} publishes no host port for 8443 in this compose config; skipping the health wait"
-        echo "    (check it by hand: docker compose logs ${BACKEND_SERVICE})"
-        return 0
+    if [[ -n "${base}" ]] && command -v curl >/dev/null 2>&1; then
+        mode="port"
+        url="${base}/api/health"
+    else
+        mode="exec"
+        url="https://localhost:8443/api/health (inside ${BACKEND_SERVICE}, via compose exec)"
+        if [[ -z "${base}" ]]; then
+            echo "==> ${BACKEND_SERVICE} publishes no host port for 8443; checking health from inside the container"
+        else
+            echo "==> curl not found; checking health from inside the ${BACKEND_SERVICE} container"
+        fi
     fi
-    if ! command -v curl >/dev/null 2>&1; then
-        echo "==> curl not found; skipping the backend health wait"
-        return 0
-    fi
-    url="${base}/api/health"
     echo "==> waiting for ${url} (up to $(( HEALTH_TRIES * HEALTH_SLEEP ))s)"
     for (( i = 1; i <= HEALTH_TRIES; i++ )); do
-        if curl -sk -f --max-time 5 -o /dev/null "${url}"; then
-            BACKEND_URL="${base}"
+        if [[ "${mode}" == port ]]; then
+            if curl -sk -f --max-time 5 -o /dev/null "${url}"; then rc=0; else rc=3; fi
+        else
+            rc=0
+            compose exec -T "${BACKEND_SERVICE}" python -c "${HEALTH_PY}" </dev/null >/dev/null 2>&1 || rc=$?
+        fi
+        if [[ "${rc}" == 0 ]]; then
             echo "==> backend healthy: ${url}"
+            HEALTH_RESULT="backend healthy at ${url}"
             return 0
         fi
+        [[ "${rc}" == 3 ]] && reached=1
         if (( i < HEALTH_TRIES )); then
             sleep "${HEALTH_SLEEP}"
         fi
     done
+    if [[ "${mode}" == exec && "${reached}" == 0 ]]; then
+        running="$(compose ps --status running --services 2>/dev/null || true)"
+        if grep -qx "${BACKEND_SERVICE}" <<<"${running}"; then
+            echo "==> could not run the in-container health check (compose exec failed every time); skipping the wait"
+            echo "    (${BACKEND_SERVICE} is running; check it by hand: docker compose logs ${BACKEND_SERVICE})"
+            HEALTH_RESULT="backend health not verified (in-container check unavailable)"
+            return 0
+        fi
+    fi
     echo "ERROR: ${BACKEND_SERVICE} did not answer ${url} within $(( HEALTH_TRIES * HEALTH_SLEEP ))s; last 20 log lines:" >&2
     compose logs --tail 20 "${BACKEND_SERVICE}" >&2 || true
     exit 1
@@ -708,18 +818,21 @@ if [[ "${ACTION}" == "up" ]]; then
         compose build
     fi
 
-    # 2. GPU detection now that the transcode image exists for the probe.
+    # 2. Refuse (unless --force) while a rip or transcode is ACTIVE. This runs
+    #    before anything else changes, so a refused run leaves no side effects
+    #    beyond the built images.
+    guard_running_spawned
+
+    # 3. GPU detection now that the transcode image exists for the probe.
     refresh_arm_gpus
 
-    # 3. Back up the running database before migrations can touch it.
+    # 4. Back up the running database before migrations can touch it.
     backup_db
 
-    # 4. Only now remove backend-spawned rippers/transcoders (refusing if any
-    #    are running, unless --force).
-    guard_running_spawned
+    # 5. Only now remove backend-spawned rippers/transcoders.
     remove_spawned_containers
 
-    # 5. Start from the images built above (no --build).
+    # 6. Start from the images built above (no --build).
     echo "==> starting the stack"
     if [[ "${RIPPER_ONLY}" -eq 1 ]]; then
         compose up -d "${UP_SERVICES[@]}"
@@ -727,19 +840,14 @@ if [[ "${ACTION}" == "up" ]]; then
         compose up -d
     fi
 
-    # 6. Wait for the backend to answer its health check.
+    # 7. Wait for the backend to answer its health check.
     wait_for_backend
 
     UI_URL="$(published_url "${UI_SERVICE}" 443)"
     UI_URL="${UI_URL:-https://localhost:8081}"
-    if [[ -n "${BACKEND_URL}" ]]; then
-        HEALTH_LINE="backend healthy at ${BACKEND_URL}/api/health"
-    else
-        HEALTH_LINE="backend health not verified (no published 8443 port)"
-    fi
     cat <<EOF
 
-stack is up; ${HEALTH_LINE}
+stack is up; ${HEALTH_RESULT}
 open ${UI_URL} -> Drives -> Enroll each drive you want ARM to use
 (spin it down with: bash devtools/setup-dev.sh down)
 
