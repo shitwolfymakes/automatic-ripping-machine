@@ -1441,6 +1441,7 @@ async def test_encode_claim_commit_raises_once_rolls_back_and_releases_gpu() -> 
             encoder_kinds=["h265"],
             status=GpuStatus.AVAILABLE,
             claimed_by_task_id=None,
+            probed_at=datetime.now(UTC),
         )
     ]
     now = datetime.now(UTC)

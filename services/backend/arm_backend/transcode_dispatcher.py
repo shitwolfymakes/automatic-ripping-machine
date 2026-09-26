@@ -44,7 +44,14 @@ from arm_common import (
     TranscodeTaskStatus,
     with_log_context,
 )
-from arm_common.encoders import get_encoder
+from arm_common.encoders import (
+    VENDOR_RANK,
+    EncoderSpec,
+    cpu_encoder_for,
+    get_encoder,
+    gpu_encoder_for,
+    gpu_is_eligible,
+)
 
 if TYPE_CHECKING:
     from arm_backend.ws.hub import WSHub
@@ -89,14 +96,21 @@ def _is_transport_death(exc: BaseException) -> bool:
 
 
 class GpuAssignment(NamedTuple):
-    """Outcome of `_claim_gpu_for_task`. `gpu` is None for the CPU spawn path;
-    `action="queue"` means leave the task queued so a later tick can retry
-    when a matching GPU frees up (a GPU encoder + all matching GPUs busy).
+    """Outcome of `_claim_gpu_for_task`.
+
+    `gpu` is the claimed device, or None for a CPU spawn. `encoder` is the
+    RESOLVED catalog encoder the worker runs: for an `any_<codec>` preset it
+    is the claimed vendor's GPU encoder or the `cpu_<codec>` fallback; it is
+    None for the `preset` encoder (HandBrake's own). `action="queue"` leaves
+    the task queued for a later tick (every eligible device busy or being
+    probed); `action="fail"` means the task can never run as configured and
+    `reason` says why.
     """
 
     gpu: Gpu | None
-    codec: str | None
-    action: Literal["spawn", "queue"]
+    encoder: EncoderSpec | None
+    action: Literal["spawn", "queue", "fail"]
+    reason: str | None = None
 
 
 async def max_parallel_transcodes(db: AsyncSession, *, default: int | None = None) -> int:
@@ -145,6 +159,9 @@ class TranscodeDispatcher:
         # un-pullable transcoder is visible in the UI, not only in the log.
         self.last_spawn_error: str | None = None
         self._probe = TtlProbe(lambda: probe_docker(self._docker, self._settings.ARM_TRANSCODE_IMAGE))
+        # GPU rows currently running a device probe; the claim never hands
+        # one of these to a task.
+        self.probing_gpu_ids: set[str] = set()
 
     def stop(self) -> None:
         self._stop.set()
@@ -530,10 +547,21 @@ class TranscodeDispatcher:
                 assignment = await self._claim_gpu_for_task(db, task, preset)
                 if assignment.action == "queue":
                     logger.info(
-                        "transcode task waiting for GPU codec=%s task_id=%s",
-                        assignment.codec,
+                        "transcode task waiting for GPU encoder=%s task_id=%s",
+                        assignment.encoder.id if assignment.encoder is not None else None,
                         task.id,
                     )
+                    continue
+                if assignment.action == "fail":
+                    # Same isolation as the passthrough branch: a raise while
+                    # failing this task (hub.emit, aggregate, commit) rolls
+                    # back and moves on, never aborting the tick; `task_id`
+                    # (loop variable) is logged, never an ORM attribute.
+                    try:
+                        await self._fail_queued_task(db, task, str(assignment.reason))
+                    except Exception as exc:
+                        logger.exception("failing unrunnable transcode task failed task_id=%s: %s", task_id, exc)
+                        await db.rollback()
                     continue
                 try:
                     # `_spawn_container` is a blocking call: a plain docker
@@ -618,44 +646,102 @@ class TranscodeDispatcher:
     async def _claim_gpu_for_task(
         self, db: AsyncSession, task: TranscodeTask, preset: TranscodePreset | None
     ) -> GpuAssignment:
-        """Maps the preset's catalog encoder onto GPU availability.
+        """Encoder-first claim: map the preset's catalog encoder onto the
+        devices whose probe verified its codec.
 
-        Branches:
-        - no preset, or a `preset`/`cpu` encoder → CPU spawn.
-        - matching GPU AVAILABLE → claim it, GPU spawn.
-        - all matching GPUs BUSY → queue (retry next tick).
-        - no GPU advertises this codec at all → CPU spawn.
+        - no preset, or the `preset` encoder -> spawn, no GPU, no encoder.
+        - a `cpu_<codec>` encoder -> spawn on CPU with that encoder.
+        - eligible device free -> claim the best-ranked one (vendor rank,
+          then device path) and spawn with the resolved GPU encoder.
+        - eligible devices all busy, or the only eligible ones are being
+          probed right now -> queue (retry next tick).
+        - no eligible device: `any_<codec>` falls back to `cpu_<codec>`; a
+          vendor-pinned encoder fails the task.
+        - an encoder id missing from the catalog fails the task.
+
+        Eligibility (enabled, probed, codec verified) is `gpu_is_eligible`;
+        a device in `probing_gpu_ids` is never claimed.
         """
-        spec = get_encoder(preset.encoder) if preset is not None else None
-        if spec is None or spec.kind in ("preset", "cpu"):
-            return GpuAssignment(gpu=None, codec=None, action="spawn")
+        if preset is None:
+            return GpuAssignment(gpu=None, encoder=None, action="spawn")
+        try:
+            spec = get_encoder(preset.encoder)
+        except ValueError:
+            return GpuAssignment(
+                gpu=None,
+                encoder=None,
+                action="fail",
+                reason=f"preset {preset.id} has unknown encoder {preset.encoder!r}",
+            )
+        if spec.kind == "preset":
+            return GpuAssignment(gpu=None, encoder=None, action="spawn")
+        if spec.kind == "cpu":
+            return GpuAssignment(gpu=None, encoder=spec, action="spawn")
         codec = str(spec.codec)
-        # Filter in Python — `text[]` ANY predicates are awkward to express in
+        # Filter in Python: `text[]` ANY predicates are awkward to express in
         # SQLAlchemy ORM and the in-memory test fake doesn't grok them. The
         # gpus table is small (1-4 rows on real hosts) so the cost is trivial.
-        # Disabled rows (Settings > GPUs switch) never participate.
         all_gpus = (await db.execute(select(Gpu))).scalars().all()
-        matching = [g for g in all_gpus if g.enabled and codec in (g.encoder_kinds or [])]
-        if not matching:
-            # No enabled silicon on this host advertises the requested codec — CPU.
-            return GpuAssignment(gpu=None, codec=codec, action="spawn")
+        eligible = [
+            g for g in all_gpus if gpu_is_eligible(g, codec) and (spec.kind == "any" or g.vendor == spec.vendor)
+        ]
+        candidates = [g for g in eligible if g.id not in self.probing_gpu_ids]
+        if not candidates:
+            if eligible:
+                # Every eligible device is mid-probe; it is only absent for
+                # this tick, so wait rather than fail or fall back to CPU.
+                return GpuAssignment(gpu=None, encoder=spec, action="queue")
+            if spec.kind == "any":
+                return GpuAssignment(gpu=None, encoder=cpu_encoder_for(codec), action="spawn")
+            return GpuAssignment(
+                gpu=None,
+                encoder=spec,
+                action="fail",
+                reason=f"no enabled device has verified {spec.id}; re-probe or enable it in Settings > GPUs",
+            )
+        # Deterministic pick instead of row order: vendor rank, then device
+        # path, so a mixed-vendor host always prefers the same silicon.
+        free = sorted(
+            (g for g in candidates if g.status == GpuStatus.AVAILABLE),
+            key=lambda g: (VENDOR_RANK.get(g.vendor, 99), g.device_path),
+        )
+        if not free:
+            return GpuAssignment(gpu=None, encoder=spec, action="queue")
+        gpu = free[0]
+        gpu.status = GpuStatus.BUSY
+        gpu.claimed_by_task_id = task.id
+        resolved = spec if spec.kind == "gpu" else gpu_encoder_for(gpu.vendor, codec)
+        return GpuAssignment(gpu=gpu, encoder=resolved, action="spawn")
 
-        available = [g for g in matching if g.status == GpuStatus.AVAILABLE]
-        if available:
-            # Deterministic pick instead of row order (G-30, first half):
-            # vendors in HandBrake-support-quality order, then device path,
-            # so a mixed-vendor host always prefers the same silicon and a
-            # redeploy can't silently flip which GPU a preset lands on.
-            # (Per-preset vendor pinning is the registered second half.)
-            vendor_rank = {GpuVendor.NVENC: 0, GpuVendor.QSV: 1, GpuVendor.VAAPI: 2}
-            available.sort(key=lambda g: (vendor_rank.get(g.vendor, 99), g.device_path))
-            gpu = available[0]
-            gpu.status = GpuStatus.BUSY
-            gpu.claimed_by_task_id = task.id
-            return GpuAssignment(gpu=gpu, codec=codec, action="spawn")
+    async def _fail_queued_task(self, db: AsyncSession, task: TranscodeTask, reason: str) -> None:
+        """Terminal-fail a queued task that can never run as configured, emit
+        `task.failed`, settle its session application, and commit."""
+        from arm_backend.transcode_apply import aggregate_session_application
 
-        # All matching GPUs are busy: hold the task in queued so a later tick retries.
-        return GpuAssignment(gpu=None, codec=codec, action="queue")
+        task.status = TranscodeTaskStatus.FAILED
+        task.last_error = reason
+        logger.error("transcode task failed before spawn task_id=%s: %s", task.id, reason)
+        await self._emit_task_failed(db, task)
+        application = (
+            await db.execute(
+                select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id)
+            )
+        ).scalar_one()
+        outcome = await aggregate_session_application(db, application)
+        if outcome.event_type is not None:
+            await self._hub.emit(
+                topic="transcode.events",
+                event_type=outcome.event_type,
+                payload={
+                    "session_application_id": application.id,
+                    "session_id": application.session_id,
+                    "job_id": application.job_id,
+                    "status": application.status.value,
+                },
+                job_id=application.job_id,
+                session=db,
+            )
+        await db.commit()
 
     def host_paths_set(self) -> bool:
         return bool(
@@ -713,11 +799,15 @@ class TranscodeDispatcher:
             str(certs_root / "arm-ca.crt"): {"bind": "/etc/ssl/arm/arm-ca.crt", "mode": "ro"},
         }
         extra_run_kwargs: dict[str, Any] = {}
+        if assignment is not None and assignment.encoder is not None:
+            # The worker resolves everything from the catalog id; the
+            # ARM_GPU_* vars below are kept for workers that predate it.
+            env["ARM_TRANSCODE_ENCODER"] = assignment.encoder.id
         if assignment is not None and assignment.gpu is not None:
             env["ARM_GPU_VENDOR"] = assignment.gpu.vendor.value
             env["ARM_GPU_DEVICE"] = assignment.gpu.device_path
-            if assignment.codec is not None:
-                env["ARM_GPU_CODEC"] = assignment.codec
+            if assignment.encoder is not None:
+                env["ARM_GPU_CODEC"] = str(assignment.encoder.codec)
             # VAAPI/QSV: the entrypoint self-derives the render gid from the
             # mounted node; an explicit ARM_RENDER_GID is a forced OVERRIDE
             # (passed through as RENDER_GID, which wins in the entrypoint).

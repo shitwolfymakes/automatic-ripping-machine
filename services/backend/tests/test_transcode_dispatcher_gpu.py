@@ -1,14 +1,17 @@
-"""Tests for the GPU dispatch matrix, keyed on the preset's catalog encoder.
+"""Tests for the encoder-first GPU claim, keyed on the preset's catalog encoder.
 
-The matrix:
+A GPU row is eligible for a codec only when it is enabled, has been probed,
+and its probe verified that codec; rows currently being re-probed are never
+claimed.
 
-| encoder kind  | matching GPU available | matching GPU busy | no matching GPU |
-|---------------|-----------------------|-------------------|-----------------|
-| preset / cpu  | CPU                   | CPU               | CPU             |
-| any / gpu     | GPU                   | queue             | CPU             |
+| encoder kind  | eligible GPU free | eligible GPUs busy | no eligible GPU      |
+|---------------|-------------------|--------------------|----------------------|
+| preset / cpu  | CPU               | CPU                | CPU                  |
+| any_<codec>   | best-ranked GPU   | queue              | CPU (cpu_<codec>)    |
+| <vendor>_<c>  | that vendor's GPU | queue              | task fails           |
 
-Plus: stale-claim sweep releases the GPU it held; a per-codec mismatch
-keeps the task on CPU even if a GPU is available.
+Plus: stale-claim sweep releases the GPU it held; a spawn failure releases
+the claim; the worker env carries the resolved catalog encoder id.
 """
 
 from __future__ import annotations
@@ -134,20 +137,39 @@ def _build_db(
             Gpu(
                 id=f"gpu_{i}",
                 vendor=vendor,
-                device_path="/dev/dri/renderD128" if vendor != GpuVendor.NVENC else "nvidia://0",
+                device_path=f"/dev/dri/renderD{128 + i}" if vendor != GpuVendor.NVENC else f"nvidia://{i}",
                 encoder_kinds=kinds,
                 status=status,
                 claimed_by_task_id=claimed_by,
+                probed_at=datetime.now(UTC),
             )
         )
     return db
 
 
+def _capture_hub() -> tuple[WSHub, list[dict[str, Any]]]:
+    hub = WSHub()
+    sent: list[dict[str, Any]] = []
+
+    async def _capture(**kwargs: Any) -> None:
+        sent.append(kwargs)
+
+    hub.emit = _capture  # type: ignore[method-assign]
+    return hub, sent
+
+
+async def _claim(db: FakeSession, disp: TranscodeDispatcher | None = None) -> Any:
+    disp = disp or TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    task = db.rows["transcode_tasks"][0]
+    preset = db.rows["transcode_presets"][0]
+    return await disp._claim_gpu_for_task(db, task, preset)
+
+
 # --- CPU-only host (no gpus rows) ---------------------------------------------
 
 
-@pytest.mark.parametrize("encoder", ["any_h265", "qsv_h265", "cpu_h265", "preset"])
-async def test_no_gpus_on_host_always_spawns_cpu(encoder: str) -> None:
+@pytest.mark.parametrize("encoder", ["any_h265", "cpu_h265", "preset"])
+async def test_no_gpus_on_host_spawns_cpu(encoder: str) -> None:
     db = _build_db(encoder=encoder, gpus=[])
     docker = MagicMock()
     disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
@@ -274,7 +296,7 @@ async def test_any_encoder_with_busy_gpu_leaves_task_queued() -> None:
 
 
 async def test_any_encoder_no_codec_match_falls_back_to_cpu() -> None:
-    """Preset wants h265 but the only GPU only advertises h264 → CPU spawn,
+    """Preset wants h265 but the only GPU only verified h264 -> CPU spawn,
     not queue: no GPU on the host has this codec."""
     db = _build_db(
         encoder="any_h265",
@@ -357,7 +379,7 @@ async def test_spawn_failure_releases_gpu_claim() -> None:
     assert db.rows["gpus"][0].claimed_by_task_id is None
 
 
-# --- enabled switch + deterministic vendor ordering (G-30 first half) ---------
+# --- enabled switch + deterministic vendor ordering ---------------------------
 
 
 async def test_disabled_gpu_is_never_claimed() -> None:
@@ -378,7 +400,7 @@ async def test_disabled_gpu_is_never_claimed() -> None:
 
 
 async def test_claim_prefers_vendor_order_not_row_order() -> None:
-    # vaapi row FIRST: row order must not decide - nvenc > qsv > vaapi.
+    # vaapi row FIRST: row order must not decide; nvenc > qsv > vaapi.
     db = _build_db(
         encoder="any_h265",
         gpus=[
@@ -409,6 +431,322 @@ async def test_disabled_preferred_vendor_falls_through_to_next() -> None:
     await disp.spawn_pending(db)
     kwargs = docker.containers.run.call_args.kwargs
     assert kwargs["environment"]["ARM_GPU_VENDOR"] == "vaapi"
+
+
+# --- Encoder-first claim matrix ------------------------------------------------
+
+
+async def test_pinned_encoder_queues_on_busy_device_never_other_vendor() -> None:
+    """A VAAPI row that verified nothing sits free next to a busy QSV row that
+    verified h265: a qsv_h265 preset waits for the QSV device and never lands
+    on the VAAPI one."""
+    db = _build_db(
+        encoder="qsv_h265",
+        gpus=[
+            (GpuVendor.VAAPI, GpuStatus.AVAILABLE, [], None),
+            (GpuVendor.QSV, GpuStatus.BUSY, ["h265"], "other-task"),
+        ],
+    )
+    assignment = await _claim(db)
+    assert assignment.action == "queue"
+    assert assignment.gpu is None
+    assert assignment.encoder is not None and assignment.encoder.id == "qsv_h265"
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+    assert await disp.spawn_pending(db) == 0
+    docker.containers.run.assert_not_called()
+    assert db.rows["gpus"][0].status == GpuStatus.AVAILABLE
+    assert db.rows["gpus"][0].claimed_by_task_id is None
+    assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.QUEUED
+
+
+async def test_any_encoder_skips_device_without_verified_codec() -> None:
+    db = _build_db(
+        encoder="any_h265",
+        gpus=[
+            (GpuVendor.NVENC, GpuStatus.AVAILABLE, ["h264"], None),
+            (GpuVendor.QSV, GpuStatus.AVAILABLE, ["h265"], None),
+        ],
+    )
+    assignment = await _claim(db)
+    assert assignment.action == "spawn"
+    assert assignment.gpu is not None and assignment.gpu.vendor == GpuVendor.QSV
+    assert assignment.encoder.id == "qsv_h265"
+    assert db.rows["gpus"][1].claimed_by_task_id == "txt_1"
+    assert db.rows["gpus"][0].claimed_by_task_id is None
+
+
+async def test_any_encoder_prefers_vendor_rank() -> None:
+    db = _build_db(
+        encoder="any_h265",
+        gpus=[
+            (GpuVendor.QSV, GpuStatus.AVAILABLE, ["h265"], None),
+            (GpuVendor.NVENC, GpuStatus.AVAILABLE, ["h265"], None),
+        ],
+    )
+    assignment = await _claim(db)
+    assert assignment.gpu is not None and assignment.gpu.vendor == GpuVendor.NVENC
+    assert assignment.encoder.id == "nvenc_h265"
+
+
+async def test_any_encoder_without_eligible_device_falls_back_to_cpu_encoder() -> None:
+    db = _build_db(
+        encoder="any_h265",
+        gpus=[
+            (GpuVendor.QSV, GpuStatus.AVAILABLE, ["h265"], None),
+            (GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h265"], None),
+        ],
+    )
+    db.rows["gpus"][0].probed_at = None  # never probed
+    db.rows["gpus"][1].enabled = False  # operator-disabled
+    assignment = await _claim(db)
+    assert assignment.action == "spawn"
+    assert assignment.gpu is None
+    assert assignment.encoder.id == "cpu_h265"
+    assert all(g.status == GpuStatus.AVAILABLE for g in db.rows["gpus"])
+
+
+async def test_any_encoder_all_eligible_busy_queues() -> None:
+    db = _build_db(
+        encoder="any_h265",
+        gpus=[
+            (GpuVendor.QSV, GpuStatus.BUSY, ["h265"], "t_a"),
+            (GpuVendor.NVENC, GpuStatus.BUSY, ["h265"], "t_b"),
+        ],
+    )
+    assignment = await _claim(db)
+    assert assignment.action == "queue"
+    assert assignment.gpu is None
+
+
+async def test_vaapi_encoder_claims_eligible_vaapi_row() -> None:
+    db = _build_db(
+        encoder="vaapi_h265",
+        gpus=[
+            (GpuVendor.NVENC, GpuStatus.AVAILABLE, ["h265"], None),
+            (GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h265"], None),
+        ],
+    )
+    assignment = await _claim(db)
+    assert assignment.action == "spawn"
+    assert assignment.gpu is not None and assignment.gpu.vendor == GpuVendor.VAAPI
+    assert assignment.encoder.id == "vaapi_h265"
+
+
+async def test_pinned_encoder_without_eligible_device_fails() -> None:
+    db = _build_db(
+        encoder="qsv_h265",
+        gpus=[(GpuVendor.QSV, GpuStatus.AVAILABLE, ["h264"], None)],
+    )
+    assignment = await _claim(db)
+    assert assignment.action == "fail"
+    assert assignment.gpu is None
+    assert assignment.reason == "no enabled device has verified qsv_h265; re-probe or enable it in Settings > GPUs"
+
+
+async def test_spawn_pending_fails_task_when_pinned_encoder_vanished() -> None:
+    db = _build_db(encoder="qsv_h265", gpus=[])
+    hub, sent = _capture_hub()
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, hub)
+    assert await disp.spawn_pending(db) == 0
+    docker.containers.run.assert_not_called()
+    task = db.rows["transcode_tasks"][0]
+    assert task.status == TranscodeTaskStatus.FAILED
+    assert task.last_error == "no enabled device has verified qsv_h265; re-probe or enable it in Settings > GPUs"
+    failed = [e for e in sent if e["event_type"] == "task.failed"]
+    assert len(failed) == 1
+    assert failed[0]["payload"]["task_id"] == "txt_1"
+    assert failed[0]["payload"]["last_error"] == task.last_error
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.FAILED
+    assert any(e["event_type"] == "session.failed" for e in sent)
+
+
+async def test_probing_device_is_never_claimed() -> None:
+    db = _build_db(
+        encoder="any_h265",
+        gpus=[
+            (GpuVendor.NVENC, GpuStatus.AVAILABLE, ["h265"], None),
+            (GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h265"], None),
+        ],
+    )
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    disp.probing_gpu_ids.add("gpu_0")
+    assignment = await _claim(db, disp)
+    assert assignment.gpu is not None and assignment.gpu.id == "gpu_1"
+    assert db.rows["gpus"][0].claimed_by_task_id is None
+
+
+async def test_pinned_encoder_whose_only_device_is_probing_queues() -> None:
+    db = _build_db(
+        encoder="qsv_h265",
+        gpus=[(GpuVendor.QSV, GpuStatus.AVAILABLE, ["h265"], None)],
+    )
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    disp.probing_gpu_ids.add("gpu_0")
+    assignment = await _claim(db, disp)
+    assert assignment.action == "queue"
+    assert assignment.gpu is None
+    assert db.rows["gpus"][0].status == GpuStatus.AVAILABLE
+
+
+async def test_any_encoder_whose_only_device_is_probing_queues() -> None:
+    db = _build_db(
+        encoder="any_h265",
+        gpus=[(GpuVendor.NVENC, GpuStatus.AVAILABLE, ["h265"], None)],
+    )
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    disp.probing_gpu_ids.add("gpu_0")
+    assignment = await _claim(db, disp)
+    assert assignment.action == "queue"
+
+
+@pytest.mark.parametrize(("encoder", "resolved"), [("preset", None), ("cpu_h264", "cpu_h264")])
+async def test_preset_and_cpu_encoders_spawn_without_gpu(encoder: str, resolved: str | None) -> None:
+    db = _build_db(
+        encoder=encoder,
+        gpus=[(GpuVendor.NVENC, GpuStatus.AVAILABLE, ["h264", "h265"], None)],
+    )
+    assignment = await _claim(db)
+    assert assignment.action == "spawn"
+    assert assignment.gpu is None
+    assert (assignment.encoder.id if assignment.encoder else None) == resolved
+    assert db.rows["gpus"][0].status == GpuStatus.AVAILABLE
+
+
+async def test_no_preset_spawns_without_gpu_or_encoder() -> None:
+    db = _build_db(gpus=[(GpuVendor.NVENC, GpuStatus.AVAILABLE, ["h265"], None)])
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    assignment = await disp._claim_gpu_for_task(db, db.rows["transcode_tasks"][0], None)
+    assert (assignment.gpu, assignment.encoder, assignment.action) == (None, None, "spawn")
+
+
+def _add_second_task(db: FakeSession, *, encoder: str) -> None:
+    """A second queued task (created after txt_1) on its own session + preset."""
+    db.rows["session_applications"].append(
+        SessionApplication(
+            id="sap_y",
+            session_id="ses_y",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000002",
+            status=SessionApplicationStatus.QUEUED,
+            overwrite=False,
+        )
+    )
+    db.rows["sessions"].append(
+        Session(
+            id="ses_y",
+            name="Other",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_x",
+            transcode_preset_id="tpr_y",
+            output_path_template="{title}/{title}.mkv",
+        )
+    )
+    db.rows["transcode_presets"].append(
+        TranscodePreset(
+            id="tpr_y",
+            name="Other",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            tool=TranscodeTool.HANDBRAKE,
+            preset_ref="H.265 MKV 1080p30",
+            container=ContainerFormat.MKV,
+            encoder=encoder,
+        )
+    )
+    db.rows["transcode_tasks"].append(
+        TranscodeTask(
+            id="txt_2",
+            session_application_id="sap_y",
+            source_track_id="trk_2",
+            status=TranscodeTaskStatus.QUEUED,
+            attempts=0,
+            progress_pct=0,
+            output_path="Other/Other.mkv",
+            created_at=datetime.now(UTC) + timedelta(seconds=1),
+        )
+    )
+
+
+async def test_unknown_encoder_fails_only_that_task() -> None:
+    db = _build_db(encoder="bogus_codec", gpus=[])
+    _add_second_task(db, encoder="cpu_h265")
+    hub, sent = _capture_hub()
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, hub)
+    assert await disp.spawn_pending(db) == 1  # must not raise
+    first, second = db.rows["transcode_tasks"]
+    assert first.status == TranscodeTaskStatus.FAILED
+    assert first.last_error == "preset tpr_x has unknown encoder 'bogus_codec'"
+    assert any(e["event_type"] == "task.failed" and e["payload"]["task_id"] == "txt_1" for e in sent)
+    # The later task still spawned, on the CPU encoder it asked for.
+    env = docker.containers.run.call_args.kwargs["environment"]
+    assert env["ARM_TRANSCODE_TASK_ID"] == "txt_2"
+    assert env["ARM_TRANSCODE_ENCODER"] == "cpu_h265"
+    assert second.status == TranscodeTaskStatus.QUEUED
+
+
+async def test_fail_path_error_rolls_back_and_tick_continues() -> None:
+    db = _build_db(encoder="qsv_h265", gpus=[])
+    _add_second_task(db, encoder="cpu_h265")
+    hub = WSHub()
+
+    async def _boom(**_kwargs: Any) -> None:
+        raise RuntimeError("ws down")
+
+    hub.emit = _boom  # type: ignore[method-assign]
+    rollbacks: list[int] = []
+    real_rollback = db.rollback
+
+    async def _spy_rollback() -> None:
+        rollbacks.append(1)
+        await real_rollback()
+
+    db.rollback = _spy_rollback  # type: ignore[method-assign]
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, hub)
+    assert await disp.spawn_pending(db) == 1  # must not raise
+    assert rollbacks == [1]
+    assert docker.containers.run.call_args.kwargs["environment"]["ARM_TRANSCODE_TASK_ID"] == "txt_2"
+
+
+# --- Worker env contract ---------------------------------------------------------
+
+
+async def test_env_for_pinned_gpu_claim_carries_encoder_and_legacy_gpu_vars() -> None:
+    db = _build_db(
+        encoder="qsv_h265",
+        gpus=[(GpuVendor.QSV, GpuStatus.AVAILABLE, ["h264", "h265"], None)],
+    )
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+    assert await disp.spawn_pending(db) == 1
+    env = docker.containers.run.call_args.kwargs["environment"]
+    assert env["ARM_TRANSCODE_ENCODER"] == "qsv_h265"
+    assert env["ARM_GPU_VENDOR"] == "qsv"
+    assert env["ARM_GPU_DEVICE"] == "/dev/dri/renderD128"
+    assert env["ARM_GPU_CODEC"] == "h265"
+
+
+async def test_env_for_any_encoder_cpu_fallback_has_no_gpu_vars() -> None:
+    db = _build_db(encoder="any_h265", gpus=[])
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+    assert await disp.spawn_pending(db) == 1
+    env = docker.containers.run.call_args.kwargs["environment"]
+    assert env["ARM_TRANSCODE_ENCODER"] == "cpu_h265"
+    assert not [k for k in env if k.startswith("ARM_GPU_")]
+
+
+async def test_env_for_preset_encoder_has_no_encoder_var() -> None:
+    db = _build_db(encoder="preset", gpus=[])
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+    assert await disp.spawn_pending(db) == 1
+    env = docker.containers.run.call_args.kwargs["environment"]
+    assert "ARM_TRANSCODE_ENCODER" not in env
+    assert not [k for k in env if k.startswith("ARM_GPU_")]
 
 
 # --- max_parallel_transcodes from operator config -----------------------------
