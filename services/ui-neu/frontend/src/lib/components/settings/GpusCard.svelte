@@ -10,6 +10,7 @@
 	import { fetchGpus, updateGpu, deleteGpu, probeGpu, probeAllGpus } from '$lib/api/gpus';
 	import { wsClient, type WSEnvelope } from '$lib/api/ws';
 	import { isAdmin } from '$lib/stores/auth';
+	import { encodersStore } from '$lib/stores/encoders.svelte';
 	import Toggle from '$lib/components/notifications/Toggle.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 
@@ -73,6 +74,7 @@
 			const updated = await updateGpu(g.id, next);
 			gpus = gpus.map((x) => (x.id === g.id ? updated : x));
 			error = null;
+			encodersStore.refresh();
 		} catch {
 			error = 'Saving the GPU switch failed.';
 		} finally {
@@ -91,6 +93,7 @@
 			await deleteGpu(g.id);
 			gpus = gpus.filter((x) => x.id !== g.id);
 			error = null;
+			encodersStore.refresh();
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : '';
 			error = msg.includes('409')
@@ -106,7 +109,10 @@
 	onMount(() => {
 		load();
 		return wsClient.subscribe('transcode.events', (env: WSEnvelope) => {
-			if (env.event_type === 'gpu.probed') load();
+			if (env.event_type === 'gpu.probed') {
+				load();
+				encodersStore.refresh();
+			}
 		});
 	});
 </script>
@@ -188,8 +194,8 @@
 			{/each}
 		</div>
 		<p class="gpus-card-note">
-			Seeded from the host probe on first boot. Use Re-probe to re-verify a device without
-			restarting the backend.
+			Rows come from device discovery; each device's encoders are verified by a per-device probe.
+			Use Re-probe to re-verify a device without restarting the backend.
 		</p>
 	{/if}
 </section>

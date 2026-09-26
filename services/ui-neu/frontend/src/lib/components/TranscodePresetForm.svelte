@@ -53,9 +53,10 @@
 	let encoder = $state<string>(preset?.encoder ?? PRESET_ENCODER_ID);
 
 	// Availability-aware encoder catalog (GET /api/encoders, cached by the
-	// shared store), in catalog order.
+	// shared store), in catalog order. Refreshed on open: availability moves
+	// with GPU probes and the enabled switches.
 	onMount(() => {
-		encodersStore.load();
+		encodersStore.refresh();
 	});
 	let encoders = $derived(encodersStore.list);
 	let encodersLoading = $derived(encodersStore.loading);
@@ -84,6 +85,9 @@
 	// vaapi_* encoders run over ffmpeg directly; the HandBrake preset name
 	// plays no part, and extra_args are ffmpeg CLI flags, not HandBrake ones.
 	let usesFfmpegVaapi = $derived(selectedEncoder?.engine === 'ffmpeg_vaapi');
+	// An any_* encoder may resolve to an AMD device at claim time, which runs
+	// ffmpeg instead of HandBrake.
+	let anyGpuSelected = $derived(selectedEncoder?.kind === 'any');
 
 	let encoderHint = $derived(
 		encoder === PRESET_ENCODER_ID && HARDWARE_HINT_PATTERN.test(presetRef)
@@ -262,6 +266,12 @@
 		{#if encodersError}
 			<p class="field-error" data-testid="tp-encoder-error">
 				Could not load encoders; the current encoder is kept.
+			</p>
+		{/if}
+		{#if anyGpuSelected}
+			<p class="field-help" data-testid="tp-encoder-any-note">
+				HandBrake preset settings (scaling, filters, audio) apply on CPU, NVENC and QSV, but not
+				when the job runs on an AMD (VAAPI) device.
 			</p>
 		{/if}
 		{#if encoderHint}

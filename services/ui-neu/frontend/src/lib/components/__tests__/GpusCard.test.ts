@@ -16,6 +16,10 @@ vi.mock('$lib/api/gpus', () => ({
 	probeAllGpus: (...a: unknown[]) => mockProbeAllGpus(...a)
 }));
 vi.mock('$lib/stores/auth', () => ({ isAdmin: readable(true) }));
+const mockRefreshEncoders = vi.fn();
+vi.mock('$lib/stores/encoders.svelte', () => ({
+	encodersStore: { refresh: (...a: unknown[]) => mockRefreshEncoders(...a) }
+}));
 
 const subscribeMock = vi.fn();
 let wsHandler: ((env: WSEnvelope) => void) | null = null;
@@ -62,6 +66,7 @@ beforeEach(() => {
 	mockDeleteGpu.mockReset();
 	mockProbeGpu.mockReset();
 	mockProbeAllGpus.mockReset();
+	mockRefreshEncoders.mockReset();
 	subscribeMock.mockReset();
 	subscribeMock.mockImplementation(() => vi.fn());
 	wsHandler = null;
@@ -112,6 +117,27 @@ describe('GpusCard', () => {
 		await fireEvent.click(screen.getByRole('switch'));
 		await waitFor(() => expect(mockUpdateGpu).toHaveBeenCalledWith('gpu_1', false));
 		await waitFor(() => expect(screen.getByText('disabled')).toBeInTheDocument());
+		expect(mockRefreshEncoders).toHaveBeenCalledTimes(1);
+	});
+
+	it('a failed toggle does not refresh encoder availability', async () => {
+		mockFetchGpus.mockResolvedValue([qsv]);
+		mockUpdateGpu.mockRejectedValue(new Error('HTTP 500'));
+		render(GpusCard);
+		await waitFor(() => expect(screen.getByRole('switch')).toBeInTheDocument());
+		await fireEvent.click(screen.getByRole('switch'));
+		await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+		expect(mockRefreshEncoders).not.toHaveBeenCalled();
+	});
+
+	it('the footer says rows come from discovery and encoders from a per-device probe', async () => {
+		mockFetchGpus.mockResolvedValue([qsv]);
+		render(GpusCard);
+		await waitFor(() =>
+			expect(
+				screen.getByText(/Rows come from device discovery; each device's encoders are verified by a per-device probe\./)
+			).toBeInTheDocument()
+		);
 	});
 
 	it('delete asks for confirmation, then removes the row', async () => {
@@ -125,6 +151,7 @@ describe('GpusCard', () => {
 		await fireEvent.click(confirm);
 		await waitFor(() => expect(mockDeleteGpu).toHaveBeenCalledWith('gpu_1'));
 		await waitFor(() => expect(screen.queryByText('QSV')).not.toBeInTheDocument());
+		expect(mockRefreshEncoders).toHaveBeenCalledTimes(1);
 	});
 
 	it('a 409 delete shows the in-use message and keeps the row', async () => {
@@ -139,6 +166,7 @@ describe('GpusCard', () => {
 			expect(screen.getByRole('alert').textContent).toContain('in use by a running transcode')
 		);
 		expect(screen.getByText('QSV')).toBeInTheDocument();
+		expect(mockRefreshEncoders).not.toHaveBeenCalled();
 	});
 
 	it('Re-probe (admin, per row) calls probeGpu', async () => {
@@ -181,6 +209,7 @@ describe('GpusCard', () => {
 		wsHandler?.(probedEvent('gpu_1'));
 
 		await waitFor(() => expect(mockFetchGpus).toHaveBeenCalledTimes(2));
+		expect(mockRefreshEncoders).toHaveBeenCalledTimes(1);
 	});
 
 	it('a transcode.events envelope with a different event_type does not trigger a refetch', async () => {
@@ -193,6 +222,7 @@ describe('GpusCard', () => {
 		wsHandler?.({ ...probedEvent('gpu_1'), event_type: 'transcode.progress' });
 
 		expect(mockFetchGpus).toHaveBeenCalledTimes(1);
+		expect(mockRefreshEncoders).not.toHaveBeenCalled();
 	});
 
 	it('releases the subscription on destroy', async () => {

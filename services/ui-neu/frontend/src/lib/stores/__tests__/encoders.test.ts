@@ -90,6 +90,43 @@ describe('encoders store', () => {
 		expect(encodersStore.list).toEqual(CATALOG);
 	});
 
+	it('refresh() refetches even when the cache is populated, without a loading flash', async () => {
+		const updated = CATALOG.map((e) => (e.id === 'any_h265' ? { ...e, reason: 'no verified GPU' } : e));
+		const fetchMock = vi.fn().mockResolvedValueOnce(CATALOG).mockResolvedValueOnce(updated);
+		vi.doMock('$lib/api/encoders', () => ({ fetchEncoders: fetchMock }));
+		const { encodersStore } = await import('../encoders.svelte');
+
+		await encodersStore.load();
+		const p = encodersStore.refresh();
+		expect(encodersStore.loading).toBe(false);
+		await p;
+
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(encodersStore.list).toEqual(updated);
+	});
+
+	it('concurrent refresh() and load() calls share one request', async () => {
+		const fetchMock = vi.fn(() => Promise.resolve(CATALOG));
+		vi.doMock('$lib/api/encoders', () => ({ fetchEncoders: fetchMock }));
+		const { encodersStore } = await import('../encoders.svelte');
+
+		await encodersStore.load();
+		fetchMock.mockClear();
+		await Promise.all([encodersStore.refresh(), encodersStore.refresh(), encodersStore.load()]);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('a failed refresh keeps the cached list and sets error', async () => {
+		const fetchMock = vi.fn().mockResolvedValueOnce(CATALOG).mockRejectedValueOnce(new Error('network'));
+		vi.doMock('$lib/api/encoders', () => ({ fetchEncoders: fetchMock }));
+		const { encodersStore } = await import('../encoders.svelte');
+
+		await encodersStore.load();
+		await encodersStore.refresh();
+		expect(encodersStore.list).toEqual(CATALOG);
+		expect(encodersStore.error).not.toBeNull();
+	});
+
 	it('encoderLabel: empty for the tool-own encoder, null and undefined', async () => {
 		vi.doMock('$lib/api/encoders', () => ({ fetchEncoders: () => Promise.resolve(CATALOG) }));
 		const { encoderLabel } = await import('../encoders.svelte');

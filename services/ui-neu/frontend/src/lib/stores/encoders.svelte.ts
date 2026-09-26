@@ -1,4 +1,4 @@
-// Shared, fetch-once cache of the GET /api/encoders catalog (arm_common's
+// Shared cache of the GET /api/encoders catalog (arm_common's
 // encoder ids/labels/availability). Consumed by the transcode preset form's
 // picker (which needs the full list, loading and error state) and by the
 // preset/session list rows that only need a saved encoder id's display
@@ -16,16 +16,12 @@ let loading = $state(false);
 let error = $state<Error | null>(null);
 let inFlight: Promise<void> | null = null;
 
-// Idempotent: a cache hit or an already-running fetch both return without
-// issuing a second request. A failed fetch leaves the cache empty so the
-// next call (e.g. reopening the form) retries.
-async function load(): Promise<void> {
-	if (encoders.length > 0) return;
-	if (inFlight) {
-		await inFlight;
-		return;
-	}
-	loading = true;
+// One request at a time: a call while a fetch is running shares it.
+// `loading` only covers a fetch with nothing cached yet, so a refresh keeps
+// the current list on screen. A failed fetch keeps whatever was cached.
+function fetchShared(): Promise<void> {
+	if (inFlight) return inFlight;
+	loading = encoders.length === 0;
 	error = null;
 	inFlight = (async () => {
 		try {
@@ -37,7 +33,21 @@ async function load(): Promise<void> {
 			inFlight = null;
 		}
 	})();
-	await inFlight;
+	return inFlight;
+}
+
+// Idempotent: a cache hit or an already-running fetch both return without
+// issuing a second request. A failed fetch leaves the cache empty so the
+// next call (e.g. reopening the form) retries. For label-only consumers.
+async function load(): Promise<void> {
+	if (encoders.length > 0) return;
+	await fetchShared();
+}
+
+// Refetches even when the cache is populated: availability changes when a
+// probe finishes or a GPU is enabled, disabled or removed.
+async function refresh(): Promise<void> {
+	await fetchShared();
 }
 
 export const encodersStore = {
@@ -50,7 +60,8 @@ export const encodersStore = {
 	get error(): Error | null {
 		return error;
 	},
-	load
+	load,
+	refresh
 };
 
 /** Display label for a saved preset's encoder id: '' for the tool's own

@@ -410,6 +410,42 @@ describe('encoder picker', () => {
 	});
 });
 
+describe('encoder availability refresh', () => {
+	afterEach(() => cleanup());
+
+	it('refetches the catalog every time the form opens, even when it is cached', async () => {
+		renderComponent(TranscodePresetForm, { props: { preset: null, oncancel: vi.fn(), onsaved: vi.fn() } });
+		await waitFor(() => expect(mockFetchEncoders).toHaveBeenCalled());
+		const encoder = screen.getByTestId('tp-encoder') as HTMLSelectElement;
+		await waitFor(() => expect(encoder.querySelector('option[value="any_h265"]')).not.toBeNull());
+		cleanup();
+		mockFetchEncoders.mockClear();
+
+		renderComponent(TranscodePresetForm, { props: { preset: null, oncancel: vi.fn(), onsaved: vi.fn() } });
+		await waitFor(() => expect(mockFetchEncoders).toHaveBeenCalledTimes(1));
+	});
+});
+
+describe('any-GPU note', () => {
+	afterEach(() => cleanup());
+
+	const NOTE =
+		'HandBrake preset settings (scaling, filters, audio) apply on CPU, NVENC and QSV, but not when the job runs on an AMD (VAAPI) device.';
+
+	it('shows the note only while an any_* encoder is selected', async () => {
+		renderComponent(TranscodePresetForm, { props: { preset: null, oncancel: vi.fn(), onsaved: vi.fn() } });
+		const encoder = screen.getByTestId('tp-encoder') as HTMLSelectElement;
+		await waitFor(() => expect(encoder.querySelector('option[value="any_h265"]')).not.toBeNull());
+		expect(screen.queryByTestId('tp-encoder-any-note')).not.toBeInTheDocument();
+
+		await fireEvent.change(encoder, { target: { value: 'any_h265' } });
+		expect(screen.getByTestId('tp-encoder-any-note').textContent?.replace(/\s+/g, ' ').trim()).toBe(NOTE);
+
+		await fireEvent.change(encoder, { target: { value: 'nvenc_h264' } });
+		expect(screen.queryByTestId('tp-encoder-any-note')).not.toBeInTheDocument();
+	});
+});
+
 describe('hardware-name hint', () => {
 	afterEach(() => cleanup());
 
