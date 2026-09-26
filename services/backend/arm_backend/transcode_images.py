@@ -1,14 +1,15 @@
 """Per-vendor transcode image selection.
 
-Most deployments run a single fat, multi-vendor `arm-transcode` image
-(`ARM_TRANSCODE_IMAGE`). A host built from the split images can instead build
-a smaller `<repo>:<tag>-intel` / `<repo>:<tag>-amd` variant alongside it; the
-dispatcher picks the matching variant for a QSV/VAAPI GPU claim when that
-image actually exists on the docker host, and falls back to the base image
-otherwise (so a host that never built the variant keeps working exactly as
-before). NVENC and CPU spawns always use the base image, since the base
-image already ships CUDA-enabled ffmpeg and there is no NVENC variant to
-derive.
+The transcode image is built as three Dockerfile targets. `base`
+(`ARM_TRANSCODE_IMAGE`) carries the CPU encoders and the HW-enabled
+HandBrakeCLI but no vendor VAAPI/QSV drivers; `intel` and `amd` add those
+drivers and are tagged `<repo>:<tag>-intel` / `<repo>:<tag>-amd`. For a
+QSV/VAAPI GPU claim the dispatcher uses the matching variant when it is
+available on the docker host (present, or pulled on demand), and falls back
+to the base image otherwise. NVENC and CPU spawns always use the base image:
+NVENC needs nothing baked in beyond the HandBrake build, because the host's
+NVIDIA Container Toolkit injects `libnvidia-encode` at run time, so there is
+no NVENC variant to derive.
 
 An explicit `ARM_TRANSCODE_IMAGE_QSV` / `_VAAPI` / `_NVENC` override always
 wins over the derived name, for a differently-named or differently-tagged
@@ -31,6 +32,24 @@ VARIANT_SUFFIX: dict[GpuVendor, str] = {
 }
 
 
+def split_reference(ref: str) -> tuple[str, str] | None:
+    """Split an image reference into (repository, tag) for a pull.
+
+    The tag separator is the LAST ':' that comes after the last '/', so a
+    registry host:port (e.g. "reg:5000/arm-transcode") is never mistaken for
+    a tag. A bare repository with no tag at all gets "latest", matching
+    docker's own default. A digest reference ("name@sha256:...") has no tag,
+    so this returns None.
+    """
+    if "@" in ref:
+        return None
+    slash = ref.rfind("/")
+    colon = ref.rfind(":")
+    if colon > slash:
+        return ref[:colon], ref[colon + 1 :]
+    return ref, "latest"
+
+
 def variant_image(base: str, suffix: str) -> str | None:
     """Derive a variant reference by suffixing `base`'s TAG (never the
     repository) with `-<suffix>`.
@@ -42,14 +61,10 @@ def variant_image(base: str, suffix: str) -> str | None:
     pins an immutable image with no tag to suffix, so this returns None;
     the caller needs an explicit override instead.
     """
-    if "@sha256:" in base:
+    parts = split_reference(base)
+    if parts is None:
         return None
-    slash = base.rfind("/")
-    colon = base.rfind(":")
-    if colon > slash:
-        repo, tag = base[:colon], base[colon + 1 :]
-    else:
-        repo, tag = base, "latest"
+    repo, tag = parts
     return f"{repo}:{tag}-{suffix}"
 
 
@@ -68,7 +83,8 @@ def image_for(settings: Settings, vendor: GpuVendor | None, *, exists: Callable[
 
     An explicit override always wins. Otherwise QSV/VAAPI use their derived
     variant when `exists(variant)` is true; every other case (NVENC, CPU, or
-    a variant that doesn't exist on this docker host) uses the base image.
+    a variant `exists` rejects) uses the base image. `exists` is only ever
+    called with a derived variant, never with the base image.
     """
     if vendor is None:
         return settings.ARM_TRANSCODE_IMAGE

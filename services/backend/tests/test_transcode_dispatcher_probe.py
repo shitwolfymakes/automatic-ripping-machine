@@ -156,11 +156,13 @@ def test_probe_notes_missing_qsv_variant_for_vendor_with_enabled_gpu() -> None:
 
     d._docker.ping.return_value = True
     d._docker.images.get.side_effect = _images_get
+    d._docker.images.pull.side_effect = docker.errors.NotFound("no such tag")
     ok, detail = d.probe()
     assert ok is True
     assert detail is not None
     assert "qsv" in detail
     assert "arm-transcode:test-intel" in detail
+    assert "could not be pulled" in detail
 
 
 def test_probe_has_no_note_when_variant_exists() -> None:
@@ -215,10 +217,127 @@ def test_probe_reports_multiple_missing_variants() -> None:
 
     d._docker.ping.return_value = True
     d._docker.images.get.side_effect = _images_get
+    d._docker.images.pull.side_effect = docker.errors.APIError("registry down")
     ok, detail = d.probe()
     assert ok is True
     assert detail is not None
     assert "qsv" in detail and "vaapi" in detail
+
+
+def test_probe_has_no_note_when_missing_variant_pulls() -> None:
+    """A variant that is absent locally but pulls fine is available, so the
+    diagnostics probe reports nothing for it."""
+    d = _make_dispatcher()
+    d._enabled_gpu_vendors = {GpuVendor.QSV}
+
+    def _images_get(image: str) -> object:
+        if image == "arm-transcode:test":
+            return object()
+        raise docker.errors.ImageNotFound("nope")
+
+    d._docker.ping.return_value = True
+    d._docker.images.get.side_effect = _images_get
+    assert d.probe() == (True, None)
+    d._docker.images.pull.assert_called_once_with("arm-transcode", tag="test-intel")
+
+
+# --- variant_available: pull a missing variant on demand ----------------------
+
+
+def _absent_locally(d) -> None:
+    d._docker.ping.return_value = True
+    d._docker.images.get.side_effect = docker.errors.ImageNotFound("nope")
+
+
+def test_variant_available_false_when_docker_none() -> None:
+    from arm_backend.transcode_dispatcher import TranscodeDispatcher
+    from arm_backend.ws import WSHub
+    from tests.test_transcode_dispatcher import _db_factory, _settings
+
+    disp = TranscodeDispatcher(_settings(), _db_factory(FakeSession()), None, WSHub())
+    assert disp.variant_available("arm-transcode:latest-intel") is False
+
+
+def test_variant_available_local_hit_never_pulls() -> None:
+    d = _make_dispatcher()
+    d._docker.ping.return_value = True
+    assert d.variant_available("arm-transcode:test-intel") is True
+    d._docker.images.pull.assert_not_called()
+
+
+def test_variant_available_pulls_a_missing_variant() -> None:
+    d = _make_dispatcher()
+    _absent_locally(d)
+    assert d.variant_available("reg:5000/ns/arm-transcode:v3-intel") is True
+    d._docker.images.pull.assert_called_once_with("reg:5000/ns/arm-transcode", tag="v3-intel")
+    # The cached "absent" presence answer is dropped, so the next check
+    # re-asks the docker host (where the pulled image now is) and never pulls.
+    d._docker.images.get.side_effect = None
+    d._docker.images.get.return_value = object()
+    assert d.variant_available("reg:5000/ns/arm-transcode:v3-intel") is True
+    assert d._docker.images.pull.call_count == 1
+
+
+def test_variant_available_untagged_reference_pulls_latest() -> None:
+    d = _make_dispatcher()
+    _absent_locally(d)
+    assert d.variant_available("arm-transcode") is True
+    d._docker.images.pull.assert_called_once_with("arm-transcode", tag="latest")
+
+
+def test_variant_available_pull_failure_is_cached_for_ten_minutes(monkeypatch) -> None:
+    from arm_backend.transcode_dispatcher import VARIANT_PULL_RETRY_SECONDS
+
+    assert VARIANT_PULL_RETRY_SECONDS == 600.0
+    fake_now = {"t": 5000.0}
+    monkeypatch.setattr("arm_backend.transcode_dispatcher.time.monotonic", lambda: fake_now["t"])
+    d = _make_dispatcher()
+    _absent_locally(d)
+    d._docker.images.pull.side_effect = docker.errors.NotFound("no such tag")
+
+    assert d.variant_available("arm-transcode:test-intel") is False
+    assert d._docker.images.pull.call_count == 1
+
+    # Inside the window: base image, no second registry round trip.
+    fake_now["t"] += VARIANT_PULL_RETRY_SECONDS - 1
+    assert d.variant_available("arm-transcode:test-intel") is False
+    assert d._docker.images.pull.call_count == 1
+
+    # Window over: the pull is tried again, and a success clears the record.
+    fake_now["t"] += 2
+    d._docker.images.pull.side_effect = None
+    assert d.variant_available("arm-transcode:test-intel") is True
+    assert d._docker.images.pull.call_count == 2
+    assert d._variant_pull_failed == {}
+
+
+def test_variant_available_failure_cache_is_per_image() -> None:
+    d = _make_dispatcher()
+    _absent_locally(d)
+    d._docker.images.pull.side_effect = docker.errors.APIError("denied")
+    assert d.variant_available("arm-transcode:test-intel") is False
+    assert d.variant_available("arm-transcode:test-amd") is False
+    assert d._docker.images.pull.call_count == 2
+
+
+def test_variant_available_digest_is_never_pulled() -> None:
+    d = _make_dispatcher()
+    _absent_locally(d)
+    assert d.variant_available("arm-transcode@sha256:" + "a" * 64) is False
+    d._docker.images.pull.assert_not_called()
+
+
+def test_digest_base_image_spawns_base_without_a_pull() -> None:
+    """A digest-pinned base has no tag to derive a variant from: image_for
+    uses the base image and nothing is pulled."""
+    from arm_backend.transcode_images import image_for
+
+    digest = "reg.example/arm-transcode@sha256:" + "b" * 64
+    d = _disp(FakeSession(), ARM_TRANSCODE_IMAGE=digest)
+    _absent_locally(d)
+    assert image_for(d._settings, GpuVendor.QSV, exists=d.variant_available) == digest
+    d._docker.images.pull.assert_not_called()
+    d._docker.images.get.assert_not_called()
 
 
 def test_last_spawn_error_defaults_none() -> None:

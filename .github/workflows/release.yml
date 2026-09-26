@@ -59,8 +59,6 @@ jobs:
           - {service: transcode, target: intel, suffix: "-intel"}
           - {service: transcode, target: amd, suffix: "-amd"}
           - {service: ui, target: "", suffix: ""}
-    outputs:
-      tag: ${{ steps.meta.outputs.version }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
@@ -92,7 +90,13 @@ jobs:
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}
-          flavor: suffix=${{ matrix.suffix }}
+          # latest=false: under the default latest=auto, `type=ref,event=tag`
+          # also emits an unsuffixed `:latest` from every leg (the flavor
+          # suffix is not applied to it), so every transcode variant would
+          # overwrite the same tag.
+          flavor: |
+            latest=false
+            suffix=${{ matrix.suffix }}
           tags: |
             type=ref,event=tag
 

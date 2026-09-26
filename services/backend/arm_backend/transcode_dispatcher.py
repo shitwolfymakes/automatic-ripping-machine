@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -31,7 +32,13 @@ from sqlmodel import col, select
 
 from arm_backend.config import Settings, settings
 from arm_backend.docker_probe import TtlProbe, probe_docker
-from arm_backend.transcode_images import VARIANT_SUFFIX, image_for, variant_image, vendor_override
+from arm_backend.transcode_images import (
+    VARIANT_SUFFIX,
+    image_for,
+    split_reference,
+    variant_image,
+    vendor_override,
+)
 from arm_common import (
     Config,
     Gpu,
@@ -66,6 +73,12 @@ _CANCEL_GRACE_SECONDS = 10
 _DOCKER_LABEL_KEY = "arm.task_id"
 # Why a deployment cannot run encode work (or a GPU probe) at all: shared by
 # `probe()` and the GPU probe endpoints so both report the same reason.
+# How long a failed pull of a per-vendor variant image is remembered before
+# the pull is tried again. A variant tag that exists only on a dev host (or a
+# registry that is down) would otherwise cost a registry round trip on every
+# spawn, GPU probe and diagnostics poll.
+VARIANT_PULL_RETRY_SECONDS = 600.0
+
 NO_DOCKER_CLIENT_DETAIL = "no docker client (ripper-only deployment or docker unavailable)"
 
 # Per-tick cap on how many ENCODE rows spawn_pending examines (spawn
@@ -177,6 +190,9 @@ class TranscodeDispatcher:
         # Per-image TtlProbe cache for `image_exists` (one entry per distinct
         # variant image ever checked, e.g. the derived "-intel"/"-amd" tag).
         self._image_probes: dict[str, TtlProbe] = {}
+        # Variant image -> time.monotonic() of its last failed pull (see
+        # `variant_available`); separate from the 30 s presence cache above.
+        self._variant_pull_failed: dict[str, float] = {}
         # Vendors seen holding an enabled GPU row. Refreshed once per tick
         # (see `_refresh_enabled_gpu_vendors`, called from `_tick`) so it
         # reflects the current inventory even with an idle queue or a
@@ -848,10 +864,51 @@ class TranscodeDispatcher:
         ok, _ = cached()
         return ok
 
+    def variant_available(self, image: str) -> bool:
+        """Can the per-vendor variant `image` be spawned on the docker host?
+
+        True when it is already present (the cached `image_exists` check) or
+        a pull of it succeeds now. A failed pull returns False and is not
+        retried for VARIANT_PULL_RETRY_SECONDS, so the caller falls back to
+        the base image without a registry round trip each time. A digest
+        reference has no tag to pull and is never pulled. Only derived
+        variants come through here; the base image is never pulled by this
+        path. Blocking (a pull can take minutes): callers run it off the
+        event loop."""
+        if self._docker is None:
+            return False
+        if self.image_exists(image):
+            return True
+        parts = split_reference(image)
+        if parts is None:
+            return False
+        now = time.monotonic()
+        failed_at = self._variant_pull_failed.get(image)
+        if failed_at is not None and now - failed_at < VARIANT_PULL_RETRY_SECONDS:
+            return False
+        repo, tag = parts
+        logger.info("variant image %s not present on the docker host; pulling it", image)
+        try:
+            self._docker.images.pull(repo, tag=tag)
+        except Exception as exc:  # noqa: BLE001 - any pull failure means "use the base image"
+            logger.warning(
+                "could not pull variant image %s (%s); using the base image, next pull attempt in %.0f s",
+                image,
+                exc,
+                VARIANT_PULL_RETRY_SECONDS,
+            )
+            self._variant_pull_failed[image] = now
+            return False
+        self._variant_pull_failed.pop(image, None)
+        # Drop the cached "absent" answer so the next presence check sees it.
+        self._image_probes.pop(image, None)
+        logger.info("pulled variant image %s", image)
+        return True
+
     def _missing_variant_notes(self) -> list[str]:
         """One note per vendor that has an enabled GPU row, has a derivable
-        variant, isn't overridden, and whose variant image isn't present on
-        this docker host right now."""
+        variant, isn't overridden, and whose variant image is neither present
+        on this docker host nor pullable right now."""
         notes: list[str] = []
         for vendor in sorted(self._enabled_gpu_vendors, key=lambda v: v.value):
             if vendor_override(self._settings, vendor):
@@ -860,9 +917,12 @@ class TranscodeDispatcher:
             if suffix is None:
                 continue
             candidate = variant_image(self._settings.ARM_TRANSCODE_IMAGE, suffix)
-            if candidate is None or self.image_exists(candidate):
+            if candidate is None or self.variant_available(candidate):
                 continue
-            notes.append(f"{vendor.value} variant image {candidate} not present; falling back to base image")
+            notes.append(
+                f"{vendor.value} variant image {candidate} not present and could not be pulled; "
+                "falling back to base image"
+            )
         return notes
 
     def _spawn_container(self, task: TranscodeTask, *, assignment: GpuAssignment | None = None) -> Any:
@@ -922,7 +982,7 @@ class TranscodeDispatcher:
         # never collide.
         hostname = f"arm-transcode-{task.id[-12:]}"
         gpu_vendor = assignment.gpu.vendor if assignment is not None and assignment.gpu is not None else None
-        image = image_for(self._settings, gpu_vendor, exists=self.image_exists)
+        image = image_for(self._settings, gpu_vendor, exists=self.variant_available)
         run_kwargs: dict[str, Any] = dict(
             image=image,
             name=hostname,

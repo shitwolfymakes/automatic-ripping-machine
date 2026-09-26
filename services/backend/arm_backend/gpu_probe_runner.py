@@ -330,8 +330,11 @@ class GpuProbeRunner:
         return kwargs
 
     async def _run_container(self, docker: Any, gpu: Gpu) -> ProbeOutcome:
-        # image_exists may ping the docker host, so it runs off the loop too.
-        image = await asyncio.to_thread(image_for, self._settings, gpu.vendor, exists=self._dispatcher.image_exists)
+        # variant_available may ping the docker host or pull a variant image,
+        # so it runs off the loop too.
+        image = await asyncio.to_thread(
+            image_for, self._settings, gpu.vendor, exists=self._dispatcher.variant_available
+        )
         kwargs = self._run_kwargs(gpu, image)
         logger.info("gpu probe: probing %s (%s %s) with %s", gpu.id, gpu.vendor.value, gpu.device_path, image)
         try:

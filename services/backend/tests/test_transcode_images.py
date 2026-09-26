@@ -1,4 +1,5 @@
-"""Per-vendor transcode image selection: `variant_image`'s tag-suffix
+"""Per-vendor transcode image selection: `split_reference`'s repo/tag split
+for pulls, `variant_image`'s tag-suffix
 derivation, `vendor_override`'s per-vendor Settings lookup, and `image_for`'s
 override > derived-variant > base precedence.
 """
@@ -11,7 +12,7 @@ os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
 from arm_backend.config import Settings  # noqa: E402
-from arm_backend.transcode_images import image_for, variant_image, vendor_override  # noqa: E402
+from arm_backend.transcode_images import image_for, split_reference, variant_image, vendor_override  # noqa: E402
 from arm_common import GpuVendor  # noqa: E402
 
 
@@ -23,6 +24,23 @@ def _settings(**overrides: object) -> Settings:
     }
     base.update(overrides)
     return Settings.model_construct(**base)
+
+
+# --- split_reference ---------------------------------------------------------
+
+
+def test_split_reference_splits_repo_and_tag() -> None:
+    assert split_reference("arm-transcode:latest-intel") == ("arm-transcode", "latest-intel")
+
+
+def test_split_reference_keeps_registry_port_in_the_repo() -> None:
+    assert split_reference("reg:5000/ns/arm-transcode:v3-amd") == ("reg:5000/ns/arm-transcode", "v3-amd")
+    assert split_reference("reg:5000/arm-transcode") == ("reg:5000/arm-transcode", "latest")
+
+
+def test_split_reference_rejects_any_digest() -> None:
+    assert split_reference("arm-transcode@sha256:" + "a" * 64) is None
+    assert split_reference("reg:5000/arm-transcode:v1@sha512:" + "b" * 128) is None
 
 
 # --- variant_image -----------------------------------------------------------

@@ -843,9 +843,31 @@ async def test_vaapi_spawn_falls_back_to_base_when_variant_missing() -> None:
     )
     docker_client = MagicMock()
     docker_client.images.get.side_effect = docker_errors.ImageNotFound("nope")
+    docker_client.images.pull.side_effect = docker_errors.NotFound("no such tag")
     disp = TranscodeDispatcher(_settings(), _db_factory(db), docker_client, WSHub())
     await disp.spawn_pending(db)
     assert docker_client.containers.run.call_args.kwargs["image"] == "arm-transcode:latest"
+    docker_client.images.pull.assert_called_once_with("arm-transcode", tag="latest-amd")
+
+
+async def test_vaapi_spawn_pulls_a_missing_variant_and_uses_it() -> None:
+    """A production host never builds the variant locally: the dispatcher
+    pulls it on demand and spawns it, instead of running a VAAPI job on the
+    base image that has no AMD driver."""
+    import docker.errors as docker_errors
+
+    db = _build_db(
+        encoder="any_h265",
+        gpus=[(GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h264", "h265"], None)],
+    )
+    docker_client = MagicMock()
+    docker_client.images.get.side_effect = docker_errors.ImageNotFound("nope")
+    disp = TranscodeDispatcher(
+        _settings(ARM_TRANSCODE_IMAGE="reg:5000/ns/arm-transcode:v3.1.0"), _db_factory(db), docker_client, WSHub()
+    )
+    await disp.spawn_pending(db)
+    docker_client.images.pull.assert_called_once_with("reg:5000/ns/arm-transcode", tag="v3.1.0-amd")
+    assert docker_client.containers.run.call_args.kwargs["image"] == "reg:5000/ns/arm-transcode:v3.1.0-amd"
 
 
 async def test_nvenc_spawn_uses_base_image_and_never_checks_a_variant() -> None:

@@ -167,7 +167,7 @@ def _build(
     container: _Container | None = None,
     *,
     docker: bool = True,
-    image_exists: Callable[[str], bool] | None = None,
+    variant_available: Callable[[str], bool] | None = None,
     **settings_kw: Any,
 ) -> tuple[GpuProbeRunner, FakeSession, _Docker | None, _Hub, TranscodeDispatcher]:
     db = FakeSession()
@@ -181,7 +181,7 @@ def _build(
         docker_client=fake_docker,
         hub=hub,  # type: ignore[arg-type]
     )
-    dispatcher.image_exists = image_exists or (lambda _image: False)  # type: ignore[method-assign]
+    dispatcher.variant_available = variant_available or (lambda _image: False)  # type: ignore[method-assign]
     runner = GpuProbeRunner(settings, _db_factory(db), dispatcher, hub)  # type: ignore[arg-type]
     return runner, db, fake_docker, hub, dispatcher
 
@@ -515,7 +515,7 @@ async def test_spawn_kwargs_for_a_qsv_row() -> None:
 
     runner, _db, docker, *_ = _build(
         [_gpu(device_path="/dev/dri/renderD129")],
-        image_exists=_exists,
+        variant_available=_exists,
         ARM_TRANSCODE_PUID="1001",
         ARM_TRANSCODE_PGID="1002",
         ARM_RENDER_GID="993",
