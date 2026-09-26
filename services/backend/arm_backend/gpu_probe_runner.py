@@ -9,19 +9,23 @@ the runner writes `encoder_kinds = verified`, `probed_at = now` and a short
 `probe_error` (None when anything verified) onto the row, then emits
 `gpu.probed` on the `transcode.events` topic.
 
-A non-zero exit or output without that JSON line (most often a transcode
-image that predates `--probe-device`) is recorded as a probe failure telling
-the operator to rebuild or pull the image, never as a silent "verified
-nothing". Every probe writes `probed_at`, so a failed row shows its error
-instead of looking unprobed; re-probing is an explicit operator action.
+A failed probe is recorded with the worker's stderr tail, never as a silent
+"verified nothing": exit 3 means the test clip could not be generated, exit 2
+means the probe environment was rejected, and any other non-zero exit or
+output without that JSON line (most often a transcode image that predates
+`--probe-device`) tells the operator to rebuild or pull the image. Every
+probe writes `probed_at`, so a failed row shows its error instead of looking
+unprobed.
 
 Mutual exclusion with the dispatcher's GPU claim: a row's id sits in
 `dispatcher.probing_gpu_ids` for the whole probe (the claim skips those
-rows), and a row that is BUSY with a transcode is never probed.
+rows), and a row that is BUSY with a transcode, or claimed by this process
+but not yet committed (`dispatcher.claimed_gpu_ids`), is never probed.
 
-Triggers: `probe_unprobed` (a background pass started at boot, sequential,
-enabled rows with no `probed_at` only) and `start_probe` (the re-probe
-endpoints). Neither runs without a docker client.
+Triggers: the boot pass (`start_boot_pass` -> `probe_unprobed`: removes
+probe containers orphaned by a previous process, then probes, one at a time,
+every enabled row that was never probed or has no verified encoder) and
+`start_probe` (the re-probe endpoints). Neither runs without a docker client.
 """
 
 from __future__ import annotations
@@ -41,7 +45,7 @@ from arm_backend.transcode_dispatcher import TranscodeDispatcher
 from arm_backend.transcode_images import image_for
 from arm_backend.ws import WSHub
 from arm_common import Gpu
-from arm_common.enums import GpuStatus, GpuVendor
+from arm_common.enums import GpuStatus, GpuVendor, VideoCodec
 
 logger = logging.getLogger("arm_backend.gpu_probe_runner")
 
@@ -54,6 +58,10 @@ PROBE_COMMAND = ["python", "-m", "arm_transcode.main", "--probe-device"]
 PROBE_LABEL_KEY = "arm.gpu_probe"
 STALE_IMAGE_ERROR = "probe failed (exit {code}); the transcode image may predate --probe-device: rebuild or pull it"
 MAX_ERROR_CHARS = 500
+# How long shutdown waits for cancelled probes to remove their containers.
+SHUTDOWN_GRACE_S = 5.0
+_STDERR_TAIL_LINES = 5
+_KNOWN_CODECS = frozenset(c.value for c in VideoCodec)
 
 ProbeOutcome = tuple[list[str], str | None]
 
@@ -71,34 +79,66 @@ def _is_timeout(exc: BaseException) -> bool:
     return "timeout" in type(exc).__name__.lower() or "timed out" in str(exc).lower()
 
 
-def parse_probe_output(status_code: int, stdout: bytes | str) -> ProbeOutcome:
-    """Turn the probe container's exit code and stdout into
-    `(verified codecs, probe_error)`.
+def _decode(raw: bytes | str) -> str:
+    return raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
+
+
+def _stderr_tail(stderr: bytes | str) -> str:
+    lines = [line.strip() for line in _decode(stderr).splitlines() if line.strip()]
+    return " | ".join(lines[-_STDERR_TAIL_LINES:])
+
+
+def parse_probe_payload(status_code: int, stdout: bytes | str) -> dict[str, Any] | None:
+    """The worker's result object, or None when the probe did not succeed.
 
     Only the LAST non-empty stdout line is parsed (the entrypoint may log
     before the worker runs). Anything other than exit 0 with a JSON object
     carrying a `verified` list is a failed probe.
     """
-    text = stdout.decode("utf-8", "replace") if isinstance(stdout, bytes) else stdout
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    payload: Any = None
-    if lines:
-        try:
-            payload = json.loads(lines[-1])
-        except ValueError:
-            payload = None
-    if status_code != 0 or not isinstance(payload, dict) or not isinstance(payload.get("verified"), list):
-        return [], STALE_IMAGE_ERROR.format(code=status_code)
+    lines = [line.strip() for line in _decode(stdout).splitlines() if line.strip()]
+    if status_code != 0 or not lines:
+        return None
+    try:
+        payload = json.loads(lines[-1])
+    except ValueError:
+        return None
+    if not isinstance(payload, dict) or not isinstance(payload.get("verified"), list):
+        return None
+    return payload
+
+
+def probe_failure_error(status_code: int, stderr: bytes | str) -> str:
+    """The row's `probe_error` for a probe that produced no result."""
+    tail = _stderr_tail(stderr)
+    if status_code == 3:
+        message = "probe could not create its test clip" + (f": {tail}" if tail else "")
+    elif status_code == 2 and "unrecognized" not in tail.lower():
+        message = "probe misconfigured" + (f": {tail}" if tail else "")
+    else:
+        # Includes an argument parser rejecting --probe-device outright.
+        message = STALE_IMAGE_ERROR.format(code=status_code) + (f"; stderr: {tail}" if tail else "")
+    return _truncate(message)
+
+
+def probe_outcome(payload: dict[str, Any]) -> ProbeOutcome:
+    """`(verified codecs, probe_error)` from a successful probe's result.
+    Codecs outside the catalog vocabulary are dropped and noted."""
     verified: list[str] = []
+    unknown: list[str] = []
     for codec in payload["verified"]:
-        if isinstance(codec, str) and codec not in verified:
-            verified.append(codec)
-    if verified:
-        return verified, None
-    errors = payload.get("errors")
-    details = [f"{enc}: {msg}" for enc, msg in errors.items()] if isinstance(errors, dict) else []
-    summary = "no encoder verified" + (": " + "; ".join(details) if details else "")
-    return [], _truncate(summary)
+        if isinstance(codec, str) and codec in _KNOWN_CODECS:
+            if codec not in verified:
+                verified.append(codec)
+        elif str(codec) not in unknown:
+            unknown.append(str(codec))
+    notes: list[str] = []
+    if not verified:
+        errors = payload.get("errors")
+        details = [f"{enc}: {msg}" for enc, msg in errors.items()] if isinstance(errors, dict) else []
+        notes.append("no encoder verified" + (": " + "; ".join(details) if details else ""))
+    if unknown:
+        notes.append("ignored unknown codec(s) from the probe: " + ", ".join(unknown))
+    return verified, _truncate("; ".join(notes)) if notes else None
 
 
 class GpuProbeRunner:
@@ -115,6 +155,15 @@ class GpuProbeRunner:
         self._hub = hub
         self._tasks: set[asyncio.Task[None]] = set()
 
+    def gpu_in_use(self, gpu: Gpu) -> bool:
+        """BUSY with a transcode, or claimed by this process for a spawn whose
+        claim is not yet committed (other sessions still read it AVAILABLE)."""
+        return (
+            gpu.claimed_by_task_id is not None
+            or gpu.status == GpuStatus.BUSY
+            or gpu.id in self._dispatcher.claimed_gpu_ids
+        )
+
     def capable(self) -> bool:
         """Whether probes can run at all: a transcode-capable deployment with
         a docker client (local socket or ARM_TRANSCODE_DOCKER_HOST)."""
@@ -124,10 +173,11 @@ class GpuProbeRunner:
 
     def start_probe(self, gpu_id: str) -> bool:
         """Schedule a background probe of one row. Returns False when that row
-        is already being probed. The row is reserved immediately, so a second
-        request for it is refused even before the task starts."""
+        is already being probed or holds an uncommitted claim. The row is
+        reserved immediately, so a second request for it is refused even
+        before the task starts."""
         probing = self._dispatcher.probing_gpu_ids
-        if gpu_id in probing:
+        if gpu_id in probing or gpu_id in self._dispatcher.claimed_gpu_ids:
             return False
         probing.add(gpu_id)
         task = asyncio.create_task(self._probe_reserved(gpu_id))
@@ -142,39 +192,85 @@ class GpuProbeRunner:
         task.add_done_callback(_release)
         return True
 
+    def start_boot_pass(self) -> asyncio.Task[None]:
+        """Run `probe_unprobed` in the background; `shutdown` cancels it."""
+        task = asyncio.create_task(self.probe_unprobed())
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        return task
+
     def pending_tasks(self) -> list[asyncio.Task[None]]:
         return list(self._tasks)
 
-    def cancel_pending(self) -> None:
-        """Cancel every scheduled probe (backend shutdown). A container already
-        running on the docker host is left to its own timeout."""
-        for task in list(self._tasks):
+    async def shutdown(self, grace_s: float = SHUTDOWN_GRACE_S) -> None:
+        """Cancel the boot pass and every scheduled probe, then wait briefly
+        so each cancelled probe's `finally` removes its container (a probe
+        container has no lifetime limit of its own beyond the runner's
+        `wait`)."""
+        tasks = list(self._tasks)
+        for task in tasks:
             task.cancel()
+        if tasks:
+            await asyncio.wait(tasks, timeout=grace_s)
+
+    async def remove_orphans(self) -> int:
+        """Remove probe containers a previous backend process left behind
+        (killed mid-probe). Containers of probes running now are kept. Never
+        raises; returns how many were removed."""
+        docker = self._dispatcher.docker_client
+        if docker is None:
+            return 0
+        try:
+            containers = await asyncio.to_thread(
+                lambda: docker.containers.list(all=True, filters={"label": PROBE_LABEL_KEY})
+            )
+        except Exception as exc:  # noqa: BLE001 - cleanup is best-effort
+            logger.warning("gpu probe: could not list orphaned probe containers: %s", exc)
+            return 0
+        removed = 0
+        for container in containers:
+            labels = getattr(container, "labels", None) or {}
+            if labels.get(PROBE_LABEL_KEY) in self._dispatcher.probing_gpu_ids:
+                continue
+            try:
+                await asyncio.to_thread(container.remove, force=True)
+                removed += 1
+            except Exception as exc:  # noqa: BLE001 - cleanup is best-effort
+                logger.warning("gpu probe: could not remove orphaned probe container: %s", exc)
+        if removed:
+            logger.info("gpu probe: removed %d orphaned probe container(s)", removed)
+        return removed
 
     async def probe_unprobed(self) -> None:
-        """Boot pass: probe every enabled row that has never been probed, one
-        at a time. A no-op when probes can't run. Never raises."""
+        """Boot pass: remove orphaned probe containers, then probe, one at a
+        time, every enabled row that was never probed or has no verified
+        encoder (a failed or verified-nothing row is retried every boot). A
+        no-op when probes can't run. Never raises."""
         if not self.capable():
             logger.info("gpu probe: boot pass skipped (no docker client for transcodes)")
             return
+        await self.remove_orphans()
         try:
             async with self._db_factory() as db:
                 rows = (await db.execute(select(Gpu).order_by(col(Gpu.vendor), col(Gpu.device_path)))).scalars().all()
-                gpu_ids = [g.id for g in rows if g.enabled and g.probed_at is None]
+                gpu_ids = [g.id for g in rows if g.enabled and (g.probed_at is None or not g.encoder_kinds)]
         except Exception as exc:  # noqa: BLE001 - a boot-time background pass must never crash
             logger.exception("gpu probe: boot pass could not list GPUs: %s", exc)
             return
         if gpu_ids:
-            logger.info("gpu probe: boot pass probing %d unprobed GPU(s)", len(gpu_ids))
+            logger.info("gpu probe: boot pass probing %d unprobed or unverified GPU(s)", len(gpu_ids))
         for gpu_id in gpu_ids:
             await self.probe_gpu(gpu_id)
 
     async def probe_gpu(self, gpu_id: str) -> None:
         """Probe one row now and write the result. Skips a row another probe
-        already holds. Never raises."""
+        already holds or one with an uncommitted claim. Never raises."""
         probing = self._dispatcher.probing_gpu_ids
         if gpu_id in probing:
             logger.info("gpu probe: %s already being probed; skipping", gpu_id)
+            return
+        if gpu_id in self._dispatcher.claimed_gpu_ids:
+            logger.info("gpu probe: %s is being claimed by a transcode; skipping", gpu_id)
             return
         probing.add(gpu_id)
         try:
@@ -192,7 +288,7 @@ class GpuProbeRunner:
             if gpu is None:
                 logger.info("gpu probe: %s no longer exists; nothing to probe", gpu_id)
                 return
-            if gpu.claimed_by_task_id is not None or gpu.status == GpuStatus.BUSY:
+            if self.gpu_in_use(gpu):
                 logger.info("gpu probe: %s is in use by a running transcode; not probing", gpu_id)
                 return
             docker = self._dispatcher.docker_client
@@ -249,9 +345,14 @@ class GpuProbeRunner:
                 if _is_timeout(exc):
                     return [], f"probe timed out after {PROBE_TIMEOUT_S} s; the probe container was removed"
                 return [], _truncate(f"probe failed while waiting for the container: {exc}")
-            status_code = result.get("StatusCode", -1)
+            raw_code = result.get("StatusCode")
+            status_code = raw_code if isinstance(raw_code, int) else -1
             stdout = await asyncio.to_thread(container.logs, stdout=True, stderr=False)
-            return parse_probe_output(int(status_code), stdout)
+            payload = parse_probe_payload(status_code, stdout)
+            if payload is not None:
+                return probe_outcome(payload)
+            stderr = await asyncio.to_thread(container.logs, stdout=False, stderr=True)
+            return [], probe_failure_error(status_code, stderr)
         finally:
             try:
                 await asyncio.to_thread(container.remove, force=True)

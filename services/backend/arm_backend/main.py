@@ -264,12 +264,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.exception("startup orphaned-application sweep failed: %s", exc)
     dispatcher_task = asyncio.create_task(transcode_dispatcher.run())
     app.state.transcode_dispatcher = transcode_dispatcher
-    # Per-device GPU probes: the boot pass verifies every enabled, never-probed
-    # row in the background (a no-op without a docker client), and the
+    # Per-device GPU probes: the boot pass removes orphaned probe containers
+    # and verifies every enabled row that was never probed or has no verified
+    # encoder, in the background (a no-op without a docker client); the
     # /api/gpus re-probe endpoints schedule through the same runner.
     gpu_probe_runner = GpuProbeRunner(settings, SessionLocal, transcode_dispatcher, app.state.ws_hub)
     app.state.gpu_probe_runner = gpu_probe_runner
-    gpu_probe_boot_task = asyncio.create_task(gpu_probe_runner.probe_unprobed())
+    gpu_probe_runner.start_boot_pass()
 
     # Drive lifecycle Plan 3 — ripper manager (spec §3). Always the LOCAL
     # daemon and always its OWN client: the drives are plugged into this
@@ -360,10 +361,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await asyncio.wait_for(notification_task, timeout=10.0)
         except asyncio.TimeoutError:  # pragma: no cover — only if the dispatcher hangs >10s on shutdown
             notification_task.cancel()
-        gpu_probe_boot_task.cancel()
-        gpu_probe_runner.cancel_pending()
-        with contextlib.suppress(asyncio.CancelledError):
-            await gpu_probe_boot_task
+        # Cancels the boot pass and any re-probe, waiting briefly so each
+        # cancelled probe removes its container.
+        await gpu_probe_runner.shutdown()
         # transcode_dispatcher/dispatcher_task are unconditionally set above
         # (the dispatcher always runs, docker or not).
         transcode_dispatcher.stop()

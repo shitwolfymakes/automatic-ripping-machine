@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import threading
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -70,16 +71,26 @@ def _db_factory(db: FakeSession) -> Any:
 
 
 class _Container:
-    def __init__(self, *, status: int = 0, stdout: bytes = b"", wait_exc: Exception | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        status: int | None = 0,
+        stdout: bytes = b"",
+        stderr: bytes = b"",
+        wait_exc: Exception | None = None,
+        labels: dict[str, str] | None = None,
+    ) -> None:
         self.status = status
         self.stdout = stdout
+        self.stderr = stderr
+        self.labels = labels or {}
         self.wait_exc = wait_exc
         self.wait_timeouts: list[object] = []
         self.logs_calls: list[dict[str, bool]] = []
         self.removed: list[bool] = []
         self.remove_exc: Exception | None = None
 
-    def wait(self, timeout: object = None) -> dict[str, int]:
+    def wait(self, timeout: object = None) -> dict[str, int | None]:
         self.wait_timeouts.append(timeout)
         if self.wait_exc is not None:
             raise self.wait_exc
@@ -87,7 +98,7 @@ class _Container:
 
     def logs(self, *, stdout: bool, stderr: bool) -> bytes:
         self.logs_calls.append({"stdout": stdout, "stderr": stderr})
-        return self.stdout
+        return self.stdout if stdout else self.stderr
 
     def remove(self, *, force: bool) -> None:
         self.removed.append(force)
@@ -101,6 +112,15 @@ class _Containers:
         self.calls: list[dict[str, Any]] = []
         self.run_exc: Exception | None = None
         self.on_run: Callable[[dict[str, Any]], None] | None = None
+        self.existing: list[_Container] = []
+        self.list_calls: list[dict[str, Any]] = []
+        self.list_exc: Exception | None = None
+
+    def list(self, **kwargs: Any) -> list[_Container]:
+        self.list_calls.append(kwargs)
+        if self.list_exc is not None:
+            raise self.list_exc
+        return self.existing
 
     def run(self, **kwargs: Any) -> _Container:
         self.calls.append(kwargs)
@@ -190,11 +210,25 @@ async def test_verified_json_writes_row_and_emits() -> None:
     assert container.removed == [True]
 
 
-async def test_duplicate_and_non_string_codecs_are_dropped() -> None:
-    container = _Container(stdout=json.dumps({"verified": ["h264", "h264", 5, "h265"], "errors": {}}).encode())
+async def test_duplicate_codecs_collapse_and_unknown_ones_are_dropped_and_noted() -> None:
+    verified = ["h264", "h264", 5, "vp9", "h265", "vp9"]
+    container = _Container(stdout=json.dumps({"verified": verified, "errors": {}}).encode())
     runner, db, *_ = _build([_gpu()], container)
     await runner.probe_gpu("gpu_1")
-    assert db.rows["gpus"][0].encoder_kinds == ["h264", "h265"]
+    row = db.rows["gpus"][0]
+    assert row.encoder_kinds == ["h264", "h265"]
+    assert row.probe_error == "ignored unknown codec(s) from the probe: 5, vp9"
+
+
+async def test_only_unknown_codecs_counts_as_nothing_verified() -> None:
+    container = _Container(stdout=_payload(["mpeg2"], {"qsv_h264": "init failed"}))
+    runner, db, *_ = _build([_gpu()], container)
+    await runner.probe_gpu("gpu_1")
+    row = db.rows["gpus"][0]
+    assert row.encoder_kinds == []
+    assert row.probe_error == (
+        "no encoder verified: qsv_h264: init failed; ignored unknown codec(s) from the probe: mpeg2"
+    )
 
 
 async def test_nothing_verified_summarises_errors() -> None:
@@ -219,31 +253,88 @@ async def test_nothing_verified_without_errors_still_explains() -> None:
 
 
 @pytest.mark.parametrize(
-    ("status", "stdout"),
+    ("status", "stdout", "stderr", "expected"),
     [
-        (2, b""),  # argparse-style rejection of an unknown mode: nothing on stdout
-        (1, b"Traceback (most recent call last):\nKeyError: 'ARM_TRANSCODE_TASK_ID'\n"),
-        (0, b"not json at all"),
-        (0, b"{}"),  # the legacy --probe-encoders shape
-        (0, b"[1, 2]"),
-        (3, _payload(["h265"])),  # a non-zero exit never counts as verified
+        # An argument parser rejecting the unknown mode.
+        (
+            2,
+            b"",
+            b"usage: main.py\nmain.py: error: unrecognized arguments: --probe-device\n",
+            STALE.format(n=2) + "; stderr: usage: main.py | main.py: error: unrecognized arguments: --probe-device",
+        ),
+        # An old worker ignoring the flag and running a transcode without a task.
+        (
+            1,
+            b"Traceback (most recent call last):\n",
+            b"Traceback (most recent call last):\nKeyError: 'ARM_TRANSCODE_TASK_ID'\n",
+            STALE.format(n=1) + "; stderr: Traceback (most recent call last): | KeyError: 'ARM_TRANSCODE_TASK_ID'",
+        ),
+        (0, b"not json at all", b"", STALE.format(n=0)),
+        (0, b"{}", b"", STALE.format(n=0)),  # the legacy --probe-encoders shape
+        (0, b"[1, 2]", b"", STALE.format(n=0)),
+        (0, b"", b"", STALE.format(n=0)),
+        (1, _payload(["h265"]), b"", STALE.format(n=1)),  # a non-zero exit never counts as verified
     ],
 )
-async def test_stale_image_or_failed_probe_says_to_rebuild(status: int, stdout: bytes) -> None:
-    runner, db, _docker, hub, _d = _build([_gpu(encoder_kinds=["h264"])], _Container(status=status, stdout=stdout))
+async def test_stale_image_or_failed_probe_says_to_rebuild(
+    status: int, stdout: bytes, stderr: bytes, expected: str
+) -> None:
+    container = _Container(status=status, stdout=stdout, stderr=stderr)
+    runner, db, _docker, hub, _d = _build([_gpu(encoder_kinds=["h264"])], container)
 
     await runner.probe_gpu("gpu_1")
 
     row = db.rows["gpus"][0]
     assert row.encoder_kinds == []
     assert row.probed_at is not None
-    assert row.probe_error == STALE.format(n=status)
+    assert row.probe_error == expected
     assert hub.events[0][1] == "gpu.probed"
+    assert container.logs_calls == [{"stdout": True, "stderr": False}, {"stdout": False, "stderr": True}]
 
 
-async def test_missing_status_code_is_reported_as_unknown_exit() -> None:
+async def test_exit_3_reports_the_test_clip_failure_with_stderr() -> None:
+    stderr = b"line1\nline2\nline3\nline4\nline5\ncould not generate the test clip: \xff libavfilter missing\n"
+    runner, db, *_ = _build([_gpu()], _Container(status=3, stderr=stderr))
+    await runner.probe_gpu("gpu_1")
+    assert db.rows["gpus"][0].probe_error == (
+        "probe could not create its test clip: line2 | line3 | line4 | line5 | "
+        "could not generate the test clip: \ufffd libavfilter missing"
+    )
+
+
+async def test_exit_3_without_stderr() -> None:
+    runner, db, *_ = _build([_gpu()], _Container(status=3))
+    await runner.probe_gpu("gpu_1")
+    assert db.rows["gpus"][0].probe_error == "probe could not create its test clip"
+
+
+async def test_exit_2_reports_a_misconfigured_probe() -> None:
+    stderr = b"--probe-device: unknown ARM_GPU_VENDOR='xyz' (valid: qsv, nvenc, vaapi)\n"
+    runner, db, *_ = _build([_gpu()], _Container(status=2, stderr=stderr))
+    await runner.probe_gpu("gpu_1")
+    assert db.rows["gpus"][0].probe_error == (
+        "probe misconfigured: --probe-device: unknown ARM_GPU_VENDOR='xyz' (valid: qsv, nvenc, vaapi)"
+    )
+
+
+async def test_exit_2_without_stderr() -> None:
+    runner, db, *_ = _build([_gpu()], _Container(status=2))
+    await runner.probe_gpu("gpu_1")
+    assert db.rows["gpus"][0].probe_error == "probe misconfigured"
+
+
+async def test_long_stderr_is_truncated_to_500_chars() -> None:
+    runner, db, *_ = _build([_gpu()], _Container(status=1, stderr=b"e" * 2000))
+    await runner.probe_gpu("gpu_1")
+    error = db.rows["gpus"][0].probe_error
+    assert error is not None and len(error) == 500
+    assert error.startswith(STALE.format(n=1))
+
+
+@pytest.mark.parametrize("result", [{}, {"StatusCode": None}])
+async def test_missing_status_code_is_reported_as_unknown_exit(result: dict[str, Any]) -> None:
     container = _Container(stdout=b"")
-    container.wait = lambda timeout=None: {}  # type: ignore[method-assign]
+    container.wait = lambda timeout=None: result  # type: ignore[method-assign]
     runner, db, *_ = _build([_gpu()], container)
     await runner.probe_gpu("gpu_1")
     assert db.rows["gpus"][0].probe_error == STALE.format(n=-1)
@@ -361,6 +452,29 @@ async def test_busy_row_is_never_probed() -> None:
     assert hub.events == []
 
 
+async def test_uncommitted_claim_is_never_probed() -> None:
+    # The claim has marked the row BUSY in its own session but not committed
+    # yet: this session still reads AVAILABLE, the in-process marker decides.
+    runner, db, docker, hub, dispatcher = _build([_gpu()])
+    dispatcher.claimed_gpu_ids.add("gpu_1")
+    assert runner.gpu_in_use(db.rows["gpus"][0]) is True
+    assert runner.start_probe("gpu_1") is False
+    await runner.probe_gpu("gpu_1")
+    assert docker is not None and docker.containers.calls == []
+    assert db.rows["gpus"][0].probed_at is None
+    assert dispatcher.probing_gpu_ids == set()
+    assert hub.events == []
+
+
+async def test_claim_landing_after_reservation_stops_the_probe() -> None:
+    runner, db, docker, hub, dispatcher = _build([_gpu()])
+    assert runner.start_probe("gpu_1") is True
+    dispatcher.claimed_gpu_ids.add("gpu_1")  # claimed before the task's first step
+    await asyncio.gather(*runner.pending_tasks())
+    assert docker is not None and docker.containers.calls == []
+    assert hub.events == []
+
+
 async def test_already_probing_row_is_not_probed_twice() -> None:
     runner, _db, docker, _hub, dispatcher = _build([_gpu()])
     dispatcher.probing_gpu_ids.add("gpu_1")
@@ -449,13 +563,14 @@ async def test_spawn_kwargs_for_an_nvenc_row() -> None:
 # --- boot pass -------------------------------------------------------------------
 
 
-async def test_boot_pass_probes_only_enabled_unprobed_rows_sequentially() -> None:
+async def test_boot_pass_probes_enabled_unprobed_or_unverified_rows_sequentially() -> None:
     probed = datetime(2026, 9, 1, tzinfo=UTC)
     rows = [
         _gpu("gpu_a"),
         _gpu("gpu_b", probed_at=probed, encoder_kinds=["h264"]),
         _gpu("gpu_c", enabled=False),
-        _gpu("gpu_d", GpuVendor.VAAPI, device_path="/dev/dri/renderD129"),
+        _gpu("gpu_d", GpuVendor.VAAPI, device_path="/dev/dri/renderD129", probed_at=probed, probe_error="failed"),
+        _gpu("gpu_e", enabled=False, probed_at=probed),
     ]
     runner, db, docker, hub, dispatcher = _build(rows)
     assert docker is not None
@@ -473,10 +588,12 @@ async def test_boot_pass_probes_only_enabled_unprobed_rows_sequentially() -> Non
     by_id = {g.id: g for g in db.rows["gpus"]}
     assert by_id["gpu_b"].probed_at == probed
     assert by_id["gpu_c"].probed_at is None
+    assert by_id["gpu_d"].encoder_kinds == ["h265"]  # a failed row is retried at boot
+    assert by_id["gpu_e"].probed_at == probed
 
 
 async def test_boot_pass_with_every_row_probed_spawns_nothing() -> None:
-    runner, _db, docker, hub, _d = _build([_gpu(probed_at=datetime(2026, 9, 1, tzinfo=UTC))])
+    runner, _db, docker, hub, _d = _build([_gpu(probed_at=datetime(2026, 9, 1, tzinfo=UTC), encoder_kinds=["h264"])])
     await runner.probe_unprobed()
     assert docker is not None and docker.containers.calls == []
     assert hub.events == []
@@ -530,14 +647,97 @@ async def test_start_probe_schedules_once_and_releases() -> None:
     assert runner.pending_tasks() == []
 
 
-async def test_cancel_pending_releases_reservations() -> None:
-    runner, _db, _docker, _hub, dispatcher = _build([_gpu()])
+async def test_shutdown_before_a_probe_starts_releases_reservations() -> None:
+    runner, _db, docker, _hub, dispatcher = _build([_gpu()])
     assert runner.start_probe("gpu_1") is True
     tasks = runner.pending_tasks()
-    runner.cancel_pending()
-    await asyncio.gather(*tasks, return_exceptions=True)
+    await runner.shutdown()
     assert all(t.cancelled() for t in tasks)
     assert dispatcher.probing_gpu_ids == set()
+    assert docker is not None and docker.containers.calls == []
+
+
+async def test_shutdown_removes_the_container_of_a_running_probe() -> None:
+    gate = threading.Event()
+    waiting = threading.Event()
+
+    def _blocking_wait(timeout: object = None) -> dict[str, int]:
+        waiting.set()
+        gate.wait(5)
+        return {"StatusCode": 0}
+
+    container = _Container(stdout=_payload(["h265"]))
+    container.wait = _blocking_wait  # type: ignore[method-assign]
+    runner, db, _docker, hub, dispatcher = _build([_gpu()], container)
+    assert runner.start_probe("gpu_1") is True
+    try:
+        assert await asyncio.to_thread(waiting.wait, 5)
+        await runner.shutdown()
+    finally:
+        gate.set()
+    assert container.removed == [True]
+    assert db.rows["gpus"][0].probed_at is None  # cancelled: nothing written
+    assert hub.events == []
+    assert dispatcher.probing_gpu_ids == set()
+    assert runner.pending_tasks() == []
+
+
+async def test_shutdown_with_nothing_pending_returns() -> None:
+    runner, *_ = _build([])
+    await runner.shutdown()
+
+
+async def test_start_boot_pass_runs_in_the_background() -> None:
+    runner, db, *_ = _build([_gpu()])
+    task = runner.start_boot_pass()
+    assert runner.pending_tasks() == [task]
+    await task
+    assert db.rows["gpus"][0].encoder_kinds == ["h265"]
+    await asyncio.sleep(0)  # let the done-callback run
+    assert runner.pending_tasks() == []
+
+
+# --- orphaned probe containers ---------------------------------------------------
+
+
+async def test_boot_pass_removes_orphaned_probe_containers_first() -> None:
+    runner, _db, docker, _hub, dispatcher = _build(
+        [_gpu(probed_at=datetime(2026, 9, 1, tzinfo=UTC), encoder_kinds=["h264"])]
+    )
+    assert docker is not None
+    orphan = _Container(labels={"arm.gpu_probe": "gpu_old"})
+    unlabeled = _Container()
+    live = _Container(labels={"arm.gpu_probe": "gpu_live"})
+    docker.containers.existing = [orphan, unlabeled, live]
+    dispatcher.probing_gpu_ids.add("gpu_live")  # a probe running right now keeps its container
+
+    await runner.probe_unprobed()
+
+    assert docker.containers.list_calls == [{"all": True, "filters": {"label": "arm.gpu_probe"}}]
+    assert orphan.removed == [True]
+    assert unlabeled.removed == [True]
+    assert live.removed == []
+
+
+async def test_orphan_cleanup_failures_never_raise(caplog: pytest.LogCaptureFixture) -> None:
+    runner, _db, docker, *_ = _build([])
+    assert docker is not None
+    stuck = _Container(labels={"arm.gpu_probe": "gpu_old"})
+    stuck.remove_exc = RuntimeError("removal in progress")
+    docker.containers.existing = [stuck]
+    with caplog.at_level("WARNING", logger="arm_backend.gpu_probe_runner"):
+        assert await runner.remove_orphans() == 0
+    assert "removal in progress" in caplog.text
+
+    docker.containers.list_exc = RuntimeError("daemon unreachable")
+    with caplog.at_level("WARNING", logger="arm_backend.gpu_probe_runner"):
+        assert await runner.remove_orphans() == 0
+    assert "daemon unreachable" in caplog.text
+
+
+async def test_orphan_cleanup_without_docker_is_a_no_op() -> None:
+    runner, *_ = _build([], docker=False)
+    assert await runner.remove_orphans() == 0
 
 
 def test_timeout_constant() -> None:

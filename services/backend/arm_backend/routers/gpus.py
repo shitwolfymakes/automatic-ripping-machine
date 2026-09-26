@@ -24,7 +24,7 @@ from sqlmodel import col, select
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.db import get_session
 from arm_backend.transcode_dispatcher import NO_DOCKER_CLIENT_DETAIL
-from arm_common import Gpu, GpuStatus, User
+from arm_common import Gpu, User
 from arm_common.schemas import GpuProbeAllScheduled, GpuProbeScheduled, GpuUpdateRequest, GpuView
 
 router = APIRouter(prefix="/api/gpus", tags=["gpus"])
@@ -39,10 +39,6 @@ def _capable_runner(request: Request) -> Any:
     if runner is None or not runner.capable():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=NO_DOCKER_CLIENT_DETAIL)
     return runner
-
-
-def _in_use(gpu: Gpu) -> bool:
-    return gpu.claimed_by_task_id is not None or gpu.status == GpuStatus.BUSY
 
 
 @router.get("", response_model=list[GpuView])
@@ -101,7 +97,7 @@ async def probe_all_gpus(
     being probed are left to that probe and not listed."""
     runner = _capable_runner(request)
     gpus = (await db.execute(select(Gpu).order_by(col(Gpu.vendor), col(Gpu.device_path)))).scalars().all()
-    scheduled = [g.id for g in gpus if g.enabled and not _in_use(g) and runner.start_probe(g.id)]
+    scheduled = [g.id for g in gpus if g.enabled and not runner.gpu_in_use(g) and runner.start_probe(g.id)]
     return GpuProbeAllScheduled(scheduled=scheduled)
 
 
@@ -118,7 +114,7 @@ async def probe_gpu(
     if gpu is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="gpu not found")
     runner = _capable_runner(request)
-    if _in_use(gpu):
+    if runner.gpu_in_use(gpu):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_IN_USE_DETAIL)
     if not runner.start_probe(gpu_id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="gpu probe already running")

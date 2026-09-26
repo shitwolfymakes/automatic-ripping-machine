@@ -166,6 +166,14 @@ class TranscodeDispatcher:
         # GPU rows currently running a device probe; the claim never hands
         # one of these to a task.
         self.probing_gpu_ids: set[str] = set()
+        # GPU rows this process has claimed (BUSY in the claim's session) but
+        # not yet committed or rolled back. Other sessions still read those
+        # rows as AVAILABLE until the per-task commit, which only happens
+        # after the container spawn (an image pull or ssh rebuild can take
+        # minutes), so the probe runner and the re-probe endpoints treat an
+        # id in this set exactly like a BUSY row. Kept in-process: the claim
+        # and the probes share one event loop.
+        self.claimed_gpu_ids: set[str] = set()
         # Per-image TtlProbe cache for `image_exists` (one entry per distinct
         # variant image ever checked, e.g. the derived "-intel"/"-amd" tag).
         self._image_probes: dict[str, TtlProbe] = {}
@@ -602,6 +610,9 @@ class TranscodeDispatcher:
                         logger.exception("failing unrunnable transcode task failed task_id=%s: %s", task_id, exc)
                         await db.rollback()
                     continue
+                # Read before the try: after a failed flush/commit no ORM
+                # attribute is readable until the rollback (see below).
+                claimed_gpu_id = assignment.gpu.id if assignment.gpu is not None else None
                 try:
                     # `_spawn_container` is a blocking call: a plain docker
                     # socket round-trip normally, but on the SSH-transport-
@@ -660,6 +671,11 @@ class TranscodeDispatcher:
                         assignment.gpu.status = GpuStatus.AVAILABLE
                         assignment.gpu.claimed_by_task_id = None
                         await db.commit()
+                finally:
+                    # Committed (other sessions now read BUSY) or rolled back
+                    # and released: either way the in-process marker is done.
+                    if claimed_gpu_id is not None:
+                        self.claimed_gpu_ids.discard(claimed_gpu_id)
         if held_encode:
             logger.debug(
                 "%d encode task(s) held (enabled=%s docker=%s)", held_encode, enabled, self._docker is not None
@@ -750,6 +766,7 @@ class TranscodeDispatcher:
         gpu = free[0]
         gpu.status = GpuStatus.BUSY
         gpu.claimed_by_task_id = task.id
+        self.claimed_gpu_ids.add(gpu.id)
         resolved = spec if spec.kind == "gpu" else gpu_encoder_for(gpu.vendor, codec)
         return GpuAssignment(gpu=gpu, encoder=resolved, action="spawn")
 

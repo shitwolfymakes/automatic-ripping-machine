@@ -379,6 +379,48 @@ async def test_spawn_failure_releases_gpu_claim() -> None:
     assert db.rows["gpus"][0].claimed_by_task_id is None
 
 
+async def test_uncommitted_claim_is_marked_in_process_until_commit() -> None:
+    db = _build_db(encoder="any_h265", gpus=[(GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h265"], None)])
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+    during_spawn: list[set[str]] = []
+    docker.containers.run.side_effect = lambda **_kw: during_spawn.append(set(disp.claimed_gpu_ids))
+    assert await disp.spawn_pending(db) == 1
+    assert during_spawn == [{"gpu_0"}]  # visible while the spawn runs, before the commit
+    assert disp.claimed_gpu_ids == set()  # released once committed
+
+
+async def test_uncommitted_claim_marker_released_after_spawn_failure() -> None:
+    db = _build_db(encoder="any_h265", gpus=[(GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h265"], None)])
+    docker = MagicMock()
+    docker.containers.run.side_effect = RuntimeError("docker daemon unhappy")
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+    assert await disp.spawn_pending(db) == 0
+    assert disp.claimed_gpu_ids == set()
+
+
+async def test_uncommitted_claim_marker_released_when_the_release_commit_fails() -> None:
+    db = _build_db(encoder="any_h265", gpus=[(GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h265"], None)])
+    docker = MagicMock()
+
+    def _spawn_then_break_commits(**_kw: Any) -> None:
+        db.commit_raises = RuntimeError("db gone")
+        raise RuntimeError("docker daemon unhappy")
+
+    docker.containers.run.side_effect = _spawn_then_break_commits
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+    with pytest.raises(RuntimeError, match="db gone"):
+        await disp.spawn_pending(db)
+    assert disp.claimed_gpu_ids == set()
+
+
+async def test_cpu_spawn_leaves_no_claim_marker() -> None:
+    db = _build_db(encoder="cpu_h265", gpus=[])
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    assert await disp.spawn_pending(db) == 1
+    assert disp.claimed_gpu_ids == set()
+
+
 # --- enabled switch + deterministic vendor ordering ---------------------------
 
 

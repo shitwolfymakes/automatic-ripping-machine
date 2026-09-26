@@ -144,12 +144,52 @@ class _Runner:
     def capable(self) -> bool:
         return self._capable
 
+    def gpu_in_use(self, gpu: Gpu) -> bool:
+        return gpu.claimed_by_task_id is not None or gpu.status == GpuStatus.BUSY
+
     def start_probe(self, gpu_id: str) -> bool:
         if gpu_id in self.probing:
             return False
         self.probing.add(gpu_id)
         self.started.append(gpu_id)
         return True
+
+
+def _real_runner(claimed: set[str]) -> object:
+    """A real GpuProbeRunner over a real dispatcher whose in-process claim
+    marker holds `claimed` (a claim not yet committed: the row still reads
+    AVAILABLE from any other session)."""
+    from unittest.mock import MagicMock
+
+    from arm_backend.config import Settings
+    from arm_backend.gpu_probe_runner import GpuProbeRunner
+    from arm_backend.transcode_dispatcher import TranscodeDispatcher
+
+    settings = Settings.model_construct(
+        ARM_TRANSCODE_CAPABLE=True, ARM_TRANSCODE_DOCKER_HOST="", ARM_TRANSCODE_DISPATCH_INTERVAL_SECONDS=5
+    )
+    dispatcher = TranscodeDispatcher(settings, MagicMock(), MagicMock(), MagicMock())
+    dispatcher.claimed_gpu_ids.update(claimed)
+    return GpuProbeRunner(settings, MagicMock(), dispatcher, MagicMock())
+
+
+def test_probe_one_uncommitted_claim_409() -> None:
+    app, token, _db = _app([_gpu()])  # AVAILABLE as far as this session can see
+    app.state.gpu_probe_runner = _real_runner({"gpu_1"})
+    with TestClient(app) as c:
+        r = c.post("/api/gpus/gpu_1/probe", headers=_auth(token))
+    assert r.status_code == 409
+    assert r.json()["detail"] == "gpu is in use by a running transcode"
+
+
+def test_probe_all_skips_uncommitted_claim() -> None:
+    app, token, _db = _app([_gpu()])
+    runner = _real_runner({"gpu_1"})
+    app.state.gpu_probe_runner = runner
+    with TestClient(app) as c:
+        r = c.post("/api/gpus/probe", headers=_auth(token))
+    assert r.status_code == 202, r.text
+    assert r.json() == {"scheduled": []}
 
 
 def test_probe_one_schedules_202() -> None:
