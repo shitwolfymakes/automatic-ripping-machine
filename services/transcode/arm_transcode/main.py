@@ -32,12 +32,12 @@ from arm_common.schemas import (
     TranscodePresetView,
     WSEnvelope,
 )
-from arm_common.enums import TranscodeTool
+from arm_common.enums import GpuVendor, TranscodeTool
 from arm_common.fileops import atomic_output, transcode_none
 
 from arm_transcode.api_client import BackendClient
 from arm_transcode.config import TranscoderConfig
-from arm_transcode.encoder_probe import probe_encoders
+from arm_transcode.device_probe import ProbeSetupError, probe_device
 from arm_transcode.engines import selected_encoder
 from arm_transcode.engines.ffmpeg_vaapi import transcode_ffmpeg_vaapi
 from arm_transcode.engines.handbrake_engine import encoder_args as handbrake_encoder_args
@@ -260,8 +260,17 @@ async def run() -> int:
 
 
 def main() -> int:
-    if "--probe-encoders" in sys.argv[1:]:
-        print(json.dumps(probe_encoders(), separators=(",", ":")))
+    if "--probe-device" in sys.argv[1:]:
+        vendor, device = os.environ.get("ARM_GPU_VENDOR"), os.environ.get("ARM_GPU_DEVICE")
+        if not vendor or not device:
+            print("--probe-device needs ARM_GPU_VENDOR and ARM_GPU_DEVICE", file=sys.stderr)
+            return 2
+        try:
+            result = probe_device(GpuVendor(vendor), device)
+        except ProbeSetupError as exc:
+            print(str(exc), file=sys.stderr)
+            return 3
+        print(json.dumps(result, separators=(",", ":")))
         return 0
     return asyncio.run(run())
 

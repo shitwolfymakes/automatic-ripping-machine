@@ -33,18 +33,47 @@ def test_clip_error_at_exact_boundary_is_unchanged() -> None:
     assert _clip_error(msg) == msg
 
 
-def test_probe_encoders_mode_prints_json(monkeypatch, capsys) -> None:
+def test_probe_device_mode_prints_json(monkeypatch, capsys) -> None:
     import json
 
     import arm_transcode.main as m
 
-    monkeypatch.setattr(m.sys, "argv", ["arm_transcode", "--probe-encoders"])
-    monkeypatch.setattr(m, "probe_encoders", lambda: {"qsv": ["h264"]})
+    monkeypatch.setattr(m.sys, "argv", ["arm_transcode", "--probe-device"])
+    monkeypatch.setenv("ARM_GPU_VENDOR", "qsv")
+    monkeypatch.setenv("ARM_GPU_DEVICE", "/dev/dri/renderD129")
+    monkeypatch.setattr(m, "probe_device", lambda v, d: {"verified": ["h265"], "errors": {}})
     rc = m.main()
     assert rc == 0
     out = capsys.readouterr().out.strip()
-    assert json.loads(out) == {"qsv": ["h264"]}
+    assert json.loads(out) == {"verified": ["h265"], "errors": {}}
     assert "\n" not in out  # exactly one JSON line
+
+
+def test_probe_device_mode_requires_env(monkeypatch, capsys) -> None:
+    import arm_transcode.main as m
+
+    monkeypatch.setattr(m.sys, "argv", ["arm_transcode", "--probe-device"])
+    monkeypatch.delenv("ARM_GPU_VENDOR", raising=False)
+    monkeypatch.delenv("ARM_GPU_DEVICE", raising=False)
+    rc = m.main()
+    assert rc == 2
+    assert capsys.readouterr().err.strip()
+
+
+def test_probe_device_mode_reports_setup_error(monkeypatch, capsys) -> None:
+    import arm_transcode.main as m
+
+    monkeypatch.setattr(m.sys, "argv", ["arm_transcode", "--probe-device"])
+    monkeypatch.setenv("ARM_GPU_VENDOR", "qsv")
+    monkeypatch.setenv("ARM_GPU_DEVICE", "/dev/dri/renderD129")
+
+    def boom(vendor, device):
+        raise m.ProbeSetupError("could not generate the test clip: clip failed")
+
+    monkeypatch.setattr(m, "probe_device", boom)
+    rc = m.main()
+    assert rc == 3
+    assert "could not generate the test clip" in capsys.readouterr().err
 
 
 def _handbrake_preset(*, preset_ref: str | None, extra_args: str | None = None) -> TranscodePresetView:
