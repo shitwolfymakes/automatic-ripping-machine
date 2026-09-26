@@ -5,6 +5,9 @@
 # hand-cutting a release). Per-service images publish to:
 #   docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-<service>:latest
 #   docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-<service>:main-<sha>
+# arm-transcode also publishes its GPU-vendor variants (Dockerfile targets
+# `intel` / `amd`) with an -intel / -amd suffix on every tag (:latest-intel,
+# :main-<sha>-amd, ...); the unsuffixed tags are the base target.
 #
 # `:latest` therefore tracks `main` HEAD — bleeding edge, NOT a support target
 # (see SECURITY.md: only the newest stable `v3.*` tag is supported). Tagged
@@ -37,12 +40,22 @@ concurrency:
 
 jobs:
   publish:
-    name: publish (${{ matrix.service }})
+    name: publish (${{ matrix.service }}${{ matrix.suffix }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        service: [backend, ripper, transcode, ui]
+        # `target` picks a Dockerfile stage (empty: the file's last stage, the
+        # only one that matters for single-image services); `suffix` is
+        # appended to every tag. The transcode image publishes three
+        # variants: base (CPU + NVENC), -intel (QSV) and -amd (VAAPI).
+        include:
+          - {service: backend, target: "", suffix: ""}
+          - {service: ripper, target: "", suffix: ""}
+          - {service: transcode, target: base, suffix: ""}
+          - {service: transcode, target: intel, suffix: "-intel"}
+          - {service: transcode, target: amd, suffix: "-amd"}
+          - {service: ui, target: "", suffix: ""}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
@@ -73,6 +86,7 @@ jobs:
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}
+          flavor: suffix=${{ matrix.suffix }}
           tags: |
             type=raw,value=latest
             type=sha,prefix=main-,format=short
@@ -85,6 +99,7 @@ jobs:
         with:
           context: .
           file: services/${{ matrix.service }}/Dockerfile
+          target: ${{ matrix.target }}
           push: true
           no-cache: ${{ github.event_name == 'schedule' }}
           tags: ${{ steps.meta.outputs.tags }}
@@ -96,8 +111,13 @@ jobs:
             MAKEMKV_MIRROR_URL=${{ vars.MAKEMKV_MIRROR_URL }}
           secrets: |
             makemkv_mirror_password=${{ secrets.MAKEMKV_MIRROR_PASSWORD }}
-          cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          # Cache scoped per service+target; a transcode variant also reads the
+          # base target's cache (the variants share every layer up to the
+          # vendor drivers, including the HandBrake compile).
+          cache-from: |
+            type=gha,scope=${{ matrix.service }}${{ matrix.target && format('-{0}', matrix.target) || '' }}
+            ${{ matrix.target && format('type=gha,scope={0}-base', matrix.service) || '' }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}${{ matrix.target && format('-{0}', matrix.target) || '' }}
 
       - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
         with:
@@ -108,7 +128,7 @@ jobs:
         with:
           image: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}@${{ steps.build.outputs.digest }}
           format: spdx-json
-          output-file: /tmp/sbom-${{ matrix.service }}.spdx.json
+          output-file: /tmp/sbom-${{ matrix.service }}${{ matrix.suffix }}.spdx.json
           upload-artifact: false
 
       - name: Sign image (cosign keyless)
@@ -123,6 +143,6 @@ jobs:
           IMAGE: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}@${{ steps.build.outputs.digest }}
         run: |
           cosign attest --yes \
-            --predicate /tmp/sbom-${{ matrix.service }}.spdx.json \
+            --predicate /tmp/sbom-${{ matrix.service }}${{ matrix.suffix }}.spdx.json \
             --type spdxjson \
             "$IMAGE"

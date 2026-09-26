@@ -20,6 +20,19 @@ ffmpeg against the raw input, writes the output through the
 - `arm_transcode` (this package) — claim/heartbeat client + encoder
   wrappers.
 
+The Dockerfile builds three runtime targets from that common `base`:
+
+| target  | tag (dev)                    | adds on top of `base`                                                              | used for                     |
+|---------|------------------------------|------------------------------------------------------------------------------------|------------------------------|
+| `base`  | `arm-transcode:latest`       | nothing: CPU encoders + NVENC (`libnvidia-encode` is injected by the host toolkit) | CPU, NVENC, and the fallback |
+| `intel` | `arm-transcode:latest-intel` | `intel-media-va-driver-non-free`, `i965-va-driver`, `libvpl2`, `libmfx-gen1.2`     | QSV (Intel)                  |
+| `amd`   | `arm-transcode:latest-amd`   | `mesa-va-drivers`                                                                  | VAAPI (AMD)                  |
+
+The Backend spawns the variant matching the GPU's vendor when that image exists
+and falls back to `base` otherwise. `ARM_TRANSCODE_IMAGE_QSV`,
+`ARM_TRANSCODE_IMAGE_VAAPI` and `ARM_TRANSCODE_IMAGE_NVENC` override the image
+per vendor. A plain `docker build` with no `--target` produces `base`.
+
 `abcde` is **not** in the transcode image — that's a ripping tool, used
 by `arm-ripper` to pull a CD into `track_NN.wav` files. The transcoder
 re-encodes those WAVs to FLAC/MP3 via ffmpeg.
@@ -58,7 +71,14 @@ spawns short-lived containers from it on demand. To (re)build just this image:
 
 ```sh
 docker compose build arm-transcode
+docker compose build arm-transcode-intel   # Intel QSV variant
+docker compose build arm-transcode-amd     # AMD VAAPI variant
 ```
+
+`bash devtools/setup-dev.sh up` always builds `arm-transcode` and builds the
+`-intel` / `-amd` variants only when it detects an Intel / AMD GPU on the host
+(none with `--ripper-only`; neither variant when `ARM_TRANSCODE_DOCKER_HOST`
+points at a remote transcode host, which builds its own).
 
 The dispatcher picks the image up by name. In dev it's built locally and tagged
 `arm-transcode:latest` (never pulled); production overrides `ARM_TRANSCODE_IMAGE`
@@ -99,11 +119,12 @@ install time** (`devtools/setup-dev.sh` / `install.sh`) and handed to the
 Backend as the `ARM_GPUS` JSON env var; the Backend just parses it at lifespan
 startup to fill the `gpus` table (`arm_backend/gpu_probe.py:load_configured_gpus`).
 
-The only container that touches a GPU is the **ephemeral transcoder**. This
-image is the fat, multi-vendor HW image: the VAAPI/QSV userspace (`libva`,
-`mesa-va-drivers`, `intel-media-va-driver-non-free`, `i965-va-driver`, oneVPL)
-is baked in; NVENC's `libnvidia-encode` is injected at runtime by the host's
-nvidia-container-toolkit. The dispatcher passes the matching device into each
+The only container that touches a GPU is the **ephemeral transcoder**. The
+vendor VAAPI/QSV userspace is baked into the matching image target (see
+[Image contents](#image-contents)): Intel's drivers + oneVPL into `intel`,
+`mesa-va-drivers` into `amd`; every target carries the `libva` loader. NVENC's
+`libnvidia-encode` is injected at runtime by the host's
+nvidia-container-toolkit, so NVENC runs from `base`. The dispatcher passes the matching device into each
 spawned container — `devices=/dev/dri/renderD*` for VAAPI/QSV, `runtime: nvidia`
 + `device_requests` for NVENC (`transcode_dispatcher.py:_inject_gpu_run_kwargs`).
 

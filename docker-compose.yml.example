@@ -189,7 +189,8 @@ services:
     volumes:
       - arm-data:/data
 
-  # The fat HW transcode image. `deploy.replicas: 0` means `docker compose up`
+  # The base transcode image (CPU + NVENC; the fallback for any GPU vendor
+  # whose variant image is absent). `deploy.replicas: 0` means `docker compose up`
   # BUILDS it (so a plain `up -d --build` tags arm-transcode:latest) but starts
   # zero containers — the Backend dispatcher spawns short-lived transcoder
   # containers from this image per task via the docker socket. Don't give it a
@@ -200,6 +201,33 @@ services:
     build:
       context: .
       dockerfile: services/transcode/Dockerfile
+      target: base
+    deploy:
+      replicas: 0
+
+  # Intel QSV variant: base plus the Intel VAAPI/oneVPL userspace. The Backend
+  # spawns it for `qsv` GPUs when the image exists, else it falls back to base.
+  # Built, never run here (`deploy.replicas: 0`, same reason as arm-transcode).
+  # devtools/setup-dev.sh builds it only on a host with an Intel GPU.
+  arm-transcode-intel:
+    image: ${ARM_TRANSCODE_IMAGE_QSV:-arm-transcode:latest-intel}
+    build:
+      context: .
+      dockerfile: services/transcode/Dockerfile
+      target: intel
+    deploy:
+      replicas: 0
+
+  # AMD VAAPI variant: base plus the Mesa VAAPI driver. The Backend spawns it
+  # for `vaapi` GPUs when the image exists, else it falls back to base. Built,
+  # never run here (`deploy.replicas: 0`, same reason as arm-transcode).
+  # devtools/setup-dev.sh builds it only on a host with an AMD GPU.
+  arm-transcode-amd:
+    image: ${ARM_TRANSCODE_IMAGE_VAAPI:-arm-transcode:latest-amd}
+    build:
+      context: .
+      dockerfile: services/transcode/Dockerfile
+      target: amd
     deploy:
       replicas: 0
 
