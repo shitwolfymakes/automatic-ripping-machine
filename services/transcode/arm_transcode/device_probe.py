@@ -14,6 +14,7 @@ from arm_common.encoders import EncoderSpec, gpu_encoders_for_vendor
 Runner = Callable[[list[str], float], tuple[int, str]]
 
 CLIP_ARGS = ["-f", "lavfi", "-i", "testsrc2=duration=2:size=320x240:rate=24"]
+CLIP_TIMEOUT_S = 30.0
 ENCODE_TIMEOUT_S = 30.0
 
 
@@ -27,8 +28,15 @@ def _default_run(argv: list[str], timeout: float) -> tuple[int, str]:
     except subprocess.TimeoutExpired:
         return 124, f"timed out after {timeout:.0f}s"
     except FileNotFoundError as exc:
+        # The binary itself is missing from PATH.
         return 127, str(exc)
-    tail = (proc.stdout + proc.stderr).strip().splitlines()[-5:]
+    except OSError as exc:
+        # Anything else exec() can raise (permission denied on a non-executable
+        # binary under the PUID-dropped user, ENOMEM, etc): surface it as a
+        # per-encoder error rather than an uncaught traceback that would break
+        # the --probe-device exit-code contract.
+        return 126, str(exc)
+    tail = (proc.stdout + "\n" + proc.stderr).strip().splitlines()[-5:]
     return proc.returncode, " | ".join(tail)
 
 
@@ -62,7 +70,7 @@ def probe_device(
     with tempfile.TemporaryDirectory(dir=workdir) as tmp:
         tmpdir = Path(tmp)
         clip = tmpdir / "probe-clip.mkv"
-        rc, out = runner(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *CLIP_ARGS, str(clip)], 30.0)
+        rc, out = runner(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *CLIP_ARGS, str(clip)], CLIP_TIMEOUT_S)
         if rc != 0 or not clip.exists() or clip.stat().st_size == 0:
             raise ProbeSetupError(f"could not generate the test clip: {out}")
         verified: list[str] = []

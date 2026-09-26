@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from arm_common import GpuVendor
 from arm_common.encoders import get_encoder
+from arm_transcode import device_probe
 from arm_transcode.device_probe import ProbeSetupError, probe_command, probe_device
 
 
@@ -67,3 +69,65 @@ def test_clip_failure_raises(tmp_path):
 def test_handbrake_test_command_shape(tmp_path):
     cmd = probe_command(get_encoder("nvenc_h265"), tmp_path / "c.mkv", tmp_path / "o.mkv", "nvidia://0")
     assert cmd[0] == "HandBrakeCLI" and cmd[cmd.index("--encoder") + 1] == "nvenc_h265"
+
+
+def test_permission_denied_encoder_lands_in_errors(tmp_path):
+    class DeniedRunner(FakeRunner):
+        def __call__(self, argv, timeout):
+            if "lavfi" in argv:
+                return super().__call__(argv, timeout)
+            if "qsv_h265" in argv:
+                return 126, "permission denied: HandBrakeCLI"
+            return super().__call__(argv, timeout)
+
+    r = probe_device(GpuVendor.QSV, "/dev/dri/renderD129", run=DeniedRunner(), workdir=tmp_path)
+    assert r["verified"] == ["h264", "av1"]
+    assert r["errors"]["qsv_h265"] == "permission denied: HandBrakeCLI"
+
+
+class _FakeCompletedProcess:
+    def __init__(self, returncode: int, stdout: str = "", stderr: str = ""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def test_default_run_joins_stdout_and_stderr_tail(monkeypatch):
+    def fake_run(argv, **kwargs):
+        return _FakeCompletedProcess(0, stdout="stdout line 1\nstdout line 2", stderr="stderr line 1")
+
+    monkeypatch.setattr(device_probe.subprocess, "run", fake_run)
+    rc, out = device_probe._default_run(["ffmpeg", "-i", "x"], 5.0)
+    assert rc == 0
+    assert "stdout line 2" in out
+    assert "stderr line 1" in out
+
+
+def test_default_run_timeout_returns_124(monkeypatch):
+    def fake_run(argv, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=argv, timeout=kwargs.get("timeout", 5.0))
+
+    monkeypatch.setattr(device_probe.subprocess, "run", fake_run)
+    rc, out = device_probe._default_run(["ffmpeg", "-i", "x"], 5.0)
+    assert rc == 124
+    assert "timed out" in out
+
+
+def test_default_run_missing_binary_returns_127(monkeypatch):
+    def fake_run(argv, **kwargs):
+        raise FileNotFoundError("[Errno 2] No such file or directory: 'ffmpeg'")
+
+    monkeypatch.setattr(device_probe.subprocess, "run", fake_run)
+    rc, out = device_probe._default_run(["ffmpeg", "-i", "x"], 5.0)
+    assert rc == 127
+    assert "ffmpeg" in out
+
+
+def test_default_run_permission_denied_returns_126(monkeypatch):
+    def fake_run(argv, **kwargs):
+        raise PermissionError("[Errno 13] Permission denied: 'HandBrakeCLI'")
+
+    monkeypatch.setattr(device_probe.subprocess, "run", fake_run)
+    rc, out = device_probe._default_run(["HandBrakeCLI"], 5.0)
+    assert rc == 126
+    assert "Permission denied" in out

@@ -76,6 +76,38 @@ def test_probe_device_mode_reports_setup_error(monkeypatch, capsys) -> None:
     assert "could not generate the test clip" in capsys.readouterr().err
 
 
+def test_probe_device_mode_rejects_unknown_vendor(monkeypatch, capsys) -> None:
+    import arm_transcode.main as m
+
+    monkeypatch.setattr(m.sys, "argv", ["arm_transcode", "--probe-device"])
+    monkeypatch.setenv("ARM_GPU_VENDOR", "not-a-real-vendor")
+    monkeypatch.setenv("ARM_GPU_DEVICE", "/dev/dri/renderD129")
+
+    def must_not_call(vendor, device):
+        raise AssertionError("probe_device should not run for an unknown vendor")
+
+    monkeypatch.setattr(m, "probe_device", must_not_call)
+    rc = m.main()
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "not-a-real-vendor" in err
+    assert "qsv" in err  # names a valid vendor
+
+
+def test_probe_encoders_mode_is_deprecated_and_empty(monkeypatch, capsys) -> None:
+    import json
+
+    import arm_transcode.main as m
+
+    monkeypatch.setattr(m.sys, "argv", ["arm_transcode", "--probe-encoders"])
+    rc = m.main()
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out.strip()) == {}
+    assert "deprecated" in captured.err.lower()
+    assert "--probe-device" in captured.err
+
+
 def _handbrake_preset(*, preset_ref: str | None, extra_args: str | None = None) -> TranscodePresetView:
     return TranscodePresetView(
         id="p1",

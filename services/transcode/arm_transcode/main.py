@@ -260,13 +260,29 @@ async def run() -> int:
 
 
 def main() -> int:
+    if "--probe-encoders" in sys.argv[1:]:
+        # Deprecated compatibility mode. The install-time HandBrakeCLI --help
+        # scrape this used to run is gone; an installer or drill script that
+        # still invokes this flag gets an empty result rather than a crash.
+        # The backend now treats install-time encoder lists as hints only and
+        # probes each GPU device for real via --probe-device, so an empty
+        # {} here is a truthful "nothing probed", not an over-claim.
+        print("--probe-encoders is deprecated; the backend probes each GPU with --probe-device", file=sys.stderr)
+        print(json.dumps({}, separators=(",", ":")))
+        return 0
     if "--probe-device" in sys.argv[1:]:
         vendor, device = os.environ.get("ARM_GPU_VENDOR"), os.environ.get("ARM_GPU_DEVICE")
         if not vendor or not device:
             print("--probe-device needs ARM_GPU_VENDOR and ARM_GPU_DEVICE", file=sys.stderr)
             return 2
         try:
-            result = probe_device(GpuVendor(vendor), device)
+            gpu_vendor = GpuVendor(vendor)
+        except ValueError:
+            valid = ", ".join(v.value for v in GpuVendor)
+            print(f"--probe-device: unknown ARM_GPU_VENDOR={vendor!r} (valid: {valid})", file=sys.stderr)
+            return 2
+        try:
+            result = probe_device(gpu_vendor, device)
         except ProbeSetupError as exc:
             print(str(exc), file=sys.stderr)
             return 3
