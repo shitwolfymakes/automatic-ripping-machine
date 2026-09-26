@@ -1,3 +1,8 @@
+from arm_common.encoders import (
+    ENCODERS,
+    EncoderSpec,
+    get_encoder,
+)
 from arm_common.logging import (
     JsonFormatter,
     configure_service_logging,
@@ -68,6 +73,8 @@ __all__ = [
     "DriveMediaStatus",
     "DriveMode",
     "DriveStatus",
+    "ENCODERS",
+    "EncoderSpec",
     "Event",
     "GUEST_ROLE",
     "Gpu",
@@ -104,6 +111,7 @@ __all__ = [
     "UserRole",
     "VideoCodec",
     "configure_service_logging",
+    "get_encoder",
     "new_id",
     "with_log_context",
 ]
