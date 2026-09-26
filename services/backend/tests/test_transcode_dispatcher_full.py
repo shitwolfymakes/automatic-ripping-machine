@@ -256,8 +256,7 @@ async def test_spawn_pending_cpu_path_no_gpu() -> None:
             tool=TranscodeTool.HANDBRAKE,
             preset_ref="H.265 MKV 1080p30",
             container=ContainerFormat.MKV,
-            codec=None,
-            hw_preference=None,
+            encoder="preset",
         )
     ]
     db.rows["gpus"] = []

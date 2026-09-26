@@ -13,7 +13,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from arm_common.enums import (
     ContainerFormat,
-    HwPreference,
     IdentificationMode,
     MediaType,
     OutputMode,
@@ -21,7 +20,6 @@ from arm_common.enums import (
     TrackSelection,
     TranscodeTaskStatus,
     TranscodeTool,
-    VideoCodec,
 )
 
 
@@ -88,8 +86,7 @@ class TranscodePresetView(BaseModel):
     preset_ref: str | None
     preset_json: dict[str, Any] | None
     container: ContainerFormat
-    codec: VideoCodec | None
-    hw_preference: HwPreference | None
+    encoder: str
     extra_args: str | None
     created_by_user_id: str | None
     created_at: datetime | None
@@ -103,8 +100,7 @@ class TranscodePresetCreateRequest(BaseModel):
     preset_ref: str | None = None
     preset_json: dict[str, Any] | None = None
     container: ContainerFormat
-    codec: VideoCodec | None = None
-    hw_preference: HwPreference | None = None
+    encoder: str = "preset"
     extra_args: str | None = None
 
 
@@ -114,8 +110,7 @@ class TranscodePresetUpdateRequest(BaseModel):
     preset_ref: str | None = None
     preset_json: dict[str, Any] | None = None
     container: ContainerFormat | None = None
-    codec: VideoCodec | None = None
-    hw_preference: HwPreference | None = None
+    encoder: str | None = None
     extra_args: str | None = None
 
 

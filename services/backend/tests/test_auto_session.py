@@ -21,7 +21,6 @@ from arm_common import (  # noqa: E402
     Config,
     ContainerFormat,
     DiscType,
-    HwPreference,
     IdentificationMode,
     Job,
     JobStatus,
@@ -102,7 +101,7 @@ def _seed(db: FakeSession, *, job_status: JobStatus = JobStatus.RIPPED) -> Job:
             is_builtin=True,
             tool=TranscodeTool.HANDBRAKE,
             container=ContainerFormat.MKV,
-            hw_preference=HwPreference.CPU_ONLY,
+            encoder="preset",
         )
     ]
     db.rows["sessions"] = [
@@ -492,7 +491,7 @@ async def test_fan_out_parks_encode_application_but_promotes_passthrough_when_di
             is_builtin=True,
             tool=TranscodeTool.NONE,
             container=ContainerFormat.MKV,
-            hw_preference=HwPreference.CPU_ONLY,
+            encoder="preset",
         )
     )
     db.rows["sessions"].append(

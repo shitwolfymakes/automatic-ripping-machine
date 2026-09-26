@@ -93,6 +93,8 @@ class GpuView(BaseModel):
     enabled: bool
     claimed_by_task_id: str | None = None
     last_seen_at: datetime | None = None
+    probed_at: datetime | None = None
+    probe_error: str | None = None
 
 
 class GpuUpdateRequest(BaseModel):

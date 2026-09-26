@@ -169,9 +169,7 @@
 				tool: p.tool,
 				preset_ref: p.preset_ref ?? null,
 				container: p.container,
-				// VideoCodec | null — the view's codec is VideoCodec | null, compatible.
-				codec: p.codec ?? null,
-				hw_preference: p.hw_preference ?? null,
+				encoder: p.encoder,
 				extra_args: p.extra_args ?? null,
 			});
 			await data.load();

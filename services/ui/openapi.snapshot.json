@@ -10994,6 +10994,29 @@
               }
             ],
             "title": "Last Seen At"
+          },
+          "probed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probed At"
+          },
+          "probe_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probe Error"
           }
         },
         "type": "object",
@@ -11119,14 +11142,6 @@
         ],
         "title": "HeldJobView",
         "description": "Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).\n\n`paused` is true when the held disc should survive a ripper reboot as a hold\n(global `ripping_paused` on \u2014 or, once it lands, a per-job pause). The ripper\nuses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)\non restart. See the timed-review-gate spec \u00a76.3."
-      },
-      "HwPreference": {
-        "type": "string",
-        "enum": [
-          "cpu_only",
-          "any"
-        ],
-        "title": "HwPreference"
       },
       "IdentificationMode": {
         "type": "string",
@@ -15459,25 +15474,10 @@
           "container": {
             "$ref": "#/components/schemas/ContainerFormat"
           },
-          "codec": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/VideoCodec"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "hw_preference": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/HwPreference"
-              },
-              {
-                "type": "null"
-              }
-            ]
+          "encoder": {
+            "type": "string",
+            "title": "Encoder",
+            "default": "preset"
           },
           "extra_args": {
             "anyOf": [
@@ -15557,25 +15557,16 @@
               }
             ]
           },
-          "codec": {
+          "encoder": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/VideoCodec"
+                "type": "string"
               },
               {
                 "type": "null"
               }
-            ]
-          },
-          "hw_preference": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/HwPreference"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            ],
+            "title": "Encoder"
           },
           "extra_args": {
             "anyOf": [
@@ -15638,25 +15629,9 @@
           "container": {
             "$ref": "#/components/schemas/ContainerFormat"
           },
-          "codec": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/VideoCodec"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "hw_preference": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/HwPreference"
-              },
-              {
-                "type": "null"
-              }
-            ]
+          "encoder": {
+            "type": "string",
+            "title": "Encoder"
           },
           "extra_args": {
             "anyOf": [
@@ -15715,8 +15690,7 @@
           "preset_ref",
           "preset_json",
           "container",
-          "codec",
-          "hw_preference",
+          "encoder",
           "extra_args",
           "created_by_user_id",
           "created_at",
@@ -16124,15 +16098,6 @@
           "type"
         ],
         "title": "ValidationError"
-      },
-      "VideoCodec": {
-        "type": "string",
-        "enum": [
-          "h264",
-          "h265",
-          "av1"
-        ],
-        "title": "VideoCodec"
       }
     }
   }

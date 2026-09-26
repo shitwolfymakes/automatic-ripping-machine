@@ -39,7 +39,6 @@ from arm_common import (  # noqa: E402
     TranscodeTask,
     TranscodeTaskStatus,
     TranscodeTool,
-    VideoCodec,
 )
 from arm_common.enums import TrackKind  # noqa: E402
 from tests._fakes import FakeSession  # noqa: E402
@@ -120,8 +119,7 @@ def _app_with_one_task(status: TranscodeTaskStatus, *, passthrough: bool = False
                 tool=TranscodeTool.HANDBRAKE,
                 preset_ref="H.265 MKV 1080p30",
                 container=ContainerFormat.MKV,
-                codec=None,
-                hw_preference=None,
+                encoder="preset",
             )
         ]
     )
@@ -388,8 +386,7 @@ async def test_spawn_caps_at_max_parallel() -> None:
             tool=TranscodeTool.HANDBRAKE,
             preset_ref="H.265 MKV 1080p30",
             container=ContainerFormat.MKV,
-            codec=None,
-            hw_preference=None,
+            encoder="preset",
         )
     ]
     # 1 already in_progress + 2 queued (both encode); MAX_PARALLEL=2 → 1 spawn slot.
@@ -477,8 +474,7 @@ async def test_spawn_continues_after_one_failure() -> None:
             tool=TranscodeTool.HANDBRAKE,
             preset_ref="H.265 MKV 1080p30",
             container=ContainerFormat.MKV,
-            codec=None,
-            hw_preference=None,
+            encoder="preset",
         )
     ]
     now = datetime.now(UTC)
@@ -772,8 +768,7 @@ async def test_mixed_queue_disable_drain(tmp_path: Path) -> None:
             tool=TranscodeTool.HANDBRAKE,
             preset_ref="H.265 MKV 1080p30",
             container=ContainerFormat.MKV,
-            codec=None,
-            hw_preference=None,
+            encoder="preset",
         )
     ]
     db.rows["transcode_tasks"].insert(
@@ -853,8 +848,7 @@ async def test_docker_none_holds_encode_and_runs_passthrough(tmp_path: Path) -> 
             tool=TranscodeTool.HANDBRAKE,
             preset_ref="H.265 MKV 1080p30",
             container=ContainerFormat.MKV,
-            codec=None,
-            hw_preference=None,
+            encoder="preset",
         )
     ]
     db.rows["transcode_tasks"].insert(
@@ -915,8 +909,7 @@ async def test_host_paths_unset_no_longer_blocks_passthrough(tmp_path: Path, cap
             tool=TranscodeTool.HANDBRAKE,
             preset_ref="H.265 MKV 1080p30",
             container=ContainerFormat.MKV,
-            codec=None,
-            hw_preference=None,
+            encoder="preset",
         )
     ]
     db.rows["transcode_tasks"].insert(
@@ -996,8 +989,7 @@ async def test_passthrough_runs_after_encode_held_by_slot_exhaustion(tmp_path: P
             tool=TranscodeTool.HANDBRAKE,
             preset_ref="H.265 MKV 1080p30",
             container=ContainerFormat.MKV,
-            codec=None,
-            hw_preference=None,
+            encoder="preset",
         )
     ]
     # Two QUEUED encode tasks ahead of the passthrough task, FIFO: the first
@@ -1083,8 +1075,7 @@ async def test_encode_scan_cap_examines_at_most_fifty() -> None:
             tool=TranscodeTool.HANDBRAKE,
             preset_ref="H.265 MKV 1080p30",
             container=ContainerFormat.MKV,
-            codec=None,
-            hw_preference=None,
+            encoder="preset",
         )
     ]
     now = datetime.now(UTC)
@@ -1353,8 +1344,7 @@ async def test_encode_row_deleted_before_its_turn_skips_cleanly() -> None:
             tool=TranscodeTool.HANDBRAKE,
             preset_ref="H.265 MKV 1080p30",
             container=ContainerFormat.MKV,
-            codec=None,
-            hw_preference=None,
+            encoder="preset",
         )
     ]
     now = datetime.now(UTC)
@@ -1440,8 +1430,7 @@ async def test_encode_claim_commit_raises_once_rolls_back_and_releases_gpu() -> 
             tool=TranscodeTool.HANDBRAKE,
             preset_ref="H.265 MKV 1080p30",
             container=ContainerFormat.MKV,
-            codec=VideoCodec.H265,
-            hw_preference=None,
+            encoder="any_h265",
         )
     ]
     db.rows["gpus"] = [

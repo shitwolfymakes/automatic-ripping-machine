@@ -11,6 +11,7 @@ os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
 import secrets  # noqa: E402
+from datetime import UTC, datetime  # noqa: E402
 
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -68,6 +69,24 @@ def test_list_returns_inventory() -> None:
     assert len(body) == 2
     assert {g["vendor"] for g in body} == {"qsv", "vaapi"}
     assert all(g["enabled"] is True for g in body)
+
+
+def test_list_surfaces_probe_state() -> None:
+    probed = datetime(2026, 9, 26, 12, 0, tzinfo=UTC)
+    app, token, _db = _app(
+        [
+            _gpu(probed_at=probed),
+            _gpu("gpu_2", GpuVendor.VAAPI, device_path="/dev/dri/renderD129", probe_error="vaapi init failed"),
+        ]
+    )
+    with TestClient(app) as c:
+        r = c.get("/api/gpus", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    by_id = {g["id"]: g for g in r.json()}
+    assert by_id["gpu_1"]["probed_at"].startswith("2026-09-26T12:00:00")
+    assert by_id["gpu_1"]["probe_error"] is None
+    assert by_id["gpu_2"]["probed_at"] is None
+    assert by_id["gpu_2"]["probe_error"] == "vaapi init failed"
 
 
 def test_patch_toggles_enabled() -> None:

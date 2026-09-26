@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { JoinedSession } from './sessionsData.svelte';
 	import { resolveSample } from './sampleTokens';
+	import { encoderSummary } from '$lib/utils/encoders';
 
 	interface Props {
 		session: JoinedSession;
@@ -48,11 +49,11 @@
 			: '-'
 	);
 
-	// Only the parts the preset sets; a passthrough preset has no codec or
-	// hardware preference, so it reads "iso", not "iso | - |".
+	// Only the parts the preset sets; a passthrough preset uses the tool's own
+	// encoder, so it reads "iso", not "iso | - |".
 	let transcodeSummary = $derived(
 		session.transcodePreset
-			? [session.transcodePreset.container, session.transcodePreset.codec, session.transcodePreset.hw_preference]
+			? [session.transcodePreset.container, encoderSummary(session.transcodePreset.encoder)]
 					.filter((v) => !!v)
 					.join(' | ')
 			: null

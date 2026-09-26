@@ -2,18 +2,17 @@
 	// Ported from services/ui/src/views/TranscodePresetForm.vue, structured to
 	// match the sibling RipPresetForm.svelte (T2a). Inline (no-route) form
 	// driven by props. media_type is immutable on edit; built-in presets are
-	// name-only; nullable fields submit `value || null`. Adds a `codec` select
-	// (beyond the Vue form, per the T2b spec). preset_json is not exposed.
+	// name-only; nullable fields submit `value || null`. `encoder` is one
+	// arm_common.encoders catalog id. preset_json is not exposed.
 	import { onMount } from 'svelte';
 	import { createTranscodePreset, updateTranscodePreset } from '$lib/api/transcodePresets';
 	import { fetchGpus } from '$lib/api/gpus';
+	import { ENCODER_OPTIONS, PRESET_ENCODER_ID } from '$lib/utils/encoders';
 	import type {
 		ContainerFormat,
-		HwPreference,
 		MediaType,
 		TranscodePresetView,
-		TranscodeTool,
-		VideoCodec
+		TranscodeTool
 	} from '$lib/types/api.gen';
 
 	let {
@@ -34,9 +33,8 @@
 	let tool = $state<TranscodeTool>(preset?.tool ?? 'handbrake');
 	let presetRef = $state(preset?.preset_ref ?? '');
 	let container = $state<ContainerFormat>(preset?.container ?? 'mkv');
-	// '' represents "no codec" (null). VideoCodec never includes ''.
-	let codec = $state<VideoCodec | ''>(preset?.codec ?? '');
-	let hwPreference = $state<HwPreference | ''>(preset?.hw_preference ?? '');
+	let encoder = $state<string>(preset?.encoder ?? PRESET_ENCODER_ID);
+
 
 	// Live inventory context (G-30 awareness): what silicon "Any" will actually
 	// use, shown where hardware intent is expressed. Soft-fails to no hint.
@@ -80,8 +78,7 @@
 					tool,
 					preset_ref: presetRef || null,
 					container,
-					codec: codec || null,
-					hw_preference: hwPreference || null,
+					encoder,
 					extra_args: extraArgs || null
 				});
 			} else {
@@ -91,8 +88,7 @@
 					tool,
 					preset_ref: presetRef || null,
 					container,
-					codec: codec || null,
-					hw_preference: hwPreference || null,
+					encoder,
 					extra_args: extraArgs || null
 				});
 			}
@@ -200,31 +196,16 @@
 	</label>
 
 	<label class="field">
-		<span class="field-label">Codec</span>
+		<span class="field-label">Encoder</span>
 		<select
-			id="tp-codec"
-			data-testid="tp-codec"
-			bind:value={codec}
+			id="tp-encoder"
+			data-testid="tp-encoder"
+			bind:value={encoder}
 			disabled={isBuiltin}
 		>
-			<option value="">CPU (preset's own encoder)</option>
-			<option value="h264">H.264</option>
-			<option value="h265">H.265</option>
-			<option value="av1">AV1</option>
-		</select>
-	</label>
-
-	<label class="field">
-		<span class="field-label">Hardware preference</span>
-		<select
-			id="tp-hw-preference"
-			data-testid="tp-hw-preference"
-			bind:value={hwPreference}
-			disabled={isBuiltin}
-		>
-			<option value="">(unset)</option>
-			<option value="cpu_only">CPU only</option>
-			<option value="any">Any</option>
+			{#each ENCODER_OPTIONS as opt (opt.id)}
+				<option value={opt.id}>{opt.label}</option>
+			{/each}
 		</select>
 		{#if gpuHint}
 			<span class="transcode-preset-form-gpu-hint" data-testid="tp-gpu-hint">{gpuHint}</span>

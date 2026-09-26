@@ -51,8 +51,7 @@ describe('transcodePresets CRUD api module', () => {
 			tool: 'handbrake',
 			preset_ref: 'Fast 1080p30',
 			container: 'mkv',
-			codec: 'h265',
-			hw_preference: 'any',
+			encoder: 'any_h265',
 			extra_args: null
 		} as unknown as Parameters<typeof createTranscodePreset>[0];
 		await createTranscodePreset(body);

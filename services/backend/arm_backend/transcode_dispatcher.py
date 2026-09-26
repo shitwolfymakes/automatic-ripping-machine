@@ -36,7 +36,6 @@ from arm_common import (
     Gpu,
     GpuStatus,
     GpuVendor,
-    HwPreference,
     Session,
     SessionApplication,
     SessionApplicationStatus,
@@ -45,6 +44,7 @@ from arm_common import (
     TranscodeTaskStatus,
     with_log_context,
 )
+from arm_common.encoders import get_encoder
 
 if TYPE_CHECKING:
     from arm_backend.ws.hub import WSHub
@@ -91,7 +91,7 @@ def _is_transport_death(exc: BaseException) -> bool:
 class GpuAssignment(NamedTuple):
     """Outcome of `_claim_gpu_for_task`. `gpu` is None for the CPU spawn path;
     `action="queue"` means leave the task queued so a later tick can retry
-    when a matching GPU frees up (NULL hw_preference + all matching GPUs busy).
+    when a matching GPU frees up (a GPU encoder + all matching GPUs busy).
     """
 
     gpu: Gpu | None
@@ -618,21 +618,18 @@ class TranscodeDispatcher:
     async def _claim_gpu_for_task(
         self, db: AsyncSession, task: TranscodeTask, preset: TranscodePreset | None
     ) -> GpuAssignment:
-        """Implements the `hw_preference` × GPU-availability matrix.
+        """Maps the preset's catalog encoder onto GPU availability.
 
         Branches:
-        - `cpu_only`, or no preset, or preset has no codec → CPU spawn.
+        - no preset, or a `preset`/`cpu` encoder → CPU spawn.
         - matching GPU AVAILABLE → claim it, GPU spawn.
-        - all matching GPUs BUSY + `any` → CPU spawn.
-        - all matching GPUs BUSY + NULL → queue (retry next tick).
-        - no GPU advertises this codec at all → CPU spawn (NULL fallback).
+        - all matching GPUs BUSY → queue (retry next tick).
+        - no GPU advertises this codec at all → CPU spawn.
         """
-        if preset is None or preset.codec is None:
+        spec = get_encoder(preset.encoder) if preset is not None else None
+        if spec is None or spec.kind in ("preset", "cpu"):
             return GpuAssignment(gpu=None, codec=None, action="spawn")
-        if preset.hw_preference == HwPreference.CPU_ONLY:
-            return GpuAssignment(gpu=None, codec=preset.codec.value, action="spawn")
-
-        codec = preset.codec.value
+        codec = str(spec.codec)
         # Filter in Python — `text[]` ANY predicates are awkward to express in
         # SQLAlchemy ORM and the in-memory test fake doesn't grok them. The
         # gpus table is small (1-4 rows on real hosts) so the cost is trivial.
@@ -657,10 +654,7 @@ class TranscodeDispatcher:
             gpu.claimed_by_task_id = task.id
             return GpuAssignment(gpu=gpu, codec=codec, action="spawn")
 
-        # All matching GPUs are busy.
-        if preset.hw_preference == HwPreference.ANY:
-            return GpuAssignment(gpu=None, codec=codec, action="spawn")
-        # NULL semantics: hold the task in queued so a later tick retries.
+        # All matching GPUs are busy: hold the task in queued so a later tick retries.
         return GpuAssignment(gpu=None, codec=codec, action="queue")
 
     def host_paths_set(self) -> bool:

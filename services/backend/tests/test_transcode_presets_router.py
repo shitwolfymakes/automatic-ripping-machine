@@ -120,6 +120,101 @@ def test_create_201(signing_key: bytes) -> None:
     assert out["name"] == "Custom HB"
     assert out["is_builtin"] is False
     assert out["created_by_user_id"] == "usr_admin"
+    # Omitted encoder: the HandBrake preset's own encoder.
+    assert out["encoder"] == "preset"
+
+
+def test_create_persists_encoder(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/transcode-presets", json={**_CREATE_BODY, "encoder": "qsv_h265"}, headers=_auth(token))
+    assert r.status_code == 201
+    assert r.json()["encoder"] == "qsv_h265"
+    assert db.rows["transcode_presets"][0].encoder == "qsv_h265"
+
+
+def test_create_unknown_encoder_422(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/transcode-presets", json={**_CREATE_BODY, "encoder": "vce_h265"}, headers=_auth(token))
+    assert r.status_code == 422
+    assert "unknown encoder" in r.json()["detail"]
+    assert db.rows.get("transcode_presets", []) == []
+
+
+def test_create_non_handbrake_tool_rejects_codec_encoder_422(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    body = {**_CREATE_BODY, "tool": "abcde", "media_type": "music", "container": "flac", "encoder": "cpu_h265"}
+    with TestClient(app) as client:
+        r = client.post("/api/transcode-presets", json=body, headers=_auth(token))
+    assert r.status_code == 422
+    assert r.json()["detail"] == "encoder 'cpu_h265' is not valid for tool abcde; only 'preset' is"
+
+
+def test_patch_encoder_validated_against_stored_tool(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["transcode_presets"] = [_preset("tpr_enc", name="enc")]
+    with TestClient(app) as client:
+        ok = client.patch("/api/transcode-presets/tpr_enc", json={"encoder": "cpu_av1"}, headers=_auth(token))
+        unknown = client.patch("/api/transcode-presets/tpr_enc", json={"encoder": "nope"}, headers=_auth(token))
+    assert ok.status_code == 200
+    assert ok.json()["encoder"] == "cpu_av1"
+    assert unknown.status_code == 422
+    assert "unknown encoder" in unknown.json()["detail"]
+    assert db.rows["transcode_presets"][0].encoder == "cpu_av1"
+
+
+def test_patch_encoder_validated_against_requested_tool(signing_key: bytes) -> None:
+    """Switching the tool away from HandBrake while keeping a codec encoder is
+    rejected; switching tool and encoder together to `preset` is accepted."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    row = _preset("tpr_sw", name="sw")
+    row.encoder = "any_h265"
+    db.rows["transcode_presets"] = [row]
+    with TestClient(app) as client:
+        rejected = client.patch(
+            "/api/transcode-presets/tpr_sw", json={"tool": "none", "encoder": "any_h265"}, headers=_auth(token)
+        )
+        rejected_tool_only = client.patch("/api/transcode-presets/tpr_sw", json={"tool": "none"}, headers=_auth(token))
+        ok = client.patch(
+            "/api/transcode-presets/tpr_sw", json={"tool": "none", "encoder": "preset"}, headers=_auth(token)
+        )
+    assert rejected.status_code == 422
+    assert "not valid for tool none" in rejected.json()["detail"]
+    assert rejected_tool_only.status_code == 422
+    assert ok.status_code == 200
+    assert ok.json()["tool"] == "none"
+    assert ok.json()["encoder"] == "preset"
+
+
+def test_patch_null_encoder_leaves_it_unchanged(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    row = _preset("tpr_null", name="null")
+    row.encoder = "cpu_h264"
+    db.rows["transcode_presets"] = [row]
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/transcode-presets/tpr_null", json={"name": "renamed", "encoder": None}, headers=_auth(token)
+        )
+    assert r.status_code == 200
+    assert r.json()["encoder"] == "cpu_h264"
+    assert r.json()["name"] == "renamed"
+
+
+def test_patch_builtin_encoder_409(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["transcode_presets"] = [_preset("tpr_bi", name="builtin", is_builtin=True)]
+    with TestClient(app) as client:
+        r = client.patch("/api/transcode-presets/tpr_bi", json={"encoder": "cpu_h265"}, headers=_auth(token))
+    assert r.status_code == 409
+    assert "only `name` can be edited" in r.json()["detail"]
 
 
 def test_patch_updates_fields(signing_key: bytes) -> None:

@@ -20,7 +20,7 @@ from arm_backend.seeders import (  # noqa: E402
     _seed_session_routes,
     run_seeders,
 )
-from arm_common import Config, DiscType, MediaType, RetentionPolicy, SessionRoute, User  # noqa: E402
+from arm_common import Config, DiscType, MediaType, RetentionPolicy, SessionRoute, TranscodeTool, User  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -219,3 +219,21 @@ async def test_delete_all_routes_then_rerun_seeders_stays_empty(
 
     await run_seeders(db)
     assert db.rows["session_routes"] == []
+
+
+async def test_run_seeders_builtin_transcode_presets_carry_catalog_encoders(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every HandBrake built-in encodes H.265 on whichever GPU is eligible
+    (`any_h265`); abcde and passthrough built-ins use the tool's own encoder."""
+    monkeypatch.setattr(seeders, "FIRST_BOOT_LOG", tmp_path / "fb.log")
+    db = FakeSession()
+    await run_seeders(db)
+    by_id = {p.id: p for p in db.rows["transcode_presets"]}
+    assert by_id["tpr_builtin_plex_1080p_h265"].encoder == "any_h265"
+    assert by_id["tpr_builtin_music_flac"].encoder == "preset"
+    assert by_id["tpr_builtin_music_mp3_v0"].encoder == "preset"
+    assert by_id["tpr_builtin_passthrough_mkv"].encoder == "preset"
+    for preset in by_id.values():
+        expected = "any_h265" if preset.tool == TranscodeTool.HANDBRAKE else "preset"
+        assert preset.encoder == expected, preset.id

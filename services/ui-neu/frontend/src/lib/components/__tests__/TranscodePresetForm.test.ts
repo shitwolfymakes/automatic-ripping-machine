@@ -48,8 +48,7 @@ function makePreset(overrides: Partial<TranscodePresetView> = {}): TranscodePres
 		preset_ref: null,
 		preset_json: null,
 		container: 'mkv',
-		codec: null,
-		hw_preference: null,
+		encoder: 'preset',
 		extra_args: null,
 		created_by_user_id: 'user_1',
 		created_at: '2026-01-01T00:00:00Z',
@@ -77,8 +76,7 @@ describe('TranscodePresetForm', () => {
 			const mediaType = screen.getByTestId('tp-media-type') as HTMLSelectElement;
 			const tool = screen.getByTestId('tp-tool') as HTMLSelectElement;
 			const container = screen.getByTestId('tp-container') as HTMLSelectElement;
-			const codec = screen.getByTestId('tp-codec') as HTMLSelectElement;
-			const hw = screen.getByTestId('tp-hw-preference') as HTMLSelectElement;
+			const encoder = screen.getByTestId('tp-encoder') as HTMLSelectElement;
 
 			expect(mediaType).not.toBeDisabled();
 
@@ -88,11 +86,18 @@ describe('TranscodePresetForm', () => {
 			expect(optionValues(container)).toEqual([
 				'mkv', 'mp4', 'webm', 'flac', 'mp3', 'ogg', 'iso', 'none'
 			]);
-			expect(optionValues(codec)).toEqual(['', 'h264', 'h265', 'av1']);
-			expect(optionValues(hw)).toEqual(['', 'cpu_only', 'any']);
+			expect(optionValues(encoder)).toEqual([
+				'preset',
+				'cpu_h264', 'cpu_h265', 'cpu_av1',
+				'any_h264', 'any_h265', 'any_av1',
+				'qsv_h264', 'qsv_h265', 'qsv_av1',
+				'nvenc_h264', 'nvenc_h265', 'nvenc_av1',
+				'vaapi_h264', 'vaapi_h265', 'vaapi_av1'
+			]);
+			expect(encoder.value).toBe('preset');
 		});
 
-		it('submits the full create body, empty optionals as null', async () => {
+		it('submits the full create body, empty optionals as null and the default encoder', async () => {
 			createMock.mockResolvedValue(resultPreset());
 			const onsaved = vi.fn();
 			renderComponent(TranscodePresetForm, {
@@ -112,15 +117,14 @@ describe('TranscodePresetForm', () => {
 					tool: 'handbrake',
 					preset_ref: null,
 					container: 'mp4',
-					codec: null,
-					hw_preference: null,
+					encoder: 'preset',
 					extra_args: null
 				});
 				expect(onsaved).toHaveBeenCalledWith(resultPreset());
 			});
 		});
 
-		it('submits codec / preset_ref / hw_preference / extra_args when set', async () => {
+		it('submits encoder / preset_ref / extra_args when set', async () => {
 			createMock.mockResolvedValue(resultPreset());
 			renderComponent(TranscodePresetForm, {
 				props: { preset: null, onsaved: vi.fn(), oncancel: vi.fn() }
@@ -128,8 +132,7 @@ describe('TranscodePresetForm', () => {
 
 			await fireEvent.input(screen.getByTestId('tp-name'), { target: { value: 'Full' } });
 			await fireEvent.input(screen.getByTestId('tp-preset-ref'), { target: { value: 'Fast 1080p30' } });
-			await fireEvent.change(screen.getByTestId('tp-codec'), { target: { value: 'h265' } });
-			await fireEvent.change(screen.getByTestId('tp-hw-preference'), { target: { value: 'any' } });
+			await fireEvent.change(screen.getByTestId('tp-encoder'), { target: { value: 'any_h265' } });
 			await fireEvent.input(screen.getByTestId('tp-extra-args'), { target: { value: '--turbo' } });
 			await fireEvent.click(screen.getByTestId('tp-submit'));
 
@@ -140,8 +143,7 @@ describe('TranscodePresetForm', () => {
 					tool: 'handbrake',
 					preset_ref: 'Fast 1080p30',
 					container: 'mkv',
-					codec: 'h265',
-					hw_preference: 'any',
+					encoder: 'any_h265',
 					extra_args: '--turbo'
 				});
 			});
@@ -158,8 +160,7 @@ describe('TranscodePresetForm', () => {
 				tool: 'abcde',
 				preset_ref: 'flac',
 				container: 'flac',
-				codec: 'h264',
-				hw_preference: 'cpu_only',
+				encoder: 'cpu_h264',
 				extra_args: '-q 5',
 				is_builtin: false
 			});
@@ -172,7 +173,7 @@ describe('TranscodePresetForm', () => {
 			expect(name.value).toBe('Existing');
 			expect(mediaType.value).toBe('music');
 			expect(mediaType).toBeDisabled();
-			expect((screen.getByTestId('tp-codec') as HTMLSelectElement).value).toBe('h264');
+			expect((screen.getByTestId('tp-encoder') as HTMLSelectElement).value).toBe('cpu_h264');
 
 			await fireEvent.input(name, { target: { value: 'Renamed' } });
 			await fireEvent.click(screen.getByTestId('tp-submit'));
@@ -183,8 +184,7 @@ describe('TranscodePresetForm', () => {
 					tool: 'abcde',
 					preset_ref: 'flac',
 					container: 'flac',
-					codec: 'h264',
-					hw_preference: 'cpu_only',
+					encoder: 'cpu_h264',
 					extra_args: '-q 5'
 				});
 			});
@@ -206,8 +206,7 @@ describe('TranscodePresetForm', () => {
 			expect(screen.getByTestId('tp-media-type')).toBeDisabled();
 			expect(screen.getByTestId('tp-tool')).toBeDisabled();
 			expect(screen.getByTestId('tp-container')).toBeDisabled();
-			expect(screen.getByTestId('tp-codec')).toBeDisabled();
-			expect(screen.getByTestId('tp-hw-preference')).toBeDisabled();
+			expect(screen.getByTestId('tp-encoder')).toBeDisabled();
 			expect(screen.getByTestId('tp-preset-ref')).toBeDisabled();
 			expect(screen.getByTestId('tp-extra-args')).toBeDisabled();
 
@@ -259,15 +258,15 @@ describe('TranscodePresetForm', () => {
 describe('GPU awareness (G-30/G-31)', () => {
 	afterEach(() => cleanup());
 
-	it('labels the empty codec choice as CPU, not default', () => {
+	it('labels the preset choice as the HandBrake preset encoder, not default', () => {
 		renderComponent(TranscodePresetForm, { props: { preset: makePreset(), oncancel: vi.fn(), onsaved: vi.fn() } });
-		const codec = screen.getByTestId('tp-codec') as HTMLSelectElement;
-		const labels = Array.from(codec.options).map((o) => o.textContent);
-		expect(labels).toContain("CPU (preset's own encoder)");
+		const encoder = screen.getByTestId('tp-encoder') as HTMLSelectElement;
+		const labels = Array.from(encoder.options).map((o) => o.textContent);
+		expect(labels).toContain("HandBrake preset's own encoder");
 		expect(labels).not.toContain('(default)');
 	});
 
-	it('shows the live inventory hint under hardware preference', async () => {
+	it('shows the live inventory hint under the encoder', async () => {
 		renderComponent(TranscodePresetForm, { props: { preset: makePreset(), oncancel: vi.fn(), onsaved: vi.fn() } });
 		await waitFor(() => expect(screen.getByTestId('tp-gpu-hint')).toBeInTheDocument());
 		const hint = screen.getByTestId('tp-gpu-hint').textContent ?? '';

@@ -1443,6 +1443,14 @@ export type GpuView = {
      * Last Seen At
      */
     last_seen_at?: string | null;
+    /**
+     * Probed At
+     */
+    probed_at?: string | null;
+    /**
+     * Probe Error
+     */
+    probe_error?: string | null;
 };
 
 /**
@@ -1525,11 +1533,6 @@ export type HeldJobView = {
      */
     paused: boolean;
 };
-
-/**
- * HwPreference
- */
-export type HwPreference = 'cpu_only' | 'any';
 
 /**
  * IdentificationMode
@@ -3870,8 +3873,10 @@ export type TranscodePresetCreateRequest = {
         [key: string]: unknown;
     } | null;
     container: ContainerFormat;
-    codec?: VideoCodec | null;
-    hw_preference?: HwPreference | null;
+    /**
+     * Encoder
+     */
+    encoder?: string;
     /**
      * Extra Args
      */
@@ -3898,8 +3903,10 @@ export type TranscodePresetUpdateRequest = {
         [key: string]: unknown;
     } | null;
     container?: ContainerFormat | null;
-    codec?: VideoCodec | null;
-    hw_preference?: HwPreference | null;
+    /**
+     * Encoder
+     */
+    encoder?: string | null;
     /**
      * Extra Args
      */
@@ -3935,8 +3942,10 @@ export type TranscodePresetView = {
         [key: string]: unknown;
     } | null;
     container: ContainerFormat;
-    codec: VideoCodec | null;
-    hw_preference: HwPreference | null;
+    /**
+     * Encoder
+     */
+    encoder: string;
     /**
      * Extra Args
      */
@@ -4201,11 +4210,6 @@ export type ValidationError = {
         [key: string]: unknown;
     };
 };
-
-/**
- * VideoCodec
- */
-export type VideoCodec = 'h264' | 'h265' | 'av1';
 
 export type HealthApiHealthGetData = {
     body?: never;

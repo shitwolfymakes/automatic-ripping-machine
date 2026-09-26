@@ -158,8 +158,7 @@ async def test_last_spawn_error_set_on_failure_and_cleared_on_next_success() -> 
             tool=TranscodeTool.HANDBRAKE,
             preset_ref="H.265 MKV 1080p30",
             container=ContainerFormat.MKV,
-            codec=None,
-            hw_preference=None,
+            encoder="preset",
         )
     ]
     db.rows["gpus"] = []

@@ -1,12 +1,11 @@
-"""Tests for the GPU dispatch matrix added in Phase 7b.
+"""Tests for the GPU dispatch matrix, keyed on the preset's catalog encoder.
 
 The matrix:
 
-| hw_preference | matching GPU available | matching GPU busy | no matching GPU |
+| encoder kind  | matching GPU available | matching GPU busy | no matching GPU |
 |---------------|-----------------------|-------------------|-----------------|
-| cpu_only      | CPU                   | CPU               | CPU             |
-| any           | GPU                   | CPU               | CPU             |
-| NULL (default)| GPU                   | queue             | CPU             |
+| preset / cpu  | CPU                   | CPU               | CPU             |
+| any / gpu     | GPU                   | queue             | CPU             |
 
 Plus: stale-claim sweep releases the GPU it held; a per-codec mismatch
 keeps the task on CPU even if a GPU is available.
@@ -31,14 +30,12 @@ from arm_common import (  # noqa: E402
     Gpu,
     GpuStatus,
     GpuVendor,
-    HwPreference,
     Session,
     SessionApplication,
     SessionApplicationStatus,
     TranscodePreset,
     TranscodeTask,
     TranscodeTaskStatus,
-    VideoCodec,
 )
 from arm_common.enums import ContainerFormat, MediaType, TranscodeTool  # noqa: E402
 from tests._fakes import FakeSession  # noqa: E402
@@ -79,12 +76,11 @@ def _db_factory(db: FakeSession) -> Any:
 
 def _build_db(
     *,
-    hw_preference: HwPreference | None,
-    codec: VideoCodec | None = VideoCodec.H265,
+    encoder: str = "any_h265",
     gpus: list[tuple[GpuVendor, GpuStatus, list[str], str | None]] | None = None,
 ) -> FakeSession:
     """Stand up a FakeSession with one queued task, one session pointing at
-    a TranscodePreset with the given hw_preference + codec, plus the supplied
+    a TranscodePreset with the given catalog encoder, plus the supplied
     GPU rows.
     """
     db = FakeSession()
@@ -117,8 +113,7 @@ def _build_db(
             tool=TranscodeTool.HANDBRAKE,
             preset_ref="H.265 MKV 1080p30",
             container=ContainerFormat.MKV,
-            codec=codec,
-            hw_preference=hw_preference,
+            encoder=encoder,
         )
     ]
     db.rows["transcode_tasks"] = [
@@ -151,9 +146,9 @@ def _build_db(
 # --- CPU-only host (no gpus rows) ---------------------------------------------
 
 
-@pytest.mark.parametrize("hw", [None, HwPreference.ANY, HwPreference.CPU_ONLY])
-async def test_no_gpus_on_host_always_spawns_cpu(hw: HwPreference | None) -> None:
-    db = _build_db(hw_preference=hw, gpus=[])
+@pytest.mark.parametrize("encoder", ["any_h265", "qsv_h265", "cpu_h265", "preset"])
+async def test_no_gpus_on_host_always_spawns_cpu(encoder: str) -> None:
+    db = _build_db(encoder=encoder, gpus=[])
     docker = MagicMock()
     disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
     spawned = await disp.spawn_pending(db)
@@ -164,12 +159,12 @@ async def test_no_gpus_on_host_always_spawns_cpu(hw: HwPreference | None) -> Non
     assert "runtime" not in kwargs
 
 
-# --- CPU_ONLY ----------------------------------------------------------------
+# --- CPU encoder ----------------------------------------------------------------
 
 
-async def test_cpu_only_with_available_gpu_spawns_cpu() -> None:
+async def test_cpu_encoder_with_available_gpu_spawns_cpu() -> None:
     db = _build_db(
-        hw_preference=HwPreference.CPU_ONLY,
+        encoder="cpu_h265",
         gpus=[(GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h264", "h265"], None)],
     )
     docker = MagicMock()
@@ -187,8 +182,7 @@ async def test_cpu_only_with_available_gpu_spawns_cpu() -> None:
 
 async def test_vaapi_available_claims_gpu_and_injects_devices() -> None:
     db = _build_db(
-        hw_preference=None,
-        codec=VideoCodec.H265,
+        encoder="any_h265",
         gpus=[(GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h264", "h265"], None)],
     )
     docker = MagicMock()
@@ -209,7 +203,7 @@ async def test_vaapi_available_claims_gpu_and_injects_devices() -> None:
 
 async def test_qsv_available_uses_devices_injection() -> None:
     db = _build_db(
-        hw_preference=HwPreference.ANY,
+        encoder="any_h265",
         gpus=[(GpuVendor.QSV, GpuStatus.AVAILABLE, ["h264", "h265"], None)],
     )
     docker = MagicMock()
@@ -225,7 +219,7 @@ async def test_render_gid_passed_as_env_for_qsv() -> None:
     forced override — the entrypoint honors it over its own derivation from
     the mounted node."""
     db = _build_db(
-        hw_preference=HwPreference.ANY,
+        encoder="any_h265",
         gpus=[(GpuVendor.QSV, GpuStatus.AVAILABLE, ["h264", "h265"], None)],
     )
     docker = MagicMock()
@@ -241,7 +235,7 @@ async def test_render_gid_passed_as_env_for_qsv() -> None:
 
 async def test_nvenc_available_uses_runtime_and_device_requests() -> None:
     db = _build_db(
-        hw_preference=None,
+        encoder="any_h265",
         gpus=[(GpuVendor.NVENC, GpuStatus.AVAILABLE, ["h264", "h265"], None)],
     )
     docker = MagicMock()
@@ -262,12 +256,12 @@ async def test_nvenc_available_uses_runtime_and_device_requests() -> None:
     assert req.get("Count", 0) == 0
 
 
-# --- NULL hw_preference matrix -----------------------------------------------
+# --- GPU encoder matrix -----------------------------------------------
 
 
-async def test_null_pref_with_busy_gpu_leaves_task_queued() -> None:
+async def test_any_encoder_with_busy_gpu_leaves_task_queued() -> None:
     db = _build_db(
-        hw_preference=None,
+        encoder="any_h265",
         gpus=[(GpuVendor.VAAPI, GpuStatus.BUSY, ["h264", "h265"], "other-task")],
     )
     docker = MagicMock()
@@ -279,13 +273,11 @@ async def test_null_pref_with_busy_gpu_leaves_task_queued() -> None:
     assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.QUEUED
 
 
-async def test_null_pref_no_codec_match_falls_back_to_cpu() -> None:
+async def test_any_encoder_no_codec_match_falls_back_to_cpu() -> None:
     """Preset wants h265 but the only GPU only advertises h264 → CPU spawn,
-    not queue (per arch doc: NULL means CPU only when no GPU on host has
-    this codec)."""
+    not queue: no GPU on the host has this codec."""
     db = _build_db(
-        hw_preference=None,
-        codec=VideoCodec.H265,
+        encoder="any_h265",
         gpus=[(GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h264"], None)],
     )
     docker = MagicMock()
@@ -298,20 +290,20 @@ async def test_null_pref_no_codec_match_falls_back_to_cpu() -> None:
     assert db.rows["gpus"][0].status == GpuStatus.AVAILABLE
 
 
-# --- ANY preference: busy GPU → CPU instead of queue --------------------------
+# --- Vendor encoder: busy GPU → queue ---------------------------------------
 
 
-async def test_any_pref_with_busy_gpu_spawns_cpu() -> None:
+async def test_vendor_encoder_with_busy_gpu_leaves_task_queued() -> None:
     db = _build_db(
-        hw_preference=HwPreference.ANY,
-        gpus=[(GpuVendor.VAAPI, GpuStatus.BUSY, ["h264", "h265"], "other-task")],
+        encoder="qsv_h265",
+        gpus=[(GpuVendor.QSV, GpuStatus.BUSY, ["h264", "h265"], "other-task")],
     )
     docker = MagicMock()
     disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
     spawned = await disp.spawn_pending(db)
-    assert spawned == 1
-    kwargs = docker.containers.run.call_args.kwargs
-    assert "ARM_GPU_VENDOR" not in kwargs["environment"]
+    assert spawned == 0
+    docker.containers.run.assert_not_called()
+    assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.QUEUED
 
 
 # --- Stale-claim sweep also releases the GPU ---------------------------------
@@ -319,7 +311,7 @@ async def test_any_pref_with_busy_gpu_spawns_cpu() -> None:
 
 async def test_stale_claim_sweep_releases_gpu() -> None:
     db = _build_db(
-        hw_preference=None,
+        encoder="any_h265",
         gpus=[(GpuVendor.VAAPI, GpuStatus.BUSY, ["h264", "h265"], "txt_stale")],
     )
     # Replace the queued task with a stale in-progress one held by the GPU.
@@ -352,7 +344,7 @@ async def test_stale_claim_sweep_releases_gpu() -> None:
 
 async def test_spawn_failure_releases_gpu_claim() -> None:
     db = _build_db(
-        hw_preference=None,
+        encoder="any_h265",
         gpus=[(GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h264", "h265"], None)],
     )
     docker = MagicMock()
@@ -370,7 +362,7 @@ async def test_spawn_failure_releases_gpu_claim() -> None:
 
 async def test_disabled_gpu_is_never_claimed() -> None:
     db = _build_db(
-        hw_preference=None,
+        encoder="any_h265",
         gpus=[(GpuVendor.QSV, GpuStatus.AVAILABLE, ["h264", "h265"], None)],
     )
     db.rows["gpus"][0].enabled = False
@@ -388,7 +380,7 @@ async def test_disabled_gpu_is_never_claimed() -> None:
 async def test_claim_prefers_vendor_order_not_row_order() -> None:
     # vaapi row FIRST: row order must not decide - nvenc > qsv > vaapi.
     db = _build_db(
-        hw_preference=None,
+        encoder="any_h265",
         gpus=[
             (GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h264", "h265"], None),
             (GpuVendor.QSV, GpuStatus.AVAILABLE, ["h264", "h265"], None),
@@ -405,7 +397,7 @@ async def test_claim_prefers_vendor_order_not_row_order() -> None:
 
 async def test_disabled_preferred_vendor_falls_through_to_next() -> None:
     db = _build_db(
-        hw_preference=None,
+        encoder="any_h265",
         gpus=[
             (GpuVendor.NVENC, GpuStatus.AVAILABLE, ["h264", "h265"], None),
             (GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h264", "h265"], None),
@@ -426,7 +418,7 @@ async def test_max_parallel_read_from_config_row() -> None:
     from arm_backend.seeders import CONFIG_SINGLETON_ID
     from arm_common import Config
 
-    db = _build_db(hw_preference=None, gpus=[])
+    db = _build_db(gpus=[])
     db.rows["config"] = [Config(id=CONFIG_SINGLETON_ID, max_parallel_transcodes=0)]
     docker = MagicMock()
     # env says 2, operator config says 0 -> config wins, nothing spawns.
@@ -440,7 +432,7 @@ async def test_max_parallel_falls_back_to_env_when_unseeded() -> None:
     from arm_backend.seeders import CONFIG_SINGLETON_ID
     from arm_common import Config
 
-    db = _build_db(hw_preference=None, gpus=[])
+    db = _build_db(gpus=[])
     db.rows["config"] = [Config(id=CONFIG_SINGLETON_ID, max_parallel_transcodes=None)]
     docker = MagicMock()
     disp = TranscodeDispatcher(_settings(MAX_PARALLEL_TRANSCODES=1), _db_factory(db), docker, WSHub())

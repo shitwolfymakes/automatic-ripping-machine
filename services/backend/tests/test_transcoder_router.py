@@ -22,7 +22,6 @@ from arm_backend.ws import WSHub  # noqa: E402
 from arm_common import (  # noqa: E402
     ContainerFormat,
     DiscType,
-    HwPreference,
     IdentificationMode,
     Job,
     JobStatus,
@@ -79,7 +78,7 @@ def _seed(db: FakeSession, *, task_status: TranscodeTaskStatus = TranscodeTaskSt
             tool=TranscodeTool.HANDBRAKE,
             preset_ref="H.265 MKV 1080p30",
             container=ContainerFormat.MKV,
-            hw_preference=HwPreference.CPU_ONLY,
+            encoder="preset",
         )
     ]
     db.rows["sessions"] = [
