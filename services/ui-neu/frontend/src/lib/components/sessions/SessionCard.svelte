@@ -1,7 +1,8 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { JoinedSession } from './sessionsData.svelte';
 	import { resolveSample } from './sampleTokens';
-	import { encoderSummary } from '$lib/utils/encoders';
+	import { encodersStore, encoderLabel } from '$lib/stores/encoders.svelte';
 
 	interface Props {
 		session: JoinedSession;
@@ -11,6 +12,10 @@
 	}
 
 	let { session, onedit, onclone, ondelete }: Props = $props();
+
+	onMount(() => {
+		encodersStore.load();
+	});
 
 	// Humanise enum values for display
 	function humanizeTrackSelection(v: string | null | undefined): string {
@@ -53,7 +58,7 @@
 	// encoder, so it reads "iso", not "iso | - |".
 	let transcodeSummary = $derived(
 		session.transcodePreset
-			? [session.transcodePreset.container, encoderSummary(session.transcodePreset.encoder)]
+			? [session.transcodePreset.container, encoderLabel(session.transcodePreset.encoder)]
 					.filter((v) => !!v)
 					.join(' | ')
 			: null

@@ -6,8 +6,7 @@
 	// arm_common.encoders catalog id. preset_json is not exposed.
 	import { onMount } from 'svelte';
 	import { createTranscodePreset, updateTranscodePreset } from '$lib/api/transcodePresets';
-	import { fetchEncoders } from '$lib/api/encoders';
-	import { PRESET_ENCODER_ID } from '$lib/utils/encoders';
+	import { encodersStore, PRESET_ENCODER_ID } from '$lib/stores/encoders.svelte';
 	import type {
 		ContainerFormat,
 		EncoderAvailabilityView,
@@ -53,17 +52,14 @@
 	let container = $state<ContainerFormat>(preset?.container ?? 'mkv');
 	let encoder = $state<string>(preset?.encoder ?? PRESET_ENCODER_ID);
 
-	// Availability-aware encoder catalog (GET /api/encoders), in catalog
-	// order. Soft-fails to an empty list; the picker just shows nothing but
-	// the tool/container fields still work.
-	let encoders = $state<EncoderAvailabilityView[]>([]);
-	onMount(async () => {
-		try {
-			encoders = await fetchEncoders();
-		} catch {
-			encoders = [];
-		}
+	// Availability-aware encoder catalog (GET /api/encoders, cached by the
+	// shared store), in catalog order.
+	onMount(() => {
+		encodersStore.load();
 	});
+	let encoders = $derived(encodersStore.list);
+	let encodersLoading = $derived(encodersStore.loading);
+	let encodersError = $derived(encodersStore.error);
 
 	let groupedEncoders = $derived(
 		(() => {
@@ -243,20 +239,31 @@
 			id="tp-encoder"
 			data-testid="tp-encoder"
 			bind:value={encoder}
-			disabled={isBuiltin || encoderLocked}
+			disabled={isBuiltin || encoderLocked || encodersLoading}
 		>
-			{#each GROUP_ORDER as g (g)}
-				{#if groupedEncoders.get(g)?.length}
-					<optgroup label={GROUP_LABELS[g]}>
-						{#each groupedEncoders.get(g) ?? [] as enc (enc.id)}
-							<option value={enc.id} disabled={!enc.available} title={enc.reason ?? undefined}>
-								{enc.label}{enc.reason ? ` (${enc.reason})` : ''}
-							</option>
-						{/each}
-					</optgroup>
-				{/if}
-			{/each}
+			{#if encodersLoading}
+				<option value={encoder} disabled>Loading encoders...</option>
+			{:else if encoders.length === 0}
+				<option value={encoder}>{encoder}</option>
+			{:else}
+				{#each GROUP_ORDER as g (g)}
+					{#if groupedEncoders.get(g)?.length}
+						<optgroup label={GROUP_LABELS[g]}>
+							{#each groupedEncoders.get(g) ?? [] as enc (enc.id)}
+								<option value={enc.id} disabled={!enc.available} title={enc.reason ?? undefined}>
+									{enc.label}{enc.reason ? ` (${enc.reason})` : ''}
+								</option>
+							{/each}
+						</optgroup>
+					{/if}
+				{/each}
+			{/if}
 		</select>
+		{#if encodersError}
+			<p class="field-error" data-testid="tp-encoder-error">
+				Could not load encoders; the current encoder is kept.
+			</p>
+		{/if}
 		{#if encoderHint}
 			<p class="field-help" data-testid="tp-encoder-hint">{encoderHint}</p>
 		{/if}

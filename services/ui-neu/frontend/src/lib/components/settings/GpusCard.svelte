@@ -182,7 +182,7 @@
 						{/if}
 					</div>
 					{#if g.probe_error}
-						<p class="gpus-card-probe-error" data-testid="gpu-probe-error-{g.id}">{g.probe_error}</p>
+						<p class="field-error" data-testid="gpu-probe-error-{g.id}">{g.probe_error}</p>
 					{/if}
 				</div>
 			{/each}
@@ -250,10 +250,5 @@
 		font-size: 0.8125rem;
 		color: var(--color-text-muted);
 		margin-top: 0.75rem;
-	}
-	.gpus-card-probe-error {
-		font-size: 0.75rem;
-		line-height: calc(1 / 0.75);
-		color: var(--color-danger);
 	}
 </style>

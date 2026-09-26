@@ -1,6 +1,7 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
-	import { encoderSummary } from '$lib/utils/encoders';
+	import { encodersStore, encoderLabel } from '$lib/stores/encoders.svelte';
 
 	type RipKind = { kind: 'rip'; preset: RipPresetView };
 	type TranscodeKind = { kind: 'transcode'; preset: TranscodePresetView };
@@ -16,6 +17,10 @@
 	}
 
 	let { kind, preset, usedBy, onview, onedit, onclone, ondelete }: Props = $props();
+
+	onMount(() => {
+		encodersStore.load();
+	});
 
 	// ── Humanise helpers ─────────────────────────────────────────────────────
 
@@ -91,7 +96,7 @@
 			})()
 			: (() => {
 				const p = preset as TranscodePresetView;
-				return [humanizeTool(p.tool), humanizeContainer(p.container), encoderSummary(p.encoder)]
+				return [humanizeTool(p.tool), humanizeContainer(p.container), encoderLabel(p.encoder)]
 					.filter((v) => !!v)
 					.join(' | ');
 			})()

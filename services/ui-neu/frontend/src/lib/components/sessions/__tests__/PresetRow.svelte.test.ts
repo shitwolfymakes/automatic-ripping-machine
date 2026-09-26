@@ -1,6 +1,26 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import PresetRow from '../PresetRow.svelte';
+
+// PresetRow labels a transcode preset's encoder id via the shared
+// encoders store (GET /api/encoders, cached); stub the fetch it triggers
+// on mount so the "Any GPU H.265" label resolves deterministically.
+vi.mock('$lib/api/encoders', () => ({
+	fetchEncoders: () =>
+		Promise.resolve([
+			{
+				id: 'any_h265',
+				label: 'Any GPU H.265',
+				group: 'any',
+				engine: 'handbrake',
+				kind: 'any',
+				vendor: null,
+				codec: 'h265',
+				available: true,
+				reason: null
+			}
+		])
+}));
 
 const ripPreset = (over = {}) => ({
 	id: 'r1',
@@ -245,7 +265,7 @@ describe('PresetRow — transcode preset', () => {
 		expect(screen.getByText('t1')).toBeInTheDocument();
 	});
 
-	it('renders transcode summary: tool · container · encoder', () => {
+	it('renders transcode summary: tool · container · encoder', async () => {
 		renderComponent(PresetRow, {
 			kind: 'transcode',
 			preset: transcodePreset({ tool: 'handbrake', container: 'mkv', encoder: 'any_h265' }),
@@ -255,7 +275,9 @@ describe('PresetRow — transcode preset', () => {
 			onclone: vi.fn(),
 			ondelete: vi.fn(),
 		});
-		expect(screen.getByText(/handbrake.*mkv.*any gpu h\.265/i)).toBeInTheDocument();
+		await waitFor(() =>
+			expect(screen.getByText(/handbrake.*mkv.*any gpu h\.265/i)).toBeInTheDocument()
+		);
 	});
 
 	it('omits the encoder part when the preset uses the tool\'s own encoder', () => {

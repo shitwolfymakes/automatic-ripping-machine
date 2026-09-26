@@ -183,6 +183,18 @@ describe('GpusCard', () => {
 		await waitFor(() => expect(mockFetchGpus).toHaveBeenCalledTimes(2));
 	});
 
+	it('a transcode.events envelope with a different event_type does not trigger a refetch', async () => {
+		mockFetchGpus.mockResolvedValue([qsv]);
+		render(GpusCard);
+		await waitFor(() => expect(screen.getByText('QSV')).toBeInTheDocument());
+		expect(mockFetchGpus).toHaveBeenCalledTimes(1);
+
+		expect(wsHandler).not.toBeNull();
+		wsHandler?.({ ...probedEvent('gpu_1'), event_type: 'transcode.progress' });
+
+		expect(mockFetchGpus).toHaveBeenCalledTimes(1);
+	});
+
 	it('releases the subscription on destroy', async () => {
 		const unsub = vi.fn();
 		subscribeMock.mockReturnValue(unsub);
