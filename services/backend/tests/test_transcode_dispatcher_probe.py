@@ -194,6 +194,16 @@ def test_probe_has_no_note_when_no_enabled_gpu_vendors() -> None:
     assert d.probe() == (True, None)
 
 
+def test_probe_has_no_note_for_vendor_without_a_variant_suffix() -> None:
+    """NVENC has no VARIANT_SUFFIX entry, so an enabled NVENC GPU never
+    produces a missing-variant note; there's nothing to derive for it."""
+    d = _make_dispatcher()
+    d._enabled_gpu_vendors = {GpuVendor.NVENC}
+    d._docker.ping.return_value = True
+    d._docker.images.get.return_value = object()
+    assert d.probe() == (True, None)
+
+
 def test_probe_reports_multiple_missing_variants() -> None:
     d = _make_dispatcher()
     d._enabled_gpu_vendors = {GpuVendor.QSV, GpuVendor.VAAPI}

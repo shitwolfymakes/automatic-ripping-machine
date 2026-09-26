@@ -166,11 +166,14 @@ class TranscodeDispatcher:
         # Per-image TtlProbe cache for `image_exists` (one entry per distinct
         # variant image ever checked, e.g. the derived "-intel"/"-amd" tag).
         self._image_probes: dict[str, TtlProbe] = {}
-        # Vendors seen holding an enabled GPU row, refreshed whenever
-        # `_claim_gpu_for_task` loads the gpus table for a GPU-eligible
-        # encoder. `probe()` is synchronous (no DB access), so it reads this
-        # cache rather than querying live; it is only ever stale for the
-        # window between a GPU being enabled and the next such claim.
+        # Vendors seen holding an enabled GPU row. Refreshed once per tick
+        # (see `_refresh_enabled_gpu_vendors`, called from `_tick`) so it
+        # reflects the current inventory even with an idle queue or a
+        # freshly-started process, and again whenever `_claim_gpu_for_task`
+        # loads the gpus table for a GPU-eligible encoder. `probe()` is
+        # synchronous (no DB access), so it reads this cache rather than
+        # querying live; it is only ever stale for the window between a GPU
+        # being enabled and the next tick or claim.
         self._enabled_gpu_vendors: set[GpuVendor] = set()
 
     def stop(self) -> None:
@@ -196,10 +199,26 @@ class TranscodeDispatcher:
 
     async def _tick(self) -> None:
         async with self._db_factory() as db:
+            await self._refresh_enabled_gpu_vendors(db)
             await self.sweep_stale_claims(db)
             await self.sweep_orphaned_applications(db)
             await db.commit()
             await self.spawn_pending(db)
+
+    async def _refresh_enabled_gpu_vendors(self, db: AsyncSession) -> None:
+        """Refresh `self._enabled_gpu_vendors` once per tick, independent of
+        queue state (the gpus table is tiny -- 1-4 rows on real hosts -- so
+        one extra unconditional select is trivial). Without this, a fresh
+        process or an idle queue never populates the set at all (only a
+        GPU-eligible claim in `_claim_gpu_for_task` did), which meant
+        `probe()`'s missing-variant note could never appear until a job
+        actually queued -- defeating its purpose of catching a forgotten
+        variant build before jobs fail over to base. Read-only and
+        best-effort: it never raises past this method's own select (a DB
+        error here surfaces the same as any other tick-body exception, via
+        `run()`'s per-tick catch-all) and never affects `ok`."""
+        all_gpus = (await db.execute(select(Gpu))).scalars().all()
+        self._enabled_gpu_vendors = {g.vendor for g in all_gpus if g.enabled}
 
     # --- stale claim sweep ---------------------------------------------------
 
