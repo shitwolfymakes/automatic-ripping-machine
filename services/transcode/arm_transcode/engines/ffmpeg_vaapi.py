@@ -1,5 +1,17 @@
 """AMD (Mesa VAAPI) encode path. No preset settings model: container from the
-preset, fixed defaults below, and preset.extra_args for tuning (spec section 2)."""
+preset, fixed defaults below, and preset.extra_args for tuning (spec section 2).
+
+Defaults (Controller Ruling R4): only the first video stream is mapped
+(`-map 0:v:0`, HandBrake parity) so the single `-vf format=nv12,hwupload
+-c:v <encoder>` chain never has to apply to more than one stream; a bare
+`-map 0` would also pull in extra angles and attached-picture "video"
+streams. Audio is always copied (`-map 0:a? -c:a copy`). Subtitles are
+copied only for MKV (`-map 0:s? -c:s copy`) because MP4 cannot mux bitmap
+subtitle codecs (Blu-ray PGS `hdmv_pgs_subtitle`, DVD `dvd_subtitle`) and
+would abort the encode; MP4 output instead drops subtitles entirely
+(`-sn`). There is no settings model to choose burn-in/convert instead;
+that is deliberate for this engine.
+"""
 
 from __future__ import annotations
 
@@ -43,7 +55,13 @@ def build_command(
         "-i",
         str(input_path),
         "-map",
-        "0",
+        "0:v:0",
+        "-map",
+        "0:a?",
+    ]
+    if container == ContainerFormat.MKV:
+        cmd += ["-map", "0:s?"]
+    cmd += [
         "-vf",
         "format=nv12,hwupload",
         "-c:v",
@@ -54,11 +72,12 @@ def build_command(
         DEFAULT_QP,
         "-c:a",
         "copy",
-        "-c:s",
-        "copy",
-        "-f",
-        muxer,
     ]
+    if container == ContainerFormat.MKV:
+        cmd += ["-c:s", "copy"]
+    else:
+        cmd += ["-sn"]
+    cmd += ["-f", muxer]
     if extra_args:
         cmd.extend(extra_args.split())
     cmd.append(str(output_path))

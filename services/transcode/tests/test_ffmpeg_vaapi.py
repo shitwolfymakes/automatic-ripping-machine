@@ -10,8 +10,11 @@ media file needed).
 Covers:
 
   - build_command: default CQP flags, encoder from the catalog spec,
-    stream copy for audio/subs, container → muxer, extra_args appended
-    before the output path, unsupported container rejected.
+    explicit stream mapping (first video stream only, all audio, subs
+    only for MKV), container → muxer, extra_args appended before the
+    output path, unsupported container rejected. MP4 drops subtitles
+    entirely (`-sn`) instead of mapping them, because MP4 cannot mux
+    bitmap subtitle codecs (Blu-ray PGS / DVD) and would abort mid-encode.
   - transcode_ffmpeg_vaapi: success returns the output file size and
     emits progress; non-zero exit raises RuntimeError with the stderr
     tail; duration_seconds=None completes successfully with no progress
@@ -46,12 +49,31 @@ def test_build_command_defaults():
     assert cmd[cmd.index("-c:v") + 1] == "hevc_vaapi"
     assert cmd[cmd.index("-rc_mode") + 1] == "CQP"
     assert cmd[cmd.index("-qp") + 1] == "22"
-    assert ["-map", "0"] == cmd[cmd.index("-map") : cmd.index("-map") + 2]
+    map_values = [cmd[i + 1] for i, tok in enumerate(cmd) if tok == "-map"]
+    assert map_values == ["0:v:0", "0:a?", "0:s?"]
+    assert "0" not in map_values  # bare `-map 0` would pull in extra angles / attached pics
     assert cmd[cmd.index("-c:a") + 1] == "copy"
     assert cmd[cmd.index("-c:s") + 1] == "copy"
     assert cmd[cmd.index("-f") + 1] == "matroska"
     assert cmd[-1] == "/media/o.mkv.arm-inprogress"
     assert "scale" not in " ".join(cmd)
+
+
+def test_build_command_mp4_drops_subtitles_and_passes_sn():
+    cmd = build_command(
+        input_path=Path("i"),
+        output_path=Path("o"),
+        spec=get_encoder("vaapi_h264"),
+        device="/dev/dri/renderD128",
+        container=ContainerFormat.MP4,
+        extra_args=None,
+    )
+    map_values = [cmd[i + 1] for i, tok in enumerate(cmd) if tok == "-map"]
+    assert map_values == ["0:v:0", "0:a?"]
+    assert "0:s?" not in map_values
+    assert "-c:s" not in cmd
+    assert "-sn" in cmd
+    assert cmd[cmd.index("-f") + 1] == "mp4"
 
 
 def test_extra_args_appended_before_output():
