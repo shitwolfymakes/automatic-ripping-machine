@@ -39,6 +39,7 @@ from arm_transcode.api_client import BackendClient
 from arm_transcode.config import TranscoderConfig
 from arm_transcode.encoder_probe import probe_encoders
 from arm_transcode.engines import selected_encoder
+from arm_transcode.engines.ffmpeg_vaapi import transcode_ffmpeg_vaapi
 from arm_transcode.engines.handbrake_engine import encoder_args as handbrake_encoder_args
 from arm_transcode.ffmpeg_audio import transcode_audio
 from arm_transcode.handbrake import transcode_handbrake
@@ -109,6 +110,28 @@ async def _run_encoder(
 
     if tool == TranscodeTool.NONE:
         size = transcode_none(raw_input, final_output)
+        state.pct = 100
+        return size
+
+    spec = selected_encoder()
+    if tool == TranscodeTool.HANDBRAKE and spec is not None and spec.engine == "ffmpeg_vaapi":
+        # `tool` only equals HANDBRAKE when `preset` produced it (see `run()`
+        # above), so `preset` is never None on this branch.
+        assert preset is not None
+        device = os.environ.get("ARM_GPU_DEVICE")
+        if not device:
+            raise RuntimeError("ffmpeg_vaapi encoder requires ARM_GPU_DEVICE")
+        with atomic_output(final_output) as tmp:
+            size = await transcode_ffmpeg_vaapi(
+                input_path=raw_input,
+                output_path=tmp,
+                spec=spec,
+                device=device,
+                container=preset.container,
+                extra_args=preset.extra_args,
+                duration_seconds=duration_seconds,
+                progress_callback=_on_progress,
+            )
         state.pct = 100
         return size
 

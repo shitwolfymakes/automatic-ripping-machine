@@ -17,11 +17,10 @@ import asyncio
 import contextlib
 import logging
 from pathlib import Path
-from typing import Awaitable, Callable
+
+from arm_transcode.ffmpeg_progress import ProgressCallback, consume_progress, drain_stderr
 
 logger = logging.getLogger("arm_transcode.ffmpeg_audio")
-
-ProgressCallback = Callable[[int, int | None, str | None], Awaitable[None]]
 
 
 # `-f <muxer>` is mandatory: the atomic-rename flow writes the output as
@@ -76,10 +75,10 @@ async def transcode_audio(
     assert proc.stderr is not None
 
     stderr_buf: list[str] = []
-    stderr_task = asyncio.create_task(_drain_stderr(proc.stderr, stderr_buf))
+    stderr_task = asyncio.create_task(drain_stderr(proc.stderr, stderr_buf))
 
     try:
-        await _consume_progress(proc.stdout, duration_seconds, progress_callback)
+        await consume_progress(proc.stdout, duration_seconds, progress_callback)
         rc = await proc.wait()
     finally:
         with contextlib.suppress(asyncio.CancelledError):
@@ -90,40 +89,3 @@ async def transcode_audio(
         raise RuntimeError(f"ffmpeg exited rc={rc}\nstderr tail:\n{tail}")
 
     return output_path.stat().st_size
-
-
-async def _drain_stderr(stream: asyncio.StreamReader, buf: list[str]) -> None:
-    while True:
-        line = await stream.readline()
-        if not line:
-            break
-        buf.append(line.decode(errors="replace").rstrip())
-
-
-async def _consume_progress(
-    stream: asyncio.StreamReader,
-    duration_seconds: int | None,
-    cb: ProgressCallback,
-) -> None:
-    last_emitted = -1
-    while True:
-        line = await stream.readline()
-        if not line:
-            break
-        decoded = line.decode(errors="replace").strip()
-        if not decoded.startswith("out_time_us="):
-            continue
-        try:
-            us = int(decoded.partition("=")[2])
-        except ValueError:
-            continue
-        if duration_seconds is None or duration_seconds <= 0:
-            continue
-        pct = min(100, int(us / 1_000_000 / duration_seconds * 100))
-        if pct == last_emitted:
-            continue
-        last_emitted = pct
-        try:
-            await cb(pct, None, "encoding")
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("progress_callback raised: %s", exc)
