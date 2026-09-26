@@ -724,3 +724,32 @@ async def test_auto_apply_transcode_disabled_wins_over_encoder_unavailable(tmp_p
     )
 
     assert outcome.skipped_reason == "transcode_disabled"
+
+
+@pytest.mark.asyncio
+async def test_fan_out_transcode_disabled_wins_over_encoder_unavailable(tmp_path: Path) -> None:
+    """`fan_out_waiting_identify_applications`: when both gates would fire
+    (transcoding off AND no eligible device), the parked application stays
+    parked with `skipped_reason="transcode_disabled"`, not
+    `"encoder_unavailable"`: the disabled gate runs first."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    _add_vendor_pinned_session(db, encoder="qsv_h265")
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_vendor",
+            session_id="ses_vendor",
+            job_id=job.id,
+            status=SessionApplicationStatus.WAITING_IDENTIFY,
+            overwrite=False,
+        ),
+    ]
+    db.rows["config"] = [Config(id=1, transcode_enabled=False)]
+    hub = CapturingHub()
+
+    outcomes = await fan_out_waiting_identify_applications(db, job=job, hub=hub)  # type: ignore[arg-type]
+
+    assert len(outcomes) == 1
+    assert outcomes[0].skipped_reason == "transcode_disabled"
+    assert outcomes[0].application.status == SessionApplicationStatus.WAITING_IDENTIFY

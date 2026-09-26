@@ -1,10 +1,10 @@
-"""Encoder catalog availability — GET /api/encoders.
+"""Encoder catalog availability: GET /api/encoders.
 
 `arm_common.encoders.ENCODERS` is a static catalog: it has no idea which
 devices this deployment actually has. This router layers the live `gpus`
 inventory on top of it (the same `gpu_is_eligible` rule the transcode
 dispatcher's GPU claim uses) so the transcode preset picker can grey out, or
-explain, an encoder the deployment can't currently satisfy — without
+explain, an encoder the deployment can't currently satisfy, without
 duplicating that eligibility rule client-side.
 """
 

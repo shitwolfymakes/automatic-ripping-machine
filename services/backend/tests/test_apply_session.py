@@ -1014,7 +1014,7 @@ def test_encode_apply_succeeds_with_eligible_device(signing_key: bytes, tmp_path
 
 
 def test_any_encoder_apply_succeeds_without_any_gpu_rows(signing_key: bytes, tmp_path: Path) -> None:
-    """`any_h265` is never refused at apply time — it falls back to the CPU
+    """`any_h265` is never refused at apply time: it falls back to the CPU
     at dispatch time when nothing eligible shows up."""
     db = FakeSession()
     _seed(db)
@@ -1031,7 +1031,7 @@ def test_any_encoder_apply_succeeds_without_any_gpu_rows(signing_key: bytes, tmp
 
 def test_transcode_disabled_wins_over_encoder_unavailable(signing_key: bytes, tmp_path: Path) -> None:
     """When both gates would fire (transcoding off AND no eligible device),
-    the transcode_disabled gate reports first — it runs before the encoder
+    the transcode_disabled gate reports first: it runs before the encoder
     gate."""
     db = FakeSession()
     _seed(db)
@@ -1046,3 +1046,22 @@ def test_transcode_disabled_wins_over_encoder_unavailable(signing_key: bytes, tm
         )
     assert r.status_code == 422, r.text
     assert "transcoding is disabled" in r.json()["detail"]
+
+
+def test_encode_apply_refused_with_unknown_catalog_encoder(signing_key: bytes, tmp_path: Path) -> None:
+    """A preset row carrying an encoder id no longer in the catalog (a stale
+    row from a removed encoder) is refused with a typed 422 naming the
+    preset, not a 500 from an unguarded catalog lookup."""
+    db = FakeSession()
+    _seed(db)
+    _seed_vendor_pinned_session(db, encoder="removed_encoder")
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_vendor"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"] == "preset tpr_vendor has unknown encoder 'removed_encoder'"
+    assert db.rows["session_applications"] == []

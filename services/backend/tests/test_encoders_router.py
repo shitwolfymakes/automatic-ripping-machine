@@ -1,4 +1,4 @@
-"""GET /api/encoders — the catalog (`arm_common.encoders.ENCODERS`) with
+"""GET /api/encoders: the catalog (`arm_common.encoders.ENCODERS`) with
 server-computed availability from the live `gpus` inventory."""
 
 from __future__ import annotations

@@ -300,15 +300,21 @@ async def transcode_enabled_now(db: AsyncSession) -> bool:
 async def encoder_available(db: AsyncSession, encoder_id: str) -> bool:
     """May an apply proceed with this preset's catalog encoder right now?
 
-    `preset`/`cpu`/`any` never depend on hardware — an `any_<codec>` encoder
-    falls back to the CPU at dispatch time when nothing eligible shows up
-    (`TranscodeDispatcher._claim_gpu_for_task`), so it's never refused here.
-    A vendor-pinned `gpu` encoder needs at least one enabled `Gpu` row whose
-    probe verified this codec for that vendor (`gpu_is_eligible`); dispatch
-    would otherwise fail the task once it reached the front of the queue,
-    so apply-time refuses it up front instead.
+    An id no longer in the catalog (a stale row from a removed encoder) is
+    treated as unavailable rather than raising, matching how the dispatcher's
+    GPU claim degrades: `preset`/`cpu`/`any` never depend on hardware (an
+    `any_<codec>` encoder falls back to the CPU at dispatch time when
+    nothing eligible shows up, `TranscodeDispatcher._claim_gpu_for_task`),
+    so those are never refused here. A vendor-pinned `gpu` encoder needs at
+    least one enabled `Gpu` row whose probe verified this codec for that
+    vendor (`gpu_is_eligible`); dispatch would otherwise fail the task once
+    it reached the front of the queue, so apply-time refuses it up front
+    instead.
     """
-    spec = get_encoder(encoder_id)
+    try:
+        spec = get_encoder(encoder_id)
+    except ValueError:
+        return False
     if spec.kind != "gpu":
         return True
     codec = str(spec.codec)

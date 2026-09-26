@@ -55,6 +55,7 @@ from arm_common import (
     TranscodeTaskStatus,
     with_log_context,
 )
+from arm_common.encoders import get_encoder
 from arm_common.models._columns import enum_value_str
 from arm_common.schemas import ApplySkippedReason, CollisionInfo
 
@@ -74,6 +75,22 @@ _TRANSCODE_DISABLED_DETAIL = (
     "transcoding is disabled (Settings > Transcoding); only passthrough sessions can be applied"
 )
 _ENCODER_UNAVAILABLE_DETAIL = "no enabled device has verified {encoder}; re-probe or enable it in Settings > GPUs"
+
+
+def _encoder_unavailable_detail(preset: TranscodePreset) -> str:
+    """Human-readable detail for `skipped_reason="encoder_unavailable"`.
+
+    Call only after `encoder_available` has already returned False for
+    `preset.encoder`. Distinguishes a catalog id that no longer exists (a
+    stale row from a removed encoder, same failure mode the dispatcher's
+    `_claim_gpu_for_task` guards against) from a known, vendor-pinned id
+    with no currently-eligible device.
+    """
+    try:
+        get_encoder(preset.encoder)
+    except ValueError:
+        return f"preset {preset.id} has unknown encoder {preset.encoder!r}"
+    return _ENCODER_UNAVAILABLE_DETAIL.format(encoder=preset.encoder)
 
 
 def _media_types_compatible(job_mt: MediaType, sess_mt: MediaType) -> bool:
@@ -282,7 +299,7 @@ async def _apply_session_internal(
                 collisions=[],
                 idempotent=False,
                 skipped_reason="encoder_unavailable",
-                error_detail=_ENCODER_UNAVAILABLE_DETAIL.format(encoder=transcode_preset.encoder),
+                error_detail=_encoder_unavailable_detail(transcode_preset),
             )
 
     # `awaiting_user_id` → park as `waiting_identify` with no tasks.
@@ -696,7 +713,7 @@ async def fan_out_waiting_identify_applications(
                         application=app,
                         tasks=[],
                         skipped_reason="encoder_unavailable",
-                        error_detail=_ENCODER_UNAVAILABLE_DETAIL.format(encoder=transcode_preset.encoder),
+                        error_detail=_encoder_unavailable_detail(transcode_preset),
                     )
                 )
                 continue
