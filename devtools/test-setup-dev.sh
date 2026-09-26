@@ -41,6 +41,8 @@ present "arm-ripper image defaults like transcode" 'ARM_RIPPER_IMAGE:-arm-ripper
 present "backend gets /dev/disk read-only"      '/dev/disk:/host-disk:ro'   "${TEMPLATE}"
 present "backend receives ARM_RIPPER_IMAGE"     'ARM_RIPPER_IMAGE: \$\{ARM_RIPPER_IMAGE' "${TEMPLATE}"
 present "backend forwards ripper poll tunable"  'ARM_RIPPER_POLL_INTERVAL_SECONDS' "${TEMPLATE}"
+present "template has the arm-data-init service" '^  arm-data-init:$'        "${TEMPLATE}"
+present "backend waits for arm-data-init"      'condition: service_completed_successfully' "${TEMPLATE}"
 
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
     envfile="$(mktemp)"
@@ -52,6 +54,8 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
     check "compose config lists arm-ripper" 0 "${rc}"
     rc=0; grep -q 'arm-ripper-sr' <<<"${services}" || rc=$?
     check "compose config lists no arm-ripper-srN" 1 "${rc}"
+    rc=0; grep -qx 'arm-data-init' <<<"${services}" || rc=$?
+    check "compose config lists arm-data-init" 0 "${rc}"
     envfile="$(mktemp)"
     printf 'POSTGRES_USER=a\nPOSTGRES_PASSWORD=b\nPOSTGRES_DB=c\nARM_SERVICE_TOKEN=t\n' > "${envfile}"
     replicas=""
