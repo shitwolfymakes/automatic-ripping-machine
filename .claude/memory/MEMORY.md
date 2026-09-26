@@ -16,3 +16,4 @@
 - [Standard UI patterns](feedback_standard_ui_patterns.md) — recurring UI (sort indicators, close buttons, status glyphs, chips) is a shared component (`Glyph`, `SortIndicator`, `CloseButton`, ...), never one-off inline markup.
 - [No-transcode mode shipped (wolfy #85)](project_no_transcode_mode.md) — capability + toggle + in-process passthrough; dispatcher identity-map invariants; follow-up list
 - [Encoder-first presets + per-device GPU probe (wolfy #87)](project_encoder_first_presets.md) — encoder ids replace codec/hw_preference (migration 0038); probe-verified eligibility; vendor image variants; parked follow-ups
+- [Docs site architecture](project_docs_site.md) — `site/` builds `build/site` (Pages) and `build/app` (baked into ui-neu's `/docs-data/`, backing the `/help` route); broken doc links fail `npm test`; branch stacked on PR #74.
