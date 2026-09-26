@@ -54,16 +54,25 @@ async def list_gpus(
 async def update_gpu(
     gpu_id: str,
     body: GpuUpdateRequest,
+    request: Request,
     _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> GpuView:
-    gpu = (await db.execute(select(Gpu).where(col(Gpu.id) == gpu_id))).scalar_one_or_none()
+    # Enabling a never-probed row also schedules its probe. When a probe can't
+    # start (the row is busy or already being probed, or this host can't run
+    # probes) the update still succeeds and the row stays unprobed.
+    gpu =(await db.execute(select(Gpu).where(col(Gpu.id) == gpu_id))).scalar_one_or_none()
     if gpu is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="gpu not found")
+    newly_enabled = body.enabled and not gpu.enabled
     gpu.enabled = body.enabled
     db.add(gpu)
     await db.commit()
     await db.refresh(gpu)
+    if newly_enabled and gpu.probed_at is None:
+        runner = getattr(request.app.state, "gpu_probe_runner", None)
+        if runner is not None and runner.capable() and not runner.gpu_in_use(gpu):
+            runner.start_probe(gpu_id)
     return GpuView.model_validate(gpu, from_attributes=True)
 
 

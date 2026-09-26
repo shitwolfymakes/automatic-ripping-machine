@@ -274,3 +274,75 @@ def test_probe_all_not_capable_409() -> None:
         r = c.post("/api/gpus/probe", headers=_auth(token))
     assert r.status_code == 409
     assert r.json()["detail"] == "no docker client (ripper-only deployment or docker unavailable)"
+
+
+# --- probe on enable ------------------------------------------------------------
+
+
+def test_enabling_a_never_probed_row_schedules_its_probe() -> None:
+    app, token, db = _app([_gpu(enabled=False, probed_at=None)])
+    runner = _Runner()
+    app.state.gpu_probe_runner = runner
+    with TestClient(app) as c:
+        r = c.patch("/api/gpus/gpu_1", json={"enabled": True}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert db.rows["gpus"][0].enabled is True
+    assert runner.started == ["gpu_1"]
+
+
+def test_enabling_an_already_probed_row_does_not_probe() -> None:
+    app, token, _db = _app([_gpu(enabled=False, probed_at=datetime(2026, 9, 26, tzinfo=UTC))])
+    runner = _Runner()
+    app.state.gpu_probe_runner = runner
+    with TestClient(app) as c:
+        r = c.patch("/api/gpus/gpu_1", json={"enabled": True}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert runner.started == []
+
+
+def test_patching_an_enabled_row_enabled_again_does_not_probe() -> None:
+    app, token, _db = _app([_gpu(probed_at=None)])
+    runner = _Runner()
+    app.state.gpu_probe_runner = runner
+    with TestClient(app) as c:
+        r = c.patch("/api/gpus/gpu_1", json={"enabled": True}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert runner.started == []
+
+
+def test_disabling_a_never_probed_row_does_not_probe() -> None:
+    app, token, _db = _app([_gpu(probed_at=None)])
+    runner = _Runner()
+    app.state.gpu_probe_runner = runner
+    with TestClient(app) as c:
+        r = c.patch("/api/gpus/gpu_1", json={"enabled": False}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert runner.started == []
+
+
+def test_enabling_succeeds_when_the_probe_cannot_start() -> None:
+    rows = [
+        _gpu("gpu_busy", enabled=False, status=GpuStatus.BUSY, claimed_by_task_id="tt_running"),
+        _gpu("gpu_probing", enabled=False),
+    ]
+    app, token, db = _app(rows)
+    runner = _Runner(probing={"gpu_probing"})
+    app.state.gpu_probe_runner = runner
+    with TestClient(app) as c:
+        busy = c.patch("/api/gpus/gpu_busy", json={"enabled": True}, headers=_auth(token))
+        probing = c.patch("/api/gpus/gpu_probing", json={"enabled": True}, headers=_auth(token))
+    assert (busy.status_code, probing.status_code) == (200, 200)
+    assert all(g.enabled for g in db.rows["gpus"])
+    assert runner.started == []
+
+
+def test_enabling_on_a_host_that_cannot_probe_still_succeeds() -> None:
+    for runner in (_Runner(capable=False), None):
+        app, token, db = _app([_gpu(enabled=False)])
+        if runner is not None:
+            app.state.gpu_probe_runner = runner
+        with TestClient(app) as c:
+            r = c.patch("/api/gpus/gpu_1", json={"enabled": True}, headers=_auth(token))
+        assert r.status_code == 200, r.text
+        assert db.rows["gpus"][0].enabled is True
+        assert runner is None or runner.started == []
