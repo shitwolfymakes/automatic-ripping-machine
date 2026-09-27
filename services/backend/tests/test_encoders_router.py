@@ -206,6 +206,28 @@ def test_gpu_kind_available_while_a_matching_device_awaits_its_first_probe(probi
     assert by_id["nvenc_h265"]["available"] is False
 
 
+@pytest.mark.parametrize("probing", [False, True], ids=["pending", "probing"])
+def test_any_kind_says_it_waits_for_the_probe_while_a_device_awaits_it(probing: bool) -> None:
+    """The claim queues an `any_<codec>` task while a device that could serve
+    the codec awaits its first probe, so the reason must not promise the CPU."""
+    by_id = _get_with_dispatcher(
+        [_gpu(vendor=GpuVendor.NVENC, probed_at=None, encoder_kinds=[])],
+        _awaiting_dispatcher("gpu_1", probing=probing),
+    )
+
+    any_h265 = by_id["any_h265"]
+    assert any_h265["available"] is True
+    assert any_h265["reason"] == "waiting for the first GPU probe"
+
+
+def test_any_kind_runs_on_the_cpu_for_an_unprobed_device_nobody_is_probing() -> None:
+    by_id = _get_with_dispatcher(
+        [_gpu(vendor=GpuVendor.NVENC, probed_at=None, encoder_kinds=[])],
+        _awaiting_dispatcher("gpu_other", probing=True),
+    )
+    assert by_id["any_h265"]["reason"] == "no verified GPU; runs on the CPU"
+
+
 def test_gpu_kind_unavailable_for_an_unprobed_device_nobody_is_probing() -> None:
     by_id = _get_with_dispatcher(
         [_gpu(vendor=GpuVendor.QSV, probed_at=None, encoder_kinds=[])],

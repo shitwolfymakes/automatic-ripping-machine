@@ -33,7 +33,7 @@ from arm_common import (
     TrackKind,
     TranscodePreset,
 )
-from arm_common.encoders import EncoderSpec, get_encoder, gpu_is_eligible
+from arm_common.encoders import EncoderSpec, get_encoder, gpu_could_serve, gpu_is_eligible
 from arm_common.enums import SessionApplicationStatus, TranscodeTaskStatus, TranscodeTool
 from arm_common.models import SessionApplication, TranscodeTask
 from arm_common.schemas import CollisionInfo
@@ -307,7 +307,7 @@ async def encoder_available(db: AsyncSession, encoder_id: str) -> bool:
     `any_<codec>` encoder falls back to the CPU at dispatch time when
     nothing eligible shows up, `TranscodeDispatcher._claim_gpu_for_task`),
     so those are never refused here. A vendor-pinned `gpu` encoder needs a
-    device per `pinned_gpu_state`; dispatch would otherwise fail the task
+    device per `gpu_encoder_state`; dispatch would otherwise fail the task
     once it reached the front of the queue, so apply-time refuses it up
     front instead.
     """
@@ -318,18 +318,19 @@ async def encoder_available(db: AsyncSession, encoder_id: str) -> bool:
     if spec.kind != "gpu":
         return True
     all_gpus = (await db.execute(select(Gpu))).scalars().all()
-    return pinned_gpu_state(spec, all_gpus) != "unavailable"
+    return gpu_encoder_state(spec, all_gpus) != "unavailable"
 
 
-PinnedGpuState = Literal["verified", "awaiting_probe", "unavailable"]
+GpuEncoderState = Literal["verified", "awaiting_probe", "unavailable"]
 
 
-def pinned_gpu_state(spec: EncoderSpec, gpus: Sequence[Gpu]) -> PinnedGpuState:
-    """Can the inventory serve this vendor-pinned `gpu` encoder?
+def gpu_encoder_state(spec: EncoderSpec, gpus: Sequence[Gpu]) -> GpuEncoderState:
+    """Can the inventory serve this `gpu` or `any` encoder on a GPU?
 
-    `verified`: an enabled row of that vendor whose probe verified the codec
-    (`gpu_is_eligible`). `awaiting_probe`: none yet, but an enabled matching
-    never-probed row has its probe reserved or running
+    `verified`: an enabled row whose probe verified the codec
+    (`gpu_is_eligible`), of the encoder's vendor for a vendor-pinned one.
+    `awaiting_probe`: none yet, but a never-probed row that could serve it
+    (`gpu_could_serve`) has its probe reserved or running
     (`gpu_awaiting_probe`), so a task queues until the probe decides, exactly
     as the claim does. Shared by the apply gate and GET /api/encoders so the
     two never disagree.
@@ -337,10 +338,9 @@ def pinned_gpu_state(spec: EncoderSpec, gpus: Sequence[Gpu]) -> PinnedGpuState:
     from arm_backend.transcode_dispatcher import gpu_awaiting_probe  # noqa: PLC0415 - avoid module cycle
 
     codec = str(spec.codec)
-    matching = [g for g in gpus if g.vendor == spec.vendor]
-    if any(gpu_is_eligible(g, codec) for g in matching):
+    if any(gpu_is_eligible(g, codec) and (spec.kind == "any" or g.vendor == spec.vendor) for g in gpus):
         return "verified"
-    if any(g.enabled and gpu_awaiting_probe(g) for g in matching):
+    if any(gpu_could_serve(g, spec) and gpu_awaiting_probe(g) for g in gpus):
         return "awaiting_probe"
     return "unavailable"
 

@@ -2,9 +2,9 @@
 
 `arm_common.encoders.ENCODERS` is a static catalog: it has no idea which
 devices this deployment actually has. This router layers the live `gpus`
-inventory on top of it (the same `gpu_is_eligible` rule the transcode
-dispatcher's GPU claim uses, and the apply gate's `pinned_gpu_state` for
-vendor-pinned encoders) so the transcode preset picker can grey out, or
+inventory on top of it (the apply gate's `gpu_encoder_state`, which follows
+the transcode dispatcher's GPU claim) so the transcode preset picker can
+grey out, or
 explain, an encoder the deployment can't currently satisfy, without
 duplicating that eligibility rule client-side.
 """
@@ -18,9 +18,9 @@ from sqlmodel import select
 
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
-from arm_backend.transcode_apply import pinned_gpu_state
+from arm_backend.transcode_apply import gpu_encoder_state
 from arm_common import Gpu, User
-from arm_common.encoders import ENCODERS, EncoderSpec, gpu_is_eligible
+from arm_common.encoders import ENCODERS, EncoderSpec
 from arm_common.enums import GpuVendor
 from arm_common.schemas import EncoderAvailabilityView
 
@@ -32,6 +32,8 @@ _GPU_GROUPS: dict[GpuVendor, Literal["qsv", "nvenc", "vaapi"]] = {
     GpuVendor.VAAPI: "vaapi",
 }
 
+_WAITING_FOR_PROBE = "waiting for the first GPU probe"
+
 
 def _availability(spec: EncoderSpec, gpus: Sequence[Gpu]) -> EncoderAvailabilityView:
     kind = spec.kind
@@ -39,18 +41,19 @@ def _availability(spec: EncoderSpec, gpus: Sequence[Gpu]) -> EncoderAvailability
     if kind == "gpu":
         assert spec.vendor is not None  # every catalog "gpu" spec sets vendor (arm_common.encoders._build)
         group: Literal["preset", "cpu", "any", "qsv", "nvenc", "vaapi"] = _GPU_GROUPS[spec.vendor]
-        codec = str(spec.codec)
-        state = pinned_gpu_state(spec, gpus)
+        state = gpu_encoder_state(spec, gpus)
         available = state != "unavailable"
         if state == "awaiting_probe":
-            reason = "waiting for the first GPU probe"
+            reason = _WAITING_FOR_PROBE
         elif state == "unavailable":
             reason = f"no enabled device has verified {spec.id}"
     elif kind == "any":
         group = kind
-        codec = str(spec.codec)
         available = True
-        if not any(gpu_is_eligible(g, codec) for g in gpus):
+        state = gpu_encoder_state(spec, gpus)
+        if state == "awaiting_probe":
+            reason = _WAITING_FOR_PROBE
+        elif state == "unavailable":
             reason = "no verified GPU; runs on the CPU"
     else:
         group = kind
