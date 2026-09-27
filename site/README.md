@@ -42,16 +42,22 @@ In ui-neu, `npm run docs` builds the app bundle into
 
 `.github/workflows/docs-pages.yml` builds `build/site` and deploys it to
 GitHub Pages on every push to `main` (or manually via `workflow_dispatch`).
-One-time repo setup, done once per fork:
+It is opt-in per repository and skipped entirely until step 1 is done, so
+repos that don't publish the site see no failing runs. One-time setup:
 
-1. Settings > Pages > Build and deployment > Source: set to "GitHub
+1. Settings > Secrets and variables > Actions > Variables: add
+   `DOCS_PAGES_ENABLED` = `true`.
+2. Settings > Pages > Build and deployment > Source: set to "GitHub
    Actions".
-2. Settings > Environments > `github-pages` > Deployment branches and
+3. Settings > Environments > `github-pages` > Deployment branches and
    tags: allow `main` (and add a feature branch such as
    `feat/docs-site` only while testing via `workflow_dispatch`; remove it
    again afterwards).
-3. The published site is served at `https://<owner>.github.io/<repo>/`
-   (for this fork: https://uprightbass360.github.io/arm-v3/).
+4. The published site is served at `https://<owner>.github.io/<repo>/`.
+
+`manifest.json`'s `siteUrl` is where the in-app help sends users for
+developer docs (pages it does not carry); point it at whichever Pages site
+is published.
 
 `npm run serve` mimics that base path locally at
 `http://127.0.0.1:4173/arm-v3/`.
