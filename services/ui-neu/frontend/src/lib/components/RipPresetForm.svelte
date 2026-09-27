@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Ported from services/ui/src/views/RipPresetForm.vue. The Vue view is a
+	// Ported from the removed Vue UI's RipPresetForm view. The Vue view was a
 	// routed page; this is an inline (no-route) form driven by props. Field
 	// wiring, the disabled rules, and the create / custom-edit / built-in
 	// submit-body shapes follow the Vue source faithfully.

@@ -4,7 +4,7 @@
 // `ripper.progress.{job_id}` with `{track_id, progress_pct}`; ETA is computed
 // here on the receiving side (matches the legacy UI's approach).
 //
-// Ported from services/ui/src/stores/rips.ts (Pinia) into ui-neu's Svelte-5
+// Ported from the removed Vue UI's Pinia rips store into ui-neu's Svelte-5
 // runes idiom (module-level $state, like lib/stores/toast.svelte.ts).
 
 import { wsClient, type WSEnvelope } from '$lib/api/ws';

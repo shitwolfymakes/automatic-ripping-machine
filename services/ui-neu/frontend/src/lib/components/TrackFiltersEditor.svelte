@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Ported from services/ui/src/components/TrackFiltersEditor.vue.
+	// Ported from the TrackFiltersEditor component of the removed Vue UI.
 	// Model is the `track_filters_json` shape; all conditions are ANDed.
 	type TrackFilters = {
 		min_duration_seconds?: number | null;

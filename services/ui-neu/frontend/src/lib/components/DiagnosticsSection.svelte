@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Ported from services/ui/src/views/Diagnostics.vue — a read-only Service /
+	// Ported from the removed Vue UI's Diagnostics view: a read-only Service /
 	// Log-level table from GET /api/diagnostics. Self-loading section (matches
 	// the Rip/Transcode/Sessions settings sections, minus CRUD). Log levels are
 	// .env-configured (ARM_LOG_LEVEL); there is no write path.

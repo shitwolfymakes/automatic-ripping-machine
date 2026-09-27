@@ -112,7 +112,7 @@ ARM_DIR="${ROOT_DIR}/arm"
 # `compose`, so COMPOSE_FILE overlays and a repointed data prefix still apply.
 DB_SERVICE="arm-db"
 BACKEND_SERVICE="arm-backend"
-UI_SERVICE="arm-ui-neu"
+UI_SERVICE="arm-ui"
 
 require() {
     local bin="$1"
@@ -163,13 +163,13 @@ fi
 # Load nvm if the user manages Node that way. nvm only wires `node`/`npm` onto
 # PATH in interactive shells, so a non-interactive `bash devtools/setup-dev.sh`
 # wouldn't see them; sourcing nvm.sh here fixes that and pins the version to
-# services/ui/.nvmrc so the host toolchain matches the container build.
+# services/ui-neu/frontend/.nvmrc so the host toolchain matches the container build.
 load_nvm() {
     local nvm_sh="${NVM_DIR:-${HOME}/.nvm}/nvm.sh"
     [[ -s "${nvm_sh}" ]] || return 0   # no nvm install — fall through to PATH + require
-    echo "==> nvm detected — loading Node from services/ui/.nvmrc"
+    echo "==> nvm detected; loading Node from services/ui-neu/frontend/.nvmrc"
     local want
-    want="$(cat "${ROOT_DIR}/services/ui/.nvmrc" 2>/dev/null || true)"
+    want="$(cat "${ROOT_DIR}/services/ui-neu/frontend/.nvmrc" 2>/dev/null || true)"
     # nvm.sh isn't written for `set -eu`; relax around the load + select, then restore.
     set +eu
     # shellcheck disable=SC1090
@@ -621,17 +621,17 @@ if [[ "${ACTION}" == "setup" ]]; then
     # nvm users: pull Node onto PATH (and pin it to .nvmrc) before the checks below.
     load_nvm
 
-    require node    "install Node 22 (matches services/ui/.nvmrc / Dockerfile): https://nodejs.org/ — or 'nvm install' if you use nvm"
+    require node    "install Node 26 (matches services/ui-neu/frontend/.nvmrc / Dockerfile): https://nodejs.org/ (or 'nvm install' if you use nvm)"
     require npm     "npm ships with Node — reinstall Node, or run 'nvm use', if it's missing"
 
     echo "==> syncing host venv via uv"
     ( cd "${ROOT_DIR}" && uv sync )
 
-    # UI deps from the committed lockfile (same as services/ui/Dockerfile, which
-    # builds on node:22). npm ci wipes node_modules and reinstalls exactly what
+    # UI deps from the committed lockfile (same as services/ui-neu/Dockerfile, which
+    # builds on node:26). npm ci wipes node_modules and reinstalls exactly what
     # package-lock.json pins, so guard it: npm writes node_modules/.package-lock.json
     # on install, and a `git pull` that updates the lockfile makes it newer again.
-    UI_DIR="${ROOT_DIR}/services/ui"
+    UI_DIR="${ROOT_DIR}/services/ui-neu/frontend"
     if [[ -d "${UI_DIR}/node_modules" \
           && "${UI_DIR}/node_modules/.package-lock.json" -nt "${UI_DIR}/package-lock.json" ]]; then
         echo "==> UI deps already current — skipping npm ci"
@@ -842,7 +842,7 @@ if [[ "${ACTION}" == "up" ]]; then
     wait_for_backend
 
     UI_URL="$(published_url "${UI_SERVICE}" 443)"
-    UI_URL="${UI_URL:-https://localhost:8082}"
+    UI_URL="${UI_URL:-https://localhost:8081}"
     cat <<EOF
 
 stack is up; ${HEALTH_RESULT}
@@ -860,7 +860,7 @@ cat <<EOF
 done — next:
   bash devtools/setup-dev.sh up      # build, back up the DB, (re)start the stack, wait for health
                                      # (or: docker compose up -d --build; no backup or health wait)
-  then open https://localhost:8082 -> Drives -> Enroll each drive you want ARM to use
+  then open https://localhost:8081 -> Drives -> Enroll each drive you want ARM to use
   spin it down (stack + spawned ripper/transcoder containers): bash devtools/setup-dev.sh down
 
   optional — trust the local CA so browsers/curl skip the self-signed warning:

@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Ported from services/ui/src/views/TranscodePresetForm.vue, structured to
+	// Ported from the removed Vue UI's TranscodePresetForm view, structured to
 	// match the sibling RipPresetForm.svelte (T2a). Inline (no-route) form
 	// driven by props. media_type is immutable on edit; built-in presets are
 	// name-only; nullable fields submit `value || null`. `encoder` is one
