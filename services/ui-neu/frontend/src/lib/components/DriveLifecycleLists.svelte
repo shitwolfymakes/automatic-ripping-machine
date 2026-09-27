@@ -80,7 +80,8 @@
 	   role that is gray-400 in dark (--color-text-muted) there instead of
 	   inventing a token. */
 	.drive-lifecycle-lists-empty { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-faint); }
-	:global(.dark) .drive-lifecycle-lists-empty { color: var(--color-text-muted); } /* :global: .dark is the app-level scheme class on <html>, outside this component's own template */
+	/* :global: .dark is the app-level scheme class on <html>, outside this component's own template */
+	:global(.dark) .drive-lifecycle-lists-empty { color: var(--color-text-muted); }
 	.drive-lifecycle-lists-row { border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 0.5rem 0.75rem; font-size: 0.875rem; }
 	.drive-lifecycle-lists-name { font-weight: 500; color: var(--color-text); }
 	.drive-lifecycle-lists-serial { color: var(--color-text-muted); }

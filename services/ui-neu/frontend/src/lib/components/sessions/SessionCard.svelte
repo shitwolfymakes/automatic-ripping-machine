@@ -176,7 +176,8 @@
 	   --color-text which is near-white in dark mode and would lighten
 	   rather than darken the surface) scaled down via color-mix; recorded
 	   as a deviation if it pushes a screen over threshold. */
-	:global(.dark) .session-card-pill[data-media="data"] { background: color-mix(in srgb, var(--color-backdrop) 30%, transparent); } /* token collapse: scaled backdrop stands in for the literal grey wash */
+	/* token collapse: scaled backdrop stands in for the literal grey wash */
+	:global(.dark) .session-card-pill[data-media="data"] { background: color-mix(in srgb, var(--color-backdrop) 30%, transparent); }
 	.session-card-pill[data-media="iso"] { background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
 	.session-card-name-wrap { display: flex; min-width: 0; flex: 1 1 0%; align-items: center; gap: 0.5rem; }
 	.session-card-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; color: var(--color-text); }
@@ -216,7 +217,8 @@
 	   slightly different composited value than Tailwind's own output -
 	   recorded as a deviation if it pushes a screen over threshold). */
 	.session-card-recipe { margin-top: 0.75rem; display: grid; grid-template-columns: 1fr; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: color-mix(in srgb, var(--color-backdrop) 20%, transparent); font-size: 0.75rem; line-height: 1rem; }
-	:global(.dark) .session-card-recipe { background: color-mix(in srgb, var(--color-backdrop) 33%, transparent); } /* token collapse: scaled backdrop stands in for the dark literal black/20 wash */
+	/* token collapse: scaled backdrop stands in for the dark literal black/20 wash */
+	:global(.dark) .session-card-recipe { background: color-mix(in srgb, var(--color-backdrop) 33%, transparent); }
 	.session-card-recipe > :not(:last-child) { border-bottom: 1px solid var(--color-border); }
 	@media (min-width: 640px) {
 		.session-card-recipe { grid-template-columns: 1fr auto 1fr auto 1fr; }

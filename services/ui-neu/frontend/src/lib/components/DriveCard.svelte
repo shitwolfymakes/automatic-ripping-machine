@@ -552,7 +552,8 @@
 	.drive-card-chip-primary { background: var(--color-primary-tint-3); color: var(--color-primary-text); font-size: 0.625rem; }
 	.drive-card-uhd { cursor: pointer; }
 	.drive-card-uhd-checkbox { width: 0.75rem; height: 0.75rem; border-radius: var(--radius-sm); accent-color: var(--color-warning); }
-	:global(.drive-card-uhd-info) { color: var(--color-text-faint); } /* :global: forwarded onto Glyph's internal <svg>, outside this component's own template */
+	/* :global: forwarded onto Glyph's internal <svg>, outside this component's own template */
+	:global(.drive-card-uhd-info) { color: var(--color-text-faint); }
 
 	.drive-card-action-bar { border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--color-surface-raised) 2.5%, transparent); padding: 0.25rem; }
 	.drive-card-mode-btn { border-radius: var(--radius-md); padding: 0.375rem 0.625rem; font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; background: var(--color-primary-tint-2); color: var(--color-primary-text); cursor: pointer; transition: background-color var(--motion-fast) var(--ease); }

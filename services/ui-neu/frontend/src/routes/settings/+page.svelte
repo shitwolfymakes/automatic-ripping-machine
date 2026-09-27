@@ -814,13 +814,15 @@
 	/* the original chevron flipped a full 180deg (open = pointing up);
 	   .btn's shared .chevron rule only rotates 90deg, tuned for a
 	   right-pointing chevron that turns to point down. */
-	.settings-page-diag-toggle[aria-expanded="true"] :global(.chevron) { transform: rotate(180deg); } /* :global: .chevron is rendered by the child Glyph component, outside this component's own scoped template */
+	/* :global: .chevron is rendered by the child Glyph component, outside this component's own scoped template */
+	.settings-page-diag-toggle[aria-expanded="true"] :global(.chevron) { transform: rotate(180deg); }
 	.settings-page-diag-panel { margin-top: 0.625rem; padding: 0.75rem; }
 	/* the original button was a tinted fill (bg-primary/15, no border), not
 	   .btn's default outlined look. */
 	.settings-page-diag-run { padding: 0.375rem 0.875rem; border-color: transparent; background: var(--color-primary-tint-3); color: var(--color-primary-text); }
 	.settings-page-diag-run:hover { background: color-mix(in srgb, var(--color-primary) 25%, transparent); }
-	button[data-busy="true"] :global(.settings-page-diag-run-icon) { animation: settings-page-spin 1s linear infinite; } /* :global: class forwarded onto Glyph's internal <svg>, outside this component's own template */
+	/* :global: class forwarded onto Glyph's internal <svg>, outside this component's own template */
+	button[data-busy="true"] :global(.settings-page-diag-run-icon) { animation: settings-page-spin 1s linear infinite; }
 	@keyframes settings-page-spin { to { transform: rotate(360deg); } }
 	.settings-page-diag-last-run { font-size: 0.625rem; color: var(--color-text-faint); }
 	/* the original diagError span was text-sm (0.875rem/1.25rem), not

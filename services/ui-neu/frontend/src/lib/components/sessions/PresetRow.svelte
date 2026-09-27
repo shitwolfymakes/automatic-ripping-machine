@@ -211,7 +211,8 @@
 	   lighten rather than darken the surface) scaled down via color-mix
 	   (see SessionCard.svelte's identical pill; recorded as a deviation if
 	   it pushes a screen over threshold). */
-	:global(.dark) .preset-row-pill[data-media="data"] { background: color-mix(in srgb, var(--color-backdrop) 30%, transparent); } /* token collapse: scaled backdrop stands in for the literal grey wash */
+	/* token collapse: scaled backdrop stands in for the literal grey wash */
+	:global(.dark) .preset-row-pill[data-media="data"] { background: color-mix(in srgb, var(--color-backdrop) 30%, transparent); }
 	.preset-row-pill[data-media="iso"] { background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
 	.preset-row-name-wrap { display: flex; min-width: 0; flex: 1 1 0%; align-items: center; gap: 0.5rem; }
 	.preset-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; color: var(--color-text); }

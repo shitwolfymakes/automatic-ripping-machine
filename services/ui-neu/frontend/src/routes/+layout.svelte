@@ -471,8 +471,10 @@
 	.layout-logo-dark { display: none; }
 	/* The ARM wordmark is two pre-rendered bitmaps (black-on-transparent,
 	   white-on-transparent); dark mode swaps which one is visible. */
-	:global(.dark) .layout-logo-light { display: none; } /* hide the black wordmark */
-	:global(.dark) .layout-logo-dark { display: block; } /* swap to the white wordmark */
+	/* hide the black wordmark */
+	:global(.dark) .layout-logo-light { display: none; }
+	/* swap to the white wordmark */
+	:global(.dark) .layout-logo-dark { display: block; }
 
 	/* Service health dots: label + hover affordance shared by all four rows. */
 	.layout-health-link {

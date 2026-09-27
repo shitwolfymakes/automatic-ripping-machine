@@ -410,7 +410,8 @@
 	.sessions-area-tabs-box { flex-shrink: 0; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); box-shadow: var(--shadow-1); padding: 0.25rem; }
 	/* original padding was px-3 py-1.5 (0.75rem/0.375rem), not tabs-pills'
 	   default 0.25rem 0.75rem - 2px taller per side. */
-	.sessions-area-tabs :global(.tabs-tab) { padding: 0.375rem 0.75rem; } /* reach the imported block's class from this scoped selector */
+	/* reach the imported block's class from this scoped selector */
+	.sessions-area-tabs :global(.tabs-tab) { padding: 0.375rem 0.75rem; }
 	.sessions-area-dialog-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-text); }
 	.sessions-area-builder-body { flex: 1; overflow-y: auto; padding: 1.5rem; }
 	/* the inline create/edit dialog stacks above the builder slide-over
