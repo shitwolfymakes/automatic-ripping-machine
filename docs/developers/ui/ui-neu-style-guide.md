@@ -8,7 +8,7 @@ scheme-authoring contract.
 
 A rendered, interactive version of this guide - live token swatches and
 working block specimens - is served by every deployment at
-[`/style-guide.html`](../services/ui-neu/frontend/static/style-guide.html).
+[`/style-guide.html`](../../../services/ui-neu/frontend/static/style-guide.html).
 
 The one-sentence version: **tokens are the only raw values, blocks are the
 shared looks, components scope what is genuinely local, and markup carries

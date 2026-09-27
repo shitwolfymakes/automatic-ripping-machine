@@ -1,6 +1,6 @@
 import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { hrefFor } from './links.mjs';
+import { hrefFor, isOffsite } from './links.mjs';
 
 export const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -15,7 +15,7 @@ export function navFor(nav, ctx) {
 			items: g.items.map((item) => ({
 				label: item.label,
 				href: hrefFor(item.resolved, ctx),
-				external: item.resolved.kind === 'external' || item.resolved.kind === 'repo',
+				external: item.resolved.kind === 'external' || item.resolved.kind === 'repo' || isOffsite(item.resolved, ctx),
 				pageId: item.resolved.kind === 'page' ? item.resolved.id : null
 			}))
 		}))

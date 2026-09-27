@@ -10,7 +10,7 @@ before(async () => {
 	renderer = await createRenderer();
 });
 
-function renderSource(source, srcPath = 'docs/arch/README.md') {
+function renderSource(source, srcPath = 'docs/developers/architecture/README.md') {
 	const armRoot = fixtureTree({ [srcPath]: source });
 	const { pages } = collectPages(armRoot, MANIFEST);
 	const resolver = createResolver({ armRoot, pages, manifest: MANIFEST });
@@ -34,15 +34,15 @@ test('links become placeholders; externals open in a new tab; bad links are line
 	assert.match(r.html, /<a href="@@doclink:0@@">topo<\/a>/);
 	assert.match(r.html, /<a href="@@doclink:1@@" target="_blank" rel="noopener">mk<\/a>/);
 	assert.deepEqual(r.links[0], { line: 3, raw: '01-architecture.md#backend', resolved: { kind: 'page', id: 'dev/01-architecture', fragment: 'backend' } });
-	assert.deepEqual(r.errors, ['docs/arch/README.md:5: link target not found: docs/arch/nope.md']);
+	assert.deepEqual(r.errors, ['docs/developers/architecture/README.md:5: link target not found: docs/developers/architecture/nope.md']);
 });
 
 test('images become asset placeholders', () => {
-	const armRoot = fixtureTree({ 'docs/arch/README.md': '# T\n\n![topo](img/t.png)\n', 'docs/arch/img/t.png': 'png' });
+	const armRoot = fixtureTree({ 'docs/developers/architecture/README.md': '# T\n\n![topo](img/t.png)\n', 'docs/developers/architecture/img/t.png': 'png' });
 	const { pages } = collectPages(armRoot, MANIFEST);
-	const r = renderer.render(pages.find((p) => p.id === 'dev/arch'), createResolver({ armRoot, pages, manifest: MANIFEST }));
+	const r = renderer.render(pages.find((p) => p.id === 'dev/architecture'), createResolver({ armRoot, pages, manifest: MANIFEST }));
 	assert.match(r.html, /<img src="@@docasset:0@@" alt="topo">/);
-	assert.deepEqual(r.assets, ['docs/arch/img/t.png']);
+	assert.deepEqual(r.assets, ['docs/developers/architecture/img/t.png']);
 });
 
 test('tables are wrapped and carry table block classes', () => {

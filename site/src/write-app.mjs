@@ -6,7 +6,9 @@ import { copyAssets, editUrl, navFor, writeJson } from './output.mjs';
 
 export function writeApp({ outDir, armRoot, rendered, nav, meta, manifest, search }) {
 	rmSync(outDir, { recursive: true, force: true });
-	const ctx = (fromId) => ({ target: 'app', fromId, repo: manifest.repo });
+	// Links to pages outside this bundle (developer docs) go to the public site.
+	const appIds = new Set(rendered.map((r) => r.page.id));
+	const ctx = (fromId) => ({ target: 'app', fromId, repo: manifest.repo, siteUrl: manifest.siteUrl, appIds });
 	for (const r of rendered) {
 		writeJson(join(outDir, 'pages', `${r.page.id}.json`), {
 			id: r.page.id,

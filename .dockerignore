@@ -48,7 +48,7 @@ services/ui-neu/frontend/static/docs-data/
 !**/.env.example
 
 # Stray key/cert material — defense in depth. No v3 image bakes certs in;
-# they are always bind-mounted at runtime. See docs/arch/06-deployment.md.
+# they are always bind-mounted at runtime. See docs/developers/architecture/06-deployment.md.
 **/*.key
 **/*.pem
 **/*.crt
@@ -64,12 +64,11 @@ media/
 logs/
 
 # ---- Repo metadata never read inside an image ------------------------
-# docs/, devtools/, arm_wiki/ and .pre-commit-config.yaml stay OUT of this
-# block: the ui-neu docs stage (services/ui-neu/Dockerfile) renders
-# arm_wiki/ + docs/ into the /docs-data bundle and its link checker
-# resolves relative links from those pages into devtools/ and
-# .pre-commit-config.yaml, so all four must reach the build context even
-# though only ui-neu's Dockerfile actually reads them.
+# docs/, devtools/ and .pre-commit-config.yaml stay OUT of this block: the
+# ui-neu docs stage (services/ui-neu/Dockerfile) renders docs/ into the
+# /docs-data bundle and its link checker resolves relative links from those
+# pages into devtools/ and .pre-commit-config.yaml, so all three must reach
+# the build context even though only ui-neu's Dockerfile actually reads them.
 test_fixtures/
 install.sh
 docker-compose*.yml
@@ -90,9 +89,9 @@ favicon.ico
 
 # ---- Markdown docs (not referenced by any build step) ----------------
 # README.md, CONTRIBUTING.md and the root CHANGELOG.md are excluded from
-# this exclusion (see the comment above test_fixtures/): docs/arch/README.md
+# this exclusion (see the comment above test_fixtures/): docs/developers/architecture/README.md
 # is dev-section page content, CONTRIBUTING.md is both a page and a link
-# target from it, and arm_wiki/Upgrading.md links straight to CHANGELOG.md.
+# target from it, and docs/user/Upgrading.md links straight to CHANGELOG.md.
 **/CODE_OF_CONDUCT.md
 **/SECURITY.md
 **/CLAUDE.md

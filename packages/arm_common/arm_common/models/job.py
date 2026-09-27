@@ -42,7 +42,7 @@ class Job(SQLModel, table=True):
     # VARCHAR + app-side validation like every enum here.
     media_type: MediaType | None = Field(default=None, sa_column=enum_column(MediaType, "media_type", nullable=True))
     # TV box sets: user-supplied season (identify can't know it — see
-    # docs/arch/02 § TV). Null = not a season-shaped disc / unknown.
+    # docs/developers/architecture/02 § TV). Null = not a season-shaped disc / unknown.
     season: int | None = Field(sa_column=Column(Integer, nullable=True))
     # Explicit per-rip session choice (manual trigger). Promoted out of
     # metadata_json (step 2 §3.4): it steers routing, so it is a column.

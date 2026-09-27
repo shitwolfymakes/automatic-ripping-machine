@@ -331,3 +331,24 @@ and logs a console warning, never a crash.
 
 - Contextual "?" deep links from settings and other screens into `/help`.
 - Consider retiring the wiki sync once the site is the canonical user guide.
+
+## Addendum (2026-09-25): docs split by audience
+
+Decided after the first implementation, with the owner:
+
+- **Folders.** `arm_wiki/` moved to `docs/user/` (still the GitHub wiki
+  source; `publish-wiki.yml` repointed). User-facing ops docs joined it
+  (`MakeMKV-Ripper.md`, `Notification-Scripts.md`, `examples/`,
+  `Intel-QSV-Gen12.md`). Developer docs moved under `docs/developers/`:
+  `architecture/` (was `docs/arch/`), `contributing/` (was
+  `docs/contributors/` plus the wiki's `Contribute*.md`), `ui/` (the ui-neu
+  style guide and theming contract), `reference/` (`MakeMKV-Codes.md`, and
+  the v2-era OMDb/TMDb readmes under `legacy/`, unpublished).
+  `docs/plans/`, `docs/superpowers/`, `docs/PSDs/` are unchanged.
+- **Manifest.** Sections are listed explicitly in nav order (Get started,
+  Using ARM, Troubleshooting, Project, Developers) instead of the wiki
+  sidebar. Each section has an `audience`: `user` pages get `guide/` ids and
+  ship in both outputs; `dev` pages get `dev/` ids and ship on the site only.
+  Every `docs/user/*.md` must be placed, or the build fails.
+- **App links.** In the app bundle, a link to a page it does not carry goes
+  to the public site (`manifest.siteUrl`) in a new tab.

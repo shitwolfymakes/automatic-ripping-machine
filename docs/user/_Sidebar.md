@@ -19,7 +19,7 @@
 
 **Project**
   - [Roadmap](Status-Roadmap)
-  - [Contributing](Contribute)
-  - [Contributing to the Wiki](Contribute-Wiki)
-  - [Architecture docs](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/arch/README.md)
+  - [Contributing](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/developers/contributing/Contribute.md)
+  - [Contributing to the Wiki](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/developers/contributing/Contribute-Wiki.md)
+  - [Architecture docs](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/developers/architecture/README.md)
   - [License](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/LICENSE)

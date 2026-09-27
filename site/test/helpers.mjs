@@ -15,28 +15,16 @@ export function makeTree(files) {
 
 export const MANIFEST = JSON.parse(readFileSync(fileURLToPath(new URL('./fixture-manifest.json', import.meta.url)), 'utf8'));
 
-const UPSTREAM = 'https://github.com/automatic-ripping-machine/automatic-ripping-machine';
 
 export function fixtureTree(extra = {}) {
 	return makeTree({
-		'arm_wiki/_Sidebar.md': [
-			`**[Home](${UPSTREAM}/wiki)**`,
-			'',
-			'**Getting Started**',
-			'  - [Getting Started](Getting-Started)',
-			'  - [Configuration](Configuring-ARM)',
-			'',
-			'**Project**',
-			`  - [Architecture docs](${UPSTREAM}/blob/main/docs/arch/README.md)`,
-			`  - [Open an issue](${UPSTREAM}/issues/new/choose)`,
-			''
-		].join('\n'),
-		'arm_wiki/Home.md': '# ARM Wiki\n\nStart with [Getting Started](Getting-Started).\n',
-		'arm_wiki/Getting-Started.md': '# Getting Started\n\n## Install\n\nSee [options](Configuring-ARM#options).\n',
-		'arm_wiki/Configuring-ARM.md': '# Configuring ARM\n\n## Options\n\nText.\n',
-		'docs/arch/README.md': '# Architecture\n\nRead [the overview](01-architecture.md).\n',
-		'docs/arch/01-architecture.md': '# Service topology\n\n## Backend\n\nText.\n',
-		'CONTRIBUTING.md': '# Contributing\n\nSee [docs/arch/](docs/arch/) and [LICENSE](LICENSE).\n',
+		'docs/user/_Sidebar.md': '**Wiki sidebar**\n  - [Home](Home)\n',
+		'docs/user/Home.md': '# ARM Wiki\n\nStart with [Getting Started](Getting-Started).\n',
+		'docs/user/Getting-Started.md': '# Getting Started\n\n## Install\n\nSee [options](Configuring-ARM#options).\n',
+		'docs/user/Configuring-ARM.md': '# Configuring ARM\n\n## Options\n\nText.\n',
+		'docs/developers/architecture/README.md': '# Architecture\n\nRead [the overview](01-architecture.md).\n',
+		'docs/developers/architecture/01-architecture.md': '# Service topology\n\n## Backend\n\nText.\n',
+		'CONTRIBUTING.md': '# Contributing\n\nSee [docs/developers/architecture/](docs/developers/architecture/) and [LICENSE](LICENSE).\n',
 		LICENSE: 'MIT\n',
 		...extra
 	});

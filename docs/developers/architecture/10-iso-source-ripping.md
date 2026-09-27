@@ -35,11 +35,11 @@ backend never hand-rolls `docker run` plumbing in a script.
 ISO-source ripping already half-exists, but only as a **test hook**:
 
 - The ripper takes `ARM_MANUAL_TRIGGER_ISO=/path/to.iso`
-  ([main.py:121-161](../../services/ripper/arm_ripper/main.py#L121-L161)): treats
+  ([main.py:121-161](../../../services/ripper/arm_ripper/main.py#L121-L161)): treats
   the ISO as its bound "device", rips **once** on startup, then **idles forever**
   so an operator can poke at it — the exact opposite of ephemeral.
 - No API, no UI, no spawn mechanism. You hand-launch a privileged container per
-  ISO, which is why [devtools/iso-smoke.sh](../../devtools/iso-smoke.sh) grew
+  ISO, which is why [devtools/iso-smoke.sh](../../../devtools/iso-smoke.sh) grew
   into a ~580-line orchestrator (fixture fetch, key scrape, `docker run`
   assembly, live-ripper stop/restart, transcode trigger, polling, teardown).
 
@@ -50,17 +50,17 @@ image — almost no new orchestration primitives.
 ## Design principle: reuse two things verbatim
 
 1. **The disc pipeline.** An ISO is a source the scan layer already understands —
-   [source.py](../../services/ripper/arm_ripper/source.py) routes
+   [source.py](../../../services/ripper/arm_ripper/source.py) routes
    `makemkv_source_url()` to `iso:<path>` vs `dev:<path>`, and scan loop-mounts a
-   file ([disc_probe.py](../../services/ripper/arm_ripper/scan/disc_probe.py)).
+   file ([disc_probe.py](../../../services/ripper/arm_ripper/scan/disc_probe.py)).
    Everything downstream of scan — identify, track selection, rip-start,
    `PATCH /tracks`, rip-complete, session auto-apply, transcode — is
    **source-blind and untouched.**
 2. **The transcode dispatcher.** The backend's
-   [transcode_dispatcher.py](../../services/backend/arm_backend/transcode_dispatcher.py)
+   [transcode_dispatcher.py](../../../services/backend/arm_backend/transcode_dispatcher.py)
    is the template: a task table, a dispatcher tick that spawns
    `containers.run(..., detach=True, auto_remove=True)`
-   ([:392-403](../../services/backend/arm_backend/transcode_dispatcher.py#L392-L403)),
+   ([:392-403](../../../services/backend/arm_backend/transcode_dispatcher.py#L392-L403)),
    a worker that claims its task and exits, a concurrency cap, a stale-claim
    sweep. ISO ingestion clones this with a `rip_tasks` table and the ripper image.
 
@@ -93,18 +93,18 @@ A `rip_tasks` table mirroring `transcode_tasks`: `status`
 (QUEUED|IN_PROGRESS|DONE|FAILED), `claimed_by`, `claim_heartbeat_at`, `attempts`,
 plus `source_ref` (library-relative ISO name) and `session_id`. A **rip
 dispatcher** background loop — a near-copy of `spawn_pending()`
-([transcode_dispatcher.py:229-299](../../services/backend/arm_backend/transcode_dispatcher.py#L229-L299))
+([transcode_dispatcher.py:229-299](../../../services/backend/arm_backend/transcode_dispatcher.py#L229-L299))
 — each tick:
 
 1. counts live `rip_tasks` IN_PROGRESS, computes free slots vs
    `MAX_PARALLEL_ISO_RIPS`,
 2. dequeues QUEUED rows FIFO with `FOR UPDATE SKIP LOCKED`,
 3. spawns one ephemeral ripper per task via the existing docker-py client
-   ([main.py:98-108](../../services/backend/arm_backend/main.py#L98-L108)) with
+   ([main.py:98-108](../../../services/backend/arm_backend/main.py#L98-L108)) with
    `auto_remove=True`, a unique hostname `arm-ripper-iso-{task_id[-12:]}`, and a
    `{label: task_id}` for cancel/force-stop,
 4. a **stale-claim sweep** (reusing the 90 s threshold pattern,
-   [config.py:63](../../services/backend/arm_backend/config.py#L63)) requeues or
+   [config.py:63](../../../services/backend/arm_backend/config.py#L63)) requeues or
    fails tasks whose worker died mid-rip — this *is* the crash-recovery story for
    ISO jobs, replacing the physical ripper's boot-probe.
 
@@ -115,11 +115,11 @@ legacy one-shot env var. Given `ARM_RIP_TASK_ID`, it:
 
 1. `POST /api/ripper/iso-tasks/{id}/claim` (atomic CAS to IN_PROGRESS, owner =
    hostname) — the same handshake transcoders use
-   ([routers/transcoder.py register/claim](../../services/backend/arm_backend/routers/transcoder.py)),
+   ([routers/transcoder.py register/claim](../../../services/backend/arm_backend/routers/transcoder.py)),
    and gets back `{drive_id, container_iso_path, session_id}`,
 2. runs `_run_pipeline(container_iso_path, pending_session_id=session_id)` — the
    **existing** pipeline
-   ([job_controller.py:175](../../services/ripper/arm_ripper/job_controller.py#L175)),
+   ([job_controller.py:175](../../../services/ripper/arm_ripper/job_controller.py#L175)),
 3. on rip-complete (or failure) marks the task terminal and **exits** — no
    idle-forever, no WS command loop. The container is auto-removed.
 
@@ -132,7 +132,7 @@ backend force-stops the labeled container.
 
 Transcoders don't create jobs, so they need no drive. ISO rippers **do** — and
 `Job.drive_id` is a non-null FK
-([job.py](../../packages/arm_common/arm_common/models/job.py)). Two options:
+([job.py](../../../packages/arm_common/arm_common/models/job.py)). Two options:
 
 - **(A) Per-spawn ephemeral drive (recommended for v1).** The backend creates a
   `Drive` row when it spawns the worker (hostname `arm-ripper-iso-{suffix}`,
@@ -153,7 +153,7 @@ Recommend **(A)** now, revisit **(B)** if ephemeral drive rows become noise.
   `/isos` (read-only). Because the backend spawns via the host Docker daemon, the
   mount uses a **host path** the same way transcode mounts do
   (`ARM_HOST_RAW_PATH`/`ARM_HOST_MEDIA_PATH`,
-  [config.py:78-80](../../services/backend/arm_backend/config.py#L78-L80)) — add
+  [config.py:78-80](../../../services/backend/arm_backend/config.py#L78-L80)) — add
   `ARM_HOST_ISO_LIBRARY_PATH`. `GET /api/iso/library` lists what's available for
   the picker; the backend also mounts it read-only so it can enumerate + validate.
 - **Future (deferred): UI upload.** A browser upload writes the `.iso` into the
@@ -173,12 +173,12 @@ Recommend **(A)** now, revisit **(B)** if ephemeral drive rows become noise.
 - **`GET /api/iso/library`** (JWT): enumerate the mounted library for the picker.
 - **`POST /api/ripper/iso-tasks/{id}/claim`** + heartbeat (service token): the
   worker handshake, cloned from the transcoder claim
-  ([routers/transcoder.py:134](../../services/backend/arm_backend/routers/transcoder.py#L134)).
+  ([routers/transcoder.py:134](../../../services/backend/arm_backend/routers/transcoder.py#L134)).
 - **Rip dispatcher + `rip_tasks` migration**, cloned from transcode.
 - **Cancel**: force-stop the labeled container, mirroring transcode cancel.
 
 The Docker socket is **already** mounted into the backend for transcode spawns
-([docker-compose.yml.example:68-70](../../docker-compose.yml.example#L68-L70)) — no new privilege
+([docker-compose.yml.example:68-70](../../../docker-compose.yml.example#L68-L70)) — no new privilege
 is taken on; the root-equivalent risk is already accepted in
 [06-deployment.md](06-deployment.md).
 
@@ -194,7 +194,7 @@ is taken on; the root-equivalent risk is already accepted in
   client leaf cert; if so, relax it to token-only for task-mode workers.
 - **Log identity from an explicit name, not the device.** Today the log file is
   derived from `ARM_DRIVE_DEV`
-  ([main.py:33](../../services/ripper/arm_ripper/main.py#L33)); the transcoder
+  ([main.py:33](../../../services/ripper/arm_ripper/main.py#L33)); the transcoder
   instead takes an explicit `ARM_SERVICE_NAME`. Adopt the same so each worker
   logs to `arm-ripper-iso-{suffix}.log` — unique per spawn, zero collision.
 
@@ -220,7 +220,7 @@ No long-running service. Just:
 - Build the **`arm-ripper-iso` image** (likely the existing ripper image with the
   task-mode entrypoint; possibly the same image, different command).
 - Backend settings, mirroring the transcode ones
-  ([config.py:53-86](../../services/backend/arm_backend/config.py#L53-L86)):
+  ([config.py:53-86](../../../services/backend/arm_backend/config.py#L53-L86)):
   `ARM_ISO_RIPPER_IMAGE`, `MAX_PARALLEL_ISO_RIPS`, `ARM_HOST_ISO_LIBRARY_PATH`,
   reusing `ARM_DOCKER_NETWORK` and the existing host-path settings.
 - GPU is irrelevant to ripping (it's a MakeMKV/file op); the spawn omits the GPU
@@ -236,7 +236,7 @@ and it's the first real consumer of the deferred "queue mechanism" in
 
 ## Migration: the smoke test becomes a thin client
 
-[devtools/iso-smoke.sh](../../devtools/iso-smoke.sh) collapses to: drop the
+[devtools/iso-smoke.sh](../../../devtools/iso-smoke.sh) collapses to: drop the
 fixture in the library → `POST /api/iso/rips` → wait for the job → (optional)
 existing transcode assertions. The fixture-fetch and key-resolution helpers stay
 (genuine test scaffolding); the `docker run` block, the live-ripper stop/restart,
@@ -265,6 +265,6 @@ still want a no-backend single-container smoke.
 - [04-data-model.md](04-data-model.md) — `Drive`/`Job`/`transcode_tasks`; note the `output_mode='iso'` name clash.
 - [06-deployment.md](06-deployment.md) — Docker-socket access already accepted for transcode spawns.
 - [07-open-questions.md](07-open-questions.md) — the deferred queue mechanism this first exercises.
-- [transcode_dispatcher.py](../../services/backend/arm_backend/transcode_dispatcher.py) — the spawn/dispatch/sweep template to clone.
-- [Phase 15 in MASTER_IMPLEMENTATION_PLAN.md](../plans/MASTER_IMPLEMENTATION_PLAN.md) — where ISO-as-source is currently parked.
-- [contributors/real-disc-smoke.md](../contributors/real-disc-smoke.md) — current `ARM_MANUAL_TRIGGER_ISO` smoke procedure.
+- [transcode_dispatcher.py](../../../services/backend/arm_backend/transcode_dispatcher.py) — the spawn/dispatch/sweep template to clone.
+- [Phase 15 in MASTER_IMPLEMENTATION_PLAN.md](../../plans/MASTER_IMPLEMENTATION_PLAN.md) — where ISO-as-source is currently parked.
+- [contributors/real-disc-smoke.md](../contributing/real-disc-smoke.md) — current `ARM_MANUAL_TRIGGER_ISO` smoke procedure.

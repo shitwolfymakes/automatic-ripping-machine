@@ -226,7 +226,7 @@ Every service logs **structured JSON to stdout**. One event per line (JSONL). Re
 - Logs are emitted to stdout (so `docker logs` works).
 - Logs are ALSO appended to `/logs/<service>.log` (shared volume). Each service manages its own file with size-based rotation (10MB × 5 files = 50MB per service ceiling).
 - The Backend reads `/logs/*.log` on demand to serve the per-job log view in the UI — a simple grep on `job_id` across all service logs.
-- A zip-for-bug-report endpoint in the UI (`GET /api/logs/{job_id}.zip`) streams the per-job slice of every service log, ready to drag onto a GitHub issue. This mirrors the v2 workflow documented in [CONTRIBUTING.md](../../CONTRIBUTING.md).
+- A zip-for-bug-report endpoint in the UI (`GET /api/logs/{job_id}.zip`) streams the per-job slice of every service log, ready to drag onto a GitHub issue. This mirrors the v2 workflow documented in [CONTRIBUTING.md](../../../CONTRIBUTING.md).
 
 ### DEBUG level
 
@@ -250,9 +250,9 @@ A single pre-commit stack, configured at the workspace root, gates every Python 
 
 | Tool | Role | Config |
 |---|---|---|
-| **ruff** (`format` + `check --fix`) | Formatter + linter. One Rust-backed binary covering what black, isort, flake8, bugbear, and pyupgrade did separately. | `[tool.ruff]` in [pyproject.toml](../../pyproject.toml) |
-| **mypy** | Strict type checker. Runs via `uv run` so it resolves against the real synced workspace graph, not a pinned subset maintained per-hook. | `[tool.mypy]` in [pyproject.toml](../../pyproject.toml) |
-| **pre-commit** | Orchestrates the above. Hooks run against the whole repository. | [.pre-commit-config.yaml](../../.pre-commit-config.yaml) |
+| **ruff** (`format` + `check --fix`) | Formatter + linter. One Rust-backed binary covering what black, isort, flake8, bugbear, and pyupgrade did separately. | `[tool.ruff]` in [pyproject.toml](../../../pyproject.toml) |
+| **mypy** | Strict type checker. Runs via `uv run` so it resolves against the real synced workspace graph, not a pinned subset maintained per-hook. | `[tool.mypy]` in [pyproject.toml](../../../pyproject.toml) |
+| **pre-commit** | Orchestrates the above. Hooks run against the whole repository. | [.pre-commit-config.yaml](../../../.pre-commit-config.yaml) |
 
 The ruff + uv pairing is deliberate: both ship from Astral and wire together cleanly, and the full sweep finishes well under a second on a warm cache. Black + isort + flake8 would reproduce the same rules across four tools and four configs for no gain.
 
@@ -287,7 +287,7 @@ v3 ships **Apprise with a native pass-through config**. Users paste Apprise URLs
 Rationale: v2 hand-maintained a 30-service dictionary mapping ARM-specific keys to Apprise URLs and went stale — new services (Signal, Home Assistant, MQTT, Pushover, Fluxer) piled up as feature requests, and bug reports accumulated around URL-assembly edge cases. Passing URLs through verbatim means every service Apprise supports works the day it supports it, with no PR to ARM.
 
 - Backend emits typed events to the `events` table and on WS topics.
-- `MessageDispatcher` in the Backend hands each notable event to a list of listeners: `AppriseListener` (Apprise URLs from `notification_channels`), `BashListener` (runs a hook script from the `/scripts` mount with declared inputs; see [docs/ops/notification-scripts.md](../ops/notification-scripts.md)), and `InboxListener` (the UI bell).
+- `MessageDispatcher` in the Backend hands each notable event to a list of listeners: `AppriseListener` (Apprise URLs from `notification_channels`), `BashListener` (runs a hook script from the `/scripts` mount with declared inputs; see [docs/user/Notification-Scripts.md](../../user/Notification-Scripts.md)), and `InboxListener` (the UI bell).
 - Event naming convention: `<domain>.<verb_past_tense>` (e.g. `rip.completed`, `transcode.failed`).
 - Event payloads share an envelope: `{event_id, event_type, emitted_at, job_id?, track_id?, data: {...}}`. New payload shapes are added by emitting new event types, never by mutating the shape of an existing type.
 

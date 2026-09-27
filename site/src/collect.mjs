@@ -1,44 +1,18 @@
-// Turns manifest.json into the ordered page list and the nav tree. The wiki
-// section's nav comes from arm_wiki/_Sidebar.md so the site and the GitHub
-// wiki share one table of contents.
-import { readFileSync, existsSync, globSync } from 'node:fs';
+// Turns manifest.json into the ordered page list and the nav tree. Sections
+// are listed explicitly in the manifest; a section's audience decides the
+// page id prefix (user -> guide/, dev -> dev/) and whether the in-app help
+// bundle carries it (user only). The GitHub wiki keeps its own _Sidebar.md.
+import { readFileSync, globSync } from 'node:fs';
 import { join, posix, sep } from 'node:path';
 
 const toPosix = (p) => p.split(sep).join('/');
 
 // Must match the app's id rule (services/ui-neu/frontend/src/lib/docs/api.ts).
 const ID_RE = /^[a-z0-9_-]+\/[a-z0-9_-]+$/;
+const ID_PREFIX = { user: 'guide', dev: 'dev' };
 
 export function loadManifest(siteDir) {
 	return JSON.parse(readFileSync(join(siteDir, 'manifest.json'), 'utf8'));
-}
-
-// A bold line is a group heading; "- [label](target)" lines are its items.
-// A bold line that is itself a link ("**[Home](url)**") is an item in an
-// unlabelled group of its own.
-export function parseSidebar(md) {
-	const groups = [];
-	const link = /\[([^\]]+)\]\(([^)\s]+)\)/;
-	let current = null;
-	md.split('\n').forEach((raw, i) => {
-		const line = raw.trim();
-		const bold = line.match(/^\*\*(.+)\*\*$/);
-		if (bold) {
-			const l = bold[1].match(link);
-			if (l) {
-				current = null;
-				groups.push({ label: null, items: [{ label: l[1], target: l[2], line: i + 1 }] });
-			} else {
-				current = { label: bold[1], items: [] };
-				groups.push(current);
-			}
-			return;
-		}
-		const item = line.match(/^[-*]\s+(.*)$/);
-		const l = item && item[1].match(link);
-		if (l && current) current.items.push({ label: l[1], target: l[2], line: i + 1 });
-	});
-	return groups;
 }
 
 export function slugFor(srcPath) {
@@ -63,11 +37,11 @@ export function collectPages(armRoot, manifest) {
 	const nav = [];
 	const errors = [];
 	const byId = new Map();
-	const taken = new Set();
+	const placed = new Set();
 
-	const add = (section, srcPath) => {
-		const slug = slugFor(srcPath);
-		const id = `${section}/${slug}`;
+	const add = (audience, srcPath, slugOverride) => {
+		const slug = slugOverride ?? slugFor(srcPath);
+		const id = `${ID_PREFIX[audience]}/${slug}`;
 		if (!ID_RE.test(id)) {
 			errors.push(`invalid page id ${id} from ${srcPath} (slugs may use a-z, 0-9, _ and -)`);
 			return null;
@@ -77,46 +51,45 @@ export function collectPages(armRoot, manifest) {
 			return null;
 		}
 		const source = readFileSync(join(armRoot, srcPath), 'utf8');
-		const page = { id, section, slug, srcPath, title: titleOf(source, srcPath), source };
+		const page = { id, audience, slug, srcPath, title: titleOf(source, srcPath), source };
 		byId.set(id, page);
-		taken.add(srcPath);
 		pages.push(page);
 		return page;
 	};
 	const glob = (pattern) => globSync(pattern, { cwd: armRoot }).map(toPosix).sort();
 
 	for (const section of manifest.sections) {
-		if (section.wiki) {
-			const files = glob(`${section.wiki}/*.md`).filter((f) => !posix.basename(f).startsWith('_'));
-			if (!files.length) errors.push(`manifest: ${section.wiki}/*.md matched no files`);
-			files.forEach((f) => add(section.id, f));
-			let groups = [];
-			if (existsSync(join(armRoot, section.sidebar))) {
-				groups = parseSidebar(readFileSync(join(armRoot, section.sidebar), 'utf8')).map((g) => ({
-					label: g.label,
-					items: g.items.map((item) => ({ ...item, from: section.sidebar }))
-				}));
-			} else {
-				errors.push(`manifest: sidebar ${section.sidebar} not found`);
-			}
-			nav.push({ id: section.id, label: section.label, groups });
+		if (!ID_PREFIX[section.audience]) {
+			errors.push(`manifest: section ${section.id} has unknown audience ${section.audience} (use user or dev)`);
 			continue;
 		}
-		const groups = [];
-		for (const group of section.groups) {
+		const groups = section.groups.map((group) => {
 			const items = [];
-			for (const pattern of group.files) {
+			for (const entry of group.files) {
+				// typeof guard: strings inherit the legacy String.prototype.link method.
+				if (typeof entry === 'object' && entry.link) {
+					items.push({ label: entry.label, target: entry.link, from: 'manifest.json', where: `manifest.json (${section.label})` });
+					continue;
+				}
+				const pattern = typeof entry === 'string' ? entry : entry.file;
 				const files = glob(pattern);
 				if (!files.length) errors.push(`manifest: ${pattern} matched no files`);
 				for (const f of files) {
-					if (taken.has(f)) continue;
-					const page = add(section.id, f);
-					if (page) items.push({ label: page.title, pageId: page.id });
+					if (placed.has(f)) continue;
+					placed.add(f);
+					const page = add(section.audience, f, entry.slug);
+					if (page) items.push({ label: entry.label ?? page.title, pageId: page.id });
 				}
 			}
-			groups.push({ label: group.label, items });
-		}
-		nav.push({ id: section.id, label: section.label, groups });
+			return { label: group.label ?? null, items };
+		});
+		nav.push({ id: section.id, label: section.label, audience: section.audience, groups });
+	}
+
+	// Every user doc must be placed, so a new wiki page can't silently miss
+	// the site and the app.
+	for (const f of glob(`${manifest.wiki}/*.md`)) {
+		if (!posix.basename(f).startsWith('_') && !placed.has(f)) errors.push(`manifest: ${f} is not placed in any section`);
 	}
 	return { pages, nav, errors };
 }

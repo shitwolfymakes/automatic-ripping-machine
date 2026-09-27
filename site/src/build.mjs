@@ -39,15 +39,15 @@ function resolveNav(nav, resolver, errors, headingIdsById) {
 				if (item.pageId) return [{ label: item.label, resolved: { kind: 'page', id: item.pageId, fragment: '' } }];
 				const resolved = resolver.resolve(item.target, item.from);
 				if (resolved.kind === 'error') {
-					errors.push(`${item.from}:${item.line}: ${resolved.message}`);
+					errors.push(`${item.where}: ${resolved.message}`);
 					return [];
 				}
 				if (resolved.kind === 'external' && !NAV_SCHEMES.has(resolved.url.split(':')[0].toLowerCase())) {
-					errors.push(`${item.from}:${item.line}: unsupported link scheme: ${item.target}`);
+					errors.push(`${item.where}: unsupported link scheme: ${item.target}`);
 					return [];
 				}
 				if (resolved.kind === 'page' && resolved.fragment && !headingIdsById.get(resolved.id)?.has(resolved.fragment)) {
-					errors.push(`${item.from}:${item.line}: missing anchor #${resolved.fragment} in ${resolved.id}`);
+					errors.push(`${item.where}: missing anchor #${resolved.fragment} in ${resolved.id}`);
 					return [];
 				}
 				return [{ label: item.label, resolved }];
@@ -68,11 +68,11 @@ async function main() {
 	const target = values.target;
 	if (!['all', 'site', 'app'].includes(target)) throw new Error(`--target must be all, site or app (got ${target})`);
 	const armRoot = resolve(process.env.ARM_ROOT ?? join(siteDir, '..'));
-	if (!existsSync(join(armRoot, 'arm_wiki'))) {
+	const manifest = process.env.DOCS_MANIFEST ? JSON.parse(readFileSync(process.env.DOCS_MANIFEST, 'utf8')) : loadManifest(siteDir);
+	if (!existsSync(join(armRoot, manifest.wiki))) {
 		console.error(`error: ARM root not found at ${armRoot} (set ARM_ROOT)`);
 		process.exit(1);
 	}
-	const manifest = process.env.DOCS_MANIFEST ? JSON.parse(readFileSync(process.env.DOCS_MANIFEST, 'utf8')) : loadManifest(siteDir);
 
 	const { pages, nav, errors } = collectPages(armRoot, manifest);
 	const resolver = createResolver({ armRoot, pages, manifest });
@@ -92,16 +92,17 @@ async function main() {
 	if (values.verbose) repoLinks.forEach((l) => console.log(`info:   ${l}`));
 
 	const meta = readMeta(armRoot);
-	const search = buildSearchIndex(rendered);
-	const common = { armRoot, rendered, nav: resolvedNav, meta, manifest, search };
 	const out = resolve(values.out);
+	// The site carries every page; the in-app help carries user docs only.
 	if (target !== 'app') {
-		writeSite({ ...common, siteDir, outDir: join(out, 'site') });
+		writeSite({ armRoot, rendered, nav: resolvedNav, meta, manifest, search: buildSearchIndex(rendered), siteDir, outDir: join(out, 'site') });
 		console.log(`site: ${join(out, 'site')}`);
 	}
 	if (target !== 'site') {
+		const appRendered = rendered.filter((r) => r.page.audience === 'user');
+		const appNav = resolvedNav.filter((s) => s.audience === 'user');
 		const appOut = resolve(values['app-out'] ?? join(out, 'app'));
-		writeApp({ ...common, outDir: appOut });
+		writeApp({ armRoot, rendered: appRendered, nav: appNav, meta, manifest, search: buildSearchIndex(appRendered), outDir: appOut });
 		console.log(`app: ${appOut}`);
 	}
 }

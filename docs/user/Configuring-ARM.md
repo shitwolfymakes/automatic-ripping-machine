@@ -170,4 +170,4 @@ when `media/` is a NAS share), reconcile at the mount layer rather than asking
 the container to span two identities — mount CIFS with
 `uid=$PUID,gid=$PGID,forceuid,forcegid`, or NFS with a squash that maps to
 `PUID`. Full detail in
-[`docs/arch/06-deployment.md § File ownership`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/arch/06-deployment.md#file-ownership).
+[`docs/developers/architecture/06-deployment.md § File ownership`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/developers/architecture/06-deployment.md#file-ownership).

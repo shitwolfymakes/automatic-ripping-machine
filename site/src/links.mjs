@@ -28,7 +28,7 @@ function decode(s) {
 export function createResolver({ armRoot, pages, manifest }) {
 	const byPath = new Map(pages.map((p) => [p.srcPath, p]));
 	const repos = new Set([manifest.repo, ...(manifest.repoAliases ?? [])].map((r) => r.toLowerCase()));
-	const wikiDir = manifest.sections.find((s) => s.wiki)?.wiki;
+	const wikiDir = manifest.wiki;
 
 	function repoPath(p, fragment) {
 		let path = posix.normalize(p).replace(/\/+$/, '') || '.';
@@ -89,7 +89,14 @@ export function createResolver({ armRoot, pages, manifest }) {
 	return { resolve, resolveAsset };
 }
 
-export function hrefFor(resolved, { target, fromId, repo }) {
+// In the app bundle, a page it does not carry (developer docs) lives only on
+// the public site, so the link leaves the app.
+export function isOffsite(resolved, { target, appIds }) {
+	return target === 'app' && resolved.kind === 'page' && Boolean(appIds) && !appIds.has(resolved.id);
+}
+
+export function hrefFor(resolved, ctx) {
+	const { target, fromId, repo, siteUrl } = ctx;
 	const frag = resolved.fragment ? `#${resolved.fragment}` : '';
 	switch (resolved.kind) {
 		case 'anchor':
@@ -99,6 +106,7 @@ export function hrefFor(resolved, { target, fromId, repo }) {
 		case 'repo':
 			return `https://github.com/${repo}/blob/main/${resolved.path}${frag}`;
 		case 'page':
+			if (isOffsite(resolved, ctx)) return `${siteUrl}${outPath(resolved.id)}${frag}`;
 			if (target === 'app') return `${appRoute(resolved.id)}${frag}`;
 			return `${posix.relative(posix.dirname(outPath(fromId)), outPath(resolved.id))}${frag}`;
 		default:
@@ -128,6 +136,10 @@ export function checkFragments(rendered) {
 
 export function fillLinks(html, { links, assets }, ctx) {
 	return html
-		.replace(/@@doclink:(\d+)@@/g, (_, n) => escapeAttr(hrefFor(links[n].resolved, ctx)))
+		.replace(/href="@@doclink:(\d+)@@"/g, (_, n) => {
+			const { resolved } = links[n];
+			const newTab = isOffsite(resolved, ctx) ? ' target="_blank" rel="noopener"' : '';
+			return `href="${escapeAttr(hrefFor(resolved, ctx))}"${newTab}`;
+		})
 		.replace(/@@docasset:(\d+)@@/g, (_, n) => escapeAttr(assetHref(assets[n], ctx)));
 }

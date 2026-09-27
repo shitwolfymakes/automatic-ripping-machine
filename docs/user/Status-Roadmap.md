@@ -33,14 +33,14 @@ The architectural goals that defined v3 are in place:
   [Known Issues](Status-Known-Issues).
 - **Ripping from an `.iso` source** (vs a physical disc) — designed but not yet
   built as a user feature. Design doc:
-  [`docs/arch/10-iso-source-ripping.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/arch/10-iso-source-ripping.md).
+  [`docs/developers/architecture/10-iso-source-ripping.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/developers/architecture/10-iso-source-ripping.md).
 - **TV-series-aware ripping** (episode detection and naming conventions) and
   further session ergonomics, building on the sessions/presets foundation.
 
 ## Where to follow along
 
 - Per-phase plan: [`docs/plans/MASTER_IMPLEMENTATION_PLAN.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/plans/MASTER_IMPLEMENTATION_PLAN.md)
-- Architecture docs: [`docs/arch/`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/arch/README.md)
+- Architecture docs: [`docs/developers/architecture/`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/developers/architecture/README.md)
 - Issues and discussions:
   [issue tracker](https://github.com/automatic-ripping-machine/automatic-ripping-machine/issues) ·
   [discussions](https://github.com/automatic-ripping-machine/automatic-ripping-machine/discussions)

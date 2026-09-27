@@ -13,7 +13,6 @@ on:
   push:
     branches: [main]
     paths:
-      - arm_wiki/**
       - docs/**
       - CONTRIBUTING.md
       - VERSION

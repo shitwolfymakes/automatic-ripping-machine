@@ -60,8 +60,8 @@ Windows and macOS can run the UI + transcoder as a library frontend, but
 - **[Hardware Transcoding](Hardware-Transcoding)** — enabling Intel QSV / AMD VAAPI / NVIDIA NVENC.
 - **[Upgrading](Upgrading)** and **[Uninstall](Uninstall)**.
 - **[Troubleshooting](Troubleshooting)** · **[FAQ](FAQ)** · **[Known Issues](Status-Known-Issues)**.
-- **[Roadmap](Status-Roadmap)** · **[Contributing](Contribute)** · **[Contributing to the Wiki](Contribute-Wiki)**.
+- **[Roadmap](Status-Roadmap)** · **[Contributing](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/developers/contributing/Contribute.md)** · **[Contributing to the Wiki](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/developers/contributing/Contribute-Wiki.md)**.
 
 For the architecture and design rationale behind v3, read the in-repo docs
 starting at
-[`docs/arch/README.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/arch/README.md).
+[`docs/developers/architecture/README.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/developers/architecture/README.md).

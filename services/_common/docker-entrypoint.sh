@@ -50,7 +50,7 @@ fi
 WRITE_CHECK_ATTEMPTS="${WRITE_CHECK_ATTEMPTS:-5}"
 WRITE_CHECK_DELAY="${WRITE_CHECK_DELAY:-2}"
 
-# v3 invariant (docs/arch/06-deployment.md): never chown a user-mounted volume.
+# v3 invariant (docs/developers/architecture/06-deployment.md): never chown a user-mounted volume.
 # Ownership + setgid are host-prep (install.sh: `chmod 2775`). Here we only
 # VERIFY the drop-uid can write each mounted data dir and fail fast with a clear
 # diagnostic if not — instead of silently corrupting ownership (which bricks
@@ -83,7 +83,7 @@ require_writable() {
         local ro_owner
         ro_owner="$(stat -c '%u:%g' "$d" 2>/dev/null || echo '?:?')"
         echo "FATAL: ${d} is not readable by arm (read-only mount) (PUID:PGID=${PUID}:${PGID}); dir owner is ${ro_owner}." >&2
-        echo "       ARM does not chown user-mounted volumes (docs/arch/06-deployment.md)." >&2
+        echo "       ARM does not chown user-mounted volumes (docs/developers/architecture/06-deployment.md)." >&2
         echo "       Fix host ownership so it matches PUID:PGID — e.g. a NAS export owned by a" >&2
         echo "       different uid, or a PUID that doesn't match the mount owner." >&2
         return 1
@@ -103,7 +103,7 @@ require_writable() {
     local owner
     owner="$(stat -c '%u:%g' "$d" 2>/dev/null || echo '?:?')"
     echo "FATAL: ${d} is not writable by arm (PUID:PGID=${PUID}:${PGID}); dir owner is ${owner}." >&2
-    echo "       ARM does not chown user-mounted volumes (docs/arch/06-deployment.md)." >&2
+    echo "       ARM does not chown user-mounted volumes (docs/developers/architecture/06-deployment.md)." >&2
     echo "       Fix host ownership so it matches PUID:PGID — e.g. a NAS export owned by a" >&2
     echo "       different uid, or a PUID that doesn't match the mount owner." >&2
     return 1

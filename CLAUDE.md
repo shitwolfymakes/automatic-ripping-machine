@@ -12,8 +12,8 @@ and not in this tree; its code remains in the repository's pre-cutover git histo
 
 Start with the architecture docs:
 
-- [docs/arch/README.md](docs/arch/README.md) — architecture overview and index.
-- [docs/arch/01-architecture.md](docs/arch/01-architecture.md) — service topology.
+- [docs/developers/architecture/README.md](docs/developers/architecture/README.md) — architecture overview and index.
+- [docs/developers/architecture/01-architecture.md](docs/developers/architecture/01-architecture.md) — service topology.
 - [docs/plans/MASTER_IMPLEMENTATION_PLAN.md](docs/plans/MASTER_IMPLEMENTATION_PLAN.md) — per-phase rollout.
 
 ## Project memory (read this at session start)
@@ -71,7 +71,7 @@ containers (they are not compose services).
 uv run pytest                  # all backend / ripper / transcode suites — zero infra
 ```
 
-The suite needs no Docker, Postgres, drives, or network (in-memory fake session + file-backed SQLite). See [docs/arch/09-testing.md](docs/arch/09-testing.md) for the two-tier design (fast fake-session unit tests + the real-DB e2e harness under `tests/e2e/`) and the Backend's 100%-statement-coverage policy. Heavier end-to-end drills live in `devtools/`: `bash devtools/iso-smoke.sh` (full scan → rip → transcode against an ISO fixture, no disc) and `bash devtools/crash-drill.sh` (backend crash recovery).
+The suite needs no Docker, Postgres, drives, or network (in-memory fake session + file-backed SQLite). See [docs/developers/architecture/09-testing.md](docs/developers/architecture/09-testing.md) for the two-tier design (fast fake-session unit tests + the real-DB e2e harness under `tests/e2e/`) and the Backend's 100%-statement-coverage policy. Heavier end-to-end drills live in `devtools/`: `bash devtools/iso-smoke.sh` (full scan → rip → transcode against an ISO fixture, no disc) and `bash devtools/crash-drill.sh` (backend crash recovery).
 
 ### Lint / format / types
 
@@ -86,7 +86,7 @@ The ui-neu hooks need `npm ci --prefix services/ui-neu/frontend` once (`setup-de
 
 ## Development model
 
-Trunk-based: `main` is the trunk and always releasable; short-lived branches merge back via PR; releases are semver **tags** on `main` (built by `release.yml`), and `latest` tracks `main`. There is no long-lived dev branch. See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/arch/08-v2-isolation-and-cutover.md](docs/arch/08-v2-isolation-and-cutover.md).
+Trunk-based: `main` is the trunk and always releasable; short-lived branches merge back via PR; releases are semver **tags** on `main` (built by `release.yml`), and `latest` tracks `main`. There is no long-lived dev branch. See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/developers/architecture/08-v2-isolation-and-cutover.md](docs/developers/architecture/08-v2-isolation-and-cutover.md).
 
 ## Gotchas / invariants
 

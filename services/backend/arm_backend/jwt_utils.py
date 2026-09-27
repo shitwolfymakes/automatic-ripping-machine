@@ -2,7 +2,7 @@
 
 Tokens are signed with `config.session_signing_key` (32 random bytes,
 seeded on first boot). 7-day TTL, no refresh per
-[05-cross-cutting.md § Authentication model](../../../docs/arch/05-cross-cutting.md#authentication-model).
+[05-cross-cutting.md § Authentication model](../../../docs/developers/architecture/05-cross-cutting.md#authentication-model).
 """
 
 from datetime import datetime, timedelta, timezone

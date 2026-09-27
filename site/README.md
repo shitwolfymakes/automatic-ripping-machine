@@ -1,12 +1,26 @@
 # ARM docs site
 
-Builds the repo's markdown (`arm_wiki/`, `docs/arch/`, `docs/ops/`,
-`CONTRIBUTING.md`, ...; see `manifest.json`) into:
+Builds the repo's markdown into:
 
 - `build/site/`: the public site deployed to GitHub Pages by
-  `.github/workflows/docs-pages.yml`. Relative URLs only.
+  `.github/workflows/docs-pages.yml`. Every page, relative URLs only.
 - `build/app/`: JSON page fragments baked into the ui-neu image at
-  `/docs-data/` and rendered by its `/help` route.
+  `/docs-data/` and rendered by its `/help` route. User docs only; links
+  from them to developer docs point at the public site.
+
+The docs live in two trees:
+
+- `docs/user/`: user docs (also the GitHub wiki source, flat, with its own
+  `_Sidebar.md`). Every page here must be placed in `manifest.json` or the
+  build fails.
+- `docs/developers/`: `architecture/`, `contributing/`, `ui/` and
+  `reference/`, plus the root `CONTRIBUTING.md`. Site only.
+
+`manifest.json` lists the sections in nav order. A section's `audience`
+(`user` or `dev`) sets its page ids (`guide/...` or `dev/...`) and whether
+the app carries it. Group `files` take a path or glob, a
+`{ "file", "label", "slug" }` object to override the nav label or URL slug,
+or a `{ "label", "link" }` nav link.
 
 Styling comes from ui-neu: `site.css` is compiled from ui-neu's tokens and
 blocks, and rendered content uses the ui-neu `docs-prose` block.

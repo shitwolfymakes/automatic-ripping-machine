@@ -9,7 +9,7 @@ spins for the full SCAN_TIMEOUT_SECONDS before our timeout kills it.
 The guard streams stdout line-by-line so the second case becomes a
 deterministic ~few-second failure with a distinct error type.
 
-See docs/ops/makemkv.md § Failure modes.
+See docs/user/MakeMKV-Ripper.md § Failure modes.
 """
 
 from __future__ import annotations
@@ -113,7 +113,7 @@ async def test_msg_5021_raises_binary_expired_error(monkeypatch: pytest.MonkeyPa
     # Distinct, operator-actionable message — includes MSG:5021 reference
     # and points at the docs.
     assert "MSG:5021" in str(excinfo.value)
-    assert "docs/ops/makemkv.md" in str(excinfo.value)
+    assert "docs/user/MakeMKV-Ripper.md" in str(excinfo.value)
 
 
 @pytest.mark.asyncio

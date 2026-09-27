@@ -57,7 +57,7 @@ too old`, that's a different issue: MakeMKV beta binaries carry a hard ~60-day
 kill switch and **no key overrides it** — you wait for the next upstream beta and
 rebuild the ripper image. DVDs keep working in the meantime. Full failure-mode
 table in
-[`docs/ops/makemkv.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/ops/makemkv.md).
+[`docs/user/MakeMKV-Ripper.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/user/MakeMKV-Ripper.md).
 
 ## Licence
 
@@ -68,8 +68,8 @@ copyright law in your jurisdiction.
 
 ## Reference
 
-- **[MakeMKV output codes](MakeMKV-Codes)** — the `DRV:`/`TINFO:`/`SINFO:`
+- **[MakeMKV output codes](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/developers/reference/MakeMKV-Codes.md)** — the `DRV:`/`TINFO:`/`SINFO:`
   message fields `makemkvcon` emits, handy when debugging a scan.
-- **[`docs/ops/makemkv.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/ops/makemkv.md)**
+- **[`docs/user/MakeMKV-Ripper.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/user/MakeMKV-Ripper.md)**
   — the in-repo operations doc: key handling internals, how the image is built,
   and every failure mode with its log signature.

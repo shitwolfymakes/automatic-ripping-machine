@@ -13,7 +13,7 @@ Put executable files in `arm/scripts/` under the install prefix (next to
 and pick the file. Files without the execute bit are listed but cannot be
 picked.
 
-    cp docs/ops/examples/send-email.sh arm/scripts/
+    cp docs/user/examples/send-email.sh arm/scripts/
     chmod +x arm/scripts/send-email.sh
 
 `devtools/setup-dev.sh` creates the directory and generates the compose file

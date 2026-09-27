@@ -4,16 +4,100 @@
     "automatic-ripping-machine/automatic-ripping-machine",
     "shitwolfymakes/automatic-ripping-machine"
   ],
+  "siteUrl": "https://uprightbass360.github.io/arm-v3/",
+  "wiki": "docs/user",
   "sections": [
-    { "id": "guide", "label": "Guide", "wiki": "arm_wiki", "sidebar": "arm_wiki/_Sidebar.md" },
     {
-      "id": "dev",
-      "label": "Developers",
+      "id": "get-started",
+      "label": "Get started",
+      "audience": "user",
       "groups": [
-        { "label": "Architecture", "files": ["docs/arch/README.md", "docs/arch/[0-9]*.md"] },
-        { "label": "Operations", "files": ["docs/ops/*.md"] },
-        { "label": "Contributing", "files": ["CONTRIBUTING.md", "docs/contributors/*.md"] },
-        { "label": "UI", "files": ["docs/ui-neu-style-guide.md", "docs/ui-neu-theming.md"] }
+        {
+          "files": [
+            { "file": "docs/user/Home.md", "label": "Home" },
+            "docs/user/Getting-Started.md",
+            "docs/user/Configuring-ARM.md",
+            "docs/user/Upgrading.md",
+            "docs/user/Uninstall.md"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "using-arm",
+      "label": "Using ARM",
+      "audience": "user",
+      "groups": [
+        {
+          "files": [
+            "docs/user/Web-UI.md",
+            "docs/user/MakeMKV.md",
+            { "file": "docs/user/MakeMKV-Ripper.md", "label": "MakeMKV in the ripper" },
+            { "file": "docs/user/MakeMKV-EULA.md", "label": "MakeMKV EULA" },
+            "docs/user/Hardware-Transcoding.md",
+            { "file": "docs/user/Intel-QSV-Gen12.md", "label": "Intel QSV on Gen12+" },
+            { "file": "docs/user/Notification-Scripts.md", "label": "Notification scripts" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "troubleshooting",
+      "label": "Troubleshooting",
+      "audience": "user",
+      "groups": [
+        {
+          "files": [
+            "docs/user/Troubleshooting.md",
+            "docs/user/FAQ.md",
+            "docs/user/Status-Known-Issues.md"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "project",
+      "label": "Project",
+      "audience": "user",
+      "groups": [
+        {
+          "files": [
+            "docs/user/Status-Roadmap.md",
+            { "label": "Open an issue", "link": "https://github.com/automatic-ripping-machine/automatic-ripping-machine/issues/new/choose" },
+            { "label": "License", "link": "LICENSE" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "developers",
+      "label": "Developers",
+      "audience": "dev",
+      "groups": [
+        {
+          "label": "Contributing",
+          "files": [
+            "CONTRIBUTING.md",
+            { "file": "docs/developers/contributing/Contribute.md", "label": "Contributing (summary)" },
+            { "file": "docs/developers/contributing/Contribute-Wiki.md", "label": "Contributing to the docs" },
+            "docs/developers/contributing/real-disc-smoke.md"
+          ]
+        },
+        {
+          "label": "Architecture",
+          "files": ["docs/developers/architecture/README.md", "docs/developers/architecture/[0-9]*.md"]
+        },
+        {
+          "label": "UI",
+          "files": [
+            { "file": "docs/developers/ui/ui-neu-style-guide.md", "label": "Style guide" },
+            { "file": "docs/developers/ui/ui-neu-theming.md", "label": "Theming contract" }
+          ]
+        },
+        {
+          "label": "Reference",
+          "files": [{ "file": "docs/developers/reference/MakeMKV-Codes.md", "label": "MakeMKV codes" }]
+        }
       ]
     }
   ]

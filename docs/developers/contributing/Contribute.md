@@ -4,7 +4,7 @@ Thanks for helping build ARM! This page is the wiki-side summary; the
 **authoritative contributor guide is in the repo** at
 [`CONTRIBUTING.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/CONTRIBUTING.md).
 Start there, and read the architecture docs at
-[`docs/arch/README.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/arch/README.md)
+[`docs/developers/architecture/README.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/developers/architecture/README.md)
 to understand the v3 service topology before making changes.
 
 > This is **ARM v3** — a FastAPI backend, a SvelteKit UI, Postgres, a ripper per drive,
@@ -83,7 +83,7 @@ scan → rip → transcode against an ISO fixture, no disc needed) and
 - CI must pass: ruff format/lint, mypy, the UI's `svelte-check` and vitest suites,
   the `pytest` suites, and the OpenAPI and UI codegen drift checks.
 - Update affected docs — including this wiki — in the same PR. See
-  [Contributing to the Wiki](Contribute-Wiki).
+  [Contributing to the Wiki](Contribute-Wiki.md).
 
 ## Reporting bugs
 
@@ -91,4 +91,4 @@ Open an issue with the **service** involved (`backend`/`ripper`/`transcode`/`ui`
 and logs captured at `ARM_LOG_LEVEL=debug` (`docker compose logs <service>`).
 Because ARM drives MakeMKV/HandBrake, try the underlying tool by hand to rule out
 an upstream problem — see
-[`docs/ops/makemkv.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/ops/makemkv.md).
+[`docs/user/MakeMKV-Ripper.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/user/MakeMKV-Ripper.md).
