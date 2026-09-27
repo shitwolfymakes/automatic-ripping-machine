@@ -151,10 +151,33 @@ remove_spawned_containers() {
     fi
 }
 
+# Compose services an earlier version of this stack defined and this one no
+# longer does. `compose up` leaves their containers running, still holding
+# their host ports (the old arm-ui-neu kept the UI port, so the new arm-ui
+# failed to bind). Remove exactly these by project + service label; a blanket
+# `up --remove-orphans` is unsafe because backend-spawned containers carry the
+# stack's project label too.
+RETIRED_SERVICES=(arm-ui-neu)
+remove_retired_services() {
+    local project svc ids
+    project="$(compose config 2>/dev/null | sed -n 's/^name: //p' | head -n 1)"
+    [[ -n "${project}" ]] || return 0
+    for svc in "${RETIRED_SERVICES[@]}"; do
+        ids="$(docker ps -aq --filter "label=com.docker.compose.project=${project}" \
+                            --filter "label=com.docker.compose.service=${svc}")"
+        if [[ -n "${ids}" ]]; then
+            echo "==> removing the retired ${svc} container (no longer part of the stack)"
+            # shellcheck disable=SC2086  # ids is a list of container ids by design
+            docker rm -f ${ids} >/dev/null
+        fi
+    done
+}
+
 if [[ "${ACTION}" == "down" ]]; then
     require docker "Install docker first."
     require_compose
     remove_spawned_containers
+    remove_retired_services
     echo "==> stopping the compose stack"
     compose down
     exit 0
@@ -826,8 +849,10 @@ if [[ "${ACTION}" == "up" ]]; then
     # 4. Back up the running database before migrations can touch it.
     backup_db
 
-    # 5. Only now remove backend-spawned rippers/transcoders.
+    # 5. Only now remove backend-spawned rippers/transcoders, and containers of
+    #    services this stack no longer defines (they would hold their ports).
     remove_spawned_containers
+    remove_retired_services
 
     # 6. Start from the images built above (no --build). An explicit service
     #    list keeps `up` from building a skipped image that does not exist yet.

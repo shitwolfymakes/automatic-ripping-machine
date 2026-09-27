@@ -68,6 +68,34 @@ check "vaapi GPU adds arm-transcode-amd"   "arm-db arm-backend arm-transcode arm
 check "qsv + vaapi GPUs build everything"  "ALL" "$(selected 0 0 "[${qsv},${amd}]")"
 check "remote transcode host skips both variants, keeps base" "arm-db arm-backend arm-transcode arm-ripper" "$(selected 0 1 "[${qsv},${amd}]")"
 
+# remove_retired_services, run for real against stubbed compose/docker: prints
+# the docker filters it queried and the ids it removed.
+retired_defs="$(awk '/^RETIRED_SERVICES=/,/^}$/' "${SETUP}")"
+retired() {  # retired <compose project name, empty = config fails> <ids docker ps returns>
+    # shellcheck disable=SC2034,SC2317,SC2329
+    (
+        stub_project="$1" stub_ids="$2"
+        compose() { [[ -n "${stub_project}" ]] && printf 'name: %s\n\nservices:\n' "${stub_project}"; }
+        docker() {
+            case "$1" in
+                ps) printf 'ps %s %s\n' "$4" "$6" >&2; [[ -n "${stub_ids}" ]] && printf '%s\n' "${stub_ids}" ;;
+                rm) shift; printf 'rm %s\n' "$*" >&2 ;;
+            esac
+        }
+        eval "${retired_defs}"
+        remove_retired_services 2>&1 >/dev/null | tr '\n' ';'
+    )
+}
+check "retired arm-ui-neu container is removed by project + service label" \
+    "ps label=com.docker.compose.project=armv3 label=com.docker.compose.service=arm-ui-neu;rm -f c0ffee;" \
+    "$(retired armv3 c0ffee)"
+check "no retired container: nothing removed" \
+    "ps label=com.docker.compose.project=armv3 label=com.docker.compose.service=arm-ui-neu;" \
+    "$(retired armv3 '')"
+check "unreadable compose config: no docker calls" "" "$(retired '' c0ffee)"
+present "up removes retired services"   '^    remove_retired_services$' "${SETUP}"
+absent  "setup-dev never runs --remove-orphans" '^[^#]*--remove-orphans' "${SETUP}"
+
 # --- compose template -----------------------------------------------------------
 absent  "template has no generated region"      'arm-ripper services'       "${TEMPLATE}"
 absent  "template has no arm-ripper-srN"        'arm-ripper-sr'             "${TEMPLATE}"
