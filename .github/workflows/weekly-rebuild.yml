@@ -83,29 +83,44 @@ jobs:
         # Same legs as release.yml: `target` picks a Dockerfile stage (empty:
         # the file's last stage), `suffix` is appended to the tag, so the
         # transcode variants :<tag>-intel / :<tag>-amd are refreshed too.
+        # `dir` (default: the service name) is the services/ subdirectory
+        # holding the Dockerfile; the arm-ui image is built from ui-neu.
         include:
           - {service: backend, target: "", suffix: ""}
           - {service: ripper, target: "", suffix: ""}
           - {service: transcode, target: base, suffix: ""}
           - {service: transcode, target: intel, suffix: "-intel"}
           - {service: transcode, target: amd, suffix: "-amd"}
-          - {service: ui, target: "", suffix: ""}
+          - {service: ui, dir: ui-neu, target: "", suffix: ""}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ needs.resolve-tag.outputs.tag }}
 
+      # A stable tag cut before the Vue UI was removed still has
+      # services/ui/, and its arm-ui image is that Vue build; rebuild it from
+      # there so the tag keeps shipping what it was released with. Later tags
+      # have no services/ui/ and build the leg's `dir` (services/ui-neu/).
+      #
       # A stable tag cut before the transcode Dockerfile was split into
       # targets has no such stages. Its base leg then builds the file's last
       # stage (that tag's only runtime image); its variant legs have no image
       # to refresh and are skipped instead of failing. An empty target always
       # builds the last stage.
-      - name: Resolve the Dockerfile target at this tag
+      - name: Resolve the Dockerfile and target at this tag
         id: target
         env:
           TARGET: ${{ matrix.target }}
-          DOCKERFILE: services/${{ matrix.service }}/Dockerfile
+          SERVICE: ${{ matrix.service }}
+          DIR: ${{ matrix.dir }}
         run: |
+          DOCKERFILE="services/${SERVICE}/Dockerfile"
+          if [[ -n "$DIR" && ! -f "$DOCKERFILE" ]]; then
+            DOCKERFILE="services/${DIR}/Dockerfile"
+          elif [[ -n "$DIR" ]]; then
+            echo "::notice::this tag predates services/${DIR}/ as arm-${SERVICE}; building $DOCKERFILE"
+          fi
+          echo "file=$DOCKERFILE" >> "$GITHUB_OUTPUT"
           if [[ -z "$TARGET" ]] || grep -qiE "^FROM .+ AS ${TARGET}\$" "$DOCKERFILE"; then
             echo "build=true" >> "$GITHUB_OUTPUT"
             echo "target=$TARGET" >> "$GITHUB_OUTPUT"
@@ -163,7 +178,7 @@ jobs:
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
-          file: services/${{ matrix.service }}/Dockerfile
+          file: ${{ steps.target.outputs.file }}
           target: ${{ steps.target.outputs.target }}
           push: true
           no-cache: true
