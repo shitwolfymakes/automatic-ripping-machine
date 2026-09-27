@@ -15,7 +15,7 @@
 	import ApplySessionDialog from '$lib/components/ApplySessionDialog.svelte';
 	import JobLifecycle from '$lib/components/JobLifecycle.svelte';
 	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
-	import { discTypeLabel, isJobActive } from '$lib/utils/job-type';
+	import { isJobActive } from '$lib/utils/job-type';
 	import { buildMetadataFields, readJobMetadata } from '$lib/utils/job-fields';
 	import { extractMusicTracks } from '$lib/utils/music-tracks';
 	import { trackKindLabel, trackSizeLabel } from '$lib/utils/track-fields';
@@ -291,7 +291,7 @@
 
 					<!-- Metadata grid -->
 					<div class="job-detail-metadata-grid w-full sm:w-auto flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-						{#each metadataFields as field}
+						{#each metadataFields as field, i (field.empty ? `pad-${i}` : field.label)}
 							<div class="job-detail-metadata-cell">
 								{#if !field.empty}
 									<div class="job-detail-metadata-label">{field.label}</div>
@@ -385,7 +385,7 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each tracks as track}
+								{#each tracks as track (track.id)}
 									{@const preview = previewByTrack.get(track.id)}
 									<tr class="table-row" data-disabled={track.excluded}>
 										<td class="table-cell" data-label="#">{track.index}</td>
@@ -550,7 +550,7 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each d.fingerprints as fp}
+								{#each d.fingerprints as fp (`${fp.algo}:${fp.value}`)}
 									<tr class="table-row">
 										<td class="table-cell job-detail-uppercase" data-label="Algorithm">{fp.algo}</td>
 										<td
@@ -586,7 +586,7 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each musicTracks as mt}
+								{#each musicTracks as mt (mt.number)}
 									<tr class="table-row">
 										<td class="table-cell" data-label="#">{mt.number}</td>
 										<td class="table-cell" data-label="Title">{mt.title}</td>
@@ -620,7 +620,7 @@
 					</button>
 					{#if showRawMetadata}
 						<div class="mt-3 overflow-x-auto job-detail-raw-metadata">
-							{#each rawMetadataPairs as [key, value]}
+							{#each rawMetadataPairs as [key, value] (key)}
 								<JsonTree {value} name={key} depth={0} />
 							{/each}
 						</div>

@@ -3,7 +3,7 @@ import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-
 import IngressBrowser from '../IngressBrowser.svelte';
 import { createFolderEntry } from '../__fixtures__/files';
 
-import { fetchIngressRoot, fetchIngressDirectory } from '$lib/api/import-jobs';
+import { fetchIngressDirectory } from '$lib/api/import-jobs';
 
 const movieFolder = createFolderEntry('Movie_Folder');
 const tvShowFolder = createFolderEntry('TV_Show', '2025-06-14T10:00:00Z');

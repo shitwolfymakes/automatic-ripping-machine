@@ -138,7 +138,7 @@
 		<div>
 			<h3 class="eyebrow readiness-step-section-title">API Keys</h3>
 			<div class="stack stack-sm">
-				{#each result.checks as check}
+				{#each result.checks as check (check.name)}
 					{@const status = checkStatus(check)}
 					<div class="panel">
 						<div class="flex items-center justify-between">
@@ -197,7 +197,7 @@
 		<div>
 			<h3 class="eyebrow readiness-step-section-title">Paths &amp; Permissions</h3>
 			<div class="stack stack-sm">
-				{#each result.paths as path}
+				{#each result.paths as path (path.name)}
 					{@const status = pathStatus(path)}
 					<div class="panel">
 						<div class="flex items-center justify-between">

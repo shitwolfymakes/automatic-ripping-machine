@@ -45,7 +45,7 @@
 		</button>
 		{#if open}
 			<div class="json-tree-children ml-3">
-				{#each node.entries as entry}
+				{#each node.entries as entry (entry.key)}
 					<Self value={entry.value} name={entry.key} depth={depth + 1} />
 				{/each}
 			</div>

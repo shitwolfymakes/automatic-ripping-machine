@@ -35,7 +35,7 @@ describe('colorScheme - theme fetch dedup', () => {
 		// Built-in themes load their CSS from the frontend's static assets
 		// (/themes/{id}.css). The in-flight guard must dedup concurrent calls
 		// (loadThemesFromApi + the subscribe handler racing on page load).
-		const mockFetch = vi.fn((url: string) => Promise.resolve({ ok: true, text: () => Promise.resolve('body{}') }));
+		const mockFetch = vi.fn((_url: string) => Promise.resolve({ ok: true, text: () => Promise.resolve('body{}') }));
 		vi.stubGlobal('fetch', mockFetch);
 
 		try {

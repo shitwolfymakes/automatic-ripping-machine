@@ -3,9 +3,6 @@
 	import type { RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
 	import { encodersStore, encoderLabel } from '$lib/stores/encoders.svelte';
 
-	type RipKind = { kind: 'rip'; preset: RipPresetView };
-	type TranscodeKind = { kind: 'transcode'; preset: TranscodePresetView };
-
 	interface Props {
 		kind: 'rip' | 'transcode';
 		preset: RipPresetView | TranscodePresetView;

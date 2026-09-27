@@ -61,6 +61,7 @@ export function stopWS(): void {
  * unsubscribe (and drop live state) for any job no longer in the set.
  */
 export function reconcileSubscriptions(activeRippingJobIds: string[]): void {
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local lookup, never stored
 	const wanted = new Set(activeRippingJobIds);
 	for (const id of Object.keys(unsubs)) {
 		if (!wanted.has(id)) {

@@ -47,7 +47,7 @@
 </script>
 
 <div class="cluster">
-	{#each cards as card}
+	{#each cards as card (card.key)}
 		<button
 			onclick={() => onfilter(card.filter)}
 			class="stat {card.tone} job-stats-panel-tile"

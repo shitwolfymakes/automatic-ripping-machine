@@ -12,9 +12,8 @@ vi.mock('$lib/api/jobs', () => ({
 	updateTrack: vi.fn(() => Promise.resolve())
 }));
 
-import { searchMetadata, fetchMediaDetail, updateTrackTitle, clearTrackTitle, updateTrack } from '$lib/api/jobs';
+import { searchMetadata, updateTrackTitle, clearTrackTitle, updateTrack } from '$lib/api/jobs';
 const mockSearchMetadata = vi.mocked(searchMetadata);
-const mockFetchDetail = vi.mocked(fetchMediaDetail);
 const mockUpdateTrackTitle = vi.mocked(updateTrackTitle);
 const mockClearTrackTitle = vi.mocked(clearTrackTitle);
 const mockUpdateTrack = vi.mocked(updateTrack);

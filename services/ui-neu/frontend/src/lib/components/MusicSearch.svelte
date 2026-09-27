@@ -126,16 +126,20 @@
 		if (!c.provider_id) return;
 		const id = c.provider_id;
 		if (flippedCards.has(id)) {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 			const next = new Map(flippedCards);
 			next.delete(id);
 			flippedCards = next;
 			return;
 		}
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 		flippedCards = new Map(flippedCards).set(id, 'loading');
 		try {
 			const d = await fetchMusicDetail(id);
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 			flippedCards = new Map(flippedCards).set(id, d);
 		} catch {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 			flippedCards = new Map(flippedCards).set(id, {
 				release_id: id,
 				title: c.title,
@@ -372,7 +376,7 @@
 	<!-- Results grid -->
 	{#if !detail && results.length > 0}
 		<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-			{#each results as c}
+			{#each results as c, i (i)}
 				{@const flipKey = c.provider_id ?? ''}
 				{@const flipData = flippedCards.get(flipKey)}
 				{@const isFlipped = flippedCards.has(flipKey)}
@@ -449,7 +453,7 @@
 								<div class="min-h-0 flex-1 overflow-y-auto">
 									<table class="w-full music-search-back-table">
 										<tbody>
-											{#each flipData.tracks as track, i}
+											{#each flipData.tracks as track, i (i)}
 												{@const kind =
 													discTracks.length > 0
 														? matchIndicator(track.length_ms, discTracks[i]?.expected_duration_seconds)
@@ -537,7 +541,7 @@
 						>
 					</thead>
 					<tbody>
-						{#each visibleTracks as t, i}
+						{#each visibleTracks as t, i (i)}
 							{@const kind = matchIndicator(t.length_ms, discTracks[i]?.expected_duration_seconds)}
 							<tr class="table-row">
 								<td class="table-cell">{t.position ?? i + 1}</td>
@@ -623,7 +627,7 @@
 					<div class="overflow-x-auto music-search-table-scroll">
 						<table class="table">
 							<tbody>
-								{#each trackMapping as p}
+								{#each trackMapping as p, i (i)}
 									<tr class="table-row">
 										<td class="table-cell whitespace-nowrap mono music-search-muted"
 											>Disc #{p.disc.index} ({fmtSec(p.disc.expected_duration_seconds)})</td

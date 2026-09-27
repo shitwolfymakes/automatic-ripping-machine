@@ -18,7 +18,9 @@ const DEBOUNCE_MS = 300;
 
 type Listener = (jobIds: Set<string>) => void;
 
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- notifier bookkeeping, never read reactively
 const listeners = new Set<Listener>();
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- notifier bookkeeping, never read reactively
 let pendingJobIds = new Set<string>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let unsub: (() => void) | null = null;
@@ -67,6 +69,7 @@ export function stopRipperEvents(): void {
 		clearTimeout(timer);
 		timer = null;
 	}
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- notifier bookkeeping, never read reactively
 	pendingJobIds = new Set();
 }
 

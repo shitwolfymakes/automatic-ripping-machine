@@ -19,7 +19,7 @@
 </script>
 
 <div class="filter-pills inline-flex gap-1">
-	{#each pills as p}
+	{#each pills as p (p.key)}
 		<button type="button" onclick={() => onselect?.(p.key)} aria-pressed={active === p.key} class="chip">
 			{p.label} | {counts[p.key]}
 		</button>

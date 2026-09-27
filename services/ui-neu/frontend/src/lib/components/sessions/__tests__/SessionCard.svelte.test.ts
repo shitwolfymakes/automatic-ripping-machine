@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { it, expect, vi, afterEach } from 'vitest';
+import { renderComponent, screen, cleanup } from '$lib/test-utils';
 import SessionCard from '../SessionCard.svelte';
 
 const joined = (over = {}) =>

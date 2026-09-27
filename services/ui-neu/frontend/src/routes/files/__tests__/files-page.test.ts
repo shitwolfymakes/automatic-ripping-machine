@@ -15,13 +15,7 @@ vi.mock('$lib/stores/auth', async () => {
 });
 
 import { fetchRoots, fetchDirectory } from '$lib/api/files';
-import { fetchOrphanFolders, cleanupTranscoder } from '$lib/api/maintenance';
-
-const defaultEntries = [
-	createFileEntry('movie.mkv', 4294967296),
-	createFolderEntry('subfolder', '2025-06-14T10:00:00Z'),
-	createFileEntry('show.mkv', 2147483648, 'mkv')
-];
+import { fetchOrphanFolders } from '$lib/api/maintenance';
 
 vi.mock('$app/stores', async () => {
 	const { readable } = await import('svelte/store');
@@ -238,9 +232,7 @@ describe('Files Page', () => {
 				expect(screen.getByText('subfolder')).toBeInTheDocument();
 			});
 
-			// Select "subfolder" via its checkbox (first checkbox is select-all; entry checkboxes follow)
-			const checkboxes = screen.getAllByRole('checkbox');
-			// The subfolder row checkbox — find checkbox near "subfolder" label
+			// Select "subfolder" via the checkbox in its row
 			const subfolderRow = screen.getByText('subfolder').closest('tr');
 			const subfolderCheckbox = subfolderRow?.querySelector('input[type="checkbox"]');
 			expect(subfolderCheckbox).toBeTruthy();

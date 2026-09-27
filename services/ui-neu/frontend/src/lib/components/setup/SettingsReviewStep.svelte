@@ -40,7 +40,7 @@
 		<div class="settings-review-step-loading">Loading settings...</div>
 	{:else if settings}
 		<div class="stack stack-sm">
-			{#each keyPaths as { key, label, desc }}
+			{#each keyPaths as { key, label, desc } (key)}
 				<div class="panel">
 					<div class="flex items-center justify-between">
 						<div>

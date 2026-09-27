@@ -40,6 +40,7 @@
 		} catch {
 			// next refresh will reconcile
 		} finally {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 			const next = new Set(dismissing);
 			next.delete(id);
 			dismissing = next;
@@ -134,12 +135,12 @@
 	>
 		{#snippet loadingSlot()}
 			<div class="stack stack-sm">
-				{#each Array(4) as _}
+				{#each Array(4) as _, i (i)}
 					<SkeletonCard lines={3} />
 				{/each}
 			</div>
 		{/snippet}
-		{#snippet ready(items)}
+		{#snippet ready(_items)}
 			{#if filtered.length === 0}
 				<div class="panel notifications-page-empty">
 					<svg

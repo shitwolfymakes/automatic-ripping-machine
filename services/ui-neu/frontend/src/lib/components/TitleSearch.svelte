@@ -216,7 +216,7 @@
 	<!-- Results grid (hidden when detail is shown) -->
 	{#if !detail && results.length > 0}
 		<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-			{#each results as result}
+			{#each results as result, i (i)}
 				<button
 					onclick={() => handleSelect(result)}
 					class="group flex flex-col overflow-hidden title-search-card"

@@ -1,7 +1,3 @@
-<script module lang="ts">
-	export type { GlyphName } from './glyph-names';
-</script>
-
 <script lang="ts">
 	import { GLYPH_PATHS, type GlyphName } from './glyph-names';
 

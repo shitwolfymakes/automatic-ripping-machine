@@ -74,7 +74,7 @@
 	{#snippet children({ close })}
 		{#if selectedJobs.size > 0}
 			<FlyoutDivider label={`Selected (${selectedJobs.size})`} />
-			{#each selectedActions() as item}
+			{#each selectedActions() as item (item.action)}
 				<FlyoutItem
 					onclick={() => {
 						onaction(item.action, item.params, item.description);
@@ -88,7 +88,7 @@
 		{/if}
 
 		<FlyoutDivider label="Bulk Actions" />
-		{#each bulkActions() as item}
+		{#each bulkActions() as item (item.params.status)}
 			<FlyoutItem
 				onclick={() => {
 					onaction(item.action, item.params, item.description);

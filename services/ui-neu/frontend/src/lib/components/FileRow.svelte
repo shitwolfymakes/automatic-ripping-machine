@@ -66,7 +66,7 @@
 
 {#if !entry}
 	<tr aria-busy="true">
-		{#each { length: 6 } as _}
+		{#each { length: 6 } as _, i (i)}
 			<td class="p-2"><Skeleton variant="line" width="80%" height="1rem" /></td>
 		{/each}
 	</tr>

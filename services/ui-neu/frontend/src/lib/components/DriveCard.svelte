@@ -55,7 +55,6 @@
 	let showSettings = $state(false);
 	let speedInput = $state('');
 	let savingSpeed = $state(false);
-	let showAdvanced = $state(false);
 	let savingPrescan = $state(false);
 
 	// Prescan override inputs - empty string means "use global default"
@@ -541,7 +540,7 @@
 
 				<div class="stack drive-card-prescan-section">
 					<div class="eyebrow">Pre-scan tuning</div>
-					{#each PRESCAN_FIELDS as field}
+					{#each PRESCAN_FIELDS as field (field.key)}
 						<div class="field">
 							<div class="flex items-center justify-between gap-2">
 								<label for="prescan-{field.key}-{drive.id}" class="field-label">

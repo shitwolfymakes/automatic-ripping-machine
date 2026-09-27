@@ -29,7 +29,7 @@
 
 {#if !job}
 	<tr aria-busy="true">
-		{#each { length: 7 } as _}
+		{#each { length: 7 } as _, i (i)}
 			<td class="table-cell" data-label=""><Skeleton variant="line" width="80%" height="1rem" /></td>
 		{/each}
 	</tr>

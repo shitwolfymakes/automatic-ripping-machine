@@ -96,6 +96,7 @@
 			return;
 		}
 		const key = rowKey(mediaType, discType);
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 		pending = new Set(pending).add(key);
 		try {
 			const saved = await upsertSessionRoute({ media_type: mediaType, disc_type: discType, session_id: sessionId });
@@ -105,6 +106,7 @@
 			showFeedback('error', e instanceof Error ? e.message : 'Failed to save route');
 			await load();
 		} finally {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 			const next = new Set(pending);
 			next.delete(key);
 			pending = next;
@@ -113,6 +115,7 @@
 
 	async function handleClear(route: SessionRouteView) {
 		const key = rowKey(route.media_type, route.disc_type);
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 		pending = new Set(pending).add(key);
 		try {
 			await deleteSessionRoute(route.id);
@@ -121,6 +124,7 @@
 			showFeedback('error', e instanceof Error ? e.message : 'Failed to clear route');
 			await load();
 		} finally {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 			const next = new Set(pending);
 			next.delete(key);
 			pending = next;

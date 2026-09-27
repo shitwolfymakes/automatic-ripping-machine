@@ -129,6 +129,7 @@
 			}));
 		} catch {
 			if (fallbackMatches?.length) {
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local dedup set, never stored
 				const seen = new Set<number>();
 				const fallback: TvdbEpisode[] = [];
 				for (const m of fallbackMatches) {
@@ -353,7 +354,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each mainTracks as track}
+					{#each mainTracks as track (track.id)}
 						{@const tn = String(track.index)}
 						{@const ep = getEpisodeForTrack(tn)}
 						<tr class="table-row">
@@ -373,7 +374,7 @@
 									}}
 								>
 									<option value="">- None -</option>
-									{#each [...episodes].sort((a, b) => a.number - b.number) as episode}
+									{#each [...episodes].sort((a, b) => a.number - b.number) as episode (episode.number)}
 										<option value={episode.number}>
 											E{episode.number} - {episode.name} ({episode.runtime}m)
 										</option>

@@ -105,7 +105,7 @@
 			<!-- Bottom row: TYPE chips + New session -->
 			<div class="cluster sessions-hub-type-row">
 				<span class="sessions-hub-label">Type</span>
-				{#each MEDIA_TYPES as chip}
+				{#each MEDIA_TYPES as chip (chip.key)}
 					{@const count = typeCounts[chip.key] ?? 0}
 					<button
 						type="button"
@@ -130,7 +130,7 @@
 	{#if loading}
 		<!-- Loading skeletons -->
 		<div class="stack stack-sm">
-			{#each Array(SKELETON_COUNT) as _}
+			{#each Array(SKELETON_COUNT) as _, i (i)}
 				<div data-testid="session-skeleton" class="skeleton sessions-hub-skeleton"></div>
 			{/each}
 		</div>

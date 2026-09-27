@@ -4,21 +4,12 @@
 
 	interface Props {
 		entries: LogEntry[];
-		loading?: boolean;
 		error?: Error | null;
-		live?: boolean;
 		search?: boolean;
 		maxHeightClass?: string;
 	}
 
-	let {
-		entries,
-		loading = false,
-		error = null,
-		live = false,
-		search = false,
-		maxHeightClass = 'max-h-96'
-	}: Props = $props();
+	let { entries, error = null, search = false, maxHeightClass = 'max-h-96' }: Props = $props();
 
 	type Level = 'all' | 'error' | 'warning' | 'info' | 'debug';
 
@@ -144,7 +135,7 @@
 <div class="flex flex-col gap-3">
 	<div class="flex flex-wrap items-center gap-2">
 		<div class="log-view-segment-group" role="radiogroup" aria-label="Log filter">
-			{#each SERVICE_FILTERS as f}
+			{#each SERVICE_FILTERS as f (f.key)}
 				<button
 					type="button"
 					role="radio"
@@ -158,7 +149,7 @@
 			{/each}
 		</div>
 		<div class="log-view-segment-group" role="radiogroup" aria-label="Log level filter">
-			{#each LEVEL_FILTERS as f}
+			{#each LEVEL_FILTERS as f (f.key)}
 				<button
 					type="button"
 					role="radio"

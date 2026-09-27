@@ -36,7 +36,7 @@
 	let sortKey = $state<'name' | 'size' | 'modified'>('name');
 	let sortDir = $state<'asc' | 'desc'>('asc');
 
-	function classifyEntry(entry: FileEntry, allEntries: readonly FileEntry[]): { kind: EntryKind; importable: boolean } {
+	function classifyEntry(entry: FileEntry): { kind: EntryKind; importable: boolean } {
 		// Prefer server-computed fields when present; codegen may not yet expose them.
 		const raw = entry as FileEntry & { kind?: EntryKind; importable?: boolean };
 		if (raw.kind) {
@@ -57,13 +57,12 @@
 		return { kind: 'other', importable: false };
 	}
 
-	let decoratedEntries = $derived<DecoratedEntry[]>(entries.map((e) => ({ ...e, ...classifyEntry(e, entries) })));
+	let decoratedEntries = $derived<DecoratedEntry[]>(entries.map((e) => ({ ...e, ...classifyEntry(e) })));
 
 	let visibleEntries = $derived(
 		decoratedEntries.filter((e) => e.kind === 'dir' || e.kind === 'iso' || e.kind === 'other')
 	);
 
-	let allDirectories = $derived(visibleEntries.filter((e) => e.kind === 'dir'));
 	let filterEnabled = $derived(visibleEntries.length > 5);
 	let sortedEntries = $derived(
 		[...visibleEntries]

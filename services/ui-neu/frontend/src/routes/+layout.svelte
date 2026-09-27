@@ -2,7 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/stores';
 	import { theme, toggleTheme } from '$lib/stores/theme';
-	import { colorScheme, schemeLocksMode, loadThemesFromApi } from '$lib/stores/colorScheme';
+	import { schemeLocksMode, loadThemesFromApi } from '$lib/stores/colorScheme';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { setRippingEnabled } from '$lib/api/dashboard';
@@ -192,7 +192,7 @@
 				</div>
 				<hr class="layout-hr" />
 				<nav class="nav flex-1 overflow-y-auto">
-					{#each navItems as item}
+					{#each navItems as item (item.href)}
 						<a href={item.href} data-active={isActive(item.href, $page.url.pathname) || undefined} class="nav-item">
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={item.icon} />
@@ -456,7 +456,7 @@
 						<hr class="layout-hr" />
 						{#if drawerView === 'menu'}
 							<nav class="nav flex-1 overflow-y-auto">
-								{#each navItems as item}
+								{#each navItems as item (item.href)}
 									<a
 										href={item.href}
 										onclick={() => (sidebarOpen = false)}

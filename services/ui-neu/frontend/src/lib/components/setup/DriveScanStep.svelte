@@ -59,7 +59,7 @@
 		</div>
 	{:else}
 		<div class="stack stack-sm">
-			{#each drives as drive}
+			{#each drives as drive (drive.id)}
 				<div class="panel">
 					<div class="flex items-center justify-between">
 						<h3 class="drive-scan-step-drive-name">

@@ -9,7 +9,7 @@ it('leaves unknown tokens for the type as-is is impossible — only valid tokens
 	expect(resolveSample('{artist}/{album}', 'music')).toBe('Radiohead/OK Computer');
 });
 it('every declared token for a type has a sample value', () => {
-	for (const [mt, map] of Object.entries(MEDIA_SAMPLE)) {
+	for (const map of Object.values(MEDIA_SAMPLE)) {
 		for (const k of Object.keys(map)) expect(String((map as any)[k]).length).toBeGreaterThan(0);
 	}
 });

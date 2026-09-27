@@ -47,7 +47,7 @@
 						onchange={(e) => (value = (e.currentTarget as HTMLSelectElement).value)}
 						class="field-control w-full"
 					>
-						{#each field.enum_values ?? [] as opt}
+						{#each field.enum_values ?? [] as opt (opt)}
 							<option value={opt}>{opt}</option>
 						{/each}
 					</select>

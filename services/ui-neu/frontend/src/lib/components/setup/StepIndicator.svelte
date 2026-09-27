@@ -8,7 +8,7 @@
 </script>
 
 <nav class="step-indicator" aria-label="Setup progress">
-	{#each steps as step, i}
+	{#each steps as step, i (step.id)}
 		{#if i > 0}
 			<div class="step-indicator-rule" data-active={i <= currentIndex}></div>
 		{/if}

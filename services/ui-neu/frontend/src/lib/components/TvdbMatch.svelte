@@ -134,6 +134,7 @@
 	}
 
 	function toggleMatch(trackNumber: string) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 		const next = new Set(selectedMatches);
 		if (next.has(trackNumber)) {
 			next.delete(trackNumber);
@@ -255,7 +256,7 @@
 				{#if result.alternatives.length > 0}
 					<div class="flex flex-wrap items-center gap-1.5">
 						<span class="tvdb-match-also-try">Also try:</span>
-						{#each result.alternatives as alt}
+						{#each result.alternatives as alt (alt.season)}
 							{#if alt.match_count > 0}
 								<button onclick={() => switchToSeason(alt.season)} class="chip chip-info chip-sm">
 									S{String(alt.season).padStart(2, '0')} ({alt.match_count} match{alt.match_count !== 1 ? 'es' : ''})
@@ -288,7 +289,7 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each result.matches as match}
+								{#each result.matches as match (match.track_number)}
 									{@const trackLen = trackLengthMap[match.track_number] ?? null}
 									{@const delta = trackLen != null ? Math.abs(trackLen - match.episode_runtime) : null}
 									{@const selected = selectedMatches.has(match.track_number)}
@@ -396,7 +397,7 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each browseResult.episodes as ep}
+								{#each browseResult.episodes as ep (ep.number)}
 									{@const matchedTrack = trackEpisodeMap[String(ep.number)]}
 									<tr class="table-row">
 										<td class="table-cell mono tvdb-match-muted">E{String(ep.number).padStart(2, '0')}</td>

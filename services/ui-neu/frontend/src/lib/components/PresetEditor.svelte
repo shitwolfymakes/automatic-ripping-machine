@@ -269,7 +269,7 @@
 									onchange={(e) => setShared('audio_encoder', (e.target as HTMLSelectElement).value)}
 									disabled={saving || isUnavailable}
 								>
-									{#each scheme.supported_audio_encoders as enc}
+									{#each scheme.supported_audio_encoders as enc (enc)}
 										<option value={enc}>{enc}</option>
 									{/each}
 								</select>
@@ -283,7 +283,7 @@
 									onchange={(e) => setShared('subtitle_mode', (e.target as HTMLSelectElement).value)}
 									disabled={saving || isUnavailable}
 								>
-									{#each scheme.supported_subtitle_modes as mode}
+									{#each scheme.supported_subtitle_modes as mode (mode)}
 										<option value={mode}>{mode}</option>
 									{/each}
 								</select>
@@ -292,7 +292,7 @@
 					</div>
 				</div>
 
-				{#each ['dvd', 'bluray', 'uhd'] as tier}
+				{#each ['dvd', 'bluray', 'uhd'] as tier (tier)}
 					<div class="panel-section">
 						<p class="eyebrow preset-editor-tier-heading">
 							{TIER_LABELS[tier]} <span class="preset-editor-tier-hint">| {TIER_HINTS[tier]}</span>
@@ -306,7 +306,7 @@
 										onchange={(e) => setTier(tier, 'video_encoder', (e.target as HTMLSelectElement).value)}
 										disabled={saving || isUnavailable}
 									>
-										{#each scheme.supported_encoders as enc}
+										{#each scheme.supported_encoders as enc (enc.slug)}
 											<option value={enc.slug}>{enc.name}</option>
 										{/each}
 									</select>
@@ -342,9 +342,9 @@
 											}}
 											disabled={saving || isUnavailable}
 										>
-											{#each Object.entries(handbrakePresetGroups) as [category, names]}
+											{#each Object.entries(handbrakePresetGroups) as [category, names] (category)}
 												<optgroup label={category}>
-													{#each names as name}
+													{#each names as name (name)}
 														<option value={name}>{name}</option>
 													{/each}
 												</optgroup>
@@ -369,7 +369,7 @@
 									>
 								{/if}
 							</label>
-							{#each Object.entries(scheme.advanced_fields ?? {}) as [key, def]}
+							{#each Object.entries(scheme.advanced_fields ?? {}) as [key, def] (key)}
 								<label class="field">
 									<span class="field-label preset-editor-sub-label">{key}</span>
 									<div data-dirty={isTierDirty(tier, key)} class="preset-editor-dirty-wrap">
@@ -379,7 +379,7 @@
 												onchange={(e) => setTier(tier, key, (e.target as HTMLSelectElement).value)}
 												disabled={saving || isUnavailable}
 											>
-												{#each def.values as v}
+												{#each def.values as v (v)}
 													<option value={v}>{v}</option>
 												{/each}
 											</select>

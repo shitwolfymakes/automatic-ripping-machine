@@ -4,13 +4,12 @@
 	import SectionFrame from './SectionFrame.svelte';
 
 	let stats = $state<JobStats | null>(null);
-	let error = $state<string | null>(null);
 
 	onMount(async () => {
 		try {
 			stats = await fetchJobStats();
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to load stats';
+		} catch {
+			// The tiles show '-' until stats load, which also covers a failed fetch.
 		}
 	});
 </script>
@@ -40,7 +39,7 @@
 	</div>
 	{#if stats && Object.keys(stats.by_type).length > 0}
 		<div class="job-stats-card-types">
-			{#each Object.entries(stats.by_type) as [type, count]}
+			{#each Object.entries(stats.by_type) as [type, count] (type)}
 				<div class="job-stats-card-type">
 					<span class="job-stats-card-type-name">{type}</span>
 					<span class="badge">{count}</span>

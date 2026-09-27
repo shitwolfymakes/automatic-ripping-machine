@@ -64,6 +64,7 @@
 
 	let groupedEncoders = $derived(
 		(() => {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh inside $derived and never mutated afterwards
 			const groups = new Map<string, EncoderAvailabilityView[]>();
 			for (const enc of encoders) {
 				const list = groups.get(enc.group);

@@ -254,7 +254,7 @@
 		<!-- Sub-tab bar: Sessions / Rip presets / Transcode presets -->
 		<div class="sessions-area-tabs-box">
 			<div class="tabs tabs-pills sessions-area-tabs" role="tablist" aria-label="Sessions sections">
-				{#each TABS as tab}
+				{#each TABS as tab (tab.key)}
 					<button
 						type="button"
 						role="tab"

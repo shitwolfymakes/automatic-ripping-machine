@@ -8,7 +8,6 @@
 		updateChannel,
 		deleteChannel,
 		testSendChannel,
-		composeUrl,
 		testConfig
 	} from '$lib/api/channels';
 	import type { EventTypeInfo } from '$lib/api/channels';

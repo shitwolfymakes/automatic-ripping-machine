@@ -145,7 +145,7 @@
 									onchange={(e) => setInput(et.key, i.key, (e.currentTarget as HTMLSelectElement).value)}
 								>
 									<option value="">inherit</option>
-									{#each i.values as v}<option value={v}>{v}</option>{/each}
+									{#each i.values as v (v)}<option value={v}>{v}</option>{/each}
 								</select>
 							{:else}
 								<input
@@ -161,7 +161,7 @@
 						Leave blank to use the default shown{overridable.length ? "; blank inputs inherit the hook's values." : '.'}
 					</p>
 					<div class="cluster event-subscriptions-vars">
-						{#each varsFor(et.key) as v}
+						{#each varsFor(et.key) as v (v)}
 							<button type="button" aria-label={`Insert {${v}}`} onclick={() => insertVariable(et.key, v)} class="chip"
 								><code>{`{${v}}`}</code></button
 							>

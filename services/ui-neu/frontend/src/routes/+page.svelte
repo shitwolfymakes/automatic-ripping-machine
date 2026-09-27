@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { fetchDashboard } from '$lib/api/dashboard';
 	import { fetchJobs, bulkDeleteJobs } from '$lib/api/jobs';
 	import type { JobView } from '$lib/types/api.gen';
@@ -84,6 +85,7 @@
 		dismissedJobIds = new Set([...dismissedJobIds, jobId]);
 		// Drop from sticky so a later poll can't re-show the card.
 		if (stickyReviewIds.has(jobId)) {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 			const next = new Set(stickyReviewIds);
 			next.delete(jobId);
 			stickyReviewIds = next;
@@ -116,7 +118,7 @@
 	let viewMode = $state<'card' | 'table'>(get(uiPrefs).dashboardView);
 
 	// Selection
-	let selectedJobs = $state<Set<string>>(new Set());
+	const selectedJobs = new SvelteSet<string>();
 
 	// Gear menu
 	let bulkBusy = $state(false);
@@ -128,7 +130,7 @@
 	async function loadJobs() {
 		if (!jobs) jobsLoading = true;
 		jobsError = null;
-		selectedJobs = new Set();
+		selectedJobs.clear();
 		try {
 			jobs = await fetchJobs({ status: statusFilter || undefined });
 		} catch (e) {
@@ -149,15 +151,14 @@
 		} else {
 			selectedJobs.delete(jobId);
 		}
-		selectedJobs = new Set(selectedJobs);
 	}
 
 	function toggleSelectAll() {
 		if (!jobs) return;
-		if (allVisibleSelected) {
-			selectedJobs = new Set();
-		} else {
-			selectedJobs = new Set(jobs.map((j) => j.id));
+		const selectAll = !allVisibleSelected;
+		selectedJobs.clear();
+		if (selectAll) {
+			for (const j of jobs) selectedJobs.add(j.id);
 		}
 	}
 
@@ -433,13 +434,13 @@
 								<thead>
 									<tr>
 										<th class="table-header w-8"></th>
-										{#each columns as col}
+										{#each columns as col (col.key)}
 											<th class="table-header">{col.label}</th>
 										{/each}
 									</tr>
 								</thead>
 								<tbody>
-									{#each { length: 25 } as _}
+									{#each { length: 25 } as _, i (i)}
 										<JobRow />
 									{/each}
 								</tbody>
@@ -447,7 +448,7 @@
 						</div>
 					{:else}
 						<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-							{#each { length: 6 } as _}
+							{#each { length: 6 } as _, i (i)}
 								<JobCard />
 							{/each}
 						</div>
@@ -469,7 +470,7 @@
 												/>
 											{/if}
 										</th>
-										{#each columns as col}
+										{#each columns as col (col.key)}
 											<th class="table-header">{col.label}</th>
 										{/each}
 									</tr>

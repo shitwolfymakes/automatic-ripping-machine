@@ -16,7 +16,7 @@
 	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
 	import { theme, toggleTheme } from '$lib/stores/theme';
-	import { colorScheme, COLOR_SCHEMES, schemeLocksMode, allSchemes, loadThemesFromApi } from '$lib/stores/colorScheme';
+	import { colorScheme, schemeLocksMode, allSchemes, loadThemesFromApi } from '$lib/stores/colorScheme';
 	import { deleteTheme as deleteThemeApi } from '$lib/api/themes';
 	import { createPollingStore } from '$lib/stores/polling';
 	import { fetchDrives, fetchDriveDiagnostic, rescanDrives } from '$lib/api/drives';
@@ -319,10 +319,6 @@
 			setTranscodeRuntimeEnabled(Boolean(payload.transcode_enabled));
 		}
 	}
-
-	function clearFeedback(setter: (v: null) => void) {
-		setTimeout(() => setter(null), 4000);
-	}
 </script>
 
 <svelte:head>
@@ -356,7 +352,7 @@
 			 so the inner div reproduces the previous nav's own box exactly. -->
 			<nav aria-label="Settings tabs">
 				<div class="tabs settings-page-tabs" role="tablist">
-					{#each visibleTabs as tab}
+					{#each visibleTabs as tab (tab)}
 						<button
 							type="button"
 							role="tab"
@@ -498,7 +494,7 @@
 							Choose an accent color for buttons, links, and highlights throughout the UI.
 						</p>
 						<div class="flex flex-wrap gap-3">
-							{#each $allSchemes.filter((s) => s.builtin !== false) as scheme}
+							{#each $allSchemes.filter((s) => s.builtin !== false) as scheme (scheme.id)}
 								<button
 									type="button"
 									onclick={() => ($colorScheme = scheme.id)}
@@ -523,7 +519,7 @@
 								Custom themes loaded from your themes directory.
 							</p>
 							<div class="flex flex-wrap gap-3">
-								{#each $allSchemes.filter((s) => s.builtin === false) as scheme}
+								{#each $allSchemes.filter((s) => s.builtin === false) as scheme (scheme.id)}
 									<div class="relative">
 										<button
 											type="button"
@@ -702,7 +698,7 @@
 									)}
 									{#if system.length > 0}
 										<div class="alert alert-warning mb-2 settings-page-diag-system" data-testid="diag-system">
-											{#each system as note}
+											{#each system as note, i (i)}
 												<div>{note}</div>
 											{/each}
 										</div>
@@ -741,7 +737,7 @@
 											{#if diag.last_error}
 												<div class="field-error mt-1">{diag.last_error}</div>
 											{/if}
-											{#each diag.notes as note}
+											{#each diag.notes as note, i (i)}
 												<div class="mt-1 flex items-start gap-1.5 settings-page-diag-note">
 													{#if note === 'ignored'}
 														<span class="settings-page-diag-ignored">ignored</span>

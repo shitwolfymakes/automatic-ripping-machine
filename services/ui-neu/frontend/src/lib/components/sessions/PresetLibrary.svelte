@@ -121,7 +121,7 @@
 		<!-- Bottom row: TYPE chips + New preset -->
 		<div class="cluster">
 			<span class="eyebrow">Type</span>
-			{#each MEDIA_TYPES as chip}
+			{#each MEDIA_TYPES as chip (chip.key)}
 				{@const count = presetTypeCounts[chip.key] ?? 0}
 				<button
 					type="button"
@@ -150,7 +150,7 @@
 	{#if loading}
 		<!-- Loading skeletons -->
 		<div class="stack stack-sm">
-			{#each Array(SKELETON_COUNT) as _}
+			{#each Array(SKELETON_COUNT) as _, i (i)}
 				<div data-testid="preset-skeleton" class="skeleton preset-library-skeleton"></div>
 			{/each}
 		</div>

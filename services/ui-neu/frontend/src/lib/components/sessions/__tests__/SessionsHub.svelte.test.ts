@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, within } from '$lib/test-utils';
 import SessionsHub from '../SessionsHub.svelte';
 

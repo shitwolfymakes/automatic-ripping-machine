@@ -83,7 +83,7 @@
 	<div class="stack add-channel-form-body">
 		<fieldset class="add-channel-form-types">
 			<legend class="sr-only">Delivery type</legend>
-			{#each types as t}
+			{#each types as t (t.key)}
 				<label class="channel-type-option" aria-checked={type === t.key}>
 					<input
 						type="radio"

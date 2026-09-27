@@ -11,7 +11,7 @@
 		fixPermissions
 	} from '$lib/api/files';
 	import type { FileRoot, DirectoryListing } from '$lib/api/files';
-	import { formatBytes, formatDateTime } from '$lib/utils/format';
+	import { formatBytes } from '$lib/utils/format';
 	import {
 		fetchOrphanFolders,
 		deleteFolder as deleteOrphanFolder,
@@ -19,7 +19,6 @@
 		cleanupTranscoder
 	} from '$lib/api/maintenance';
 	import type { OrphanFoldersResponse } from '$lib/api/maintenance';
-	import FileIcon from '$lib/components/FileIcon.svelte';
 	import BreadcrumbNav from '$lib/components/BreadcrumbNav.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import FileRow from '$lib/components/FileRow.svelte';
@@ -70,7 +69,6 @@
 
 	// Transcoder cleanup
 	let transcoderCleanupOpen = $state(false);
-	let transcoderBusy = $state(false);
 
 	let isReadonly = $derived(listing?.readonly === true);
 
@@ -139,6 +137,7 @@
 
 	function toggleSelect(entryName: string) {
 		const key = selectionKey(entryName);
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 		const next = new Set(selectedKeys);
 		if (next.has(key)) next.delete(key);
 		else next.add(key);
@@ -377,6 +376,7 @@
 	}
 
 	function toggleOrphanFolderSelect(path: string) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 		const next = new Set(orphanFoldersSelected);
 		if (next.has(path)) next.delete(path);
 		else next.add(path);
@@ -415,7 +415,6 @@
 
 	// --- Transcoder cleanup ---
 	async function handleCleanupTranscoder() {
-		transcoderBusy = true;
 		try {
 			const result = await cleanupTranscoder();
 			feedback = {
@@ -427,7 +426,6 @@
 			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Cleanup failed' };
 			clearFeedback();
 		}
-		transcoderBusy = false;
 		transcoderCleanupOpen = false;
 	}
 
@@ -495,7 +493,7 @@
 	<!-- Root tabs -->
 	{#if roots.length > 0}
 		<div class="tabs" aria-label="File root tabs">
-			{#each roots as root}
+			{#each roots as root (root.key)}
 				<button
 					type="button"
 					onclick={() => navigate(root.key, '')}
@@ -665,7 +663,7 @@
 						</tr>
 					</thead>
 					<tbody>
-						{#each Array(8) as _}
+						{#each Array(8) as _, i (i)}
 							<FileRow />
 						{/each}
 					</tbody>

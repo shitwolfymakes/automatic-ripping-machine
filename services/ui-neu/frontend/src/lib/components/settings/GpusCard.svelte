@@ -43,6 +43,7 @@
 	}
 
 	async function reprobe(g: GpuView) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 		pending = new Set(pending).add(g.id);
 		try {
 			await probeGpu(g.id);
@@ -50,6 +51,7 @@
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Re-probe failed.';
 		} finally {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 			const p = new Set(pending);
 			p.delete(g.id);
 			pending = p;
@@ -69,6 +71,7 @@
 	}
 
 	async function toggle(g: GpuView, next: boolean) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 		pending = new Set(pending).add(g.id);
 		try {
 			const updated = await updateGpu(g.id, next);
@@ -78,6 +81,7 @@
 		} catch {
 			error = 'Saving the GPU switch failed.';
 		} finally {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 			const p = new Set(pending);
 			p.delete(g.id);
 			pending = p;
@@ -88,6 +92,7 @@
 		const g = confirmTarget;
 		confirmTarget = null;
 		if (!g) return;
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 		pending = new Set(pending).add(g.id);
 		try {
 			await deleteGpu(g.id);
@@ -100,6 +105,7 @@
 				? 'That GPU is in use by a running transcode. Disable it instead, or wait for the task to finish.'
 				: 'Deleting the GPU failed.';
 		} finally {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 			const p = new Set(pending);
 			p.delete(g.id);
 			pending = p;

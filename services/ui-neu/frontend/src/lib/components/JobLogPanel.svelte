@@ -72,7 +72,7 @@
 
 	{#if open}
 		<div class="mt-3">
-			<LogView entries={log.entries} loading={log.loading} error={log.error} live={log.live} />
+			<LogView entries={log.entries} error={log.error} />
 		</div>
 	{/if}
 </section>

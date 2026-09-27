@@ -215,7 +215,7 @@
 					</div>
 				</div>
 				<div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
-					{#each Array(5) as _unused}
+					{#each Array(5) as _unused, i (i)}
 						<div class="panel">
 							<div class="skeleton skeleton-text transcoder-page-skeleton-label"></div>
 							<div class="skeleton skeleton-text transcoder-page-skeleton-value"></div>
@@ -358,7 +358,7 @@
 
 			<!-- Tabs -->
 			<div class="tabs transcoder-page-tabs">
-				{#each tabs as tab}
+				{#each tabs as tab (tab)}
 					<button onclick={() => switchTab(tab)} data-selected={activeTab === tab} class="tabs-tab transcoder-page-tab">
 						{TAB_LABELS[tab] ?? tab}
 					</button>
@@ -377,7 +377,7 @@
 					<!-- As many placeholders as the stats poll says there are tasks (it
 				     lands first), so the list does not grow when the jobs arrive. -->
 					<div class="stack stack-sm">
-						{#each Array(Math.min(s.total_tasks || 3, 6)) as _unused}
+						{#each Array(Math.min(s.total_tasks || 3, 6)) as _unused, i (i)}
 							<SkeletonCard lines={4} class="pb-3" />
 						{/each}
 					</div>

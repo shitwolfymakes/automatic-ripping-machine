@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { SetupStatus } from '$lib/api/setup';
-	import type { Component } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { completeSetup } from '$lib/api/setup';
 	import StepIndicator from './StepIndicator.svelte';
@@ -12,7 +11,6 @@
 	interface SetupStep {
 		id: string;
 		label: string;
-		component: Component<any>;
 	}
 
 	interface Props {
@@ -22,10 +20,10 @@
 	let { status }: Props = $props();
 
 	const steps: SetupStep[] = [
-		{ id: 'welcome', label: 'Welcome', component: WelcomeStep },
-		{ id: 'drives', label: 'Drives', component: DriveScanStep },
-		{ id: 'readiness', label: 'Readiness', component: ReadinessCheckStep },
-		{ id: 'settings', label: 'Settings', component: SettingsReviewStep }
+		{ id: 'welcome', label: 'Welcome' },
+		{ id: 'drives', label: 'Drives' },
+		{ id: 'readiness', label: 'Readiness' },
+		{ id: 'settings', label: 'Settings' }
 	];
 
 	let currentIndex = $state(0);

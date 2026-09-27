@@ -243,7 +243,7 @@
 	<!-- Results -->
 	{#if !detail && results.length > 0}
 		<div class="flex flex-wrap items-stretch gap-1.5">
-			{#each results.slice(0, 8) as result}
+			{#each results.slice(0, 8) as result, i (i)}
 				<button
 					onclick={() => handleSelect(result)}
 					class="flex min-w-0 flex-1 items-center gap-1.5 track-title-search-result"

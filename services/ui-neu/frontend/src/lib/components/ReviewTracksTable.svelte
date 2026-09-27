@@ -18,7 +18,6 @@
 	let rows = $derived(tracks.length ? tracks.map(trackToRow) : scanTitles.map(scanTitleToRow));
 
 	let openSearchTrackIds = $state<Set<string>>(new Set());
-	let savingTrackField = $state<string | null>(null);
 	let errorMessage = $state<string | null>(null);
 
 	async function handleTrackFieldUpdate(
@@ -26,15 +25,12 @@
 		field: 'episode_number' | 'episode_name' | 'excluded',
 		value: number | string | boolean | null
 	) {
-		savingTrackField = `${trackId}-${field}`;
 		errorMessage = null;
 		try {
 			await updateTrack(job.id, trackId, { [field]: value });
 			onrefresh?.();
 		} catch (e) {
 			errorMessage = `Failed to update track: ${e instanceof Error ? e.message : 'Unknown error'}`;
-		} finally {
-			savingTrackField = null;
 		}
 	}
 
@@ -45,6 +41,7 @@
 	}
 
 	function toggleTrackSearch(trackId: string) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 		const next = new Set(openSearchTrackIds);
 		if (next.has(trackId)) next.delete(trackId);
 		else next.add(trackId);
@@ -92,7 +89,7 @@
 						</tr>
 					</thead>
 					<tbody>
-						{#each rows as row}
+						{#each rows as row (row.trackId ?? `scan-${row.index}`)}
 							<tr class="table-row" data-disabled={row.excluded}>
 								<td class="table-cell mono">{row.index}</td>
 								<td

@@ -393,7 +393,7 @@
 						<div class="min-h-0 flex-1 overflow-y-auto">
 							{#if searchResults.length > 0}
 								<div class="grid grid-cols-3 gap-2 sm:grid-cols-4">
-									{#each searchResults as result}
+									{#each searchResults as result, i (i)}
 										<button
 											type="button"
 											onclick={() => handleSelectResult(result)}
@@ -513,7 +513,7 @@
 				</div>
 				<!-- Progress dots -->
 				<div class="flex items-center gap-2">
-					{#each [1, 2, 3, 4] as s}
+					{#each [1, 2, 3, 4] as s (s)}
 						<div class="import-wizard-dot" data-state={s === step ? 'current' : s < step ? 'done' : 'pending'}></div>
 					{/each}
 				</div>
