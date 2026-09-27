@@ -326,8 +326,9 @@ authority. Allowed in markup:
 Banned: every colour/type/border/radius/shadow/effect family, `dark:`,
 `hover:`/`focus:` variants, arbitrary values (`w-[13px]`), `style=`
 attributes, `class:` directives, `:global(` without a same-line or preceding
-comment, literal colours inside `<style>`, and responsive table display
-utilities. The lint scans class attributes, class-expression strings, and
+comment (put it on the line before: Prettier moves a trailing comment onto
+the rule's closing brace), literal colours inside `<style>`, and responsive
+table display utilities. The lint scans class attributes, class-expression strings, and
 script literals. Target: **0 violations** (from 7,439 pre-cleanup).
 
 ## 9. Component-scoped styles
@@ -418,6 +419,7 @@ Conventions the codebase holds to:
 
 ```
 cd services/ui-neu/frontend && npx vitest run && npm run check   # green
+cd services/ui-neu/frontend && npm run lint && npm run format:check   # 0 problems, formatted
 node devtools/ui-neu-style-lint.mjs --files <your files>          # 0
 node devtools/ui-neu-parity.mjs capture current && ... diff       # for changes to existing screens
 ```
@@ -487,6 +489,9 @@ keep it stable - schemes depend on it from the first release it ships in.
 
 - `npm run lint:styles` — the whole-frontend scan, wired into the ui-neu CI
   lint job with its own test suite (`devtools/ui-neu-style-lint.test.mjs`).
+- `npm run lint` / `npm run format:check`: ESLint and Prettier, run by the
+  `lint-ui-neu` CI job and the `eslint-ui-neu` / `prettier-ui-neu` pre-commit
+  hooks.
 - `node devtools/ui-neu-parity.mjs capture current && … diff` — the visual
   gate: 44 screens x 6 schemes x 3 viewports against a pinned baseline,
   0.5% pixelmatch threshold, allowed deviations named in

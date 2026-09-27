@@ -95,9 +95,20 @@ uv run pre-commit install              # install the git hook once
 uv run pre-commit run --all-files      # run everything manually
 ```
 
-Hooks: `ruff-format` + `ruff` and `mypy` on Python; `shellcheck` on shell
-scripts. Line length is **120**. The UI (`services/ui-neu/frontend`) is checked
-with `npm run check` (svelte-check) and `npx vitest run`.
+Hooks: `ruff-format` + `ruff` and `mypy` on Python; `eslint-ui-neu` and
+`prettier-ui-neu` on the UI; `shellcheck` on shell scripts. Line length is
+**120**. The UI hooks run the frontend's own tooling, so install it once with
+`npm ci --prefix services/ui-neu/frontend` (`devtools/setup-dev.sh` already
+does). The UI (`services/ui-neu/frontend`) is also checked with `npm run check`
+(svelte-check) and `npx vitest run`; `npm run lint` and `npm run format` run
+ESLint and Prettier by hand.
+
+The one-time Prettier reformat of the UI is listed in `.git-blame-ignore-revs`.
+To have `git blame` skip it:
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
 
 ## Wire contract (OpenAPI)
 
