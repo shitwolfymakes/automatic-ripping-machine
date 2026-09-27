@@ -209,7 +209,8 @@ describe('GpusCard', () => {
 		wsHandler?.(probedEvent('gpu_1'));
 
 		await waitFor(() => expect(mockFetchGpus).toHaveBeenCalledTimes(2));
-		expect(mockRefreshEncoders).toHaveBeenCalledTimes(1);
+		// Encoder availability follows gpu.probed in the encoders store.
+		expect(mockRefreshEncoders).not.toHaveBeenCalled();
 	});
 
 	it('a transcode.events envelope with a different event_type does not trigger a refetch', async () => {

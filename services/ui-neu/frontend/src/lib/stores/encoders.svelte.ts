@@ -7,6 +7,7 @@
 // copy.
 
 import { fetchEncoders } from '$lib/api/encoders';
+import { wsClient, type WSEnvelope } from '$lib/api/ws';
 import type { EncoderAvailabilityView } from '$lib/types/api.gen';
 
 export const PRESET_ENCODER_ID = 'preset';
@@ -15,6 +16,10 @@ let encoders = $state<EncoderAvailabilityView[]>([]);
 let loading = $state(false);
 let error = $state<Error | null>(null);
 let inFlight: Promise<void> | null = null;
+// A refresh() asked for while a fetch was running: that fetch may predate
+// whatever prompted the refresh (a probe finishing), so one more follows.
+let stale = false;
+let unsubProbed: (() => void) | null = null;
 
 // One request at a time: a call while a fetch is running shares it.
 // `loading` only covers a fetch with nothing cached yet, so a refresh keeps
@@ -25,9 +30,15 @@ function fetchShared(): Promise<void> {
 	error = null;
 	inFlight = (async () => {
 		try {
-			encoders = await fetchEncoders();
-		} catch (e) {
-			error = e instanceof Error ? e : new Error(String(e));
+			do {
+				stale = false;
+				try {
+					encoders = await fetchEncoders();
+					error = null;
+				} catch (e) {
+					error = e instanceof Error ? e : new Error(String(e));
+				}
+			} while (stale);
 		} finally {
 			loading = false;
 			inFlight = null;
@@ -45,9 +56,33 @@ async function load(): Promise<void> {
 }
 
 // Refetches even when the cache is populated: availability changes when a
-// probe finishes or a GPU is enabled, disabled or removed.
+// probe finishes or a GPU is enabled, disabled or removed. Joining a running
+// fetch queues exactly one follow-up fetch, however many callers join.
 async function refresh(): Promise<void> {
+	followProbes();
+	if (inFlight) stale = true;
 	await fetchShared();
+}
+
+function onTranscodeEvent(env: WSEnvelope): void {
+	if (env.event_type === 'gpu.probed') void refresh();
+}
+
+// One `transcode.events` subscription for the whole SPA session, taken on
+// the first refresh() (the availability consumers: the preset form and the
+// GPUs card), so a finished probe updates an open picker wherever it lives.
+function followProbes(): void {
+	if (unsubProbed !== null) return;
+	wsClient.start();
+	unsubProbed = wsClient.subscribe('transcode.events', onTranscodeEvent);
+}
+
+/** Drop the `transcode.events` subscription. For tests. */
+export function stopEncoderEvents(): void {
+	if (unsubProbed !== null) {
+		unsubProbed();
+		unsubProbed = null;
+	}
 }
 
 export const encodersStore = {

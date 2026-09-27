@@ -3,6 +3,8 @@ import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-
 import TranscodePresetForm from '../TranscodePresetForm.svelte';
 import { createTranscodePreset, updateTranscodePreset } from '$lib/api/transcodePresets';
 import type { EncoderAvailabilityView, TranscodePresetView } from '$lib/types/api.gen';
+import type { WSEnvelope } from '$lib/api/ws';
+import { stopEncoderEvents } from '$lib/stores/encoders.svelte';
 
 vi.mock('$lib/api/transcodePresets', () => ({
 	createTranscodePreset: vi.fn(),
@@ -84,6 +86,21 @@ const ENCODERS: EncoderAvailabilityView[] = [
 
 const mockFetchEncoders = vi.fn(() => Promise.resolve(ENCODERS));
 vi.mock('$lib/api/encoders', () => ({ fetchEncoders: () => mockFetchEncoders() }));
+
+// The encoders store follows `transcode.events` over the shared WS client;
+// capture its handler so a test can deliver a gpu.probed envelope.
+const ws = vi.hoisted(() => ({ handler: null as ((env: WSEnvelope) => void) | null }));
+vi.mock('$lib/api/ws', () => ({
+	wsClient: {
+		start: vi.fn(),
+		subscribe: (_topic: string, handler: (env: WSEnvelope) => void) => {
+			ws.handler = handler;
+			return () => {
+				ws.handler = null;
+			};
+		}
+	}
+}));
 
 const createMock = vi.mocked(createTranscodePreset);
 const updateMock = vi.mocked(updateTranscodePreset);
@@ -342,7 +359,10 @@ describe('TranscodePresetForm', () => {
 });
 
 describe('encoder picker', () => {
-	afterEach(() => cleanup());
+	afterEach(() => {
+		cleanup();
+		stopEncoderEvents();
+	});
 
 	it('groups options into optgroups in catalog order', async () => {
 		renderComponent(TranscodePresetForm, { props: { preset: null, oncancel: vi.fn(), onsaved: vi.fn() } });
@@ -366,6 +386,47 @@ describe('encoder picker', () => {
 		const option = encoder.querySelector('option[value="qsv_h264"]') as HTMLOptionElement;
 		expect(option.disabled).toBe(true);
 		expect(option.textContent).toContain('no enabled device has verified qsv_h264');
+	});
+
+	it('offers an encoder waiting for its first GPU probe, with the reason as a hint', async () => {
+		const waiting = ENCODERS.map((e) =>
+			e.id === 'qsv_h264' ? { ...e, available: true, reason: 'waiting for the first GPU probe' } : e
+		);
+		mockFetchEncoders.mockResolvedValueOnce(waiting);
+		renderComponent(TranscodePresetForm, { props: { preset: null, oncancel: vi.fn(), onsaved: vi.fn() } });
+		const encoder = screen.getByTestId('tp-encoder') as HTMLSelectElement;
+		await waitFor(() =>
+			expect(encoder.querySelector('option[value="qsv_h264"]')?.textContent).toContain(
+				'waiting for the first GPU probe'
+			)
+		);
+		expect((encoder.querySelector('option[value="qsv_h264"]') as HTMLOptionElement).disabled).toBe(false);
+	});
+
+	it('refreshes encoder availability while open when a GPU probe finishes', async () => {
+		renderComponent(TranscodePresetForm, { props: { preset: null, oncancel: vi.fn(), onsaved: vi.fn() } });
+		const encoder = screen.getByTestId('tp-encoder') as HTMLSelectElement;
+		await waitFor(() =>
+			expect((encoder.querySelector('option[value="qsv_h264"]') as HTMLOptionElement | null)?.disabled).toBe(true)
+		);
+
+		const verified = ENCODERS.map((e) => (e.id === 'qsv_h264' ? { ...e, available: true, reason: null } : e));
+		mockFetchEncoders.mockResolvedValueOnce(verified);
+		expect(ws.handler).not.toBeNull();
+		ws.handler?.({
+			op: 'event',
+			event_id: 'evt_1',
+			event_type: 'gpu.probed',
+			emitted_at: 'now',
+			topic: 'transcode.events',
+			job_id: null,
+			track_id: null,
+			payload: { gpu_id: 'gpu_1' }
+		});
+
+		await waitFor(() =>
+			expect((encoder.querySelector('option[value="qsv_h264"]') as HTMLOptionElement).disabled).toBe(false)
+		);
 	});
 
 	it('locks the encoder to preset and disables it when the tool is abcde', async () => {

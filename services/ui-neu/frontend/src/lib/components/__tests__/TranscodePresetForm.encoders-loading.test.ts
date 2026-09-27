@@ -22,6 +22,11 @@ vi.mock('$lib/api/encoders', () => ({
 		})
 }));
 
+// The encoders store follows transcode.events; keep jsdom off a real socket.
+vi.mock('$lib/api/ws', () => ({
+	wsClient: { start: vi.fn(), subscribe: vi.fn(() => () => {}) }
+}));
+
 function makePreset(overrides: Partial<TranscodePresetView> = {}): TranscodePresetView {
 	return {
 		id: 'tpr_1',

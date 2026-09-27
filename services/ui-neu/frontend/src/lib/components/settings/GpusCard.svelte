@@ -109,10 +109,8 @@
 	onMount(() => {
 		load();
 		return wsClient.subscribe('transcode.events', (env: WSEnvelope) => {
-			if (env.event_type === 'gpu.probed') {
-				load();
-				encodersStore.refresh();
-			}
+			// The encoders store follows gpu.probed itself.
+			if (env.event_type === 'gpu.probed') load();
 		});
 	});
 </script>
