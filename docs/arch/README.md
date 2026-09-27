@@ -10,7 +10,7 @@ v3 is a **multi-container, Python-first** system built around a job/session stat
 
 | Service | Image | Lifetime | Role |
 |---|---|---|---|
-| **UI** | `arm-ui` | Long-running | SPA (Vite-built) served by nginx; consumes Backend API + WS |
+| **UI** | `arm-ui` | Long-running | SvelteKit SPA (`services/ui-neu/`) served by nginx; consumes Backend API + WS |
 | **Backend** | `arm-backend` | Long-running | FastAPI: job/session state machine, internet adapters, WS hub, spawns transcoders |
 | **Ripper** | `arm-ripper` | Long-running, one per drive | Bound to a single `/dev/sr*`; identifies disc, rips to `/raw`, reports to Backend |
 | **Transcode** | `arm-transcode` | Ad-hoc, one per transcode | Spawned by Backend; optional GPU pass-through; reports progress, exits |

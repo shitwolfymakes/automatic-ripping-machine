@@ -10,7 +10,7 @@
                                          │
               ┌──────────────────────────▼──────────────────────────┐
               │                    arm-ui                            │
-              │   nginx serving Vite-built SPA (Vue 3 + Vite)        │
+              │   nginx serving SvelteKit SPA (Svelte 5 + Vite)      │
               │   /api → proxy to arm-backend:8443 (HTTPS)           │
               │   /ws  → proxy to arm-backend:8443 (WSS)             │
               └──────────────────────────┬──────────────────────────┘
@@ -64,7 +64,7 @@
 - **Inputs:** browser traffic.
 - **Outputs:** proxied calls to Backend.
 - **State:** none. Fully stateless.
-- **Notes:** SPA can be rebuilt and redeployed without touching Backend. Vue 3 (Composition API + `<script setup>`) chosen for the contributor team's existing fluency; Pinia for stores, vue-router for routing.
+- **Notes:** SPA can be rebuilt and redeployed without touching Backend. SvelteKit (Svelte 5 runes) built as a static SPA, source in `services/ui-neu/` and published as the `arm-ui` image. It replaced the original Vue 3 SPA, which was removed on 2026-09-27. Its TypeScript API types are generated from the committed OpenAPI snapshot (`services/ui-neu/openapi.snapshot.json`).
 
 ### `arm-backend`
 - **Image:** custom, Python 3.14 + FastAPI + Uvicorn + docker-py.
