@@ -42,8 +42,6 @@
 			applying = false;
 		}
 	}
-
-
 </script>
 
 <div class="stack">
@@ -70,11 +68,7 @@
 			<input type="text" bind:value={posterUrl} placeholder="https://..." />
 		</label>
 		<div class="flex items-center gap-2">
-			<button
-				onclick={handleApply}
-				disabled={applying}
-				class="btn crc-lookup-success-btn"
-			>
+			<button onclick={handleApply} disabled={applying} class="btn crc-lookup-success-btn">
 				{applying ? 'Applying...' : 'Apply to Job'}
 			</button>
 			{#if applyFeedback}
@@ -94,14 +88,48 @@
 </div>
 
 <style>
-	.crc-lookup-hash-row { font-size: 0.875rem; line-height: 1.25rem; }
-	.crc-lookup-label { color: var(--color-text-muted); }
-	.crc-lookup-hash { border-radius: var(--radius-sm); background: var(--color-primary-tint-2); padding: 0.125rem 0.5rem; font-size: 0.75rem; line-height: 1rem; color: var(--color-text-secondary); }
-	.crc-lookup-divider { border: 0; border-top: 1px solid var(--color-border); }
-	.crc-lookup-heading { font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; color: var(--color-text-secondary); }
-	.crc-lookup-success-btn { border: 0; padding: 0.375rem 0.75rem; background: var(--color-success); color: var(--color-on-primary); }
-	.crc-lookup-success-btn:hover { filter: brightness(0.9); }
-	.crc-lookup-feedback { font-size: 0.75rem; line-height: 1rem; }
-	.crc-lookup-feedback[data-tone="success"] { color: var(--color-success); }
-	.crc-lookup-feedback[data-tone="error"] { color: var(--color-danger); }
+	.crc-lookup-hash-row {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+	}
+	.crc-lookup-label {
+		color: var(--color-text-muted);
+	}
+	.crc-lookup-hash {
+		border-radius: var(--radius-sm);
+		background: var(--color-primary-tint-2);
+		padding: 0.125rem 0.5rem;
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-secondary);
+	}
+	.crc-lookup-divider {
+		border: 0;
+		border-top: 1px solid var(--color-border);
+	}
+	.crc-lookup-heading {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		font-weight: 600;
+		color: var(--color-text-secondary);
+	}
+	.crc-lookup-success-btn {
+		border: 0;
+		padding: 0.375rem 0.75rem;
+		background: var(--color-success);
+		color: var(--color-on-primary);
+	}
+	.crc-lookup-success-btn:hover {
+		filter: brightness(0.9);
+	}
+	.crc-lookup-feedback {
+		font-size: 0.75rem;
+		line-height: 1rem;
+	}
+	.crc-lookup-feedback[data-tone='success'] {
+		color: var(--color-success);
+	}
+	.crc-lookup-feedback[data-tone='error'] {
+		color: var(--color-danger);
+	}
 </style>

@@ -16,20 +16,20 @@ vi.mock('$lib/stores/auth', async () => {
 });
 
 vi.mock('$lib/api/jobs', () => ({
-	tvdbMatch: vi.fn(() => Promise.resolve({
-		success: true,
-		matcher: 'runtime',
-		season: 1,
-		matches: [],
-		match_count: 0,
-		score: 0,
-		alternatives: []
-	})),
+	tvdbMatch: vi.fn(() =>
+		Promise.resolve({
+			success: true,
+			matcher: 'runtime',
+			season: 1,
+			matches: [],
+			match_count: 0,
+			score: 0,
+			alternatives: []
+		})
+	),
 	fetchTvdbEpisodes: vi.fn(() => Promise.resolve({ episodes: [], tvdb_id: 12345, season: 1 })),
 	updateTrack: vi.fn(() => Promise.resolve({ id: 'job_1' })),
-	fetchNamingPreview: vi.fn(() =>
-		Promise.resolve({ job_output_dir: '', job_output_name: '', items: [] })
-	)
+	fetchNamingPreview: vi.fn(() => Promise.resolve({ job_output_dir: '', job_output_name: '', items: [] }))
 }));
 
 /** Create a series JobDetailView with common defaults for EpisodeMatch tests. */
@@ -127,9 +127,7 @@ describe('EpisodeMatch', () => {
 				success: true,
 				matcher: 'runtime',
 				season: 1,
-				matches: [
-					{ track_number: '0', episode_number: 1, episode_name: 'Pilot', episode_runtime: 2700 }
-				],
+				matches: [{ track_number: '0', episode_number: 1, episode_name: 'Pilot', episode_runtime: 2700 }],
 				match_count: 1,
 				score: 100,
 				alternatives: []
@@ -168,9 +166,7 @@ describe('EpisodeMatch', () => {
 				success: true,
 				matcher: 'runtime',
 				season: 1,
-				matches: [
-					{ track_number: '0', episode_number: 3, episode_name: 'Episode 3', episode_runtime: 2700 }
-				],
+				matches: [{ track_number: '0', episode_number: 3, episode_name: 'Episode 3', episode_runtime: 2700 }],
 				match_count: 1,
 				score: 100,
 				alternatives: []
@@ -259,9 +255,7 @@ describe('EpisodeMatch', () => {
 				success: true,
 				matcher: 'runtime',
 				season: 1,
-				matches: [
-					{ track_number: '0', episode_number: 1, episode_name: 'Pilot', episode_runtime: 2700 }
-				],
+				matches: [{ track_number: '0', episode_number: 1, episode_name: 'Pilot', episode_runtime: 2700 }],
 				match_count: 1,
 				score: 100,
 				alternatives: []

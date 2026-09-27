@@ -1,11 +1,24 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
-vi.mock('$lib/api/sessions', () => ({ createSession: vi.fn(), updateSession: vi.fn(), previewTemplate: vi.fn().mockResolvedValue({ resolved: 'p', error: null }) }));
+vi.mock('$lib/api/sessions', () => ({
+	createSession: vi.fn(),
+	updateSession: vi.fn(),
+	previewTemplate: vi.fn().mockResolvedValue({ resolved: 'p', error: null })
+}));
 import { createSession } from '$lib/api/sessions';
 import SessionBuilder from '../SessionBuilder.svelte';
 
-const rip = (id: string, mt = 'movie') => ({ id, name: `rip ${id}`, media_type: mt } as any);
-const props = (over = {}) => ({ session: null, ripPresets: [rip('r1'), rip('r2', 'tv')], transcodePresets: [{ id: 't1', name: 'tc1', media_type: 'movie' }], oncreaterip: vi.fn(), oncreatetranscode: vi.fn(), onsaved: vi.fn(), oncancel: vi.fn(), ...over });
+const rip = (id: string, mt = 'movie') => ({ id, name: `rip ${id}`, media_type: mt }) as any;
+const props = (over = {}) => ({
+	session: null,
+	ripPresets: [rip('r1'), rip('r2', 'tv')],
+	transcodePresets: [{ id: 't1', name: 'tc1', media_type: 'movie' }],
+	oncreaterip: vi.fn(),
+	oncreatetranscode: vi.fn(),
+	onsaved: vi.fn(),
+	oncancel: vi.fn(),
+	...over
+});
 
 afterEach(cleanup);
 
@@ -43,7 +56,17 @@ it('submits createSession with the assembled body', async () => {
 	await fireEvent.change(screen.getByLabelText(/rip preset/i), { target: { value: 'r1' } });
 	await fireEvent.input(screen.getByLabelText(/output path/i), { target: { value: 'movies/{title}.{ext}' } });
 	await fireEvent.click(screen.getByRole('button', { name: /create session/i }));
-	await waitFor(() => expect(createSession).toHaveBeenCalledWith(expect.objectContaining({ name: 'My Movies', media_type: 'movie', rip_preset_id: 'r1', transcode_preset_id: null, output_path_template: 'movies/{title}.{ext}' })));
+	await waitFor(() =>
+		expect(createSession).toHaveBeenCalledWith(
+			expect.objectContaining({
+				name: 'My Movies',
+				media_type: 'movie',
+				rip_preset_id: 'r1',
+				transcode_preset_id: null,
+				output_path_template: 'movies/{title}.{ext}'
+			})
+		)
+	);
 	await waitFor(() => expect(onsaved).toHaveBeenCalled());
 });
 
@@ -76,7 +99,7 @@ it('edit mode seeds overrides_json into the textarea', async () => {
 		created_at: null,
 		updated_at: null,
 		ripPreset: undefined,
-		transcodePreset: undefined,
+		transcodePreset: undefined
 	} as any;
 	renderComponent(SessionBuilder, props({ session }));
 	// Open the Advanced disclosure to reveal the textarea

@@ -29,9 +29,14 @@ const catalogEventTypes: EventTypeInfo[] = [
 	}
 ];
 
-function appriseService(over: { required_fields?: CatalogField[]; advanced_fields?: CatalogField[] } = {}): CatalogService {
+function appriseService(
+	over: { required_fields?: CatalogField[]; advanced_fields?: CatalogField[] } = {}
+): CatalogService {
 	return {
-		id: 'discord', name: 'Discord', docs_url: '', url_scheme: 'discord',
+		id: 'discord',
+		name: 'Discord',
+		docs_url: '',
+		url_scheme: 'discord',
 		required_fields: over.required_fields ?? [],
 		advanced_fields: over.advanced_fields ?? []
 	};
@@ -41,7 +46,11 @@ describe('EventsSection', () => {
 	afterEach(() => cleanup());
 
 	it('select all checks every event from catalog; clear empties them', async () => {
-		const props = $state({ selected: [] as string[], templates: {} as Record<string, ChannelTemplate>, eventTypes: catalogEventTypes });
+		const props = $state({
+			selected: [] as string[],
+			templates: {} as Record<string, ChannelTemplate>,
+			eventTypes: catalogEventTypes
+		});
 		renderComponent(EventsSection, { props });
 		await fireEvent.click(screen.getByRole('button', { name: /select all/i }));
 		expect(props.selected).toEqual(['rip.completed', 'session.started']);
@@ -50,7 +59,11 @@ describe('EventsSection', () => {
 	});
 
 	it('renders catalog event labels', () => {
-		const props = $state({ selected: [] as string[], templates: {} as Record<string, ChannelTemplate>, eventTypes: catalogEventTypes });
+		const props = $state({
+			selected: [] as string[],
+			templates: {} as Record<string, ChannelTemplate>,
+			eventTypes: catalogEventTypes
+		});
 		renderComponent(EventsSection, { props });
 		expect(screen.getByLabelText('Rip completed')).toBeInTheDocument();
 		expect(screen.getByLabelText('Session started')).toBeInTheDocument();
@@ -62,8 +75,11 @@ describe('ConfigureSection', () => {
 
 	it('renders the channel label input and enabled toggle', () => {
 		const props = $state({
-			type: 'webhook' as const, name: '', enabled: true,
-			config: {} as Record<string, unknown>, service: null
+			type: 'webhook' as const,
+			name: '',
+			enabled: true,
+			config: {} as Record<string, unknown>,
+			service: null
 		});
 		renderComponent(ConfigureSection, { props });
 		expect(screen.getByLabelText(/channel label/i)).toBeInTheDocument();
@@ -72,8 +88,11 @@ describe('ConfigureSection', () => {
 
 	it('renders webhook fields (URL) for webhook type', () => {
 		const props = $state({
-			type: 'webhook' as const, name: '', enabled: true,
-			config: {} as Record<string, unknown>, service: null
+			type: 'webhook' as const,
+			name: '',
+			enabled: true,
+			config: {} as Record<string, unknown>,
+			service: null
 		});
 		renderComponent(ConfigureSection, { props });
 		expect(screen.getByLabelText(/webhook url/i)).toBeInTheDocument();
@@ -81,8 +100,12 @@ describe('ConfigureSection', () => {
 
 	it('preserveExisting makes config fields optional and shows the keep-current hint', () => {
 		const props = $state({
-			type: 'webhook' as const, name: 'x', enabled: true,
-			config: {} as Record<string, unknown>, service: null, preserveExisting: true
+			type: 'webhook' as const,
+			name: 'x',
+			enabled: true,
+			config: {} as Record<string, unknown>,
+			service: null,
+			preserveExisting: true
 		});
 		renderComponent(ConfigureSection, { props });
 		const url = screen.getByLabelText(/webhook url/i) as HTMLInputElement;
@@ -92,8 +115,11 @@ describe('ConfigureSection', () => {
 
 	it('without preserveExisting, required fields stay required', () => {
 		const props = $state({
-			type: 'webhook' as const, name: 'x', enabled: true,
-			config: {} as Record<string, unknown>, service: null
+			type: 'webhook' as const,
+			name: 'x',
+			enabled: true,
+			config: {} as Record<string, unknown>,
+			service: null
 		});
 		renderComponent(ConfigureSection, { props });
 		const url = screen.getByLabelText(/webhook url/i) as HTMLInputElement;
@@ -140,8 +166,11 @@ describe('ConfigureSection', () => {
 	it('webhook layout unchanged: single grid, no <details>', () => {
 		renderComponent(ConfigureSection, {
 			props: {
-				type: 'webhook' as const, name: '', enabled: true,
-				config: {} as Record<string, unknown>, service: null
+				type: 'webhook' as const,
+				name: '',
+				enabled: true,
+				config: {} as Record<string, unknown>,
+				service: null
 			}
 		});
 		expect(screen.getByLabelText(/webhook url/i)).toBeInTheDocument();
@@ -152,19 +181,39 @@ describe('ConfigureSection', () => {
 describe('ConfigureSection bash', () => {
 	afterEach(cleanup);
 	const info = {
-		name: 'send-email.sh', executable: true, description: 'Send an email', size_bytes: 120, modified_at: '2026-09-06T00:00:00Z',
+		name: 'send-email.sh',
+		executable: true,
+		description: 'Send an email',
+		size_bytes: 120,
+		modified_at: '2026-09-06T00:00:00Z',
 		preview: '#!/usr/bin/env bash\n# arm-hook: Send an email',
 		inputs: [
 			{ key: 'TO', label: 'Recipient', required: true, secret: false, default: '', values: null },
-			{ key: 'PRIORITY', label: 'Priority', required: false, secret: false, default: 'normal', values: ['low', 'normal', 'high'] },
+			{
+				key: 'PRIORITY',
+				label: 'Priority',
+				required: false,
+				secret: false,
+				default: 'normal',
+				values: ['low', 'normal', 'high']
+			},
 			{ key: 'SMTP_PASS', label: 'SMTP password', required: false, secret: true, default: '', values: null }
 		]
 	};
 
 	it('lists scripts, loads the selected script, renders its inputs and viewer', async () => {
-		vi.mocked(fetchScripts).mockResolvedValue([{ name: 'send-email.sh', executable: true, description: 'Send an email' }, { name: 'draft.sh', executable: false, description: '' }]);
+		vi.mocked(fetchScripts).mockResolvedValue([
+			{ name: 'send-email.sh', executable: true, description: 'Send an email' },
+			{ name: 'draft.sh', executable: false, description: '' }
+		]);
 		vi.mocked(fetchScript).mockResolvedValue(info as never);
-		const props = $state({ type: 'bash' as const, name: 'x', enabled: true, config: {} as Record<string, unknown>, service: null });
+		const props = $state({
+			type: 'bash' as const,
+			name: 'x',
+			enabled: true,
+			config: {} as Record<string, unknown>,
+			service: null
+		});
 		renderComponent(ConfigureSection, { props });
 		await screen.findByText('Choose a script');
 		const select = screen.getByLabelText('Script') as HTMLSelectElement;
@@ -193,7 +242,15 @@ describe('ConfigureSection bash', () => {
 	it('keeps a stale script name selectable as missing and masks stored secrets', async () => {
 		vi.mocked(fetchScripts).mockResolvedValue([]);
 		vi.mocked(fetchScript).mockRejectedValue(new Error('404'));
-		renderComponent(ConfigureSection, { props: { type: 'bash', name: 'x', enabled: true, config: { script: 'gone.sh', inputs: { SMTP_PASS: '<hidden>' }, secret_keys: ['SMTP_PASS'] }, service: null } });
+		renderComponent(ConfigureSection, {
+			props: {
+				type: 'bash',
+				name: 'x',
+				enabled: true,
+				config: { script: 'gone.sh', inputs: { SMTP_PASS: '<hidden>' }, secret_keys: ['SMTP_PASS'] },
+				service: null
+			}
+		});
 		await screen.findByText('No scripts found');
 		const select = screen.getByLabelText('Script') as HTMLSelectElement;
 		expect(select.value).toBe('gone.sh');

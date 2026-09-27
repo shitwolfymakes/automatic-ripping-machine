@@ -80,7 +80,7 @@
 	--radius-2xl: calc(var(--radius) * 2);
 
 	--font-display: 'Rajdhani', var(--font-sans);
-	--font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+	--font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 
 	--animate-indeterminate: indeterminate 1.5s ease-in-out infinite;
 }
@@ -126,6 +126,10 @@
 }
 
 @keyframes indeterminate {
-	0% { transform: translateX(-100%); }
-	100% { transform: translateX(400%); }
+	0% {
+		transform: translateX(-100%);
+	}
+	100% {
+		transform: translateX(400%);
+	}
 }

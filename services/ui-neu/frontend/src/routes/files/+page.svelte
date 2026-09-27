@@ -1,10 +1,23 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import { fetchRoots, fetchDirectory, renameFile, moveFile, deleteFile, createDirectory, fixPermissions } from '$lib/api/files';
+	import {
+		fetchRoots,
+		fetchDirectory,
+		renameFile,
+		moveFile,
+		deleteFile,
+		createDirectory,
+		fixPermissions
+	} from '$lib/api/files';
 	import type { FileRoot, DirectoryListing } from '$lib/api/files';
 	import { formatBytes, formatDateTime } from '$lib/utils/format';
-	import { fetchOrphanFolders, deleteFolder as deleteOrphanFolder, bulkDeleteFolders, cleanupTranscoder } from '$lib/api/maintenance';
+	import {
+		fetchOrphanFolders,
+		deleteFolder as deleteOrphanFolder,
+		bulkDeleteFolders,
+		cleanupTranscoder
+	} from '$lib/api/maintenance';
 	import type { OrphanFoldersResponse } from '$lib/api/maintenance';
 	import FileIcon from '$lib/components/FileIcon.svelte';
 	import BreadcrumbNav from '$lib/components/BreadcrumbNav.svelte';
@@ -96,19 +109,14 @@
 		const movingNames = sameDir
 			? new Set([...selectedKeys].map((k) => k.split('::')[1].split('/').pop()))
 			: new Set<string | undefined>();
-		return pickerListing.entries.filter(
-			(e) => e.type === 'directory' && !movingNames.has(e.name)
-		);
+		return pickerListing.entries.filter((e) => e.type === 'directory' && !movingNames.has(e.name));
 	});
 
 	// Can we go up from picker?
-	let pickerCanGoUp = $derived(
-		picker.subpath !== '' || picker.root !== current.root
-	);
+	let pickerCanGoUp = $derived(picker.subpath !== '' || picker.root !== current.root);
 
 	let allSelected = $derived(
-		sortedEntries.length > 0 &&
-		sortedEntries.every(e => selectedKeys.has(selectionKey(e.name)))
+		sortedEntries.length > 0 && sortedEntries.every((e) => selectedKeys.has(selectionKey(e.name)))
 	);
 
 	function toggleSort(key: 'name' | 'size' | 'modified') {
@@ -142,7 +150,7 @@
 		if (allSelected) {
 			selectedKeys = new Set();
 		} else {
-			selectedKeys = new Set(sortedEntries.map(e => selectionKey(e.name)));
+			selectedKeys = new Set(sortedEntries.map((e) => selectionKey(e.name)));
 		}
 	}
 
@@ -189,7 +197,10 @@
 	async function handleFixPermissions(entryName: string, displayName: string) {
 		try {
 			const result = await fixPermissions(current.root, itemSubpath(entryName));
-			feedback = { type: 'success', message: `Fixed permissions on ${displayName} (${result.fixed} item${result.fixed !== 1 ? 's' : ''})` };
+			feedback = {
+				type: 'success',
+				message: `Fixed permissions on ${displayName} (${result.fixed} item${result.fixed !== 1 ? 's' : ''})`
+			};
 			clearFeedback();
 			await navigate(current.root, current.subpath);
 		} catch (e) {
@@ -255,7 +266,7 @@
 	}
 
 	function pickerDisplayPath(): string {
-		const rootObj = roots.find(r => r.key === picker.root);
+		const rootObj = roots.find((r) => r.key === picker.root);
 		const rootLabel = rootObj?.label ?? picker.root;
 		if (!picker.subpath) return rootLabel;
 		return `${rootLabel}/${picker.subpath}`;
@@ -290,7 +301,10 @@
 		let failed = 0;
 		// Sort by subpath length descending so children are deleted before parents
 		const items = [...selectedKeys]
-			.map(k => { const [r, sp] = k.split('::'); return { root: r, subpath: sp }; })
+			.map((k) => {
+				const [r, sp] = k.split('::');
+				return { root: r, subpath: sp };
+			})
 			.sort((a, b) => b.subpath.length - a.subpath.length);
 		const deletedSubpaths: string[] = [];
 		for (const item of items) {
@@ -356,7 +370,9 @@
 		try {
 			orphanFoldersData = await fetchOrphanFolders();
 			orphanFoldersSelected = new Set();
-		} catch { orphanFoldersData = null; }
+		} catch {
+			orphanFoldersData = null;
+		}
 		orphanFoldersLoading = false;
 	}
 
@@ -458,7 +474,8 @@
 
 	<!-- Warning banner -->
 	<div class="alert files-page-warning-banner">
-		<span class="alert-title">Warning:</span> Modify files at your own risk. This will not update database records and will cause issues for any in-progress rips or transcodes.
+		<span class="alert-title">Warning:</span> Modify files at your own risk. This will not update database records and will
+		cause issues for any in-progress rips or transcodes.
 	</div>
 
 	<!-- Feedback toast -->
@@ -494,8 +511,18 @@
 	<!-- Read-only mount banner -->
 	{#if isReadonly}
 		<div class="alert alert-warning cluster files-page-readonly-banner">
-			<svg class="h-4 w-4 shrink-0 files-page-readonly-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-				<path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+			<svg
+				class="h-4 w-4 shrink-0 files-page-readonly-icon"
+				fill="none"
+				stroke="currentColor"
+				viewBox="0 0 24 24"
+				stroke-width="2"
+			>
+				<path
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+				/>
 			</svg>
 			<p>This directory is on a read-only mount. File operations are disabled.</p>
 		</div>
@@ -515,7 +542,12 @@
 						class="btn btn-primary files-page-bulk-btn"
 					>
 						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+							/>
 						</svg>
 						Move {selectedKeys.size}
 					</button>
@@ -526,7 +558,12 @@
 						class="btn files-page-bulk-btn files-page-bulk-btn-danger"
 					>
 						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+							/>
 						</svg>
 						Delete {selectedKeys.size}
 					</button>
@@ -540,7 +577,12 @@
 						title="Orphan folders"
 					>
 						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+							/>
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11v4m-2-2h4" />
 						</svg>
 					</button>
@@ -552,7 +594,12 @@
 						title="Clean up transcoder jobs"
 					>
 						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"
+							/>
 						</svg>
 					</button>
 				{/if}
@@ -566,7 +613,12 @@
 						title={isReadonly ? 'Read-only mount' : 'New folder'}
 					>
 						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+							/>
 						</svg>
 					</button>
 				{/if}
@@ -574,12 +626,17 @@
 				<button
 					type="button"
 					onclick={() => navigate(current.root, current.subpath)}
-				disabled={loading}
-				class="btn btn-icon files-page-toolbar-btn"
-				title="Refresh"
+					disabled={loading}
+					class="btn btn-icon files-page-toolbar-btn"
+					title="Refresh"
 				>
 					<svg class="h-5 w-5 {loading ? 'spin' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+						/>
 					</svg>
 				</button>
 			</div>
@@ -636,7 +693,12 @@
 					<div class="flex items-center gap-2 files-page-nav-row files-page-new-folder-row">
 						<span class="w-10"></span>
 						<svg class="h-5 w-5 shrink-0 files-page-folder-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="1.5"
+								d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+							/>
 						</svg>
 						<input
 							type="text"
@@ -645,7 +707,12 @@
 							placeholder="Folder name"
 							class="field-control flex-1 files-page-new-folder-input"
 						/>
-						<button type="button" onclick={confirmNewFolder} class="btn btn-icon files-page-new-folder-confirm" title="Create">
+						<button
+							type="button"
+							onclick={confirmNewFolder}
+							class="btn btn-icon files-page-new-folder-confirm"
+							title="Create"
+						>
 							<Glyph name="check" />
 						</button>
 						<button type="button" onclick={cancelNewFolder} class="btn btn-icon" title="Cancel">
@@ -655,13 +722,9 @@
 				{/if}
 
 				{#if listing?.unavailable}
-					<div class="files-page-empty">
-						This root is not mounted on the server.
-					</div>
+					<div class="files-page-empty">This root is not mounted on the server.</div>
 				{:else if sortedEntries.length === 0 && !creatingFolder}
-					<div class="files-page-empty">
-						This directory is empty
-					</div>
+					<div class="files-page-empty">This directory is empty</div>
 				{:else if sortedEntries.length > 0}
 					<table class="table">
 						<thead>
@@ -738,7 +801,9 @@
 <ConfirmDialog
 	open={bulkDeleteOpen}
 	title="Delete {selectedKeys.size} item{selectedKeys.size !== 1 ? 's' : ''}"
-	message="This will permanently delete {selectedKeys.size} selected item{selectedKeys.size !== 1 ? 's' : ''}, including all contents of any folders. This cannot be undone."
+	message="This will permanently delete {selectedKeys.size} selected item{selectedKeys.size !== 1
+		? 's'
+		: ''}, including all contents of any folders. This cannot be undone."
 	confirmLabel="Delete All"
 	variant="danger"
 	onconfirm={confirmBulkDelete}
@@ -775,7 +840,11 @@
 			<!-- Feedback -->
 			{#if orphanFoldersFeedback}
 				<div class="shrink-0 files-page-modal-feedback-row">
-					<div class="alert files-page-orphan-feedback {orphanFoldersFeedback.type === 'success' ? 'alert-success' : 'alert-danger'}">
+					<div
+						class="alert files-page-orphan-feedback {orphanFoldersFeedback.type === 'success'
+							? 'alert-success'
+							: 'alert-danger'}"
+					>
 						{orphanFoldersFeedback.message}
 					</div>
 				</div>
@@ -801,8 +870,18 @@
 								disabled={orphanFoldersBusy}
 								class="files-page-select-all"
 							/>
-							<svg class="h-5 w-5 shrink-0 files-page-folder-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+							<svg
+								class="h-5 w-5 shrink-0 files-page-folder-icon"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="1.5"
+									d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+								/>
 							</svg>
 							<div class="min-w-0 flex-1">
 								<div class="truncate files-page-orphan-name">{folder.name}</div>
@@ -819,19 +898,20 @@
 								title="Delete folder"
 							>
 								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+									/>
 								</svg>
 							</button>
 						</div>
 					{/each}
 				{:else if orphanFoldersData}
-					<div class="files-page-empty">
-						No orphan folders found
-					</div>
+					<div class="files-page-empty">No orphan folders found</div>
 				{:else}
-					<div class="files-page-empty files-page-empty-error">
-						Failed to load orphan folders
-					</div>
+					<div class="files-page-empty files-page-empty-error">Failed to load orphan folders</div>
 				{/if}
 			</div>
 
@@ -847,19 +927,18 @@
 								class="btn files-page-bulk-btn files-page-bulk-btn-danger"
 							>
 								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+									/>
 								</svg>
 								Delete {orphanFoldersSelected.size} selected
 							</button>
 						{/if}
 					</div>
-					<button
-						type="button"
-						onclick={() => (orphanFoldersOpen = false)}
-						class="btn"
-					>
-						Close
-					</button>
+					<button type="button" onclick={() => (orphanFoldersOpen = false)} class="btn"> Close </button>
 				</div>
 			</div>
 		</div>
@@ -881,16 +960,19 @@
 				<h3 class="modal-title">
 					Move {selectedKeys.size} item{selectedKeys.size !== 1 ? 's' : ''}
 				</h3>
-				<p class="files-page-modal-subtitle">
-					Browse to the destination folder
-				</p>
+				<p class="files-page-modal-subtitle">Browse to the destination folder</p>
 			</div>
 
 			<!-- Current picker location -->
 			<div class="shrink-0 files-page-picker-location">
 				<div class="flex items-center gap-2 files-page-picker-location-text">
 					<svg class="h-4 w-4 shrink-0 files-page-folder-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="1.5"
+							d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+						/>
 					</svg>
 					<span class="files-page-picker-path">{pickerDisplayPath()}</span>
 					{#if picker.root === current.root && picker.subpath === current.subpath}
@@ -911,11 +993,7 @@
 				{:else}
 					<!-- Go up -->
 					{#if pickerCanGoUp}
-						<button
-							type="button"
-							onclick={pickerGoUp}
-							class="flex w-full items-center gap-3 files-page-picker-row"
-						>
+						<button type="button" onclick={pickerGoUp} class="flex w-full items-center gap-3 files-page-picker-row">
 							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12" />
 							</svg>
@@ -924,19 +1002,28 @@
 					{/if}
 
 					{#if pickerFolders.length === 0 && !pickerCanGoUp}
-						<div class="files-page-picker-empty">
-							No subfolders
-						</div>
+						<div class="files-page-picker-empty">No subfolders</div>
 					{/if}
 
 					{#each pickerFolders as folder (folder.name)}
 						<button
 							type="button"
-							onclick={() => pickerNavigate(picker.root, picker.subpath ? `${picker.subpath}/${folder.name}` : folder.name)}
+							onclick={() =>
+								pickerNavigate(picker.root, picker.subpath ? `${picker.subpath}/${folder.name}` : folder.name)}
 							class="flex w-full items-center gap-3 files-page-picker-row files-page-picker-row-folder"
 						>
-							<svg class="h-5 w-5 shrink-0 files-page-folder-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+							<svg
+								class="h-5 w-5 shrink-0 files-page-folder-icon"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="1.5"
+									d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+								/>
 							</svg>
 							{folder.name}
 							<Glyph name="chevron-right" class="ml-auto h-4 w-4 files-page-chevron" />
@@ -948,19 +1035,15 @@
 			<!-- Footer -->
 			<div class="shrink-0 files-page-modal-footer">
 				<div class="flex justify-end gap-3">
-					<button
-						type="button"
-						onclick={closeMoveDialog}
-						class="btn"
-					>
-						Cancel
-					</button>
+					<button type="button" onclick={closeMoveDialog} class="btn"> Cancel </button>
 					<button
 						type="button"
 						onclick={confirmBulkMove}
 						disabled={picker.root === current.root && picker.subpath === current.subpath}
 						class="btn btn-primary"
-						title={picker.root === current.root && picker.subpath === current.subpath ? 'Navigate to a different folder first' : ''}
+						title={picker.root === current.root && picker.subpath === current.subpath
+							? 'Navigate to a different folder first'
+							: ''}
 					>
 						Move here
 					</button>
@@ -978,90 +1061,265 @@
 	   blue-400 dark) a step lighter than blue-800; both mode-flip on their
 	   own, which also retires the global dark-mode override. Named collapse. */
 	/* original was px-4 py-3 (1rem/0.75rem), not .alert's own 0.5rem/0.75rem default */
-	.files-page-warning-banner { padding: 0.75rem 1rem; background: var(--color-primary-tint-2); color: var(--color-primary-text); }
+	.files-page-warning-banner {
+		padding: 0.75rem 1rem;
+		background: var(--color-primary-tint-2);
+		color: var(--color-primary-text);
+	}
 	/* original was px-4 py-2.5 (1rem/0.625rem), not .alert's own 0.5rem/0.75rem default */
-	.files-page-readonly-banner { padding: 0.625rem 1rem; }
+	.files-page-readonly-banner {
+		padding: 0.625rem 1rem;
+	}
 	/* original was px-4 py-2 (1rem/0.5rem) */
-	.files-page-feedback { padding: 0.5rem 1rem; }
+	.files-page-feedback {
+		padding: 0.5rem 1rem;
+	}
 	/* original was px-3 py-1.5 (0.75rem/0.375rem) */
-	.files-page-orphan-feedback { padding: 0.375rem 0.75rem; }
-	.files-page-readonly-icon { color: var(--color-warning); }
-	.files-page-toolbar { gap: 0.25rem; }
+	.files-page-orphan-feedback {
+		padding: 0.375rem 0.75rem;
+	}
+	.files-page-readonly-icon {
+		color: var(--color-warning);
+	}
+	.files-page-toolbar {
+		gap: 0.25rem;
+	}
 	/* original was rounded-lg p-2 (0.5rem all around), not .btn-icon's own
 	   0.375rem default - a real ~4px-per-side layout regression */
-	.files-page-toolbar-btn { padding: 0.5rem; }
+	.files-page-toolbar-btn {
+		padding: 0.5rem;
+	}
 	/* replaces the banned inline `hidden lg:table-cell`/`hidden
 	   md:table-cell` (table/table-row/table-cell are Tailwind
 	   display-utility names, banned outright by the lint per Task 11 fix
 	   round 3 - only the table block's own classes may set that display
 	   value) */
-	.files-page-cell-lg { display: none; }
-	@media (min-width: 1024px) {
-		.files-page-cell-lg { display: table-cell; }
+	.files-page-cell-lg {
+		display: none;
 	}
-	.files-page-cell-md { display: none; }
+	@media (min-width: 1024px) {
+		.files-page-cell-lg {
+			display: table-cell;
+		}
+	}
+	.files-page-cell-md {
+		display: none;
+	}
 	@media (min-width: 768px) {
-		.files-page-cell-md { display: table-cell; }
+		.files-page-cell-md {
+			display: table-cell;
+		}
 	}
 	/* original bulk-action buttons were px-3 py-1.5 text-xs (0.75rem/1rem),
 	   smaller than .btn's own default 1rem/0.5rem/text-sm - restated to
 	   match; the icon+label gap (gap-1.5) is close enough to .btn's own
 	   0.375rem default that no override is needed there */
-	.files-page-bulk-btn { padding: 0.375rem 0.75rem; font-size: 0.75rem; line-height: 1rem; }
-	.files-page-bulk-btn-danger { border: 0; background: var(--color-danger); color: var(--color-on-primary); }
+	.files-page-bulk-btn {
+		padding: 0.375rem 0.75rem;
+		font-size: 0.75rem;
+		line-height: 1rem;
+	}
+	.files-page-bulk-btn-danger {
+		border: 0;
+		background: var(--color-danger);
+		color: var(--color-on-primary);
+	}
 	/* darkens on hover like the original's bg-red-600 -> hover:bg-red-700;
 	   no darker danger token exists, so filter substitutes for a literal
 	   colour (the lint bans raw colour keywords, even inside color-mix) */
-	.files-page-bulk-btn-danger:hover { filter: brightness(0.9); }
-	.files-page-listing { overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); }
-	.files-page-nav-row { border-bottom: 1px solid var(--color-border); padding: 0.5rem 0.75rem; font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-secondary); }
-	.files-page-nav-row:hover { background: var(--color-primary-tint-1); }
-	.files-page-new-folder-row { background: var(--color-primary-tint-1); }
-	.files-page-new-folder-input { width: auto; min-height: auto; padding: 0.25rem 0.5rem; }
-	.files-page-folder-icon { color: var(--color-warning); }
-	.files-page-new-folder-confirm { color: var(--color-success); }
-	.files-page-new-folder-confirm:hover { background: var(--color-success-soft); color: var(--color-success); }
-	.files-page-empty { padding: 2rem; text-align: center; font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
-	.files-page-empty-panel { padding: 2rem; text-align: center; }
-	.files-page-empty-panel-text { color: var(--color-text-muted); }
-	.files-page-select-all { height: 1rem; width: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--color-border-strong); accent-color: var(--color-primary); }
-	.files-page-sort-btn { color: inherit; }
-	.files-page-sort-btn:hover { color: var(--color-text-secondary); }
-	.files-page-modal-backdrop { position: absolute; inset: 0; }
-	.files-page-orphan-panel { display: flex; width: 100%; max-width: 32rem; max-height: 80vh; flex-direction: column; padding: 0; }
-	.files-page-modal-header { border-bottom: 1px solid var(--color-border); padding: 1rem 1.5rem; }
-	.files-page-modal-subtitle { margin-top: 0.25rem; font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
-	.files-page-modal-feedback-row { border-bottom: 1px solid var(--color-border); padding: 0.5rem 1.5rem; }
-	.files-page-spinner { color: var(--color-text-faint); }
-	.files-page-loading-text { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	.files-page-bulk-btn-danger:hover {
+		filter: brightness(0.9);
+	}
+	.files-page-listing {
+		overflow: hidden;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		background: var(--color-surface);
+	}
+	.files-page-nav-row {
+		border-bottom: 1px solid var(--color-border);
+		padding: 0.5rem 0.75rem;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-secondary);
+	}
+	.files-page-nav-row:hover {
+		background: var(--color-primary-tint-1);
+	}
+	.files-page-new-folder-row {
+		background: var(--color-primary-tint-1);
+	}
+	.files-page-new-folder-input {
+		width: auto;
+		min-height: auto;
+		padding: 0.25rem 0.5rem;
+	}
+	.files-page-folder-icon {
+		color: var(--color-warning);
+	}
+	.files-page-new-folder-confirm {
+		color: var(--color-success);
+	}
+	.files-page-new-folder-confirm:hover {
+		background: var(--color-success-soft);
+		color: var(--color-success);
+	}
+	.files-page-empty {
+		padding: 2rem;
+		text-align: center;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
+	.files-page-empty-panel {
+		padding: 2rem;
+		text-align: center;
+	}
+	.files-page-empty-panel-text {
+		color: var(--color-text-muted);
+	}
+	.files-page-select-all {
+		height: 1rem;
+		width: 1rem;
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--color-border-strong);
+		accent-color: var(--color-primary);
+	}
+	.files-page-sort-btn {
+		color: inherit;
+	}
+	.files-page-sort-btn:hover {
+		color: var(--color-text-secondary);
+	}
+	.files-page-modal-backdrop {
+		position: absolute;
+		inset: 0;
+	}
+	.files-page-orphan-panel {
+		display: flex;
+		width: 100%;
+		max-width: 32rem;
+		max-height: 80vh;
+		flex-direction: column;
+		padding: 0;
+	}
+	.files-page-modal-header {
+		border-bottom: 1px solid var(--color-border);
+		padding: 1rem 1.5rem;
+	}
+	.files-page-modal-subtitle {
+		margin-top: 0.25rem;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
+	.files-page-modal-feedback-row {
+		border-bottom: 1px solid var(--color-border);
+		padding: 0.5rem 1.5rem;
+	}
+	.files-page-spinner {
+		color: var(--color-text-faint);
+	}
+	.files-page-loading-text {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
 	/* the original row was a plain flex row (no hover/pointer affordance -
 	   only its checkbox/delete button are interactive); list-row's own
 	   cursor:pointer/hover-tint are for a clickable row and don't apply here */
-	.files-page-orphan-row { grid-template-columns: auto auto 1fr auto auto; gap: 0.75rem; padding: 0.625rem 1.5rem; cursor: default; }
-	.files-page-orphan-row:hover { background: transparent; }
-	.files-page-orphan-name { font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text); }
-	.files-page-orphan-size { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
+	.files-page-orphan-row {
+		grid-template-columns: auto auto 1fr auto auto;
+		gap: 0.75rem;
+		padding: 0.625rem 1.5rem;
+		cursor: default;
+	}
+	.files-page-orphan-row:hover {
+		background: transparent;
+	}
+	.files-page-orphan-name {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		font-weight: 500;
+		color: var(--color-text);
+	}
+	.files-page-orphan-size {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-muted);
+	}
 	/* the original category pill used two literal hues with no shared
 	   badge look (rounded-full px-2 py-0.5 text-xs font-medium); nearest
 	   tones are warning (raw) and success (completed) */
-	.files-page-category-badge { border-radius: 9999px; }
-	.files-page-category-badge[data-category="raw"] { background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
-	.files-page-category-badge[data-category="completed"] { background: var(--color-success-soft); color: var(--color-on-success-soft); }
-	.files-page-orphan-delete { color: var(--color-danger); }
-	.files-page-orphan-delete:hover { background: var(--color-danger-soft); color: var(--color-danger); }
-	.files-page-modal-footer { border-top: 1px solid var(--color-border); padding: 1rem 1.5rem; }
-	.files-page-picker-location { border-bottom: 1px solid var(--color-border); background: var(--color-page); padding: 0.5rem 1.5rem; }
-	.files-page-picker-location-text { font-size: 0.875rem; line-height: 1.25rem; }
-	.files-page-picker-path { font-weight: 500; color: var(--color-text); }
+	.files-page-category-badge {
+		border-radius: 9999px;
+	}
+	.files-page-category-badge[data-category='raw'] {
+		background: var(--color-warning-soft);
+		color: var(--color-on-warning-soft);
+	}
+	.files-page-category-badge[data-category='completed'] {
+		background: var(--color-success-soft);
+		color: var(--color-on-success-soft);
+	}
+	.files-page-orphan-delete {
+		color: var(--color-danger);
+	}
+	.files-page-orphan-delete:hover {
+		background: var(--color-danger-soft);
+		color: var(--color-danger);
+	}
+	.files-page-modal-footer {
+		border-top: 1px solid var(--color-border);
+		padding: 1rem 1.5rem;
+	}
+	.files-page-picker-location {
+		border-bottom: 1px solid var(--color-border);
+		background: var(--color-page);
+		padding: 0.5rem 1.5rem;
+	}
+	.files-page-picker-location-text {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+	}
+	.files-page-picker-path {
+		font-weight: 500;
+		color: var(--color-text);
+	}
 	/* original was a plain lowercase gray-200/gray-600 tag, not .badge's
 	   primary-tinted pill nor .badge-sm's uppercase transform - no neutral
 	   token exists (spec 5.1), so this keeps .badge's shape (pill, weight,
 	   size) but restates the case and a text-sm-scale padding */
-	.files-page-current-badge { border-radius: var(--radius-sm); padding: 0.125rem 0.375rem; font-size: 0.75rem; line-height: 1rem; text-transform: none; letter-spacing: normal; }
-	.files-page-picker-row { border-bottom: 1px solid var(--color-border); padding: 0.625rem 1.5rem; font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-secondary); }
-	.files-page-picker-row:hover { background: var(--color-primary-tint-1); }
-	.files-page-picker-row-folder { color: var(--color-text); }
-	.files-page-picker-empty { padding: 1.5rem; text-align: center; font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	.files-page-current-badge {
+		border-radius: var(--radius-sm);
+		padding: 0.125rem 0.375rem;
+		font-size: 0.75rem;
+		line-height: 1rem;
+		text-transform: none;
+		letter-spacing: normal;
+	}
+	.files-page-picker-row {
+		border-bottom: 1px solid var(--color-border);
+		padding: 0.625rem 1.5rem;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-secondary);
+	}
+	.files-page-picker-row:hover {
+		background: var(--color-primary-tint-1);
+	}
+	.files-page-picker-row-folder {
+		color: var(--color-text);
+	}
+	.files-page-picker-empty {
+		padding: 1.5rem;
+		text-align: center;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
 	/* :global: forwarded through Glyph's class prop */
-	:global(.files-page-chevron) { color: var(--color-text-faint); }
+	:global(.files-page-chevron) {
+		color: var(--color-text-faint);
+	}
 </style>

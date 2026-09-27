@@ -149,11 +149,7 @@
 	</h3>
 
 	{#if isBuiltin}
-		<div
-			class="alert alert-warning"
-			data-testid="tp-builtin-note"
-			role="status"
-		>
+		<div class="alert alert-warning" data-testid="tp-builtin-note" role="status">
 			This is a built-in preset and can't be edited. Clone it to make an editable copy.
 		</div>
 	{/if}
@@ -176,12 +172,7 @@
 
 	<label class="field">
 		<span class="field-label">Media type</span>
-		<select
-			id="tp-media-type"
-			data-testid="tp-media-type"
-			bind:value={mediaType}
-			disabled={editing}
-		>
+		<select id="tp-media-type" data-testid="tp-media-type" bind:value={mediaType} disabled={editing}>
 			<option value="movie">Movie</option>
 			<option value="tv">TV</option>
 			<option value="music">Music</option>
@@ -192,12 +183,7 @@
 
 	<label class="field">
 		<span class="field-label">Tool</span>
-		<select
-			id="tp-tool"
-			data-testid="tp-tool"
-			bind:value={tool}
-			disabled={isBuiltin}
-		>
+		<select id="tp-tool" data-testid="tp-tool" bind:value={tool} disabled={isBuiltin}>
 			<option value="handbrake">HandBrake</option>
 			<option value="abcde">abcde</option>
 			<option value="none">None</option>
@@ -206,13 +192,7 @@
 
 	<label class="field">
 		<span class="field-label">Preset ref (HandBrake/abcde profile name)</span>
-		<input
-			id="tp-preset-ref"
-			data-testid="tp-preset-ref"
-			type="text"
-			bind:value={presetRef}
-			disabled={isBuiltin}
-		/>
+		<input id="tp-preset-ref" data-testid="tp-preset-ref" type="text" bind:value={presetRef} disabled={isBuiltin} />
 		{#if usesFfmpegVaapi}
 			<p class="field-help" data-testid="tp-preset-ref-note">Not used by this encoder.</p>
 		{/if}
@@ -220,12 +200,7 @@
 
 	<label class="field">
 		<span class="field-label">Container</span>
-		<select
-			id="tp-container"
-			data-testid="tp-container"
-			bind:value={container}
-			disabled={isBuiltin}
-		>
+		<select id="tp-container" data-testid="tp-container" bind:value={container} disabled={isBuiltin}>
 			<option value="mkv">MKV</option>
 			<option value="mp4">MP4</option>
 			<option value="webm">WebM</option>
@@ -264,14 +239,12 @@
 			{/if}
 		</select>
 		{#if encodersError}
-			<p class="field-error" data-testid="tp-encoder-error">
-				Could not load encoders; the current encoder is kept.
-			</p>
+			<p class="field-error" data-testid="tp-encoder-error">Could not load encoders; the current encoder is kept.</p>
 		{/if}
 		{#if anyGpuSelected}
 			<p class="field-help" data-testid="tp-encoder-any-note">
-				HandBrake preset settings (scaling, filters, audio) apply on CPU, NVENC and QSV, but not
-				when the job runs on an AMD (VAAPI) device.
+				HandBrake preset settings (scaling, filters, audio) apply on CPU, NVENC and QSV, but not when the job runs on an
+				AMD (VAAPI) device.
 			</p>
 		{/if}
 		{#if encoderHint}
@@ -281,31 +254,15 @@
 
 	<label class="field">
 		<span class="field-label">{usesFfmpegVaapi ? 'ffmpeg arguments' : 'Extra args'}</span>
-		<input
-			id="tp-extra-args"
-			data-testid="tp-extra-args"
-			type="text"
-			bind:value={extraArgs}
-			disabled={isBuiltin}
-		/>
+		<input id="tp-extra-args" data-testid="tp-extra-args" type="text" bind:value={extraArgs} disabled={isBuiltin} />
 	</label>
 
 	<div class="transcode-preset-form-actions">
-		<button
-			type="button"
-			onclick={oncancel}
-			disabled={submitting}
-			class="btn btn-ghost"
-		>
+		<button type="button" onclick={oncancel} disabled={submitting} class="btn btn-ghost">
 			{isBuiltin ? 'Close' : 'Cancel'}
 		</button>
 		{#if !isBuiltin}
-			<button
-				type="submit"
-				disabled={!canSubmit}
-				data-testid="tp-submit"
-				class="btn btn-primary"
-			>
+			<button type="submit" disabled={!canSubmit} data-testid="tp-submit" class="btn btn-primary">
 				{submitting ? 'Saving...' : 'Save'}
 			</button>
 		{/if}
@@ -313,6 +270,16 @@
 </form>
 
 <style>
-	.transcode-preset-form-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-text); }
-	.transcode-preset-form-actions { display: flex; justify-content: flex-end; gap: 0.75rem; padding-top: 0.5rem; }
+	.transcode-preset-form-title {
+		font-size: 1.125rem;
+		line-height: 1.75rem;
+		font-weight: 600;
+		color: var(--color-text);
+	}
+	.transcode-preset-form-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.75rem;
+		padding-top: 0.5rem;
+	}
 </style>

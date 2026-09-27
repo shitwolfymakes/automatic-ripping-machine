@@ -116,9 +116,7 @@
 		scanning = true;
 		scanError = null;
 		try {
-			const result = selectedKind === 'iso'
-				? await scanIso(selectedPath)
-				: await scanFolder(selectedPath);
+			const result = selectedKind === 'iso' ? await scanIso(selectedPath) : await scanFolder(selectedPath);
 			scanResult = result;
 			editTitle = result.title_suggestion ?? '';
 			editYear = result.year_suggestion || '';
@@ -239,7 +237,7 @@
 				poster_url: editPosterUrl.trim() || null,
 				season: editSeason ? Number(editSeason) : null,
 				disc_number: editDiscNumber ? Number(editDiscNumber) : null,
-				disc_total: editDiscTotal ? Number(editDiscTotal) : null,
+				disc_total: editDiscTotal ? Number(editDiscTotal) : null
 			};
 			if (selectedKind === 'iso') {
 				await createIsoJob(common);
@@ -259,11 +257,7 @@
 {#if open}
 	<div class="modal import-wizard-modal">
 		<!-- Backdrop -->
-		<button
-			type="button"
-			class="modal-backdrop import-wizard-backdrop"
-			aria-label="Close dialog"
-			onclick={handleClose}
+		<button type="button" class="modal-backdrop import-wizard-backdrop" aria-label="Close dialog" onclick={handleClose}
 		></button>
 
 		<!-- Dialog -->
@@ -271,12 +265,7 @@
 			<!-- Header -->
 			<div class="flex items-center justify-between import-wizard-header">
 				<h3 class="modal-title">Import</h3>
-				<button
-					type="button"
-					onclick={handleClose}
-					class="btn btn-icon"
-					aria-label="Close"
-				>
+				<button type="button" onclick={handleClose} class="btn btn-icon" aria-label="Close">
 					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
 					</svg>
@@ -293,7 +282,6 @@
 						</div>
 					{/if}
 					<IngressBrowser onselect={handleSelect} />
-
 				{:else if step === 2}
 					<!-- Step 2: Verify metadata -->
 					{#if scanResult}
@@ -309,22 +297,25 @@
 								<span class="import-wizard-muted">{scanResult.stream_count} streams</span>
 								<span class="import-wizard-muted">Label: {scanResult.label}</span>
 								{#if selectedKind === 'iso' && scanVolumeId(scanResult)}
-									<span class="w-full import-wizard-volume-id">Volume ID: <span class="mono">{scanVolumeId(scanResult)}</span></span>
+									<span class="w-full import-wizard-volume-id"
+										>Volume ID: <span class="mono">{scanVolumeId(scanResult)}</span></span
+									>
 								{/if}
 							</div>
 
 							<!-- Poster preview + editable fields -->
 							<div class="flex gap-4">
 								{#if editPosterUrl}
-									<PosterImage
-										url={editPosterUrl}
-										alt={editTitle}
-										class="import-wizard-poster shrink-0"
-									/>
+									<PosterImage url={editPosterUrl} alt={editTitle} class="import-wizard-poster shrink-0" />
 								{:else}
 									<div class="flex shrink-0 items-center justify-center import-wizard-poster-placeholder">
 										<svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="1.5"
+												d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"
+											/>
 										</svg>
 									</div>
 								{/if}
@@ -364,13 +355,13 @@
 							</div>
 						</div>
 					{/if}
-
 				{:else if step === 3}
 					<!-- Step 3: OMDB Match -->
 					<div class="flex min-h-0 flex-1 flex-col">
 						<div class="shrink-0 stack import-wizard-search-header">
 							<p class="import-wizard-muted">
-								Search OMDB to refine the auto-detected metadata. Selecting a result fills in the title, year, type, IMDb ID, and poster.
+								Search OMDB to refine the auto-detected metadata. Selecting a result fills in the title, year, type,
+								IMDb ID, and poster.
 							</p>
 							<div class="flex gap-2">
 								<input
@@ -418,7 +409,12 @@
 											{:else}
 												<div class="flex w-full items-center justify-center import-wizard-result-poster-placeholder">
 													<svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+														<path
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															stroke-width="1.5"
+															d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"
+														/>
 													</svg>
 												</div>
 											{/if}
@@ -432,22 +428,22 @@
 							{/if}
 						</div>
 					</div>
-
 				{:else if step === 4}
 					<!-- Step 4: Confirm -->
 					<!-- Pinned: summary card -->
 					<div class="shrink-0 panel import-wizard-summary">
 						<div class="flex gap-4">
 							{#if editPosterUrl}
-								<PosterImage
-									url={editPosterUrl}
-									alt={editTitle}
-									class="import-wizard-summary-poster shrink-0"
-								/>
+								<PosterImage url={editPosterUrl} alt={editTitle} class="import-wizard-summary-poster shrink-0" />
 							{:else}
 								<div class="flex shrink-0 items-center justify-center import-wizard-summary-poster-placeholder">
 									<svg class="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="1.5"
+											d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"
+										/>
 									</svg>
 								</div>
 							{/if}
@@ -477,13 +473,26 @@
 					<div class="min-h-0 flex-1 overflow-y-auto import-wizard-confirm-scroll">
 						<div class="stack import-wizard-confirm-source import-wizard-muted">
 							<div class="flex items-center gap-2">
-								<svg class="h-4 w-4 shrink-0 import-wizard-faint-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+								<svg
+									class="h-4 w-4 shrink-0 import-wizard-faint-icon"
+									fill="none"
+									stroke="currentColor"
+									viewBox="0 0 24 24"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="1.5"
+										d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+									/>
 								</svg>
 								<span>Source: <span class="import-wizard-source-path">{selectedPath}</span></span>
 							</div>
 							{#if editSeason}
-								<p>Season {editSeason}{#if editDiscNumber}, Disc {editDiscNumber}{#if editDiscTotal} of {editDiscTotal}{/if}{/if}</p>
+								<p>
+									Season {editSeason}{#if editDiscNumber}, Disc {editDiscNumber}{#if editDiscTotal}
+											of {editDiscTotal}{/if}{/if}
+								</p>
 							{/if}
 						</div>
 						{#if importError}
@@ -499,67 +508,31 @@
 			<div class="flex items-center justify-between import-wizard-footer">
 				<div class="w-20">
 					{#if step > 1}
-						<button
-							type="button"
-							onclick={() => step--}
-							class="btn btn-link"
-						>
-							Back
-						</button>
+						<button type="button" onclick={() => step--} class="btn btn-link"> Back </button>
 					{/if}
 				</div>
 				<!-- Progress dots -->
 				<div class="flex items-center gap-2">
 					{#each [1, 2, 3, 4] as s}
-						<div
-							class="import-wizard-dot"
-							data-state={s === step ? 'current' : s < step ? 'done' : 'pending'}
-						></div>
+						<div class="import-wizard-dot" data-state={s === step ? 'current' : s < step ? 'done' : 'pending'}></div>
 					{/each}
 				</div>
 				<div class="flex justify-end gap-2">
 					{#if step === 1}
-						<button
-							type="button"
-							onclick={goToStep2}
-							disabled={!selectedPath || scanning}
-							class="btn btn-primary"
-						>
+						<button type="button" onclick={goToStep2} disabled={!selectedPath || scanning} class="btn btn-primary">
 							{scanning ? 'Scanning...' : 'Next'}
 						</button>
 					{:else if step === 2}
-						<button
-							type="button"
-							onclick={goToOmdbStep}
-							disabled={!editTitle.trim()}
-							class="btn"
-						>
-							Search OMDB
-						</button>
-						<button
-							type="button"
-							onclick={() => step = 4}
-							disabled={!editTitle.trim()}
-							class="btn btn-primary"
-						>
+						<button type="button" onclick={goToOmdbStep} disabled={!editTitle.trim()} class="btn"> Search OMDB </button>
+						<button type="button" onclick={() => (step = 4)} disabled={!editTitle.trim()} class="btn btn-primary">
 							Looks good
 						</button>
 					{:else if step === 3}
-						<button
-							type="button"
-							onclick={() => step = 4}
-							disabled={!editTitle.trim()}
-							class="btn btn-primary"
-						>
+						<button type="button" onclick={() => (step = 4)} disabled={!editTitle.trim()} class="btn btn-primary">
 							Next
 						</button>
 					{:else if step === 4}
-						<button
-							type="button"
-							onclick={handleImport}
-							disabled={importing}
-							class="btn btn-primary"
-						>
+						<button type="button" onclick={handleImport} disabled={importing} class="btn btn-primary">
 							{importing ? 'Importing...' : 'Import'}
 						</button>
 					{/if}
@@ -572,53 +545,204 @@
 <style>
 	/* modal-wide is 48rem; original was sm:max-w-2xl (42rem) - narrower,
 	   and full-height on mobile (h-full) vs a capped 75vh from sm: up */
-	.import-wizard-modal { align-items: flex-end; }
-	@media (min-width: 640px) { .import-wizard-modal { align-items: center; justify-content: center; } }
-	.import-wizard-backdrop { position: absolute; inset: 0; }
-	.import-wizard-panel { display: flex; height: 100%; width: 100%; max-width: 42rem; flex-direction: column; padding: 0; }
-	@media (min-width: 640px) { .import-wizard-panel { height: 75vh; border-radius: var(--radius-lg); } }
-	.import-wizard-header { border-bottom: 1px solid var(--color-border); padding: 0.75rem 1.5rem; }
-	.import-wizard-body { padding: 1rem 1.5rem; }
-	.import-wizard-muted { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
-	.import-wizard-faint { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-faint); }
-	.import-wizard-source-title { margin-bottom: 0.5rem; }
-	.import-wizard-scan-info { margin-bottom: 0.75rem; font-size: 0.875rem; line-height: 1.25rem; }
-	.import-wizard-disc-type { border-radius: var(--radius-sm); padding: 0.125rem 0.5rem; font-weight: 500; background: var(--color-info-soft); color: var(--color-on-info-soft); }
-	.import-wizard-volume-id { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
+	.import-wizard-modal {
+		align-items: flex-end;
+	}
+	@media (min-width: 640px) {
+		.import-wizard-modal {
+			align-items: center;
+			justify-content: center;
+		}
+	}
+	.import-wizard-backdrop {
+		position: absolute;
+		inset: 0;
+	}
+	.import-wizard-panel {
+		display: flex;
+		height: 100%;
+		width: 100%;
+		max-width: 42rem;
+		flex-direction: column;
+		padding: 0;
+	}
+	@media (min-width: 640px) {
+		.import-wizard-panel {
+			height: 75vh;
+			border-radius: var(--radius-lg);
+		}
+	}
+	.import-wizard-header {
+		border-bottom: 1px solid var(--color-border);
+		padding: 0.75rem 1.5rem;
+	}
+	.import-wizard-body {
+		padding: 1rem 1.5rem;
+	}
+	.import-wizard-muted {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
+	.import-wizard-faint {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-faint);
+	}
+	.import-wizard-source-title {
+		margin-bottom: 0.5rem;
+	}
+	.import-wizard-scan-info {
+		margin-bottom: 0.75rem;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+	}
+	.import-wizard-disc-type {
+		border-radius: var(--radius-sm);
+		padding: 0.125rem 0.5rem;
+		font-weight: 500;
+		background: var(--color-info-soft);
+		color: var(--color-on-info-soft);
+	}
+	.import-wizard-volume-id {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-muted);
+	}
 	/* :global: forwarded through PosterImage's class prop */
-	:global(.import-wizard-poster) { height: 9rem; width: 6rem; border-radius: var(--radius-md); object-fit: cover; }
-	.import-wizard-poster-placeholder { height: 9rem; width: 6rem; border-radius: var(--radius-md); background: var(--color-primary-tint-2); color: var(--color-text-faint); }
-	.import-wizard-field-label { margin-bottom: 0.25rem; }
-	.import-wizard-disc-of { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
+	:global(.import-wizard-poster) {
+		height: 9rem;
+		width: 6rem;
+		border-radius: var(--radius-md);
+		object-fit: cover;
+	}
+	.import-wizard-poster-placeholder {
+		height: 9rem;
+		width: 6rem;
+		border-radius: var(--radius-md);
+		background: var(--color-primary-tint-2);
+		color: var(--color-text-faint);
+	}
+	.import-wizard-field-label {
+		margin-bottom: 0.25rem;
+	}
+	.import-wizard-disc-of {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-faint);
+	}
 	/* original was space-y-3 (0.75rem), between stack-sm's 0.5rem and
 	   stack's 1rem defaults */
-	.import-wizard-search-header { gap: 0.75rem; padding-bottom: 0.75rem; }
-	.import-wizard-result-card { border: 1px solid var(--color-border); border-radius: var(--radius-lg); text-align: left; transition: border-color var(--motion-fast) var(--ease); }
-	.import-wizard-result-card:hover { border-color: var(--color-border-strong); }
-	.import-wizard-result-card[data-selected="true"] { border-color: var(--color-primary); box-shadow: 0 0 0 2px var(--color-primary); }
+	.import-wizard-search-header {
+		gap: 0.75rem;
+		padding-bottom: 0.75rem;
+	}
+	.import-wizard-result-card {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		text-align: left;
+		transition: border-color var(--motion-fast) var(--ease);
+	}
+	.import-wizard-result-card:hover {
+		border-color: var(--color-border-strong);
+	}
+	.import-wizard-result-card[data-selected='true'] {
+		border-color: var(--color-primary);
+		box-shadow: 0 0 0 2px var(--color-primary);
+	}
 	/* :global: forwarded through PosterImage's class prop */
-	:global(.import-wizard-result-poster) { aspect-ratio: 2 / 3; object-fit: cover; }
-	.import-wizard-result-poster-placeholder { aspect-ratio: 2 / 3; background: var(--color-primary-tint-2); color: var(--color-text-faint); }
-	.import-wizard-result-body { padding: 0.375rem; }
-	.import-wizard-result-title { font-size: 0.75rem; line-height: 1rem; font-weight: 500; color: var(--color-text); }
-	.import-wizard-result-year { font-size: 10px; color: var(--color-text-muted); }
-	.import-wizard-summary { padding: 1rem; }
+	:global(.import-wizard-result-poster) {
+		aspect-ratio: 2 / 3;
+		object-fit: cover;
+	}
+	.import-wizard-result-poster-placeholder {
+		aspect-ratio: 2 / 3;
+		background: var(--color-primary-tint-2);
+		color: var(--color-text-faint);
+	}
+	.import-wizard-result-body {
+		padding: 0.375rem;
+	}
+	.import-wizard-result-title {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		font-weight: 500;
+		color: var(--color-text);
+	}
+	.import-wizard-result-year {
+		font-size: 10px;
+		color: var(--color-text-muted);
+	}
+	.import-wizard-summary {
+		padding: 1rem;
+	}
 	/* :global: forwarded through PosterImage's class prop */
-	:global(.import-wizard-summary-poster) { height: 10rem; width: 7rem; border-radius: var(--radius-md); object-fit: cover; }
-	.import-wizard-summary-poster-placeholder { height: 10rem; width: 7rem; border-radius: var(--radius-md); background: var(--color-primary-tint-2); color: var(--color-text-faint); }
-	.import-wizard-summary-info { font-size: 0.875rem; line-height: 1.25rem; }
-	.import-wizard-summary-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-text); }
-	.import-wizard-type-badge { border-radius: var(--radius-sm); padding: 0.125rem 0.5rem; font-size: 0.75rem; line-height: 1rem; font-weight: 500; background: var(--color-success-soft); color: var(--color-on-success-soft); }
-	.import-wizard-confirm-scroll { padding-top: 1rem; }
+	:global(.import-wizard-summary-poster) {
+		height: 10rem;
+		width: 7rem;
+		border-radius: var(--radius-md);
+		object-fit: cover;
+	}
+	.import-wizard-summary-poster-placeholder {
+		height: 10rem;
+		width: 7rem;
+		border-radius: var(--radius-md);
+		background: var(--color-primary-tint-2);
+		color: var(--color-text-faint);
+	}
+	.import-wizard-summary-info {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+	}
+	.import-wizard-summary-title {
+		font-size: 1.125rem;
+		line-height: 1.75rem;
+		font-weight: 600;
+		color: var(--color-text);
+	}
+	.import-wizard-type-badge {
+		border-radius: var(--radius-sm);
+		padding: 0.125rem 0.5rem;
+		font-size: 0.75rem;
+		line-height: 1rem;
+		font-weight: 500;
+		background: var(--color-success-soft);
+		color: var(--color-on-success-soft);
+	}
+	.import-wizard-confirm-scroll {
+		padding-top: 1rem;
+	}
 	/* original was space-y-3 (0.75rem) */
-	.import-wizard-confirm-source { gap: 0.75rem; }
-	.import-wizard-faint-icon { color: var(--color-text-faint); }
-	.import-wizard-source-path { font-weight: 500; color: var(--color-text-secondary); }
-	.import-wizard-footer { border-top: 1px solid var(--color-border); padding: 0.75rem 1.5rem; }
-	.import-wizard-dot { height: 0.5rem; width: 0.5rem; border-radius: 9999px; background: var(--color-border-strong); transition: background-color var(--motion-fast) var(--ease); }
-	.import-wizard-dot[data-state="current"] { background: var(--color-primary); }
-	.import-wizard-dot[data-state="done"] { background: color-mix(in srgb, var(--color-primary) 50%, transparent); }
+	.import-wizard-confirm-source {
+		gap: 0.75rem;
+	}
+	.import-wizard-faint-icon {
+		color: var(--color-text-faint);
+	}
+	.import-wizard-source-path {
+		font-weight: 500;
+		color: var(--color-text-secondary);
+	}
+	.import-wizard-footer {
+		border-top: 1px solid var(--color-border);
+		padding: 0.75rem 1.5rem;
+	}
+	.import-wizard-dot {
+		height: 0.5rem;
+		width: 0.5rem;
+		border-radius: 9999px;
+		background: var(--color-border-strong);
+		transition: background-color var(--motion-fast) var(--ease);
+	}
+	.import-wizard-dot[data-state='current'] {
+		background: var(--color-primary);
+	}
+	.import-wizard-dot[data-state='done'] {
+		background: color-mix(in srgb, var(--color-primary) 50%, transparent);
+	}
 	/* both scan/import error boxes were p-3 (0.75rem all sides), not .alert's
 	   own 0.5rem/0.75rem default */
-	.import-wizard-scan-error { padding: 0.75rem; }
+	.import-wizard-scan-error {
+		padding: 0.75rem;
+	}
 </style>

@@ -89,7 +89,12 @@ describe('fetchTranscoderPresets (v3 GET /api/transcode-presets)', () => {
 describe('createCustomPreset (v3 POST /api/transcode-presets)', () => {
 	it('POSTs the v3 create body', async () => {
 		mockPost.mockResolvedValue({ id: 'p2', name: 'Custom' });
-		const body = { name: 'Custom', media_type: 'movie' as const, tool: 'handbrake' as const, container: 'mkv' as const };
+		const body = {
+			name: 'Custom',
+			media_type: 'movie' as const,
+			tool: 'handbrake' as const,
+			container: 'mkv' as const
+		};
 		const result = await createCustomPreset(body);
 		expect(mockPost).toHaveBeenCalledWith('/api/transcode-presets', body);
 		expect(result.id).toBe('p2');

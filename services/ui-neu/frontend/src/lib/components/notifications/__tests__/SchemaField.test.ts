@@ -27,14 +27,18 @@ describe('SchemaField', () => {
 	});
 
 	it('renders a select for choice with values', () => {
-		renderComponent(SchemaField, { props: { field: field({ type: 'choice', label: 'Fmt', values: ['a', 'b'], required: true }), value: 'a' } });
+		renderComponent(SchemaField, {
+			props: { field: field({ type: 'choice', label: 'Fmt', values: ['a', 'b'], required: true }), value: 'a' }
+		});
 		const sel = screen.getByLabelText('Fmt') as HTMLSelectElement;
 		expect(sel.tagName).toBe('SELECT');
 		expect(sel.options.length).toBe(2);
 	});
 
 	it('an optional choice field leads with an empty (not set) option', () => {
-		renderComponent(SchemaField, { props: { field: field({ type: 'choice', label: 'Mode', values: ['a', 'b'] }), value: '' } });
+		renderComponent(SchemaField, {
+			props: { field: field({ type: 'choice', label: 'Mode', values: ['a', 'b'] }), value: '' }
+		});
 		const sel = screen.getByLabelText('Mode') as HTMLSelectElement;
 		expect(sel.options.length).toBe(3);
 		expect(sel.options[0].value).toBe('');

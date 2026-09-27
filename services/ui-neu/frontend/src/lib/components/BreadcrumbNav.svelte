@@ -14,9 +14,7 @@
 		const rootLabel = rootObj?.label ?? root;
 
 		// First crumb: the root itself (subpath='')
-		const result: { label: string; root: string; subpath: string }[] = [
-			{ label: rootLabel, root, subpath: '' }
-		];
+		const result: { label: string; root: string; subpath: string }[] = [{ label: rootLabel, root, subpath: '' }];
 
 		if (subpath) {
 			const parts = subpath.split('/').filter(Boolean);
@@ -41,11 +39,7 @@
 		{#if i === segments.length - 1}
 			<span class="breadcrumb-current">{segment.label}</span>
 		{:else}
-			<button
-				type="button"
-				onclick={() => onnavigate(segment.root, segment.subpath)}
-				class="breadcrumb-crumb"
-			>
+			<button type="button" onclick={() => onnavigate(segment.root, segment.subpath)} class="breadcrumb-crumb">
 				{segment.label}
 			</button>
 		{/if}

@@ -56,7 +56,9 @@
 				<span class="mono configure-section-scheme">{service.url_scheme}://...</span>
 			</div>
 			{#if preserveExisting}
-				<p class="panel-hint configure-section-hint">Re-enter credentials to change the destination. Leave blank to keep the current settings.</p>
+				<p class="panel-hint configure-section-hint">
+					Re-enter credentials to change the destination. Leave blank to keep the current settings.
+				</p>
 			{/if}
 
 			{#if appriseRequired.length}
@@ -98,11 +100,11 @@
 		</div>
 	{:else if flatFields.length}
 		<div class="panel-section">
-			<div class="panel-title configure-section-title-only">
-				Webhook configuration
-			</div>
+			<div class="panel-title configure-section-title-only">Webhook configuration</div>
 			{#if preserveExisting}
-				<p class="panel-hint configure-section-hint">Re-enter credentials to change the destination. Leave blank to keep the current settings.</p>
+				<p class="panel-hint configure-section-hint">
+					Re-enter credentials to change the destination. Leave blank to keep the current settings.
+				</p>
 			{/if}
 			<div class="grid-2">
 				{#each applyPreserve(flatFields) as f (f.key)}
@@ -116,17 +118,58 @@
 </div>
 
 <style>
-	.configure-section-scheme { margin-left: 0.25rem; font-size: 11px; text-transform: none; letter-spacing: normal; color: var(--color-text-muted); }
+	.configure-section-scheme {
+		margin-left: 0.25rem;
+		font-size: 11px;
+		text-transform: none;
+		letter-spacing: normal;
+		color: var(--color-text-muted);
+	}
 	/* panel-hint's own margin-top (0.75rem) is meant for a note under the whole
 	   panel; here it sits directly under the title, replacing the block's mb-3. */
-	.configure-section-hint { margin-top: 0; margin-bottom: 0.75rem; }
-	.configure-section-title-only { margin-bottom: 0.75rem; }
-	.configure-section-advanced { margin-top: 1rem; }
-	.configure-section-advanced-summary { cursor: pointer; font-size: 0.75rem; line-height: 1rem; font-weight: 500; color: var(--color-text-muted); }
-	.configure-section-advanced-summary:hover { color: var(--color-primary); }
-	.configure-section-advanced-body { margin-top: 0.75rem; }
-	.configure-section-bool-grid { display: grid; grid-template-columns: 1fr; gap: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--color-border); }
-	@media (min-width: 640px) { .configure-section-bool-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-	@media (min-width: 768px) { .configure-section-bool-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-	@media (min-width: 640px) { .configure-section-span-2 { grid-column: span 2; } }
+	.configure-section-hint {
+		margin-top: 0;
+		margin-bottom: 0.75rem;
+	}
+	.configure-section-title-only {
+		margin-bottom: 0.75rem;
+	}
+	.configure-section-advanced {
+		margin-top: 1rem;
+	}
+	.configure-section-advanced-summary {
+		cursor: pointer;
+		font-size: 0.75rem;
+		line-height: 1rem;
+		font-weight: 500;
+		color: var(--color-text-muted);
+	}
+	.configure-section-advanced-summary:hover {
+		color: var(--color-primary);
+	}
+	.configure-section-advanced-body {
+		margin-top: 0.75rem;
+	}
+	.configure-section-bool-grid {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 0.5rem;
+		padding-top: 0.5rem;
+		border-top: 1px solid var(--color-border);
+	}
+	@media (min-width: 640px) {
+		.configure-section-bool-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+	@media (min-width: 768px) {
+		.configure-section-bool-grid {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+	}
+	@media (min-width: 640px) {
+		.configure-section-span-2 {
+			grid-column: span 2;
+		}
+	}
 </style>

@@ -46,7 +46,9 @@
 	<div class="flex flex-wrap items-center justify-between gap-2">
 		<button
 			type="button"
-			onclick={() => { open = !open; }}
+			onclick={() => {
+				open = !open;
+			}}
 			class="job-log-panel-toggle"
 			aria-expanded={open}
 		>
@@ -63,20 +65,8 @@
 			{/if}
 		</button>
 		<div class="flex items-center gap-3">
-			<a
-				href="/logs/{jobId}"
-				data-testid="job-log-open"
-				class="btn btn-link"
-			>
-				Open full log
-			</a>
-			<a
-				href={jobLogDownloadUrl(jobId)}
-				data-testid="job-log-download"
-				class="btn btn-link"
-			>
-				Download .zip
-			</a>
+			<a href="/logs/{jobId}" data-testid="job-log-open" class="btn btn-link"> Open full log </a>
+			<a href={jobLogDownloadUrl(jobId)} data-testid="job-log-download" class="btn btn-link"> Download .zip </a>
 		</div>
 	</div>
 
@@ -88,10 +78,40 @@
 </section>
 
 <style>
-	.job-log-panel-toggle { display: flex; align-items: center; gap: 0.5rem; font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-text); }
-	.job-log-panel-toggle .chevron { transition: transform var(--motion-fast) var(--ease); }
-	.job-log-panel-toggle[aria-expanded="true"] .chevron { transform: rotate(90deg); }
-	.job-log-panel-count { font-size: 0.875rem; line-height: 1.25rem; font-weight: 400; color: var(--color-text-muted); }
-	.job-log-panel-live { display: flex; align-items: center; gap: 0.375rem; font-size: 0.75rem; line-height: 1rem; font-weight: 400; color: var(--color-success); }
-	.job-log-panel-live-dot { height: 0.5rem; width: 0.5rem; border-radius: 9999px; background: var(--color-success); }
+	.job-log-panel-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 1.125rem;
+		line-height: 1.75rem;
+		font-weight: 600;
+		color: var(--color-text);
+	}
+	.job-log-panel-toggle .chevron {
+		transition: transform var(--motion-fast) var(--ease);
+	}
+	.job-log-panel-toggle[aria-expanded='true'] .chevron {
+		transform: rotate(90deg);
+	}
+	.job-log-panel-count {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		font-weight: 400;
+		color: var(--color-text-muted);
+	}
+	.job-log-panel-live {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		font-size: 0.75rem;
+		line-height: 1rem;
+		font-weight: 400;
+		color: var(--color-success);
+	}
+	.job-log-panel-live-dot {
+		height: 0.5rem;
+		width: 0.5rem;
+		border-radius: 9999px;
+		background: var(--color-success);
+	}
 </style>

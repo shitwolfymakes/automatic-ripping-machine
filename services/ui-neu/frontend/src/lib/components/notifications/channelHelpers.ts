@@ -60,7 +60,9 @@ export function missingRequirements(state: FormState): string[] {
 	if (!allFilled) missing.push('required fields');
 	if (state.type === 'bash' && state.inputs) {
 		const values = (state.config.inputs as Record<string, string> | undefined) ?? {};
-		const missingInputs = state.inputs.filter((i) => i.required && !i.secret && !(values[i.key] ?? i.default ?? '').trim());
+		const missingInputs = state.inputs.filter(
+			(i) => i.required && !i.secret && !(values[i.key] ?? i.default ?? '').trim()
+		);
 		if (missingInputs.length && !missing.includes('required fields')) missing.push('required fields');
 	}
 	if (state.events.length === 0) missing.push('at least one event');

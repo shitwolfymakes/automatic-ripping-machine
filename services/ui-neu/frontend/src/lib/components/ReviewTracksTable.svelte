@@ -97,7 +97,9 @@
 								<td class="table-cell mono">{row.index}</td>
 								<td
 									class="table-cell {isVideo && row.trackId ? 'review-tracks-table-clickable' : ''}"
-									onclick={() => { if (isVideo && row.trackId) toggleTrackSearch(row.trackId!); }}
+									onclick={() => {
+										if (isVideo && row.trackId) toggleTrackSearch(row.trackId!);
+									}}
 								>
 									{#if row.title}
 										<div class="flex items-center gap-1.5">
@@ -107,7 +109,10 @@
 											{/if}
 										</div>
 									{:else if row.trackId}
-										<span class="review-tracks-table-faint">{job.title || 'Untitled'}{#if job.year} ({job.year}){/if}</span>
+										<span class="review-tracks-table-faint"
+											>{job.title || 'Untitled'}{#if job.year}
+												({job.year}){/if}</span
+										>
 									{:else}
 										<span class="review-tracks-table-faint">-</span>
 									{/if}
@@ -150,7 +155,13 @@
 							{#if isVideo && row.trackId && openSearchTrackIds.has(row.trackId)}
 								<tr>
 									<td colspan="99" class="px-3 py-2">
-										<TrackTitleSearch jobId={job.id} track={tracks.find((t) => t.id === row.trackId)!} onapply={() => handleTrackTitleApply(row.trackId!)} onclear={() => onrefresh?.()} onclose={() => toggleTrackSearch(row.trackId!)} />
+										<TrackTitleSearch
+											jobId={job.id}
+											track={tracks.find((t) => t.id === row.trackId)!}
+											onapply={() => handleTrackTitleApply(row.trackId!)}
+											onclear={() => onrefresh?.()}
+											onclose={() => toggleTrackSearch(row.trackId!)}
+										/>
 									</td>
 								</tr>
 							{/if}
@@ -165,23 +176,70 @@
 </div>
 
 <style>
-	.review-tracks-table-wrap { border-top: 1px solid var(--color-border); padding: 1rem; }
-	.review-tracks-table-scroll { border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+	.review-tracks-table-wrap {
+		border-top: 1px solid var(--color-border);
+		padding: 1rem;
+	}
+	.review-tracks-table-scroll {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+	}
 	/* the original was px-3 py-1.5 (px-2 for the Episode column), between
 	   table's own default padding and table-compact's - a custom override
 	   rather than either preset */
-	.review-tracks-table { font-size: 0.75rem; line-height: 1rem; }
-	.review-tracks-table .table-header, .review-tracks-table .table-cell { padding: 0.375rem 0.75rem; }
-	.review-tracks-table-center { text-align: center; padding-left: 0.5rem; padding-right: 0.5rem; }
-	.table-row[data-disabled="true"] { opacity: 0.4; }
-	.review-tracks-table-clickable { cursor: pointer; }
-	.review-tracks-table-clickable:hover { background: var(--color-primary-tint-1); }
-	.review-tracks-table-episode-input { width: 2.5rem; min-height: auto; padding: 0.125rem 0.25rem; text-align: center; }
-	.review-tracks-table-search-btn[aria-pressed="true"] { color: var(--color-primary); }
-	.review-tracks-table-heading { font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; color: var(--color-text-secondary); }
-	.review-tracks-table-title { font-weight: 500; color: var(--color-text-secondary); }
-	.review-tracks-table-faint { color: var(--color-text-faint); }
-	.review-tracks-table-secondary { color: var(--color-text-secondary); }
-	.review-tracks-table-muted { color: var(--color-text-muted); }
-	.review-tracks-table-empty { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-faint); }
+	.review-tracks-table {
+		font-size: 0.75rem;
+		line-height: 1rem;
+	}
+	.review-tracks-table .table-header,
+	.review-tracks-table .table-cell {
+		padding: 0.375rem 0.75rem;
+	}
+	.review-tracks-table-center {
+		text-align: center;
+		padding-left: 0.5rem;
+		padding-right: 0.5rem;
+	}
+	.table-row[data-disabled='true'] {
+		opacity: 0.4;
+	}
+	.review-tracks-table-clickable {
+		cursor: pointer;
+	}
+	.review-tracks-table-clickable:hover {
+		background: var(--color-primary-tint-1);
+	}
+	.review-tracks-table-episode-input {
+		width: 2.5rem;
+		min-height: auto;
+		padding: 0.125rem 0.25rem;
+		text-align: center;
+	}
+	.review-tracks-table-search-btn[aria-pressed='true'] {
+		color: var(--color-primary);
+	}
+	.review-tracks-table-heading {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		font-weight: 600;
+		color: var(--color-text-secondary);
+	}
+	.review-tracks-table-title {
+		font-weight: 500;
+		color: var(--color-text-secondary);
+	}
+	.review-tracks-table-faint {
+		color: var(--color-text-faint);
+	}
+	.review-tracks-table-secondary {
+		color: var(--color-text-secondary);
+	}
+	.review-tracks-table-muted {
+		color: var(--color-text-muted);
+	}
+	.review-tracks-table-empty {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-faint);
+	}
 </style>

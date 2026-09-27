@@ -20,31 +20,46 @@
 	// Humanise enum values for display
 	function humanizeTrackSelection(v: string | null | undefined): string {
 		switch (v) {
-			case 'main_feature': return 'Main feature';
-			case 'all_tracks': return 'All tracks';
-			case 'archive': return 'Archive';
-			case 'custom': return 'Custom';
-			default: return v ?? '-';
+			case 'main_feature':
+				return 'Main feature';
+			case 'all_tracks':
+				return 'All tracks';
+			case 'archive':
+				return 'Archive';
+			case 'custom':
+				return 'Custom';
+			default:
+				return v ?? '-';
 		}
 	}
 
 	function humanizeOutputMode(v: string | null | undefined): string {
 		switch (v) {
-			case 'tracks': return 'Tracks';
-			case 'iso': return 'ISO image';
-			case 'data_copy': return 'File copy';
-			default: return v ?? '-';
+			case 'tracks':
+				return 'Tracks';
+			case 'iso':
+				return 'ISO image';
+			case 'data_copy':
+				return 'File copy';
+			default:
+				return v ?? '-';
 		}
 	}
 
 	function humanizeMediaType(v: string | null | undefined): string {
 		switch (v) {
-			case 'movie': return 'Movie';
-			case 'tv': return 'TV';
-			case 'music': return 'Music';
-			case 'data': return 'Data';
-			case 'iso': return 'ISO';
-			default: return v ?? '-';
+			case 'movie':
+				return 'Movie';
+			case 'tv':
+				return 'TV';
+			case 'music':
+				return 'Music';
+			case 'data':
+				return 'Data';
+			case 'iso':
+				return 'ISO';
+			default:
+				return v ?? '-';
 		}
 	}
 
@@ -64,9 +79,7 @@
 			: null
 	);
 
-	let samplePath = $derived(
-		resolveSample(session.output_path_template, session.media_type)
-	);
+	let samplePath = $derived(resolveSample(session.output_path_template, session.media_type));
 
 	// Five media-type hues (movie/tv/music/data/iso) with no dedicated block:
 	// mapped onto existing tone/accent tokens, same soft-bg + accent-fg
@@ -98,19 +111,9 @@
 
 		<!-- Action buttons -->
 		<div class="session-card-actions">
-			<button
-				onclick={onedit}
-				class="btn btn-sm session-card-edit-btn"
-			>{session.is_builtin ? 'View' : 'Edit'}</button>
-			<button
-				onclick={onclone}
-				class="btn btn-sm"
-			>Clone</button>
-			<button
-				onclick={ondelete}
-				disabled={session.is_builtin}
-				class="btn btn-danger btn-sm"
-			>Delete</button>
+			<button onclick={onedit} class="btn btn-sm session-card-edit-btn">{session.is_builtin ? 'View' : 'Edit'}</button>
+			<button onclick={onclone} class="btn btn-sm">Clone</button>
+			<button onclick={ondelete} disabled={session.is_builtin} class="btn btn-danger btn-sm">Delete</button>
 		</div>
 	</div>
 
@@ -156,20 +159,49 @@
 	/* original: rounded-lg border border-primary/20 bg-surface shadow-xs
 	   px-4 py-3 - same surface-card shape as PresetRow.svelte's .preset-row;
 	   panel-section's own background/padding are for a nested form box. */
-	.session-card { background: var(--color-surface); box-shadow: var(--shadow-1); padding: 0.75rem 1rem; }
-	.session-card-head { display: flex; flex-wrap: wrap; align-items: flex-start; column-gap: 1rem; row-gap: 0.5rem; }
+	.session-card {
+		background: var(--color-surface);
+		box-shadow: var(--shadow-1);
+		padding: 0.75rem 1rem;
+	}
+	.session-card-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		column-gap: 1rem;
+		row-gap: 0.5rem;
+	}
 	/* original: rounded px-2 py-0.5 text-xs font-semibold uppercase
 	   tracking-wide - badge-sm's own size/tracking/padding are tuned for
 	   the BUILT-IN tag look, smaller than this media pill's metrics, so
 	   both are restated here (see PresetRow.svelte's identical pill). */
-	.session-card-pill { flex-shrink: 0; padding: 0.125rem 0.5rem; font-size: 0.75rem; line-height: 1rem; font-weight: 600; letter-spacing: 0.025em; }
-	.session-card-pill[data-media="movie"] { background: var(--color-info-soft); color: var(--color-on-info-soft); }
-	.session-card-pill[data-media="tv"] { background: color-mix(in srgb, var(--color-accent-3) 15%, transparent); color: var(--color-accent-3); }
-	.session-card-pill[data-media="music"] { background: var(--color-success-soft); color: var(--color-on-success-soft); }
+	.session-card-pill {
+		flex-shrink: 0;
+		padding: 0.125rem 0.5rem;
+		font-size: 0.75rem;
+		line-height: 1rem;
+		font-weight: 600;
+		letter-spacing: 0.025em;
+	}
+	.session-card-pill[data-media='movie'] {
+		background: var(--color-info-soft);
+		color: var(--color-on-info-soft);
+	}
+	.session-card-pill[data-media='tv'] {
+		background: color-mix(in srgb, var(--color-accent-3) 15%, transparent);
+		color: var(--color-accent-3);
+	}
+	.session-card-pill[data-media='music'] {
+		background: var(--color-success-soft);
+		color: var(--color-on-success-soft);
+	}
 	/* original gray-100 is within a few RGB units of this card's own
 	   surface background - visually no pill box, just bold text (see
 	   PresetRow.svelte's identical pill). */
-	.session-card-pill[data-media="data"] { background: transparent; color: var(--color-text-secondary); }
+	.session-card-pill[data-media='data'] {
+		background: transparent;
+		color: var(--color-text-secondary);
+	}
 	/* dark WAS visible (gray-700 at 30% alpha) - the strict token set forbids
 	   a literal wash even where no dedicated neutral-grey role exists, so
 	   this collapses onto --color-backdrop (a fixed-black token, unlike
@@ -177,10 +209,29 @@
 	   rather than darken the surface) scaled down via color-mix; recorded
 	   as a deviation if it pushes a screen over threshold. */
 	/* token collapse: scaled backdrop stands in for the literal grey wash */
-	:global(.dark) .session-card-pill[data-media="data"] { background: color-mix(in srgb, var(--color-backdrop) 30%, transparent); }
-	.session-card-pill[data-media="iso"] { background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
-	.session-card-name-wrap { display: flex; min-width: 0; flex: 1 1 0%; align-items: center; gap: 0.5rem; }
-	.session-card-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; color: var(--color-text); }
+	:global(.dark) .session-card-pill[data-media='data'] {
+		background: color-mix(in srgb, var(--color-backdrop) 30%, transparent);
+	}
+	.session-card-pill[data-media='iso'] {
+		background: var(--color-warning-soft);
+		color: var(--color-on-warning-soft);
+	}
+	.session-card-name-wrap {
+		display: flex;
+		min-width: 0;
+		flex: 1 1 0%;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.session-card-name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		font-weight: 600;
+		color: var(--color-text);
+	}
 	/* original: bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 -
 	   measurably more saturated than --color-warning-soft/--color-on-warning-soft
 	   (baseline bg rgb(254,243,198) vs the token's rgb(255,251,235), baseline
@@ -188,14 +239,38 @@
 	   sRGB distance, visible at this badge's small size). The strict token set
 	   forbids literal colours in components regardless; the two warning tokens
 	   are used and the visible gap is recorded as a deviation. */
-	.session-card-builtin { flex-shrink: 0; background: var(--color-warning-soft); color: var(--color-on-warning-soft); padding: 0.125rem 0.375rem; font-size: 0.75rem; line-height: 1rem; font-weight: 700; letter-spacing: 0.1em; }
-	.session-card-actions { display: flex; flex-shrink: 0; align-items: center; gap: 0.375rem; }
+	.session-card-builtin {
+		flex-shrink: 0;
+		background: var(--color-warning-soft);
+		color: var(--color-on-warning-soft);
+		padding: 0.125rem 0.375rem;
+		font-size: 0.75rem;
+		line-height: 1rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+	}
+	.session-card-actions {
+		display: flex;
+		flex-shrink: 0;
+		align-items: center;
+		gap: 0.375rem;
+	}
 	/* original buttons: px-3 py-1 text-xs - .btn-sm's min-height/inherited
 	   line-height render taller than this size (Task 7 finding, see
 	   PresetRow.svelte's identical action row). */
-	.session-card-actions .btn { min-height: 0; padding: 0.25rem 0.75rem; line-height: 1rem; }
-	.session-card-edit-btn { border-color: var(--color-border-strong); background: var(--color-primary-tint-2); color: var(--color-primary); }
-	.session-card-edit-btn:hover { background: var(--color-primary-tint-3); }
+	.session-card-actions .btn {
+		min-height: 0;
+		padding: 0.25rem 0.75rem;
+		line-height: 1rem;
+	}
+	.session-card-edit-btn {
+		border-color: var(--color-border-strong);
+		background: var(--color-primary-tint-2);
+		color: var(--color-primary);
+	}
+	.session-card-edit-btn:hover {
+		background: var(--color-primary-tint-3);
+	}
 	/* original Clone: border-gray-300 text-gray-600 hover:bg-gray-50
 	   dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800 - a
 	   genuinely neutral outlined button. Per the migration reference (line
@@ -216,24 +291,76 @@
 	   themes) scaled down via color-mix is the nearest equivalent (a
 	   slightly different composited value than Tailwind's own output -
 	   recorded as a deviation if it pushes a screen over threshold). */
-	.session-card-recipe { margin-top: 0.75rem; display: grid; grid-template-columns: 1fr; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: color-mix(in srgb, var(--color-backdrop) 20%, transparent); font-size: 0.75rem; line-height: 1rem; }
-	/* token collapse: scaled backdrop stands in for the dark literal black/20 wash */
-	:global(.dark) .session-card-recipe { background: color-mix(in srgb, var(--color-backdrop) 33%, transparent); }
-	.session-card-recipe > :not(:last-child) { border-bottom: 1px solid var(--color-border); }
-	@media (min-width: 640px) {
-		.session-card-recipe { grid-template-columns: 1fr auto 1fr auto 1fr; }
-		.session-card-recipe > :not(:last-child) { border-bottom: 0; }
-		.session-card-recipe > :not(:first-child) { border-left: 1px solid var(--color-border); }
+	.session-card-recipe {
+		margin-top: 0.75rem;
+		display: grid;
+		grid-template-columns: 1fr;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		background: color-mix(in srgb, var(--color-backdrop) 20%, transparent);
+		font-size: 0.75rem;
+		line-height: 1rem;
 	}
-	.session-card-recipe-cell { display: flex; flex-direction: column; gap: 0.125rem; padding: 0.75rem 1rem; }
-	.session-card-recipe-label { font-weight: 500; text-transform: uppercase; letter-spacing: 0.025em; color: var(--color-text-faint); }
-	.session-card-recipe-value { font-weight: 500; color: var(--color-text-secondary); }
-	.session-card-recipe-sub { color: var(--color-text-muted); }
-	.session-card-recipe-empty { font-style: italic; color: var(--color-text-faint); }
+	/* token collapse: scaled backdrop stands in for the dark literal black/20 wash */
+	:global(.dark) .session-card-recipe {
+		background: color-mix(in srgb, var(--color-backdrop) 33%, transparent);
+	}
+	.session-card-recipe > :not(:last-child) {
+		border-bottom: 1px solid var(--color-border);
+	}
+	@media (min-width: 640px) {
+		.session-card-recipe {
+			grid-template-columns: 1fr auto 1fr auto 1fr;
+		}
+		.session-card-recipe > :not(:last-child) {
+			border-bottom: 0;
+		}
+		.session-card-recipe > :not(:first-child) {
+			border-left: 1px solid var(--color-border);
+		}
+	}
+	.session-card-recipe-cell {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		padding: 0.75rem 1rem;
+	}
+	.session-card-recipe-label {
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+		color: var(--color-text-faint);
+	}
+	.session-card-recipe-value {
+		font-weight: 500;
+		color: var(--color-text-secondary);
+	}
+	.session-card-recipe-sub {
+		color: var(--color-text-muted);
+	}
+	.session-card-recipe-empty {
+		font-style: italic;
+		color: var(--color-text-faint);
+	}
 	/* original: break-all (word-break: break-all), not overflow-wrap's word-
 	   preferring break-word - break-all allows a mid-word split at the exact
 	   column edge, which is why the original wraps at a different point. */
-	.session-card-recipe-path { word-break: break-all; color: var(--color-text-secondary); }
-	.session-card-recipe-arrow { display: none; align-items: center; justify-content: center; padding: 0 0.25rem; font-size: 1.125rem; font-weight: 600; color: var(--color-text-faint); }
-	@media (min-width: 640px) { .session-card-recipe-arrow { display: flex; } }
+	.session-card-recipe-path {
+		word-break: break-all;
+		color: var(--color-text-secondary);
+	}
+	.session-card-recipe-arrow {
+		display: none;
+		align-items: center;
+		justify-content: center;
+		padding: 0 0.25rem;
+		font-size: 1.125rem;
+		font-weight: 600;
+		color: var(--color-text-faint);
+	}
+	@media (min-width: 640px) {
+		.session-card-recipe-arrow {
+			display: flex;
+		}
+	}
 </style>

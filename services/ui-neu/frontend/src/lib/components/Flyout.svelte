@@ -32,7 +32,7 @@
 		panelClass = '',
 		paddingClass = 'py-1',
 		gap = 6,
-		label = 'Menu',
+		label = 'Menu'
 	}: Props = $props();
 
 	let root = $state<HTMLElement>();

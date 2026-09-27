@@ -43,7 +43,11 @@
 	let editPosterUrl = $state('');
 
 	const RESOLVABLE_STATUSES = [
-		'awaiting_user_id', 'ripped_awaiting_identify', 'identified', 'ripped', 'ripped_partial'
+		'awaiting_user_id',
+		'ripped_awaiting_identify',
+		'identified',
+		'ripped',
+		'ripped_partial'
 	];
 	let canResolve = $derived(RESOLVABLE_STATUSES.includes(job.status));
 
@@ -155,8 +159,6 @@
 	function handleSearchKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter') handleSearch();
 	}
-
-
 </script>
 
 <div class="stack">
@@ -200,7 +202,9 @@
 		{#if searchError.toLowerCase().includes('api key')}
 			<div class="alert alert-warning">
 				<p class="title-search-alert-title">{searchError}</p>
-				<p class="mt-1 title-search-alert-hint">Configure API keys in <a href="/settings" class="title-search-alert-link">Settings</a>.</p>
+				<p class="mt-1 title-search-alert-hint">
+					Configure API keys in <a href="/settings" class="title-search-alert-link">Settings</a>.
+				</p>
 			</div>
 		{:else}
 			<div class="flex items-center gap-3">
@@ -221,9 +225,7 @@
 					{#if result.poster_url}
 						<PosterImage url={result.poster_url} alt={result.title} class="title-search-poster w-full object-cover" />
 					{:else}
-						<div
-							class="flex title-search-poster w-full items-center justify-center title-search-placeholder"
-						>
+						<div class="flex title-search-poster w-full items-center justify-center title-search-placeholder">
 							<svg class="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path
 									stroke-linecap="round"
@@ -235,9 +237,7 @@
 						</div>
 					{/if}
 					<div class="p-2">
-						<p
-							class="title-search-card-title line-clamp-2"
-						>
+						<p class="title-search-card-title line-clamp-2">
 							{result.title}
 						</p>
 						<div class="mt-1 flex items-center gap-1.5">
@@ -257,17 +257,12 @@
 
 	<!-- Detail panel with editable fields -->
 	{#if loadingDetail}
-		<div class="panel-section title-search-loading">
-			Loading details...
-		</div>
+		<div class="panel-section title-search-loading">Loading details...</div>
 	{:else if detail}
 		<div class="panel">
 			<div class="stack">
 				{#if results.length > 0}
-					<button
-						onclick={backToResults}
-						class="btn btn-link inline-flex items-center gap-1"
-					>
+					<button onclick={backToResults} class="btn btn-link inline-flex items-center gap-1">
 						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
 						</svg>
@@ -307,20 +302,11 @@
 						</button>
 					{/if}
 					{#if feedback}
-						<span
-							in:reveal
-							class="title-search-feedback"
-							data-tone={feedback.type}
-						>
+						<span in:reveal class="title-search-feedback" data-tone={feedback.type}>
 							{feedback.message}
 						</span>
 						{#if feedback.showEpisodes && onepisodes}
-							<button
-								onclick={onepisodes}
-								class="btn btn-primary title-search-action-btn"
-							>
-								Match Episodes
-							</button>
+							<button onclick={onepisodes} class="btn btn-primary title-search-action-btn"> Match Episodes </button>
 						{/if}
 					{/if}
 				</div>
@@ -330,31 +316,96 @@
 </div>
 
 <style>
-	.title-search-min { min-width: 200px; }
+	.title-search-min {
+		min-width: 200px;
+	}
 	/* the original action buttons were px-3 py-1.5 (0.75rem/0.375rem),
 	   narrower than .btn's default 1rem/0.5rem */
-	.title-search-action-btn { padding: 0.375rem 0.75rem; }
+	.title-search-action-btn {
+		padding: 0.375rem 0.75rem;
+	}
 	/* :global: also passed as PosterImage's class prop, landing on its own <img> */
-	:global(.title-search-poster) { aspect-ratio: 2 / 3; }
-	.title-search-alert-title { font-weight: 500; }
-	.title-search-alert-link { text-decoration: underline; }
-	.title-search-alert-link:hover { text-decoration: none; }
-	.title-search-alert-hint { font-size: 0.75rem; line-height: 1rem; color: var(--color-on-warning-soft); }
-	.title-search-card { border: 1px solid var(--color-border); border-radius: var(--radius-lg); text-align: left; transition: border-color var(--motion-fast) var(--ease); }
-	.title-search-card:hover { border-color: var(--color-border-strong); }
-	.title-search-card[data-selected="true"] { border-color: var(--color-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 30%, transparent); }
-	.title-search-placeholder { background: var(--color-primary-tint-2); color: var(--color-text-faint); }
-	.title-search-card-title { font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text); }
-	.title-search-card:hover .title-search-card-title { color: var(--color-primary-text); }
-	.title-search-card-year { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
-	.title-search-loading { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
-	.title-search-success-btn { border: 0; background: var(--color-success); color: var(--color-on-primary); }
-	.title-search-success-btn:hover { filter: brightness(0.9); }
-	.title-search-feedback { font-size: 0.75rem; line-height: 1rem; }
-	.title-search-feedback[data-tone="success"] { color: var(--color-success); }
-	.title-search-feedback[data-tone="error"] { color: var(--color-danger); }
+	:global(.title-search-poster) {
+		aspect-ratio: 2 / 3;
+	}
+	.title-search-alert-title {
+		font-weight: 500;
+	}
+	.title-search-alert-link {
+		text-decoration: underline;
+	}
+	.title-search-alert-link:hover {
+		text-decoration: none;
+	}
+	.title-search-alert-hint {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-on-warning-soft);
+	}
+	.title-search-card {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		text-align: left;
+		transition: border-color var(--motion-fast) var(--ease);
+	}
+	.title-search-card:hover {
+		border-color: var(--color-border-strong);
+	}
+	.title-search-card[data-selected='true'] {
+		border-color: var(--color-primary);
+		box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 30%, transparent);
+	}
+	.title-search-placeholder {
+		background: var(--color-primary-tint-2);
+		color: var(--color-text-faint);
+	}
+	.title-search-card-title {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		font-weight: 500;
+		color: var(--color-text);
+	}
+	.title-search-card:hover .title-search-card-title {
+		color: var(--color-primary-text);
+	}
+	.title-search-card-year {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-muted);
+	}
+	.title-search-loading {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
+	.title-search-success-btn {
+		border: 0;
+		background: var(--color-success);
+		color: var(--color-on-primary);
+	}
+	.title-search-success-btn:hover {
+		filter: brightness(0.9);
+	}
+	.title-search-feedback {
+		font-size: 0.75rem;
+		line-height: 1rem;
+	}
+	.title-search-feedback[data-tone='success'] {
+		color: var(--color-success);
+	}
+	.title-search-feedback[data-tone='error'] {
+		color: var(--color-danger);
+	}
 	/* result kind pill: series -> accent-3 (violet, no tone matches purple);
 	   movie -> success tone (closest to the original's green) */
-	.badge[data-kind="series"] { background: color-mix(in srgb, var(--color-accent-3) 15%, transparent); color: var(--color-accent-3); text-transform: uppercase; }
-	.badge[data-kind="movie"] { background: var(--color-success-soft); color: var(--color-on-success-soft); text-transform: uppercase; }
+	.badge[data-kind='series'] {
+		background: color-mix(in srgb, var(--color-accent-3) 15%, transparent);
+		color: var(--color-accent-3);
+		text-transform: uppercase;
+	}
+	.badge[data-kind='movie'] {
+		background: var(--color-success-soft);
+		color: var(--color-on-success-soft);
+		text-transform: uppercase;
+	}
 </style>

@@ -75,9 +75,7 @@
 
 <div class="job-info-form">
 	{#if !resolvable}
-		<p class="field-help mb-3">
-			Identity is locked once the disc is identified. Use Search to re-identify.
-		</p>
+		<p class="field-help mb-3">Identity is locked once the disc is identified. Use Search to re-identify.</p>
 	{/if}
 
 	<!-- Identity section -->
@@ -139,20 +137,10 @@
 	{#if dirty && resolvable}
 		<div class="mt-3 flex items-center gap-2 job-info-form-save-bar">
 			{#if $isAdmin}
-				<button
-					onclick={saveInfo}
-					disabled={saving || !title.trim()}
-					class="btn btn-primary job-info-form-save-btn"
-				>
+				<button onclick={saveInfo} disabled={saving || !title.trim()} class="btn btn-primary job-info-form-save-btn">
 					{saving ? 'Saving...' : 'Save'}
 				</button>
-				<button
-					onclick={resetInfo}
-					disabled={saving}
-					class="btn job-info-form-reset-btn"
-				>
-					Reset
-				</button>
+				<button onclick={resetInfo} disabled={saving} class="btn job-info-form-reset-btn"> Reset </button>
 			{/if}
 			{#if feedback}
 				<span in:reveal class="ml-auto job-info-form-feedback" data-tone={feedback.type}>{feedback.message}</span>
@@ -166,16 +154,40 @@
 </div>
 
 <style>
-	.job-info-form { border-top: 1px solid var(--color-border); padding: 1rem; }
+	.job-info-form {
+		border-top: 1px solid var(--color-border);
+		padding: 1rem;
+	}
 	/* the original labels were text-xs (12px/16px), one size down from
 	   field-label's default text-sm (14px/20px) */
-	.job-info-form-small-label { font-size: 0.75rem; line-height: 1rem; }
-	.job-info-form-save-bar { border-top: 1px solid var(--color-border); padding-top: 0.75rem; }
+	.job-info-form-small-label {
+		font-size: 0.75rem;
+		line-height: 1rem;
+	}
+	.job-info-form-save-bar {
+		border-top: 1px solid var(--color-border);
+		padding-top: 0.75rem;
+	}
 	/* Save was px-4 py-1.5 (1rem/0.375rem) no border; Reset px-3 py-1.5
 	   (0.75rem/0.375rem) with a ring, not .btn's real border */
-	.job-info-form-save-btn { border: 0; padding: 0.375rem 1rem; }
-	.job-info-form-reset-btn { border: 0; padding: 0.375rem 0.75rem; box-shadow: 0 0 0 1px var(--color-border-strong); color: var(--color-text-secondary); }
-	.job-info-form-feedback { font-size: 0.75rem; line-height: 1rem; }
-	.job-info-form-feedback[data-tone="success"] { color: var(--color-success); }
-	.job-info-form-feedback[data-tone="error"] { color: var(--color-danger); }
+	.job-info-form-save-btn {
+		border: 0;
+		padding: 0.375rem 1rem;
+	}
+	.job-info-form-reset-btn {
+		border: 0;
+		padding: 0.375rem 0.75rem;
+		box-shadow: 0 0 0 1px var(--color-border-strong);
+		color: var(--color-text-secondary);
+	}
+	.job-info-form-feedback {
+		font-size: 0.75rem;
+		line-height: 1rem;
+	}
+	.job-info-form-feedback[data-tone='success'] {
+		color: var(--color-success);
+	}
+	.job-info-form-feedback[data-tone='error'] {
+		color: var(--color-danger);
+	}
 </style>

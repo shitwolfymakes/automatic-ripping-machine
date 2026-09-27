@@ -13,19 +13,9 @@
  * jobs surface a pause icon overlay on the active stage.
  */
 
-export type LifecycleStageId =
-	| 'waiting'
-	| 'identifying'
-	| 'ripping'
-	| 'transcoding'
-	| 'complete';
+export type LifecycleStageId = 'waiting' | 'identifying' | 'ripping' | 'transcoding' | 'complete';
 
-export type LifecycleNodeState =
-	| 'completed'
-	| 'active'
-	| 'paused'
-	| 'failed'
-	| 'pending';
+export type LifecycleNodeState = 'completed' | 'active' | 'paused' | 'failed' | 'pending';
 
 export interface LifecycleNode {
 	id: LifecycleStageId;
@@ -34,45 +24,44 @@ export interface LifecycleNode {
 }
 
 const ALL_STAGES: { id: LifecycleStageId; label: string }[] = [
-	{ id: 'waiting',      label: 'Waiting' },
-	{ id: 'identifying',  label: 'Identifying' },
-	{ id: 'ripping',      label: 'Ripping' },
-	{ id: 'transcoding',  label: 'Transcoding' },
-	{ id: 'complete',     label: 'Complete' }
+	{ id: 'waiting', label: 'Waiting' },
+	{ id: 'identifying', label: 'Identifying' },
+	{ id: 'ripping', label: 'Ripping' },
+	{ id: 'transcoding', label: 'Transcoding' },
+	{ id: 'complete', label: 'Complete' }
 ];
-
 
 const STATUS_TO_STAGE: Record<string, LifecycleStageId> = {
 	// Waiting
-	'waiting':            'waiting',          // legacy pre-v2.0.0
-	'manual_paused':      'waiting',
-	'makemkv_throttled':  'waiting',
-	'waiting_transcode':  'waiting',
-	'pending':            'waiting',
-	'ready':              'waiting',
+	waiting: 'waiting', // legacy pre-v2.0.0
+	manual_paused: 'waiting',
+	makemkv_throttled: 'waiting',
+	waiting_transcode: 'waiting',
+	pending: 'waiting',
+	ready: 'waiting',
 	// Identifying
-	'info':               'identifying',
-	'identifying':        'identifying',
-	'awaiting_user_id':   'identifying',   // v3 — needs manual ID
-	'awaiting_review':    'identifying',   // v3 — held for the timed review gate
+	info: 'identifying',
+	identifying: 'identifying',
+	awaiting_user_id: 'identifying', // v3 — needs manual ID
+	awaiting_review: 'identifying', // v3 — held for the timed review gate
 	// Ripping (disc rip)
-	'ripping':            'ripping',          // legacy pre-v2.0.0
-	'video_ripping':      'ripping',
-	'audio_ripping':      'ripping',
-	'copying':            'ripping',
-	'ejecting':           'ripping',
-	'importing':          'ripping',
-	'ripped':            'ripping',          // rip done; awaiting a session (no transcode yet)
-	'ripped_partial':    'ripping',
+	ripping: 'ripping', // legacy pre-v2.0.0
+	video_ripping: 'ripping',
+	audio_ripping: 'ripping',
+	copying: 'ripping',
+	ejecting: 'ripping',
+	importing: 'ripping',
+	ripped: 'ripping', // rip done; awaiting a session (no transcode yet)
+	ripped_partial: 'ripping',
 	// Transcoding
-	'transcoding':        'transcoding',
-	'finishing':          'transcoding',
-	'processing':         'transcoding',
+	transcoding: 'transcoding',
+	finishing: 'transcoding',
+	processing: 'transcoding',
 	// Complete
-	'success':            'complete',
-	'completed':          'complete',
-	'complete':           'complete',
-	'transcoded':         'complete'
+	success: 'complete',
+	completed: 'complete',
+	complete: 'complete',
+	transcoded: 'complete'
 };
 
 const FAILURE_STATUSES = new Set(['fail', 'failed', 'failure', 'error', 'transcode_failed']);
@@ -91,10 +80,7 @@ export function isFolderImport(sourceType: string | null | undefined): boolean {
  * which stage failed in (no history), so we paint the *last reachable*
  * non-complete stage as failed. The complete node stays pending.
  */
-export function deriveLifecycle(
-	status: string | null | undefined,
-	_sourceType?: string | null
-): LifecycleNode[] {
+export function deriveLifecycle(status: string | null | undefined, _sourceType?: string | null): LifecycleNode[] {
 	const stages = ALL_STAGES;
 	const lower = (status ?? '').toLowerCase();
 
@@ -131,7 +117,7 @@ export function deriveLifecycle(
 			return { ...s, state: 'completed' as const };
 		}
 		if (i < activeIndex) return { ...s, state: 'completed' as const };
-		if (i === activeIndex) return { ...s, state: isPaused ? 'paused' as const : 'active' as const };
+		if (i === activeIndex) return { ...s, state: isPaused ? ('paused' as const) : ('active' as const) };
 		return { ...s, state: 'pending' as const };
 	});
 }
@@ -142,10 +128,15 @@ export function deriveLifecycle(
  */
 export function lifecycleColorVar(state: LifecycleNodeState): string {
 	switch (state) {
-		case 'completed': return 'var(--color-status-success)';
-		case 'active':    return 'var(--color-status-ripping)';
-		case 'paused':    return 'var(--color-status-waiting)';
-		case 'failed':    return 'var(--color-status-error)';
-		case 'pending':   return 'var(--color-status-pending, #9ca3af)';
+		case 'completed':
+			return 'var(--color-status-success)';
+		case 'active':
+			return 'var(--color-status-ripping)';
+		case 'paused':
+			return 'var(--color-status-waiting)';
+		case 'failed':
+			return 'var(--color-status-error)';
+		case 'pending':
+			return 'var(--color-status-pending, #9ca3af)';
 	}
 }

@@ -19,7 +19,9 @@
 		try {
 			const resp = await fetch('/api/system-info');
 			if (resp.ok) systemInfo = await resp.json();
-		} catch { /* non-critical */ }
+		} catch {
+			/* non-critical */
+		}
 
 		if (!$transcoderEnabled) return;
 		try {
@@ -29,16 +31,16 @@
 				transcoderOnline = data.transcoder_online ?? false;
 				transcoderStats = data.transcoder_stats ?? null;
 			}
-		} catch { /* non-critical */ }
+		} catch {
+			/* non-critical */
+		}
 	});
 </script>
 
 <div class="stack stack-lg">
 	<div class="welcome-step-header">
 		<h2 class="welcome-step-title">Welcome to ARM</h2>
-		<p class="welcome-step-subtitle">
-			Let's make sure your system is configured correctly.
-		</p>
+		<p class="welcome-step-subtitle">Let's make sure your system is configured correctly.</p>
 	</div>
 
 	<div class="grid-2">
@@ -106,27 +108,62 @@
 </div>
 
 <style>
-	.welcome-step-header { text-align: center; }
-	.welcome-step-title { font-size: 1.5rem; line-height: 2rem; font-weight: 700; color: var(--color-text); }
-	.welcome-step-subtitle { margin-top: 0.5rem; color: var(--color-text-muted); }
-	.welcome-step-value { font-size: 1.125rem; line-height: 1.75rem; font-weight: 500; color: var(--color-text); }
-	.welcome-step-value-sm { font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text); }
+	.welcome-step-header {
+		text-align: center;
+	}
+	.welcome-step-title {
+		font-size: 1.5rem;
+		line-height: 2rem;
+		font-weight: 700;
+		color: var(--color-text);
+	}
+	.welcome-step-subtitle {
+		margin-top: 0.5rem;
+		color: var(--color-text-muted);
+	}
+	.welcome-step-value {
+		font-size: 1.125rem;
+		line-height: 1.75rem;
+		font-weight: 500;
+		color: var(--color-text);
+	}
+	.welcome-step-value-sm {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		font-weight: 500;
+		color: var(--color-text);
+	}
 	/* status tones dissolved from legacy.css's .setup-status-* rules
 	   (Task 11): ok/warn use the same green/red pairing the legacy rules
 	   did, off/wait are muted text (off had no dark: variant in the
 	   original, so it stays --color-text-faint in both modes) */
-	.welcome-step-value[data-tone="ok"], .welcome-step-value-sm[data-tone="ok"] { color: var(--color-success); }
-	.welcome-step-value[data-tone="warn"] { color: var(--color-danger); }
-	.welcome-step-value-sm[data-tone="off"] { color: var(--color-text-muted); }
+	.welcome-step-value[data-tone='ok'],
+	.welcome-step-value-sm[data-tone='ok'] {
+		color: var(--color-success);
+	}
+	.welcome-step-value[data-tone='warn'] {
+		color: var(--color-danger);
+	}
+	.welcome-step-value-sm[data-tone='off'] {
+		color: var(--color-text-muted);
+	}
 	/* original .setup-status-wait was text-gray-400 with NO dark: variant,
 	   so it stayed gray-400 in both modes; --color-text-faint is gray-400 in
 	   light but gray-500 in dark, so dark mode needs --color-text-muted
 	   (gray-400 there) instead to keep the same rendered shade */
-	.welcome-step-value-sm[data-tone="wait"] { color: var(--color-text-faint); }
+	.welcome-step-value-sm[data-tone='wait'] {
+		color: var(--color-text-faint);
+	}
 	/* :global: dark-mode override, see the comment above */
-	:global(.dark) .welcome-step-value-sm[data-tone="wait"] { color: var(--color-text-muted); }
+	:global(.dark) .welcome-step-value-sm[data-tone='wait'] {
+		color: var(--color-text-muted);
+	}
 	@media (min-width: 640px) {
-		.welcome-step-status-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-		.welcome-step-status-row-single { grid-template-columns: 1fr; }
+		.welcome-step-status-row {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+		.welcome-step-status-row-single {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>

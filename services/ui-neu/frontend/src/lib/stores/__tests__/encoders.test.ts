@@ -126,10 +126,7 @@ describe('encoders store', () => {
 	});
 
 	it('a failed load sets error, leaves the cache empty, and a later call retries', async () => {
-		const fetchMock = vi
-			.fn()
-			.mockRejectedValueOnce(new Error('network'))
-			.mockResolvedValueOnce(CATALOG);
+		const fetchMock = vi.fn().mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce(CATALOG);
 		vi.doMock('$lib/api/encoders', () => ({ fetchEncoders: fetchMock }));
 		const { encodersStore } = await importStore();
 

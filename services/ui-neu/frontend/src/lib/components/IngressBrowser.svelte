@@ -57,9 +57,7 @@
 		return { kind: 'other', importable: false };
 	}
 
-	let decoratedEntries = $derived<DecoratedEntry[]>(
-		entries.map((e) => ({ ...e, ...classifyEntry(e, entries) }))
-	);
+	let decoratedEntries = $derived<DecoratedEntry[]>(entries.map((e) => ({ ...e, ...classifyEntry(e, entries) })));
 
 	let visibleEntries = $derived(
 		decoratedEntries.filter((e) => e.kind === 'dir' || e.kind === 'iso' || e.kind === 'other')
@@ -80,8 +78,12 @@
 	);
 
 	function toggleSort(key: 'name' | 'size' | 'modified') {
-		if (sortKey === key) { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; }
-		else { sortKey = key; sortDir = key === 'modified' ? 'desc' : 'asc'; }
+		if (sortKey === key) {
+			sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+		} else {
+			sortKey = key;
+			sortDir = key === 'modified' ? 'desc' : 'asc';
+		}
 	}
 
 	function sortIconDir(key: string): 'asc' | 'desc' | null {
@@ -103,7 +105,9 @@
 
 	/** True if the current listing contains BDMV or VIDEO_TS - this folder IS a disc. */
 	let currentIsDisc = $derived(
-		entries.some((e) => e.type === 'directory' && (e.name.toUpperCase() === 'BDMV' || e.name.toUpperCase() === 'VIDEO_TS'))
+		entries.some(
+			(e) => e.type === 'directory' && (e.name.toUpperCase() === 'BDMV' || e.name.toUpperCase() === 'VIDEO_TS')
+		)
 	);
 
 	/** Badge for entries that are disc structure internals. */
@@ -125,9 +129,8 @@
 			scrollContainer?.scrollTo(0, 0);
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : 'Failed to load directory';
-			error = msg.includes('unreachable') || msg.includes('503')
-				? 'ARM service is starting up - try again in a moment'
-				: msg;
+			error =
+				msg.includes('unreachable') || msg.includes('503') ? 'ARM service is starting up - try again in a moment' : msg;
 		} finally {
 			loading = false;
 		}
@@ -182,14 +185,15 @@
 			await loadDirectory(ingress.path);
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : 'Failed to load file roots';
-			error = msg.includes('unreachable') || msg.includes('503')
-				? 'ARM service is starting up - try again in a moment'
-				: msg;
+			error =
+				msg.includes('unreachable') || msg.includes('503') ? 'ARM service is starting up - try again in a moment' : msg;
 			loading = false;
 		}
 	}
 
-	onMount(() => { init(); });
+	onMount(() => {
+		init();
+	});
 </script>
 
 {#snippet sortIcon(key: string)}
@@ -200,22 +204,23 @@
 	{#if needsConfig}
 		<div class="alert alert-warning alert-lg">
 			<p class="alert-title">Folder Import Path is not configured</p>
-			<p class="alert-body">Set the <strong>Folder Import Path</strong> in
+			<p class="alert-body">
+				Set the <strong>Folder Import Path</strong> in
 				<button
 					type="button"
 					class="ingress-browser-config-link"
-					onclick={() => { showImportWizard.set(false); goto('/settings#ripping/media-directories'); }}
-				>Settings &rarr; Ripping &rarr; Media Directories</button>
-				to the directory containing your BDMV/VIDEO_TS folders or ISO files.</p>
+					onclick={() => {
+						showImportWizard.set(false);
+						goto('/settings#ripping/media-directories');
+					}}>Settings &rarr; Ripping &rarr; Media Directories</button
+				>
+				to the directory containing your BDMV/VIDEO_TS folders or ISO files.
+			</p>
 		</div>
 	{:else if error}
 		<div class="alert alert-danger alert-lg">
 			<p>{error}</p>
-			<button
-				type="button"
-				onclick={init}
-				class="ingress-browser-retry"
-			>Retry</button>
+			<button type="button" onclick={init} class="ingress-browser-retry">Retry</button>
 		</div>
 	{:else if loading && entries.length === 0}
 		<div class="ingress-browser-loading">Loading...</div>
@@ -225,7 +230,12 @@
 			<!-- Path bar -->
 			<div class="flex items-center gap-1 panel-section ingress-browser-path-bar">
 				<svg class="h-4 w-4 shrink-0 ingress-browser-path-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="1.5"
+						d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+					/>
 				</svg>
 				<span class="truncate ingress-browser-path-text">{currentPath || ingressPath}</span>
 			</div>
@@ -251,7 +261,11 @@
 		</div>
 
 		<!-- Directory table (scrollable) -->
-		<div bind:this={scrollContainer} class="min-h-0 flex-1 overflow-y-auto ingress-browser-table-scroll" data-loading={loading}>
+		<div
+			bind:this={scrollContainer}
+			class="min-h-0 flex-1 overflow-y-auto ingress-browser-table-scroll"
+			data-loading={loading}
+		>
 			<div class="ingress-browser-table-wrap">
 				<table class="table ingress-browser-table">
 					<colgroup>
@@ -262,37 +276,50 @@
 					<thead>
 						<tr>
 							<th class="table-header">
-								<button type="button" onclick={() => toggleSort('name')} class="ingress-browser-sort-btn">Name {@render sortIcon('name')}</button>
+								<button type="button" onclick={() => toggleSort('name')} class="ingress-browser-sort-btn"
+									>Name {@render sortIcon('name')}</button
+								>
 							</th>
 							<th class="table-header">
-								<button type="button" onclick={() => toggleSort('size')} class="ingress-browser-sort-btn">Size {@render sortIcon('size')}</button>
+								<button type="button" onclick={() => toggleSort('size')} class="ingress-browser-sort-btn"
+									>Size {@render sortIcon('size')}</button
+								>
 							</th>
 							<th class="table-header">
-								<button type="button" onclick={() => toggleSort('modified')} class="ingress-browser-sort-btn">Modified {@render sortIcon('modified')}</button>
+								<button type="button" onclick={() => toggleSort('modified')} class="ingress-browser-sort-btn"
+									>Modified {@render sortIcon('modified')}</button
+								>
 							</th>
 						</tr>
 					</thead>
 					<tbody>
-					{#if currentPath && currentPath !== ingressPath}
-						<tr
-							class="table-row ingress-browser-row"
-							onclick={goBack}
-						>
-							<td class="table-cell">
-								<div class="flex items-center gap-2">
-									<svg class="h-4 w-4 shrink-0 ingress-browser-path-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12" />
-									</svg>
-									<span class="ingress-browser-muted">..</span>
-								</div>
-							</td>
-							<td class="table-cell"></td>
-							<td class="table-cell"></td>
-						</tr>
-					{/if}
-					{#if sortedEntries.length === 0}
-						<tr><td colspan="3" class="table-cell ingress-browser-empty">No entries found.</td></tr>
-					{/if}
+						{#if currentPath && currentPath !== ingressPath}
+							<tr class="table-row ingress-browser-row" onclick={goBack}>
+								<td class="table-cell">
+									<div class="flex items-center gap-2">
+										<svg
+											class="h-4 w-4 shrink-0 ingress-browser-path-icon"
+											fill="none"
+											stroke="currentColor"
+											viewBox="0 0 24 24"
+										>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M11 17l-5-5m0 0l5-5m-5 5h12"
+											/>
+										</svg>
+										<span class="ingress-browser-muted">..</span>
+									</div>
+								</td>
+								<td class="table-cell"></td>
+								<td class="table-cell"></td>
+							</tr>
+						{/if}
+						{#if sortedEntries.length === 0}
+							<tr><td colspan="3" class="table-cell ingress-browser-empty">No entries found.</td></tr>
+						{/if}
 						{#each sortedEntries as entry (entry.name)}
 							{@const fullPath = currentPath ? `${currentPath}/${entry.name}` : entry.name}
 							{@const isStructureDir = entry.kind === 'dir' && isDiscStructureDir(entry.name)}
@@ -304,8 +331,12 @@
 								aria-disabled={disabled ? 'true' : undefined}
 								class="table-row ingress-browser-row"
 								data-selected={!disabled && selectedPath === fullPath}
-								onclick={() => { if (!disabled) handleSelect(entry); }}
-								ondblclick={() => { if (!disabled) handleOpen(entry); }}
+								onclick={() => {
+									if (!disabled) handleSelect(entry);
+								}}
+								ondblclick={() => {
+									if (!disabled) handleOpen(entry);
+								}}
 							>
 								<td class="table-cell">
 									<div class="flex items-center gap-2 overflow-hidden">
@@ -342,38 +373,115 @@
 </div>
 
 <style>
-	.ingress-browser-config-link { text-decoration: underline; }
+	.ingress-browser-config-link {
+		text-decoration: underline;
+	}
 	/* the original was a soft danger pill (bg-red-100 text-red-800), not a
 	   solid badge fill - no shared block matches this shape exactly */
-	.ingress-browser-retry { margin-top: 0.5rem; border: 0; border-radius: var(--radius-md); padding: 0.25rem 0.75rem; font-size: 0.75rem; line-height: 1rem; font-weight: 500; cursor: pointer; background: var(--color-danger-soft); color: var(--color-on-danger-soft); }
+	.ingress-browser-retry {
+		margin-top: 0.5rem;
+		border: 0;
+		border-radius: var(--radius-md);
+		padding: 0.25rem 0.75rem;
+		font-size: 0.75rem;
+		line-height: 1rem;
+		font-weight: 500;
+		cursor: pointer;
+		background: var(--color-danger-soft);
+		color: var(--color-on-danger-soft);
+	}
 	/* original was p-3 (0.75rem all sides), not .alert's own 0.5rem/0.75rem default */
-	.ingress-browser-disc-alert { padding: 0.75rem; }
-	.ingress-browser-retry:hover { background: color-mix(in srgb, var(--color-danger-soft) 60%, var(--color-danger)); }
-	.ingress-browser-loading { padding: 2rem 0; text-align: center; color: var(--color-text-faint); }
-	.ingress-browser-nav { padding-bottom: 0.5rem; }
-	.ingress-browser-path-bar { font-size: 0.875rem; line-height: 1.25rem; padding: 0.375rem 0.75rem; }
-	.ingress-browser-path-icon { color: var(--color-text-faint); }
-	.ingress-browser-path-text { color: var(--color-text-secondary); }
-	.ingress-browser-hint { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
-	.ingress-browser-table-scroll { transition: opacity var(--motion-fast) var(--ease); }
-	.ingress-browser-table-scroll[data-loading="true"] { pointer-events: none; opacity: 0.5; }
-	.ingress-browser-table-wrap { border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
-	.ingress-browser-table { table-layout: fixed; }
-	.ingress-browser-sort-btn { color: inherit; }
-	.ingress-browser-sort-btn:hover { color: var(--color-text-secondary); }
-	.ingress-browser-row { cursor: pointer; }
-	.ingress-browser-row[data-disabled] { cursor: default; opacity: 0.5; }
-	.ingress-browser-muted { color: var(--color-text-muted); }
-	.ingress-browser-empty { padding: 1.5rem 1rem; text-align: center; color: var(--color-text-faint); }
+	.ingress-browser-disc-alert {
+		padding: 0.75rem;
+	}
+	.ingress-browser-retry:hover {
+		background: color-mix(in srgb, var(--color-danger-soft) 60%, var(--color-danger));
+	}
+	.ingress-browser-loading {
+		padding: 2rem 0;
+		text-align: center;
+		color: var(--color-text-faint);
+	}
+	.ingress-browser-nav {
+		padding-bottom: 0.5rem;
+	}
+	.ingress-browser-path-bar {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		padding: 0.375rem 0.75rem;
+	}
+	.ingress-browser-path-icon {
+		color: var(--color-text-faint);
+	}
+	.ingress-browser-path-text {
+		color: var(--color-text-secondary);
+	}
+	.ingress-browser-hint {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-faint);
+	}
+	.ingress-browser-table-scroll {
+		transition: opacity var(--motion-fast) var(--ease);
+	}
+	.ingress-browser-table-scroll[data-loading='true'] {
+		pointer-events: none;
+		opacity: 0.5;
+	}
+	.ingress-browser-table-wrap {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+	}
+	.ingress-browser-table {
+		table-layout: fixed;
+	}
+	.ingress-browser-sort-btn {
+		color: inherit;
+	}
+	.ingress-browser-sort-btn:hover {
+		color: var(--color-text-secondary);
+	}
+	.ingress-browser-row {
+		cursor: pointer;
+	}
+	.ingress-browser-row[data-disabled] {
+		cursor: default;
+		opacity: 0.5;
+	}
+	.ingress-browser-muted {
+		color: var(--color-text-muted);
+	}
+	.ingress-browser-empty {
+		padding: 1.5rem 1rem;
+		text-align: center;
+		color: var(--color-text-faint);
+	}
 	/* :global: forwarded through lucide-svelte's Disc/FolderArchive class prop */
-	:global(.ingress-browser-icon-primary) { color: var(--color-primary); }
+	:global(.ingress-browser-icon-primary) {
+		color: var(--color-primary);
+	}
 	/* :global: forwarded through lucide-svelte's Folder class prop */
-	:global(.ingress-browser-icon-muted) { color: var(--color-text-muted); }
+	:global(.ingress-browser-icon-muted) {
+		color: var(--color-text-muted);
+	}
 	/* :global: forwarded through lucide-svelte's FileIcon class prop */
-	:global(.ingress-browser-icon-faint) { color: var(--color-text-faint); }
-	.ingress-browser-name { color: var(--color-text); }
-	.ingress-browser-name[data-disabled="true"] { color: var(--color-text-faint); }
+	:global(.ingress-browser-icon-faint) {
+		color: var(--color-text-faint);
+	}
+	.ingress-browser-name {
+		color: var(--color-text);
+	}
+	.ingress-browser-name[data-disabled='true'] {
+		color: var(--color-text-faint);
+	}
 	/* the original was a soft warning pill (bg-amber-100 text-amber-700
 	   text-[10px]), not badge-warning's solid fill */
-	.ingress-browser-disc-badge { border-radius: var(--radius-sm); padding: 0.125rem 0.375rem; font-size: 10px; font-weight: 600; background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
+	.ingress-browser-disc-badge {
+		border-radius: var(--radius-sm);
+		padding: 0.125rem 0.375rem;
+		font-size: 10px;
+		font-weight: 600;
+		background: var(--color-warning-soft);
+		color: var(--color-on-warning-soft);
+	}
 </style>

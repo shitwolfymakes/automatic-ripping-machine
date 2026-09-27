@@ -59,11 +59,13 @@ describe('TvdbMatch', () => {
 	describe('match flow', () => {
 		it('calls tvdbMatch on Preview click', async () => {
 			mockTvdbMatch.mockResolvedValue({
-				success: true, matcher: 'runtime', season: 2,
-				matches: [
-					{ track_number: '1', episode_number: 1, episode_name: 'Pilot', episode_runtime: 2400 }
-				],
-				match_count: 1, score: 95, alternatives: []
+				success: true,
+				matcher: 'runtime',
+				season: 2,
+				matches: [{ track_number: '1', episode_number: 1, episode_name: 'Pilot', episode_runtime: 2400 }],
+				match_count: 1,
+				score: 95,
+				alternatives: []
 			} as never);
 			renderComponent(TvdbMatch, { props: { job: seriesDetail(), season: '2', tvdbId: 12345 } });
 			await fireEvent.click(screen.getByText('Preview Match'));
@@ -75,9 +77,13 @@ describe('TvdbMatch', () => {
 
 		it('shows Apply button after preview', async () => {
 			mockTvdbMatch.mockResolvedValue({
-				success: true, matcher: 'runtime', season: 2,
+				success: true,
+				matcher: 'runtime',
+				season: 2,
 				matches: [{ track_number: '1', episode_number: 1, episode_name: 'Pilot', episode_runtime: 2400 }],
-				match_count: 1, score: 90, alternatives: []
+				match_count: 1,
+				score: 90,
+				alternatives: []
 			} as never);
 			renderComponent(TvdbMatch, { props: { job: seriesDetail(), season: '2', tvdbId: 12345 } });
 			await fireEvent.click(screen.getByText('Preview Match'));
@@ -103,7 +109,8 @@ describe('TvdbMatch', () => {
 					{ number: 1, name: 'Episode One', runtime: 40, aired: '2024-01-15' },
 					{ number: 2, name: 'Episode Two', runtime: 42, aired: '2024-01-22' }
 				],
-				tvdb_id: 12345, season: 2
+				tvdb_id: 12345,
+				season: 2
 			} as never);
 			renderComponent(TvdbMatch, { props: { job: seriesDetail(), season: '2', tvdbId: 12345 } });
 			await fireEvent.click(screen.getByText('Browse Episodes'));

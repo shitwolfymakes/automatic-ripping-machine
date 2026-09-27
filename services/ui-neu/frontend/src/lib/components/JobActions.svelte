@@ -64,7 +64,6 @@
 			clearFeedback();
 		}
 	}
-
 </script>
 
 {#if canAbandon || canDelete}
@@ -98,23 +97,58 @@
 {/if}
 
 <style>
-	.job-actions-row { gap: 0.375rem; }
+	.job-actions-row {
+		gap: 0.375rem;
+	}
 	/* the original was a filled soft pill (rounded-full, bg-*-100/text-*-700),
 	   not .btn's outlined default nor .btn-danger/.btn-warning's outlined tone
 	   look */
-	.job-actions-pill { border: 0; border-radius: 9999px; padding: 0.375rem 0.75rem; font-size: 0.75rem; line-height: 1rem; font-weight: 500; cursor: pointer; transition: background-color var(--motion-fast) var(--ease); }
+	.job-actions-pill {
+		border: 0;
+		border-radius: 9999px;
+		padding: 0.375rem 0.75rem;
+		font-size: 0.75rem;
+		line-height: 1rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color var(--motion-fast) var(--ease);
+	}
 	/* compact: original was rounded px-2 py-0.5 (not rounded-full px-3 py-1.5);
 	   Tailwind's unprefixed `rounded` is 0.25rem, matching neither radius token exactly */
-	.job-actions-pill[data-compact="true"] { border-radius: 0.25rem; padding: 0.125rem 0.5rem; }
-	.job-actions-pill:disabled { opacity: 0.5; cursor: not-allowed; }
-	.job-actions-pill-warning { background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
-	.job-actions-pill-warning:hover { background: color-mix(in srgb, var(--color-warning-soft) 70%, var(--color-warning)); }
+	.job-actions-pill[data-compact='true'] {
+		border-radius: 0.25rem;
+		padding: 0.125rem 0.5rem;
+	}
+	.job-actions-pill:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.job-actions-pill-warning {
+		background: var(--color-warning-soft);
+		color: var(--color-on-warning-soft);
+	}
+	.job-actions-pill-warning:hover {
+		background: color-mix(in srgb, var(--color-warning-soft) 70%, var(--color-warning));
+	}
 	/* the original also carried ring-1 ring-red-200 (a box-shadow ring, not
 	   .btn's real border - same 30%-mix treatment as DiscReviewWidget's
 	   Cancel button) */
-	.job-actions-pill-danger { background: var(--color-danger-soft); color: var(--color-on-danger-soft); box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-danger) 30%, transparent); }
-	.job-actions-pill-danger:hover { background: color-mix(in srgb, var(--color-danger-soft) 70%, var(--color-danger)); }
-	.job-actions-feedback { font-size: 0.75rem; line-height: 1rem; }
-	.job-actions-feedback[data-tone="success"] { color: var(--color-success); }
-	.job-actions-feedback[data-tone="error"] { color: var(--color-danger); }
+	.job-actions-pill-danger {
+		background: var(--color-danger-soft);
+		color: var(--color-on-danger-soft);
+		box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-danger) 30%, transparent);
+	}
+	.job-actions-pill-danger:hover {
+		background: color-mix(in srgb, var(--color-danger-soft) 70%, var(--color-danger));
+	}
+	.job-actions-feedback {
+		font-size: 0.75rem;
+		line-height: 1rem;
+	}
+	.job-actions-feedback[data-tone='success'] {
+		color: var(--color-success);
+	}
+	.job-actions-feedback[data-tone='error'] {
+		color: var(--color-danger);
+	}
 </style>

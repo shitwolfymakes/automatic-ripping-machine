@@ -21,7 +21,7 @@ describe('setup page load', () => {
 		mockFetchSetupStatus.mockResolvedValue({
 			db_initialized: true,
 			db_current: true,
-			first_run: false,
+			first_run: false
 		});
 
 		const { load } = await import('../+page');
@@ -33,7 +33,7 @@ describe('setup page load', () => {
 		mockFetchSetupStatus.mockResolvedValue({
 			db_initialized: false,
 			db_current: false,
-			first_run: true,
+			first_run: true
 		});
 
 		const { load } = await import('../+page');
@@ -48,7 +48,7 @@ describe('setup page load', () => {
 		mockFetchSetupStatus.mockResolvedValue({
 			db_initialized: true,
 			db_current: false,
-			first_run: false,
+			first_run: false
 		});
 
 		const { load } = await import('../+page');

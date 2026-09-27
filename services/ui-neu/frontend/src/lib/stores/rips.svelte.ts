@@ -87,11 +87,7 @@ export function onProgress(jobId: string, env: WSEnvelope): void {
 	// null until enough has accumulated. Also reset on a sustained backwards
 	// jump (>1 pp) — defensive against a non-monotonic sequence under a stable
 	// track_id; without it pctDelta goes negative and ETA hangs at null.
-	if (
-		baseline === undefined ||
-		baseline.trackId !== payload.track_id ||
-		payload.progress_pct < baseline.atPct - 1
-	) {
+	if (baseline === undefined || baseline.trackId !== payload.track_id || payload.progress_pct < baseline.atPct - 1) {
 		baselines[jobId] = { trackId: payload.track_id, atMs: now, atPct: payload.progress_pct };
 		ripProgress.value = {
 			...ripProgress.value,

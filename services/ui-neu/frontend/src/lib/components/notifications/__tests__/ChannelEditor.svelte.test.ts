@@ -10,7 +10,9 @@ vi.mock('$lib/api/channels', async (orig) => ({
 	...(await orig<typeof import('$lib/api/channels')>()),
 	fetchScripts: vi.fn().mockResolvedValue([]),
 	fetchScript: vi.fn().mockRejectedValue(new Error('no script selected')),
-	previewBash: vi.fn().mockResolvedValue({ title: '', body: '', inputs: {}, env: {}, argv: [], error: null, result: null })
+	previewBash: vi
+		.fn()
+		.mockResolvedValue({ title: '', body: '', inputs: {}, env: {}, argv: [], error: null, result: null })
 }));
 
 const catalog: Catalog = { featured: [], services: [] };
@@ -31,7 +33,16 @@ describe('ChannelEditor', () => {
 	afterEach(() => cleanup());
 
 	function renderEditor(channel: Channel, cat: Catalog = catalog, overrides: Record<string, unknown> = {}) {
-		const props = { channel, catalog: cat, eventTypes: editorEventTypes, onsave: () => {}, ontest: () => {}, onclose: () => {}, ondelete: () => {}, ...overrides };
+		const props = {
+			channel,
+			catalog: cat,
+			eventTypes: editorEventTypes,
+			onsave: () => {},
+			ontest: () => {},
+			onclose: () => {},
+			ondelete: () => {},
+			...overrides
+		};
 		return renderComponent(ChannelEditor, { props });
 	}
 
@@ -72,7 +83,7 @@ describe('ChannelEditor', () => {
 
 	it('apprise editor renders the service fields resolved from service_id', async () => {
 		renderEditor(appriseDiscord(), discordCatalog);
-		const wid = await screen.findByLabelText(/Webhook ID/i) as HTMLInputElement;
+		const wid = (await screen.findByLabelText(/Webhook ID/i)) as HTMLInputElement;
 		expect(wid).toBeInTheDocument();
 		expect(wid.value).toBe('');
 	});
@@ -103,18 +114,25 @@ describe('ChannelEditor', () => {
 	});
 
 	it('apprise editor seeds appriseFields from stored channel.config.fields', async () => {
-		renderEditor(appriseDiscord({
-			id: 8,
-			config: { type: 'apprise', url: 'discord://...', service_id: 'discord',
-			          fields: { webhook_id: '<hidden>', webhook_token: '<hidden>', thread: '5' } }
-		}), discordCatalog);
-		const wid = await screen.findByLabelText(/Webhook ID/i) as HTMLInputElement;
+		renderEditor(
+			appriseDiscord({
+				id: 8,
+				config: {
+					type: 'apprise',
+					url: 'discord://...',
+					service_id: 'discord',
+					fields: { webhook_id: '<hidden>', webhook_token: '<hidden>', thread: '5' }
+				}
+			}),
+			discordCatalog
+		);
+		const wid = (await screen.findByLabelText(/Webhook ID/i)) as HTMLInputElement;
 		expect(wid.type).toBe('password');
 		expect(wid.value).toBe('');
 		expect(wid.placeholder).toMatch(/leave blank to keep/i);
 		const adv = screen.getByText(/Advanced \(/).closest('details') as HTMLDetailsElement;
 		adv.open = true;
-		const thread = await screen.findByLabelText(/Thread/i) as HTMLInputElement;
+		const thread = (await screen.findByLabelText(/Thread/i)) as HTMLInputElement;
 		expect(thread.value).toBe('5');
 	});
 
@@ -129,7 +147,9 @@ describe('ChannelEditor', () => {
 
 	it('bash shows the test panel instead of the Send test button', async () => {
 		const bashChannel: Channel = {
-			...webhookChannel({ id: 5 }), type: 'bash', config: { type: 'bash', script: 'plex.sh' }
+			...webhookChannel({ id: 5 }),
+			type: 'bash',
+			config: { type: 'bash', script: 'plex.sh' }
 		};
 		renderEditor(bashChannel);
 		expect(screen.queryByRole('button', { name: 'Send test' })).toBeNull();
@@ -171,7 +191,9 @@ describe('ChannelEditor', () => {
 		expect(smtpPass.placeholder).toMatch(/leave blank to keep/i);
 		expect(smtpPass.required).toBe(false);
 
-		const to = (await screen.findByLabelText('Recipient', { selector: '[aria-label="Recipient"]' })) as HTMLInputElement;
+		const to = (await screen.findByLabelText('Recipient', {
+			selector: '[aria-label="Recipient"]'
+		})) as HTMLInputElement;
 		expect(to.value).toBe('me@x');
 	});
 });

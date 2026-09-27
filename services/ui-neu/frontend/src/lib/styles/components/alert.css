@@ -13,7 +13,8 @@
    decimal because a rounded 1.4286 computes to 19.9996px, and that
    sub-pixel miss shifts layout on text-dense pages. */
 @layer components {
-	.alert, .alert-info {
+	.alert,
+	.alert-info {
 		border: 1px solid color-mix(in srgb, var(--color-info) 30%, transparent);
 		border-radius: var(--radius-md);
 		background: var(--color-info-soft);
@@ -22,10 +23,29 @@
 		line-height: calc(1.25 / 0.875);
 		color: var(--color-on-info-soft);
 	}
-	.alert-title { font-weight: 600; }
-	.alert-body { margin-top: 0.25rem; }
-	.alert-warning { border-color: color-mix(in srgb, var(--color-warning) 30%, transparent); background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
-	.alert-danger { border-color: color-mix(in srgb, var(--color-danger) 30%, transparent); background: var(--color-danger-soft); color: var(--color-on-danger-soft); }
-	.alert-success { border-color: color-mix(in srgb, var(--color-success) 30%, transparent); background: var(--color-success-soft); color: var(--color-on-success-soft); }
-	.alert-lg { padding: 1rem; border-radius: var(--radius-lg); }
+	.alert-title {
+		font-weight: 600;
+	}
+	.alert-body {
+		margin-top: 0.25rem;
+	}
+	.alert-warning {
+		border-color: color-mix(in srgb, var(--color-warning) 30%, transparent);
+		background: var(--color-warning-soft);
+		color: var(--color-on-warning-soft);
+	}
+	.alert-danger {
+		border-color: color-mix(in srgb, var(--color-danger) 30%, transparent);
+		background: var(--color-danger-soft);
+		color: var(--color-on-danger-soft);
+	}
+	.alert-success {
+		border-color: color-mix(in srgb, var(--color-success) 30%, transparent);
+		background: var(--color-success-soft);
+		color: var(--color-on-success-soft);
+	}
+	.alert-lg {
+		padding: 1rem;
+		border-radius: var(--radius-lg);
+	}
 }

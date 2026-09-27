@@ -119,12 +119,7 @@
 	<div class="gpus-card-head">
 		<h3 class="eyebrow">Transcode GPUs</h3>
 		{#if $isAdmin && gpus.length > 0}
-			<button
-				type="button"
-				class="btn btn-ghost btn-sm"
-				disabled={probingAll}
-				onclick={reprobeAll}
-			>
+			<button type="button" class="btn btn-ghost btn-sm" disabled={probingAll} onclick={reprobeAll}>
 				Re-probe all
 			</button>
 		{/if}
@@ -136,8 +131,8 @@
 		<p class="gpus-card-note">Loading GPU inventory...</p>
 	{:else if gpus.length === 0}
 		<p class="gpus-card-note" data-testid="gpus-empty">
-			No GPUs configured. Transcodes run on CPU. The inventory seeds from the host probe (ARM_GPUS)
-			when this list is empty and the backend restarts.
+			No GPUs configured. Transcodes run on CPU. The inventory seeds from the host probe (ARM_GPUS) when this list is
+			empty and the backend restarts.
 		</p>
 	{:else}
 		<div class="stack stack-sm">
@@ -192,8 +187,8 @@
 			{/each}
 		</div>
 		<p class="gpus-card-note">
-			Rows come from device discovery; each device's encoders are verified by a per-device probe.
-			Use Re-probe to re-verify a device without restarting the backend.
+			Rows come from device discovery; each device's encoders are verified by a per-device probe. Use Re-probe to
+			re-verify a device without restarting the backend.
 		</p>
 	{/if}
 </section>

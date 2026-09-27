@@ -32,8 +32,6 @@ export function cloneSession(id: string, body: SessionCloneRequest): Promise<Ses
 	return post<SessionView>(`/api/sessions/${id}/clone`, body);
 }
 
-export function previewTemplate(
-	body: TemplatePreviewRequest
-): Promise<TemplatePreviewResponse> {
+export function previewTemplate(body: TemplatePreviewRequest): Promise<TemplatePreviewResponse> {
 	return post<TemplatePreviewResponse>('/api/sessions/preview', body);
 }

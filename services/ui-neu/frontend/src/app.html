@@ -7,13 +7,28 @@
 		<link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>ARM</title>
-		<style>body { visibility: hidden; }</style>
+		<style>
+			body {
+				visibility: hidden;
+			}
+		</style>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
 		<script>
-			(function() {
-				var darkSchemes = ['glass','cinema','gaming','royale','lcars','tactical','craft','terminal','blockbuster','hollywood-video-v2'];
+			(function () {
+				var darkSchemes = [
+					'glass',
+					'cinema',
+					'gaming',
+					'royale',
+					'lcars',
+					'tactical',
+					'craft',
+					'terminal',
+					'blockbuster',
+					'hollywood-video-v2'
+				];
 				var cs = localStorage.getItem('colorScheme');
 				if (darkSchemes.indexOf(cs) !== -1) {
 					document.documentElement.classList.add('dark');

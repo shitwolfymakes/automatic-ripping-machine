@@ -35,9 +35,7 @@ describe('colorScheme - theme fetch dedup', () => {
 		// Built-in themes load their CSS from the frontend's static assets
 		// (/themes/{id}.css). The in-flight guard must dedup concurrent calls
 		// (loadThemesFromApi + the subscribe handler racing on page load).
-		const mockFetch = vi.fn((url: string) =>
-			Promise.resolve({ ok: true, text: () => Promise.resolve('body{}') })
-		);
+		const mockFetch = vi.fn((url: string) => Promise.resolve({ ok: true, text: () => Promise.resolve('body{}') }));
 		vi.stubGlobal('fetch', mockFetch);
 
 		try {
@@ -45,9 +43,7 @@ describe('colorScheme - theme fetch dedup', () => {
 
 			await Promise.all([loadThemeCss('blue'), loadThemeCss('blue')]);
 
-			const cssCalls = mockFetch.mock.calls.filter(
-				([url]) => typeof url === 'string' && url === '/themes/blue.css'
-			);
+			const cssCalls = mockFetch.mock.calls.filter(([url]) => typeof url === 'string' && url === '/themes/blue.css');
 			expect(cssCalls.length).toBe(1);
 		} finally {
 			vi.unstubAllGlobals();
@@ -69,10 +65,7 @@ describe('colorScheme - theme fetch dedup', () => {
 			const mod = await import('$lib/stores/colorScheme');
 			await mod.loadThemeCss('blue');
 
-			expect(setItem).toHaveBeenCalledWith(
-				'theme-cache-v1-blue',
-				'body { background: blue; }'
-			);
+			expect(setItem).toHaveBeenCalledWith('theme-cache-v1-blue', 'body { background: blue; }');
 		} finally {
 			vi.unstubAllGlobals();
 		}

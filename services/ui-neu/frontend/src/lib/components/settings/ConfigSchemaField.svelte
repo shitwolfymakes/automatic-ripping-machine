@@ -2,11 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import type { ConfigFieldMeta } from '$lib/types/api.gen';
 
-	let {
-		field,
-		value = $bindable(),
-		action
-	}: { field: ConfigFieldMeta; value: unknown; action?: Snippet } = $props();
+	let { field, value = $bindable(), action }: { field: ConfigFieldMeta; value: unknown; action?: Snippet } = $props();
 
 	const HIDDEN = '<hidden>';
 	const isSecret = $derived(field.tier === 'secret');
@@ -79,8 +75,17 @@
 	   offset for the sticky header) and the highlight-flash transition aren't
 	   covered by any block. gap: the original was space-y-1 (0.25rem), tighter
 	   than the stack-sm modifier (0.5rem). */
-	.config-schema-field { gap: 0.25rem; scroll-margin-top: 6rem; border-radius: var(--radius-lg); transition: box-shadow var(--motion-base) var(--ease); }
+	.config-schema-field {
+		gap: 0.25rem;
+		scroll-margin-top: 6rem;
+		border-radius: var(--radius-lg);
+		transition: box-shadow var(--motion-base) var(--ease);
+	}
 	/* the read-only value was font-mono text-sm text-gray-500 (0.875rem/1.25rem);
 	   .mono is size-neutral, so this component supplies its own original size. */
-	.config-schema-field-value { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	.config-schema-field-value {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
 </style>

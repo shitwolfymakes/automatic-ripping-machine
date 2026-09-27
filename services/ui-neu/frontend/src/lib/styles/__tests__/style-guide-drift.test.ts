@@ -27,7 +27,10 @@ const htmlRaw = readFileSync(resolve(__dirname, '../../../../static/style-guide.
 function expandFamilies(text: string): string {
 	let out = text;
 	out = out.replace(/([-\w]+)\{([^}]+)\}/g, (_, stem: string, body: string) =>
-		body.split(',').map((part) => stem + part.trim()).join(' ')
+		body
+			.split(',')
+			.map((part) => stem + part.trim())
+			.join(' ')
 	);
 	out = out.replace(/([-\w]+-)(\d+)\.\.(\d+)/g, (_, stem: string, a: string, b: string) => {
 		const names: string[] = [];
@@ -48,7 +51,10 @@ describe('style guide drift', () => {
 			// primitives are private; --radius is documented through its scale
 			.filter((n) => !n.startsWith('--color-p-'));
 		const missing = [...new Set(names)].filter((n) => !docs.includes(n));
-		expect(missing, `tokens undocumented in docs/ui-neu-style-guide.md or static/style-guide.html: ${missing.join(', ')}`).toEqual([]);
+		expect(
+			missing,
+			`tokens undocumented in docs/ui-neu-style-guide.md or static/style-guide.html: ${missing.join(', ')}`
+		).toEqual([]);
 	});
 
 	it('every rgb-valued colour token value appears in the rendered guide swatches', () => {

@@ -50,14 +50,10 @@ const { buildDetail } = vi.hoisted(() => {
 
 vi.mock('$lib/api/jobs', () => ({
 	fetchJob: vi.fn(() => Promise.resolve(buildDetail())),
-	fetchNamingPreview: vi.fn(() =>
-		Promise.resolve({ job_output_dir: '', job_output_name: '', items: [] })
-	),
+	fetchNamingPreview: vi.fn(() => Promise.resolve({ job_output_dir: '', job_output_name: '', items: [] })),
 	updateTrack: vi.fn(() => Promise.resolve()),
 	resolveJob: vi.fn(() => Promise.resolve({ job: {}, fan_out: [] })),
-	applySession: vi.fn(() =>
-		Promise.resolve({ session_application: {}, tasks: [], collisions: [], idempotent: false })
-	)
+	applySession: vi.fn(() => Promise.resolve({ session_application: {}, tasks: [], collisions: [], idempotent: false }))
 }));
 
 vi.mock('$lib/api/sessions', () => ({
@@ -124,9 +120,7 @@ describe('Job Detail Page', () => {
 		it('shows the poster/metadata-search tab for video discs', async () => {
 			renderComponent(JobDetailPage);
 			await waitFor(() => {
-				expect(
-					screen.getByRole('button', { name: /Poster & metadata search/ })
-				).toBeInTheDocument();
+				expect(screen.getByRole('button', { name: /Poster & metadata search/ })).toBeInTheDocument();
 			});
 		});
 
@@ -140,9 +134,7 @@ describe('Job Detail Page', () => {
 			await waitFor(() => {
 				expect(screen.getByRole('heading', { name: 'Data Disc' })).toBeInTheDocument();
 			});
-			expect(
-				screen.queryByRole('button', { name: /Poster & metadata search/ })
-			).not.toBeInTheDocument();
+			expect(screen.queryByRole('button', { name: /Poster & metadata search/ })).not.toBeInTheDocument();
 		});
 
 		it('shows the Identify (resolve) and Apply session buttons for a resolvable status', async () => {

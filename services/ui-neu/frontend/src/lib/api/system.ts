@@ -56,6 +56,6 @@ export function runPreflight(): Promise<PreflightResult> {
 export function fixPreflight(items: string[]): Promise<PreflightResult> {
 	return apiFetch<PreflightResult>('/api/system/preflight/fix', {
 		method: 'POST',
-		body: JSON.stringify({ fix: items }),
+		body: JSON.stringify({ fix: items })
 	});
 }

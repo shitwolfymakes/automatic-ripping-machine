@@ -131,9 +131,9 @@
 <div class="panel">
 	<h3 class="session-routes-card-title">Session Routing</h3>
 	<p class="session-routes-card-intro">
-		A route applies the chosen session when a disc's identified media type matches. The drive's default session
-		wins when it is compatible with the disc's media type; otherwise these routes apply instead. A disc-type-specific
-		route (DVD, Blu-ray, CD) beats the Any-disc wildcard for the same media type.
+		A route applies the chosen session when a disc's identified media type matches. The drive's default session wins
+		when it is compatible with the disc's media type; otherwise these routes apply instead. A disc-type-specific route
+		(DVD, Blu-ray, CD) beats the Any-disc wildcard for the same media type.
 	</p>
 
 	{#if feedback}
@@ -206,7 +206,9 @@
 									type="button"
 									onclick={() => handleClear(route)}
 									disabled={rowBusy}
-									aria-label="Clear {route.media_type} / {discLabel(route.disc_type)} route ({sessionNameFor(route.session_id)})"
+									aria-label="Clear {route.media_type} / {discLabel(route.disc_type)} route ({sessionNameFor(
+										route.session_id
+									)})"
 									class="btn btn-sm"
 								>
 									Clear
@@ -224,23 +226,78 @@
 	/* the original title was text-base font-semibold text-gray-900, mb-1 -
 	   a plain heading, not panel-title's uppercase eyebrow look (matches
 	   UsersCard's own title treatment). */
-	.session-routes-card-title { margin-bottom: 0.25rem; font-size: 1rem; line-height: 1.5rem; font-weight: 600; color: var(--color-text); }
-	.session-routes-card-intro { margin-bottom: 1rem; font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
-	.session-routes-card-loading { padding: 1rem 0; text-align: center; font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-faint); }
+	.session-routes-card-title {
+		margin-bottom: 0.25rem;
+		font-size: 1rem;
+		line-height: 1.5rem;
+		font-weight: 600;
+		color: var(--color-text);
+	}
+	.session-routes-card-intro {
+		margin-bottom: 1rem;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
+	.session-routes-card-loading {
+		padding: 1rem 0;
+		text-align: center;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-faint);
+	}
 	/* the original group heading was text-xs font-bold uppercase
 	   tracking-wider (12px/700/0.05em) - close to but not exactly .eyebrow's
 	   own weight/tracking, so those two are overridden here. */
-	.session-routes-card-group-title { margin-bottom: 0.375rem; font-weight: 700; letter-spacing: 0.05em; }
+	.session-routes-card-group-title {
+		margin-bottom: 0.375rem;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+	}
 	/* the original row was a bordered, unfilled box (rounded-lg
 	   border-primary/10 px-3 py-2) - panel-section's shape, but without its
 	   tint-1 fill and at a tighter 10% border + own padding. */
-	.session-routes-card-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; border-color: var(--color-primary-tint-2); background: none; padding: 0.5rem 0.75rem; }
-	.session-routes-card-scope-label { width: 5rem; flex-shrink: 0; font-size: 0.75rem; line-height: 1rem; font-weight: 500; color: var(--color-text-secondary); }
-	.session-routes-card-select { min-width: 0; flex: 1 1 0%; width: auto; min-height: 0; padding: 0.375rem 0.5rem; font-size: 0.75rem; }
+	.session-routes-card-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+		border-color: var(--color-primary-tint-2);
+		background: none;
+		padding: 0.5rem 0.75rem;
+	}
+	.session-routes-card-scope-label {
+		width: 5rem;
+		flex-shrink: 0;
+		font-size: 0.75rem;
+		line-height: 1rem;
+		font-weight: 500;
+		color: var(--color-text-secondary);
+	}
+	.session-routes-card-select {
+		min-width: 0;
+		flex: 1 1 0%;
+		width: auto;
+		min-height: 0;
+		padding: 0.375rem 0.5rem;
+		font-size: 0.75rem;
+	}
 	/* other-routes: API-created keys outside the grid; same row shape,
 	   muted single-line label. */
-	.session-routes-card-other { margin-top: 1rem; }
-	.session-routes-card-other-label { min-width: 0; flex: 1 1 0%; font-size: 0.75rem; line-height: 1rem; color: var(--color-text-secondary); }
-	.session-routes-card-other-key { font-weight: 500; }
-	.session-routes-card-other-arrow { color: var(--color-text-faint); }
+	.session-routes-card-other {
+		margin-top: 1rem;
+	}
+	.session-routes-card-other-label {
+		min-width: 0;
+		flex: 1 1 0%;
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-secondary);
+	}
+	.session-routes-card-other-key {
+		font-weight: 500;
+	}
+	.session-routes-card-other-arrow {
+		color: var(--color-text-faint);
+	}
 </style>

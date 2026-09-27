@@ -78,17 +78,30 @@ describe('JobRow', () => {
 	describe('Rip + Transcode columns', () => {
 		it('renders separate Rip and Transcode columns; partial transcode is not green', async () => {
 			const job = {
-				id: 'job_x', status: 'ripped', title: 'M', disc_type: 'dvd', drive_id: 'd',
-				metadata_json: {}, transcode_progress: { state: 'done_partial', tasks_total: 4, tasks_done: 2, tasks_failed: 2, percent: 50 }
+				id: 'job_x',
+				status: 'ripped',
+				title: 'M',
+				disc_type: 'dvd',
+				drive_id: 'd',
+				metadata_json: {},
+				transcode_progress: { state: 'done_partial', tasks_total: 4, tasks_done: 2, tasks_failed: 2, percent: 50 }
 			} as any;
 			const { getByText, getAllByText } = renderInTable({ job });
-			expect(getByText('Ripped')).toBeInTheDocument();                      // Rip column
+			expect(getByText('Ripped')).toBeInTheDocument(); // Rip column
 			// Only the StatusBadge renders "Transcode failed"; the redundant caption is suppressed.
-			expect(getAllByText('Transcode failed').length).toBe(1);             // Transcode column (red, not green)
+			expect(getAllByText('Transcode failed').length).toBe(1); // Transcode column (red, not green)
 		});
 
 		it('shows a dash in Transcode when no session', async () => {
-			const job = { id: 'job_y', status: 'ripped', title: 'M', disc_type: 'dvd', drive_id: 'd', metadata_json: {}, transcode_progress: null } as any;
+			const job = {
+				id: 'job_y',
+				status: 'ripped',
+				title: 'M',
+				disc_type: 'dvd',
+				drive_id: 'd',
+				metadata_json: {},
+				transcode_progress: null
+			} as any;
 			const { getByText } = renderInTable({ job });
 			expect(getByText('-')).toBeInTheDocument();
 		});

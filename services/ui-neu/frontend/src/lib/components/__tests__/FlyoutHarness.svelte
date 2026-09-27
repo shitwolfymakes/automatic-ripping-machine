@@ -17,6 +17,11 @@
 		<button data-testid="trigger" aria-expanded={open} onclick={toggle}>Open</button>
 	{/snippet}
 	{#snippet children({ close })}
-		<FlyoutItem onclick={() => { onaction(); close(); }}>Do thing</FlyoutItem>
+		<FlyoutItem
+			onclick={() => {
+				onaction();
+				close();
+			}}>Do thing</FlyoutItem
+		>
 	{/snippet}
 </Flyout>

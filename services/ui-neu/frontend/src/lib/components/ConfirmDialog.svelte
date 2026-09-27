@@ -9,21 +9,9 @@
 		oncancel: () => void;
 	}
 
-	let {
-		open,
-		title,
-		message,
-		confirmLabel = 'Confirm',
-		variant = 'primary',
-		onconfirm,
-		oncancel
-	}: Props = $props();
+	let { open, title, message, confirmLabel = 'Confirm', variant = 'primary', onconfirm, oncancel }: Props = $props();
 
-	let confirmClasses = $derived(
-		variant === 'danger'
-			? 'btn-danger'
-			: 'btn-primary'
-	);
+	let confirmClasses = $derived(variant === 'danger' ? 'btn-danger' : 'btn-primary');
 
 	$effect(() => {
 		if (!open) return;
@@ -40,30 +28,22 @@
 {#if open}
 	<div class="modal">
 		<!-- Backdrop -->
-		<button
-			type="button"
-			class="confirm-dialog-scrim absolute inset-0"
-			aria-label="Close dialog"
-			onclick={oncancel}
+		<button type="button" class="confirm-dialog-scrim absolute inset-0" aria-label="Close dialog" onclick={oncancel}
 		></button>
 
 		<!-- Dialog -->
-		<div class="modal-panel confirm-dialog-panel relative" data-dialog role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+		<div
+			class="modal-panel confirm-dialog-panel relative"
+			data-dialog
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="dialog-title"
+		>
 			<h3 id="dialog-title" class="modal-title">{title}</h3>
 			<p class="modal-body">{message}</p>
 			<div class="modal-actions">
-				<button
-					type="button"
-					onclick={oncancel}
-					class="btn btn-ghost"
-				>
-					Cancel
-				</button>
-				<button
-					type="button"
-					onclick={onconfirm}
-					class="btn {confirmClasses}"
-				>
+				<button type="button" onclick={oncancel} class="btn btn-ghost"> Cancel </button>
+				<button type="button" onclick={onconfirm} class="btn {confirmClasses}">
 					{confirmLabel}
 				</button>
 			</div>

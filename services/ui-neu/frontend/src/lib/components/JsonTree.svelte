@@ -27,7 +27,14 @@
 
 {#if node.isContainer}
 	<div class="mono json-tree-node">
-		<button type="button" onclick={() => { open = !open; }} class="json-tree-toggle flex w-full items-center gap-1" aria-expanded={open}>
+		<button
+			type="button"
+			onclick={() => {
+				open = !open;
+			}}
+			class="json-tree-toggle flex w-full items-center gap-1"
+			aria-expanded={open}
+		>
 			<svg class="json-tree-chevron h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
 			</svg>
@@ -55,16 +62,49 @@
 
 <style>
 	/* .mono is size-neutral; this was font-mono text-xs (0.75rem/1rem). */
-	.json-tree-node { font-size: 0.75rem; line-height: 1rem; }
-	.json-tree-toggle { padding: 0.125rem 0; text-align: left; border: 0; background: none; cursor: pointer; color: inherit; font: inherit; }
-	.json-tree-toggle:hover { background: var(--color-primary-tint-1); }
-	.json-tree-chevron { transition: transform var(--motion-fast) var(--ease); }
-	.json-tree-toggle[aria-expanded="true"] .json-tree-chevron { transform: rotate(90deg); }
-	.json-tree-children { padding-left: 0.5rem; border-left: 1px solid var(--color-border); }
-	.json-tree-scalar { padding: 0.125rem 0; }
-	.json-tree-key { color: var(--color-text-muted); }
-	.json-tree-preview { color: var(--color-text-faint); }
-	.json-tree-string { color: var(--color-text); }
-	.json-tree-number { color: var(--color-on-warning-soft); }
-	.json-tree-const { color: var(--color-text-faint); font-style: italic; }
+	.json-tree-node {
+		font-size: 0.75rem;
+		line-height: 1rem;
+	}
+	.json-tree-toggle {
+		padding: 0.125rem 0;
+		text-align: left;
+		border: 0;
+		background: none;
+		cursor: pointer;
+		color: inherit;
+		font: inherit;
+	}
+	.json-tree-toggle:hover {
+		background: var(--color-primary-tint-1);
+	}
+	.json-tree-chevron {
+		transition: transform var(--motion-fast) var(--ease);
+	}
+	.json-tree-toggle[aria-expanded='true'] .json-tree-chevron {
+		transform: rotate(90deg);
+	}
+	.json-tree-children {
+		padding-left: 0.5rem;
+		border-left: 1px solid var(--color-border);
+	}
+	.json-tree-scalar {
+		padding: 0.125rem 0;
+	}
+	.json-tree-key {
+		color: var(--color-text-muted);
+	}
+	.json-tree-preview {
+		color: var(--color-text-faint);
+	}
+	.json-tree-string {
+		color: var(--color-text);
+	}
+	.json-tree-number {
+		color: var(--color-on-warning-soft);
+	}
+	.json-tree-const {
+		color: var(--color-text-faint);
+		font-style: italic;
+	}
 </style>

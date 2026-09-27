@@ -49,16 +49,12 @@
 	// Apprise channels store config.service_id, so resolve the service from the
 	// loaded catalog to render the per-service re-entry fields.
 	const serviceId = $derived(
-		channel.type === 'apprise'
-			? ((channel.config as AppriseConfig).service_id ?? null)
-			: null
+		channel.type === 'apprise' ? ((channel.config as AppriseConfig).service_id ?? null) : null
 	);
 	const service = $derived<CatalogService | null>(
-		serviceId ? catalog.services.find((s) => s.id === serviceId) ?? null : null
+		serviceId ? (catalog.services.find((s) => s.id === serviceId) ?? null) : null
 	);
-	const unknownService = $derived(
-		channel.type === 'apprise' && serviceId !== null && service === null
-	);
+	const unknownService = $derived(channel.type === 'apprise' && serviceId !== null && service === null);
 
 	// Apprise re-entry values live in a separate state from config (which holds the
 	// composed url + service_id). Seed from stored fields so private values show as
@@ -67,20 +63,18 @@
 	let appriseFields = $state<Record<string, unknown>>({
 		...((channel.config as AppriseConfig).fields ?? {})
 	});
-	const noFields = $derived(
-		channel.type === 'apprise' && !(channel.config as AppriseConfig).fields
-	);
+	const noFields = $derived(channel.type === 'apprise' && !(channel.config as AppriseConfig).fields);
 	const appriseTouched = $derived(
 		Object.values(appriseFields).some((v) => v !== undefined && v !== null && String(v).trim() !== '')
 	);
 
 	const dirty = $derived(
 		name !== channel.name ||
-		enabled !== channel.enabled ||
-		(channel.type !== 'apprise' && JSON.stringify(config) !== JSON.stringify(channel.config)) ||
-		JSON.stringify(events) !== JSON.stringify(channel.subscribed_events) ||
-		JSON.stringify(templates) !== JSON.stringify(channel.templates) ||
-		appriseTouched
+			enabled !== channel.enabled ||
+			(channel.type !== 'apprise' && JSON.stringify(config) !== JSON.stringify(channel.config)) ||
+			JSON.stringify(events) !== JSON.stringify(channel.subscribed_events) ||
+			JSON.stringify(templates) !== JSON.stringify(channel.templates) ||
+			appriseTouched
 	);
 
 	function body(): EditorBody {
@@ -102,7 +96,15 @@
 			<ConfigureSection type="apprise" bind:name bind:enabled bind:config={appriseFields} {service} preserveExisting />
 		{/if}
 	{:else}
-		<ConfigureSection type={channel.type} bind:name bind:enabled bind:config {service} preserveExisting onscript={(i: BashScriptInfo | null) => (scriptInputs = i?.inputs ?? [])} />
+		<ConfigureSection
+			type={channel.type}
+			bind:name
+			bind:enabled
+			bind:config
+			{service}
+			preserveExisting
+			onscript={(i: BashScriptInfo | null) => (scriptInputs = i?.inputs ?? [])}
+		/>
 	{/if}
 	<EventsSection bind:selected={events} bind:templates {eventTypes} inputs={scriptInputs} />
 	{#if channel.type === 'bash'}
@@ -120,11 +122,16 @@
 </div>
 
 <style>
-	.channel-editor { border-top: 1px solid var(--color-border); padding: 1rem; }
+	.channel-editor {
+		border-top: 1px solid var(--color-border);
+		padding: 1rem;
+	}
 	/* the original Close button's border was a genuinely neutral grey
 	   (border-gray-300/600), not the primary-tinted --color-border-strong
 	   every other bare .btn uses - no neutral-border role exists in spec 5.1,
 	   so this is a deliberate, unfixable-without-inventing-a-token collapse
 	   (kept as bare .btn per the reference's precedent, spec section 3). */
-	.channel-editor-delete { margin-left: auto; }
+	.channel-editor-delete {
+		margin-left: auto;
+	}
 </style>

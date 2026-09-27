@@ -10,13 +10,13 @@ const tvShowFolder = createFolderEntry('TV_Show', '2025-06-14T10:00:00Z');
 const subFolder = createFolderEntry('Subfolder');
 
 vi.mock('$lib/api/import-jobs', () => ({
-	fetchIngressRoot: vi.fn(() => Promise.resolve([
-		{ key: 'ingress', label: 'Ingress', path: '/home/arm/ingress' }
-	])),
-	fetchIngressDirectory: vi.fn(() => Promise.resolve({
-		path: '/home/arm/ingress',
-		entries: [movieFolder, tvShowFolder]
-	}))
+	fetchIngressRoot: vi.fn(() => Promise.resolve([{ key: 'ingress', label: 'Ingress', path: '/home/arm/ingress' }])),
+	fetchIngressDirectory: vi.fn(() =>
+		Promise.resolve({
+			path: '/home/arm/ingress',
+			entries: [movieFolder, tvShowFolder]
+		})
+	)
 }));
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
@@ -43,13 +43,15 @@ async function waitForEntries() {
 
 /** Navigate into Movie_Folder and wait for the ".." back-row to appear. */
 async function navigateIntoSubfolder() {
-	mockFetchIngressDirectory.mockResolvedValueOnce({
-		path: '/home/arm/ingress',
-		entries: [{ ...movieFolder, size: 4294967296 }]
-	} as any).mockResolvedValueOnce({
-		path: '/home/arm/ingress/Movie_Folder',
-		entries: [{ ...subFolder, size: 1024 }]
-	} as any);
+	mockFetchIngressDirectory
+		.mockResolvedValueOnce({
+			path: '/home/arm/ingress',
+			entries: [{ ...movieFolder, size: 4294967296 }]
+		} as any)
+		.mockResolvedValueOnce({
+			path: '/home/arm/ingress/Movie_Folder',
+			entries: [{ ...subFolder, size: 1024 }]
+		} as any);
 
 	renderBrowser();
 	await waitForEntries();
@@ -138,7 +140,17 @@ describe('IngressBrowser', () => {
 				path: '/home/arm/ingress',
 				entries: [
 					movieFolder,
-					{ name: 'Movie.iso', type: 'file', size: 8_000_000_000, modified: '2025-06-15T12:00:00Z', extension: 'iso', category: 'archive', permissions: 'rw-r--r--', owner: 'arm', group: 'arm' }
+					{
+						name: 'Movie.iso',
+						type: 'file',
+						size: 8_000_000_000,
+						modified: '2025-06-15T12:00:00Z',
+						extension: 'iso',
+						category: 'archive',
+						permissions: 'rw-r--r--',
+						owner: 'arm',
+						group: 'arm'
+					}
 				]
 			} as any);
 
@@ -154,7 +166,17 @@ describe('IngressBrowser', () => {
 			mockFetchIngressDirectory.mockResolvedValueOnce({
 				path: '/home/arm/ingress',
 				entries: [
-					{ name: 'notes.txt', type: 'file', size: 100, modified: '2025-06-15T12:00:00Z', extension: 'txt', category: 'text', permissions: 'rw-r--r--', owner: 'arm', group: 'arm' }
+					{
+						name: 'notes.txt',
+						type: 'file',
+						size: 100,
+						modified: '2025-06-15T12:00:00Z',
+						extension: 'txt',
+						category: 'text',
+						permissions: 'rw-r--r--',
+						owner: 'arm',
+						group: 'arm'
+					}
 				]
 			} as any);
 
@@ -174,7 +196,17 @@ describe('IngressBrowser', () => {
 			mockFetchIngressDirectory.mockResolvedValueOnce({
 				path: '/home/arm/ingress',
 				entries: [
-					{ name: 'Movie.iso', type: 'file', size: 8_000_000_000, modified: '2025-06-15T12:00:00Z', extension: 'iso', category: 'archive', permissions: 'rw-r--r--', owner: 'arm', group: 'arm' }
+					{
+						name: 'Movie.iso',
+						type: 'file',
+						size: 8_000_000_000,
+						modified: '2025-06-15T12:00:00Z',
+						extension: 'iso',
+						category: 'archive',
+						permissions: 'rw-r--r--',
+						owner: 'arm',
+						group: 'arm'
+					}
 				]
 			} as any);
 
@@ -211,7 +243,17 @@ describe('IngressBrowser', () => {
 			mockFetchIngressDirectory.mockResolvedValueOnce({
 				path: '/home/arm/ingress',
 				entries: [
-					{ name: 'notes.txt', type: 'file', size: 100, modified: '2025-06-15T12:00:00Z', extension: 'txt', category: 'text', permissions: 'rw-r--r--', owner: 'arm', group: 'arm' }
+					{
+						name: 'notes.txt',
+						type: 'file',
+						size: 100,
+						modified: '2025-06-15T12:00:00Z',
+						extension: 'txt',
+						category: 'text',
+						permissions: 'rw-r--r--',
+						owner: 'arm',
+						group: 'arm'
+					}
 				]
 			} as any);
 

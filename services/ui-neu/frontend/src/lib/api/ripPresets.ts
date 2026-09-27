@@ -1,8 +1,4 @@
-import type {
-	RipPresetView,
-	RipPresetCreateRequest,
-	RipPresetUpdateRequest
-} from '$lib/types/api.gen';
+import type { RipPresetView, RipPresetCreateRequest, RipPresetUpdateRequest } from '$lib/types/api.gen';
 import { get, post, patch, del } from './client';
 
 export function fetchRipPresets(): Promise<RipPresetView[]> {

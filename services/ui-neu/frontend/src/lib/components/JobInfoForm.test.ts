@@ -72,12 +72,14 @@ describe('JobInfoForm', () => {
 		await fireEvent.input(screen.getByLabelText('Disc number'), { target: { value: '2' } });
 		await fireEvent.input(screen.getByLabelText('Disc total'), { target: { value: '3' } });
 		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-		await waitFor(() => expect(mockResolve).toHaveBeenCalledWith('job_1', {
-			title: 'Star Knight',
-			year: 1985,
-			disc_number: 2,
-			disc_total: 3
-		}));
+		await waitFor(() =>
+			expect(mockResolve).toHaveBeenCalledWith('job_1', {
+				title: 'Star Knight',
+				year: 1985,
+				disc_number: 2,
+				disc_total: 3
+			})
+		);
 	});
 
 	it('a save error shows error feedback and keeps the dirty Save bar', async () => {

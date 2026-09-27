@@ -150,9 +150,7 @@ describe('TranscodePresetForm', () => {
 			const optionValues = (el: HTMLSelectElement) => Array.from(el.options).map((o) => o.value);
 			expect(optionValues(mediaType)).toEqual(['movie', 'tv', 'music', 'data', 'iso']);
 			expect(optionValues(tool)).toEqual(['handbrake', 'abcde', 'none']);
-			expect(optionValues(container)).toEqual([
-				'mkv', 'mp4', 'webm', 'flac', 'mp3', 'ogg', 'iso', 'none'
-			]);
+			expect(optionValues(container)).toEqual(['mkv', 'mp4', 'webm', 'flac', 'mp3', 'ogg', 'iso', 'none']);
 
 			await waitFor(() =>
 				expect(optionValues(encoder)).toEqual([
@@ -288,10 +286,7 @@ describe('TranscodePresetForm', () => {
 			await fireEvent.click(screen.getByTestId('tp-submit'));
 
 			await waitFor(() =>
-				expect(updateMock).toHaveBeenCalledWith(
-					'tpr_100',
-					expect.objectContaining({ encoder: 'preset' })
-				)
+				expect(updateMock).toHaveBeenCalledWith('tpr_100', expect.objectContaining({ encoder: 'preset' }))
 			);
 		});
 	});
@@ -314,9 +309,7 @@ describe('TranscodePresetForm', () => {
 			expect(screen.getByTestId('tp-extra-args')).toBeDisabled();
 
 			// Warning banner instead of the old "only the name is editable" note.
-			expect(
-				screen.getByText(/built-in preset and can't be edited/i)
-			).toBeInTheDocument();
+			expect(screen.getByText(/built-in preset and can't be edited/i)).toBeInTheDocument();
 
 			// No Save button at all; heading reads View.
 			expect(screen.queryByTestId('tp-submit')).not.toBeInTheDocument();
@@ -369,14 +362,7 @@ describe('encoder picker', () => {
 		const encoder = screen.getByTestId('tp-encoder') as HTMLSelectElement;
 		await waitFor(() => expect(encoder.querySelectorAll('optgroup')).toHaveLength(6));
 		const groupLabels = Array.from(encoder.querySelectorAll('optgroup')).map((g) => g.label);
-		expect(groupLabels).toEqual([
-			"HandBrake preset's own",
-			'CPU',
-			'Any GPU',
-			'Intel QSV',
-			'NVIDIA NVENC',
-			'AMD VAAPI'
-		]);
+		expect(groupLabels).toEqual(["HandBrake preset's own", 'CPU', 'Any GPU', 'Intel QSV', 'NVIDIA NVENC', 'AMD VAAPI']);
 	});
 
 	it('disables an unavailable encoder option and shows its reason', async () => {

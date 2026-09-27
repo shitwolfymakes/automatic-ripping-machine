@@ -7,14 +7,19 @@ const rescanMock = vi.mocked(rescanDrives);
 const summary = { online: 1, stale: 0, detected: 2, ignored: 1, enrolled: 1, absent: 1, pruned: 0 };
 
 describe('DriveMaintenance', () => {
-	afterEach(() => { cleanup(); vi.clearAllMocks(); });
+	afterEach(() => {
+		cleanup();
+		vi.clearAllMocks();
+	});
 
 	it('Rescan calls the API without force, reports the counts, and notifies the parent', async () => {
 		rescanMock.mockResolvedValueOnce(summary);
 		const onrescanned = vi.fn();
 		renderComponent(DriveMaintenance, { props: { onrescanned } });
 		await fireEvent.click(screen.getByTestId('drive-rescan'));
-		await waitFor(() => expect(screen.getByTestId('drive-rescan-summary')).toHaveTextContent('2 detected · 1 enrolled · 1 ignored'));
+		await waitFor(() =>
+			expect(screen.getByTestId('drive-rescan-summary')).toHaveTextContent('2 detected · 1 enrolled · 1 ignored')
+		);
 		expect(rescanMock).toHaveBeenCalledWith(false);
 		expect(onrescanned).toHaveBeenCalledWith(summary);
 		expect(screen.queryByText(/removed/)).not.toBeInTheDocument();
@@ -46,6 +51,8 @@ describe('DriveMaintenance', () => {
 		rescanMock.mockRejectedValueOnce(new Error('drive scanner unavailable'));
 		renderComponent(DriveMaintenance, { props: { onrescanned: vi.fn() } });
 		await fireEvent.click(screen.getByTestId('drive-rescan'));
-		await waitFor(() => expect(screen.getByTestId('drive-rescan-error')).toHaveTextContent('drive scanner unavailable'));
+		await waitFor(() =>
+			expect(screen.getByTestId('drive-rescan-error')).toHaveTextContent('drive scanner unavailable')
+		);
 	});
 });

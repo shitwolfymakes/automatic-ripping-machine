@@ -19,7 +19,9 @@ describe('apiFormPost', () => {
 
 	it('throws with detail from error response', async () => {
 		mockFetch.mockResolvedValue({
-			ok: false, status: 400, statusText: 'Bad Request',
+			ok: false,
+			status: 400,
+			statusText: 'Bad Request',
 			json: () => Promise.resolve({ detail: 'Invalid file' })
 		});
 		await expect(apiFormPost('/api/upload', new FormData())).rejects.toThrow('Invalid file');
@@ -27,7 +29,9 @@ describe('apiFormPost', () => {
 
 	it('throws with status text when body is not JSON', async () => {
 		mockFetch.mockResolvedValue({
-			ok: false, status: 500, statusText: 'Internal Server Error',
+			ok: false,
+			status: 500,
+			statusText: 'Internal Server Error',
 			json: () => Promise.reject(new Error('not json'))
 		});
 		await expect(apiFormPost('/api/upload', new FormData())).rejects.toThrow('API 500: Internal Server Error');

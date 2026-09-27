@@ -85,10 +85,7 @@ describe('image cache (real backend)', () => {
 	it('clearImageCache POSTs /api/images/cache/clear', async () => {
 		mockFetch.mockResolvedValue(jsonResponse({ count: 0, size_mb: 0, cleared: 2, freed_bytes: 1024 }));
 		const result = await clearImageCache();
-		expect(mockFetch).toHaveBeenCalledWith(
-			'/api/images/cache/clear',
-			expect.objectContaining({ method: 'POST' })
-		);
+		expect(mockFetch).toHaveBeenCalledWith('/api/images/cache/clear', expect.objectContaining({ method: 'POST' }));
 		expect(result).toEqual({ count: 0, size_mb: 0, cleared: 2, freed_bytes: 1024 });
 	});
 });

@@ -3,10 +3,16 @@ import { channelStatus, relativeTime, typeLabel, isReady, missingRequirements } 
 import type { Channel, CatalogService } from '$lib/types/notifications';
 
 const base: Channel = {
-	id: 1, type: 'apprise', name: 'X', enabled: true,
+	id: 1,
+	type: 'apprise',
+	name: 'X',
+	enabled: true,
 	config: { type: 'apprise', url: 'discord://a/b' },
-	subscribed_events: ['job.started'], templates: {},
-	last_fired_at: null, last_success_at: null, last_error: null
+	subscribed_events: ['job.started'],
+	templates: {},
+	last_fired_at: null,
+	last_success_at: null,
+	last_error: null
 };
 
 describe('channelStatus', () => {
@@ -40,7 +46,10 @@ describe('typeLabel', () => {
 });
 
 const svc: CatalogService = {
-	id: 'discord', name: 'Discord', docs_url: '', url_scheme: 'discord',
+	id: 'discord',
+	name: 'Discord',
+	docs_url: '',
+	url_scheme: 'discord',
 	required_fields: [{ key: 'webhook_id', label: 'Webhook ID', type: 'string', private: false, required: true }],
 	advanced_fields: []
 };
@@ -48,7 +57,11 @@ const svc: CatalogService = {
 describe('missingRequirements', () => {
 	it('flags blank label, unfilled required field, and no events', () => {
 		const m = missingRequirements({
-			type: 'apprise', name: '  ', config: {}, events: [], service: svc
+			type: 'apprise',
+			name: '  ',
+			config: {},
+			events: [],
+			service: svc
 		});
 		expect(m).toContain('channel label');
 		expect(m).toContain('required fields');
@@ -57,23 +70,36 @@ describe('missingRequirements', () => {
 
 	it('is empty when all requirements are met', () => {
 		const m = missingRequirements({
-			type: 'apprise', name: 'My Discord',
-			config: { webhook_id: '123' }, events: ['job.started'], service: svc
+			type: 'apprise',
+			name: 'My Discord',
+			config: { webhook_id: '123' },
+			events: ['job.started'],
+			service: svc
 		});
 		expect(m).toEqual([]);
 	});
 
 	it('webhook requires a url', () => {
-		expect(missingRequirements({ type: 'webhook', name: 'H', config: {}, events: ['job.started'], service: null }))
-			.toContain('required fields');
-		expect(missingRequirements({ type: 'webhook', name: 'H', config: { url: 'https://x' }, events: ['job.started'], service: null }))
-			.toEqual([]);
+		expect(
+			missingRequirements({ type: 'webhook', name: 'H', config: {}, events: ['job.started'], service: null })
+		).toContain('required fields');
+		expect(
+			missingRequirements({
+				type: 'webhook',
+				name: 'H',
+				config: { url: 'https://x' },
+				events: ['job.started'],
+				service: null
+			})
+		).toEqual([]);
 	});
 });
 
 describe('isReady', () => {
 	it('true only when nothing missing', () => {
-		expect(isReady({ type: 'webhook', name: 'H', config: { url: 'https://x' }, events: ['job.started'], service: null })).toBe(true);
+		expect(
+			isReady({ type: 'webhook', name: 'H', config: { url: 'https://x' }, events: ['job.started'], service: null })
+		).toBe(true);
 		expect(isReady({ type: 'webhook', name: '', config: {}, events: [], service: null })).toBe(false);
 	});
 });

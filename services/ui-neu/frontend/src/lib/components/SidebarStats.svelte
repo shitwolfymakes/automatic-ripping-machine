@@ -25,7 +25,11 @@
 			</div>
 			<div class="progress progress-sm">
 				<div class="progress-track">
-					<div class="progress-fill" data-bar={barColor($resources.cpu_percent, 'cpu')} style:--progress="{Math.min(100, $resources.cpu_percent)}%"></div>
+					<div
+						class="progress-fill"
+						data-bar={barColor($resources.cpu_percent, 'cpu')}
+						style:--progress="{Math.min(100, $resources.cpu_percent)}%"
+					></div>
 				</div>
 			</div>
 		</div>
@@ -38,7 +42,11 @@
 			</div>
 			<div class="progress progress-sm">
 				<div class="progress-track">
-					<div class="progress-fill" data-bar={barColor($resources.memory.percent, 'mem')} style:--progress="{Math.min(100, $resources.memory.percent)}%"></div>
+					<div
+						class="progress-fill"
+						data-bar={barColor($resources.memory.percent, 'mem')}
+						style:--progress="{Math.min(100, $resources.memory.percent)}%"
+					></div>
 				</div>
 			</div>
 		</div>
@@ -56,7 +64,11 @@
 					</div>
 					<div class="progress progress-sm">
 						<div class="progress-track">
-							<div class="progress-fill" data-bar={barColor(s.percent, 'disk')} style:--progress="{Math.min(100, s.percent)}%"></div>
+							<div
+								class="progress-fill"
+								data-bar={barColor(s.percent, 'disk')}
+								style:--progress="{Math.min(100, s.percent)}%"
+							></div>
 						</div>
 					</div>
 				</a>

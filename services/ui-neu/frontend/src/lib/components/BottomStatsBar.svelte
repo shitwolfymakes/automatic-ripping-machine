@@ -16,7 +16,11 @@
 		<span class="shrink-0">CPU</span>
 		<div class="progress progress-sm stats-bar-track">
 			<div class="progress-track">
-				<div class="progress-fill" data-bar={barColor($resources.cpu_percent, 'cpu')} style:--progress="{Math.min(100, $resources.cpu_percent)}%"></div>
+				<div
+					class="progress-fill"
+					data-bar={barColor($resources.cpu_percent, 'cpu')}
+					style:--progress="{Math.min(100, $resources.cpu_percent)}%"
+				></div>
 			</div>
 		</div>
 		<span class="stats-bar-slot stats-bar-slot-pct shrink-0">{$resources.cpu_percent.toFixed(0)}%</span>
@@ -29,10 +33,16 @@
 		<span class="shrink-0">Mem</span>
 		<div class="progress progress-sm stats-bar-track">
 			<div class="progress-track">
-				<div class="progress-fill" data-bar={barColor($resources.memory.percent, 'mem')} style:--progress="{Math.min(100, $resources.memory.percent)}%"></div>
+				<div
+					class="progress-fill"
+					data-bar={barColor($resources.memory.percent, 'mem')}
+					style:--progress="{Math.min(100, $resources.memory.percent)}%"
+				></div>
 			</div>
 		</div>
-		<span class="stats-bar-slot stats-bar-slot-mem shrink-0 whitespace-nowrap">{$resources.memory.used_gb} / {$resources.memory.total_gb} GB</span>
+		<span class="stats-bar-slot stats-bar-slot-mem shrink-0 whitespace-nowrap"
+			>{$resources.memory.used_gb} / {$resources.memory.total_gb} GB</span
+		>
 	</div>
 
 	<!-- Storage per root -->
@@ -44,7 +54,11 @@
 					<span class="stats-bar-name">{s.name}</span>
 					<div class="progress progress-sm stats-bar-track stats-bar-track-sm">
 						<div class="progress-track">
-							<div class="progress-fill" data-bar={barColor(s.percent, 'disk')} style:--progress="{Math.min(100, s.percent)}%"></div>
+							<div
+								class="progress-fill"
+								data-bar={barColor(s.percent, 'disk')}
+								style:--progress="{Math.min(100, s.percent)}%"
+							></div>
 						</div>
 					</div>
 					<span class="stats-bar-slot stats-bar-slot-free shrink-0">{s.free_gb} GB</span>

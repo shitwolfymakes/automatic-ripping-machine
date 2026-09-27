@@ -21,8 +21,8 @@
 	style:--font-size="{Math.round(size * 0.45)}px"
 	style:--bg={bg}
 	style:--fg={fg}
-	aria-hidden="true"
->{letter}</span>
+	aria-hidden="true">{letter}</span
+>
 
 <style>
 	.service-glyph {

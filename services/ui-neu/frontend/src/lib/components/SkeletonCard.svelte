@@ -8,11 +8,7 @@
 	let { class: cls = '', lines = 3 }: Props = $props();
 </script>
 
-<div
-	class="panel {cls}"
-	aria-busy="true"
-	aria-live="polite"
->
+<div class="panel {cls}" aria-busy="true" aria-live="polite">
 	<div class="stack stack-sm skeleton-card-lines">
 		<Skeleton variant="line" width="60%" height="1.25rem" />
 		{#each { length: Math.max(0, lines - 1) } as _}

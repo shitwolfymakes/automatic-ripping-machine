@@ -6,13 +6,15 @@ const mockScanFolder = vi.fn<() => Promise<FolderScanResult>>();
 const mockCreateFolderJob = vi.fn(() => Promise.resolve({ job_id: 99 }));
 
 vi.mock('$lib/api/import-jobs', () => ({
-	scanFolder: (...args: unknown[]) => mockScanFolder(...args as []),
-	createFolderJob: (...args: unknown[]) => mockCreateFolderJob(...args as [])
+	scanFolder: (...args: unknown[]) => mockScanFolder(...(args as [])),
+	createFolderJob: (...args: unknown[]) => mockCreateFolderJob(...(args as []))
 }));
 
 vi.mock('$lib/api/jobs', () => ({
 	searchMetadata: vi.fn(() => Promise.resolve([])),
-	fetchMediaDetail: vi.fn(() => Promise.resolve({ title: 'Test', year: '2024', media_type: 'movie', imdb_id: 'tt0000001', poster_url: null }))
+	fetchMediaDetail: vi.fn(() =>
+		Promise.resolve({ title: 'Test', year: '2024', media_type: 'movie', imdb_id: 'tt0000001', poster_url: null })
+	)
 }));
 
 vi.mock('$lib/utils/poster', () => ({
@@ -147,7 +149,7 @@ describe('ImportWizard', () => {
 				poster_url: editPosterUrl.trim() || null,
 				season: editSeason ? Number(editSeason) : null,
 				disc_number: editDiscNumber ? Number(editDiscNumber) : null,
-				disc_total: editDiscTotal ? Number(editDiscTotal) : null,
+				disc_total: editDiscTotal ? Number(editDiscTotal) : null
 			};
 
 			expect(data).toEqual({
@@ -160,7 +162,7 @@ describe('ImportWizard', () => {
 				poster_url: null,
 				season: 3,
 				disc_number: 2,
-				disc_total: 4,
+				disc_total: 4
 			});
 		});
 	});

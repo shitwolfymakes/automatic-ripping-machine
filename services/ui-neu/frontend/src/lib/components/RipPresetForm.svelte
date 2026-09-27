@@ -5,13 +5,7 @@
 	// submit-body shapes follow the Vue source faithfully.
 	import { createRipPreset, updateRipPreset } from '$lib/api/ripPresets';
 	import TrackFiltersEditor from './TrackFiltersEditor.svelte';
-	import type {
-		IdentificationMode,
-		MediaType,
-		OutputMode,
-		RipPresetView,
-		TrackSelection
-	} from '$lib/types/api.gen';
+	import type { IdentificationMode, MediaType, OutputMode, RipPresetView, TrackSelection } from '$lib/types/api.gen';
 
 	type TrackFilters = {
 		min_duration_seconds?: number | null;
@@ -37,9 +31,7 @@
 	let name = $state(preset?.name ?? '');
 	let mediaType = $state<MediaType>(preset?.media_type ?? 'movie');
 	let trackSelection = $state<TrackSelection>(preset?.track_selection ?? 'main_feature');
-	let identificationMode = $state<IdentificationMode>(
-		preset?.identification_mode ?? 'required'
-	);
+	let identificationMode = $state<IdentificationMode>(preset?.identification_mode ?? 'required');
 	let outputMode = $state<OutputMode>(preset?.output_mode ?? 'tracks');
 	let filters = $state<TrackFilters>((preset?.track_filters_json as TrackFilters) ?? {});
 
@@ -53,9 +45,7 @@
 	// custom selection, and drop null/undefined keys from it; otherwise null.
 	function buildTrackFilters(): TrackFilters | null {
 		if (trackSelection !== 'custom') return null;
-		return Object.fromEntries(
-			Object.entries(filters).filter(([, v]) => v !== null && v !== undefined)
-		) as TrackFilters;
+		return Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== null && v !== undefined)) as TrackFilters;
 	}
 
 	async function submit(event: Event): Promise<void> {
@@ -103,11 +93,7 @@
 	</h3>
 
 	{#if isBuiltin}
-		<div
-			class="alert alert-warning"
-			data-testid="preset-builtin-note"
-			role="status"
-		>
+		<div class="alert alert-warning" data-testid="preset-builtin-note" role="status">
 			This is a built-in preset and can't be edited. Clone it to make an editable copy.
 		</div>
 	{/if}
@@ -130,12 +116,7 @@
 
 	<label class="field">
 		<span class="field-label">Media type</span>
-		<select
-			id="preset-media-type"
-			data-testid="preset-media-type"
-			bind:value={mediaType}
-			disabled={editing}
-		>
+		<select id="preset-media-type" data-testid="preset-media-type" bind:value={mediaType} disabled={editing}>
 			<option value="movie">Movie</option>
 			<option value="tv">TV</option>
 			<option value="music">Music</option>
@@ -175,12 +156,7 @@
 
 	<label class="field">
 		<span class="field-label">Output mode</span>
-		<select
-			id="preset-output-mode"
-			data-testid="preset-output-mode"
-			bind:value={outputMode}
-			disabled={isBuiltin}
-		>
+		<select id="preset-output-mode" data-testid="preset-output-mode" bind:value={outputMode} disabled={isBuiltin}>
 			<option value="tracks">Tracks</option>
 			<option value="iso">ISO</option>
 			<option value="data_copy">Data copy</option>
@@ -192,21 +168,11 @@
 	{/if}
 
 	<div class="rip-preset-form-actions">
-		<button
-			type="button"
-			onclick={oncancel}
-			disabled={submitting}
-			class="btn btn-ghost"
-		>
+		<button type="button" onclick={oncancel} disabled={submitting} class="btn btn-ghost">
 			{isBuiltin ? 'Close' : 'Cancel'}
 		</button>
 		{#if !isBuiltin}
-			<button
-				type="submit"
-				disabled={!canSubmit}
-				data-testid="preset-submit"
-				class="btn btn-primary"
-			>
+			<button type="submit" disabled={!canSubmit} data-testid="preset-submit" class="btn btn-primary">
 				{submitting ? 'Saving...' : 'Save'}
 			</button>
 		{/if}
@@ -214,6 +180,16 @@
 </form>
 
 <style>
-	.rip-preset-form-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-text); }
-	.rip-preset-form-actions { display: flex; justify-content: flex-end; gap: 0.75rem; padding-top: 0.5rem; }
+	.rip-preset-form-title {
+		font-size: 1.125rem;
+		line-height: 1.75rem;
+		font-weight: 600;
+		color: var(--color-text);
+	}
+	.rip-preset-form-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.75rem;
+		padding-top: 0.5rem;
+	}
 </style>

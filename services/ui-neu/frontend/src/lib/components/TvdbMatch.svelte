@@ -81,17 +81,11 @@
 	let browseResult = $state<TvdbEpisodesResponse | null>(null);
 
 	// Build a map of track durations for display (track index → seconds).
-	let trackLengthMap = $derived(
-		Object.fromEntries(tracks.map((t) => [String(t.index), t.duration_seconds]))
-	);
+	let trackLengthMap = $derived(Object.fromEntries(tracks.map((t) => [String(t.index), t.duration_seconds])));
 
 	// Build a map of track episode assignments for browse view.
 	let trackEpisodeMap = $derived(
-		Object.fromEntries(
-			tracks
-				.filter((t) => t.episode_number)
-				.map((t) => [String(t.episode_number), String(t.index)])
-		)
+		Object.fromEntries(tracks.filter((t) => t.episode_number).map((t) => [String(t.episode_number), String(t.index)]))
 	);
 
 	async function handlePreview() {
@@ -190,8 +184,6 @@
 		const sign = delta >= 0 ? '+' : '';
 		return `${sign}${delta}s`;
 	}
-
-
 </script>
 
 <div class="stack">
@@ -211,18 +203,10 @@
 
 	<!-- Tab bar -->
 	<div class="tabs">
-		<button
-			data-selected={activeTab === 'match'}
-			onclick={() => (activeTab = 'match')}
-			class="tabs-tab"
-		>
+		<button data-selected={activeTab === 'match'} onclick={() => (activeTab = 'match')} class="tabs-tab">
 			Match Tracks
 		</button>
-		<button
-			data-selected={activeTab === 'browse'}
-			onclick={() => (activeTab = 'browse')}
-			class="tabs-tab"
-		>
+		<button data-selected={activeTab === 'browse'} onclick={() => (activeTab = 'browse')} class="tabs-tab">
 			Browse Episodes
 		</button>
 	</div>
@@ -232,39 +216,20 @@
 		<!-- Controls -->
 		<div class="flex flex-wrap items-end gap-3">
 			<label class="flex items-center gap-2">
-				<input
-					type="checkbox"
-					bind:checked={autoDetect}
-					class="tvdb-match-checkbox"
-				/>
+				<input type="checkbox" bind:checked={autoDetect} class="tvdb-match-checkbox" />
 				<span class="tvdb-match-checkbox-label">Auto-detect season</span>
 			</label>
 			{#if !autoDetect}
 				<label class="field">
 					<span class="field-label tvdb-match-field-label">Season</span>
-					<input
-						type="number"
-						bind:value={seasonInput}
-						min="1"
-						class="w-20"
-					/>
+					<input type="number" bind:value={seasonInput} min="1" class="w-20" />
 				</label>
 			{/if}
 			<label class="field">
 				<span class="field-label tvdb-match-field-label">Tolerance (sec)</span>
-				<input
-					type="number"
-					bind:value={toleranceInput}
-					min="60"
-					step="30"
-					class="w-24"
-				/>
+				<input type="number" bind:value={toleranceInput} min="60" step="30" class="w-24" />
 			</label>
-			<button
-				onclick={handlePreview}
-				disabled={loading}
-				class="btn btn-primary tvdb-match-action-btn"
-			>
+			<button onclick={handlePreview} disabled={loading} class="btn btn-primary tvdb-match-action-btn">
 				{loading ? 'Matching...' : 'Preview Match'}
 			</button>
 		</div>
@@ -279,9 +244,7 @@
 				<!-- Summary -->
 				<div class="flex flex-wrap items-center gap-3">
 					<span class="tvdb-match-summary">
-						Season {result.season}: {result.match_count} match{result.match_count !== 1
-							? 'es'
-							: ''}
+						Season {result.season}: {result.match_count} match{result.match_count !== 1 ? 'es' : ''}
 					</span>
 					{#if result.score > 0}
 						<span class="tvdb-match-summary-note">avg delta {result.score}s</span>
@@ -294,10 +257,7 @@
 						<span class="tvdb-match-also-try">Also try:</span>
 						{#each result.alternatives as alt}
 							{#if alt.match_count > 0}
-								<button
-									onclick={() => switchToSeason(alt.season)}
-									class="chip chip-info chip-sm"
-								>
+								<button onclick={() => switchToSeason(alt.season)} class="chip chip-info chip-sm">
 									S{String(alt.season).padStart(2, '0')} ({alt.match_count} match{alt.match_count !== 1 ? 'es' : ''})
 								</button>
 							{/if}
@@ -329,50 +289,25 @@
 							</thead>
 							<tbody>
 								{#each result.matches as match}
-									{@const trackLen =
-										trackLengthMap[match.track_number] ?? null}
-									{@const delta =
-										trackLen != null
-											? Math.abs(trackLen - match.episode_runtime)
-											: null}
-									{@const selected = selectedMatches.has(
-										match.track_number
-									)}
-									<tr
-										class="table-row"
-										data-disabled={!selected}
-									>
+									{@const trackLen = trackLengthMap[match.track_number] ?? null}
+									{@const delta = trackLen != null ? Math.abs(trackLen - match.episode_runtime) : null}
+									{@const selected = selectedMatches.has(match.track_number)}
+									<tr class="table-row" data-disabled={!selected}>
 										<td class="table-cell">
 											<input
 												type="checkbox"
 												checked={selected}
-												onchange={() =>
-													toggleMatch(match.track_number)}
+												onchange={() => toggleMatch(match.track_number)}
 												class="tvdb-match-checkbox"
 											/>
 										</td>
-										<td class="table-cell mono"
-											>{match.track_number}</td
-										>
-										<td class="table-cell"
-											>{formatRuntime(trackLen)}</td
-										>
+										<td class="table-cell mono">{match.track_number}</td>
+										<td class="table-cell">{formatRuntime(trackLen)}</td>
 										<td class="table-cell tvdb-match-episode-cell"
-											>S{String(result.season).padStart(
-												2,
-												'0'
-											)}E{String(
-												match.episode_number
-											).padStart(2, '0')}</td
+											>S{String(result.season).padStart(2, '0')}E{String(match.episode_number).padStart(2, '0')}</td
 										>
-										<td class="table-cell"
-											>{match.episode_name}</td
-										>
-										<td class="table-cell"
-											>{formatRuntime(
-												match.episode_runtime
-											)}</td
-										>
+										<td class="table-cell">{match.episode_name}</td>
+										<td class="table-cell">{formatRuntime(match.episode_runtime)}</td>
 										<td
 											class="table-cell mono tvdb-match-delta"
 											data-tone={delta != null && delta < 60
@@ -390,21 +325,14 @@
 					</div>
 
 					<!-- Unmatched tracks -->
-					{@const matchedTracks = new Set(
-						result.matches.map((m) => m.track_number)
-					)}
+					{@const matchedTracks = new Set(result.matches.map((m) => m.track_number))}
 					{@const unmatchedTracks = tracks.filter(
-						(t) =>
-							!matchedTracks.has(String(t.index)) &&
-							(t.duration_seconds ?? 0) >= 120
+						(t) => !matchedTracks.has(String(t.index)) && (t.duration_seconds ?? 0) >= 120
 					)}
 					{#if unmatchedTracks.length > 0}
 						<p class="tvdb-match-unmatched">
 							Unmatched tracks: {unmatchedTracks
-								.map(
-									(t) =>
-										`#${t.index} (${formatRuntime(t.duration_seconds)})`
-								)
+								.map((t) => `#${t.index} (${formatRuntime(t.duration_seconds)})`)
 								.join(', ')}
 						</p>
 					{/if}
@@ -416,44 +344,28 @@
 							disabled={applying || selectedCount === 0}
 							class="btn tvdb-match-success-btn tvdb-match-action-btn"
 						>
-							{applying
-								? 'Applying...'
-								: `Apply ${selectedCount} Match${selectedCount !== 1 ? 'es' : ''}`}
+							{applying ? 'Applying...' : `Apply ${selectedCount} Match${selectedCount !== 1 ? 'es' : ''}`}
 						</button>
 						{#if applyFeedback}
-							<span
-								class="tvdb-match-feedback"
-								data-tone={applyFeedback.type}
-							>
+							<span class="tvdb-match-feedback" data-tone={applyFeedback.type}>
 								{applyFeedback.message}
 							</span>
 						{/if}
 					</div>
 				{:else}
-					<p class="tvdb-match-empty">
-						No matches found. Try adjusting the tolerance or season.
-					</p>
+					<p class="tvdb-match-empty">No matches found. Try adjusting the tolerance or season.</p>
 				{/if}
 			</div>
 		{/if}
 
-	<!-- ===== BROWSE TAB ===== -->
+		<!-- ===== BROWSE TAB ===== -->
 	{:else if activeTab === 'browse'}
 		<div class="flex flex-wrap items-end gap-3">
 			<label class="field">
 				<span class="field-label tvdb-match-field-label">Season</span>
-				<input
-					type="number"
-					bind:value={browseSeason}
-					min="1"
-					class="w-20"
-				/>
+				<input type="number" bind:value={browseSeason} min="1" class="w-20" />
 			</label>
-			<button
-				onclick={handleBrowse}
-				disabled={browseLoading}
-				class="btn btn-primary tvdb-match-action-btn"
-			>
+			<button onclick={handleBrowse} disabled={browseLoading} class="btn btn-primary tvdb-match-action-btn">
 				{browseLoading ? 'Loading...' : 'Load Episodes'}
 			</button>
 		</div>
@@ -487,18 +399,10 @@
 								{#each browseResult.episodes as ep}
 									{@const matchedTrack = trackEpisodeMap[String(ep.number)]}
 									<tr class="table-row">
-										<td class="table-cell mono tvdb-match-muted"
-											>E{String(ep.number).padStart(2, '0')}</td
-										>
-										<td class="table-cell"
-											>{ep.name}</td
-										>
-										<td class="table-cell"
-											>{formatRuntime(ep.runtime)}</td
-										>
-										<td class="table-cell tvdb-match-summary-note"
-											>{ep.aired || '--'}</td
-										>
+										<td class="table-cell mono tvdb-match-muted">E{String(ep.number).padStart(2, '0')}</td>
+										<td class="table-cell">{ep.name}</td>
+										<td class="table-cell">{formatRuntime(ep.runtime)}</td>
+										<td class="table-cell tvdb-match-summary-note">{ep.aired || '--'}</td>
 										<td class="table-cell">
 											{#if matchedTrack}
 												<span class="badge badge-sm badge-success">
@@ -514,9 +418,7 @@
 						</table>
 					</div>
 				{:else}
-					<p class="tvdb-match-empty">
-						No episodes found for this season.
-					</p>
+					<p class="tvdb-match-empty">No episodes found for this season.</p>
 				{/if}
 			</div>
 		{/if}
@@ -524,29 +426,101 @@
 </div>
 
 <style>
-	.tvdb-match-id { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
-	.tvdb-match-episode-cell { font-weight: 500; }
-	.tvdb-match-id-empty { font-style: italic; color: var(--color-text-faint); }
-	.tvdb-match-checkbox { width: 1rem; height: 1rem; border-radius: var(--radius-sm); accent-color: var(--color-primary); }
-	.tvdb-match-checkbox-label { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-secondary); }
-	.tvdb-match-field-label { font-size: 0.75rem; line-height: 1rem; }
-	.tvdb-match-summary { font-weight: 500; color: var(--color-text); }
-	.tvdb-match-summary-note { color: var(--color-text-muted); }
-	.tvdb-match-also-try { font-size: 0.75rem; line-height: 1rem; font-weight: 500; color: var(--color-text-faint); }
-	.tvdb-match-table-scroll { border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
-	.tvdb-match-delta { font-size: 0.75rem; line-height: 1rem; }
-	.tvdb-match-delta[data-tone="success"] { color: var(--color-success); }
-	.tvdb-match-delta[data-tone="warning"] { color: var(--color-on-warning-soft); }
-	.tvdb-match-delta[data-tone="muted"] { color: var(--color-text-muted); }
-	.tvdb-match-unmatched { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
-	.tvdb-match-success-btn { border: 0; background: var(--color-success); color: var(--color-on-primary); }
+	.tvdb-match-id {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-muted);
+	}
+	.tvdb-match-episode-cell {
+		font-weight: 500;
+	}
+	.tvdb-match-id-empty {
+		font-style: italic;
+		color: var(--color-text-faint);
+	}
+	.tvdb-match-checkbox {
+		width: 1rem;
+		height: 1rem;
+		border-radius: var(--radius-sm);
+		accent-color: var(--color-primary);
+	}
+	.tvdb-match-checkbox-label {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-secondary);
+	}
+	.tvdb-match-field-label {
+		font-size: 0.75rem;
+		line-height: 1rem;
+	}
+	.tvdb-match-summary {
+		font-weight: 500;
+		color: var(--color-text);
+	}
+	.tvdb-match-summary-note {
+		color: var(--color-text-muted);
+	}
+	.tvdb-match-also-try {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		font-weight: 500;
+		color: var(--color-text-faint);
+	}
+	.tvdb-match-table-scroll {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+	}
+	.tvdb-match-delta {
+		font-size: 0.75rem;
+		line-height: 1rem;
+	}
+	.tvdb-match-delta[data-tone='success'] {
+		color: var(--color-success);
+	}
+	.tvdb-match-delta[data-tone='warning'] {
+		color: var(--color-on-warning-soft);
+	}
+	.tvdb-match-delta[data-tone='muted'] {
+		color: var(--color-text-muted);
+	}
+	.tvdb-match-unmatched {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-faint);
+	}
+	.tvdb-match-success-btn {
+		border: 0;
+		background: var(--color-success);
+		color: var(--color-on-primary);
+	}
 	/* the original action buttons were px-3 py-1.5 (0.75rem/0.375rem) */
-	.tvdb-match-action-btn { padding: 0.375rem 0.75rem; }
-	.tvdb-match-success-btn:hover { filter: brightness(0.9); }
-	.tvdb-match-feedback { font-size: 0.75rem; line-height: 1rem; }
-	.tvdb-match-feedback[data-tone="success"] { color: var(--color-success); }
-	.tvdb-match-feedback[data-tone="error"] { color: var(--color-danger); }
-	.tvdb-match-empty { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-faint); }
-	.tvdb-match-empty-sm { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
-	.tvdb-match-muted { color: var(--color-text-muted); }
+	.tvdb-match-action-btn {
+		padding: 0.375rem 0.75rem;
+	}
+	.tvdb-match-success-btn:hover {
+		filter: brightness(0.9);
+	}
+	.tvdb-match-feedback {
+		font-size: 0.75rem;
+		line-height: 1rem;
+	}
+	.tvdb-match-feedback[data-tone='success'] {
+		color: var(--color-success);
+	}
+	.tvdb-match-feedback[data-tone='error'] {
+		color: var(--color-danger);
+	}
+	.tvdb-match-empty {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-faint);
+	}
+	.tvdb-match-empty-sm {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-faint);
+	}
+	.tvdb-match-muted {
+		color: var(--color-text-muted);
+	}
 </style>

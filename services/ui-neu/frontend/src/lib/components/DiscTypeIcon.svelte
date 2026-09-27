@@ -11,7 +11,7 @@
 		bluray: { src: '/img/disc-bluray.svg', alt: 'Blu-ray' },
 		bluray4k: { src: '/img/disc-bluray4k.svg', alt: '4K UHD' },
 		music: { src: '/img/disc-music.svg', alt: 'CD' },
-		data: { src: '/img/disc-data.svg', alt: 'Data' },
+		data: { src: '/img/disc-data.svg', alt: 'Data' }
 	};
 
 	let icon = $derived(iconMap[disctype ?? ''] ?? { src: '/img/disc-unknown.svg', alt: 'Unknown' });

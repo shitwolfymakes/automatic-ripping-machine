@@ -13,7 +13,7 @@ const rip = (id: string, name: string, mt: string, builtin = false) => ({
 	track_filters_json: null,
 	created_by_user_id: null,
 	created_at: null,
-	updated_at: null,
+	updated_at: null
 });
 
 const transcode = (id: string, name: string, mt: string, builtin = false) => ({
@@ -29,18 +29,13 @@ const transcode = (id: string, name: string, mt: string, builtin = false) => ({
 	extra_args: null,
 	created_by_user_id: null,
 	created_at: null,
-	updated_at: null,
+	updated_at: null
 });
 
 const defaultProps = (over = {}) => ({
 	kind: 'rip' as 'rip' | 'transcode',
-	ripPresets: [
-		rip('r1', 'Movie Rip', 'movie', true),
-		rip('r2', 'TV Rip', 'tv', false),
-	],
-	transcodePresets: [
-		transcode('t1', 'H.265 MKV', 'movie', false),
-	],
+	ripPresets: [rip('r1', 'Movie Rip', 'movie', true), rip('r2', 'TV Rip', 'tv', false)],
+	transcodePresets: [transcode('t1', 'H.265 MKV', 'movie', false)],
 	ripUsage: (id: string) => (id === 'r2' ? 2 : 0),
 	transcodeUsage: (_id: string) => 0,
 	loading: false,
@@ -50,7 +45,7 @@ const defaultProps = (over = {}) => ({
 	onedit: vi.fn(),
 	onclone: vi.fn(),
 	ondelete: vi.fn(),
-	...over,
+	...over
 });
 
 afterEach(cleanup);
@@ -101,7 +96,7 @@ it('builtin rip preset shows BUILT-IN and disabled delete', () => {
 	expect(screen.getByText('BUILT-IN')).toBeInTheDocument();
 	// Find the delete button for the builtin row - there should be at least one disabled delete
 	const delButtons = screen.getAllByRole('button', { name: /delete/i }) as HTMLButtonElement[];
-	const disabledDels = delButtons.filter(b => b.disabled);
+	const disabledDels = delButtons.filter((b) => b.disabled);
 	expect(disabledDels.length).toBeGreaterThan(0);
 });
 

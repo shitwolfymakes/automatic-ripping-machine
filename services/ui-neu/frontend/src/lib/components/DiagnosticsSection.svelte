@@ -30,9 +30,7 @@
 <section class="stack">
 	<div>
 		<h2 class="diagnostics-section-title">Diagnostics</h2>
-		<p class="diagnostics-section-description">
-			Read-only view of each service's runtime log level.
-		</p>
+		<p class="diagnostics-section-description">Read-only view of each service's runtime log level.</p>
 	</div>
 
 	{#if error}
@@ -59,10 +57,7 @@
 								<span class="diagnostics-section-name">{s.name}</span>
 							</td>
 							<td class="table-cell">
-								<span
-									class="badge"
-									data-testid="diag-level-{s.name}"
-								>
+								<span class="badge" data-testid="diag-level-{s.name}">
 									{s.log_level}
 								</span>
 							</td>
@@ -80,13 +75,39 @@
 </section>
 
 <style>
-	.diagnostics-section-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-text); }
+	.diagnostics-section-title {
+		font-size: 1.125rem;
+		line-height: 1.75rem;
+		font-weight: 600;
+		color: var(--color-text);
+	}
 	/* the original description was text-sm (0.875rem/1.25rem), not
 	   panel-hint's 0.75rem - panel-hint is sized for a note under a form
 	   control, a visibly smaller role. */
-	.diagnostics-section-description { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
-	.diagnostics-section-empty { padding: 2rem 0; text-align: center; color: var(--color-text-faint); }
-	.diagnostics-section-table-wrap { border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); }
-	.diagnostics-section-name { font-weight: 500; color: var(--color-text); }
-	.diagnostics-section-code { font-size: 0.7rem; padding: 0 0.25rem; border-radius: var(--radius-sm); background: var(--color-primary-tint-2); color: var(--color-primary-text); }
+	.diagnostics-section-description {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
+	.diagnostics-section-empty {
+		padding: 2rem 0;
+		text-align: center;
+		color: var(--color-text-faint);
+	}
+	.diagnostics-section-table-wrap {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		background: var(--color-surface);
+	}
+	.diagnostics-section-name {
+		font-weight: 500;
+		color: var(--color-text);
+	}
+	.diagnostics-section-code {
+		font-size: 0.7rem;
+		padding: 0 0.25rem;
+		border-radius: var(--radius-sm);
+		background: var(--color-primary-tint-2);
+		color: var(--color-primary-text);
+	}
 </style>

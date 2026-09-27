@@ -28,9 +28,21 @@
 	const cards = [
 		{ key: 'total' as const, label: 'Total', filter: '', tone: 'stat-muted', accent: 'var(--color-text-secondary)' },
 		{ key: 'active' as const, label: 'Active', filter: 'active', tone: 'stat-info', accent: 'var(--color-info)' },
-		{ key: 'success' as const, label: 'Success', filter: 'success', tone: 'stat-success', accent: 'var(--color-success)' },
+		{
+			key: 'success' as const,
+			label: 'Success',
+			filter: 'success',
+			tone: 'stat-success',
+			accent: 'var(--color-success)'
+		},
 		{ key: 'fail' as const, label: 'Failed', filter: 'fail', tone: 'stat-danger', accent: 'var(--color-danger)' },
-		{ key: 'waiting' as const, label: 'Waiting', filter: 'waiting', tone: 'stat-warning', accent: 'var(--color-warning)' }
+		{
+			key: 'waiting' as const,
+			label: 'Waiting',
+			filter: 'waiting',
+			tone: 'stat-warning',
+			accent: 'var(--color-warning)'
+		}
 	];
 </script>
 
@@ -62,6 +74,10 @@
 		border-left: 4px solid var(--accent);
 		transition: box-shadow var(--motion-fast) var(--ease);
 	}
-	.job-stats-panel-tile:hover { box-shadow: var(--shadow-2); }
-	.job-stats-panel-tile[aria-pressed="true"] { box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 40%, transparent); }
+	.job-stats-panel-tile:hover {
+		box-shadow: var(--shadow-2);
+	}
+	.job-stats-panel-tile[aria-pressed='true'] {
+		box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 40%, transparent);
+	}
 </style>
