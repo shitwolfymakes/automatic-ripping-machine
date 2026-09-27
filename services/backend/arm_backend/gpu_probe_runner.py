@@ -407,15 +407,20 @@ class GpuProbeRunner:
 
     async def _remove_probe_containers(self, docker: Any, gpu_id: str) -> None:
         """Remove every container labelled as this row's probe. Only called
-        while this probe holds the row's reservation. Never raises."""
+        while this probe holds the row's reservation. Never raises; one
+        container failing to go does not stop the rest."""
         try:
             containers = await asyncio.to_thread(
                 lambda: docker.containers.list(all=True, filters={"label": f"{PROBE_LABEL_KEY}={gpu_id}"})
             )
-            for container in containers:
-                await asyncio.to_thread(container.remove, force=True)
         except Exception as exc:  # noqa: BLE001 - best-effort cleanup
-            logger.warning("gpu probe: could not remove the unstarted probe container for %s: %s", gpu_id, exc)
+            logger.warning("gpu probe: could not list the unstarted probe containers for %s: %s", gpu_id, exc)
+            return
+        for container in containers:
+            try:
+                await asyncio.to_thread(container.remove, force=True)
+            except Exception as exc:  # noqa: BLE001 - best-effort cleanup
+                logger.warning("gpu probe: could not remove the unstarted probe container for %s: %s", gpu_id, exc)
 
     async def _write(self, gpu_id: str, verified: list[str], error: str | None) -> None:
         async with self._db_factory() as db:

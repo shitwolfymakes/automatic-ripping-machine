@@ -339,41 +339,44 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
-        thediscdb_refresh_task.cancel()
+        # The dispatcher holder is cleared whatever a shutdown step raises.
         try:
-            await asyncio.wait_for(thediscdb_refresh_task, timeout=10.0)
-        except TimeoutError, asyncio.CancelledError:  # pragma: no cover — cancellation is the expected path
-            pass
-        disk_refresher.stop()
-        try:
-            await asyncio.wait_for(disk_refresher_task, timeout=10.0)
-        except TimeoutError, asyncio.CancelledError:
-            disk_refresher_task.cancel()
-        log_tailer.stop()
-        try:
-            await asyncio.wait_for(log_tailer_task, timeout=10.0)
-        except asyncio.TimeoutError:  # pragma: no cover — only if the tailer hangs >10s on shutdown
-            log_tailer_task.cancel()
-        drive_scanner_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await drive_scanner_task
-        notification_dispatcher.stop()
-        try:
-            await asyncio.wait_for(notification_task, timeout=10.0)
-        except asyncio.TimeoutError:  # pragma: no cover — only if the dispatcher hangs >10s on shutdown
-            notification_task.cancel()
-        # Cancels the boot pass and any re-probe, waiting briefly so each
-        # cancelled probe removes its container.
-        await gpu_probe_runner.shutdown()
-        # transcode_dispatcher/dispatcher_task are unconditionally set above
-        # (the dispatcher always runs, docker or not).
-        transcode_dispatcher.stop()
-        try:
-            await asyncio.wait_for(dispatcher_task, timeout=10.0)
-        except asyncio.TimeoutError:  # pragma: no cover, only if the dispatcher hangs >10s on shutdown
-            dispatcher_task.cancel()
-        set_active_dispatcher(None)
-        await app.state.dispatcher.aclose()
+            thediscdb_refresh_task.cancel()
+            try:
+                await asyncio.wait_for(thediscdb_refresh_task, timeout=10.0)
+            except TimeoutError, asyncio.CancelledError:  # pragma: no cover, cancellation is the expected path
+                pass
+            disk_refresher.stop()
+            try:
+                await asyncio.wait_for(disk_refresher_task, timeout=10.0)
+            except TimeoutError, asyncio.CancelledError:
+                disk_refresher_task.cancel()
+            log_tailer.stop()
+            try:
+                await asyncio.wait_for(log_tailer_task, timeout=10.0)
+            except asyncio.TimeoutError:  # pragma: no cover, only if the tailer hangs >10s on shutdown
+                log_tailer_task.cancel()
+            drive_scanner_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await drive_scanner_task
+            notification_dispatcher.stop()
+            try:
+                await asyncio.wait_for(notification_task, timeout=10.0)
+            except asyncio.TimeoutError:  # pragma: no cover, only if the dispatcher hangs >10s on shutdown
+                notification_task.cancel()
+            # Cancels the boot pass and any re-probe, waiting briefly so each
+            # cancelled probe removes its container.
+            await gpu_probe_runner.shutdown()
+            # transcode_dispatcher/dispatcher_task are unconditionally set above
+            # (the dispatcher always runs, docker or not).
+            transcode_dispatcher.stop()
+            try:
+                await asyncio.wait_for(dispatcher_task, timeout=10.0)
+            except asyncio.TimeoutError:  # pragma: no cover, only if the dispatcher hangs >10s on shutdown
+                dispatcher_task.cancel()
+            await app.state.dispatcher.aclose()
+        finally:
+            set_active_dispatcher(None)
 
 
 app = FastAPI(title="ARM v3 Backend", lifespan=lifespan)

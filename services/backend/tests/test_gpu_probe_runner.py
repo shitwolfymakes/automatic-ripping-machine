@@ -403,6 +403,25 @@ async def test_unstarted_container_cleanup_failure_is_logged(caplog: pytest.LogC
     assert db.rows["gpus"][0].probe_error == "probe container could not start: start failed"
 
 
+async def test_unstarted_container_cleanup_continues_past_a_remove_failure(caplog: pytest.LogCaptureFixture) -> None:
+    runner, db, docker, _hub, dispatcher = _build([_gpu()])
+    assert docker is not None
+    stuck = _Container(labels={"arm.gpu_probe": "gpu_1"})
+    stuck.remove_exc = RuntimeError("removal in progress")
+    also_stuck = _Container(labels={"arm.gpu_probe": "gpu_1"})
+    also_stuck.remove_exc = RuntimeError("device busy")
+    created = _Container(labels={"arm.gpu_probe": "gpu_1"})
+    docker.containers.existing = [stuck, also_stuck, created]
+    docker.containers.run_exc = RuntimeError("start failed")
+    with caplog.at_level("WARNING", logger="arm_backend.gpu_probe_runner"):
+        await runner.probe_gpu("gpu_1")
+    assert created.removed == [True]
+    assert "removal in progress" in caplog.text
+    assert "device busy" in caplog.text
+    assert db.rows["gpus"][0].probe_error == "probe container could not start: start failed"
+    assert dispatcher.probing_gpu_ids == set()
+
+
 async def test_remove_failure_is_logged_not_raised(caplog: pytest.LogCaptureFixture) -> None:
     container = _Container(stdout=_payload(["h264"]))
     container.remove_exc = RuntimeError("already gone")
