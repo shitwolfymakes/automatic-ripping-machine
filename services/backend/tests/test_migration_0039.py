@@ -2,12 +2,6 @@
 values, role_source / video_type dropped, TheDiscDB map moved into
 identity_claims. Rendered offline like test_migration_chain; the role backfill
 is executed against in-memory SQLite by value.
-
-Note: `_render_sql(from_rev, to_rev)` without `downgrade=True` does not render
-a downgrade when `from_rev` is the newer revision (verified empirically: it
-renders an empty transaction). The downgrade path is instead exercised in the
-manual Postgres check documented in the task report, so there is no
-`test_0039_downgrade_restores_columns` here.
 """
 
 from __future__ import annotations
@@ -82,3 +76,20 @@ def test_0039_moves_thediscdb_map_into_identity_claims() -> None:
     assert "jsonb_each" in move
     assert "jsonb_strip_nulls" in move
     assert "WHERE jsonb_typeof(metadata_json::jsonb -> 'thediscdb') = 'object'" in move
+
+
+def test_0039_downgrade_restores_columns() -> None:
+    sql = _render_sql(_REV, _PARENT, downgrade=True)
+    assert "ALTER TABLE tracks ADD COLUMN role_source VARCHAR" in sql
+    assert "ALTER TABLE tracks ADD COLUMN video_type VARCHAR" in sql
+    assert "ALTER TABLE tracks DROP COLUMN identity_provenance" in sql
+    assert "ALTER TABLE jobs DROP COLUMN identity_provenance" in sql
+    assert "- 'identity_claims'" in sql
+    # role_source restore reads identity_provenance, so both the role
+    # reverse-mapping and the role_source restore must run before the
+    # column is dropped.
+    role_update = sql.index("UPDATE tracks SET role = CASE role")
+    role_source_update = sql.index("UPDATE tracks SET role_source")
+    drop_identity_provenance = sql.index("ALTER TABLE tracks DROP COLUMN identity_provenance")
+    assert role_update < drop_identity_provenance
+    assert role_source_update < drop_identity_provenance
