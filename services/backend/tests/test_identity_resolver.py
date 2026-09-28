@@ -118,6 +118,17 @@ def test_apply_leaves_unowned_field_when_no_winner() -> None:
     assert track.episode_name == "Operator typed this"
 
 
+def test_apply_drops_provenance_without_change_when_reset_value_already_current() -> None:
+    # excluded is already at its default (False); losing its only proposer
+    # still drops the stale provenance entry, but there is no value to write
+    # back, so this contributes 0 to the changed count.
+    track = _track(identity_provenance={"excluded": "manual"})
+    changed = apply_resolution(_job(), [track], resolve(IdentityClaims(), tiers=TIERS))
+    assert track.excluded is False
+    assert track.identity_provenance is None
+    assert changed == 0
+
+
 def test_apply_leaves_unowned_nonempty_field_when_only_lower_tier_proposes() -> None:
     track = _track(episode_name="Operator typed this")
     res = resolve(_claims(thediscdb=SourceClaims(tracks={"1": TrackClaim(episode_name="Pilot")})), tiers=TIERS)
