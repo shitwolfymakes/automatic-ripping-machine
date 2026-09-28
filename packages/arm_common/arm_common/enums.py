@@ -120,6 +120,18 @@ class TrackKind(StrEnum):
     DATA_DUMP = "data_dump"
 
 
+class TrackRole(StrEnum):
+    """What one title on a disc is. Set by identity sources via the resolver
+    (arm_backend.identity) or by the operator; replaces the old free-text
+    role and the per-track video_type."""
+
+    MAIN = "main"
+    EPISODE = "episode"
+    EXTRA = "extra"
+    TRAILER = "trailer"
+    OTHER = "other"
+
+
 class MediaType(StrEnum):
     MOVIE = "movie"
     TV = "tv"

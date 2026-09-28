@@ -6,8 +6,8 @@ The bag holds four kinds of content, and this module gives each a home:
   rip-start's track selection reads it). Already typed by `ScanResult`.
 - `identity` — what identification concluded: which provider, the external
   ids, the synopsis. Written at identify; never merged from raw payloads.
-- `music` / `thediscdb` — provider-shaped sections with real readers (the
-  music naming tokens; the TheDiscDB track map).
+- `music` — provider-shaped section with a real reader (the music naming tokens).
+- `identity_claims` — per-source identity proposals (arm_backend.identity).
 - `flags` — booleans that steer behaviour (`unidentified` parks placeholder
   rips at ripped_awaiting_identify; `dispatch_timeout` is diagnostic).
 - `provider_raw` — everything a provider returned, keyed by provider name.
@@ -27,6 +27,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from arm_common.schemas.identity import IdentityClaims
 from arm_common.schemas.ripper import ScanResult
 
 
@@ -82,10 +83,9 @@ class JobMetadata(BaseModel):
     scan_result: ScanResult | None = None
     identity: JobIdentity | None = None
     music: MusicMeta | None = None
-    # Per-title map from the TheDiscDB snapshot match: dynamic source-ref
-    # keys plus `matched_at` — left as a dict until it grows a reader that
-    # needs more than `apply_map` does.
-    thediscdb: dict[str, Any] | None = None
+    # What every identity source proposed (typed; see arm_common.schemas.identity).
+    # Replaces the old `thediscdb` map section (migration 0039 moved it here).
+    identity_claims: IdentityClaims | None = None
     flags: JobFlags = Field(default_factory=JobFlags)
     provider_raw: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
