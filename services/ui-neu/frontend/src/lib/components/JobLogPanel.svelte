@@ -72,7 +72,11 @@
 
 	{#if open}
 		<div class="mt-3">
-			<LogView entries={log.entries} error={log.error} />
+			{#if log.loading && log.entries.length === 0}
+				<p class="job-log-panel-loading">Loading log...</p>
+			{:else}
+				<LogView entries={log.entries} error={log.error} />
+			{/if}
 		</div>
 	{/if}
 </section>
@@ -97,6 +101,11 @@
 		font-size: 0.875rem;
 		line-height: 1.25rem;
 		font-weight: 400;
+		color: var(--color-text-muted);
+	}
+	.job-log-panel-loading {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
 		color: var(--color-text-muted);
 	}
 	.job-log-panel-live {

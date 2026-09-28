@@ -95,6 +95,32 @@ describe('JobLogPanel', () => {
 		});
 	});
 
+	it('shows a loading line instead of the empty state while the first fetch is pending', async () => {
+		let resolve: (v: unknown) => void = () => {};
+		fetchJobLogMock.mockReturnValue(new Promise((r) => (resolve = r)));
+		renderComponent(JobLogPanel, { props: { jobId: 'job_a', status: 'ripped', defaultOpen: true } });
+		await waitFor(() => expect(screen.getByText('Loading log...')).toBeInTheDocument());
+		expect(screen.queryByText(/no log lines for this job yet/i)).not.toBeInTheDocument();
+
+		resolve(ENTRIES);
+		await waitFor(() => expect(screen.getByText('backend line')).toBeInTheDocument());
+		expect(screen.queryByText('Loading log...')).not.toBeInTheDocument();
+	});
+
+	it('does not show the loading line on a reload once lines exist', async () => {
+		fetchJobLogMock.mockResolvedValueOnce(ENTRIES);
+		const { rerender } = renderComponent(JobLogPanel, {
+			props: { jobId: 'job_a', status: 'ripped', defaultOpen: true }
+		});
+		await waitFor(() => expect(screen.getByText('backend line')).toBeInTheDocument());
+
+		fetchJobLogMock.mockReturnValueOnce(new Promise(() => {}));
+		await rerender({ jobId: 'job_b', status: 'ripped', defaultOpen: true });
+		await waitFor(() => expect(fetchJobLogMock).toHaveBeenCalledTimes(2));
+		expect(screen.queryByText('Loading log...')).not.toBeInTheDocument();
+		expect(screen.getByText('backend line')).toBeInTheDocument();
+	});
+
 	it('shows the error state in red on a failed load', async () => {
 		fetchJobLogMock.mockRejectedValue(new Error('boom'));
 		renderComponent(JobLogPanel, { props: { jobId: 'job_a', status: 'ripped', defaultOpen: true } });
