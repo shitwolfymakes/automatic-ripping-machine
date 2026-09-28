@@ -116,9 +116,11 @@
 		feedback = null;
 		try {
 			const yr = editYear.trim() ? Number(editYear.trim()) : undefined;
+			const role = editType === 'series' ? 'episode' : editType === 'movie' ? 'main' : undefined;
 			await updateTrackTitle(jobId, track.id, {
 				title: editTitle.trim(),
 				year: Number.isFinite(yr) ? yr : undefined,
+				role,
 				poster_url: editPosterUrl.trim() || undefined
 			});
 			feedback = { type: 'success', message: 'Track title updated' };

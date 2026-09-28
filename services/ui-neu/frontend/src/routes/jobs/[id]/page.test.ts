@@ -356,6 +356,28 @@ describe('Job detail page (v3)', () => {
 		expect(screen.queryByRole('columnheader', { name: 'Episode' })).not.toBeInTheDocument();
 	});
 
+	it('shows the Episode column for a TV job whose tracks have no role and no episode_number yet', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({ id: 'job_42', title: 'Show', status: 'ripped', media_type: 'tv' }),
+			tracks: [createTrack({ id: 'trk_1', status: 'done', role: null })],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByText('Tracks (1)')).toBeInTheDocument());
+		expect(screen.getByRole('columnheader', { name: 'Episode' })).toBeInTheDocument();
+	});
+
+	it('omits the Episode column for a TV job whose only track is role main', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({ id: 'job_42', title: 'Show', status: 'ripped', media_type: 'tv' }),
+			tracks: [createTrack({ id: 'trk_1', status: 'done', role: 'main' })],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByText('Tracks (1)')).toBeInTheDocument());
+		expect(screen.queryByRole('columnheader', { name: 'Episode' })).not.toBeInTheDocument();
+	});
+
 	it('renders an edition badge when set', async () => {
 		mockFetchJob.mockResolvedValue({
 			job: createJob({ id: 'job_42', title: 'Test Movie', status: 'ripped' }),

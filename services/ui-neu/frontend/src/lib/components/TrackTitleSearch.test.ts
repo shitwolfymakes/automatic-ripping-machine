@@ -164,6 +164,42 @@ describe('TrackTitleSearch', () => {
 			});
 		});
 
+		it('applying with Type=Series sends role: episode', async () => {
+			mockSearchMetadata.mockResolvedValue({
+				candidates: [createCandidate({ title: 'Picked Show', kind: 'series' })]
+			});
+			renderComponent(TrackTitleSearch, {
+				props: { jobId: 'job_3', track: createTrack({ id: 'trk_5' }) }
+			});
+			await fireEvent.click(screen.getByText('Search'));
+			await waitFor(() => expect(screen.getByText('Picked Show')).toBeInTheDocument());
+			await fireEvent.click(screen.getByText('Picked Show'));
+			await fireEvent.click(screen.getByText('Apply'));
+			await waitFor(() => {
+				expect(mockUpdateTrackTitle).toHaveBeenCalledWith(
+					'job_3',
+					'trk_5',
+					expect.objectContaining({ role: 'episode' })
+				);
+			});
+		});
+
+		it('applying with Type=Movie sends role: main', async () => {
+			mockSearchMetadata.mockResolvedValue({
+				candidates: [createCandidate({ title: 'Picked Movie', kind: 'movie' })]
+			});
+			renderComponent(TrackTitleSearch, {
+				props: { jobId: 'job_3', track: createTrack({ id: 'trk_5' }) }
+			});
+			await fireEvent.click(screen.getByText('Search'));
+			await waitFor(() => expect(screen.getByText('Picked Movie')).toBeInTheDocument());
+			await fireEvent.click(screen.getByText('Picked Movie'));
+			await fireEvent.click(screen.getByText('Apply'));
+			await waitFor(() => {
+				expect(mockUpdateTrackTitle).toHaveBeenCalledWith('job_3', 'trk_5', expect.objectContaining({ role: 'main' }));
+			});
+		});
+
 		it('shows the no-results message without a "Set manually" button', async () => {
 			mockSearchMetadata.mockResolvedValue({ candidates: [] } as any);
 			renderComponent(TrackTitleSearch, { props: { jobId: 'job_1', track: createTrack({ title: '' }) } });
