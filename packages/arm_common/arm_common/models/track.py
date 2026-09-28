@@ -1,10 +1,10 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, Column, ForeignKey, Integer, String
+from sqlalchemy import BigInteger, Boolean, Column, ForeignKey, Integer, JSON, String
 from sqlmodel import Field, SQLModel
 
 from arm_common.models._columns import created_at_column, enum_column, updated_at_column
-from arm_common.enums import TrackKind, TrackStatus
+from arm_common.enums import TrackKind, TrackRole, TrackStatus
 from arm_common.ulid import new_id
 
 
@@ -21,20 +21,22 @@ class Track(SQLModel, table=True):
     index: int = Field(sa_column=Column(Integer, nullable=False))
     source_ref: str = Field(sa_column=Column(String, nullable=False))
     label: str | None = Field(default=None)
-    role: str | None = Field(default=None)
-    role_source: str | None = Field(default=None)
+    role: TrackRole | None = Field(default=None, sa_column=enum_column(TrackRole, "track_role", nullable=True))
     edition: str | None = Field(default=None)
     # Per-track identity (operator-editable; null = inherit job-level). For
     # multi-title discs (TV box sets / multi-movie) each VIDEO_TITLE track
-    # carries its own identity. B23 (TVDB matcher) later auto-fills episode_*.
+    # carries its own identity. Resolver-managed fields record which identity
+    # source set them in `identity_provenance` ({attribute: source_id}).
     title: str | None = Field(default=None)
     year: int | None = Field(default=None)
     imdb_id: str | None = Field(default=None)
     poster_url: str | None = Field(default=None)
-    video_type: str | None = Field(default=None)
     episode_number: int | None = Field(default=None)
+    # Last episode for a title that spans two consecutive episodes (E01-E02).
+    episode_number_end: int | None = Field(default=None)
     episode_name: str | None = Field(default=None)
     season: int | None = Field(default=None)
+    identity_provenance: dict[str, str] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     # Operator control. `excluded` omits this ripped title from transcode OUTPUT
     # (the disc still rips whole — makemkvcon `mkv all` invariant). `custom_filename`
     # overrides the pattern-rendered name for this track.
