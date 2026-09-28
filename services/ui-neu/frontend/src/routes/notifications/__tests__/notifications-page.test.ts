@@ -186,7 +186,7 @@ describe('Notifications Page', () => {
 	});
 
 	describe('dismiss all', () => {
-		it('makes one dismiss-all call and marks the unseen rows seen', async () => {
+		it('makes one dismiss-all call and dismisses the unseen rows', async () => {
 			renderComponent(NotificationsPage);
 			await waitFor(() => {
 				expect(screen.getByText('Dismiss All')).toBeInTheDocument();
@@ -199,24 +199,25 @@ describe('Notifications Page', () => {
 			expect(dismissNotification).not.toHaveBeenCalled();
 			expect(screen.queryByText('Job Complete')).not.toBeInTheDocument();
 			expect(screen.queryByText('Dismiss All')).not.toBeInTheDocument();
-			// Seen rows are still listed under Show dismissed.
+			// Dismissed rows are still listed under Show dismissed until the next reload.
 			await fireEvent.click(screen.getByRole('checkbox'));
 			await waitFor(() => {
 				expect(screen.getByText('Job Complete')).toBeInTheDocument();
 			});
 		});
 
-		it('does not make Purge Cleared appear, since dismiss-all does not clear rows', async () => {
+		it('makes Purge Cleared appear, since dismiss-all clears the rows it dismisses', async () => {
 			vi.mocked(fetchNotificationCount).mockResolvedValueOnce({ unseen: 1, seen: 1, cleared: 0, total: 2 });
+			vi.mocked(dismissAllNotifications).mockResolvedValueOnce({ updated: 2 });
 			renderComponent(NotificationsPage);
 			await waitFor(() => {
 				expect(screen.getByText('Dismiss All')).toBeInTheDocument();
 			});
+			expect(screen.queryByText('Purge Cleared')).not.toBeInTheDocument();
 			await fireEvent.click(screen.getByText('Dismiss All'));
 			await waitFor(() => {
-				expect(screen.queryByText('Dismiss All')).not.toBeInTheDocument();
+				expect(screen.getByText('Purge Cleared')).toBeInTheDocument();
 			});
-			expect(screen.queryByText('Purge Cleared')).not.toBeInTheDocument();
 		});
 
 		it('keeps the rows unseen and shows the error when dismiss-all fails', async () => {

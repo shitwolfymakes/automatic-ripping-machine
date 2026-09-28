@@ -924,7 +924,8 @@ def test_inbox_dismiss_all(signing_key: bytes) -> None:
     with TestClient(app) as client:
         r = client.post("/api/notifications/inbox/dismiss-all", headers=_auth(token))
     assert r.status_code == 200
-    assert r.json()["updated"] == 1  # only the unseen one gets marked
+    assert r.json()["updated"] == 2  # both rows were not yet cleared
+    assert all(row.seen and row.cleared for row in db.rows["notification_inbox"])
 
 
 def test_inbox_purge(signing_key: bytes) -> None:

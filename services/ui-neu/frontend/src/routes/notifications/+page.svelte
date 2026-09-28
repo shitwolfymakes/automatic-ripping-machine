@@ -62,9 +62,10 @@
 		if (ids.length === 0) return;
 		dismissing = new Set(ids);
 		try {
-			await dismissAllNotifications();
-			// dismiss-all only marks rows seen; it does not clear them.
-			notifications = notifications.map((n) => (n.seen ? n : { ...n, seen: true }));
+			const result = await dismissAllNotifications();
+			// Like a per-row dismiss: every not-yet-cleared row ends up seen and cleared.
+			clearedCount += result.updated;
+			notifications = notifications.map((n) => (n.cleared ? n : { ...n, seen: true, cleared: true }));
 		} catch (e) {
 			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Dismiss all failed' };
 		} finally {
