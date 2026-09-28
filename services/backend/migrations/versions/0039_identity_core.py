@@ -20,12 +20,16 @@ _NEW_ROLES = "('main', 'episode', 'extra', 'trailer', 'other')"
 _EXTRA_TYPES = "('Extra', 'Featurette', 'DeletedScene', 'Interview', 'BehindTheScenes', 'Short')"
 
 # TheDiscDB Item.Type -> TrackRole value, as a SQL CASE over <expr>.
-_DISC_TYPE_TO_ROLE = """CASE {expr}
+_DISC_TYPE_TO_ROLE = (
+    """CASE {expr}
     WHEN 'MainMovie' THEN 'main'
     WHEN 'Episode' THEN 'episode'
     WHEN 'Trailer' THEN 'trailer'
-    ELSE CASE WHEN {expr} IN """ + _EXTRA_TYPES + """ THEN 'extra' ELSE 'other' END
+    ELSE CASE WHEN {expr} IN """
+    + _EXTRA_TYPES
+    + """ THEN 'extra' ELSE 'other' END
 END"""
+)
 
 
 def upgrade() -> None:
