@@ -524,6 +524,25 @@ async def test_persist_review_tracks_is_idempotent() -> None:
     assert added_refs == {"2"}  # index 1 skipped (already exists), only 2 added
 
 
+async def test_persist_review_tracks_no_new_titles_records_no_preset_claim() -> None:
+    """Every title already has a Track row (a full re-POST idempotency case):
+    no rows are added, so no preset proposal is recorded either."""
+    from arm_backend.routers.ripper import _persist_review_tracks
+    from arm_common import Job as _Job, Track as _Track, TrackKind as _TrackKind
+    from arm_common.schemas import ScanResult as _ScanResult, ScanTitle as _ScanTitle
+
+    db = FakeSession()
+    db.rows["rip_presets"] = [_movie_preset()]
+    job = _Job(
+        id="job_01JZXR7K3M5Q8N4VWA0000I02", drive_id="drv_x", disc_type=DiscType.DVD, status=JobStatus.AWAITING_REVIEW
+    )
+    db.rows["tracks"] = [_Track(id="trk_pre", job_id=job.id, kind=_TrackKind.VIDEO_TITLE, index=1, source_ref="1")]
+    scan = _ScanResult(disc_type=DiscType.DVD, titles=[_ScanTitle(index=1, duration_seconds=4200)])
+    await _persist_review_tracks(db, job, scan)
+    assert [t for t in db.added if type(t).__name__ == "Track"] == []
+    assert "identity_claims" not in (job.metadata_json or {})
+
+
 def test_identify_with_hold_parks_without_preset_seeded() -> None:
     """hold_for_review on but the default rip preset isn't seeded -> still parks in
     AWAITING_REVIEW (review-track persistence is skipped, logged) rather than
@@ -596,6 +615,60 @@ def test_identify_unidentified_with_hold_does_not_park(signing_key: bytes) -> No
     out = r.json()
     assert out["status"] == "identified"  # not awaiting_review
     assert out["metadata_json"]["flags"]["unidentified"] is True
+
+
+def test_identify_repost_on_held_disc_keeps_operator_exclusion() -> None:
+    """Ripper re-POSTs identify for a disc already parked in review after the
+    operator re-enabled a preset-dropped title. The preset claim must not flip
+    it back and no duplicate Track rows appear (Review Focus 5)."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(hold_for_review=True)]
+    claims = {
+        "sources": {
+            "preset": {"status": "ok", "tracks": {"1": {"selected": True}, "2": {"selected": False}}},
+            "manual": {"status": "ok", "tracks": {"2": {"selected": True}}},
+        }
+    }
+    held = _job(status=JobStatus.AWAITING_REVIEW, meta={"identity_claims": claims})
+    db.rows["jobs"] = [held]
+    db.rows["disc_fingerprints"] = [DiscFingerprint(job_id=held.id, algo="crc64", value="abc")]
+    db.rows["tracks"] = [
+        Track(
+            id="trk_kept",
+            job_id=held.id,
+            kind=TrackKind.VIDEO_TITLE,
+            index=1,
+            source_ref="1",
+            excluded=False,
+        ),
+        Track(
+            id="trk_reenabled",
+            job_id=held.id,
+            kind=TrackKind.VIDEO_TITLE,
+            index=2,
+            source_ref="2",
+            excluded=False,
+            identity_provenance={"excluded": "manual"},
+        ),
+    ]
+
+    app = _make_app(db, dispatcher=_Dispatcher(None))
+    scan = _scan_dict()
+    scan["fingerprints"] = [{"algo": "crc64", "value": "abc"}]
+
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan},
+            headers=_SERVICE_AUTH,
+        )
+
+    assert r.status_code == 200
+    assert r.json()["id"] == held.id  # reused, not new
+    assert len(db.rows["tracks"]) == 2  # no duplicate Track rows
+    reenabled = next(t for t in db.rows["tracks"] if t.source_ref == "2")
+    assert reenabled.excluded is False
 
 
 def test_identify_snapshots_drive_serial_onto_job() -> None:
@@ -716,9 +789,9 @@ class _FakeStore:
 
 def test_identify_thediscdb_match_stamps_map_and_uses_exact_identity() -> None:
     """A TheDiscDB content-hash match on a new job: the exact-identity path
-    (identify_from_imdb) wins over fuzzy identify, the match is stored in
-    job.metadata_json["thediscdb"], and it is applied onto the review Track
-    row persisted by the hold_for_review path."""
+    (identify_from_imdb) wins over fuzzy identify, the match is stored as an
+    identity_claims source, and it is resolved onto the review Track row
+    persisted by the hold_for_review path."""
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config(hold_for_review=True, thediscdb_enabled=True)]
@@ -740,14 +813,14 @@ def test_identify_thediscdb_match_stamps_map_and_uses_exact_identity() -> None:
     assert r.status_code == 200
     out = r.json()
     assert out["title"] == "Round Midnight"
-    assert out["metadata_json"]["thediscdb"]["matched"]["0"]["type"] == "MainMovie"
+    assert out["metadata_json"]["identity_claims"]["sources"]["thediscdb"]["tracks"]["0"]["role"] == "main"
     assert app.state.thediscdb.called_with == ["2D61282D8DA5EAC2CA87B451BCE9A055"]
     assert dispatcher.identify_from_imdb_calls == ["tt0090557"]
 
     tracks = [row for row in db.added if type(row).__name__ == "Track"]
     by_ref = {t.source_ref: t for t in tracks}
-    assert by_ref["0"].role == "MainMovie"
-    assert by_ref["0"].role_source == "thediscdb"
+    assert by_ref["0"].role == "main"
+    assert by_ref["0"].identity_provenance["role"] == "thediscdb"
     assert by_ref["0"].custom_filename == "Main.mkv"
     assert by_ref["0"].excluded is False
 
@@ -831,9 +904,10 @@ class _AllMissDispatcher:
 def test_identify_thediscdb_match_survives_total_identify_miss() -> None:
     """A TheDiscDB match was found, but BOTH identify_from_imdb and the fuzzy
     fallback miss (block_on_miss=False -> synthetic unidentified IDENTIFIED).
-    The stamped "thediscdb" record must survive the miss-path's metadata_json
-    assignment (a full overwrite here would silently orphan the map, making
-    rip_start's apply_map a no-op even though good disc-map data exists)."""
+    The stamped identity_claims source must survive the miss-path's
+    metadata_json assignment (a full overwrite here would silently orphan the
+    claims, making rip_start's resolve_job a no-op even though good disc-map
+    data exists)."""
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config(block_on_miss=False, thediscdb_enabled=True)]
@@ -854,7 +928,7 @@ def test_identify_thediscdb_match_survives_total_identify_miss() -> None:
     out = r.json()
     assert out["status"] == "identified"  # unchanged synthetic-miss behavior
     assert out["metadata_json"]["flags"]["unidentified"] is True
-    assert out["metadata_json"]["thediscdb"]["matched"]  # map survived the overwrite
+    assert out["metadata_json"]["identity_claims"]["sources"]["thediscdb"]["tracks"]  # claims survived the overwrite
 
 
 # --- /jobs/{id} & in-flight --------------------------------------------------
@@ -1185,21 +1259,20 @@ def test_rip_start_success_creates_tracks_and_emits() -> None:
     assert any(e["event_type"] == "rip.started" for e in hub.events)
 
 
-def test_rip_start_applies_stored_thediscdb_map_to_new_tracks() -> None:
-    """A job whose identify run stored a TheDiscDB map must have that map
-    applied (apply_map) onto the freshly-created rip-start Track rows."""
+def test_rip_start_applies_stored_thediscdb_claims_to_new_tracks() -> None:
+    """A job whose identify run stored TheDiscDB claims must have them
+    resolved onto the freshly-created rip-start Track rows."""
     db = FakeSession()
     db.rows["drives"] = [_drive()]
-    thediscdb_meta = {
-        "release_slug": "2022-criterion-blu-ray",
-        "title_slug": "round-midnight-1986",
-        "kind": "movie",
-        "contributors": [],
-        "matched": {"1": {"type": "MainMovie", "title": "Round Midnight", "filename": "Main.mkv"}},
+    claims = {
+        "sources": {
+            "thediscdb": {
+                "status": "ok",
+                "tracks": {"1": {"role": "main", "filename": "Main.mkv", "selected": True}},
+            }
+        }
     }
-    db.rows["jobs"] = [
-        _job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict(), "thediscdb": thediscdb_meta})
-    ]
+    db.rows["jobs"] = [_job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict(), "identity_claims": claims})]
     db.rows["tracks"] = []
     db.rows["rip_presets"] = [_movie_preset()]
     new = [_track("trk_new", status=TrackStatus.QUEUED, index=1)]
@@ -1207,10 +1280,12 @@ def test_rip_start_applies_stored_thediscdb_map_to_new_tracks() -> None:
         r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 200
     out_track = r.json()["tracks"][0]
-    assert out_track["role"] == "MainMovie"
+    assert out_track["role"] == "main"
     assert out_track["custom_filename"] == "Main.mkv"
     assert out_track["excluded"] is False
-    assert new[0].role_source == "thediscdb"
+    assert out_track["identity_provenance"]["role"] == "thediscdb"
+    stored = db.rows["jobs"][0].metadata_json["identity_claims"]["sources"]
+    assert stored["preset"]["tracks"]["1"] == {"selected": True}
 
 
 # --- /resume (no-default-preset branch; happy path is in test_ripper_resume) --

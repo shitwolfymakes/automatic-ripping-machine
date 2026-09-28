@@ -19,7 +19,9 @@ from arm_backend.metadata import MetadataDispatcher
 from arm_backend.metadata.base import MetadataResult, extract_poster_url, metadata_with_identity
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
 from arm_backend.seeders import CONFIG_SINGLETON_ID
-from arm_backend.thediscdb.matcher import apply_map, build_map, external_imdb_id
+from arm_backend.identity.pipeline import resolve_job
+from arm_backend.identity.proposals import put_source, record_preset
+from arm_backend.identity.sources.thediscdb import SOURCE_ID as THEDISCDB, build_claims, external_imdb_id
 from arm_backend.track_selection import select_tracks, select_tracks_for_review
 from arm_backend.ws import WSHub
 from arm_common import (
@@ -212,10 +214,14 @@ async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -
     existing_refs = {
         t.source_ref for t in (await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
     }
+    added: list[Track] = []
     for track in select_tracks_for_review(job.id, scan, preset):
         if track.source_ref in existing_refs:
             continue
         db.add(track)
+        added.append(track)
+    if added:
+        record_preset(job, added, now=datetime.now(timezone.utc))
     await db.flush()
 
 
@@ -525,13 +531,7 @@ async def identify(
             try:
                 thediscdb_match = await asyncio.to_thread(store.lookup, content_hash)
                 if thediscdb_match is not None:
-                    job.metadata_json = {
-                        **(job.metadata_json or {}),
-                        "thediscdb": {
-                            **build_map(thediscdb_match, scan),
-                            "matched_at": datetime.now(timezone.utc).isoformat(),
-                        },
-                    }
+                    put_source(job, THEDISCDB, build_claims(thediscdb_match, scan, now=datetime.now(timezone.utc)))
                     logger.info("thediscdb: matched job_id=%s release=%s", job.id, thediscdb_match.release_slug)
             except Exception as e:
                 logger.warning("thediscdb: lookup failed job_id=%s: %s", job.id, e)
@@ -599,7 +599,7 @@ async def identify(
                 job.status = JobStatus.AWAITING_REVIEW
                 job.wait_start_time = datetime.now(timezone.utc)
                 await _persist_review_tracks(session, job, scan)
-                await apply_map(session, job)
+                await resolve_job(session, job)
             else:
                 job.status = JobStatus.IDENTIFIED
         else:
@@ -734,7 +734,8 @@ async def rip_start(
 
     session.add_all(new_tracks)
     await session.flush()
-    await apply_map(session, job)
+    record_preset(job, new_tracks, now=datetime.now(timezone.utc))
+    await resolve_job(session, job)
     job.status = JobStatus.RIPPING
     job.started_at = datetime.now(timezone.utc)
     await session.commit()
