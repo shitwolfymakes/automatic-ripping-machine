@@ -26,7 +26,7 @@ import pytest  # noqa: E402
 from arm_backend.db import get_session  # noqa: E402
 from arm_backend.metadata.base import MetadataResult  # noqa: E402
 from arm_backend.routers import ripper as ripper_router  # noqa: E402
-from arm_backend.thediscdb.snapshot import DiscMatch  # noqa: E402
+from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch  # noqa: E402
 from arm_common import (  # noqa: E402
     Config,
     ContainerFormat,

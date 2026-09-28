@@ -7,7 +7,7 @@ import json
 import tarfile
 from pathlib import Path
 
-from arm_backend.thediscdb.snapshot import SnapshotStore, build_index
+from arm_backend.identity.sources.thediscdb_snapshot import SnapshotStore, build_index
 
 DISC = {
     "Index": 1,
