@@ -1,6 +1,5 @@
 import type { TranscodeTaskView, TranscodeStatsView, TranscodeWorkerView } from '$lib/types/api.gen';
 import { get, post, del, buildQuery } from './client';
-import { notAvailable } from './_stub';
 
 // v3 calls these "transcodes" (the task model), not the BFF's "transcoder jobs".
 // The BFF response wrappers (TranscoderJobListResponse / WorkersResponse /
@@ -38,16 +37,4 @@ export function retryTranscoderJob(id: string): Promise<TranscodeTaskView> {
 
 export function deleteTranscoderJob(id: string): Promise<void> {
 	return del(`/api/transcodes/${id}`);
-}
-
-// MISSING in v3 — there is no separate retranscode endpoint; v3 folds re-queue
-// into retry. Screens guarded off / use retry instead.
-export async function retranscodeTranscoderJob(_id: string): Promise<never> {
-	notAvailable('Re-transcode job');
-}
-
-// MISSING in v3 — no handbrake-presets endpoint. The PresetEditor falls back to
-// free-text, so the stub rejects loudly rather than silently returning {}.
-export async function listHandbrakePresets(): Promise<never> {
-	notAvailable('HandBrake presets');
 }

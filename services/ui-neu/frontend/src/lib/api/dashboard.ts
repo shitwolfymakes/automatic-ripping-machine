@@ -1,6 +1,5 @@
 import type { JobView, JobStatus, TranscodeTaskView, ConfigView } from '$lib/types/api.gen';
 import { apiFetch } from './client';
-import { notAvailable } from './_stub';
 import { fetchDrives } from './drives';
 import { fetchJobs } from './jobs';
 import { fetchTranscoderStats, fetchTranscoderJobs } from './transcoder';
@@ -104,17 +103,6 @@ export async function fetchDashboard(): Promise<DashboardData> {
 		transcoder_stats: transcoderStatsRes.status === 'fulfilled' ? {} : null,
 		active_transcodes: activeTranscodes
 	};
-}
-
-// v3 has no makemkv-key-check endpoint (the BFF POST /api/dashboard/
-// makemkv-key-check is gone). Key validity surfaces via ConfigView's
-// makemkv_key_valid/makemkv_key_checked_at on the next dashboard poll instead.
-export async function checkMakemkvKey(): Promise<{
-	key_valid: boolean;
-	checked_at: string | null;
-	message: string;
-}> {
-	notAvailable('MakeMKV key check');
 }
 
 // The Pause toggle means "hold discs for review": pausing lets discs scan +

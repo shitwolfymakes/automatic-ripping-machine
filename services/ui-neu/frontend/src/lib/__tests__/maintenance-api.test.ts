@@ -8,15 +8,10 @@ function jsonResponse(data: unknown, ok = true) {
 }
 
 import {
-	fetchSummary,
-	fetchOrphanLogs,
 	fetchOrphanFolders,
-	deleteLog,
 	deleteFolder,
-	bulkDeleteLogs,
 	bulkDeleteFolders,
 	cleanupTranscoder,
-	clearRaw,
 	fetchImageCacheStats,
 	clearImageCache
 } from '$lib/api/maintenance';
@@ -27,28 +22,12 @@ beforeEach(() => mockFetch.mockReset());
 // stubs that reject before any fetch. The image-cache stats/clear endpoints DO
 // exist (image_cache.stats()/clear()) and hit the real backend.
 describe('maintenance MISSING stubs', () => {
-	it('fetchSummary rejects', async () => {
-		await expect(fetchSummary()).rejects.toThrow(/not yet available in v3/);
-	});
-
-	it('fetchOrphanLogs rejects', async () => {
-		await expect(fetchOrphanLogs()).rejects.toThrow(/not yet available in v3/);
-	});
-
 	it('fetchOrphanFolders rejects', async () => {
 		await expect(fetchOrphanFolders()).rejects.toThrow(/not yet available in v3/);
 	});
 
-	it('deleteLog rejects', async () => {
-		await expect(deleteLog('/tmp/test.log')).rejects.toThrow(/not yet available in v3/);
-	});
-
 	it('deleteFolder rejects', async () => {
 		await expect(deleteFolder('/raw/orphan')).rejects.toThrow(/not yet available in v3/);
-	});
-
-	it('bulkDeleteLogs rejects', async () => {
-		await expect(bulkDeleteLogs(['/a.log', '/b.log'])).rejects.toThrow(/not yet available in v3/);
 	});
 
 	it('bulkDeleteFolders rejects', async () => {
@@ -57,10 +36,6 @@ describe('maintenance MISSING stubs', () => {
 
 	it('cleanupTranscoder rejects', async () => {
 		await expect(cleanupTranscoder()).rejects.toThrow(/not yet available in v3/);
-	});
-
-	it('clearRaw rejects', async () => {
-		await expect(clearRaw()).rejects.toThrow(/not yet available in v3/);
 	});
 });
 

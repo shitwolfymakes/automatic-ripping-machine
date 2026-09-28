@@ -3,8 +3,8 @@ import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-
 import JobActions from './JobActions.svelte';
 import { createJob } from './__fixtures__/job';
 
-// Mock the API module. Fix-permissions has no v3 backend yet, so the component
-// renders a disabled ComingSoon control instead of calling an API.
+// Mock the API module. Fix-permissions has no v3 backend, so the component
+// renders no control for it.
 vi.mock('$lib/api/jobs', () => ({
 	abandonJob: vi.fn(() => Promise.resolve()),
 	deleteJob: vi.fn(() => Promise.resolve())

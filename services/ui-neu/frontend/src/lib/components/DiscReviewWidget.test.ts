@@ -35,8 +35,6 @@ vi.mock('$lib/api/jobs', () => ({
 	fetchMusicDetail: vi.fn(),
 	updateJobTitle: vi.fn(() => Promise.resolve(createJob())),
 	updateJobConfig: vi.fn(() => Promise.resolve(createJob())),
-	updateJobNaming: vi.fn(() => Promise.reject(new Error('not available'))),
-	updateJobTranscodeConfig: vi.fn(() => Promise.reject(new Error('not available'))),
 	updateTrackTitle: vi.fn(() => Promise.resolve(createJob())),
 	clearTrackTitle: vi.fn(() => Promise.resolve(createJob())),
 	fetchNamingVariables: vi.fn(() => Promise.resolve({ variables: {} })),
@@ -45,7 +43,6 @@ vi.mock('$lib/api/jobs', () => ({
 }));
 
 vi.mock('$lib/api/settings', () => ({
-	fetchTranscoderScheme: vi.fn(() => Promise.resolve(null)),
 	fetchTranscoderPresets: vi.fn(() => Promise.resolve(null))
 }));
 

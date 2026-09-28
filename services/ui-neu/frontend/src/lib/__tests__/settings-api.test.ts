@@ -9,18 +9,7 @@ vi.mock('$lib/api/client', () => ({
 }));
 
 import { get, post, patch } from '$lib/api/client';
-import {
-	fetchSettings,
-	saveArmConfig,
-	checkApiKey,
-	fetchTranscoderPresets,
-	createCustomPreset,
-	fetchTranscoderScheme,
-	saveTranscoderConfig,
-	testTranscoderConnection,
-	testTranscoderWebhook,
-	fetchSystemInfo
-} from '../api/settings';
+import { fetchSettings, saveArmConfig, checkApiKey, fetchTranscoderPresets, createCustomPreset } from '../api/settings';
 
 const mockGet = vi.mocked(get);
 const mockPost = vi.mocked(post);
@@ -98,39 +87,5 @@ describe('createCustomPreset (v3 POST /api/transcode-presets)', () => {
 		const result = await createCustomPreset(body);
 		expect(mockPost).toHaveBeenCalledWith('/api/transcode-presets', body);
 		expect(result.id).toBe('p2');
-	});
-});
-
-describe('fetchTranscoderScheme (MISSING in v3)', () => {
-	it('resolves null (no transcoder-scheme endpoint) without any fetch', async () => {
-		await expect(fetchTranscoderScheme()).resolves.toBeNull();
-		expect(mockGet).not.toHaveBeenCalled();
-	});
-});
-
-describe('MISSING transcoder/system endpoints reject before fetch', () => {
-	it('saveTranscoderConfig rejects', async () => {
-		await expect(saveTranscoderConfig({})).rejects.toThrow(/not yet available/);
-	});
-	it('testTranscoderConnection rejects', async () => {
-		await expect(testTranscoderConnection()).rejects.toThrow(/not yet available/);
-	});
-	it('testTranscoderWebhook rejects', async () => {
-		await expect(testTranscoderWebhook('s')).rejects.toThrow(/not yet available/);
-	});
-	it('fetchSystemInfo rejects', async () => {
-		await expect(fetchSystemInfo()).rejects.toThrow(/not yet available/);
-	});
-
-	it('none of the MISSING stubs hit the client', async () => {
-		await Promise.allSettled([
-			saveTranscoderConfig({}),
-			testTranscoderConnection(),
-			testTranscoderWebhook('s'),
-			fetchSystemInfo()
-		]);
-		expect(mockGet).not.toHaveBeenCalled();
-		expect(mockPost).not.toHaveBeenCalled();
-		expect(mockPatch).not.toHaveBeenCalled();
 	});
 });
