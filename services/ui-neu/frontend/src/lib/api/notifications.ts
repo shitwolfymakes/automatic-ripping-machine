@@ -23,6 +23,20 @@ export function dismissNotification(id: string): Promise<NotificationInboxView> 
 	return patch<NotificationInboxView>(`/api/notifications/inbox/${id}`, body);
 }
 
-export function dismissAllNotifications(): Promise<unknown> {
-	return post('/api/notifications/inbox/dismiss-all');
+export interface NotificationDismissAllResult {
+	updated: number;
+}
+
+export interface NotificationPurgeResult {
+	deleted: number;
+}
+
+// Marks every unseen row seen. It does NOT clear them, so they are not purgeable.
+export function dismissAllNotifications(): Promise<NotificationDismissAllResult> {
+	return post<NotificationDismissAllResult>('/api/notifications/inbox/dismiss-all');
+}
+
+// Deletes every cleared row.
+export function purgeNotifications(): Promise<NotificationPurgeResult> {
+	return post<NotificationPurgeResult>('/api/notifications/inbox/purge');
 }

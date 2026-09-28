@@ -15,8 +15,6 @@ import {
 	deleteFolder,
 	bulkDeleteLogs,
 	bulkDeleteFolders,
-	dismissAllNotifications,
-	purgeNotifications,
 	cleanupTranscoder,
 	clearRaw,
 	fetchImageCacheStats,
@@ -55,14 +53,6 @@ describe('maintenance MISSING stubs', () => {
 
 	it('bulkDeleteFolders rejects', async () => {
 		await expect(bulkDeleteFolders(['/raw/a'])).rejects.toThrow(/not yet available in v3/);
-	});
-
-	it('dismissAllNotifications rejects', async () => {
-		await expect(dismissAllNotifications()).rejects.toThrow(/not yet available in v3/);
-	});
-
-	it('purgeNotifications rejects', async () => {
-		await expect(purgeNotifications()).rejects.toThrow(/not yet available in v3/);
 	});
 
 	it('cleanupTranscoder rejects', async () => {

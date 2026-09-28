@@ -39,23 +39,32 @@ vi.mock('$lib/api/notifications', () => ({
 				message: 'Rip failed',
 				job_id: null,
 				seen: true,
-				cleared: true,
+				cleared: false,
 				seen_at: null,
 				cleared_at: null,
 				created_at: '2025-06-14T10:00:00Z'
 			}
 		])
 	),
+	fetchNotificationCount: vi.fn(() => Promise.resolve({ unseen: 1, seen: 1, cleared: 2, total: 4 })),
 	dismissNotification: vi.fn(() => Promise.resolve({})),
-	dismissAllNotifications: vi.fn(() => Promise.resolve())
+	dismissAllNotifications: vi.fn(() => Promise.resolve({ updated: 1 })),
+	purgeNotifications: vi.fn(() => Promise.resolve({ deleted: 2 }))
 }));
 
-vi.mock('$lib/api/maintenance', () => ({
-	purgeNotifications: vi.fn(() => Promise.resolve({ success: true, count: 0 }))
-}));
+import {
+	fetchNotifications,
+	fetchNotificationCount,
+	dismissNotification,
+	dismissAllNotifications,
+	purgeNotifications
+} from '$lib/api/notifications';
 
 describe('Notifications Page', () => {
-	afterEach(() => cleanup());
+	afterEach(() => {
+		cleanup();
+		vi.clearAllMocks();
+	});
 
 	describe('rendering', () => {
 		it('renders page title', () => {
@@ -100,24 +109,74 @@ describe('Notifications Page', () => {
 			});
 		});
 
-		it('does not show Purge Cleared button when no cleared notifications', async () => {
-			const { fetchNotifications } = await import('$lib/api/notifications');
-			vi.mocked(fetchNotifications).mockResolvedValueOnce([
-				{
-					id: 'n-1',
-					event_id: null,
-					channel_id: null,
-					event_type: 'job.rip_complete',
-					title: 'Job Complete',
-					message: 'Movie ripped successfully',
-					job_id: null,
-					seen: false,
-					cleared: false,
-					seen_at: null,
-					cleared_at: null,
-					created_at: '2025-06-15T12:00:00Z'
-				}
-			]);
+		it('does not show Purge Cleared when nothing is cleared, even with seen rows listed', async () => {
+			vi.mocked(fetchNotificationCount).mockResolvedValueOnce({ unseen: 1, seen: 1, cleared: 0, total: 2 });
+			renderComponent(NotificationsPage);
+			await waitFor(() => {
+				expect(screen.getByText('Job Complete')).toBeInTheDocument();
+			});
+			expect(screen.queryByText('Purge Cleared')).not.toBeInTheDocument();
+		});
+
+		it('shows Purge Cleared after a single dismiss clears a row', async () => {
+			vi.mocked(fetchNotificationCount).mockResolvedValueOnce({ unseen: 1, seen: 1, cleared: 0, total: 2 });
+			renderComponent(NotificationsPage);
+			await waitFor(() => {
+				expect(screen.getByText('Dismiss')).toBeInTheDocument();
+			});
+			expect(screen.queryByText('Purge Cleared')).not.toBeInTheDocument();
+			await fireEvent.click(screen.getByText('Dismiss'));
+			await waitFor(() => {
+				expect(screen.getByText('Purge Cleared')).toBeInTheDocument();
+			});
+			expect(dismissNotification).toHaveBeenCalledWith('n-1');
+		});
+
+		it('purges through the backend and reports the deleted count', async () => {
+			renderComponent(NotificationsPage);
+			await waitFor(() => {
+				expect(screen.getByText('Purge Cleared')).toBeInTheDocument();
+			});
+			await fireEvent.click(screen.getByText('Purge Cleared'));
+			await fireEvent.click(screen.getByRole('button', { name: 'Purge' }));
+			await waitFor(() => {
+				expect(screen.getByText('Purged 2 cleared notifications')).toBeInTheDocument();
+			});
+			expect(purgeNotifications).toHaveBeenCalledTimes(1);
+			// The list and count reload after a purge.
+			expect(fetchNotifications).toHaveBeenCalledTimes(2);
+			expect(fetchNotificationCount).toHaveBeenCalledTimes(2);
+		});
+
+		it('uses the singular for one purged notification', async () => {
+			vi.mocked(purgeNotifications).mockResolvedValueOnce({ deleted: 1 });
+			renderComponent(NotificationsPage);
+			await waitFor(() => {
+				expect(screen.getByText('Purge Cleared')).toBeInTheDocument();
+			});
+			await fireEvent.click(screen.getByText('Purge Cleared'));
+			await fireEvent.click(screen.getByRole('button', { name: 'Purge' }));
+			await waitFor(() => {
+				expect(screen.getByText('Purged 1 cleared notification')).toBeInTheDocument();
+			});
+		});
+
+		it('shows the error when the purge fails', async () => {
+			vi.mocked(purgeNotifications).mockRejectedValueOnce(new Error('API 403: Forbidden'));
+			renderComponent(NotificationsPage);
+			await waitFor(() => {
+				expect(screen.getByText('Purge Cleared')).toBeInTheDocument();
+			});
+			await fireEvent.click(screen.getByText('Purge Cleared'));
+			await fireEvent.click(screen.getByRole('button', { name: 'Purge' }));
+			await waitFor(() => {
+				expect(screen.getByText('API 403: Forbidden')).toBeInTheDocument();
+			});
+			expect(fetchNotifications).toHaveBeenCalledTimes(1);
+		});
+
+		it('still lists notifications when the count request fails', async () => {
+			vi.mocked(fetchNotificationCount).mockRejectedValueOnce(new Error('count down'));
 			renderComponent(NotificationsPage);
 			await waitFor(() => {
 				expect(screen.getByText('Job Complete')).toBeInTheDocument();
@@ -126,9 +185,57 @@ describe('Notifications Page', () => {
 		});
 	});
 
+	describe('dismiss all', () => {
+		it('makes one dismiss-all call and marks the unseen rows seen', async () => {
+			renderComponent(NotificationsPage);
+			await waitFor(() => {
+				expect(screen.getByText('Dismiss All')).toBeInTheDocument();
+			});
+			await fireEvent.click(screen.getByText('Dismiss All'));
+			await waitFor(() => {
+				expect(screen.queryByText('1 new')).not.toBeInTheDocument();
+			});
+			expect(dismissAllNotifications).toHaveBeenCalledTimes(1);
+			expect(dismissNotification).not.toHaveBeenCalled();
+			expect(screen.queryByText('Job Complete')).not.toBeInTheDocument();
+			expect(screen.queryByText('Dismiss All')).not.toBeInTheDocument();
+			// Seen rows are still listed under Show dismissed.
+			await fireEvent.click(screen.getByRole('checkbox'));
+			await waitFor(() => {
+				expect(screen.getByText('Job Complete')).toBeInTheDocument();
+			});
+		});
+
+		it('does not make Purge Cleared appear, since dismiss-all does not clear rows', async () => {
+			vi.mocked(fetchNotificationCount).mockResolvedValueOnce({ unseen: 1, seen: 1, cleared: 0, total: 2 });
+			renderComponent(NotificationsPage);
+			await waitFor(() => {
+				expect(screen.getByText('Dismiss All')).toBeInTheDocument();
+			});
+			await fireEvent.click(screen.getByText('Dismiss All'));
+			await waitFor(() => {
+				expect(screen.queryByText('Dismiss All')).not.toBeInTheDocument();
+			});
+			expect(screen.queryByText('Purge Cleared')).not.toBeInTheDocument();
+		});
+
+		it('keeps the rows unseen and shows the error when dismiss-all fails', async () => {
+			vi.mocked(dismissAllNotifications).mockRejectedValueOnce(new Error('API 500: Internal Server Error'));
+			renderComponent(NotificationsPage);
+			await waitFor(() => {
+				expect(screen.getByText('Dismiss All')).toBeInTheDocument();
+			});
+			await fireEvent.click(screen.getByText('Dismiss All'));
+			await waitFor(() => {
+				expect(screen.getByText('API 500: Internal Server Error')).toBeInTheDocument();
+			});
+			expect(screen.getByText('1 new')).toBeInTheDocument();
+			expect(screen.getByText('Job Complete')).toBeInTheDocument();
+		});
+	});
+
 	describe('empty state', () => {
 		it('shows empty state when no notifications', async () => {
-			const { fetchNotifications } = await import('$lib/api/notifications');
 			vi.mocked(fetchNotifications).mockResolvedValueOnce([]);
 			renderComponent(NotificationsPage);
 			await waitFor(() => {

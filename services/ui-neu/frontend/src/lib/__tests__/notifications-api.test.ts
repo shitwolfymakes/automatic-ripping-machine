@@ -11,7 +11,8 @@ import {
 	fetchNotifications,
 	fetchNotificationCount,
 	dismissNotification,
-	dismissAllNotifications
+	dismissAllNotifications,
+	purgeNotifications
 } from '../api/notifications';
 
 beforeEach(() => mockFetch.mockReset());
@@ -51,12 +52,30 @@ describe('dismissNotification', () => {
 });
 
 describe('dismissAllNotifications', () => {
-	it('POSTs /api/notifications/inbox/dismiss-all', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({}));
-		await dismissAllNotifications();
+	it('POSTs /api/notifications/inbox/dismiss-all and returns the updated count', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ updated: 3 }));
+		const result = await dismissAllNotifications();
+		expect(result).toEqual({ updated: 3 });
 		expect(mockFetch).toHaveBeenCalledWith(
 			'/api/notifications/inbox/dismiss-all',
 			expect.objectContaining({ method: 'POST' })
 		);
+	});
+});
+
+describe('purgeNotifications', () => {
+	it('POSTs /api/notifications/inbox/purge and returns the deleted count', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ deleted: 2 }));
+		const result = await purgeNotifications();
+		expect(result).toEqual({ deleted: 2 });
+		expect(mockFetch).toHaveBeenCalledWith(
+			'/api/notifications/inbox/purge',
+			expect.objectContaining({ method: 'POST' })
+		);
+	});
+
+	it('rejects when the backend errors', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ detail: 'boom' }, false));
+		await expect(purgeNotifications()).rejects.toThrow();
 	});
 });

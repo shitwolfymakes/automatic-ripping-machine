@@ -1,7 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { fetchNotifications, dismissNotification } from '$lib/api/notifications';
-	import { purgeNotifications } from '$lib/api/maintenance';
+	import {
+		fetchNotifications,
+		fetchNotificationCount,
+		dismissNotification,
+		dismissAllNotifications,
+		purgeNotifications
+	} from '$lib/api/notifications';
 	import type { NotificationInboxView } from '$lib/types/api.gen';
 	import { formatDateTime, timeAgo } from '$lib/utils/format';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
@@ -17,6 +22,8 @@
 	let purging = $state(false);
 	let purgeConfirmOpen = $state(false);
 	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+	// Purge deletes cleared rows, which the inbox list omits, so this comes from the count endpoint.
+	let clearedCount = $state(0);
 
 	let filtered = $derived(showCleared ? notifications : notifications.filter((n) => !n.seen));
 
@@ -24,7 +31,9 @@
 		notifsLoading = true;
 		notifsError = null;
 		try {
-			notifications = await fetchNotifications();
+			const [rows, counts] = await Promise.all([fetchNotifications(), fetchNotificationCount().catch(() => null)]);
+			notifications = rows;
+			clearedCount = counts?.cleared ?? 0;
 		} catch (e) {
 			notifsError = e instanceof Error ? e : new Error('Failed to load notifications');
 		} finally {
@@ -36,7 +45,8 @@
 		dismissing = new Set([...dismissing, id]);
 		try {
 			await dismissNotification(id);
-			notifications = notifications.map((n) => (n.id === id ? { ...n, seen: true } : n));
+			if (notifications.some((n) => n.id === id && !n.cleared)) clearedCount += 1;
+			notifications = notifications.map((n) => (n.id === id ? { ...n, seen: true, cleared: true } : n));
 		} catch {
 			// next refresh will reconcile
 		} finally {
@@ -48,17 +58,21 @@
 	}
 
 	async function dismissAll() {
-		const unseen = notifications.filter((n) => !n.seen);
-		if (unseen.length === 0) return;
-		const ids = unseen.map((n) => n.id);
+		const ids = notifications.filter((n) => !n.seen).map((n) => n.id);
+		if (ids.length === 0) return;
 		dismissing = new Set(ids);
-		await Promise.allSettled(ids.map((id) => dismissNotification(id)));
-		notifications = notifications.map((n) => ({ ...n, seen: true }));
-		dismissing = new Set();
+		try {
+			await dismissAllNotifications();
+			// dismiss-all only marks rows seen; it does not clear them.
+			notifications = notifications.map((n) => (n.seen ? n : { ...n, seen: true }));
+		} catch (e) {
+			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Dismiss all failed' };
+		} finally {
+			dismissing = new Set();
+		}
 	}
 
 	let unseenCount = $derived(notifications.filter((n) => !n.seen).length);
-	let clearedCount = $derived(notifications.filter((n) => n.seen).length);
 
 	async function handlePurge() {
 		purging = true;
@@ -67,7 +81,7 @@
 			const result = await purgeNotifications();
 			feedback = {
 				type: 'success',
-				message: `Purged ${result.count} cleared notification${result.count !== 1 ? 's' : ''}`
+				message: `Purged ${result.deleted} cleared notification${result.deleted !== 1 ? 's' : ''}`
 			};
 			await load();
 		} catch (e) {

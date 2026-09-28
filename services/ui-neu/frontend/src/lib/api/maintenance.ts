@@ -102,14 +102,6 @@ export async function bulkDeleteFolders(_paths: string[]): Promise<MaintenanceBu
 	notAvailable('Maintenance bulk-delete folders');
 }
 
-export async function dismissAllNotifications(): Promise<{ success: boolean; count: number }> {
-	notAvailable('Dismiss all notifications (maintenance)');
-}
-
-export async function purgeNotifications(): Promise<{ success: boolean; count: number }> {
-	notAvailable('Purge notifications');
-}
-
 export async function cleanupTranscoder(): Promise<CleanupTranscoderResult> {
 	notAvailable('Cleanup transcoder');
 }
