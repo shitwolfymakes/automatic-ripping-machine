@@ -331,7 +331,7 @@ describe('Job detail page (v3)', () => {
 				createTrack({
 					id: 'trk_1',
 					status: 'done',
-					video_type: 'series',
+					role: 'episode',
 					episode_number: 3,
 					episode_name: 'The One With The Test'
 				})

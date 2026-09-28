@@ -94,9 +94,7 @@
 
 	let metadataFields = $derived(detail ? buildMetadataFields(detail.job, $dashboard.drive_names) : []);
 	let musicTracks = $derived(detail ? extractMusicTracks(detail.job.metadata_json) : []);
-	let tracksAreSeries = $derived(
-		(detail?.tracks ?? []).some((t) => t.video_type === 'series' || t.episode_number != null)
-	);
+	let tracksAreSeries = $derived((detail?.tracks ?? []).some((t) => t.role === 'episode' || t.episode_number != null));
 	let jobMeta = $derived(detail ? readJobMetadata(detail.job.metadata_json) : {});
 	let showRawMetadata = $state(false);
 	let rawMetadataPairs = $derived(
@@ -522,6 +520,7 @@
 												<TrackTitleSearch
 													jobId={job.id}
 													{track}
+													mediaType={job.media_type}
 													onapply={handleTrackTitleApply}
 													onclose={() => {
 														editingTrackId = null;

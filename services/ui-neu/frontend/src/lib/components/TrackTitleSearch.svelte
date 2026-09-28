@@ -1,17 +1,20 @@
 <script lang="ts">
-	import type { TrackView, MetadataCandidate, TrackEditRequest } from '$lib/types/api.gen';
+	import type { TrackView, MetadataCandidate, TrackEditRequest, MediaType } from '$lib/types/api.gen';
 	import { searchMetadata, fetchMediaDetail, updateTrackTitle, clearTrackTitle, updateTrack } from '$lib/api/jobs';
 	import PosterImage from './PosterImage.svelte';
 
 	interface Props {
 		jobId: string;
 		track: TrackView;
+		// The job's media type: the fallback for isSeries until a source or
+		// the operator has set this title's role.
+		mediaType?: MediaType | null;
 		onapply?: () => void;
 		onclear?: () => void;
 		onclose?: () => void;
 	}
 
-	let { jobId, track, onapply, onclear, onclose }: Props = $props();
+	let { jobId, track, mediaType = null, onapply, onclear, onclose }: Props = $props();
 
 	let query = $state(track.title || (track.source_ref?.replace(/\.\w+$/, '') ?? ''));
 	let yearInput = $state(track.year != null ? String(track.year) : '');
@@ -31,7 +34,7 @@
 	let editEpisodeNum = $state(track.episode_number != null ? String(track.episode_number) : '');
 	let editEpisodeName = $state(track.episode_name ?? '');
 	let savingOptions = $state(false);
-	let isSeries = $derived(track.video_type === 'series');
+	let isSeries = $derived(track.role != null ? track.role === 'episode' : mediaType === 'tv');
 
 	async function saveOptions() {
 		savingOptions = true;
@@ -116,7 +119,6 @@
 			await updateTrackTitle(jobId, track.id, {
 				title: editTitle.trim(),
 				year: Number.isFinite(yr) ? yr : undefined,
-				video_type: editType,
 				poster_url: editPosterUrl.trim() || undefined
 			});
 			feedback = { type: 'success', message: 'Track title updated' };

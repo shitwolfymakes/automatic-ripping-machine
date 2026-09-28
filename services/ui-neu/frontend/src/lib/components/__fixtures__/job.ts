@@ -41,7 +41,6 @@ const trackDefaults: TrackView = {
 	year: null,
 	imdb_id: null,
 	poster_url: null,
-	video_type: null,
 	episode_number: null,
 	episode_name: null
 };

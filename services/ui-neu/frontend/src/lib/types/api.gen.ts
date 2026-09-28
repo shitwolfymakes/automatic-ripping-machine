@@ -1632,6 +1632,24 @@ export type IdentifyRequest = {
 };
 
 /**
+ * IdentityClaims
+ */
+export type IdentityClaims = {
+    /**
+     * Sources
+     */
+    sources?: {
+        [key: string]: SourceClaims;
+    };
+    /**
+     * Pin
+     */
+    pin?: {
+        [key: string]: string;
+    };
+};
+
+/**
  * InAppChannelConfig
  */
 export type InAppChannelConfig = {
@@ -1684,6 +1702,12 @@ export type Job = {
      */
     disc_total: number | null;
     /**
+     * Identity Provenance
+     */
+    identity_provenance?: {
+        [key: string]: string;
+    } | null;
+    /**
      * Poster Url
      */
     poster_url: string | null;
@@ -1726,6 +1750,28 @@ export type Job = {
      * Updated At
      */
     updated_at: string | null;
+};
+
+/**
+ * JobClaim
+ */
+export type JobClaim = {
+    /**
+     * Season
+     */
+    season?: number | null;
+    /**
+     * Disc Number
+     */
+    disc_number?: number | null;
+    /**
+     * Disc Total
+     */
+    disc_total?: number | null;
+    /**
+     * Title
+     */
+    title?: string | null;
 };
 
 /**
@@ -1801,12 +1847,7 @@ export type JobMetadata = {
     scan_result?: ScanResult | null;
     identity?: JobIdentity | null;
     music?: MusicMeta | null;
-    /**
-     * Thediscdb
-     */
-    thediscdb?: {
-        [key: string]: unknown;
-    } | null;
+    identity_claims?: IdentityClaims | null;
     flags?: JobFlags;
     /**
      * Provider Raw
@@ -3589,6 +3630,49 @@ export type SettingsSchemaResponse = {
 };
 
 /**
+ * SourceClaims
+ */
+export type SourceClaims = {
+    /**
+     * Run At
+     */
+    run_at?: string | null;
+    /**
+     * Status
+     */
+    status?: 'ok' | 'miss' | 'skipped' | 'error';
+    /**
+     * Detail
+     */
+    detail?: string | null;
+    /**
+     * Inputs
+     */
+    inputs?: {
+        [key: string]: unknown;
+    };
+    job?: JobClaim;
+    /**
+     * Tracks
+     */
+    tracks?: {
+        [key: string]: TrackClaim;
+    };
+    /**
+     * Alternatives
+     */
+    alternatives?: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Extra
+     */
+    extra?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
  * StatsResponse
  */
 export type StatsResponse = {
@@ -3733,10 +3817,52 @@ export type TemplatePreviewResponse = {
 };
 
 /**
+ * TrackClaim
+ */
+export type TrackClaim = {
+    role?: TrackRole | null;
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Season
+     */
+    season?: number | null;
+    /**
+     * Episode
+     */
+    episode?: number | null;
+    /**
+     * Episode End
+     */
+    episode_end?: number | null;
+    /**
+     * Episode Name
+     */
+    episode_name?: string | null;
+    /**
+     * Filename
+     */
+    filename?: string | null;
+    /**
+     * Selected
+     */
+    selected?: boolean | null;
+    /**
+     * Confidence
+     */
+    confidence?: number | null;
+};
+
+/**
  * TrackEditRequest
  *
  * One entry in JobUpdateRequest.tracks. `track_id` selects the row; every
  * other field is an optional operator edit (omitted=untouched, null=clear).
+ * Identity fields become `manual` identity proposals; `revert_fields` drops
+ * the operator's value for those fields and hands them back to the
+ * automatic sources.
  */
 export type TrackEditRequest = {
     /**
@@ -3759,14 +3885,19 @@ export type TrackEditRequest = {
      * Poster Url
      */
     poster_url?: string | null;
+    role?: TrackRole | null;
     /**
-     * Video Type
+     * Season
      */
-    video_type?: string | null;
+    season?: number | null;
     /**
      * Episode Number
      */
     episode_number?: number | null;
+    /**
+     * Episode Number End
+     */
+    episode_number_end?: number | null;
     /**
      * Episode Name
      */
@@ -3779,12 +3910,25 @@ export type TrackEditRequest = {
      * Custom Filename
      */
     custom_filename?: string | null;
+    /**
+     * Revert Fields
+     */
+    revert_fields?: Array<'role' | 'title' | 'season' | 'episode_number' | 'episode_number_end' | 'episode_name' | 'custom_filename' | 'excluded'>;
 };
 
 /**
  * TrackKind
  */
 export type TrackKind = 'video_title' | 'audio_track' | 'data_dump';
+
+/**
+ * TrackRole
+ *
+ * What one title on a disc is. Set by identity sources via the resolver
+ * (arm_backend.identity) or by the operator; replaces the old free-text
+ * role and the per-track video_type.
+ */
+export type TrackRole = 'main' | 'episode' | 'extra' | 'trailer' | 'other';
 
 /**
  * TrackSelection
@@ -3883,10 +4027,7 @@ export type TrackView = {
      * Label
      */
     label?: string | null;
-    /**
-     * Role
-     */
-    role?: string | null;
+    role?: TrackRole | null;
     /**
      * Edition
      */
@@ -3908,10 +4049,6 @@ export type TrackView = {
      */
     poster_url?: string | null;
     /**
-     * Video Type
-     */
-    video_type?: string | null;
-    /**
      * Episode Number
      */
     episode_number?: number | null;
@@ -3920,6 +4057,14 @@ export type TrackView = {
      */
     episode_name?: string | null;
     /**
+     * Episode Number End
+     */
+    episode_number_end?: number | null;
+    /**
+     * Season
+     */
+    season?: number | null;
+    /**
      * Excluded
      */
     excluded?: boolean;
@@ -3927,6 +4072,12 @@ export type TrackView = {
      * Custom Filename
      */
     custom_filename?: string | null;
+    /**
+     * Identity Provenance
+     */
+    identity_provenance?: {
+        [key: string]: string;
+    } | null;
 };
 
 /**
