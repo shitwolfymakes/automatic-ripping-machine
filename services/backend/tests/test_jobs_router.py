@@ -1110,6 +1110,152 @@ def test_update_job_edits_multiple_tracks(signing_key: bytes) -> None:
     assert len(updated) == 2
 
 
+# --- update_job identity edits become manual proposals (identity core) ------
+
+
+def test_patch_track_identity_edit_is_manual_claim_with_provenance(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    db.rows["tracks"][0].source_ref = "1"
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "episode_number": 5}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    track = db.rows["tracks"][0]
+    assert track.episode_number == 5
+    assert track.identity_provenance == {"episode_number": "manual"}
+    claims = db.rows["jobs"][0].metadata_json["identity_claims"]["sources"]["manual"]
+    assert claims["tracks"]["1"] == {"episode": 5}
+
+
+def test_patch_manual_clear_beats_disc_map(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    job = db.rows["jobs"][0]
+    job.metadata_json = {"identity_claims": {"sources": {"thediscdb": {"tracks": {"1": {"episode_name": "Pilot"}}}}}}
+    track = db.rows["tracks"][0]
+    track.source_ref = "1"
+    track.episode_name = "Pilot"
+    track.identity_provenance = {"episode_name": "thediscdb"}
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "episode_name": None}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    track = db.rows["tracks"][0]
+    assert track.episode_name is None
+    assert track.identity_provenance == {"episode_name": "manual"}
+
+
+def test_patch_revert_hands_field_back_to_disc_map(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    job = db.rows["jobs"][0]
+    job.metadata_json = {
+        "identity_claims": {
+            "sources": {
+                "thediscdb": {"tracks": {"1": {"episode_name": "Pilot"}}},
+                "manual": {"tracks": {"1": {"episode_name": None}}},
+            }
+        }
+    }
+    track = db.rows["tracks"][0]
+    track.source_ref = "1"
+    track.episode_name = None
+    track.identity_provenance = {"episode_name": "manual"}
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "revert_fields": ["episode_name"]}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    track = db.rows["tracks"][0]
+    assert track.episode_name == "Pilot"
+    assert track.identity_provenance == {"episode_name": "thediscdb"}
+
+
+def test_patch_revert_with_no_other_proposer_resets_to_default(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    job = db.rows["jobs"][0]
+    job.metadata_json = {"identity_claims": {"sources": {"manual": {"tracks": {"1": {"episode": 5}}}}}}
+    track = db.rows["tracks"][0]
+    track.source_ref = "1"
+    track.episode_number = 5
+    track.identity_provenance = {"episode_number": "manual"}
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "revert_fields": ["episode_number"]}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert db.rows["tracks"][0].episode_number is None
+
+
+def test_patch_plain_fields_still_set_directly(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "year": 1999}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert db.rows["tracks"][0].year == 1999
+    assert "identity_claims" not in db.rows["jobs"][0].metadata_json
+
+
+def test_patch_job_disc_fields_are_manual_claims(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(f"/api/jobs/{_JOB_ID_A}", json={"disc_number": 2, "disc_total": 4}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    job = db.rows["jobs"][0]
+    assert (job.disc_number, job.disc_total) == (2, 4)
+    assert job.identity_provenance == {"disc_number": "manual", "disc_total": "manual"}
+
+
+def test_patch_rejects_unknown_revert_field(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "revert_fields": ["year"]}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422
+
+
+def test_patch_rejects_video_type(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "video_type": "series"}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422
+
+
 # --- resolve fills the identity columns (step 2 / G-03, G-14) ----------------
 
 
@@ -1133,6 +1279,25 @@ def test_resolve_sets_media_type_and_season_columns(signing_key: bytes) -> None:
     body = r.json()
     assert body["job"]["media_type"] == "tv"
     assert body["job"]["season"] == 3
+
+
+def test_resolve_disc_and_season_become_manual_claims(signing_key: bytes) -> None:
+    """Disc position and season are identity fields: resolve records them as
+    manual claims with provenance, not plain column writes -- so a later
+    disc-map or preset proposal can never silently override them."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID, meta={})]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Show", "disc_number": 2, "disc_total": 3, "season": 1},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    job = db.rows["jobs"][0]
+    assert (job.season, job.disc_number, job.disc_total) == (1, 2, 3)
+    assert job.identity_provenance == {"season": "manual", "disc_number": "manual", "disc_total": "manual"}
 
 
 def test_resolve_legacy_metadata_season_and_disc_now_rejected(signing_key: bytes) -> None:
