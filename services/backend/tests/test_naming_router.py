@@ -715,10 +715,10 @@ def test_naming_preview_422_when_optional_tokens_empty_the_path(signing_key: byt
     _seed(db)
     app, token = _make_app(signing_key, db)
     body = {
-        "template": "({year?})",
+        "template": "{title}/{year?}",
         "media_type": "movie",
         "has_transcode_preset": True,
-        "variables": {"year": ""},
+        "variables": {"title": "", "year": ""},
     }
     with TestClient(app) as client:
         r = client.post("/api/naming/preview", json=body, headers=_auth(token))

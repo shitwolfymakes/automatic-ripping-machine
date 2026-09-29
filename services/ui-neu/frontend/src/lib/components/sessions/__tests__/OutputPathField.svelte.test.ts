@@ -66,7 +66,7 @@ it('shows the missing-value preview when the template has optional tokens', asyn
 	} as any);
 	renderComponent(OutputPathField, { value: '{title} ({year?}).{ext}', mediaType: 'movie', onchange: vi.fn() });
 	await waitFor(() => expect(screen.getByText('Iron Man.mkv')).toBeInTheDocument());
-	expect(screen.getByText('WITH NO YEAR OR OTHER OPTIONAL VALUE')).toBeInTheDocument();
+	expect(screen.getByText('WITH OPTIONAL VALUES EMPTY')).toBeInTheDocument();
 });
 
 it('hides the missing-value preview when there are no optional tokens', async () => {
@@ -76,5 +76,10 @@ it('hides the missing-value preview when there are no optional tokens', async ()
 	} as any);
 	renderComponent(OutputPathField, { value: '{title} ({year}).{ext}', mediaType: 'movie', onchange: vi.fn() });
 	await waitFor(() => expect(screen.getByText('Iron Man (2008).mkv')).toBeInTheDocument());
-	expect(screen.queryByText('WITH NO YEAR OR OTHER OPTIONAL VALUE')).not.toBeInTheDocument();
+	expect(screen.queryByText('WITH OPTIONAL VALUES EMPTY')).not.toBeInTheDocument();
+});
+
+it('omits the optional-marker hint for media types with no year token', () => {
+	renderComponent(OutputPathField, { value: '', mediaType: 'music', onchange: vi.fn() });
+	expect(screen.queryByText(/Add \? to make a token optional/)).not.toBeInTheDocument();
 });

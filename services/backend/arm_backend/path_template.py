@@ -101,8 +101,10 @@ def expand_template(template: str, ctx: dict[str, str]) -> str:
     """Expand `{token}` / `{token?}` references against `ctx`. Unknown tokens raise.
 
     An optional token whose value is empty is removed together with a ()/[]
-    pair wrapping only it and one preceding space; empty path segments left
-    behind collapse. A result that is empty after that raises.
+    pair wrapping only it and one preceding space; segments are then trimmed of
+    edge whitespace and empty ones (with leading/trailing `/`) collapse. That
+    collapse only happens when an optional token was dropped; otherwise the
+    output is left byte-identical. A result that is empty after that raises.
     """
     dropped = False
 
@@ -122,7 +124,7 @@ def expand_template(template: str, ctx: dict[str, str]) -> str:
     except (IndexError, ValueError) as exc:
         raise TemplateValidationError(f"malformed template: {exc}") from exc
     if dropped:
-        out = "/".join(seg for seg in out.split("/") if seg)
+        out = "/".join(seg for seg in (s.strip() for s in out.split("/")) if seg)
         if not out:
             raise TemplateValidationError("output path is empty once optional tokens with no value are dropped")
     return out

@@ -152,6 +152,10 @@ def test_music_allows_disc_token() -> None:
         ("{year?}/{title}.{ext}", {"title": "X", "year": "", "ext": "mkv"}, "X.mkv"),
         # brackets that wrap more than the token are left alone
         ("{title} ({year?} cut).{ext}", {"title": "X", "year": "", "ext": "mkv"}, "X ( cut).mkv"),
+        # whitespace left at segment edges is trimmed once something was dropped
+        ("{title}  ({year?})/x", {"title": "X", "year": ""}, "X/x"),
+        ("({year?}) {title}", {"title": "X", "year": ""}, "X"),
+        ("{title} ({year?}) /x", {"title": "X", "year": ""}, "X/x"),
         # values are never parsed as syntax
         ("{title} ({year?})", {"title": "What? {year?}", "year": ""}, "What? {year?}"),
     ],
@@ -201,3 +205,9 @@ def test_expand_without_optional() -> None:
 def test_year_description_mentions_optional_marker() -> None:
     year = next(t for t in tokens_for_media(MediaType.MOVIE) if t["token"] == "year")
     assert "{year?}" in year["description"]
+
+
+def test_expand_template_without_drop_is_byte_identical() -> None:
+    # No optional token dropped: no collapse, no trimming.
+    assert expand_template(" /{title}  /x/", {"title": "X", "year": "2008"}) == " /X  /x/"
+    assert expand_template("{title} ({year?}) /", {"title": "X", "year": "2008"}) == "X (2008) /"

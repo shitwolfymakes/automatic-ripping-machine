@@ -121,10 +121,12 @@
 				{/if}
 			{/each}
 		</div>
-		<p class="output-path-field-hint">
-			Add ? to make a token optional, for example {'{year?}'}. It is dropped with its brackets when the job has no
-			value.
-		</p>
+		{#if tokens.includes('year')}
+			<p class="output-path-field-hint">
+				Add ? to make a token optional, for example {'{year?}'}. It is dropped with its brackets when the job has no
+				value.
+			</p>
+		{/if}
 	{/if}
 
 	<!-- Live preview -->
@@ -136,7 +138,7 @@
 	{/if}
 	{#if expansion !== null && expansionWithoutOptional !== null}
 		<div class="output-path-field-preview">
-			<span class="output-path-field-preview-label">WITH NO YEAR OR OTHER OPTIONAL VALUE</span>
+			<span class="output-path-field-preview-label">WITH OPTIONAL VALUES EMPTY</span>
 			<span class="mono output-path-field-preview-value">{expansionWithoutOptional}</span>
 		</div>
 	{/if}
