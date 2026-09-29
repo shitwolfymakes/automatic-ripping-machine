@@ -1,7 +1,10 @@
-// Instant status refresh from `ripper.events` and `transcode.events`. A NOTIFIER, not a data store:
-// it holds no job state. It subscribes once to the bare `ripper.events`
-// and `transcode.events` topics, coalesces the job_ids seen within a debounce window, and invokes
-// each registered listener once per flush with the accumulated set.
+// Instant status refresh from `ripper.events` and `transcode.events`. A
+// NOTIFIER, not a data store: it holds no job state. It subscribes once to
+// the bare `ripper.events` and `transcode.events` topics, coalesces the
+// job_ids seen within a debounce window, and invokes each registered
+// listener once per flush with the accumulated set. Every listener (the
+// dashboard included) therefore also refreshes on transcode lifecycle
+// events, debounced. The name predates the transcode topic and is kept.
 // Listeners re-run their own existing fetchers; polling stays untouched as
 // reconciliation (WS down => exactly today's behavior).
 //

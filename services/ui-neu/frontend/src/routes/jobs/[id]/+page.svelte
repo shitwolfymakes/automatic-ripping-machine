@@ -15,7 +15,8 @@
 	import ApplySessionDialog from '$lib/components/ApplySessionDialog.svelte';
 	import JobLifecycle from '$lib/components/JobLifecycle.svelte';
 	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
-	import { isAwaitingIdentity, isLive } from '$lib/utils/job-status-groups';
+	import { isAwaitingIdentity, isLive, isPostRipStatus } from '$lib/utils/job-status-groups';
+	import { fetchSessions } from '$lib/api/sessions';
 	import { buildMetadataFields, readJobMetadata } from '$lib/utils/job-fields';
 	import { extractMusicTracks } from '$lib/utils/music-tracks';
 	import { trackKindLabel, trackSizeLabel } from '$lib/utils/track-fields';
@@ -68,6 +69,14 @@
 	function handleApplied(resp: ApplySessionResponse) {
 		showApply = false;
 		loadJob();
+		if (resp.session_application?.status === 'waiting_identify') {
+			// Pre-rip applies park until rip-complete. A post-rip park (identity
+			// still pending, or no title resolved an output) has no such
+			// promise; the skip reason is not persisted, so just say waiting.
+			const postRip = detail ? isPostRipStatus(detail.job.status) : false;
+			flashNote(postRip ? 'Session parked; waiting' : 'Session parked; applies when the rip finishes');
+			return;
+		}
 		const n = resp.tasks?.length ?? 0;
 		flashNote(`${n} transcode task${n === 1 ? '' : 's'} queued`);
 	}
@@ -76,7 +85,8 @@
 
 	let isCdDisc = $derived(detail?.job.disc_type === 'cd');
 
-	let metadataFields = $derived(detail ? buildMetadataFields(detail.job, $dashboard.drive_names) : []);
+	let sessionNames = $state(new Map<string, string>());
+	let metadataFields = $derived(detail ? buildMetadataFields(detail.job, $dashboard.drive_names, sessionNames) : []);
 	let musicTracks = $derived(detail ? extractMusicTracks(detail.job.metadata_json) : []);
 	let tracksAreSeries = $derived(
 		(detail?.tracks ?? []).some(
@@ -156,6 +166,9 @@
 
 	onMount(() => {
 		let stopped = false;
+		fetchSessions()
+			.then((s) => (sessionNames = new Map(s.map((x) => [x.id, x.name]))))
+			.catch(() => {});
 		// Instant status for the job being viewed (ripper and transcode
 		// events): refresh only when an event names this job, so other jobs'
 		// events don't disturb the page. The 5s poll below stays as

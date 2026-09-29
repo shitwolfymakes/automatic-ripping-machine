@@ -369,3 +369,74 @@ def test_summarize_includes_tasks_failed() -> None:
     tp = r.json()["job"]["transcode_progress"]
     assert tp["tasks_failed"] == 1
     assert tp["state"] == "done_partial"
+
+
+def _parked_seed(db: FakeSession, job_id: str) -> None:
+    _seed_admin(db)
+    db.rows["jobs"] = [_ripped_job(job_id)]
+    rows = [
+        ("sap_1", "ses_a", job_id, SessionApplicationStatus.WAITING_IDENTIFY),
+        ("sap_2", "ses_b", job_id, SessionApplicationStatus.QUEUED),
+        ("sap_3", "ses_c", job_id, SessionApplicationStatus.DONE),
+        ("sap_4", "ses_d", "job_OTHER", SessionApplicationStatus.WAITING_IDENTIFY),
+    ]
+    db.rows["session_applications"] = [
+        SessionApplication(id=i, session_id=s, job_id=j, status=st, overwrite=False) for i, s, j, st in rows
+    ]
+
+
+def test_list_and_detail_parked_ids_only_waiting_applications_for_the_job() -> None:
+    job_id = "job_01JZXR7K3M5Q8N4VWA00000030"
+    db = FakeSession()
+    _parked_seed(db, job_id)
+    app, token = _make_app(db)
+    with TestClient(app) as client:
+        listed = client.get("/api/jobs", headers=_auth(token)).json()
+        detail = client.get(f"/api/jobs/{job_id}", headers=_auth(token)).json()
+    row = next(j for j in listed if j["id"] == job_id)
+    assert row["parked_session_ids"] == ["ses_a"]
+    assert detail["job"]["parked_session_ids"] == ["ses_a"]
+
+
+def test_parked_session_ids_empty_by_default() -> None:
+    job_id = "job_01JZXR7K3M5Q8N4VWA00000031"
+    db = FakeSession()
+    _parked_seed(db, job_id)
+    db.rows["session_applications"] = []
+    app, token = _make_app(db)
+    with TestClient(app) as client:
+        detail = client.get(f"/api/jobs/{job_id}", headers=_auth(token)).json()
+    assert detail["job"]["parked_session_ids"] == []
+
+
+def test_parked_session_ids_ordered_by_created_at_none_last() -> None:
+    from datetime import UTC, datetime
+
+    job_id = "job_01JZXR7K3M5Q8N4VWA00000032"
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [_ripped_job(job_id)]
+    waiting = SessionApplicationStatus.WAITING_IDENTIFY
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_1",
+            session_id="ses_late",
+            job_id=job_id,
+            status=waiting,
+            overwrite=False,
+            created_at=datetime(2026, 1, 2, tzinfo=UTC),
+        ),
+        SessionApplication(id="sap_2", session_id="ses_none", job_id=job_id, status=waiting, overwrite=False),
+        SessionApplication(
+            id="sap_3",
+            session_id="ses_early",
+            job_id=job_id,
+            status=waiting,
+            overwrite=False,
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        ),
+    ]
+    app, token = _make_app(db)
+    with TestClient(app) as client:
+        detail = client.get(f"/api/jobs/{job_id}", headers=_auth(token)).json()
+    assert detail["job"]["parked_session_ids"] == ["ses_early", "ses_late", "ses_none"]

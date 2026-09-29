@@ -1,7 +1,7 @@
 import logging
 import os
 import shutil
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Literal
 
@@ -183,6 +183,14 @@ def _session_app_is_terminal(sa: SessionApplicationStatus, task_count: int) -> b
     return task_count == 0 and sa != SessionApplicationStatus.WAITING_IDENTIFY
 
 
+def _parked_session_ids(sas: list[SessionApplication]) -> list[str]:
+    parked = [sa for sa in sas if sa.status == SessionApplicationStatus.WAITING_IDENTIFY]
+    # created_at is server-defaulted, so it can be None on unflushed/fake rows;
+    # ULID ids break ties and order those rows by creation too.
+    parked.sort(key=lambda sa: (sa.created_at is None, sa.created_at or datetime.min.replace(tzinfo=UTC), sa.id))
+    return [sa.session_id for sa in parked]
+
+
 def _summarize_transcode_progress(
     session_apps: list[SessionApplication],
     tasks: list[TranscodeTask],
@@ -307,6 +315,7 @@ async def list_jobs(
         view.transcode_progress = _summarize_transcode_progress(
             sas_by_job.get(j.id, []), transcode_tasks_by_job.get(j.id, [])
         )
+        view.parked_session_ids = _parked_session_ids(sas_by_job.get(j.id, []))
         views.append(view)
     return views
 
@@ -368,6 +377,7 @@ async def get_job_detail(
         )
     job_view = JobView.model_validate(job)
     job_view.transcode_progress = _summarize_transcode_progress(list(sas), job_tasks)
+    job_view.parked_session_ids = _parked_session_ids(list(sas))
 
     # Most-recent transcode task status per source track (ULID ids are
     # monotonic, so the greatest id is the newest task). Built from the

@@ -8,9 +8,9 @@
  *
  * Maps v3 JobStatus values (and the effective statuses transcoding / complete /
  * transcode_failed from effectiveJobStatus) to stages via job-status-groups.
- * Failures paint the active
- * stage with the failure color; subsequent stages stay pending. Paused
- * jobs surface a pause icon overlay on the active stage.
+ * Failures paint the active stage with the failure color; subsequent stages
+ * stay pending. deriveLifecycle never emits 'paused' itself: JobLifecycle
+ * paints the Complete node paused for a partial success.
  */
 
 import { lifecycleStageFor, LIFECYCLE_FAILURE_STATUSES } from '$lib/utils/job-status-groups';

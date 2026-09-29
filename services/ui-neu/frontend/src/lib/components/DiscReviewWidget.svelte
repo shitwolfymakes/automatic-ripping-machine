@@ -4,7 +4,7 @@
 	import { abandonJob, fetchJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
 	import { cancelIsoRip } from '$lib/api/iso';
 	import { fetchSessions } from '$lib/api/sessions';
-	import { readJobMetadata, videoTypeLabel } from '$lib/utils/job-fields';
+	import { parkedSessionLine, readJobMetadata, videoTypeLabel } from '$lib/utils/job-fields';
 	import { driveLabel } from '$lib/utils/drive-name';
 	import { reviewPhaseBadge } from '$lib/utils/job-status';
 	import CountdownTimer from './CountdownTimer.svelte';
@@ -104,10 +104,12 @@
 	function shortId(id: string): string {
 		return id.length > 15 ? `${id.slice(0, 15)}...` : id;
 	}
+	let parkedLine = $derived(parkedSessionLine(displayJob, sessionNameById));
 	let appliedSession = $derived(
-		jobMeta.pending_session_id
-			? (sessionNameById.get(jobMeta.pending_session_id) ?? shortId(jobMeta.pending_session_id))
-			: null
+		parkedLine ??
+			(jobMeta.pending_session_id
+				? (sessionNameById.get(jobMeta.pending_session_id) ?? shortId(jobMeta.pending_session_id))
+				: null)
 	);
 
 	// Header phase pill. For a post-rip job that already HAS a session pending but
@@ -115,7 +117,7 @@
 	// helper's default (NEEDS SESSION for post-rip).
 	let phaseBadge = $derived.by(() => {
 		const b = reviewPhaseBadge(displayJob);
-		if (isPostRip && jobMeta.pending_session_id && !displayJob.title?.trim()) {
+		if (isPostRip && (jobMeta.pending_session_id || parkedLine) && !displayJob.title?.trim()) {
 			return { ...b, label: 'RIPPED | NEEDS TITLE' };
 		}
 		return b;

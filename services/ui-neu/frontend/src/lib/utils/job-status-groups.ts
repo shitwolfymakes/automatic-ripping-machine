@@ -82,3 +82,21 @@ export function lifecycleStageFor(status: string): LifecycleStageId | null {
 	const s = status.toLowerCase();
 	return STAGE_BY_EFFECTIVE[s] ?? STAGE_BY_STATUS[s as JobStatus] ?? null;
 }
+
+const POST_RIP: Record<JobStatus, boolean> = {
+	created: false,
+	awaiting_user_id: false,
+	identified: false,
+	awaiting_review: false,
+	ripping: false,
+	ripped: true,
+	ripped_partial: true,
+	ripped_awaiting_identify: true,
+	abandoned: false,
+	failed: false
+};
+
+/** The rip has finished (the disc is post-rip, whatever happens next). */
+export function isPostRipStatus(status: string): boolean {
+	return POST_RIP[status as JobStatus] === true;
+}

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-utils';
 import JobDetailPage from '../[id]/+page.svelte';
 import { createJob, createTrack } from '$lib/components/__fixtures__/job';
-import type { JobView, JobDetailView } from '$lib/types/api.gen';
+import type { JobView, JobDetailView, SessionView, ApplySessionResponse } from '$lib/types/api.gen';
 
 vi.mock('$app/stores', async () => {
 	const { readable } = await import('svelte/store');
@@ -202,6 +202,87 @@ describe('Job Detail Page', () => {
 			});
 			expect(screen.getByTestId('apply-open')).toBeInTheDocument();
 			expect(screen.getByText('Delete')).toBeInTheDocument();
+		});
+	});
+
+	describe('apply note', () => {
+		const session: SessionView = {
+			id: 'ses_1',
+			name: 'My Plex',
+			media_type: 'movie',
+			is_builtin: false,
+			rip_preset_id: 'rpr_1',
+			transcode_preset_id: null,
+			output_path_template: '{title}/{title}.mkv',
+			overrides_json: null,
+			created_by_user_id: null,
+			created_at: null,
+			updated_at: null
+		};
+
+		async function applyVia(resp: ApplySessionResponse) {
+			const { applySession } = await import('$lib/api/jobs');
+			const { fetchSessions } = await import('$lib/api/sessions');
+			vi.mocked(fetchSessions).mockResolvedValue([session]);
+			vi.mocked(applySession).mockResolvedValueOnce(resp);
+			renderComponent(JobDetailPage);
+			await waitFor(() => expect(screen.getByTestId('apply-open')).toBeInTheDocument());
+			await fireEvent.click(screen.getByTestId('apply-open'));
+			const select = await screen.findByTestId('apply-session-select');
+			await waitFor(() => expect(select.querySelector('option[value="ses_1"]')).not.toBeNull());
+			await fireEvent.change(select, { target: { value: 'ses_1' } });
+			await waitFor(() => expect(screen.getByTestId('apply-session-apply')).not.toBeDisabled());
+			await fireEvent.click(screen.getByTestId('apply-session-apply'));
+		}
+
+		afterEach(async () => {
+			const { fetchSessions } = await import('$lib/api/sessions');
+			vi.mocked(fetchSessions).mockResolvedValue([]);
+		});
+
+		it('says the session is parked until the rip finishes when a held disc parks', async () => {
+			const { fetchJob } = await import('$lib/api/jobs');
+			vi.mocked(fetchJob).mockResolvedValue(buildDetail({ status: 'awaiting_review' }));
+			try {
+				await applyVia({
+					session_application: { id: 'sap_1', session_id: 'ses_1', job_id: 'job_1', status: 'waiting_identify' },
+					tasks: [],
+					collisions: [],
+					idempotent: false
+				} as unknown as ApplySessionResponse);
+				await waitFor(() =>
+					expect(screen.getByText('Session parked; applies when the rip finishes')).toBeInTheDocument()
+				);
+				expect(screen.queryByText(/transcode tasks? queued/)).not.toBeInTheDocument();
+			} finally {
+				vi.mocked(fetchJob).mockImplementation(() => Promise.resolve(buildDetail()));
+			}
+		});
+
+		it('does not promise a rip-complete fan-out when a ripped job parks', async () => {
+			const { fetchJob } = await import('$lib/api/jobs');
+			vi.mocked(fetchJob).mockResolvedValue(buildDetail({ status: 'ripped_awaiting_identify' }));
+			try {
+				await applyVia({
+					session_application: { id: 'sap_1', session_id: 'ses_1', job_id: 'job_1', status: 'waiting_identify' },
+					tasks: [],
+					collisions: [],
+					idempotent: false
+				} as unknown as ApplySessionResponse);
+				await waitFor(() => expect(screen.getByText('Session parked; waiting')).toBeInTheDocument());
+			} finally {
+				vi.mocked(fetchJob).mockImplementation(() => Promise.resolve(buildDetail()));
+			}
+		});
+
+		it('counts queued transcode tasks when the apply fans out', async () => {
+			await applyVia({
+				session_application: { id: 'sap_1', session_id: 'ses_1', job_id: 'job_1', status: 'queued' },
+				tasks: [{ id: 'tsk_1' }, { id: 'tsk_2' }],
+				collisions: [],
+				idempotent: false
+			} as unknown as ApplySessionResponse);
+			await waitFor(() => expect(screen.getByText('2 transcode tasks queued')).toBeInTheDocument());
 		});
 	});
 

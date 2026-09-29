@@ -14018,6 +14018,14 @@
             ],
             "title": "Pending Session Id"
           },
+          "parked_session_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Parked Session Ids",
+            "default": []
+          },
           "disc_number": {
             "anyOf": [
               {

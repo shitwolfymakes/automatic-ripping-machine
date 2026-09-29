@@ -4,6 +4,7 @@ import {
 	isLive,
 	isInProgress,
 	isAwaitingIdentity,
+	isPostRipStatus,
 	lifecycleStageFor,
 	LIFECYCLE_FAILURE_STATUSES
 } from '../job-status-groups';
@@ -92,5 +93,11 @@ describe('lifecycleStageFor', () => {
 	});
 	it('returns null for failure statuses and unknowns', () => {
 		for (const s of [...LIFECYCLE_FAILURE_STATUSES, 'video_ripping']) expect(lifecycleStageFor(s)).toBeNull();
+	});
+});
+
+describe('isPostRipStatus', () => {
+	it.each(ALL)('%s', (s) => {
+		expect(isPostRipStatus(s)).toBe(['ripped', 'ripped_partial', 'ripped_awaiting_identify'].includes(s));
 	});
 });

@@ -191,6 +191,11 @@ class JobView(BaseModel):
     media_type: MediaType | None = None
     season: int | None = None
     pending_session_id: str | None = None
+    # Sessions applied to this job that are parked (waiting_identify): pre-rip
+    # they fan out at rip-complete; post-rip something else holds them (e.g.
+    # transcoding disabled). Filled by GET /api/jobs and GET /api/jobs/{id}
+    # only; other endpoints returning a JobView leave it empty.
+    parked_session_ids: list[str] = []
     disc_number: int | None = None
     disc_total: int | None = None
     # Computed at identify; UI prefers `poster_url_manual` if set.
