@@ -6,6 +6,13 @@ skipped (extras, trailers); an episode can be skipped between matches (it
 lives on another disc or was not ripped). Leading and trailing episodes are
 free to skip, so the disc may sit anywhere in the season; `anchor` pulls the
 start toward the position cross-disc continuity predicts.
+
+A match made after an earlier title's match pays for every episode number
+missing between it and the list entry before it (claimed by a sibling disc or
+absent from the provider), so a run does not jump a hole for free. When
+shifting the single-episode matches one position either way fits about as well,
+the result is flagged `ambiguous`: its positions came from the anchor or list
+order, not from runtimes.
 """
 
 from __future__ import annotations
@@ -19,6 +26,10 @@ from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn, T
 DOUBLE_PENALTY = 60
 ANCHOR_WEIGHT = 30
 FREE_START_WEIGHT = 1
+# A title this close to the sum of exactly two other titles is a play-all.
+PLAY_ALL_PAIR_WINDOW_S = 10
+# A shifted mapping whose total delta is this close to the chosen one is as plausible.
+AMBIGUITY_WINDOW_S = 60
 _INF = float("inf")
 
 
@@ -34,7 +45,9 @@ def _eff_tol(reference: int, tolerance: int) -> int:
 def _is_play_all(
     seconds: int, episodes: Sequence[Episode], tolerance: int, ref_rt: int, titles: Sequence[TitleIn], title_idx: int
 ) -> bool:
-    """Check if a title is play-all: matches sum of 3+ consecutive episodes, or sum of other titles."""
+    """Check if a title is play-all: matches sum of 3+ consecutive episodes, or sum of the other titles
+    (within tolerance for 3+ others; within PLAY_ALL_PAIR_WINDOW_S for exactly 2, where a genuine two-part
+    title is otherwise just as likely)."""
     # Rule B: in play-all scan, treat unknown runtime as ref_rt
     runtimes = [_known(e.runtime_s) or ref_rt for e in episodes]
 
@@ -55,6 +68,8 @@ def _is_play_all(
         sum_others = sum(t.seconds for t in other_titles)
         if abs(seconds - sum_others) <= _eff_tol(sum_others, tolerance):
             return True
+    elif len(other_titles) == 2 and abs(seconds - sum(t.seconds for t in other_titles)) < PLAY_ALL_PAIR_WINDOW_S:
+        return True
 
     return False
 
@@ -70,6 +85,48 @@ def _one_cost(seconds: int, runtime: int | None, tolerance: int, ref_rt: int) ->
     delta = abs(seconds - rt)
     eff = _eff_tol(rt, tolerance)
     return float(delta) if delta <= eff else None
+
+
+def _hole(episodes: Sequence[Episode], j: int) -> int:
+    """Episode numbers missing between list entries j-1 and j of the same season."""
+    if j == 0 or episodes[j - 1].season != episodes[j].season:
+        return 0
+    return max(0, episodes[j].number - episodes[j - 1].number - 1)
+
+
+def _is_ambiguous(
+    singles: Sequence[tuple[int, int]],
+    doubles: frozenset[int],
+    episodes: Sequence[Episode],
+    tolerance: int,
+    ref_rt: int,
+) -> bool:
+    """True when shifting every single-episode match (list position, title seconds)
+    by -1 or +1 is also valid and its total delta is within AMBIGUITY_WINDOW_S of
+    the chosen one. Unknown runtimes count as the reference-runtime delta."""
+    if not singles:
+        return False
+
+    def delta(seconds: int, ep: Episode) -> int:
+        return abs(seconds - (_known(ep.runtime_s) or ref_rt))
+
+    chosen = sum(delta(sec, episodes[j]) for j, sec in singles)
+    for shift in (-1, 1):
+        total = 0
+        for j, sec in singles:
+            k = j + shift
+            if (
+                not 0 <= k < len(episodes)
+                or k in doubles
+                or episodes[k].season != episodes[j].season
+                or _one_cost(sec, episodes[k].runtime_s, tolerance, ref_rt) is None
+            ):
+                break
+            total += delta(sec, episodes[k])
+        else:
+            if abs(total - chosen) <= AMBIGUITY_WINDOW_S:
+                return True
+    return False
 
 
 def _confidence(delta: int | None, eff_tol: int) -> float:
@@ -128,6 +185,9 @@ def align(
     for i in range(m + 1):
         for j in range(n + 1):
             cur = dp[i][j]
+            # A match here follows an earlier title (i > 0): pay for every
+            # episode number the run would jump between list entries j-1 and j.
+            hole_cost = (tolerance + 1) * _hole(episodes, j) if i > 0 and j < n else 0
             if i < m:
                 relax(i + 1, j, cur + skip_title_cost, ("skip_title", i, j))
             if i > 0 and j < n:
@@ -135,7 +195,7 @@ def align(
             if i < m and j < n:
                 one = _one_cost(elig[i].seconds, episodes[j].runtime_s, tolerance, ref_rt)
                 if one is not None:
-                    relax(i + 1, j + 1, cur + one, ("one", i, j))
+                    relax(i + 1, j + 1, cur + one + hole_cost, ("one", i, j))
             if (
                 i < m
                 and j + 1 < n
@@ -147,11 +207,13 @@ def align(
                     delta = abs(elig[i].seconds - (a + b))
                     eff = _eff_tol(a + b, tolerance)
                     if delta <= eff:
-                        relax(i + 1, j + 2, cur + delta + DOUBLE_PENALTY, ("two", i, j))
+                        relax(i + 1, j + 2, cur + delta + DOUBLE_PENALTY + hole_cost, ("two", i, j))
 
     best_j = min(range(n + 1), key=lambda j: (dp[m][j], j))
     matches: list[TitleMatch] = []
     skipped: list[str] = []
+    singles: list[tuple[int, int]] = []
+    doubles: set[int] = set()
     i, j = m, best_j
     while (step := back[i][j]) is not None:
         if step[0] == "start":
@@ -164,6 +226,7 @@ def align(
         elif kind == "one":
             title = elig[pi]
             ep = episodes[pj]
+            singles.append((pj, title.seconds))
             rt = _known(ep.runtime_s)
             if rt is not None:
                 delta_val: int | None = abs(title.seconds - rt)
@@ -177,6 +240,7 @@ def align(
         elif kind == "two":
             title = elig[pi]
             first, second = episodes[pj], episodes[pj + 1]
+            doubles.update((pj, pj + 1))
             delta_val = abs(title.seconds - ((first.runtime_s or 0) + (second.runtime_s or 0)))
             eff = _eff_tol((first.runtime_s or 0) + (second.runtime_s or 0), tolerance)
             matches.append(
@@ -194,4 +258,5 @@ def align(
     matches.reverse()
     skipped.reverse()
     coverage = len(matches) / m if m else 0.0
-    return MatchResult(tuple(matches), tuple(skipped), play_all, dp[m][best_j], coverage)
+    ambiguous = _is_ambiguous(singles, frozenset(doubles), episodes, tolerance, ref_rt)
+    return MatchResult(tuple(matches), tuple(skipped), play_all, dp[m][best_j], coverage, ambiguous)

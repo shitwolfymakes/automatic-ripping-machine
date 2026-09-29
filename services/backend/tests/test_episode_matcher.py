@@ -187,3 +187,97 @@ def test_two_episode_match_skips_provider_gap() -> None:
     listed = [Episode(season=1, number=n, name=f"E{n}", runtime_s=2640) for n in (1, 2, 4, 5)]
     r = align(titles(2640, 5280), listed)
     assert (2, 4) not in mapping(r).values()
+
+
+def test_run_does_not_jump_a_claimed_hole() -> None:
+    # Important 4a: out-of-order box set — siblings claimed E1-E6 and E12-E21,
+    # so the remaining list is E7-E11, E22. Six equal-runtime titles: the sixth
+    # has no runtime evidence for E22 and must not jump the ten-episode hole.
+    remaining = [Episode(season=1, number=n, name=f"E{n}", runtime_s=2600) for n in (7, 8, 9, 10, 11, 22)]
+    r = align(titles(*[2600] * 6), remaining, anchor=0)
+    assert [m.episode for m in r.matches] == [7, 8, 9, 10, 11]
+    assert len(r.skipped) == 1
+    # A sixth title that fits E22 within tolerance (50 s off) still does not
+    # earn the jump: it is skipped rather than named E22.
+    r = align(titles(*[2600] * 5, 2650), remaining, anchor=0)
+    assert [m.episode for m in r.matches] == [7, 8, 9, 10, 11]
+    assert r.skipped == ("5",)
+
+
+def test_hole_penalty_ignores_season_boundaries() -> None:
+    # Season 1 ends at E3 and season 2 starts at E1: crossing seasons is not a hole.
+    listed = [Episode(season=1, number=n, runtime_s=2600) for n in (1, 2, 3)] + [
+        Episode(season=2, number=n, runtime_s=2600) for n in (1, 2)
+    ]
+    r = align(titles(2600, 2600, 2600, 2600), listed)
+    assert [(m.season, m.episode) for m in r.matches] == [(1, 1), (1, 2), (1, 3), (2, 1)]
+
+
+def test_identical_runtimes_with_anchor_are_ambiguous() -> None:
+    # Important 4b: an anchor alone decided E6-E10; E5-E9 or E7-E11 fit equally well
+    r = align(titles(*[3000] * 5), eps(*[3000] * 20), anchor=5)
+    assert [m.episode for m in r.matches] == [6, 7, 8, 9, 10]
+    assert r.ambiguous is True
+
+
+def test_distinctive_runtimes_are_not_ambiguous() -> None:
+    r = align(titles(1300, 3500), eps(2600, 2600, 1320, 3480, 2600))
+    assert mapping(r) == {"0": (3, None), "1": (4, None)}
+    assert r.ambiguous is False
+
+
+def test_nominal_identical_provider_runtimes_are_ambiguous() -> None:
+    # Provider lists every episode at the nominal 2600 s: E2-E4 fits as well as E1-E3
+    r = align(titles(2580, 2640, 2600), eps(2600, 2600, 2600, 2600))
+    assert mapping(r) == {"0": (1, None), "1": (2, None), "2": (3, None)}
+    assert r.ambiguous is True
+
+
+def test_shift_that_leaves_the_season_is_not_ambiguous() -> None:
+    # Two-episode season: shifting E1-E2 either way runs off the list
+    r = align(titles(3000, 3000), eps(3000, 3000))
+    assert r.ambiguous is False
+
+
+def test_shift_crossing_a_season_boundary_is_not_ambiguous() -> None:
+    listed = [Episode(season=1, number=1, runtime_s=3000), Episode(season=2, number=1, runtime_s=3000)]
+    r = align(titles(3000), listed)
+    assert [(m.season, m.episode) for m in r.matches] == [(1, 1)]
+    assert r.ambiguous is False
+
+
+def test_shift_onto_a_two_episode_match_is_not_ambiguous() -> None:
+    # -1 runs E1 off the list; +1 would move E1 onto E2, which the double holds
+    r = align(titles(3000, 6010, 3000), eps(3000, 3000, 3000, 3000, 3000, 3000))
+    assert mapping(r) == {"0": (1, None), "1": (2, 3), "2": (4, None)}
+    assert r.ambiguous is False
+
+
+def test_ambiguity_ignores_two_episode_matches() -> None:
+    # Only the single-episode match (E3) is shifted (to E4); the double stays put
+    r = align(titles(6000, 3000), eps(3000, 3000, 3000, 3000, 3000))
+    assert mapping(r) == {"0": (1, 2), "1": (3, None)}
+    assert r.ambiguous is True
+
+
+def test_shift_with_worse_total_delta_is_not_ambiguous() -> None:
+    # Shifting forward moves 3000 -> 3200 (within tolerance) but adds 200 s of delta
+    r = align(titles(3000), eps(3000, 3200))
+    assert r.ambiguous is False
+
+
+def test_unknown_runtimes_are_ambiguous() -> None:
+    r = align(titles(2600, 2600), eps(None, None, None))
+    assert r.ambiguous is True
+
+
+def test_no_single_episode_match_is_not_ambiguous() -> None:
+    assert align(titles(6000), eps(3000, 3000, 3000)).ambiguous is False
+    assert align([], eps(3000)).ambiguous is False
+
+
+def test_play_all_of_exactly_two_other_titles() -> None:
+    # Minor 4: 6970 is the sum of the two other titles, not an E1-E2 double
+    r = align(titles(3480, 3490, 6970), eps(3600, 3600, 3600, 3600))
+    assert r.play_all == ("2",)
+    assert mapping(r) == {"0": (1, None), "1": (2, None)}
