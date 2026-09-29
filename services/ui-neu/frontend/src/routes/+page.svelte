@@ -437,7 +437,7 @@
 					</div>
 					{#if $isAdmin}
 						<div class="dashboard-jobs-divider"></div>
-						<BulkActionsMenu {selectedJobs} jobsStats={null} {bulkBusy} onaction={handleBulkAction} />
+						<BulkActionsMenu {selectedJobs} {bulkBusy} onaction={handleBulkAction} />
 					{/if}
 				</div>
 			</div>

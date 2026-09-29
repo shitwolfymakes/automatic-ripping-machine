@@ -70,9 +70,19 @@ describe('buildMetadataFields', () => {
 			expect(findField(fields, 'State')?.value).toBe('In progress');
 		});
 
-		it('shows Finished for terminal jobs', () => {
-			const fields = buildMetadataFields(createJob({ status: 'ripped' }));
+		it('shows Finished for failed jobs', () => {
+			const fields = buildMetadataFields(createJob({ status: 'failed' }));
 			expect(findField(fields, 'State')?.value).toBe('Finished');
+		});
+
+		it('shows In progress for a ripped job that is transcoding', () => {
+			const fields = buildMetadataFields(
+				createJob({
+					status: 'ripped',
+					transcode_progress: { state: 'transcoding', tasks_total: 1, tasks_done: 0, tasks_failed: 0, percent: 5 }
+				})
+			);
+			expect(findField(fields, 'State')?.value).toBe('In progress');
 		});
 	});
 

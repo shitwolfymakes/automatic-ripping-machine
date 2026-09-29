@@ -10,17 +10,7 @@
 	}
 	let { job, onrefresh }: Props = $props();
 
-	// Statuses where the backend resolve endpoint accepts an identity edit.
-	// Outside these, resolve returns 409 — the form goes read-only.
-	const RESOLVABLE = [
-		'awaiting_user_id',
-		'ripped_awaiting_identify',
-		'awaiting_review',
-		'identified',
-		'ripped',
-		'ripped_partial'
-	];
-	let resolvable = $derived(RESOLVABLE.includes(job.status));
+	let resolvable = $derived(job.actions.can_resolve);
 
 	let title = $state('');
 	let year = $state('');

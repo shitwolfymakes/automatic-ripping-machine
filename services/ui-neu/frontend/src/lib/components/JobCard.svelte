@@ -4,8 +4,9 @@
 	import StatusBadge from './StatusBadge.svelte';
 	import ProgressBar from './ProgressBar.svelte';
 	import { jobPoster } from '$lib/utils/poster';
-	import { getVideoTypeConfig, isJobActive, discTypeLabel } from '$lib/utils/job-type';
+	import { getVideoTypeConfig, discTypeLabel } from '$lib/utils/job-type';
 	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
+	import { isInProgress } from '$lib/utils/job-status-groups';
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import JobLifecycle from './JobLifecycle.svelte';
@@ -24,7 +25,7 @@
 	// transcoding job (raw `ripped` + transcode_progress.state 'transcoding')
 	// reads effective 'transcoding' (active); a finished one reads 'complete'
 	// (not active) so a done job shows no in-progress stepper.
-	let active = $derived(job ? isJobActive(effectiveJobStatus(job)) : false);
+	let active = $derived(job ? isInProgress(job) : false);
 </script>
 
 {#if !job}

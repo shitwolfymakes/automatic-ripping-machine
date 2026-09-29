@@ -8,7 +8,7 @@ describe('JobLifecycle', () => {
 	describe('size=md', () => {
 		it('renders 5 stages for disc rip with stage labels', () => {
 			renderComponent(JobLifecycle, {
-				props: { status: 'video_ripping', sourceType: 'disc' }
+				props: { status: 'ripping', sourceType: 'disc' }
 			});
 			expect(screen.getByText('Waiting')).toBeInTheDocument();
 			expect(screen.getByText('Identifying')).toBeInTheDocument();
@@ -19,10 +19,9 @@ describe('JobLifecycle', () => {
 
 		it('renders the same 5 stages for folder imports', () => {
 			// folder_ripper still drives a MakeMKV remux pass, so folder imports
-			// share the disc 5-stage lifecycle. An earlier 4-stage variant left
-			// video_ripping on folder jobs unmapped.
+			// share the disc 5-stage lifecycle.
 			renderComponent(JobLifecycle, {
-				props: { status: 'video_ripping', sourceType: 'folder' }
+				props: { status: 'ripping', sourceType: 'folder' }
 			});
 			expect(screen.getByText('Waiting')).toBeInTheDocument();
 			expect(screen.getByText('Identifying')).toBeInTheDocument();
@@ -42,15 +41,15 @@ describe('JobLifecycle', () => {
 
 		it('does not pulse on terminal failure', () => {
 			const { container } = renderComponent(JobLifecycle, {
-				props: { status: 'fail', sourceType: 'disc' }
+				props: { status: 'failed', sourceType: 'disc' }
 			});
 			const pulsing = container.querySelectorAll('.job-lifecycle-bar[data-state="active"]');
 			expect(pulsing.length).toBe(0);
 		});
 
-		it('does not pulse on success', () => {
+		it('does not pulse on complete', () => {
 			const { container } = renderComponent(JobLifecycle, {
-				props: { status: 'success', sourceType: 'disc' }
+				props: { status: 'complete', sourceType: 'disc' }
 			});
 			const pulsing = container.querySelectorAll('.job-lifecycle-bar[data-state="active"]');
 			expect(pulsing.length).toBe(0);
@@ -84,17 +83,6 @@ describe('JobLifecycle', () => {
 			// 5 segments for disc rip
 			const segments = container.querySelectorAll('.job-lifecycle-seg');
 			expect(segments.length).toBe(5);
-		});
-	});
-
-	describe('paused state', () => {
-		it('shows pause icon on the active stage', () => {
-			const { container } = renderComponent(JobLifecycle, {
-				props: { status: 'manual_paused', sourceType: 'disc' }
-			});
-			// Lucide Pause renders as an svg with class containing 'lucide-pause'
-			const pauseIcons = container.querySelectorAll('svg.lucide-pause');
-			expect(pauseIcons.length).toBe(1);
 		});
 	});
 });

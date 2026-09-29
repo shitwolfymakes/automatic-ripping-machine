@@ -1,6 +1,7 @@
 import type { JobView } from '$lib/types/api.gen';
 import { statusLabel } from '$lib/utils/format';
-import { discTypeLabel, isJobActive } from '$lib/utils/job-type';
+import { discTypeLabel } from '$lib/utils/job-type';
+import { isLive } from '$lib/utils/job-status-groups';
 import { driveLabel } from '$lib/utils/drive-name';
 
 export interface MetadataField {
@@ -109,7 +110,7 @@ export function videoTypeLabel(vt: string | null | undefined): string {
 // tvdb_id, artist/album, output paths, stop_time, job_length, …) has no
 // v3 equivalent, so those fields are dropped here rather than synthesized.
 export function buildMetadataFields(job: JobView, driveNames?: Record<string, string> | null): MetadataField[] {
-	const active = isJobActive(job.status);
+	const active = isLive(job);
 
 	const fields: MetadataField[] = [];
 

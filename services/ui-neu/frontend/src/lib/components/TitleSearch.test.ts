@@ -182,6 +182,22 @@ describe('TitleSearch', () => {
 			});
 		});
 
+		it('held review disc: Apply resolves title/year (not poster-only)', async () => {
+			mockSearchMetadata.mockResolvedValue({
+				candidates: [createCandidate({ title: 'The Matrix', year: 1999, poster_url: 'https://img/m.jpg' })]
+			});
+			renderComponent(TitleSearch, {
+				props: { job: createJob({ id: 'job_9', status: 'awaiting_review', title: 'matrix' }) }
+			});
+			await fireEvent.click(screen.getByText('Search'));
+			await waitFor(() => expect(screen.getByText('The Matrix')).toBeInTheDocument());
+			await fireEvent.click(screen.getByText('The Matrix'));
+			await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+			await waitFor(() => {
+				expect(mockResolve).toHaveBeenCalledWith('job_9', { title: 'The Matrix', year: 1999, media_type: 'movie' });
+			});
+		});
+
 		it('resolvable job: a poster failure still reports identify success', async () => {
 			mockSearchMetadata.mockResolvedValue({
 				candidates: [createCandidate({ title: 'The Matrix', year: 1999, poster_url: 'https://img/m.jpg' })]

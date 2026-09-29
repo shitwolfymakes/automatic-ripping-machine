@@ -3,8 +3,9 @@
 	import StatusBadge from './StatusBadge.svelte';
 	import ProgressBar from './ProgressBar.svelte';
 	import { statusAccentVar } from '$lib/utils/format';
-	import { getVideoTypeConfig, isJobActive, discTypeLabel } from '$lib/utils/job-type';
+	import { getVideoTypeConfig, discTypeLabel } from '$lib/utils/job-type';
 	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
+	import { isInProgress } from '$lib/utils/job-status-groups';
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import PosterImage from './PosterImage.svelte';
 	import { jobPoster } from '$lib/utils/poster';
@@ -72,7 +73,7 @@
 	// is genuinely in-flight (ripping OR transcoding) and disappears once it is
 	// terminal (complete/failed). A done job (raw `ripped` + transcode_progress
 	// 'done') reads effective 'complete' → not active → no progress bar.
-	let active = $derived(job ? isJobActive(effectiveJobStatus(job)) : false);
+	let active = $derived(job ? isInProgress(job) : false);
 	let accentVar = $derived(statusAccentVar(job?.status));
 
 	function toggle(e: MouseEvent) {

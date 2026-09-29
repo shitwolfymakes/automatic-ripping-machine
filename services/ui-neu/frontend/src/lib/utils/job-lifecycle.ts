@@ -3,15 +3,17 @@
  * Waiting -> Identifying -> Ripping -> Transcoding -> Complete
  *
  * Folder imports use the same 5 stages: folder_ripper still drives a
- * MakeMKV remux pass (job.status = VIDEO_RIPPING) before handing off to
- * the transcoder. An earlier 4-stage variant that omitted "Ripping"
- * left video_ripping/audio_ripping unmapped, painting all nodes pending.
+ * MakeMKV remux pass (job.status = ripping) before handing off to the
+ * transcoder.
  *
- * Maps the disambiguated v2.0.0 JobState wire strings (and legacy pre-v2
- * strings, defensive) to lifecycle stages. Failures paint the active
+ * Maps v3 JobStatus values (and the effective statuses transcoding / complete /
+ * transcode_failed from effectiveJobStatus) to stages via job-status-groups.
+ * Failures paint the active
  * stage with the failure color; subsequent stages stay pending. Paused
  * jobs surface a pause icon overlay on the active stage.
  */
+
+import { lifecycleStageFor, LIFECYCLE_FAILURE_STATUSES } from '$lib/utils/job-status-groups';
 
 export type LifecycleStageId = 'waiting' | 'identifying' | 'ripping' | 'transcoding' | 'complete';
 
@@ -31,42 +33,6 @@ const ALL_STAGES: { id: LifecycleStageId; label: string }[] = [
 	{ id: 'complete', label: 'Complete' }
 ];
 
-const STATUS_TO_STAGE: Record<string, LifecycleStageId> = {
-	// Waiting
-	waiting: 'waiting', // legacy pre-v2.0.0
-	manual_paused: 'waiting',
-	makemkv_throttled: 'waiting',
-	waiting_transcode: 'waiting',
-	pending: 'waiting',
-	ready: 'waiting',
-	// Identifying
-	info: 'identifying',
-	identifying: 'identifying',
-	awaiting_user_id: 'identifying', // v3 — needs manual ID
-	awaiting_review: 'identifying', // v3 — held for the timed review gate
-	// Ripping (disc rip)
-	ripping: 'ripping', // legacy pre-v2.0.0
-	video_ripping: 'ripping',
-	audio_ripping: 'ripping',
-	copying: 'ripping',
-	ejecting: 'ripping',
-	importing: 'ripping',
-	ripped: 'ripping', // rip done; awaiting a session (no transcode yet)
-	ripped_partial: 'ripping',
-	// Transcoding
-	transcoding: 'transcoding',
-	finishing: 'transcoding',
-	processing: 'transcoding',
-	// Complete
-	success: 'complete',
-	completed: 'complete',
-	complete: 'complete',
-	transcoded: 'complete'
-};
-
-const FAILURE_STATUSES = new Set(['fail', 'failed', 'failure', 'error', 'transcode_failed']);
-const PAUSED_STATUSES = new Set(['manual_paused']);
-
 export function isFolderImport(sourceType: string | null | undefined): boolean {
 	return sourceType === 'folder';
 }
@@ -84,7 +50,7 @@ export function deriveLifecycle(status: string | null | undefined, _sourceType?:
 	const stages = ALL_STAGES;
 	const lower = (status ?? '').toLowerCase();
 
-	if (FAILURE_STATUSES.has(lower)) {
+	if (LIFECYCLE_FAILURE_STATUSES.has(lower)) {
 		// Failure snapshot: paint the last non-complete stage red.
 		const failIndex = stages.length - 2; // index of stage before 'complete'
 		return stages.map((s, i) => {
@@ -96,7 +62,7 @@ export function deriveLifecycle(status: string | null | undefined, _sourceType?:
 		});
 	}
 
-	const stageId = STATUS_TO_STAGE[lower];
+	const stageId = lifecycleStageFor(lower);
 	if (!stageId) {
 		// Unknown status: render fully pending.
 		return stages.map((s) => ({ ...s, state: 'pending' as const }));
@@ -109,7 +75,6 @@ export function deriveLifecycle(status: string | null | undefined, _sourceType?:
 		return stages.map((s) => ({ ...s, state: 'pending' as const }));
 	}
 
-	const isPaused = PAUSED_STATUSES.has(lower);
 	const isComplete = stageId === 'complete';
 
 	return stages.map((s, i) => {
@@ -117,7 +82,7 @@ export function deriveLifecycle(status: string | null | undefined, _sourceType?:
 			return { ...s, state: 'completed' as const };
 		}
 		if (i < activeIndex) return { ...s, state: 'completed' as const };
-		if (i === activeIndex) return { ...s, state: isPaused ? ('paused' as const) : ('active' as const) };
+		if (i === activeIndex) return { ...s, state: 'active' as const };
 		return { ...s, state: 'pending' as const };
 	});
 }

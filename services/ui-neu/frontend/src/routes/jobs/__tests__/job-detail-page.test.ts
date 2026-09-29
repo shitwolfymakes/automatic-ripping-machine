@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor } from '$lib/test-utils';
 import JobDetailPage from '../[id]/+page.svelte';
 import { createJob, createTrack } from '$lib/components/__fixtures__/job';
@@ -137,6 +137,20 @@ describe('Job Detail Page', () => {
 			expect(screen.queryByRole('button', { name: /Poster & metadata search/ })).not.toBeInTheDocument();
 		});
 
+		it('shows Edit identity on a held review disc', async () => {
+			const { fetchJob } = await import('$lib/api/jobs');
+			vi.mocked(fetchJob).mockResolvedValueOnce(buildDetail({ status: 'awaiting_review' }));
+			renderComponent(JobDetailPage);
+			await waitFor(() => expect(screen.getByTestId('identify-open')).toHaveTextContent('Edit identity'));
+		});
+
+		it('shows Apply session for a ripped disc awaiting identification', async () => {
+			const { fetchJob } = await import('$lib/api/jobs');
+			vi.mocked(fetchJob).mockResolvedValueOnce(buildDetail({ status: 'ripped_awaiting_identify' }));
+			renderComponent(JobDetailPage);
+			await waitFor(() => expect(screen.getByTestId('apply-open')).toBeInTheDocument());
+		});
+
 		it('shows the Identify (resolve) and Apply session buttons for a resolvable status', async () => {
 			renderComponent(JobDetailPage);
 			await waitFor(() => {
@@ -188,6 +202,70 @@ describe('Job Detail Page', () => {
 			});
 			expect(screen.getByTestId('apply-open')).toBeInTheDocument();
 			expect(screen.getByText('Delete')).toBeInTheDocument();
+		});
+	});
+
+	describe('refresh', () => {
+		beforeEach(async () => {
+			const { stopRipperEvents } = await import('$lib/stores/ripperEvents.svelte');
+			stopRipperEvents();
+		});
+		afterEach(() => vi.useRealTimers());
+
+		it('keeps refreshing a ripped job while it transcodes', async () => {
+			vi.useFakeTimers();
+			const { fetchJob } = await import('$lib/api/jobs');
+			vi.mocked(fetchJob).mockResolvedValue(
+				buildDetail({
+					status: 'ripped',
+					transcode_progress: { state: 'transcoding', tasks_total: 1, tasks_done: 0, tasks_failed: 0, percent: 5 }
+				})
+			);
+			renderComponent(JobDetailPage);
+			await vi.advanceTimersByTimeAsync(0);
+			const before = vi.mocked(fetchJob).mock.calls.length;
+			await vi.advanceTimersByTimeAsync(15000);
+			expect(vi.mocked(fetchJob).mock.calls.length).toBeGreaterThanOrEqual(before + 3);
+		});
+
+		it('stops fetching once the transcode is done, and resumes if it goes live again', async () => {
+			vi.useFakeTimers();
+			const { fetchJob } = await import('$lib/api/jobs');
+			const done = buildDetail({
+				status: 'ripped',
+				transcode_progress: { state: 'done', tasks_total: 1, tasks_done: 1, tasks_failed: 0, percent: 100 }
+			});
+			const live = buildDetail({
+				status: 'ripped',
+				transcode_progress: { state: 'transcoding', tasks_total: 2, tasks_done: 1, tasks_failed: 0, percent: 50 }
+			});
+			vi.mocked(fetchJob).mockResolvedValue(done);
+			renderComponent(JobDetailPage);
+			await vi.advanceTimersByTimeAsync(0);
+			const settled = vi.mocked(fetchJob).mock.calls.length;
+			await vi.advanceTimersByTimeAsync(15000);
+			expect(vi.mocked(fetchJob).mock.calls.length).toBe(settled);
+
+			// A WS event (e.g. a new apply) reloads the job; it is live again.
+			vi.mocked(fetchJob).mockResolvedValue(live);
+			const { wsClient } = await import('$lib/api/ws');
+			const handler = vi.mocked(wsClient.subscribe).mock.calls.find(([topic]) => topic === 'transcode.events')?.[1] as (
+				e: unknown
+			) => void;
+			handler({
+				op: 'event',
+				event_id: 'evt_1',
+				event_type: 'session.queued',
+				emitted_at: '2026-09-29T00:00:00Z',
+				topic: 'transcode.events',
+				job_id: 'job_1',
+				track_id: null,
+				payload: {}
+			});
+			await vi.advanceTimersByTimeAsync(400);
+			const afterEvent = vi.mocked(fetchJob).mock.calls.length;
+			await vi.advanceTimersByTimeAsync(10000);
+			expect(vi.mocked(fetchJob).mock.calls.length).toBeGreaterThanOrEqual(afterEvent + 2);
 		});
 	});
 });
