@@ -55,3 +55,10 @@ def test_bd_name_with_empty_title() -> None:
     # Also test with just disc info and empty title
     claims = BD_TITLE.run(_ctx(BdDiscMeta(name="  ", set_number=2, num_sets=6)))
     assert claims.job.model_dump(exclude_unset=True) == {"disc_number": 2, "disc_total": 6}
+
+
+def test_part_marker_only_keeps_disc_drops_title() -> None:
+    """A BDMT disc title with a lone `P<n>` marker (one part of a single
+    film) keeps the disc claim but must not propose a search title."""
+    claims = BD_TITLE.run(_ctx(BdDiscMeta(name="Harry Potter Deathly Hallows P2")))
+    assert claims.job.model_dump(exclude_unset=True) == {"disc_number": 2}

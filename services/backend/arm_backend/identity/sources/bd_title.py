@@ -36,7 +36,7 @@ class BdTitleSource:
             fields["disc_number"] = disc
         if total is not None:
             fields["disc_total"] = total
-        if hints.title:
+        if hints.title and not hints.part_marker_only:
             fields["title"] = hints.title
         inputs = {k: v for k, v in meta.model_dump().items() if v is not None}
         return SourceClaims(run_at=ctx.now, status="ok", inputs=inputs, job=JobClaim(**fields))

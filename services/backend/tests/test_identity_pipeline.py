@@ -90,18 +90,22 @@ def test_hint_is_tv_false_for_cd() -> None:
 
 
 def test_run_disc_hints_handles_pathological_bd_name() -> None:
-    # Pathological BD name (very long) causes parse_label to raise; bd_title
-    # records error, label still works, hint_title uses label.
+    # Pathological BD name (a disc-number digit run past int()'s digit-count
+    # limit) no longer raises: parse_label's bounds check (finding 2, PR2
+    # final review) catches the ValueError and drops the disc number, so
+    # bd_title still runs to completion (status "ok", no disc claim).
     job = Job(id="job_1", drive_id="d", disc_type=DiscType.BLURAY, status=JobStatus.CREATED, metadata_json={})
     pathological_name = "X D" + "9" * 4301
     scan = ScanResult(disc_type=DiscType.BLURAY, volume_label="LOST_S2D3", bd_meta=BdDiscMeta(name=pathological_name))
     run_disc_hints(job, scan, now=NOW)
     sources = claims_of(job).sources
-    assert sources["bd_title"].status == "error"
-    assert sources["bd_title"].detail  # non-empty detail
+    assert sources["bd_title"].status == "ok"
+    assert sources["bd_title"].job.model_dump(exclude_unset=True) == {"title": "x"}
     assert sources["label"].status == "ok"
     assert sources["label"].job.model_dump(exclude_unset=True) == {"season": 2, "disc_number": 3, "title": "lost"}
-    assert hint_title(job) == "lost"
+    # bd_title is ranked ahead of label and its (low-quality but non-empty)
+    # title wins.
+    assert hint_title(job) == "x"
 
 
 def test_run_disc_hints_handles_source_applies_to_exception(monkeypatch) -> None:
@@ -126,6 +130,31 @@ def test_run_disc_hints_handles_source_applies_to_exception(monkeypatch) -> None
     assert sources["bd_title"].status == "error"
     assert "RuntimeError" in sources["bd_title"].detail
     assert "intentional test error" in sources["bd_title"].detail
+    # Label source should have run successfully
+    assert sources["label"].status == "ok"
+    assert sources["label"].job.model_dump(exclude_unset=True) == {"season": 2, "disc_number": 3, "title": "lost"}
+
+
+def test_run_disc_hints_handles_source_run_exception(monkeypatch) -> None:
+    # When a source's run() method raises (applies_to said it applies), run_disc_hints
+    # records status=error with the exception detail, and continues with other sources.
+    from arm_backend.identity.sources import registry
+
+    job = Job(id="job_1", drive_id="d", disc_type=DiscType.BLURAY, status=JobStatus.CREATED, metadata_json={})
+    scan = ScanResult(
+        disc_type=DiscType.BLURAY, volume_label="LOST_S2D3", bd_meta=BdDiscMeta(name="The West Wing Disc 2")
+    )
+
+    def boom(ctx):
+        raise RuntimeError("intentional run() error")
+
+    monkeypatch.setattr(registry.BD_TITLE, "run", boom)
+    run_disc_hints(job, scan, now=NOW)
+
+    sources = claims_of(job).sources
+    assert sources["bd_title"].status == "error"
+    assert "RuntimeError" in sources["bd_title"].detail
+    assert "intentional run() error" in sources["bd_title"].detail
     # Label source should have run successfully
     assert sources["label"].status == "ok"
     assert sources["label"].job.model_dump(exclude_unset=True) == {"season": 2, "disc_number": 3, "title": "lost"}

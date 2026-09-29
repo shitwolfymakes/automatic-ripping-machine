@@ -22,7 +22,7 @@ NOW = datetime(2026, 9, 28, tzinfo=timezone.utc)
         ("THE_OFFICE_SEASON2", LabelHints("the office", 2, None, None)),
         ("LOST_S4", LabelHints("lost", 4, None, None)),
         ("LOTR_FELLOWSHIP_D2", LabelHints("lotr fellowship", None, 2, None)),
-        ("LOTR_FELLOWSHIP_P1", LabelHints("lotr fellowship", None, 1, None)),
+        ("LOTR_FELLOWSHIP_P1", LabelHints("lotr fellowship", None, 1, None, True)),
         ("BAND_OF_BROTHERS_DISC_3_OF_6", LabelHints("band of brothers", None, 3, 6)),
         ("PLANET_EARTH_DISC_TWO", LabelHints("planet earth", None, 2, None)),
         ("MOVIE_16X9_SKU1234", LabelHints("movie", None, None, None)),
@@ -48,6 +48,51 @@ def test_parse_label_empty() -> None:
 
 def test_parse_label_rejects_total_below_number() -> None:
     assert parse_label("SET_DISC_4_OF_2") == LabelHints("set", None, 4, None)
+
+
+def test_parse_label_drops_unbounded_season() -> None:
+    """An absurd digit run must be dropped, not overflow Postgres's int4
+    season column (or raise on int()'s digit-count limit)."""
+    hints = parse_label("X_S99999999999")
+    assert hints.season is None
+
+
+def test_parse_label_drops_out_of_range_disc_number() -> None:
+    """`D0` is outside the valid 1-999 disc-number range, so it yields no
+    disc hint at all (rather than a nonsensical disc 0)."""
+    hints = parse_label("MOVIE_D0")
+    assert hints.disc_number is None
+
+
+def test_parse_label_sku_requires_word_boundary() -> None:
+    """`_SKU_RE` must not eat into a real word that happens to start with
+    the same three letters as SKU ("Skull") — only a standalone SKU token
+    (optionally followed by digits) is a code to strip."""
+    assert parse_label("Kong: Skull Island").title == "kong: skull island"
+    # The original SKU-code-stripping behaviour must still work.
+    assert parse_label("MOVIE_16X9_SKU1234") == LabelHints("movie", None, None, None)
+
+
+def test_parse_label_normalizes_unicode() -> None:
+    """NFKC folds compatibility glyphs (e.g. the trademark sign) before the
+    Blu-ray-suffix strip runs, so a real disc label with a literal ™ still
+    loses the branding suffix."""
+    assert parse_label("Avatar Blu-ray™").title == "avatar"
+
+
+def test_parse_label_part_marker_only() -> None:
+    """A lone `P<n>` with no season/DISC/D marker flags part_marker_only —
+    the text before it is one part of a single film and is not a safe
+    search title (e.g. it could match the wrong part)."""
+    hints = parse_label("HARRY_POTTER_DEATHLY_HALLOWS_P2")
+    assert (hints.disc_number, hints.part_marker_only) == (2, True)
+
+
+def test_parse_label_disc_marker_is_not_part_marker_only() -> None:
+    """A `D<n>` marker is an explicit disc marker, not a part split, so
+    part_marker_only stays False and the title is still a safe hint."""
+    hints = parse_label("LOTR_FELLOWSHIP_D2")
+    assert (hints.disc_number, hints.part_marker_only, hints.title) == (2, False, "lotr fellowship")
 
 
 def _ctx(label: str | None, disc_type: DiscType = DiscType.DVD) -> JobContext:
@@ -86,3 +131,20 @@ def test_label_source_sets_disc_total() -> None:
     assert claims.status == "ok"
     assert claims.job.model_dump(exclude_unset=True) == {"disc_number": 3, "disc_total": 6, "title": "band of brothers"}
     assert claims.inputs == {"volume_label": "BAND_OF_BROTHERS_DISC_3_OF_6"}
+
+
+def test_label_source_part_marker_only_keeps_disc_drops_title() -> None:
+    """A lone P<n> marker (one part of a single film) keeps the disc claim
+    but must not propose a search title — the stripped text could match
+    the wrong part of the film."""
+    claims = LABEL.run(_ctx("HARRY_POTTER_DEATHLY_HALLOWS_P2"))
+    assert claims.status == "ok"
+    assert claims.job.model_dump(exclude_unset=True) == {"disc_number": 2}
+
+
+def test_label_source_disc_marker_still_emits_title() -> None:
+    """A D<n> marker (not a bare P) is an explicit disc marker, so the
+    title hint is still proposed."""
+    claims = LABEL.run(_ctx("LOTR_FELLOWSHIP_D2"))
+    assert claims.status == "ok"
+    assert claims.job.model_dump(exclude_unset=True) == {"disc_number": 2, "title": "lotr fellowship"}
