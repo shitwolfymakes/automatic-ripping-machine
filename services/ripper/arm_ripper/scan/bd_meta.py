@@ -29,11 +29,14 @@ def pick_bdmt_file(names: list[str]) -> tuple[str, str] | None:
 
 
 def _int(text: str | None) -> int | None:
+    # Postgres's disc_number/disc_total columns are int4; a malformed BDMT
+    # setNumber/numSets must not carry an out-of-range value through to a
+    # 500 on commit. 999 is generous for any real box set.
     try:
         value = int((text or "").strip())
     except ValueError:
         return None
-    return value if value > 0 else None
+    return value if 1 <= value <= 999 else None
 
 
 def parse_bdmt(xml_bytes: bytes, language: str | None) -> BdDiscMeta | None:

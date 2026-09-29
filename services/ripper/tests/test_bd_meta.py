@@ -38,6 +38,14 @@ def test_parse_bdmt_drops_set_number_above_total() -> None:
     assert meta is not None and (meta.set_number, meta.num_sets) == (None, None)
 
 
+def test_parse_bdmt_drops_out_of_range_set_number() -> None:
+    """A setNumber outside 1-999 must be dropped, not overflow Postgres's
+    int4 disc_number column."""
+    xml = _XML.replace(b"<di:setNumber>2</di:setNumber>", b"<di:setNumber>100000</di:setNumber>")
+    meta = parse_bdmt(xml, "eng")
+    assert meta is not None and meta.set_number is None
+
+
 def test_parse_bdmt_invalid_or_nameless() -> None:
     assert parse_bdmt(b"<not xml", "eng") is None
     assert parse_bdmt(_XML.replace(b"The West Wing: The Complete Third Season", b"   "), "eng") is None
