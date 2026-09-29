@@ -282,7 +282,7 @@ Multi-feature discs (extended editions, alternate endings) produce multiple feat
 
 - All tracks → `{Show} ({Year})/Season {NN}/{Show} - S{NN}D{DD}T{NN} ({HH}h{MM}m) - {transcode_slug}.{ext}`
 
-Season + disc + track + duration + session in a predictable, greppable pattern. **No auto-`SNNEMM`:** disc order is not always episode order, and silently guessing wrong is worse than shipping honest names. Users rename to `{Show} - S{NN}E{MM} - Episode Title - {transcode_slug}.{ext}` post-rip once they know which track is which.
+Season + disc + track + duration + session in a predictable, greppable pattern. **No auto-`SNNEMM`:** disc order is not always episode order, and silently guessing wrong is worse than shipping honest names. Users rename to `{Show} - S{NN}E{MM} - Episode Title - {transcode_slug}.{ext}` post-rip once they know which track is which. When a template includes `{episode}`, the token renders `01-E02` for a title spanning two episodes, and a TV template's episode tokens render empty (instead of failing) for titles whose role is not an episode.
 
 "Play All" tracks (a single long track that concatenates every episode on the disc) appear with the same mechanical name, and land in the Season folder. They are *not* auto-detected and filtered — "duration ≈ sum of other tracks" doesn't work because special features on the same disc confound the heuristic. Instead, the ripper UI surfaces all tracks with their durations at rip-selection time, and the user deselects Play All (or any tracks they don't want) before the rip starts. The naming layer stays mechanical.
 
