@@ -1412,3 +1412,85 @@ def test_resolve_season_first_class_field_used_directly(signing_key: bytes) -> N
             headers=_auth(token),
         )
     assert r.status_code == 422
+
+
+# --- restated values are not recorded as manual claims ----------------------
+
+
+def test_patch_resending_unchanged_auto_values_records_no_manual_claim(signing_key: bytes) -> None:
+    """ui-neu re-sends every field on save (incl. null for blanks); restating
+    what TheDiscDB set, or an empty field, must not pin it as manual."""
+    db = FakeSession()
+    _seed_job_with_track(db)
+    job = db.rows["jobs"][0]
+    job.metadata_json = {"identity_claims": {"sources": {"thediscdb": {"tracks": {"1": {"episode_name": "Pilot"}}}}}}
+    track = db.rows["tracks"][0]
+    track.source_ref = "1"
+    track.episode_name = "Pilot"
+    track.identity_provenance = {"episode_name": "thediscdb"}
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "episode_name": "Pilot", "custom_filename": None}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert "manual" not in db.rows["jobs"][0].metadata_json["identity_claims"]["sources"]
+    assert db.rows["tracks"][0].identity_provenance == {"episode_name": "thediscdb"}
+
+
+def test_patch_resending_manual_value_records_normally(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    track = db.rows["tracks"][0]
+    track.source_ref = "1"
+    track.episode_name = "Mine"
+    track.identity_provenance = {"episode_name": "manual"}
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "episode_name": "Mine"}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    manual = db.rows["jobs"][0].metadata_json["identity_claims"]["sources"]["manual"]
+    assert manual["tracks"]["1"] == {"episode_name": "Mine"}
+    assert db.rows["tracks"][0].identity_provenance == {"episode_name": "manual"}
+
+
+def test_patch_clearing_a_set_value_records_manual_null(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    track = db.rows["tracks"][0]
+    track.source_ref = "1"
+    track.custom_filename = "typed.mkv"
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "custom_filename": None}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    manual = db.rows["jobs"][0].metadata_json["identity_claims"]["sources"]["manual"]
+    assert manual["tracks"]["1"] == {"filename": None}
+    assert db.rows["tracks"][0].custom_filename is None
+    assert db.rows["tracks"][0].identity_provenance == {"custom_filename": "manual"}
+
+
+def test_resolve_null_disc_fields_on_empty_job_record_nothing(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID, meta={})]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Show", "disc_number": None, "disc_total": None, "season": None},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    job = db.rows["jobs"][0]
+    assert "identity_claims" not in job.metadata_json
+    assert job.identity_provenance is None

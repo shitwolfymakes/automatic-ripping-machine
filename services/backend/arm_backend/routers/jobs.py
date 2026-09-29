@@ -848,10 +848,7 @@ async def update_job(
     for key, value in job_fields.items():
         if key not in _IDENTITY_JOB_ATTRS:
             setattr(job, key, value)
-    identity_touched = False
-    if job_identity:
-        record_manual_job(job, job_identity)
-        identity_touched = True
+    identity_touched = record_manual_job(job, job_identity) if job_identity else False
     db.add(job)
 
     edited_track_ids: list[str] = []
@@ -872,8 +869,7 @@ async def update_job(
             for key, value in data.items():
                 if key not in _IDENTITY_TRACK_ATTRS:
                     setattr(track, key, value)
-            if identity:
-                record_manual_track(job, track.source_ref, identity)
+            if identity and record_manual_track(job, track, identity):
                 identity_touched = True
             if edit.revert_fields:
                 revert_manual_track(job, track.source_ref, edit.revert_fields)

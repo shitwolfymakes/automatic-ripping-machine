@@ -66,7 +66,22 @@ def _manual(claims: IdentityClaims) -> SourceClaims:
     return claims.sources.get(MANUAL) or SourceClaims()
 
 
-def record_manual_track(job: Job, source_ref: str, edits: dict[str, Any]) -> None:
+def _restated(obj: Job | Track, attr: str, value: Any) -> bool:
+    """True when an edit only restates the object's current value and that
+    value is not already the operator's. UIs re-send unchanged fields; turning
+    those into manual claims would pin automatic values (and blanks) forever."""
+    if (obj.identity_provenance or {}).get(attr) == MANUAL:
+        return False
+    return bool(getattr(obj, attr) == value)
+
+
+def record_manual_track(job: Job, track: Track, edits: dict[str, Any]) -> bool:
+    """Record the operator's track edits as `manual` claims, skipping restated
+    values. Returns whether any claim was recorded."""
+    edits = {attr: value for attr, value in edits.items() if not _restated(track, attr, value)}
+    if not edits:
+        return False
+    source_ref = track.source_ref
     claims = claims_of(job)
     manual = _manual(claims)
     current = manual.tracks.get(source_ref)
@@ -77,6 +92,7 @@ def record_manual_track(job: Job, source_ref: str, edits: dict[str, Any]) -> Non
     manual.tracks = {**manual.tracks, source_ref: TrackClaim(**merged)}
     claims.sources = {**claims.sources, MANUAL: manual}
     _store(job, claims)
+    return True
 
 
 def revert_manual_track(job: Job, source_ref: str, attrs: Iterable[str]) -> None:
@@ -97,7 +113,12 @@ def revert_manual_track(job: Job, source_ref: str, attrs: Iterable[str]) -> None
     _store(job, claims)
 
 
-def record_manual_job(job: Job, edits: dict[str, Any]) -> None:
+def record_manual_job(job: Job, edits: dict[str, Any]) -> bool:
+    """Record the operator's job edits as `manual` claims, skipping restated
+    values. Returns whether any claim was recorded."""
+    edits = {attr: value for attr, value in edits.items() if not _restated(job, attr, value)}
+    if not edits:
+        return False
     claims = claims_of(job)
     manual = _manual(claims)
     merged = manual.job.model_dump(exclude_unset=True)
@@ -106,6 +127,7 @@ def record_manual_job(job: Job, edits: dict[str, Any]) -> None:
     manual.job = JobClaim(**merged)
     claims.sources = {**claims.sources, MANUAL: manual}
     _store(job, claims)
+    return True
 
 
 def record_preset(job: Job, tracks: Iterable[Track], *, now: datetime) -> None:
