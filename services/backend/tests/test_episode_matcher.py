@@ -189,28 +189,52 @@ def test_two_episode_match_skips_provider_gap() -> None:
     assert (2, 4) not in mapping(r).values()
 
 
-def test_run_does_not_jump_a_claimed_hole() -> None:
-    # Important 4a: out-of-order box set — siblings claimed E1-E6 and E12-E21,
-    # so the remaining list is E7-E11, E22. Six equal-runtime titles: the sixth
-    # has no runtime evidence for E22 and must not jump the ten-episode hole.
+def test_run_crosses_a_claimed_hole_on_runtime_evidence() -> None:
+    # A sibling claimed E12-E21, so the remaining list is E7-E11, E22 (a
+    # ten-episode hole). A title whose runtime fits E22 crosses the hole
+    # instead of being skipped: a disc can genuinely span a numbering gap.
     remaining = [Episode(season=1, number=n, name=f"E{n}", runtime_s=2600) for n in (7, 8, 9, 10, 11, 22)]
     r = align(titles(*[2600] * 6), remaining, anchor=0)
-    assert [m.episode for m in r.matches] == [7, 8, 9, 10, 11]
-    assert len(r.skipped) == 1
-    # A sixth title that fits E22 within tolerance (50 s off) still does not
-    # earn the jump: it is skipped rather than named E22.
-    r = align(titles(*[2600] * 5, 2650), remaining, anchor=0)
-    assert [m.episode for m in r.matches] == [7, 8, 9, 10, 11]
-    assert r.skipped == ("5",)
+    assert [m.episode for m in r.matches] == [7, 8, 9, 10, 11, 22]
+    assert r.skipped == ()
 
 
-def test_hole_penalty_ignores_season_boundaries() -> None:
-    # Season 1 ends at E3 and season 2 starts at E1: crossing seasons is not a hole.
-    listed = [Episode(season=1, number=n, runtime_s=2600) for n in (1, 2, 3)] + [
-        Episode(season=2, number=n, runtime_s=2600) for n in (1, 2)
-    ]
-    r = align(titles(2600, 2600, 2600, 2600), listed)
-    assert [(m.season, m.episode) for m in r.matches] == [(1, 1), (1, 2), (1, 3), (2, 1)]
+# Numbering-hole penalty removal (a provider gap is missing data, not a hole to
+# pay for): the season list genuinely lacks a number, and the disc's titles
+# still carry runtime evidence for the episodes either side of it.
+
+
+def test_maps_across_a_single_number_gap_on_runtime_evidence() -> None:
+    # Provider list has no E4; the disc's 6 titles still land on their
+    # runtime-matching episode either side of the gap.
+    all_numbers = [1, 2, 3, 5, 6, 7, 8, 9, 10]
+    ep_rt = {1: 3090, 2: 3070, 3: 2800, 5: 3080, 6: 2780, 7: 3010, 8: 2900, 9: 3050, 10: 2890}
+    episodes = [Episode(season=1, number=n, name=f"E{n}", runtime_s=ep_rt[n]) for n in all_numbers]
+    r = align(titles(3050, 2815, 3080, 2780, 3030, 2905), episodes)
+    assert [m.episode for m in r.matches] == [2, 3, 5, 6, 7, 8]
+    assert r.skipped == ()
+
+
+def test_maps_across_a_two_number_gap_on_runtime_evidence() -> None:
+    # Provider list has no E4 or E5; the disc's 6 titles still land on their
+    # runtime-matching episode either side of the two-number gap.
+    all_numbers = [1, 2, 3, 6, 7, 8, 9, 10]
+    ep_rt = {1: 2500, 2: 2410, 3: 2530, 6: 2650, 7: 2470, 8: 2590, 9: 2710, 10: 2500}
+    episodes = [Episode(season=1, number=n, name=f"E{n}", runtime_s=ep_rt[n]) for n in all_numbers]
+    r = align(titles(2410, 2530, 2660, 2470, 2590, 2710), episodes)
+    assert [m.episode for m in r.matches] == [2, 3, 6, 7, 8, 9]
+    assert r.skipped == ()
+
+
+def test_leading_extra_before_a_gap_does_not_drop_the_first_episode() -> None:
+    # A 420 s extra is skipped; the four episodes after it still map
+    # correctly across the provider's missing E4, including the first one.
+    all_numbers = [1, 2, 3, 5, 6, 7, 8, 9]
+    ep_rt = {1: 1940, 2: 2170, 3: 1950, 5: 2090, 6: 2200, 7: 1930, 8: 2160, 9: 2010}
+    episodes = [Episode(season=1, number=n, name=f"E{n}", runtime_s=ep_rt[n]) for n in all_numbers]
+    r = align(titles(420, 2060, 2190, 1920, 2130), episodes)
+    assert mapping(r) == {"1": (5, None), "2": (6, None), "3": (7, None), "4": (8, None)}
+    assert r.skipped == ("0",)
 
 
 def test_identical_runtimes_with_anchor_are_ambiguous() -> None:

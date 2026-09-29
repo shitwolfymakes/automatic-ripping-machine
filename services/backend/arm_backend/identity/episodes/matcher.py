@@ -7,12 +7,9 @@ lives on another disc or was not ripped). Leading and trailing episodes are
 free to skip, so the disc may sit anywhere in the season; `anchor` pulls the
 start toward the position cross-disc continuity predicts.
 
-A match made after an earlier title's match pays for every episode number
-missing between it and the list entry before it (claimed by a sibling disc or
-absent from the provider), so a run does not jump a hole for free. When
-shifting the single-episode matches one position either way fits about as well,
-the result is flagged `ambiguous`: its positions came from the anchor or list
-order, not from runtimes.
+When shifting the single-episode matches one position either way fits about as
+well, the result is flagged `ambiguous`: its positions came from the anchor or
+list order, not from runtimes.
 """
 
 from __future__ import annotations
@@ -85,13 +82,6 @@ def _one_cost(seconds: int, runtime: int | None, tolerance: int, ref_rt: int) ->
     delta = abs(seconds - rt)
     eff = _eff_tol(rt, tolerance)
     return float(delta) if delta <= eff else None
-
-
-def _hole(episodes: Sequence[Episode], j: int) -> int:
-    """Episode numbers missing between list entries j-1 and j of the same season."""
-    if j == 0 or episodes[j - 1].season != episodes[j].season:
-        return 0
-    return max(0, episodes[j].number - episodes[j - 1].number - 1)
 
 
 def _is_ambiguous(
@@ -185,9 +175,6 @@ def align(
     for i in range(m + 1):
         for j in range(n + 1):
             cur = dp[i][j]
-            # A match here follows an earlier title (i > 0): pay for every
-            # episode number the run would jump between list entries j-1 and j.
-            hole_cost = (tolerance + 1) * _hole(episodes, j) if i > 0 and j < n else 0
             if i < m:
                 relax(i + 1, j, cur + skip_title_cost, ("skip_title", i, j))
             if i > 0 and j < n:
@@ -195,7 +182,7 @@ def align(
             if i < m and j < n:
                 one = _one_cost(elig[i].seconds, episodes[j].runtime_s, tolerance, ref_rt)
                 if one is not None:
-                    relax(i + 1, j + 1, cur + one + hole_cost, ("one", i, j))
+                    relax(i + 1, j + 1, cur + one, ("one", i, j))
             if (
                 i < m
                 and j + 1 < n
@@ -207,7 +194,7 @@ def align(
                     delta = abs(elig[i].seconds - (a + b))
                     eff = _eff_tol(a + b, tolerance)
                     if delta <= eff:
-                        relax(i + 1, j + 2, cur + delta + DOUBLE_PENALTY + hole_cost, ("two", i, j))
+                        relax(i + 1, j + 2, cur + delta + DOUBLE_PENALTY, ("two", i, j))
 
     best_j = min(range(n + 1), key=lambda j: (dp[m][j], j))
     matches: list[TitleMatch] = []
