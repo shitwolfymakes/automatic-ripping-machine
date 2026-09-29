@@ -2330,7 +2330,7 @@ async def test_resolve_manual_season_beats_label_hint() -> None:
 
     # A later resolve_job re-run (e.g. triggered by a plain field PATCH) must
     # not let the lower-tier label hint reclaim the operator's season.
-    changed = await resolve_job(db, job2)
-    assert changed == 0
+    outcome = await resolve_job(db, job2)
+    assert outcome.changed == 0
     assert job2.season == 5
     assert job2.identity_provenance.get("season") == "manual"

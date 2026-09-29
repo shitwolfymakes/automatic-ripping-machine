@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,18 +21,27 @@ from arm_backend.identity.sources.registry import DEFAULT_RANKS, SOURCE_TIERS, H
 logger = logging.getLogger(__name__)
 
 
-async def resolve_job(session: AsyncSession, job: Job) -> int:
+@dataclass(frozen=True)
+class ResolveOutcome:
+    changed: int
+    track_ids: frozenset[str]
+
+
+async def resolve_job(session: AsyncSession, job: Job) -> ResolveOutcome:
     """Apply every stored proposal to the job and its tracks. Idempotent;
-    returns the number of attributes changed."""
+    returns the number of attributes changed and which tracks changed."""
     tracks = list((await session.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all())
-    changed = apply_resolution(job, tracks, resolve(claims_of(job), tiers=SOURCE_TIERS, ranks=DEFAULT_RANKS))
+    changed_ids: set[str] = set()
+    changed = apply_resolution(
+        job, tracks, resolve(claims_of(job), tiers=SOURCE_TIERS, ranks=DEFAULT_RANKS), changed_track_ids=changed_ids
+    )
     for track in tracks:
         session.add(track)
     session.add(job)
     await session.flush()
     if changed:
         logger.info("identity: resolved job_id=%s changed=%d", job.id, changed)
-    return changed
+    return ResolveOutcome(changed=changed, track_ids=frozenset(changed_ids))
 
 
 def run_disc_hints(job: Job, scan: ScanResult, *, now: datetime) -> None:

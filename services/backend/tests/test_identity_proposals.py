@@ -52,6 +52,28 @@ def test_put_source_preserves_other_metadata_and_reassigns_dict() -> None:
     assert job.metadata_json["identity_claims"]["sources"]["thediscdb"]["tracks"]["1"] == {"episode": 3}
 
 
+def test_put_source_error_keeps_last_good() -> None:
+    job = _job()
+    put_source(job, "thediscdb", SourceClaims(tracks={"1": TrackClaim(episode=3)}))
+    put_source(job, "thediscdb", SourceClaims(run_at=NOW, status="error", detail="TimeoutError: boom"))
+    entry = claims_of(job).sources["thediscdb"]
+    assert entry.status == "ok" and entry.tracks["1"].episode == 3
+    assert entry.extra["last_error"]["detail"] == "TimeoutError: boom"
+
+
+def test_put_source_error_without_prior_ok_is_stored() -> None:
+    job = _job()
+    put_source(job, "thediscdb", SourceClaims(status="error", detail="x"))
+    assert claims_of(job).sources["thediscdb"].status == "error"
+
+
+def test_put_source_skipped_replaces_ok() -> None:
+    job = _job()
+    put_source(job, "thediscdb", SourceClaims(tracks={"1": TrackClaim(episode=3)}))
+    put_source(job, "thediscdb", SourceClaims(status="skipped", detail="no key"))
+    assert claims_of(job).sources["thediscdb"].status == "skipped"
+
+
 def test_record_manual_track_maps_attributes_and_merges() -> None:
     job, track = _job(), _track("1")
     track.custom_filename = "old.mkv"

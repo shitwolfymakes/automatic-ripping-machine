@@ -209,6 +209,23 @@ def test_hint_does_not_overwrite_unowned_job_season() -> None:
     assert job.season == 7 and job.identity_provenance is None
 
 
+def test_unknown_owner_field_is_left_alone() -> None:
+    """A field whose provenance names a source no longer in `tiers` (rolled
+    back / removed) is left untouched, not reset to default, when nothing
+    proposes it this run."""
+    track = _track(episode_number=4, identity_provenance={"episode_number": "retired_source"})
+    apply_resolution(_job(), [track], resolve(IdentityClaims(), tiers=TIERS))
+    assert track.episode_number == 4 and track.identity_provenance == {"episode_number": "retired_source"}
+
+
+def test_apply_reports_changed_track_ids() -> None:
+    t1, t2 = _track("1"), _track("2")
+    changed: set[str] = set()
+    res = resolve(_claims(thediscdb=SourceClaims(tracks={"2": TrackClaim(episode=5)})), tiers=TIERS)
+    apply_resolution(_job(), [t1, t2], res, changed_track_ids=changed)
+    assert changed == {t2.id}
+
+
 def test_tier_beats_pin() -> None:
     res = resolve(
         IdentityClaims(

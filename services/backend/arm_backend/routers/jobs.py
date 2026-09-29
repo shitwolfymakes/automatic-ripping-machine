@@ -879,10 +879,16 @@ async def update_job(
             db.add(track)
             edited_track_ids.append(track.id)
 
+    resolver_track_ids: frozenset[str] = frozenset()
     if identity_touched:
-        await resolve_job(db, job)
+        outcome = await resolve_job(db, job)
+        resolver_track_ids = outcome.track_ids
     await db.flush()
-    for tid in edited_track_ids:
+    # De-duplicated, stable order: the tracks the request itself edited,
+    # followed by any sibling the resolver also changed (e.g. a claim that
+    # was never applied until this PATCH ran the resolver) -- fixing PR 1's
+    # parked finding that resolver-only changes never got a track.updated.
+    for tid in list(dict.fromkeys([*edited_track_ids, *sorted(resolver_track_ids)])):
         await hub.emit(
             topic="ripper.events",
             event_type="track.updated",

@@ -1241,6 +1241,38 @@ def test_patch_sibling_edit_keeps_migrated_legacy_exclusion(signing_key: bytes) 
     assert db.rows["tracks"][1].custom_filename == "Bonus"
 
 
+def test_patch_emits_track_updated_for_resolver_changed_sibling(signing_key: bytes) -> None:
+    """PR 3a Task 4: PATCHing track "1" (a plain identity edit) runs the
+    resolver over every track on the job; track "2" carries a thediscdb
+    episode claim that was never applied and picks one up here. Both track
+    ids must get exactly one track.updated event (PR 1's parked finding)."""
+    db = FakeSession()
+    _seed_job_with_track(db)
+    job = db.rows["jobs"][0]
+    job.metadata_json = {"identity_claims": {"sources": {"thediscdb": {"tracks": {"2": {"episode": 7}}}}}}
+    track1 = db.rows["tracks"][0]
+    track1.source_ref = "1"
+    sibling_id = "trk_00000000000000000000000002"
+    db.rows["tracks"].append(
+        Track(id=sibling_id, job_id=_JOB_ID_A, kind=TrackKind.VIDEO_TITLE, index=2, source_ref="2")
+    )
+    hub = _Hub()
+    app, token = _make_app(signing_key, db, hub=hub)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "custom_filename": "Bonus"}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    sibling = db.rows["tracks"][1]
+    assert sibling.episode_number == 7
+    updated_ids = [e["payload"]["track_id"] for e in hub.events if e["event_type"] == "track.updated"]
+    assert updated_ids.count(_TRK_ID_A) == 1
+    assert updated_ids.count(sibling_id) == 1
+    assert len(updated_ids) == 2
+
+
 def test_patch_plain_fields_still_set_directly(signing_key: bytes) -> None:
     db = FakeSession()
     _seed_job_with_track(db)
