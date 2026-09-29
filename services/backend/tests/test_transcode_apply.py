@@ -471,8 +471,45 @@ def test_tv_template_skips_episode_tokens_for_non_episode_titles() -> None:
     tp = _tv_preset()
     out = {r.track_id: r.output_path for r in compute_outputs(job, tracks, sess, tp)}
     assert out["trk_1"] == "Show/Season 01/Show - S01E01 - Pilot.mkv"
-    assert out["trk_2"] == "Show/Season 01/Show - S01E.mkv"
-    assert out["trk_3"] == "Show/Season 01/Show - S01E.mkv"
+    # Distinct paths: the dangling "E" is dropped and the track number is
+    # appended (the template has no {track}), so bonus titles never collide.
+    assert out["trk_2"] == "Show/Season 01/Show - S01 - T02.mkv"
+    assert out["trk_3"] == "Show/Season 01/Show - S01 - T03.mkv"
+
+
+def test_bonus_title_gets_no_track_suffix_when_template_has_track() -> None:
+    template = "{show}/Season {season}/{show} - S{season}E{episode} - T{track}.{ext}"
+    job = _tv_job(title="Show")
+    tracks = [_tv_track(2, role=TrackRole.EXTRA), _tv_track(3, role=TrackRole.EXTRA)]
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    out = {r.track_id: r.output_path for r in compute_outputs(job, tracks, sess, tp)}
+    assert out == {
+        "trk_2": "Show/Season 01/Show - S01 - T02.mkv",
+        "trk_3": "Show/Season 01/Show - S01 - T03.mkv",
+    }
+
+
+def test_bonus_title_tidies_only_segments_with_an_empty_episode_token() -> None:
+    # The show folder's double space is not near an episode token: it stays
+    # byte-for-byte; only the filename segment is tidied.
+    template = "{show}  -  Collection/Season {season}/{show} - S{season}E{episode}.{ext}"
+    job = _tv_job(title="Show")
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    out = compute_outputs(job, [_tv_track(4, role=TrackRole.EXTRA)], sess, tp)
+    assert out[0].output_path == "Show  -  Collection/Season 01/Show - S01 - T04.mkv"
+
+
+def test_bonus_title_keeps_e_that_is_not_dangling() -> None:
+    # "S01Extras" is not a dangling E (a letter follows); an extensionless
+    # final segment gets the track suffix at its end.
+    template = "{show}/S{season}Extras {episode_title}"
+    job = _tv_job(title="Show")
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    out = compute_outputs(job, [_tv_track(5, role=TrackRole.EXTRA)], sess, tp)
+    assert out[0].output_path == "Show/S01Extras - T05"
 
 
 def test_episode_role_with_empty_episode_still_fails() -> None:
@@ -520,6 +557,26 @@ def test_tidy_raises_when_a_path_segment_becomes_empty() -> None:
     tp = _tv_preset()
     with pytest.raises(TemplateValidationError):
         compute_outputs(job, [track], sess, tp)
+
+
+def test_tidy_raises_when_the_final_segment_becomes_empty() -> None:
+    """The track suffix must not rescue a filename made only of skipped
+    episode tokens: the empty-segment rule still applies."""
+    template = "{show}/{episode_title}"
+    job = _tv_job()
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    with pytest.raises(TemplateValidationError):
+        compute_outputs(job, [_tv_track(1, role=TrackRole.EXTRA)], sess, tp)
+
+
+def test_bonus_title_with_only_an_extension_gets_a_bare_track_name() -> None:
+    template = "{show}/{episode_title}.{ext}"
+    job = _tv_job(title="Show")
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    out = compute_outputs(job, [_tv_track(6, role=TrackRole.EXTRA)], sess, tp)
+    assert out[0].output_path == "Show/T06.mkv"
 
 
 def test_paths_without_skipped_tokens_are_untouched() -> None:

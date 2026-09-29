@@ -136,6 +136,9 @@ _EPISODE_TOKENS = frozenset({"episode", "episode_title"})
 _WS_RUN = re.compile(r"\s+")
 _DASH_RUN = re.compile(r"(?:\s*-\s*){2,}")
 _DASH_BEFORE_EXT = re.compile(r"\s*-\s*(?=\.[A-Za-z0-9]+$)")
+# "S01E" left behind by an empty {episode}: drop the E when no digit/letter follows.
+_DANGLING_E = re.compile(r"(\bS\d+)E(?![A-Za-z0-9])")
+_EXT = re.compile(r"\.[A-Za-z0-9]+$")
 
 
 def _episode_tokens_required(job: Job, track: Track, session: Session) -> bool:
@@ -153,14 +156,34 @@ def _episode_tokens_required(job: Job, track: Track, session: Session) -> bool:
     return (job.media_type or session.media_type) == MediaType.TV
 
 
-def _tidy_path(path: str) -> str:
+def _tidy_segment(seg: str) -> str:
+    seg = _DANGLING_E.sub(r"\1", seg)
+    seg = _WS_RUN.sub(" ", seg)
+    seg = _DASH_RUN.sub(" - ", seg)
+    seg = _DASH_BEFORE_EXT.sub("", seg)
+    return seg.strip(" -_")
+
+
+def _render_with_empty_episode(template: str, ctx: dict[str, str]) -> list[str]:
+    """Render a template whose episode tokens were allowed to resolve empty
+    (a bonus title on a TV disc) segment by segment. Only the `/`-segments
+    that referenced an empty episode token are tidied; the rest render
+    byte-for-byte."""
     segments = []
-    for seg in path.split("/"):
-        seg = _WS_RUN.sub(" ", seg)
-        seg = _DASH_RUN.sub(" - ", seg)
-        seg = _DASH_BEFORE_EXT.sub("", seg)
-        segments.append(seg.strip(" -_"))
-    return "/".join(segments)
+    for seg_template in template.split("/"):
+        seg = expand_template(seg_template, ctx)
+        if any(not ctx.get(t) for t in referenced_tokens(seg_template) & _EPISODE_TOKENS):
+            seg = _tidy_segment(seg)
+        segments.append(seg)
+    return segments
+
+
+def _with_track_suffix(name: str, track: str) -> str:
+    """`Show - S01.mkv` -> `Show - S01 - T02.mkv`: keeps a disc's bonus titles
+    on distinct paths when the template has no `{track}`."""
+    ext = m.group(0) if (m := _EXT.search(name)) else ""
+    stem = name[: len(name) - len(ext)]
+    return f"{stem} - T{track}{ext}" if stem else f"T{track}{ext}"
 
 
 def _track_kinds_for_media(media_type: MediaType) -> set[TrackKind]:
@@ -199,13 +222,17 @@ def compute_outputs(
                 raise TemplateValidationError(
                     f"track index={track.index}: token {{{token}}} resolved empty against the job's metadata"
                 )
-        path = expand_template(template, ctx)
         if allowed_empty:
-            path = _tidy_path(path)
-            if any(not seg for seg in path.split("/")):
+            segments = _render_with_empty_episode(template, ctx)
+            if any(not seg for seg in segments):
                 raise TemplateValidationError(
                     f"track index={track.index}: an allowed-empty episode token left an empty path segment"
                 )
+            if "track" not in referenced:
+                segments[-1] = _with_track_suffix(segments[-1], ctx["track"])
+            path = "/".join(segments)
+        else:
+            path = expand_template(template, ctx)
         if track.custom_filename:
             p = PurePosixPath(path)
             ext = p.suffix
