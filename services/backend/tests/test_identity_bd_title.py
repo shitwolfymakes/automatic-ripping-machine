@@ -34,3 +34,12 @@ def test_skips_without_meta_or_on_dvd() -> None:
     assert BD_TITLE.applies_to(_ctx(None)) is not None
     assert BD_TITLE.applies_to(_ctx(BdDiscMeta(name="X"), DiscType.DVD)) is not None
     assert BD_TITLE.applies_to(_ctx(BdDiscMeta(name="X"))) is None
+
+
+def test_bd_name_with_season_and_disc() -> None:
+    claims = BD_TITLE.run(_ctx(BdDiscMeta(name="The West Wing: Season 3 Disc 2")))
+    assert claims.job.model_dump(exclude_unset=True) == {
+        "season": 3,
+        "disc_number": 2,
+        "title": "the west wing",
+    }

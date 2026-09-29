@@ -69,3 +69,18 @@ def test_hint_title_none_without_hints() -> None:
     job = Job(id="job_1", drive_id="d", disc_type=DiscType.CD, status=JobStatus.CREATED, metadata_json={})
     run_disc_hints(job, ScanResult(disc_type=DiscType.CD), now=NOW)
     assert hint_title(job) is None
+
+
+def test_run_disc_hints_handles_pathological_bd_name() -> None:
+    # Pathological BD name (very long) causes parse_label to raise; bd_title
+    # records error, label still works, hint_title uses label.
+    job = Job(id="job_1", drive_id="d", disc_type=DiscType.BLURAY, status=JobStatus.CREATED, metadata_json={})
+    pathological_name = "X D" + "9" * 4301
+    scan = ScanResult(disc_type=DiscType.BLURAY, volume_label="LOST_S2D3", bd_meta=BdDiscMeta(name=pathological_name))
+    run_disc_hints(job, scan, now=NOW)
+    sources = claims_of(job).sources
+    assert sources["bd_title"].status == "error"
+    assert sources["bd_title"].detail  # non-empty detail
+    assert sources["label"].status == "ok"
+    assert sources["label"].job.model_dump(exclude_unset=True) == {"season": 2, "disc_number": 3, "title": "lost"}
+    assert hint_title(job) == "lost"

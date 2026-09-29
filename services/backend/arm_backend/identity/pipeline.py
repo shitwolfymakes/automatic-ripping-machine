@@ -38,8 +38,21 @@ def run_disc_hints(job: Job, scan: ScanResult, *, now: datetime) -> None:
     """Record every disc-hint source's proposals (or why it was skipped)."""
     ctx = JobContext(job=job, scan=scan, now=now)
     for source in HINT_SOURCES:
-        reason = source.applies_to(ctx)
-        claims = source.run(ctx) if reason is None else SourceClaims(run_at=now, status="skipped", detail=reason)
+        try:
+            reason = source.applies_to(ctx)
+        except Exception as e:
+            logger.warning("identity: source %s failed job_id=%s: %s", source.id, job.id, e)
+            claims = SourceClaims(run_at=now, status="error", detail=f"{type(e).__name__}: {e}"[:200])
+            put_source(job, source.id, claims)
+            continue
+        if reason is None:
+            try:
+                claims = source.run(ctx)
+            except Exception as e:
+                logger.warning("identity: source %s failed job_id=%s: %s", source.id, job.id, e)
+                claims = SourceClaims(run_at=now, status="error", detail=f"{type(e).__name__}: {e}"[:200])
+        else:
+            claims = SourceClaims(run_at=now, status="skipped", detail=reason)
         put_source(job, source.id, claims)
 
 
