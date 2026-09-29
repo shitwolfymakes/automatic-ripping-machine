@@ -87,3 +87,85 @@ def test_confidence_reflects_delta() -> None:
 
 def test_custom_tolerance() -> None:
     assert align(titles(2700), eps(3000), tolerance=200).matches == ()
+
+
+# Regression tests from fix round 1
+
+
+def test_unknown_runtimes_with_120s_skip() -> None:
+    # Regression 1: 120s title should be skipped (ref_rt ~2600)
+    r = align(titles(2600, 120, 2600, 2600), eps(None, None, None, None, None, None, None, None, None, None))
+    assert mapping(r) == {"0": (1, None), "2": (2, None), "3": (3, None)}
+    assert r.skipped == ("1",)
+
+
+def test_unknown_runtimes_play_all_and_others() -> None:
+    # Regression 2: 15000 title doesn't match; five 2600s map E1-E5
+    r = align(
+        titles(15000, 2600, 2600, 2600, 2600, 2600),
+        eps(None, None, None, None, None, None, None, None, None, None),
+    )
+    assert r.coverage == 5.0 / 6.0 or r.coverage == 5.0 / 5.0  # Either "0" is skipped or in play_all
+    # The 5 titles of 2600 should map to E1-E5
+    assert {m.episode for m in r.matches} == {1, 2, 3, 4, 5}
+
+
+def test_play_all_by_other_titles() -> None:
+    # Regression 3: 7800 = 2600*3, so "0" is play-all; E1-E3 match others
+    r = align(titles(7800, 2600, 2600, 2600), eps(2600, 2600, 2600, 2600))
+    assert r.play_all == ("0",)
+    assert mapping(r) == {"1": (1, None), "2": (2, None), "3": (3, None)}
+
+
+def test_interior_episode_skip() -> None:
+    # Regression 4: E3 (3500) is skipped, E1-2 and E4 match
+    r = align(titles(2600, 2600, 2600), eps(2600, 2600, 3500, 2600))
+    assert mapping(r) == {"0": (1, None), "1": (2, None), "2": (4, None)}
+    assert r.skipped == ()
+
+
+def test_skipped_title_in_middle() -> None:
+    # Regression 5: 1100 title is skipped (ref_rt ~1320)
+    r = align(titles(1320, 1100, 1320, 1320), eps(1320, 1320, 1320, 1320, 1320, 1320, 1320, 1320, 1320, 1320))
+    assert mapping(r) == {"0": (1, None), "2": (2, None), "3": (3, None)}
+    assert r.skipped == ("1",)
+
+
+def test_tolerance_zero_raises() -> None:
+    # Regression 6a: tolerance < 1 raises ValueError
+    try:
+        align(titles(2600), eps(2600), tolerance=0)
+        assert False, "Should raise ValueError"
+    except ValueError as e:
+        assert "tolerance" in str(e).lower()
+
+
+def test_duplicate_refs_raises() -> None:
+    # Regression 6b: duplicate refs raise ValueError
+    try:
+        align([TitleIn(ref="0", seconds=2600), TitleIn(ref="0", seconds=2600)], eps(2600))
+        assert False, "Should raise ValueError"
+    except ValueError as e:
+        assert "unique" in str(e).lower()
+
+
+def test_two_episode_confidence() -> None:
+    # Regression 7: two-episode match confidence = round(1 - delta/eff_tol, 3)
+    r = align(titles(6010), eps(3000, 3000))
+    assert len(r.matches) == 1
+    match = r.matches[0]
+    assert match.episode_end == 2
+    # delta = |6010 - 6000| = 10; eff_tol = min(300, max(60, 6000//10)) = min(300, 600) = 300
+    expected_conf = round(1 - 10 / 300, 3)
+    assert match.confidence == expected_conf
+
+
+def test_play_all_by_other_titles_only() -> None:
+    # Covers play-all-by-other-titles path (not episode-sum): fewer episodes
+    # so 7500 doesn't match any 3+ episode sum, but matches sum of 3 other titles
+    r = align(titles(7500, 2500, 2500, 2500), eps(2600, 2600))
+    # Title "0" (7500) is play-all, excluded; remaining eligible
+    # DP chooses to match "2" → E1, "3" → E2, skipping "1"
+    assert "0" in r.play_all or all(m.ref != "0" for m in r.matches)
+    assert mapping(r) == {"2": (1, None), "3": (2, None)}
+    assert "1" in r.skipped
