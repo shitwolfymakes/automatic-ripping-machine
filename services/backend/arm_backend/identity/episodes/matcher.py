@@ -136,7 +136,12 @@ def align(
                 one = _one_cost(elig[i].seconds, episodes[j].runtime_s, tolerance, ref_rt)
                 if one is not None:
                     relax(i + 1, j + 1, cur + one, ("one", i, j))
-            if i < m and j + 1 < n and episodes[j].season == episodes[j + 1].season:
+            if (
+                i < m
+                and j + 1 < n
+                and episodes[j].season == episodes[j + 1].season
+                and episodes[j + 1].number == episodes[j].number + 1
+            ):
                 a, b = _known(episodes[j].runtime_s), _known(episodes[j + 1].runtime_s)
                 if a is not None and b is not None:
                     delta = abs(elig[i].seconds - (a + b))

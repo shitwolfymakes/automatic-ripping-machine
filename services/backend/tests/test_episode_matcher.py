@@ -169,3 +169,21 @@ def test_play_all_by_other_titles_only() -> None:
     assert "0" in r.play_all or all(m.ref != "0" for m in r.matches)
     assert mapping(r) == {"2": (1, None), "3": (2, None)}
     assert "1" in r.skipped
+
+
+# Final review fix wave
+
+
+def test_two_episode_match_never_spans_a_numbering_hole() -> None:
+    # Important 1: siblings claimed E5-E6; the 5280 s title must not become "E04-E07"
+    remaining = [Episode(season=1, number=n, name=f"E{n}", runtime_s=2640) for n in range(1, 11) if n not in (5, 6)]
+    r = align(titles(2600, 2610, 2620, 5280), remaining)
+    assert all(not (m.episode == 4 and m.episode_end == 7) for m in r.matches)
+    assert all(m.episode_end is None or m.episode_end == m.episode + 1 for m in r.matches)
+
+
+def test_two_episode_match_skips_provider_gap() -> None:
+    # Important 1: a provider list missing E3 must not yield "E02-E04"
+    listed = [Episode(season=1, number=n, name=f"E{n}", runtime_s=2640) for n in (1, 2, 4, 5)]
+    r = align(titles(2640, 5280), listed)
+    assert (2, 4) not in mapping(r).values()
