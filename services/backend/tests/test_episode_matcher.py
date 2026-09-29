@@ -1,5 +1,7 @@
 """Ordered-alignment episode matcher (spec 6.2) incl. neu defect regressions."""
 
+import pytest
+
 from arm_backend.identity.episodes.matcher import align
 from arm_backend.identity.episodes.model import Episode, TitleIn
 
@@ -189,14 +191,21 @@ def test_two_episode_match_skips_provider_gap() -> None:
     assert (2, 4) not in mapping(r).values()
 
 
-def test_run_crosses_a_claimed_hole_on_runtime_evidence() -> None:
+@pytest.mark.xfail(
+    strict=True,
+    reason="known limitation: matcher crosses sibling-claimed holes; PR 3b splits alignment at sibling-claimed episodes",
+)
+def test_run_does_not_cross_a_sibling_claimed_hole() -> None:
     # A sibling claimed E12-E21, so the remaining list is E7-E11, E22 (a
-    # ten-episode hole). A title whose runtime fits E22 crosses the hole
-    # instead of being skipped: a disc can genuinely span a numbering gap.
+    # ten-episode hole). Unlike a provider gap, this hole is claimed by
+    # another disc, not missing data: the title whose runtime fits E22 must
+    # not be mapped across it. Currently xfails — the matcher still crosses
+    # sibling-claimed holes on runtime evidence alone; PR 3b fixes this by
+    # aligning only within runs between sibling-claimed episodes.
     remaining = [Episode(season=1, number=n, name=f"E{n}", runtime_s=2600) for n in (7, 8, 9, 10, 11, 22)]
     r = align(titles(*[2600] * 6), remaining, anchor=0)
-    assert [m.episode for m in r.matches] == [7, 8, 9, 10, 11, 22]
-    assert r.skipped == ()
+    assert [m.episode for m in r.matches] == [7, 8, 9, 10, 11]
+    assert r.skipped == ("5",)
 
 
 # Numbering-hole penalty removal (a provider gap is missing data, not a hole to
