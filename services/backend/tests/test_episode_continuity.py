@@ -68,6 +68,52 @@ def test_anchor_past_end_is_clamped() -> None:
     assert remaining == [] and anchor == 0
 
 
+def test_lower_sibling_sentinel_is_len_remaining_not_minus_one() -> None:
+    # fix round 1: the "nothing remaining reaches the target" sentinel is
+    # len(remaining), not len(remaining) - 1 - regression with a NON-empty
+    # remaining list (season(10) minus {8, 9, 10} leaves 7 episodes).
+    remaining, anchor = start_anchor(
+        season(10), disc_number=2, disc_total=None, n_titles=5, siblings=[SiblingDisc(1, frozenset({8, 9, 10}))]
+    )
+    assert len(remaining) == 7
+    assert anchor == 7 == len(remaining)
+
+
+def test_lower_sibling_sentinel_anchor_keeps_title_unmatched() -> None:
+    # Same setup: a title too long for any remaining episode should be
+    # skipped at the anchor-past-end position, not dragged backward onto E7.
+    remaining, anchor = start_anchor(
+        season(10), disc_number=2, disc_total=None, n_titles=5, siblings=[SiblingDisc(1, frozenset({8, 9, 10}))]
+    )
+    result = align([TitleIn("0", 3280)], remaining, anchor=anchor)
+    assert result.matches == ()
+    assert result.skipped == ("0",)
+
+
+def test_proportional_sentinel_is_len_remaining_not_minus_one() -> None:
+    # Same fix, proportional (non-lower-sibling) branch: a sibling with
+    # unknown disc_number claims E5 only (so it doesn't count toward
+    # "lower"), leaving 4 remaining episodes; disc 3 of an unknown-total set
+    # targets a position past all of them.
+    remaining, anchor = start_anchor(
+        season(5), disc_number=3, disc_total=None, n_titles=5, siblings=[SiblingDisc(None, frozenset({5}))]
+    )
+    assert len(remaining) == 4
+    assert anchor == 4 == len(remaining)
+
+
+def test_empty_season_with_known_disc_number_is_free_start() -> None:
+    assert start_anchor([], disc_number=2, disc_total=4, n_titles=5, siblings=[]) == ([], None)
+
+
+def test_sibling_with_empty_episodes_is_ignored() -> None:
+    with_empty_sibling = start_anchor(
+        season(10), disc_number=2, disc_total=4, n_titles=5, siblings=[SiblingDisc(1, frozenset())]
+    )
+    without_sibling = start_anchor(season(10), disc_number=2, disc_total=4, n_titles=5, siblings=[])
+    assert with_empty_sibling == without_sibling
+
+
 def test_rank_seasons_prefers_coverage_then_cost() -> None:
     good = align(five_titles(), season(10, number=2))
     worse = align(five_titles(), season(10, runtime=3200, number=1))

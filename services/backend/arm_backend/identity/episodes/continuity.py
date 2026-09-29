@@ -1,5 +1,11 @@
 """Cross-disc continuity (spec 6.3): which episodes are still unclaimed and
-where this disc should start, plus ranking of per-season match results."""
+where this disc should start, plus ranking of per-season match results.
+
+`start_anchor`'s sentinel for "no remaining episode reaches the target
+position" is `len(remaining)` (one past the last remaining episode), not
+`len(remaining) - 1` — `align()`'s DP indexes episodes 0..n inclusive, so an
+anchor of `len(remaining)` is a valid, meaningful position (it pulls the free
+trailing rule toward "nothing here matches, skip the title")."""
 
 from __future__ import annotations
 
@@ -40,7 +46,7 @@ def start_anchor(
     ]
     if lower:
         idx = _index_at_or_above(remaining, max(lower), strictly_above=True)
-        return remaining, min(idx, max(len(remaining) - 1, 0))
+        return remaining, min(idx, len(remaining))
 
     if disc_number is not None and season:
         n = len(season)
@@ -52,7 +58,7 @@ def start_anchor(
             pos = (disc_number - 1) * n_titles
         pos = min(max(pos, 0), n - 1)
         idx = _index_at_or_above(remaining, season[pos].number, strictly_above=False)
-        return remaining, min(idx, max(len(remaining) - 1, 0))
+        return remaining, min(idx, len(remaining))
 
     return remaining, None
 
