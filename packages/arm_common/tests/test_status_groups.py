@@ -59,11 +59,21 @@ def test_resolvable_groups() -> None:
 
 
 def test_apply_groups() -> None:
-    assert APPLY_OK_JOB_STATUSES == {JobStatus.IDENTIFIED, JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL}
+    assert APPLY_OK_JOB_STATUSES == {
+        JobStatus.IDENTIFIED,
+        JobStatus.AWAITING_REVIEW,
+        JobStatus.RIPPED,
+        JobStatus.RIPPED_PARTIAL,
+    }
     assert APPLY_PARK_JOB_STATUSES == {JobStatus.AWAITING_USER_ID, JobStatus.RIPPED_AWAITING_IDENTIFY}
     assert APPLY_OK_JOB_STATUSES & APPLY_PARK_JOB_STATUSES == frozenset()
 
 
 def test_post_rip_and_redrain_groups() -> None:
     assert POST_RIP_JOB_STATUSES == {JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL, JobStatus.RIPPED_AWAITING_IDENTIFY}
-    assert REDRAIN_JOB_STATUSES == {JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL, JobStatus.IDENTIFIED}
+    assert REDRAIN_JOB_STATUSES == {
+        JobStatus.RIPPED,
+        JobStatus.RIPPED_PARTIAL,
+        JobStatus.IDENTIFIED,
+        JobStatus.AWAITING_REVIEW,
+    }

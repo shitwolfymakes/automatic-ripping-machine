@@ -8,7 +8,7 @@ EXPECTED = {
     JobStatus.CREATED: (False, False, True, False),
     JobStatus.AWAITING_USER_ID: (True, True, True, False),
     JobStatus.IDENTIFIED: (True, True, True, False),
-    JobStatus.AWAITING_REVIEW: (True, False, True, False),
+    JobStatus.AWAITING_REVIEW: (True, True, True, False),
     JobStatus.RIPPING: (False, False, True, False),
     JobStatus.RIPPED: (True, True, False, True),
     JobStatus.RIPPED_PARTIAL: (True, True, False, True),

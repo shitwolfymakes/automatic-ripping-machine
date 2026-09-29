@@ -6,7 +6,7 @@ const ACTIONS: Record<JobStatus, JobActions> = {
 	created: { can_resolve: false, can_apply: false, can_abandon: true, can_delete: false },
 	awaiting_user_id: { can_resolve: true, can_apply: true, can_abandon: true, can_delete: false },
 	identified: { can_resolve: true, can_apply: true, can_abandon: true, can_delete: false },
-	awaiting_review: { can_resolve: true, can_apply: false, can_abandon: true, can_delete: false },
+	awaiting_review: { can_resolve: true, can_apply: true, can_abandon: true, can_delete: false },
 	ripping: { can_resolve: false, can_apply: false, can_abandon: true, can_delete: false },
 	ripped: { can_resolve: true, can_apply: true, can_abandon: false, can_delete: true },
 	ripped_partial: { can_resolve: true, can_apply: true, can_abandon: false, can_delete: true },

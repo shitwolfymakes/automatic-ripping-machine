@@ -97,11 +97,9 @@ describe('DiscReviewWidget', () => {
 			});
 		});
 
-		it('hides Apply session on a held disc while the backend refuses it', async () => {
-			// can_apply is false for awaiting_review until the backend allows it.
+		it('offers Apply session on a held disc', async () => {
 			renderWidget({ status: 'awaiting_review' });
-			await waitFor(() => expect(screen.getByText(/Ready: Review & Start/)).toBeInTheDocument());
-			expect(screen.queryByRole('button', { name: /Apply session/ })).not.toBeInTheDocument();
+			await waitFor(() => expect(screen.getByRole('button', { name: /Apply session/ })).toBeInTheDocument());
 		});
 
 		it('shows Start rip on an awaiting_user_id job (review-card start)', async () => {
