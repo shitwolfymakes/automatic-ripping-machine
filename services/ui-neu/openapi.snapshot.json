@@ -8859,6 +8859,53 @@
         ],
         "title": "BashScriptSummary"
       },
+      "BdDiscMeta": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "set_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Set Number"
+          },
+          "num_sets": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Num Sets"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "BdDiscMeta",
+        "description": "Blu-ray disc title from BDMV/META/DL/bdmt_<lang>.xml (studio-authored).\nOptional on the wire: older rippers never send it."
+      },
       "Body_upload_theme_api_themes_post": {
         "properties": {
           "theme_json": {
@@ -14114,7 +14161,7 @@
           "title"
         ],
         "title": "ResolveRequest",
-        "description": "POST /api/jobs/{id}/resolve body.\n\ntitle/year/disc_number/disc_total are the full identity statement: every\nresolve restates them, so there is no \"omitted\" case for these four --\nwhatever value is sent (including null) is exactly what lands.\n\nmedia_type/season are classifications, not part of that statement, and\nfollow different semantics: **omitted = keep** the stored value (a\ntitle-only fix must not wipe them), **explicit null = clear** it (the\noperator saying \"this isn't a season\" / \"clear the kind\"). The same\nomitted=keep / explicit-null=clears rule applies per-field inside\n`external_ids`: sending `external_ids` at all starts an identity edit,\nand each of its member fields (imdb/tmdb/tvdb/musicbrainz_release) that\nis explicitly present -- even as `null` -- clears that one id, while a\nmember field left out of the payload keeps its previously stored value.\nDistinguishing \"sent null\" from \"not sent\" requires Pydantic's\n`model_fields_set`, not an `is not None` check, since both collapse to\nthe same `None` once parsed."
+        "description": "POST /api/jobs/{id}/resolve body.\n\ntitle/year are the full identity statement: every resolve restates them,\nso there is no \"omitted\" case for these two -- whatever value is sent\n(including null) is exactly what lands.\n\nmedia_type/season/disc_number/disc_total are classifications, not part of\nthat statement, and follow different semantics: **omitted = keep** the\nstored value (a title-only fix -- e.g. picking a title in the identify\ndialog after a disc-hint source already filled disc_number/disc_total --\nmust not wipe them), **explicit null = clear** it (the operator saying\n\"this isn't a season\" / \"clear the kind\" / \"clear the disc position\").\nThe same omitted=keep / explicit-null=clears rule applies per-field\ninside `external_ids`: sending `external_ids` at all starts an identity\nedit, and each of its member fields (imdb/tmdb/tvdb/musicbrainz_release)\nthat is explicitly present -- even as `null` -- clears that one id,\nwhile a member field left out of the payload keeps its previously\nstored value. Distinguishing \"sent null\" from \"not sent\" requires\nPydantic's `model_fields_set`, not an `is not None` check, since both\ncollapse to the same `None` once parsed."
       },
       "ResolveResponse": {
         "properties": {
@@ -14526,6 +14573,16 @@
             },
             "type": "array",
             "title": "Fingerprints"
+          },
+          "bd_meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BdDiscMeta"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "raw": {
             "additionalProperties": true,
