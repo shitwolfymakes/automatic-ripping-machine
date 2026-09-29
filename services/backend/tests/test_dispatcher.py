@@ -368,6 +368,94 @@ async def test_identify_tv_first_falls_back_to_movie_when_tv_misses(monkeypatch)
     assert call_order[1] == "movie"
 
 
+@respx.mock
+async def test_identify_hint_is_tv_uses_omdb_series_when_no_tmdb_key():
+    """OMDb-only installs (no TMDb key) must search OMDb `type=series` for a
+    season-shaped hint, not `type=movie` — otherwise `LOST_S2D3`'s hint
+    "lost" silently identifies as the movie "Lost" (finding 1)."""
+    omdb_route = respx.get("https://www.omdbapi.com/").mock(
+        return_value=httpx.Response(
+            200,
+            json={"Response": "True", "Title": "Lost", "Year": "2004"},
+        )
+    )
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3")
+        result = await dispatcher.identify(scan, _config(tmdb_api_key=None), title_hint="lost", title_hint_is_tv=True)
+    assert result is not None and result.title == "Lost" and result.kind == "tv"
+    assert omdb_route.calls.last.request.url.params["type"] == "series"
+
+
+@respx.mock
+async def test_identify_hint_is_tv_falls_through_tmdb_misses_to_omdb_series():
+    """tv_first=True with a TMDb key present: when BOTH the TMDb TV and
+    movie searches miss, the OMDb fallback still uses `type=series` for the
+    hint (not the pre-fix `type=movie`)."""
+    respx.get("https://api.themoviedb.org/3/search/tv").mock(return_value=httpx.Response(200, json={"results": []}))
+    respx.get("https://api.themoviedb.org/3/search/movie").mock(return_value=httpx.Response(200, json={"results": []}))
+    omdb_route = respx.get("https://www.omdbapi.com/").mock(
+        return_value=httpx.Response(
+            200,
+            json={"Response": "True", "Title": "Lost", "Year": "2004"},
+        )
+    )
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3")
+        result = await dispatcher.identify(scan, _config(), title_hint="lost", title_hint_is_tv=True)
+    assert result is not None and result.title == "Lost"
+    assert omdb_route.calls.last.request.url.params["type"] == "series"
+
+
+@respx.mock
+async def test_identify_hint_not_tv_uses_omdb_movie_when_no_tmdb_key():
+    """title_hint_is_tv=False keeps the OMDb `type=movie` param (the
+    pre-existing behaviour)."""
+    omdb_route = respx.get("https://www.omdbapi.com/").mock(
+        return_value=httpx.Response(
+            200,
+            json={"Response": "True", "Title": "Arrival", "Year": "2016"},
+        )
+    )
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="ARRIVAL")
+        result = await dispatcher.identify(
+            scan, _config(tmdb_api_key=None), title_hint="arrival", title_hint_is_tv=False
+        )
+    assert result is not None and result.title == "Arrival"
+    assert omdb_route.calls.last.request.url.params["type"] == "movie"
+
+
+async def test_identify_hint_candidate_reuses_label_year(monkeypatch):
+    """The hint candidate has no year of its own; it must be searched with
+    the same year the label candidate parsed (e.g. `ALIEN_1979` narrows
+    the hint "alien" to 1979 too), not an unfiltered search."""
+    from arm_backend.metadata import dispatcher as dispatcher_mod
+
+    seen_years: dict[str, int | None] = {}
+
+    class FakeTMDB:
+        def __init__(self, api_key, http):
+            pass
+
+        async def search_movie(self, title, year):
+            seen_years[title] = year
+            return None
+
+        async def search_tv(self, title):
+            return None
+
+    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="ALIEN_1979")
+        result = await dispatcher.identify(scan, _config(omdb_api_key=None), title_hint="alien")
+    assert result is None
+    assert seen_years["alien"] == 1979
+
+
 async def test_identify_from_imdb_uses_tmdb_find(monkeypatch):
     from arm_backend.metadata import dispatcher as dispatcher_mod
     from arm_backend.metadata.base import MetadataResult

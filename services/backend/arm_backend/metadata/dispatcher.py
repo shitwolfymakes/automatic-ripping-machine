@@ -2,6 +2,7 @@ import asyncio
 import logging
 import re
 import unicodedata
+from typing import Literal
 
 import httpx
 
@@ -132,13 +133,20 @@ class MetadataDispatcher:
         # before TMDb movie for THAT candidate only, so e.g. `LOST_S2D3`'s
         # hint title "lost" doesn't mismatch to TMDb's top movie hit. The
         # label-derived candidate keeps the existing movie-first order.
-        candidates: list[tuple[str, int | None, bool]] = []
-        if title_hint and title_hint.strip():
-            candidates.append((title_hint.strip(), None, title_hint_is_tv))
+        # Compute the label candidate's (title, year) first so the hint
+        # candidate — which has no year of its own — can be searched with the
+        # same year filter (e.g. `ALIEN_1979` narrows the hint "alien" to
+        # 1979 too, not an unfiltered search).
+        label_title: str | None = None
+        label_year: int | None = None
         if scan.volume_label:
             label_title, label_year = _normalize_volume_label(scan.volume_label)
-            if label_title:
-                candidates.append((label_title, label_year, False))
+
+        candidates: list[tuple[str, int | None, bool]] = []
+        if title_hint and title_hint.strip():
+            candidates.append((title_hint.strip(), label_year, title_hint_is_tv))
+        if label_title:
+            candidates.append((label_title, label_year, False))
         seen: set[str] = set()
         for title, year, tv_first in candidates:
             key = title.casefold()
@@ -173,7 +181,11 @@ class MetadataDispatcher:
         omdb_key = self._omdb_api_key_override or cfg.omdb_api_key
         if omdb_key:
             omdb = OMDBClient(omdb_key, self._http)
-            hit = await self._call("omdb_movie", omdb.lookup_by_title(title, year, kind="movie"))
+            # A season-shaped hint is TV, not a movie: an OMDb-only install
+            # (no TMDb key) must search OMDb `type=series` for it, or a hint
+            # like "lost" silently identifies as the movie "Lost" (finding 1).
+            kind: Literal["movie", "tv"] = "tv" if tv_first else "movie"
+            hit = await self._call(f"omdb_{kind}", omdb.lookup_by_title(title, year, kind=kind))
             if hit is not None:
                 return hit
 
