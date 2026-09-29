@@ -138,13 +138,19 @@ _DASH_RUN = re.compile(r"(?:\s*-\s*){2,}")
 _DASH_BEFORE_EXT = re.compile(r"\s*-\s*(?=\.[A-Za-z0-9]+$)")
 
 
-def _episode_tokens_required(job: Job, track: Track) -> bool:
+def _episode_tokens_required(job: Job, track: Track, session: Session) -> bool:
     """Episode tokens must resolve for episode titles (and, as before, for
     titles of unknown role on a TV disc); a bonus film or extra on a TV disc
-    renders them empty instead of failing the whole apply (spec 5)."""
+    renders them empty instead of failing the whole apply (spec 5).
+
+    An unidentified job (`job.media_type is None`) can still be applied to a
+    TV session (`auto_session.py` allows and documents this); for a
+    role-None track, fall back to the session's media type so that case
+    keeps today's strict behaviour instead of silently going lenient.
+    """
     if track.role is not None:
         return track.role == TrackRole.EPISODE
-    return job.media_type == MediaType.TV
+    return (job.media_type or session.media_type) == MediaType.TV
 
 
 def _tidy_path(path: str) -> str:
@@ -187,7 +193,7 @@ def compute_outputs(
         allowed_empty = False
         for token in referenced:
             if not ctx.get(token):
-                if token in _EPISODE_TOKENS and not _episode_tokens_required(job, track):
+                if token in _EPISODE_TOKENS and not _episode_tokens_required(job, track, session):
                     allowed_empty = True
                     continue
                 raise TemplateValidationError(
@@ -196,6 +202,10 @@ def compute_outputs(
         path = expand_template(template, ctx)
         if allowed_empty:
             path = _tidy_path(path)
+            if any(not seg for seg in path.split("/")):
+                raise TemplateValidationError(
+                    f"track index={track.index}: an allowed-empty episode token left an empty path segment"
+                )
         if track.custom_filename:
             p = PurePosixPath(path)
             ext = p.suffix

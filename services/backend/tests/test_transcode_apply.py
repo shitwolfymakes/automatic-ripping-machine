@@ -495,6 +495,33 @@ def test_unknown_role_on_tv_disc_keeps_strict_check() -> None:
         compute_outputs(job, [track], sess, tp)
 
 
+def test_unidentified_job_on_tv_session_role_none_keeps_strict_check() -> None:
+    """An unidentified job (media_type=None) can still be applied to a TV
+    session (auto_session.py allows this); a role-None track must fall back
+    to the session's media type, not silently go lenient (fix round 1)."""
+    template = "{show} - S{season}E{episode}.{ext}"
+    job = _tv_job()
+    job.media_type = None
+    track = _tv_track(1, role=None)
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    with pytest.raises(TemplateValidationError):
+        compute_outputs(job, [track], sess, tp)
+
+
+def test_tidy_raises_when_a_path_segment_becomes_empty() -> None:
+    """A leading segment made entirely of skipped episode tokens must not
+    collapse to "" (which would escape MEDIA_ROOT via a leading "/" once
+    joined downstream) — raise instead of returning it (fix round 1)."""
+    template = "{episode_title}/{show} S{season}E{episode}.{ext}"
+    job = _tv_job()
+    track = _tv_track(1, role=TrackRole.EXTRA)
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    with pytest.raises(TemplateValidationError):
+        compute_outputs(job, [track], sess, tp)
+
+
 def test_paths_without_skipped_tokens_are_untouched() -> None:
     # A movie template with double spaces / dashes renders byte-for-byte as
     # before: no episode token was allowed to render empty, so nothing is tidied.
