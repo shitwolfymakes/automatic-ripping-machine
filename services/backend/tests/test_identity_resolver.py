@@ -146,6 +146,24 @@ def test_apply_role_and_excluded_are_not_guarded() -> None:
     assert (track.role, track.excluded) == (TrackRole.MAIN, False)
 
 
+def test_manual_selected_false_beats_thediscdb_selected_on_unguarded_field() -> None:
+    """Migration 0039 seeds a manual `selected=False` for a legacy operator
+    exclusion; it must outrank the disc map's `selected=True` even though
+    `excluded` is unguarded."""
+    track = _track(role=TrackRole.MAIN, excluded=True)
+    res = resolve(
+        _claims(
+            thediscdb=SourceClaims(tracks={"1": TrackClaim(role=TrackRole.MAIN, selected=True)}),
+            manual=SourceClaims(tracks={"1": TrackClaim(selected=False)}),
+        ),
+        tiers=TIERS,
+    )
+    assert res.tracks["1"]["selected"] == Winner(False, "manual")
+    apply_resolution(_job(), [track], res)
+    assert track.excluded is True
+    assert track.identity_provenance == {"role": "thediscdb", "excluded": "manual"}
+
+
 def test_apply_manual_overrides_unowned_value() -> None:
     track = _track(episode_name="old")
     res = resolve(_claims(manual=SourceClaims(tracks={"1": TrackClaim(episode_name="new")})), tiers=TIERS)

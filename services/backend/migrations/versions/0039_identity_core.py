@@ -56,7 +56,7 @@ def upgrade() -> None:
     # 3. metadata_json.thediscdb -> metadata_json.identity_claims.sources.thediscdb,
     #    converting each matched entry to the TrackClaim shape. jsonb_strip_nulls
     #    turns JSON nulls into ABSENT fields (= no opinion), matching the schema's
-    #    presence semantics.
+    #    presence semantics; an empty title / filename is no opinion either.
     role_case = _DISC_TYPE_TO_ROLE.format(expr="m.value ->> 'type'")
     op.execute(f"""
         UPDATE jobs SET metadata_json = (
@@ -76,10 +76,10 @@ def upgrade() -> None:
                         WHEN jsonb_typeof(metadata_json::jsonb -> 'thediscdb' -> 'matched') = 'object' THEN COALESCE((
                             SELECT jsonb_object_agg(m.key, jsonb_strip_nulls(jsonb_build_object(
                                 'role', {role_case},
-                                'episode_name', m.value -> 'title',
+                                'episode_name', to_jsonb(NULLIF(m.value ->> 'title', '')),
                                 'season', m.value -> 'season',
                                 'episode', m.value -> 'episode',
-                                'filename', m.value -> 'filename',
+                                'filename', to_jsonb(NULLIF(m.value ->> 'filename', '')),
                                 'selected', CASE WHEN m.value ->> 'type' IN ('MainMovie', 'Episode') THEN true END
                             )))
                             FROM jsonb_each(metadata_json::jsonb -> 'thediscdb' -> 'matched') AS m
@@ -91,6 +91,49 @@ def upgrade() -> None:
             ))
         )::json
         WHERE jsonb_typeof(metadata_json::jsonb -> 'thediscdb') = 'object';
+    """)
+
+    # 4. Keep pre-upgrade operator choices. The resolver lets thediscdb set
+    #    `excluded` (via `selected`) and `role` even over a value without
+    #    provenance, so a legacy track the operator excluded, or re-roled,
+    #    would be flipped back on the first PATCH / resolve. Where a moved
+    #    thediscdb claim disagrees with the stored column, seed a `manual`
+    #    claim holding the column's value (merged into any manual claim
+    #    already there). Agreeing values get no manual claim. Compared as
+    #    jsonb so a malformed claim value never raises a cast error.
+    op.execute("""
+        UPDATE jobs SET metadata_json = jsonb_set(
+            metadata_json::jsonb,
+            '{identity_claims,sources,manual}',
+            COALESCE(metadata_json::jsonb #> '{identity_claims,sources,manual}', '{}'::jsonb)
+            || jsonb_build_object('tracks',
+                COALESCE(metadata_json::jsonb #> '{identity_claims,sources,manual,tracks}', '{}'::jsonb) || d.claims)
+        )::json
+        FROM (
+            SELECT t.job_id, jsonb_object_agg(
+                t.source_ref,
+                COALESCE(j.metadata_json::jsonb #> ARRAY['identity_claims', 'sources', 'manual', 'tracks', t.source_ref],
+                    '{}'::jsonb) || f.fields
+            ) AS claims
+            FROM tracks t
+            JOIN jobs j ON j.id = t.job_id
+            CROSS JOIN LATERAL (
+                SELECT j.metadata_json::jsonb #> ARRAY['identity_claims', 'sources', 'thediscdb', 'tracks', t.source_ref]
+                    AS claim
+            ) c
+            CROSS JOIN LATERAL (
+                SELECT jsonb_strip_nulls(jsonb_build_object(
+                    'selected', CASE WHEN c.claim -> 'selected' = to_jsonb(t.excluded) THEN NOT t.excluded END,
+                    'role', CASE
+                        WHEN t.role IS NOT NULL AND c.claim -> 'role' IS NOT NULL
+                            AND c.claim -> 'role' <> to_jsonb(t.role) THEN t.role
+                    END
+                )) AS fields
+            ) f
+            WHERE jsonb_typeof(c.claim) = 'object' AND f.fields <> '{}'::jsonb
+            GROUP BY t.job_id
+        ) AS d
+        WHERE jobs.id = d.job_id;
     """)
 
 
@@ -108,8 +151,10 @@ def downgrade() -> None:
         WHERE identity_provenance IS NOT NULL
           AND (identity_provenance::jsonb ->> 'role') = 'thediscdb';
     """)
-    # identity_claims is dropped, not reverse-converted: the pre-0039 code only
-    # read the map in apply_map, which already stamped every existing Track row.
+    # identity_claims is dropped, not reverse-converted to the old `thediscdb`
+    # section. Accepted trade-off: after a downgrade, a job identified but not
+    # yet ripped loses its TheDiscDB labels at rip-start (the pre-0039 code
+    # read that section there). Rows already ripped keep their column values.
     op.execute("""
         UPDATE jobs SET metadata_json = (metadata_json::jsonb - 'identity_claims')::json
         WHERE metadata_json::jsonb ? 'identity_claims';

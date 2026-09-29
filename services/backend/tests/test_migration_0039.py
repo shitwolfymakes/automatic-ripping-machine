@@ -71,11 +71,42 @@ def test_0039_role_backfill_by_value() -> None:
 
 def test_0039_moves_thediscdb_map_into_identity_claims() -> None:
     sql = _render_sql(_PARENT, _REV)
-    (move,) = [u for u in _updates(sql, "jobs") if "identity_claims" in u]
-    assert "- 'thediscdb'" in move
+    (move,) = [u for u in _updates(sql, "jobs") if "- 'thediscdb'" in u]
     assert "jsonb_each" in move
     assert "jsonb_strip_nulls" in move
     assert "WHERE jsonb_typeof(metadata_json::jsonb -> 'thediscdb') = 'object'" in move
+
+
+def test_0039_move_drops_empty_title_and_filename() -> None:
+    """An empty TheDiscDB title / filename is no opinion, not a proposal of ''."""
+    sql = _render_sql(_PARENT, _REV)
+    (move,) = [u for u in _updates(sql, "jobs") if "- 'thediscdb'" in u]
+    assert "'episode_name', to_jsonb(NULLIF(m.value ->> 'title', ''))" in move
+    assert "'filename', to_jsonb(NULLIF(m.value ->> 'filename', ''))" in move
+
+
+def test_0039_seeds_manual_claims_for_legacy_operator_choices() -> None:
+    """Operator exclusions / roles made before the upgrade disagree with the
+    moved disc map; `excluded` and `role` are unguarded in the resolver, so
+    they are kept by seeding `manual` claims from the stored columns."""
+    sql = _render_sql(_PARENT, _REV)
+    jobs_updates = _updates(sql, "jobs")
+    (seed,) = [u for u in jobs_updates if "'{identity_claims,sources,manual}'" in u]
+    (move,) = [u for u in jobs_updates if "- 'thediscdb'" in u]
+    # Reads the moved thediscdb claims, so it must run after the move.
+    assert sql.index(move) < sql.index(seed)
+    assert "FROM tracks t" in seed
+    assert "ARRAY['identity_claims', 'sources', 'thediscdb', 'tracks', t.source_ref]" in seed
+    # selected: only where the claim equals the stored `excluded` (= disagrees).
+    assert "WHEN c.claim -> 'selected' = to_jsonb(t.excluded) THEN NOT t.excluded" in seed
+    # role: only a non-null stored role that differs from the claim's.
+    assert "t.role IS NOT NULL" in seed
+    assert "c.claim -> 'role' <> to_jsonb(t.role)" in seed
+    # Agreeing tracks contribute nothing; existing manual claims are merged.
+    assert "f.fields <> '{}'::jsonb" in seed
+    assert "ARRAY['identity_claims', 'sources', 'manual', 'tracks', t.source_ref]" in seed
+    # Nothing else in the upgrade touches jobs after the seed.
+    assert sql.index(seed) == max(sql.index(u) for u in jobs_updates)
 
 
 def test_0039_downgrade_restores_columns() -> None:

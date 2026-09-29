@@ -40,7 +40,7 @@ from arm_common import (  # noqa: E402
     TrackStatus,
     User,
 )
-from arm_common.enums import TrackKind  # noqa: E402
+from arm_common.enums import TrackKind, TrackRole  # noqa: E402
 from arm_common.models import Track  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
@@ -1201,6 +1201,44 @@ def test_patch_revert_with_no_other_proposer_resets_to_default(signing_key: byte
         )
     assert r.status_code == 200, r.text
     assert db.rows["tracks"][0].episode_number is None
+
+
+def test_patch_sibling_edit_keeps_migrated_legacy_exclusion(signing_key: bytes) -> None:
+    """Post-0039 shape of a legacy job: the disc map selects track 1, but the
+    operator excluded it before the upgrade, so 0039 seeded a manual
+    `selected=false`. Editing a sibling runs the resolver over every track;
+    track 1 must stay excluded."""
+    db = FakeSession()
+    _seed_job_with_track(db)
+    job = db.rows["jobs"][0]
+    job.metadata_json = {
+        "identity_claims": {
+            "sources": {
+                "thediscdb": {"tracks": {"1": {"selected": True, "role": "main"}}},
+                "manual": {"tracks": {"1": {"selected": False}}},
+            }
+        }
+    }
+    legacy = db.rows["tracks"][0]
+    legacy.source_ref = "1"
+    legacy.excluded = True
+    legacy.role = TrackRole.MAIN
+    sibling_id = "trk_00000000000000000000000002"
+    db.rows["tracks"].append(
+        Track(id=sibling_id, job_id=_JOB_ID_A, kind=TrackKind.VIDEO_TITLE, index=2, source_ref="2")
+    )
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": sibling_id, "custom_filename": "Bonus"}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    legacy = db.rows["tracks"][0]
+    assert legacy.excluded is True
+    assert legacy.identity_provenance == {"role": "thediscdb", "excluded": "manual"}
+    assert db.rows["tracks"][1].custom_filename == "Bonus"
 
 
 def test_patch_plain_fields_still_set_directly(signing_key: bytes) -> None:
