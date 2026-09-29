@@ -333,4 +333,5 @@ async def scan_disc(device_path: str) -> ScanResult:
         volume_label=volume_label,
         titles=titles,
         fingerprints=fingerprints,
+        bd_meta=probe.bd_meta,
     )

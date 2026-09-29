@@ -17,7 +17,10 @@ import asyncio
 import logging
 from dataclasses import dataclass
 
+from arm_common.schemas import BdDiscMeta
+
 from arm_ripper.drive_poll import DriveState, read_drive_status
+from arm_ripper.scan.bd_meta import probe_bd_meta
 from arm_ripper.scan.thediscdb_hash import probe_thediscdb_hash
 from arm_ripper.source import is_iso_source
 
@@ -33,6 +36,7 @@ DEVICE_READY_TIMEOUT_SECONDS = 6.0
 class DiscProbe:
     crc64: str | None
     thediscdb: str | None = None
+    bd_meta: BdDiscMeta | None = None
 
 
 async def await_device_ready(device_path: str) -> bool:
@@ -93,7 +97,10 @@ async def probe_disc(device_path: str) -> DiscProbe:
     thediscdb = await asyncio.to_thread(probe_thediscdb_hash, device_path)
     if thediscdb:
         logger.info("thediscdb hash device=%s value=%s", device_path, thediscdb)
-    return DiscProbe(crc64=crc64, thediscdb=thediscdb)
+    bd_meta = await asyncio.to_thread(probe_bd_meta, device_path)
+    if bd_meta:
+        logger.info("bdmt device=%s name=%r set=%s/%s", device_path, bd_meta.name, bd_meta.set_number, bd_meta.num_sets)
+    return DiscProbe(crc64=crc64, thediscdb=thediscdb, bd_meta=bd_meta)
 
 
 def _compute_crc(device_path: str) -> str | None:

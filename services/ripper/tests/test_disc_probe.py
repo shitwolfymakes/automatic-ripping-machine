@@ -165,6 +165,7 @@ async def test_probe_disc_skips_compute_when_not_ready(monkeypatch: pytest.Monke
     monkeypatch.setattr(disc_probe, "_compute_crc", _boom)
     probe = await disc_probe.probe_disc("/dev/sr0")
     assert probe.crc64 is None
+    assert probe.bd_meta is None
 
 
 @pytest.mark.asyncio
@@ -253,3 +254,19 @@ async def test_probe_disc_skips_thediscdb_when_not_ready(monkeypatch: pytest.Mon
     monkeypatch.setattr(disc_probe, "probe_thediscdb_hash", _boom)
     probe = await disc_probe.probe_disc("/dev/sr0")
     assert probe.thediscdb is None
+
+
+@pytest.mark.asyncio
+async def test_probe_disc_returns_bd_meta(monkeypatch: pytest.MonkeyPatch) -> None:
+    from arm_common.schemas import BdDiscMeta
+
+    async def _ready(_dev: str) -> bool:
+        return True
+
+    meta = BdDiscMeta(name="The West Wing: The Complete Third Season", set_number=2, num_sets=6, language="eng")
+    monkeypatch.setattr(disc_probe, "await_device_ready", _ready)
+    monkeypatch.setattr(disc_probe, "_compute_crc", lambda _dev: None)
+    monkeypatch.setattr(disc_probe, "probe_thediscdb_hash", lambda _p: None)
+    monkeypatch.setattr(disc_probe, "probe_bd_meta", lambda _p: meta)
+    probe = await disc_probe.probe_disc("/dev/sr0")
+    assert probe.bd_meta == meta
