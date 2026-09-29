@@ -12,6 +12,7 @@ each candidate path under `MEDIA_ROOT` to surface filesystem-only hits
 (pre-v3 content the user copied in by hand).
 """
 
+import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -31,6 +32,7 @@ from arm_common import (
     Session,
     Track,
     TrackKind,
+    TrackRole,
     TranscodePreset,
 )
 from arm_common.encoders import EncoderSpec, get_encoder, gpu_could_serve, gpu_is_eligible
@@ -88,7 +90,13 @@ def _build_track_ctx(
     eff_title = track.title or job.title or ""
     eff_year = track.year if track.year is not None else job.year
     eff_season = track.season if track.season is not None else job.season
-    episode = f"{track.episode_number:02d}" if track.episode_number is not None else ""
+    if track.episode_number is None:
+        episode = ""
+    elif track.episode_number_end is not None and track.episode_number_end > track.episode_number:
+        # Multi-episode title: S01E01-E02 (the Plex / Jellyfin form).
+        episode = f"{track.episode_number:02d}-E{track.episode_number_end:02d}"
+    else:
+        episode = f"{track.episode_number:02d}"
 
     # Human-readable metadata fields land inside path segments; sanitise
     # so titles like "Crown / She Said" don't introduce a phantom path
@@ -124,6 +132,31 @@ def _build_track_ctx(
     return ctx
 
 
+_EPISODE_TOKENS = frozenset({"episode", "episode_title"})
+_WS_RUN = re.compile(r"\s+")
+_DASH_RUN = re.compile(r"(?:\s*-\s*){2,}")
+_DASH_BEFORE_EXT = re.compile(r"\s*-\s*(?=\.[A-Za-z0-9]+$)")
+
+
+def _episode_tokens_required(job: Job, track: Track) -> bool:
+    """Episode tokens must resolve for episode titles (and, as before, for
+    titles of unknown role on a TV disc); a bonus film or extra on a TV disc
+    renders them empty instead of failing the whole apply (spec 5)."""
+    if track.role is not None:
+        return track.role == TrackRole.EPISODE
+    return job.media_type == MediaType.TV
+
+
+def _tidy_path(path: str) -> str:
+    segments = []
+    for seg in path.split("/"):
+        seg = _WS_RUN.sub(" ", seg)
+        seg = _DASH_RUN.sub(" - ", seg)
+        seg = _DASH_BEFORE_EXT.sub("", seg)
+        segments.append(seg.strip(" -_"))
+    return "/".join(segments)
+
+
 def _track_kinds_for_media(media_type: MediaType) -> set[TrackKind]:
     if media_type in (MediaType.MOVIE, MediaType.TV):
         return {TrackKind.VIDEO_TITLE}
@@ -151,12 +184,18 @@ def compute_outputs(
     resolved: list[ResolvedTask] = []
     for track in candidates:
         ctx = _build_track_ctx(job, track, session, transcode_preset)
+        allowed_empty = False
         for token in referenced:
             if not ctx.get(token):
+                if token in _EPISODE_TOKENS and not _episode_tokens_required(job, track):
+                    allowed_empty = True
+                    continue
                 raise TemplateValidationError(
                     f"track index={track.index}: token {{{token}}} resolved empty against the job's metadata"
                 )
         path = expand_template(template, ctx)
+        if allowed_empty:
+            path = _tidy_path(path)
         if track.custom_filename:
             p = PurePosixPath(path)
             ext = p.suffix
