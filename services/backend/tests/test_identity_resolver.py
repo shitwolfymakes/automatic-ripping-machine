@@ -199,6 +199,16 @@ def test_unranked_sorts_after_sparse_ranks() -> None:
     assert resolve(_claims(**both), tiers=TIERS, ranks={"ep_b": 10}).tracks["1"]["episode"].source == "ep_b"
 
 
+def test_hint_does_not_overwrite_unowned_job_season() -> None:
+    """Review Focus 4 (resolver guard): a job-level season set before this PR
+    (no provenance) is not overwritten by a lower-tier disc-hint claim."""
+    job = _job()
+    job.season = 7
+    res = resolve(_claims(label=SourceClaims(job=JobClaim(season=2))), tiers={**TIERS, "label": 4})
+    apply_resolution(job, [], res)
+    assert job.season == 7 and job.identity_provenance is None
+
+
 def test_tier_beats_pin() -> None:
     res = resolve(
         IdentityClaims(

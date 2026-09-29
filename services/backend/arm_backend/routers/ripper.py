@@ -19,7 +19,7 @@ from arm_backend.metadata import MetadataDispatcher
 from arm_backend.metadata.base import MetadataResult, extract_poster_url, metadata_with_identity
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
 from arm_backend.seeders import CONFIG_SINGLETON_ID
-from arm_backend.identity.pipeline import resolve_job
+from arm_backend.identity.pipeline import hint_title, resolve_job, run_disc_hints
 from arm_backend.identity.proposals import put_source, record_preset
 from arm_backend.identity.sources.thediscdb import SOURCE_ID as THEDISCDB, build_claims, external_imdb_id
 from arm_backend.track_selection import select_tracks, select_tracks_for_review
@@ -520,6 +520,11 @@ async def identify(
         session.add(DiscFingerprint(job_id=job.id, algo=algo, value=fp.value))
     await session.flush()
 
+    if not already_identified:
+        # Offline disc hints (volume label, Blu-ray BDMT title): season / disc /
+        # total proposals plus a cleaner search title for the dispatcher.
+        run_disc_hints(job, scan, now=datetime.now(timezone.utc))
+
     thediscdb_match = None
     if not already_identified and cfg.thediscdb_enabled:
         store = getattr(request.app.state, "thediscdb", None)
@@ -563,7 +568,7 @@ async def identify(
                         exact = await dispatcher.identify_from_imdb(imdb, cfg)
                         if exact is not None:
                             return exact
-                return await dispatcher.identify(scan, cfg)
+                return await dispatcher.identify(scan, cfg, title_hint=hint_title(job))
 
             result = await asyncio.wait_for(_identify(), timeout=DISPATCH_TIMEOUT_SECONDS)
             timed_out = False
@@ -599,7 +604,6 @@ async def identify(
                 job.status = JobStatus.AWAITING_REVIEW
                 job.wait_start_time = datetime.now(timezone.utc)
                 await _persist_review_tracks(session, job, scan)
-                await resolve_job(session, job)
             else:
                 job.status = JobStatus.IDENTIFIED
         else:
@@ -615,6 +619,10 @@ async def identify(
                 job.status = JobStatus.IDENTIFIED
                 job.title = scan.volume_label
                 job.metadata_json = with_flags(job.metadata_json, unidentified=True, **diagnostic)
+
+        # Apply every stored proposal: hint job fields for all outcomes, plus
+        # disc-map / preset track fields when review tracks were persisted.
+        await resolve_job(session, job)
 
     job.metadata_json = {
         **(job.metadata_json or {}),

@@ -179,6 +179,101 @@ async def test_omdb_config_key_used_by_dispatcher():
     assert omdb_route.calls.last.request.url.params["apikey"] == "from-config"
 
 
+async def test_identify_tries_title_hint_before_volume_label(monkeypatch):
+    """The dispatcher searches the hint title first; a hit there must not
+    reach the label-derived title at all."""
+    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata.base import MetadataResult
+
+    searched_titles: list[str] = []
+
+    class FakeTMDB:
+        def __init__(self, api_key, http):  # matches TMDBClient signature
+            pass
+
+        async def search_movie(self, title, year):
+            searched_titles.append(title)
+            return None
+
+        async def search_tv(self, title):
+            searched_titles.append(title)
+            if title == "the west wing":
+                return MetadataResult(title="The West Wing", year=1999, kind="tv")
+            return None
+
+    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="WW_S3D2")
+        result = await dispatcher.identify(scan, _config(), title_hint="the west wing")
+    assert result is not None and result.title == "The West Wing"
+    assert searched_titles[0] == "the west wing"
+    # The label-derived title ("WW S3D2") must never have been searched.
+    assert "WW S3D2" not in searched_titles
+
+
+async def test_identify_falls_back_to_label_when_hint_misses(monkeypatch):
+    """A hint that misses on every provider falls back to the normalized
+    volume-label title as the next candidate."""
+    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata.base import MetadataResult
+
+    searched_titles: list[str] = []
+
+    class FakeTMDB:
+        def __init__(self, api_key, http):
+            pass
+
+        async def search_movie(self, title, year):
+            searched_titles.append(title)
+            return None
+
+        async def search_tv(self, title):
+            searched_titles.append(title)
+            if title == "WW S3D2":
+                return MetadataResult(title="The West Wing", year=1999, kind="tv")
+            return None
+
+    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="WW_S3D2")
+        result = await dispatcher.identify(scan, _config(), title_hint="wrong hint")
+    assert result is not None and result.title == "The West Wing"
+    assert searched_titles[0] == "wrong hint"
+    assert searched_titles[-1] == "WW S3D2"
+
+
+async def test_identify_dedupes_hint_equal_to_label(monkeypatch):
+    """A hint equal to the normalised label title (case-insensitive) is
+    searched only once per provider call, not once per candidate."""
+    from arm_backend.metadata import dispatcher as dispatcher_mod
+
+    call_counts: dict[str, int] = {}
+
+    class FakeTMDB:
+        def __init__(self, api_key, http):
+            pass
+
+        async def search_movie(self, title, year):
+            call_counts[title] = call_counts.get(title, 0) + 1
+            return None
+
+        async def search_tv(self, title):
+            call_counts[title] = call_counts.get(title, 0) + 1
+            return None
+
+    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="WW_S3D2")
+        result = await dispatcher.identify(scan, _config(omdb_api_key=None), title_hint="ww s3d2")
+    assert result is None
+    # movie + tv called once each, for the hint's own casing — the label
+    # candidate ("WW S3D2") was deduped away (same casefold key).
+    assert call_counts == {"ww s3d2": 2}
+
+
 async def test_identify_from_imdb_uses_tmdb_find(monkeypatch):
     from arm_backend.metadata import dispatcher as dispatcher_mod
     from arm_backend.metadata.base import MetadataResult

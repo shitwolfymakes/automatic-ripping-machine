@@ -79,14 +79,14 @@ class MetadataDispatcher:
     async def aclose(self) -> None:
         await self._http.aclose()
 
-    async def identify(self, scan: ScanResult, cfg: Config) -> MetadataResult | None:
+    async def identify(self, scan: ScanResult, cfg: Config, *, title_hint: str | None = None) -> MetadataResult | None:
         if scan.disc_type in (DiscType.DATA, DiscType.UNKNOWN):
             return None
 
         if scan.disc_type == DiscType.CD:
             return await self._identify_cd(scan)
 
-        return await self._identify_video(scan, cfg)
+        return await self._identify_video(scan, cfg, title_hint=title_hint)
 
     async def _identify_cd(self, scan: ScanResult) -> MetadataResult | None:
         if not scan.musicbrainz_disc_id:
@@ -94,7 +94,9 @@ class MetadataDispatcher:
         client = MusicBrainzClient(MUSICBRAINZ_USER_AGENT, self._http)
         return await self._call("musicbrainz", client.lookup_disc_id(scan.musicbrainz_disc_id))
 
-    async def _identify_video(self, scan: ScanResult, cfg: Config) -> MetadataResult | None:
+    async def _identify_video(
+        self, scan: ScanResult, cfg: Config, *, title_hint: str | None = None
+    ) -> MetadataResult | None:
         # 1337server first when we have a DVD CRC64. This is the
         # community-maintained crc64 → title DB; a hit beats fuzzy
         # title matching on TMDB/OMDB because the fingerprint is unique
@@ -109,12 +111,30 @@ class MetadataDispatcher:
             if hit is not None:
                 return hit
 
-        if not scan.volume_label:
-            return None
-        title, year = _normalize_volume_label(scan.volume_label)
-        if not title:
-            return None
+        # Disc hints (bd_title / label, see arm_backend.identity) supply a
+        # cleaner search title than the raw volume label — try it first, then
+        # fall back to the normalized volume-label title. Empty and duplicate
+        # (case-insensitive) candidates are skipped so a hint equal to the
+        # label title doesn't double the provider calls.
+        candidates: list[tuple[str, int | None]] = []
+        if title_hint and title_hint.strip():
+            candidates.append((title_hint.strip(), None))
+        if scan.volume_label:
+            label_title, label_year = _normalize_volume_label(scan.volume_label)
+            if label_title:
+                candidates.append((label_title, label_year))
+        seen: set[str] = set()
+        for title, year in candidates:
+            key = title.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            hit = await self._search_title(title, year, cfg)
+            if hit is not None:
+                return hit
+        return None
 
+    async def _search_title(self, title: str, year: int | None, cfg: Config) -> MetadataResult | None:
         if cfg.tmdb_api_key:
             tmdb = TMDBClient(cfg.tmdb_api_key, self._http)
             hit = await self._call("tmdb_movie", tmdb.search_movie(title, year))
