@@ -1338,6 +1338,58 @@ def test_resolve_disc_and_season_become_manual_claims(signing_key: bytes) -> Non
     assert job.identity_provenance == {"season": "manual", "disc_number": "manual", "disc_total": "manual"}
 
 
+def _job_with_label_disc_hint() -> Job:
+    """A job whose disc_number/disc_total were filled by the label disc-hint
+    source (tier 4), as identify would leave it before the operator opens the
+    identify dialog to pick a title."""
+    job = _job(
+        status=JobStatus.AWAITING_USER_ID,
+        meta={"identity_claims": {"sources": {"label": {"job": {"disc_number": 3, "disc_total": 6}}}}},
+    )
+    job.disc_number = 3
+    job.disc_total = 6
+    job.identity_provenance = {"disc_number": "label", "disc_total": "label"}
+    return job
+
+
+def test_resolve_without_disc_fields_keeps_hinted_disc(signing_key: bytes) -> None:
+    """Review Focus 5: picking a title in the identify dialog after hints
+    filled the disc number must not wipe it -- /resolve must not treat
+    OMITTED disc_number/disc_total as an explicit manual null."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job_with_label_disc_hint()]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Lost"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    job = db.rows["jobs"][0]
+    assert (job.disc_number, job.disc_total) == (3, 6)
+    assert job.identity_provenance == {"disc_number": "label", "disc_total": "label"}
+
+
+def test_resolve_explicit_null_disc_clears_hint(signing_key: bytes) -> None:
+    """An EXPLICIT null for disc_number is the operator saying "clear it" --
+    distinct from omitting the field (test_resolve_without_disc_fields_keeps_hinted_disc
+    above), and still wins over the hint as a manual claim."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job_with_label_disc_hint()]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Lost", "disc_number": None},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    job = db.rows["jobs"][0]
+    assert job.disc_number is None
+    assert job.identity_provenance == {"disc_number": "manual", "disc_total": "label"}
+
+
 def test_resolve_legacy_metadata_season_and_disc_now_rejected(signing_key: bytes) -> None:
     """G-14's transitional lift (season/disc inside a free-form `metadata`
     bag) is retired now that season/disc are first-class request fields
