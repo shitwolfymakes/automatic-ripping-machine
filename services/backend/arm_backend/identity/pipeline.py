@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_common import Job, Track
+from arm_common.schemas import ScanResult
+from arm_common.schemas.identity import SourceClaims
 
-from arm_backend.identity.proposals import claims_of
+from arm_backend.identity.proposals import claims_of, put_source
 from arm_backend.identity.resolver import apply_resolution, resolve
-from arm_backend.identity.sources.registry import DEFAULT_RANKS, SOURCE_TIERS
+from arm_backend.identity.sources.base import JobContext
+from arm_backend.identity.sources.registry import DEFAULT_RANKS, SOURCE_TIERS, HINT_SOURCES
 
 logger = logging.getLogger(__name__)
 
@@ -28,3 +32,22 @@ async def resolve_job(session: AsyncSession, job: Job) -> int:
     if changed:
         logger.info("identity: resolved job_id=%s changed=%d", job.id, changed)
     return changed
+
+
+def run_disc_hints(job: Job, scan: ScanResult, *, now: datetime) -> None:
+    """Record every disc-hint source's proposals (or why it was skipped)."""
+    ctx = JobContext(job=job, scan=scan, now=now)
+    for source in HINT_SOURCES:
+        reason = source.applies_to(ctx)
+        claims = source.run(ctx) if reason is None else SourceClaims(run_at=now, status="skipped", detail=reason)
+        put_source(job, source.id, claims)
+
+
+def hint_title(job: Job) -> str | None:
+    """The cleaned search title from the best-ranked disc-hint source, if any."""
+    sources = claims_of(job).sources
+    for source in HINT_SOURCES:
+        entry = sources.get(source.id)
+        if entry is not None and entry.status == "ok" and entry.job.title:
+            return entry.job.title
+    return None

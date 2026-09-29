@@ -1,7 +1,9 @@
 """Tier and default rank per identity source id (1 is the highest tier).
 PR 4 replaces DEFAULT_RANKS with the operator's ranked settings."""
 
-from arm_backend.identity.sources.base import TIER_BY_CAPABILITY, Capability
+from arm_backend.identity.sources.base import TIER_BY_CAPABILITY, Capability, Source  # noqa: E402
+from arm_backend.identity.sources.bd_title import BD_TITLE  # noqa: E402
+from arm_backend.identity.sources.label_hints import LABEL  # noqa: E402
 
 SOURCE_TIERS: dict[str, int] = {
     "manual": TIER_BY_CAPABILITY[Capability.MANUAL],
@@ -13,3 +15,6 @@ SOURCE_TIERS: dict[str, int] = {
 
 # Within a tier, lower rank wins. Spec 4.5 default for disc_hint_sources.
 DEFAULT_RANKS: dict[str, int] = {"bd_title": 0, "label": 1}
+
+# Disc-hint sources in default rank order (PR 4 makes this the operator's setting).
+HINT_SOURCES: tuple[Source, ...] = (BD_TITLE, LABEL)
