@@ -80,7 +80,7 @@ async def _stub_probe(monkeypatch: pytest.MonkeyPatch) -> None:
     Tests focus on the MakeMKV branch; probe is exercised elsewhere."""
     from arm_ripper.scan.disc_probe import DiscProbe
 
-    async def _fake(_device: str) -> DiscProbe:
+    async def _fake(_device: str, **_kw: Any) -> DiscProbe:
         return DiscProbe(crc64=None)
 
     monkeypatch.setattr(makemkv_mod, "probe_disc", _fake)

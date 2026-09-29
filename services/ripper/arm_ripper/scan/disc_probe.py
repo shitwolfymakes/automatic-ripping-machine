@@ -75,15 +75,20 @@ async def await_device_ready(device_path: str) -> bool:
     return False
 
 
-async def probe_disc(device_path: str) -> DiscProbe:
-    """Compute the disc's pydvdid CRC64 and TheDiscDB ContentHash, read off
-    the device via PyCdlib.
+async def probe_disc(device_path: str, *, bluray: bool = False) -> DiscProbe:
+    """Compute the disc's pydvdid CRC64, TheDiscDB ContentHash, and (Blu-ray
+    only) BDMT disc title, read off the device via PyCdlib.
 
     Needs only read access to the disc — no mount, no CAP_SYS_ADMIN — so a
     DVD always gets its 1337server fingerprint, even on discs the kernel
     won't mount (region locks, UDF quirks) and even after the ripper service
     drops root. pydvdid returns None for anything without a /VIDEO_TS tree
     (Blu-ray / CD), so this is a cheap no-op there.
+
+    `bluray=True` additionally opens the disc a third time to read the BDMT
+    disc title (`BDMV/META/DL/bdmt_<lang>.xml`); the caller (scan_disc) passes
+    it only once the disc type is known, so DVD/CD scans skip this extra
+    pycdlib open entirely.
 
     Probes only when the device reports ready (see await_device_ready); an
     unready device degrades to crc64=None and thediscdb=None without racing
@@ -97,9 +102,13 @@ async def probe_disc(device_path: str) -> DiscProbe:
     thediscdb = await asyncio.to_thread(probe_thediscdb_hash, device_path)
     if thediscdb:
         logger.info("thediscdb hash device=%s value=%s", device_path, thediscdb)
-    bd_meta = await asyncio.to_thread(probe_bd_meta, device_path)
-    if bd_meta:
-        logger.info("bdmt device=%s name=%r set=%s/%s", device_path, bd_meta.name, bd_meta.set_number, bd_meta.num_sets)
+    bd_meta = None
+    if bluray:
+        bd_meta = await asyncio.to_thread(probe_bd_meta, device_path)
+        if bd_meta:
+            logger.info(
+                "bdmt device=%s name=%r set=%s/%s", device_path, bd_meta.name, bd_meta.set_number, bd_meta.num_sets
+            )
     return DiscProbe(crc64=crc64, thediscdb=thediscdb, bd_meta=bd_meta)
 
 

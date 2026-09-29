@@ -268,5 +268,52 @@ async def test_probe_disc_returns_bd_meta(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(disc_probe, "_compute_crc", lambda _dev: None)
     monkeypatch.setattr(disc_probe, "probe_thediscdb_hash", lambda _p: None)
     monkeypatch.setattr(disc_probe, "probe_bd_meta", lambda _p: meta)
+    probe = await disc_probe.probe_disc("/dev/sr0", bluray=True)
+    assert probe.bd_meta == meta
+
+
+@pytest.mark.asyncio
+async def test_probe_disc_skips_bd_meta_when_not_bluray(monkeypatch: pytest.MonkeyPatch) -> None:
+    # DVD / CD scans (bluray=False, the default) must never open the disc a
+    # third time for the BDMT read.
+    async def _ready(_dev: str) -> bool:
+        return True
+
+    calls: list[str] = []
+
+    def _boom(_p: str) -> None:
+        calls.append(_p)
+        raise AssertionError("probe_bd_meta must not run when bluray=False")
+
+    monkeypatch.setattr(disc_probe, "await_device_ready", _ready)
+    monkeypatch.setattr(disc_probe, "_compute_crc", lambda _dev: None)
+    monkeypatch.setattr(disc_probe, "probe_thediscdb_hash", lambda _p: None)
+    monkeypatch.setattr(disc_probe, "probe_bd_meta", _boom)
     probe = await disc_probe.probe_disc("/dev/sr0")
+    assert probe.bd_meta is None
+    assert not calls
+
+
+@pytest.mark.asyncio
+async def test_probe_disc_runs_bd_meta_when_bluray(monkeypatch: pytest.MonkeyPatch) -> None:
+    # bluray=True must call probe_bd_meta (recorded via a call list, since a
+    # lambda can't easily assert call args).
+    from arm_common.schemas import BdDiscMeta
+
+    async def _ready(_dev: str) -> bool:
+        return True
+
+    meta = BdDiscMeta(name="Some Title")
+    calls: list[str] = []
+
+    def _record(p: str) -> BdDiscMeta:
+        calls.append(p)
+        return meta
+
+    monkeypatch.setattr(disc_probe, "await_device_ready", _ready)
+    monkeypatch.setattr(disc_probe, "_compute_crc", lambda _dev: None)
+    monkeypatch.setattr(disc_probe, "probe_thediscdb_hash", lambda _p: None)
+    monkeypatch.setattr(disc_probe, "probe_bd_meta", _record)
+    probe = await disc_probe.probe_disc("/dev/sr0", bluray=True)
+    assert calls == ["/dev/sr0"]
     assert probe.bd_meta == meta

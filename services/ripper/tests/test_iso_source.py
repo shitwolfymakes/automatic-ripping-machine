@@ -186,6 +186,31 @@ async def test_scan_disc_keeps_dev_source_url_for_block_device(monkeypatch) -> N
     assert not any(str(a).startswith("iso:") for a in argv), argv
 
 
+@pytest.mark.asyncio
+async def test_scan_disc_probes_bluray_false_for_dvd(monkeypatch) -> None:
+    # CINFO:1 says DVD → probe_disc must be called with bluray=False (skip
+    # the extra BDMT pycdlib open on every DVD scan).
+    _capture_subprocess(monkeypatch, scan_makemkv, returncode=0, stdout=b'CINFO:1,6206,"DVD disc"')
+    probe_mock = AsyncMock(return_value=disc_probe.DiscProbe(crc64=None))
+    monkeypatch.setattr(scan_makemkv, "probe_disc", probe_mock)
+
+    await scan_makemkv.scan_disc("/dev/sr0")
+
+    probe_mock.assert_awaited_once_with("/dev/sr0", bluray=False)
+
+
+@pytest.mark.asyncio
+async def test_scan_disc_probes_bluray_true_for_bluray(monkeypatch) -> None:
+    # CINFO:1 says Blu-ray disc → probe_disc must be called with bluray=True.
+    _capture_subprocess(monkeypatch, scan_makemkv, returncode=0, stdout=b'CINFO:1,6210,"Blu-ray disc"')
+    probe_mock = AsyncMock(return_value=disc_probe.DiscProbe(crc64=None))
+    monkeypatch.setattr(scan_makemkv, "probe_disc", probe_mock)
+
+    await scan_makemkv.scan_disc("/dev/sr0")
+
+    probe_mock.assert_awaited_once_with("/dev/sr0", bluray=True)
+
+
 # --- rip_disc command-line -------------------------------------------------
 
 
