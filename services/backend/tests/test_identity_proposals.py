@@ -61,6 +61,41 @@ def test_put_source_error_keeps_last_good() -> None:
     assert entry.extra["last_error"]["detail"] == "TimeoutError: boom"
 
 
+def test_put_source_error_with_equal_inputs_keeps_last_good() -> None:
+    job = _job()
+    put_source(
+        job,
+        "label",
+        SourceClaims(status="ok", inputs={"volume_label": "LOST_S2D3"}, tracks={"1": TrackClaim(episode=3)}),
+    )
+    put_source(job, "label", SourceClaims(status="error", inputs={"volume_label": "LOST_S2D3"}, detail="boom"))
+    entry = claims_of(job).sources["label"]
+    assert entry.status == "ok" and entry.tracks["1"].episode == 3
+    assert entry.extra["last_error"]["detail"] == "boom"
+
+
+def test_put_source_error_with_different_inputs_replaces() -> None:
+    # The kept claims would describe a different disc input: store the error, claims cleared.
+    job = _job()
+    put_source(
+        job,
+        "label",
+        SourceClaims(status="ok", inputs={"volume_label": "LOST_S2D3"}, tracks={"1": TrackClaim(episode=3)}),
+    )
+    put_source(job, "label", SourceClaims(status="error", inputs={"volume_label": "LOST_S2D4"}, detail="boom"))
+    entry = claims_of(job).sources["label"]
+    assert entry.status == "error" and entry.tracks == {}
+    assert entry.inputs == {"volume_label": "LOST_S2D4"}
+
+
+def test_put_source_error_after_skipped_replaces() -> None:
+    job = _job()
+    put_source(job, "bd_title", SourceClaims(status="skipped", detail="no BDMT disc title"))
+    put_source(job, "bd_title", SourceClaims(status="error", detail="boom"))
+    entry = claims_of(job).sources["bd_title"]
+    assert entry.status == "error" and entry.detail == "boom"
+
+
 def test_put_source_error_without_prior_ok_is_stored() -> None:
     job = _job()
     put_source(job, "thediscdb", SourceClaims(status="error", detail="x"))

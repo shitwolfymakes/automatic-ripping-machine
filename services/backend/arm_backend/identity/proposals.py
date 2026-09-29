@@ -52,9 +52,15 @@ def _store(job: Job, claims: IdentityClaims) -> None:
 def put_source(job: Job, source_id: str, source_claims: SourceClaims) -> None:
     claims = claims_of(job)
     existing = claims.sources.get(source_id)
-    if source_claims.status == "error" and existing is not None and existing.status == "ok":
-        # A failed re-run keeps the last good proposals (a provider outage must
-        # not wipe episode numbers); the failure is recorded for the UI.
+    if (
+        source_claims.status == "error"
+        and existing is not None
+        and existing.status == "ok"
+        and source_claims.inputs == existing.inputs
+    ):
+        # A failed re-run on the same inputs keeps the last good proposals (a
+        # provider outage must not wipe episode numbers); the failure is
+        # recorded for the UI. Claims made for different inputs are not kept.
         at = source_claims.run_at.isoformat() if source_claims.run_at else None
         existing.extra = {**existing.extra, "last_error": {"at": at, "detail": source_claims.detail}}
         source_claims = existing
