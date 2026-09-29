@@ -43,7 +43,7 @@ def resolve(claims: IdentityClaims, *, tiers: Mapping[str, int], ranks: Mapping[
             continue
         if source.status == "ok":
             usable.append(source_id)
-    usable.sort(key=lambda s: (tiers[s], 0 if s in pinned else 1, ranks.get(s, len(ranks) + 1), s))
+    usable.sort(key=lambda s: (tiers[s], 0 if s in pinned else 1, s not in ranks, ranks.get(s, 0), s))
 
     res = Resolution()
     for source_id in usable:

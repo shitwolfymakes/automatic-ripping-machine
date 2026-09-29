@@ -188,3 +188,26 @@ def test_apply_is_idempotent() -> None:
 def test_apply_skips_claims_for_missing_tracks() -> None:
     res = resolve(_claims(thediscdb=SourceClaims(tracks={"9": TrackClaim(episode=1)})), tiers=TIERS)
     assert apply_resolution(_job(), [_track("1")], res) == 0
+
+
+def test_unranked_sorts_after_sparse_ranks() -> None:
+    both = dict(
+        ep_a=SourceClaims(tracks={"1": TrackClaim(episode=1)}),
+        ep_b=SourceClaims(tracks={"1": TrackClaim(episode=2)}),
+    )
+    # A sparse rank (10) must still beat an unranked source.
+    assert resolve(_claims(**both), tiers=TIERS, ranks={"ep_b": 10}).tracks["1"]["episode"].source == "ep_b"
+
+
+def test_tier_beats_pin() -> None:
+    res = resolve(
+        IdentityClaims(
+            sources={
+                "thediscdb": SourceClaims(tracks={"1": TrackClaim(episode=2)}),
+                "ep_a": SourceClaims(tracks={"1": TrackClaim(episode=9)}),
+            },
+            pin={"episode": "ep_a"},
+        ),
+        tiers=TIERS,
+    )
+    assert res.tracks["1"]["episode"].source == "thediscdb"
