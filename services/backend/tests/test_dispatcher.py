@@ -335,6 +335,39 @@ async def test_identify_hint_not_tv_keeps_movie_first_order(monkeypatch):
     assert call_order[0] == "movie"
 
 
+async def test_identify_tv_first_falls_back_to_movie_when_tv_misses(monkeypatch):
+    """When title_hint_is_tv=True, the TV search runs first; if it misses,
+    the movie search is tried as a fallback, and returns if it hits."""
+    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata.base import MetadataResult
+
+    call_order: list[str] = []
+
+    class FakeTMDB:
+        def __init__(self, api_key, http):
+            pass
+
+        async def search_movie(self, title, year):
+            call_order.append("movie")
+            # Return a movie hit when TV missed
+            return MetadataResult(title="Tron", year=1982, kind="movie")
+
+        async def search_tv(self, title):
+            call_order.append("tv")
+            # TV search misses
+            return None
+
+    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="TRON")
+        result = await dispatcher.identify(scan, _config(), title_hint="tron", title_hint_is_tv=True)
+    assert result is not None and result.title == "Tron"
+    # TV was searched first due to tv_first=True, then movie fallback found it
+    assert call_order[0] == "tv"
+    assert call_order[1] == "movie"
+
+
 async def test_identify_from_imdb_uses_tmdb_find(monkeypatch):
     from arm_backend.metadata import dispatcher as dispatcher_mod
     from arm_backend.metadata.base import MetadataResult

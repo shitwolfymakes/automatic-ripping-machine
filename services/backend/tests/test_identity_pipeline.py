@@ -102,3 +102,30 @@ def test_run_disc_hints_handles_pathological_bd_name() -> None:
     assert sources["label"].status == "ok"
     assert sources["label"].job.model_dump(exclude_unset=True) == {"season": 2, "disc_number": 3, "title": "lost"}
     assert hint_title(job) == "lost"
+
+
+def test_run_disc_hints_handles_source_applies_to_exception(monkeypatch) -> None:
+    # When a source's applies_to method raises an exception, run_disc_hints
+    # records status=error with the exception detail, and continues with other sources.
+    from arm_backend.identity.sources import registry
+
+    job = Job(id="job_1", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.CREATED, metadata_json={})
+    scan = ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3")
+
+    # Monkeypatch BD_TITLE's applies_to to raise
+    original_applies_to = registry.BD_TITLE.applies_to
+
+    def boom(ctx):
+        raise RuntimeError("intentional test error")
+
+    monkeypatch.setattr(registry.BD_TITLE, "applies_to", boom)
+    run_disc_hints(job, scan, now=NOW)
+    monkeypatch.setattr(registry.BD_TITLE, "applies_to", original_applies_to)
+
+    sources = claims_of(job).sources
+    assert sources["bd_title"].status == "error"
+    assert "RuntimeError" in sources["bd_title"].detail
+    assert "intentional test error" in sources["bd_title"].detail
+    # Label source should have run successfully
+    assert sources["label"].status == "ok"
+    assert sources["label"].job.model_dump(exclude_unset=True) == {"season": 2, "disc_number": 3, "title": "lost"}

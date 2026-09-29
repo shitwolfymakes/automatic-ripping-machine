@@ -78,3 +78,11 @@ def test_label_source_skips(label: str | None, disc_type: DiscType) -> None:
 
 def test_label_source_applies_to_bluray() -> None:
     assert LABEL.applies_to(_ctx("X_S1D1", DiscType.BLURAY)) is None
+
+
+def test_label_source_sets_disc_total() -> None:
+    # A label like "DISC 3 OF 6" should set disc_total=6 in the claims
+    claims = LABEL.run(_ctx("BAND_OF_BROTHERS_DISC_3_OF_6"))
+    assert claims.status == "ok"
+    assert claims.job.model_dump(exclude_unset=True) == {"disc_number": 3, "disc_total": 6, "title": "band of brothers"}
+    assert claims.inputs == {"volume_label": "BAND_OF_BROTHERS_DISC_3_OF_6"}

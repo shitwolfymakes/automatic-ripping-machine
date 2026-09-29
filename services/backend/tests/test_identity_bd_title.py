@@ -43,3 +43,15 @@ def test_bd_name_with_season_and_disc() -> None:
         "disc_number": 2,
         "title": "the west wing",
     }
+
+
+def test_bd_name_with_empty_title() -> None:
+    # A name that parses to an empty title (e.g. just whitespace or empty string)
+    # should not include title in the job claims.
+    claims = BD_TITLE.run(_ctx(BdDiscMeta(name="")))
+    assert claims.job.model_dump(exclude_unset=True) == {}
+    assert claims.inputs == {"name": ""}
+
+    # Also test with just disc info and empty title
+    claims = BD_TITLE.run(_ctx(BdDiscMeta(name="  ", set_number=2, num_sets=6)))
+    assert claims.job.model_dump(exclude_unset=True) == {"disc_number": 2, "disc_total": 6}
