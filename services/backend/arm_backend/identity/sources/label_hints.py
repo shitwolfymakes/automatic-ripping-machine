@@ -99,7 +99,14 @@ class LabelSource:
             fields["disc_number"] = hints.disc_number
         if hints.disc_total is not None:
             fields["disc_total"] = hints.disc_total
-        if hints.title:
+        # A search-title hint is only worth proposing when parse_label actually
+        # stripped a season/disc marker off the label — otherwise this is just
+        # a cruder version of the dispatcher's own _normalize_volume_label
+        # pass (which also strips NTSC/Blu-ray branding and keeps the year for
+        # a filtered search), and running it first only risks a worse hit
+        # ("THE_MATRIX_NTSC" -> "the matrix ntsc", "ALIEN_1979" -> "alien
+        # 1979" instead of a year-filtered "alien"/1979).
+        if hints.title and (hints.season is not None or hints.disc_number is not None or hints.disc_total is not None):
             fields["title"] = hints.title
         return SourceClaims(run_at=ctx.now, status="ok", inputs={"volume_label": label}, job=JobClaim(**fields))
 

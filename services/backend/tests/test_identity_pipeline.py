@@ -13,7 +13,7 @@ from arm_common.enums import TrackRole  # noqa: E402
 from arm_common.schemas import BdDiscMeta, ScanResult  # noqa: E402
 from arm_common.schemas.identity import SourceClaims, TrackClaim  # noqa: E402
 
-from arm_backend.identity.pipeline import resolve_job, run_disc_hints, hint_title  # noqa: E402
+from arm_backend.identity.pipeline import resolve_job, run_disc_hints, hint_title, hint_is_tv  # noqa: E402
 from arm_backend.identity.proposals import put_source, claims_of  # noqa: E402
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -69,6 +69,24 @@ def test_hint_title_none_without_hints() -> None:
     job = Job(id="job_1", drive_id="d", disc_type=DiscType.CD, status=JobStatus.CREATED, metadata_json={})
     run_disc_hints(job, ScanResult(disc_type=DiscType.CD), now=NOW)
     assert hint_title(job) is None
+
+
+def test_hint_is_tv_true_for_season_shaped_label() -> None:
+    job = Job(id="job_1", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.CREATED, metadata_json={})
+    run_disc_hints(job, ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3"), now=NOW)
+    assert hint_is_tv(job) is True
+
+
+def test_hint_is_tv_false_for_movie_shaped_label() -> None:
+    job = Job(id="job_1", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.CREATED, metadata_json={})
+    run_disc_hints(job, ScanResult(disc_type=DiscType.DVD, volume_label="LOTR_FELLOWSHIP_D2"), now=NOW)
+    assert hint_is_tv(job) is False
+
+
+def test_hint_is_tv_false_for_cd() -> None:
+    job = Job(id="job_1", drive_id="d", disc_type=DiscType.CD, status=JobStatus.CREATED, metadata_json={})
+    run_disc_hints(job, ScanResult(disc_type=DiscType.CD), now=NOW)
+    assert hint_is_tv(job) is False
 
 
 def test_run_disc_hints_handles_pathological_bd_name() -> None:

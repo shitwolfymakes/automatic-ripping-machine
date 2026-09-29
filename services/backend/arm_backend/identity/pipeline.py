@@ -64,3 +64,21 @@ def hint_title(job: Job) -> str | None:
         if entry is not None and entry.status == "ok" and entry.job.title:
             return entry.job.title
     return None
+
+
+def hint_is_tv(job: Job) -> bool:
+    """True when any ok disc-hint source proposed a `season` — the hint title
+    is then TV-shaped (a season/box-set disc) and should be searched TMDb-TV
+    first, not movie-first (a movie label ending in a season-shaped number,
+    e.g. a real season disc, must not be mismatched to TMDb's top movie hit)."""
+    sources = claims_of(job).sources
+    for source in HINT_SOURCES:
+        entry = sources.get(source.id)
+        if (
+            entry is not None
+            and entry.status == "ok"
+            and "season" in entry.job.model_fields_set
+            and entry.job.season is not None
+        ):
+            return True
+    return False

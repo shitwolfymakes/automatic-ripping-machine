@@ -2177,6 +2177,24 @@ def test_identify_passes_hint_title_to_dispatcher() -> None:
         r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
     assert r.status_code == 200
     assert dispatcher.received_kwargs.get("title_hint") == "arrival"
+    assert dispatcher.received_kwargs.get("title_hint_is_tv") is False
+
+
+def test_identify_passes_title_hint_is_tv_true_for_season_label() -> None:
+    """A season-bearing label hint reaches the dispatcher as title_hint_is_tv=True."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    dispatcher = _Dispatcher(MetadataResult(title="Lost", year=2004, kind="tv", payload={}))
+    app = _make_app(db, dispatcher=dispatcher)
+    scan = _scan_dict()
+    scan["volume_label"] = "LOST_S2D3"
+    body = {"drive_id": "drv_x", "scan_result": scan}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert dispatcher.received_kwargs.get("title_hint") == "lost"
+    assert dispatcher.received_kwargs.get("title_hint_is_tv") is True
 
 
 def test_identify_without_bd_meta_key_still_uses_label() -> None:
@@ -2201,6 +2219,59 @@ def test_identify_without_bd_meta_key_still_uses_label() -> None:
     sources = job.metadata_json["identity_claims"]["sources"]
     assert sources["label"]["status"] == "ok"
     assert sources["bd_title"]["status"] == "skipped"
+
+
+def test_identify_reuse_records_no_new_hint_claims() -> None:
+    """Guard 1 extended: a re-POSTed identify that reuses an existing job
+    (fingerprint match) must not run disc hints at all — already_identified
+    skips run_disc_hints/resolve_job entirely, so a season/disc-shaped label
+    on the re-scan is neither computed nor applied to the existing job."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, hold_for_review=False)]
+    existing = _job("job_exist", status=JobStatus.AWAITING_USER_ID, disc_type="dvd")
+    existing.title = "Operator Title"
+    db.rows["jobs"] = [existing]
+    db.rows["disc_fingerprints"] = [DiscFingerprint(job_id="job_exist", algo="crc64", value="abc")]
+    dispatcher = _Dispatcher(result=None)  # must NOT be consulted on reuse
+    app = _make_app(db, dispatcher=dispatcher)
+    scan = _scan_dict("dvd")
+    scan["fingerprints"] = [{"algo": "crc64", "value": "abc"}]
+    scan["volume_label"] = "LOST_S2D3"
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan},
+            headers=_SERVICE_AUTH,
+        )
+    assert resp.status_code == 200
+    assert resp.json()["id"] == "job_exist"
+    assert existing.season is None
+    assert existing.disc_number is None
+    assert existing.identity_provenance is None
+    assert "identity_claims" not in (existing.metadata_json or {})
+
+
+def test_identify_awaiting_user_id_still_applies_label_hints() -> None:
+    """A total identify miss with block_on_miss on still runs disc hints and
+    resolve_job: the label-derived season/disc land on the job even though
+    the job parks at AWAITING_USER_ID for the operator to pick a title."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True)]
+    app = _make_app(db, dispatcher=_Dispatcher(None))
+    scan = _scan_dict()
+    scan["volume_label"] = "LOST_S2D3"
+    body = {"drive_id": "drv_x", "scan_result": scan}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["status"] == "awaiting_user_id"
+    job = db.rows["jobs"][0]
+    assert job.season == 2
+    assert job.disc_number == 3
+    assert job.identity_provenance == {"season": "label", "disc_number": "label"}
 
 
 async def test_resolve_manual_season_beats_label_hint() -> None:

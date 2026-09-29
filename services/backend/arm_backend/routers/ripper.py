@@ -19,7 +19,7 @@ from arm_backend.metadata import MetadataDispatcher
 from arm_backend.metadata.base import MetadataResult, extract_poster_url, metadata_with_identity
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
 from arm_backend.seeders import CONFIG_SINGLETON_ID
-from arm_backend.identity.pipeline import hint_title, resolve_job, run_disc_hints
+from arm_backend.identity.pipeline import hint_is_tv, hint_title, resolve_job, run_disc_hints
 from arm_backend.identity.proposals import put_source, record_preset
 from arm_backend.identity.sources.thediscdb import SOURCE_ID as THEDISCDB, build_claims, external_imdb_id
 from arm_backend.track_selection import select_tracks, select_tracks_for_review
@@ -568,7 +568,9 @@ async def identify(
                         exact = await dispatcher.identify_from_imdb(imdb, cfg)
                         if exact is not None:
                             return exact
-                return await dispatcher.identify(scan, cfg, title_hint=hint_title(job))
+                return await dispatcher.identify(
+                    scan, cfg, title_hint=hint_title(job), title_hint_is_tv=hint_is_tv(job)
+                )
 
             result = await asyncio.wait_for(_identify(), timeout=DISPATCH_TIMEOUT_SECONDS)
             timed_out = False

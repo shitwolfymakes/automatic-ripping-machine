@@ -63,9 +63,12 @@ def test_label_source_claims_job_fields_present_only() -> None:
 
 
 def test_label_source_miss_when_nothing_parsed() -> None:
+    """No season/disc marker parsed -> no fields at all, not even a title:
+    a marker-less label title is a worse search candidate than the
+    dispatcher's own normalized-volume-label pass (fix round 1, item 2)."""
     claims = LABEL.run(_ctx("APOLLO_13"))
     assert claims.status == "ok"
-    assert claims.job.model_dump(exclude_unset=True) == {"title": "apollo 13"}
+    assert claims.job.model_dump(exclude_unset=True) == {}
 
 
 @pytest.mark.parametrize(("label", "disc_type"), [(None, DiscType.DVD), ("", DiscType.DVD), ("X_S1D1", DiscType.CD)])

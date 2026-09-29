@@ -245,8 +245,10 @@ async def test_identify_falls_back_to_label_when_hint_misses(monkeypatch):
 
 
 async def test_identify_dedupes_hint_equal_to_label(monkeypatch):
-    """A hint equal to the normalised label title (case-insensitive) is
-    searched only once per provider call, not once per candidate."""
+    """Realistic pairing: a BD title hint ("arrival", from bd_meta name
+    "Arrival") equal to the normalised label title (volume_label "ARRIVAL",
+    case-insensitive) is searched only once per provider call, not once per
+    candidate."""
     from arm_backend.metadata import dispatcher as dispatcher_mod
 
     call_counts: dict[str, int] = {}
@@ -266,12 +268,71 @@ async def test_identify_dedupes_hint_equal_to_label(monkeypatch):
     monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
-        scan = ScanResult(disc_type=DiscType.DVD, volume_label="WW_S3D2")
-        result = await dispatcher.identify(scan, _config(omdb_api_key=None), title_hint="ww s3d2")
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="ARRIVAL")
+        result = await dispatcher.identify(scan, _config(omdb_api_key=None), title_hint="arrival")
     assert result is None
     # movie + tv called once each, for the hint's own casing — the label
-    # candidate ("WW S3D2") was deduped away (same casefold key).
-    assert call_counts == {"ww s3d2": 2}
+    # candidate ("ARRIVAL") was deduped away (same casefold key).
+    assert call_counts == {"arrival": 2}
+
+
+async def test_identify_hint_is_tv_searches_tv_before_movie(monkeypatch):
+    """A season-shaped hint (title_hint_is_tv=True) searches TMDb TV first for
+    that candidate, so a TV-shaped label like `LOST_S2D3` doesn't mismatch to
+    TMDb's top movie hit."""
+    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata.base import MetadataResult
+
+    call_order: list[str] = []
+
+    class FakeTMDB:
+        def __init__(self, api_key, http):
+            pass
+
+        async def search_movie(self, title, year):
+            call_order.append("movie")
+            return None
+
+        async def search_tv(self, title):
+            call_order.append("tv")
+            return MetadataResult(title="Lost", year=2004, kind="tv")
+
+    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3")
+        result = await dispatcher.identify(scan, _config(), title_hint="lost", title_hint_is_tv=True)
+    assert result is not None and result.title == "Lost"
+    assert call_order[0] == "tv"
+
+
+async def test_identify_hint_not_tv_keeps_movie_first_order(monkeypatch):
+    """title_hint_is_tv=False (the default) keeps the existing movie-first
+    order for the hint candidate."""
+    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata.base import MetadataResult
+
+    call_order: list[str] = []
+
+    class FakeTMDB:
+        def __init__(self, api_key, http):
+            pass
+
+        async def search_movie(self, title, year):
+            call_order.append("movie")
+            return MetadataResult(title="Arrival", year=2016, kind="movie")
+
+        async def search_tv(self, title):
+            call_order.append("tv")
+            return None
+
+    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="ARRIVAL")
+        result = await dispatcher.identify(scan, _config(), title_hint="arrival", title_hint_is_tv=False)
+    assert result is not None and result.title == "Arrival"
+    assert call_order[0] == "movie"
 
 
 async def test_identify_from_imdb_uses_tmdb_find(monkeypatch):
