@@ -1847,7 +1847,12 @@ export type JobMetadata = {
     scan_result?: ScanResult | null;
     identity?: JobIdentity | null;
     music?: MusicMeta | null;
-    identity_claims?: IdentityClaims | null;
+    /**
+     * Identity Claims
+     */
+    identity_claims?: IdentityClaims | {
+        [key: string]: unknown;
+    } | null;
     flags?: JobFlags;
     /**
      * Provider Raw

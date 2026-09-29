@@ -47,3 +47,12 @@ def test_field_maps_cover_resolver_managed_fields() -> None:
 
 def test_job_metadata_has_no_thediscdb_section() -> None:
     assert "thediscdb" not in JobMetadata.model_fields
+
+
+def test_job_metadata_identity_claims_valid_parses_invalid_passes_through() -> None:
+    valid = JobMetadata.model_validate({"identity_claims": {"sources": {"manual": {"tracks": {"1": {"title": None}}}}}})
+    assert isinstance(valid.identity_claims, IdentityClaims)
+    corrupt = {"sources": "garbage", "future_key": 1}
+    raw = JobMetadata.model_validate({"identity_claims": corrupt})
+    assert raw.identity_claims == corrupt
+    assert raw.model_dump(mode="json", exclude_unset=True)["identity_claims"] == corrupt

@@ -11909,9 +11909,14 @@
                 "$ref": "#/components/schemas/IdentityClaims"
               },
               {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Identity Claims"
           },
           "flags": {
             "$ref": "#/components/schemas/JobFlags"

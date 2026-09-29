@@ -85,7 +85,11 @@ class JobMetadata(BaseModel):
     music: MusicMeta | None = None
     # What every identity source proposed (typed; see arm_common.schemas.identity).
     # Replaces the old `thediscdb` map section (migration 0039 moved it here).
-    identity_claims: IdentityClaims | None = None
+    # Left-to-right union: a valid section parses as IdentityClaims; a corrupt
+    # or future-version one passes through raw, so one bad row never fails a
+    # bulk read and a validate/dump round-trip (resolve) never wipes it. The
+    # backend's claims_of() warns and treats an invalid section as empty.
+    identity_claims: IdentityClaims | dict[str, Any] | None = Field(default=None, union_mode="left_to_right")
     flags: JobFlags = Field(default_factory=JobFlags)
     provider_raw: dict[str, dict[str, Any]] = Field(default_factory=dict)
 

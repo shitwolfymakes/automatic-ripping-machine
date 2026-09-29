@@ -1414,6 +1414,53 @@ def test_resolve_season_first_class_field_used_directly(signing_key: bytes) -> N
     assert r.status_code == 422
 
 
+# --- corrupt / future-version identity_claims never 500s a read or write ----
+
+_CORRUPT_CLAIMS = {"sources": "garbage", "future_key": 1}
+
+
+def test_list_and_detail_tolerate_corrupt_identity_claims(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(meta={"identity_claims": _CORRUPT_CLAIMS})]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
+    with TestClient(app) as client:
+        listed = client.get("/api/jobs", headers=_auth(token))
+        detail = client.get("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001", headers=_auth(token))
+    assert listed.status_code == 200, listed.text
+    assert listed.json()[0]["metadata_json"]["identity_claims"] == _CORRUPT_CLAIMS
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["job"]["metadata_json"]["identity_claims"] == _CORRUPT_CLAIMS
+
+
+def test_patch_plain_field_tolerates_corrupt_identity_claims(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(meta={"identity_claims": _CORRUPT_CLAIMS})]
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001",
+            json={"poster_url_manual": "https://x/p.jpg"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["metadata_json"]["identity_claims"] == _CORRUPT_CLAIMS
+
+
+def test_resolve_tolerates_and_keeps_corrupt_identity_claims(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID, meta={"identity_claims": _CORRUPT_CLAIMS})]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Fixed"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert db.rows["jobs"][0].metadata_json["identity_claims"] == _CORRUPT_CLAIMS
+
+
 # --- restated values are not recorded as manual claims ----------------------
 
 
