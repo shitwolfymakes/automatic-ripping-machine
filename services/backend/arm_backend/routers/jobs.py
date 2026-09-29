@@ -65,6 +65,7 @@ from arm_common.schemas import (
     TranscodeTaskView,
 )
 from arm_common.enums import NON_TERMINAL_JOB_STATUSES, TERMINAL_JOB_STATUSES
+from arm_common.schemas.identity import JOB_CLAIM_FIELDS, TRACK_CLAIM_FIELDS
 from arm_common.schemas.job_metadata import JobIdentity, JobMetadata
 from arm_common.ulid import is_valid_id
 
@@ -82,10 +83,11 @@ def _get_hub(request: Request) -> WSHub:
 # one of these becomes a `manual` identity proposal (with provenance) instead
 # of a direct column write, so it goes through the same tiered resolver as
 # every other identity source. Everything else is still a plain `setattr`.
-_IDENTITY_TRACK_ATTRS = frozenset(
-    {"role", "title", "season", "episode_number", "episode_number_end", "episode_name", "custom_filename", "excluded"}
-)
-_IDENTITY_JOB_ATTRS = frozenset({"disc_number", "disc_total"})
+# Derived from the claim-field maps so the resolver, the recorders and this
+# router cannot drift apart. JobUpdateRequest has no `season` (it is set
+# through /resolve), so the job set is the maps' attrs the request can carry.
+_IDENTITY_TRACK_ATTRS = frozenset(TRACK_CLAIM_FIELDS.values())
+_IDENTITY_JOB_ATTRS = frozenset(JOB_CLAIM_FIELDS.values()).intersection(JobUpdateRequest.model_fields)
 
 
 # Manual-trigger pre-check (drive media status). The ripper posts every

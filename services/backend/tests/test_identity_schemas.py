@@ -1,7 +1,10 @@
 """identity_claims schemas: presence semantics survive a JSON round trip."""
 
+from typing import get_args
+
 from arm_common.enums import TrackRole
 from arm_common.schemas import JobMetadata
+from arm_common.schemas.jobs import TrackRevertField
 from arm_common.schemas.identity import (
     JOB_CLAIM_FIELDS,
     TRACK_CLAIM_FIELDS,
@@ -56,3 +59,15 @@ def test_job_metadata_identity_claims_valid_parses_invalid_passes_through() -> N
     raw = JobMetadata.model_validate({"identity_claims": corrupt})
     assert raw.identity_claims == corrupt
     assert raw.model_dump(mode="json", exclude_unset=True)["identity_claims"] == corrupt
+
+
+def test_track_revert_field_literal_matches_track_claim_attrs() -> None:
+    assert set(get_args(TrackRevertField)) == set(TRACK_CLAIM_FIELDS.values())
+
+
+def test_router_identity_attr_sets_derive_from_claim_fields() -> None:
+    from arm_backend.routers import jobs as jobs_router
+
+    assert jobs_router._IDENTITY_TRACK_ATTRS == frozenset(TRACK_CLAIM_FIELDS.values())
+    # JobUpdateRequest has no season (season is set through /resolve).
+    assert jobs_router._IDENTITY_JOB_ATTRS == frozenset({"disc_number", "disc_total"})
