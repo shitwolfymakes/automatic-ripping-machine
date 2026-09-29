@@ -708,3 +708,19 @@ def test_naming_validate_default_matches_preview(signing_key: bytes) -> None:
             headers=_auth(token),
         )
     assert r.status_code == 200, r.text
+
+
+def test_naming_preview_422_when_optional_tokens_empty_the_path(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {
+        "template": "({year?})",
+        "media_type": "movie",
+        "has_transcode_preset": True,
+        "variables": {"year": ""},
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/naming/preview", json=body, headers=_auth(token))
+    assert r.status_code == 422, r.text
+    assert "empty" in r.json()["detail"]

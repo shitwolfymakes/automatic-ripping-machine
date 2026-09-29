@@ -1,5 +1,8 @@
 """Path-template token expansion + save-time validation.
 
+Templates reference `{token}` (required) or `{token?}` (optional: dropped, with
+a wrapping ()/[] pair and one leading space, when its value is empty).
+
 The token whitelist per `MediaType` mirrors arch §02 (`docs/developers/architecture/02-job-lifecycle.md`).
 Save-time validation expands the template against a synthetic context that
 populates every legal token; an empty expansion or an unknown token both
@@ -10,7 +13,10 @@ import re
 
 from arm_common.enums import MediaType
 
-_TOKEN_RE = re.compile(r"\{(\w+)\}")
+_TOKEN_RE = re.compile(r"\{(\w+)(\?)?\}")
+# An optional token, optionally wrapped by one ()/[] pair that contains only it,
+# optionally preceded by one space. Groups 1-3 hold the name for each shape.
+_OPTIONAL_RE = re.compile(r" ?(?:\(\{(\w+)\?\}\)|\[\{(\w+)\?\}\]|\{(\w+)\?\})")
 
 
 class TemplateValidationError(ValueError):
@@ -92,15 +98,62 @@ class _StrictDict(dict[str, str]):
 
 
 def expand_template(template: str, ctx: dict[str, str]) -> str:
-    """Expand `{token}` references against `ctx`. Unknown tokens raise."""
+    """Expand `{token}` / `{token?}` references against `ctx`. Unknown tokens raise.
+
+    An optional token whose value is empty is removed together with a ()/[]
+    pair wrapping only it and one preceding space; empty path segments left
+    behind collapse. A result that is empty after that raises.
+    """
+    dropped = False
+
+    def _optional(m: re.Match[str]) -> str:
+        nonlocal dropped
+        name = m.group(1) or m.group(2) or m.group(3)
+        if name in ctx and not ctx[name]:
+            dropped = True
+            return ""
+        # Present (or unknown, so format_map raises "unknown token"): strip the "?".
+        return m.group(0).replace("?}", "}")
+
     try:
-        return template.format_map(_StrictDict(ctx))
+        out = _OPTIONAL_RE.sub(_optional, template).format_map(_StrictDict(ctx))
+    except TemplateValidationError:
+        raise
     except (IndexError, ValueError) as exc:
         raise TemplateValidationError(f"malformed template: {exc}") from exc
+    if dropped:
+        out = "/".join(seg for seg in out.split("/") if seg)
+        if not out:
+            raise TemplateValidationError("output path is empty once optional tokens with no value are dropped")
+    return out
 
 
 def referenced_tokens(template: str) -> set[str]:
-    return set(_TOKEN_RE.findall(template))
+    return {m.group(1) for m in _TOKEN_RE.finditer(template)}
+
+
+def optional_tokens(template: str) -> set[str]:
+    return {m.group(1) for m in _TOKEN_RE.finditer(template) if m.group(2)}
+
+
+def required_tokens(template: str) -> set[str]:
+    """Tokens used at least once without `?` (a token used both ways stays required)."""
+    return {m.group(1) for m in _TOKEN_RE.finditer(template) if not m.group(2)}
+
+
+# Tokens that always have a value when allowed, so `?` on them is meaningless.
+NEVER_OPTIONAL = frozenset({"ext", "transcode_slug"})
+
+
+def expand_without_optional(template: str, media_type: MediaType) -> str | None:
+    """Synthetic expansion with every optional token empty; None if the template has none."""
+    opt = optional_tokens(template)
+    if not opt:
+        return None
+    ctx = synthetic_context(media_type)
+    for tok in opt:
+        ctx[tok] = ""
+    return expand_template(template, ctx)
 
 
 def validate_template(template: str, media_type: MediaType, has_transcode_preset: bool) -> str:
@@ -112,14 +165,21 @@ def validate_template(template: str, media_type: MediaType, has_transcode_preset
     if illegal:
         raise TemplateValidationError(f"tokens not allowed for media_type={media_type.value}: {sorted(illegal)}")
 
+    never = optional_tokens(template) & NEVER_OPTIONAL
+    if never:
+        tok = min(never)
+        raise TemplateValidationError(f"{{{tok}?}} can't be optional: {{{tok}}} always has a value when it is allowed")
+
     if "transcode_slug" in tokens and not has_transcode_preset:
         raise TemplateValidationError("{transcode_slug} requires a transcode preset; this session has none")
     if "ext" in tokens and not has_transcode_preset and media_type != MediaType.ISO:
         raise TemplateValidationError("{ext} requires a transcode preset (or media_type=iso, which is fixed)")
 
+    # Synthetic ctx is fully populated, so this only fails for a literally empty
+    # template (also caught by the schema's min_length).
     expansion = expand_template(template, _SYNTHETIC_CONTEXTS[media_type])
-    # Synthetic ctx is fully populated; an empty expansion would mean the
-    # template was literally empty, which is caught by the schema's min_length.
+    # Raises if nothing is left once every optional token is empty.
+    expand_without_optional(template, media_type)
     return expansion
 
 
@@ -141,7 +201,7 @@ def validate_template_or_http(template: str, media_type: MediaType, has_transcod
 _TOKEN_DESCRIPTIONS: dict[str, str] = {
     "title": "Movie/feature title",
     "show": "TV show name",
-    "year": "Release year",
+    "year": "Release year. Write {year?} to drop it, with its brackets, when the year is unknown",
     "season": "Season number, zero-padded",
     "episode": "Episode number, zero-padded (01, or 01-E02 for a two-episode title)",
     "episode_title": "Episode title",
