@@ -237,3 +237,42 @@ async def test_run_seeders_builtin_transcode_presets_carry_catalog_encoders(
     for preset in by_id.values():
         expected = "any_h265" if preset.tool == TranscodeTool.HANDBRAKE else "preset"
         assert preset.encoder == expected, preset.id
+
+
+async def test_run_seeders_syncs_builtin_session_templates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Built-in session templates are seeder-owned: an older shipped template is
+    corrected on boot. A user's clone keeps its own template (review focus 5)."""
+    monkeypatch.setattr(seeders, "FIRST_BOOT_LOG", tmp_path / "fb.log")
+    db = FakeSession()
+    await run_seeders(db)
+    builtin = next(s for s in db.rows["sessions"] if s.id == "ses_builtin_movie_plex_1080p")
+    old = "{title} ({year})/{title} ({year}) - Track {track} - {transcode_slug}.{ext}"
+    builtin.output_path_template = old
+    from arm_common import Session
+
+    db.rows["sessions"].append(
+        Session(
+            id="ses_user_clone",
+            name="My clone",
+            media_type=builtin.media_type,
+            is_builtin=False,
+            rip_preset_id=builtin.rip_preset_id,
+            transcode_preset_id=builtin.transcode_preset_id,
+            output_path_template=old,
+        )
+    )
+
+    await run_seeders(db)
+
+    assert builtin.output_path_template == "{title} ({year?})/{title} ({year?}) - Track {track} - {transcode_slug}.{ext}"
+    clone = next(s for s in db.rows["sessions"] if s.id == "ses_user_clone")
+    assert clone.output_path_template == old
+
+
+def test_every_builtin_session_template_is_valid_and_year_optional() -> None:
+    from arm_backend.path_template import required_tokens, validate_template
+
+    for row in seeders.SESSIONS:
+        tpl = row["output_path_template"]
+        assert "year" not in required_tokens(tpl), row["id"]
+        validate_template(tpl, row["media_type"], has_transcode_preset=row.get("transcode_preset_id") is not None)
