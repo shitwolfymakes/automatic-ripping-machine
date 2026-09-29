@@ -2,7 +2,7 @@
 
 from arm_backend.identity.episodes.continuity import SiblingDisc, rank_seasons, start_anchor
 from arm_backend.identity.episodes.matcher import align
-from arm_backend.identity.episodes.model import Episode, TitleIn
+from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn, TitleMatch
 
 
 def season(n: int, runtime: int = 3000, number: int = 1) -> list[Episode]:
@@ -120,3 +120,14 @@ def test_rank_seasons_prefers_coverage_then_cost() -> None:
     none = align(five_titles(), season(10, runtime=9000, number=3))
     ranked = rank_seasons({1: worse, 2: good, 3: none})
     assert [s for s, _ in ranked] == [2, 1, 3]
+
+
+def test_rank_seasons_breaks_coverage_ties_by_match_count() -> None:
+    # Minor 2: equal coverage (a play-all excluded in one season shrinks its
+    # denominator); more matched titles wins over a lower mean cost.
+    def match(n: int) -> TitleMatch:
+        return TitleMatch(str(n), 1, n, None, None, 0, 1.0)
+
+    two = MatchResult((match(1), match(2)), (), (), 200.0, 1.0)
+    one = MatchResult((match(1),), (), ("1",), 10.0, 1.0)
+    assert [s for s, _ in rank_seasons({1: one, 2: two})] == [2, 1]

@@ -857,8 +857,9 @@ async def update_job(
     if req.tracks is not None:
         rows = list((await db.execute(select(Track).where(col(Track.job_id) == job_id))).scalars().all())
         by_id = {t.id: t for t in rows}
-        # Duplicate track_ids in req.tracks → last-wins (idempotent setattr); a
-        # repeated track.updated event is benign. Callers needn't deduplicate.
+        # Duplicate track_ids in req.tracks → last-wins (idempotent setattr);
+        # track.updated is emitted once per track (de-duplicated below).
+        # Callers needn't deduplicate.
         for edit in req.tracks:
             track = by_id.get(edit.track_id)
             if track is None:

@@ -66,5 +66,10 @@ def start_anchor(
 def rank_seasons(results: Mapping[int, MatchResult]) -> list[tuple[int, MatchResult]]:
     return sorted(
         results.items(),
-        key=lambda item: (-item[1].coverage, item[1].cost / max(1, len(item[1].matches)), item[0]),
+        key=lambda item: (
+            -item[1].coverage,
+            -len(item[1].matches),
+            item[1].cost / max(1, len(item[1].matches)),
+            item[0],
+        ),
     )
