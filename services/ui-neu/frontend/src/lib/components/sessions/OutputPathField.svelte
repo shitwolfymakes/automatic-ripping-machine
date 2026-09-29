@@ -33,7 +33,11 @@
 		iso: ['title', 'year', 'ext']
 	};
 
+	// Tokens that commonly have no value; each gets an extra chip inserting {token?}.
+	const OPTIONAL_CHIPS = new Set(['year']);
+
 	let expansion = $state<string | null>(null);
+	let expansionWithoutOptional = $state<string | null>(null);
 	let previewError = $state<string | null>(null);
 	// Non-reactive — just a handle for clearTimeout; must NOT be $state (would cause effect cycles)
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -49,6 +53,7 @@
 
 		if (!template) {
 			expansion = null;
+			expansionWithoutOptional = null;
 			previewError = null;
 			return;
 		}
@@ -64,10 +69,12 @@
 				}
 				const result = await previewTemplate(body);
 				expansion = result.expansion;
+				expansionWithoutOptional = result.expansion_without_optional ?? null;
 				previewError = null;
 			} catch (err) {
 				previewError = err instanceof Error ? err.message : String(err);
 				expansion = null;
+				expansionWithoutOptional = null;
 			}
 		}, 300);
 
@@ -76,8 +83,8 @@
 		};
 	});
 
-	function insertToken(token: string) {
-		const newValue = value + `{${token}}`;
+	function insertToken(token: string, optional = false) {
+		const newValue = value + `{${token}${optional ? '?' : ''}}`;
 		onchange(newValue);
 	}
 
@@ -102,8 +109,22 @@
 				<button type="button" onclick={() => insertToken(token)} class="chip mono output-path-field-token">
 					{`{${token}}`}
 				</button>
+				{#if OPTIONAL_CHIPS.has(token)}
+					<button
+						type="button"
+						onclick={() => insertToken(token, true)}
+						class="chip mono output-path-field-token"
+						title={`Optional: dropped with its brackets when the job has no ${token}`}
+					>
+						{`{${token}?}`}
+					</button>
+				{/if}
 			{/each}
 		</div>
+		<p class="output-path-field-hint">
+			Add ? to make a token optional, for example {'{year?}'}. It is dropped with its brackets when the job has no
+			value.
+		</p>
 	{/if}
 
 	<!-- Live preview -->
@@ -111,6 +132,12 @@
 		<div class="output-path-field-preview">
 			<span class="output-path-field-preview-label">LIVE PREVIEW</span>
 			<span class="mono output-path-field-preview-value">{expansion}</span>
+		</div>
+	{/if}
+	{#if expansion !== null && expansionWithoutOptional !== null}
+		<div class="output-path-field-preview">
+			<span class="output-path-field-preview-label">WITH NO YEAR OR OTHER OPTIONAL VALUE</span>
+			<span class="mono output-path-field-preview-value">{expansionWithoutOptional}</span>
 		</div>
 	{/if}
 	{#if previewError !== null}
@@ -127,6 +154,12 @@
 	   only needs to add the family; nothing to restate here. */
 	.output-path-field-input {
 		width: 100%;
+	}
+	.output-path-field-hint {
+		margin: 0;
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-secondary);
 	}
 	.output-path-field-tokens {
 		gap: 0.375rem;
