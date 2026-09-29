@@ -37,6 +37,7 @@ from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_common import Config, Job, JobStatus, SessionApplication, SessionApplicationStatus, User
 from arm_common.config_metadata import CONFIG_FIELD_META
+from arm_common.enums import REDRAIN_JOB_STATUSES
 from arm_common.schemas import ConfigUpdateRequest, ConfigView, KeyCheckRequest, KeyCheckResponse
 from arm_common.secrets import HIDDEN_SECRET
 
@@ -45,11 +46,6 @@ _KEY_CHECK_TIMEOUT_SECONDS = 10.0
 router = APIRouter(prefix="/api/config", tags=["config"])
 
 logger = logging.getLogger("arm_backend.routers.config")
-
-# Job statuses whose parked (WAITING_IDENTIFY) applications are drained when
-# transcoding is switched back on: the rip is done and identity is known, so
-# the only thing that held an encode application parked was the toggle.
-_REDRAIN_JOB_STATUSES = (JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL, JobStatus.IDENTIFIED)
 
 _NON_EDITABLE_KEYS = frozenset(m.key for m in CONFIG_FIELD_META if not m.editable)
 
@@ -260,7 +256,7 @@ async def _redrain_parked_applications(session: AsyncSession, request: Request) 
                 await session.execute(
                     select(Job)
                     .where(col(Job.id).in_(sorted(parked_job_ids)))
-                    .where(col(Job.status).in_(_REDRAIN_JOB_STATUSES))
+                    .where(col(Job.status).in_(list(REDRAIN_JOB_STATUSES)))
                 )
             )
             .scalars()

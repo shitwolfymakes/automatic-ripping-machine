@@ -2191,6 +2191,34 @@ export type Job = {
 };
 
 /**
+ * JobActions
+ *
+ * Operator actions the backend will accept for a job in its current status.
+ *
+ * Derived from the same status groups the endpoints enforce, so a UI button
+ * gated on these flags cannot offer an action its endpoint rejects. Role
+ * (admin/guest) gating stays in the UI.
+ */
+export type JobActions = {
+    /**
+     * Can Resolve
+     */
+    can_resolve: boolean;
+    /**
+     * Can Apply
+     */
+    can_apply: boolean;
+    /**
+     * Can Abandon
+     */
+    can_abandon: boolean;
+    /**
+     * Can Delete
+     */
+    can_delete: boolean;
+};
+
+/**
  * JobClaim
  */
 export type JobClaim = {
@@ -2443,6 +2471,7 @@ export type JobView = {
     manual_pause?: boolean;
     rip_progress?: RipProgressSummary | null;
     transcode_progress?: TranscodeProgressSummary | null;
+    readonly actions: JobActions;
 };
 
 /**
@@ -5210,6 +5239,135 @@ export type ValidationError = {
     };
 };
 
+/**
+ * HeldJobView
+ *
+ * Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).
+ *
+ * `paused` is true when the held disc should survive a ripper reboot as a hold
+ * (global `ripping_paused` on — or, once it lands, a per-job pause). The ripper
+ * uses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)
+ * on restart. See the timed-review-gate spec §6.3.
+ */
+export type HeldJobViewWritable = {
+    job: JobViewWritable;
+    /**
+     * Paused
+     */
+    paused: boolean;
+};
+
+/**
+ * JobCompleteRequest
+ *
+ * POST /api/ripper/jobs/{job_id}/rip-complete body.
+ *
+ * Empty for now; backend computes the final job status from the track
+ * outcomes. Reserved for future flags (e.g. user-initiated abort).
+ */
+export type JobCompleteRequestWritable = {
+    [key: string]: unknown;
+};
+
+/**
+ * JobDetailView
+ */
+export type JobDetailViewWritable = {
+    job: JobViewWritable;
+    /**
+     * Tracks
+     */
+    tracks: Array<TrackView>;
+    /**
+     * Fingerprints
+     */
+    fingerprints?: Array<DiscFingerprintView>;
+};
+
+/**
+ * JobView
+ */
+export type JobViewWritable = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Drive Id
+     */
+    drive_id: string | null;
+    /**
+     * Drive Serial
+     */
+    drive_serial?: string | null;
+    disc_type: DiscType;
+    status: JobStatus;
+    /**
+     * Title
+     */
+    title: string | null;
+    /**
+     * Year
+     */
+    year: number | null;
+    media_type?: MediaType | null;
+    /**
+     * Season
+     */
+    season?: number | null;
+    /**
+     * Pending Session Id
+     */
+    pending_session_id?: string | null;
+    /**
+     * Disc Number
+     */
+    disc_number?: number | null;
+    /**
+     * Disc Total
+     */
+    disc_total?: number | null;
+    /**
+     * Poster Url
+     */
+    poster_url?: string | null;
+    /**
+     * Poster Url Manual
+     */
+    poster_url_manual?: string | null;
+    metadata_json: JobMetadata;
+    /**
+     * Resumed From Crash
+     */
+    resumed_from_crash: boolean;
+    /**
+     * Wait Start Time
+     */
+    wait_start_time?: string | null;
+    /**
+     * Manual Pause
+     */
+    manual_pause?: boolean;
+    rip_progress?: RipProgressSummary | null;
+    transcode_progress?: TranscodeProgressSummary | null;
+};
+
+/**
+ * ResolveResponse
+ *
+ * POST /api/jobs/{id}/resolve response. The job always reflects the
+ * just-applied identity (status flipped to `identified`); `fan_out` lists
+ * the per-application outcomes from the parked-applications promotion
+ * pass — empty when no session was applied to the job before resolve.
+ */
+export type ResolveResponseWritable = {
+    job: JobViewWritable;
+    /**
+     * Fan Out
+     */
+    fan_out: Array<ResolveFanOutOutcomeView>;
+};
+
 export type HealthApiHealthGetData = {
     body?: never;
     path?: never;
@@ -5932,7 +6090,7 @@ export type UpdateTrackApiRipperTracksTrackIdPatchResponses = {
 export type UpdateTrackApiRipperTracksTrackIdPatchResponse = UpdateTrackApiRipperTracksTrackIdPatchResponses[keyof UpdateTrackApiRipperTracksTrackIdPatchResponses];
 
 export type RipCompleteApiRipperJobsJobIdRipCompletePostData = {
-    body: JobCompleteRequest;
+    body: JobCompleteRequestWritable;
     headers?: {
         /**
          * X-Arm-Hostname

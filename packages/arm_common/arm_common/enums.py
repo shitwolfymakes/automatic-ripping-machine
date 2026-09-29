@@ -133,6 +133,42 @@ PRE_RIP_JOB_STATUSES: frozenset[JobStatus] = frozenset(
 )
 NON_TERMINAL_JOB_STATUSES: frozenset[JobStatus] = PRE_RIP_JOB_STATUSES | frozenset({JobStatus.RIPPING})
 
+# Identity edits (POST /jobs/{id}/resolve). PROMOTE flips status (to IDENTIFIED,
+# or RIPPED for a ripped placeholder); PRESERVE edits identity in place.
+RESOLVABLE_PROMOTE_JOB_STATUSES: frozenset[JobStatus] = frozenset(
+    {JobStatus.AWAITING_USER_ID, JobStatus.RIPPED_AWAITING_IDENTIFY}
+)
+RESOLVABLE_PRESERVE_JOB_STATUSES: frozenset[JobStatus] = frozenset(
+    {
+        JobStatus.IDENTIFIED,
+        JobStatus.RIPPED,
+        JobStatus.RIPPED_PARTIAL,
+        # A held review-gate disc accepts identity edits WITHOUT flipping status —
+        # resolve = "I've identified it"; the separate Start = "begin ripping".
+        # PRESERVE (not PROMOTE) keeps it in AWAITING_REVIEW after an edit.
+        JobStatus.AWAITING_REVIEW,
+    }
+)
+RESOLVABLE_JOB_STATUSES: frozenset[JobStatus] = RESOLVABLE_PROMOTE_JOB_STATUSES | RESOLVABLE_PRESERVE_JOB_STATUSES
+# Session apply (POST /jobs/{id}/transcode). OK = resolve outputs now (or park
+# as no_tracks pre-rip); PARK = park as waiting_identify until identity lands.
+APPLY_OK_JOB_STATUSES: frozenset[JobStatus] = frozenset(
+    {JobStatus.IDENTIFIED, JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL}
+)
+APPLY_PARK_JOB_STATUSES: frozenset[JobStatus] = frozenset(
+    {JobStatus.AWAITING_USER_ID, JobStatus.RIPPED_AWAITING_IDENTIFY}
+)
+# Rip finished (successfully or as a placeholder); Track rows exist.
+POST_RIP_JOB_STATUSES: frozenset[JobStatus] = frozenset(
+    {JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL, JobStatus.RIPPED_AWAITING_IDENTIFY}
+)
+# Jobs whose parked applications are re-drained when transcoding is re-enabled:
+# the rip is done and identity is known, so the only thing that held an encode
+# application parked was the toggle.
+REDRAIN_JOB_STATUSES: frozenset[JobStatus] = frozenset(
+    {JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL, JobStatus.IDENTIFIED}
+)
+
 
 class TrackStatus(StrEnum):
     QUEUED = "queued"

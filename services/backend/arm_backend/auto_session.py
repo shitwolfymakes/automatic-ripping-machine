@@ -43,7 +43,6 @@ from arm_common import (
     DiscType,
     Drive,
     Job,
-    JobStatus,
     MediaType,
     RipPreset,
     Session,
@@ -57,16 +56,13 @@ from arm_common import (
     with_log_context,
 )
 from arm_common.encoders import get_encoder
+from arm_common.enums import APPLY_OK_JOB_STATUSES, APPLY_PARK_JOB_STATUSES, POST_RIP_JOB_STATUSES
 from arm_common.models._columns import enum_value_str
 from arm_common.schemas import ApplySkippedReason, CollisionInfo
 
 logger = logging.getLogger("arm_backend.auto_session")
 
 
-_APPLY_OK_STATUSES: frozenset[JobStatus] = frozenset({JobStatus.IDENTIFIED, JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL})
-_RIPPED_STATUSES: frozenset[JobStatus] = frozenset(
-    {JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL, JobStatus.RIPPED_AWAITING_IDENTIFY}
-)
 _NO_TRACKS_DETAIL = "no tracks yet: the rip has not started; the application fans out when the rip completes"
 _NO_OUTPUTS_DETAIL = (
     "tracks exist but none resolved an output for this session (excluded, or none match its "
@@ -308,7 +304,7 @@ async def _apply_session_internal(
     # that completed without identity (RIPPED_AWAITING_IDENTIFY) parks the
     # same way: transcode is gated on identity, and resolve's after-rip pass
     # promotes the application once the operator supplies it.
-    if job.status in (JobStatus.AWAITING_USER_ID, JobStatus.RIPPED_AWAITING_IDENTIFY):
+    if job.status in APPLY_PARK_JOB_STATUSES:
         application = SessionApplication(
             session_id=session_id,
             job_id=job.id,
@@ -327,7 +323,7 @@ async def _apply_session_internal(
             skipped_reason=None,
         )
 
-    if job.status not in _APPLY_OK_STATUSES:
+    if job.status not in APPLY_OK_JOB_STATUSES:
         # Manual route maps this to 409; auto path never reaches here because
         # `maybe_auto_apply_session` gates on RIPPED/RIPPED_PARTIAL.
         raise HTTPException(
@@ -482,7 +478,7 @@ async def _fan_out_tasks_for_application(
     # media_type/track-kind routing) — parking as "no_tracks" there would
     # promise a fan-out at rip-complete that will never come, because the
     # rip is already done and the tracks that exist simply don't qualify.
-    if not tracks and job.status not in _RIPPED_STATUSES:
+    if not tracks and job.status not in POST_RIP_JOB_STATUSES:
         # The ripper persists Track rows at rip-start, so a session applied
         # between identify and rip-start (or resolved before the rip) has
         # nothing to fan out yet. Park the application with no tasks instead

@@ -73,7 +73,12 @@ from arm_common.schemas import (
     TranscodeProgressSummary,
     TranscodeTaskView,
 )
-from arm_common.enums import NON_TERMINAL_JOB_STATUSES, TERMINAL_JOB_STATUSES
+from arm_common.enums import (
+    NON_TERMINAL_JOB_STATUSES,
+    RESOLVABLE_JOB_STATUSES,
+    RESOLVABLE_PROMOTE_JOB_STATUSES,
+    TERMINAL_JOB_STATUSES,
+)
 from arm_common.schemas.identity import JOB_CLAIM_FIELDS, TRACK_CLAIM_FIELDS
 from arm_common.schemas.job_metadata import JobIdentity, JobMetadata
 from arm_common.ulid import is_valid_id
@@ -915,22 +920,6 @@ async def update_job(
 # Show ids an operator can send on /resolve; tvmaze is only ever derived.
 _SHOW_ID_FIELDS: tuple[str, ...] = ("imdb", "tmdb", "tvdb")
 
-_RESOLVABLE_STATUSES_PROMOTE: frozenset[JobStatus] = frozenset(
-    {JobStatus.AWAITING_USER_ID, JobStatus.RIPPED_AWAITING_IDENTIFY}
-)
-_RESOLVABLE_STATUSES_PRESERVE: frozenset[JobStatus] = frozenset(
-    {
-        JobStatus.IDENTIFIED,
-        JobStatus.RIPPED,
-        JobStatus.RIPPED_PARTIAL,
-        # A held review-gate disc accepts identity edits WITHOUT flipping status —
-        # resolve = "I've identified it"; the separate Start = "begin ripping".
-        # PRESERVE (not PROMOTE) keeps it in AWAITING_REVIEW after an edit.
-        JobStatus.AWAITING_REVIEW,
-    }
-)
-_RESOLVABLE_STATUSES: frozenset[JobStatus] = _RESOLVABLE_STATUSES_PROMOTE | _RESOLVABLE_STATUSES_PRESERVE
-
 
 @router.post("/{job_id}/resolve", response_model=ResolveResponse)
 async def resolve(
@@ -945,7 +934,7 @@ async def resolve(
     job = (await session.execute(select(Job).where(col(Job.id) == job_id).with_for_update())).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
-    if job.status not in _RESOLVABLE_STATUSES:
+    if job.status not in RESOLVABLE_JOB_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"job {job_id} is in status {job.status.value}, not in an identify-resolvable status",
@@ -1025,7 +1014,7 @@ async def resolve(
     new_metadata.pop("unidentified", None)
     if isinstance(new_metadata.get("flags"), dict):
         new_metadata["flags"] = {k: v for k, v in new_metadata["flags"].items() if k != "unidentified"}
-    if job.status in _RESOLVABLE_STATUSES_PROMOTE:
+    if job.status in RESOLVABLE_PROMOTE_JOB_STATUSES:
         # A placeholder whose rip already finished becomes RIPPED, not
         # IDENTIFIED — its rip is done (G-09).
         job.status = JobStatus.RIPPED if was_ripped_placeholder else JobStatus.IDENTIFIED

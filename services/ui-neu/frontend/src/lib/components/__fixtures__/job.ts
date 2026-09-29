@@ -1,10 +1,30 @@
-import type { JobView, JobDetailView, TrackView } from '$lib/types/api.gen';
+import type { JobView, JobDetailView, TrackView, JobStatus, JobActions } from '$lib/types/api.gen';
+
+// Test mirror of arm_common job_actions_for(). Keyed on JobStatus so a new
+// backend status fails `npm run check` here too.
+const ACTIONS: Record<JobStatus, JobActions> = {
+	created: { can_resolve: false, can_apply: false, can_abandon: true, can_delete: false },
+	awaiting_user_id: { can_resolve: true, can_apply: true, can_abandon: true, can_delete: false },
+	identified: { can_resolve: true, can_apply: true, can_abandon: true, can_delete: false },
+	awaiting_review: { can_resolve: true, can_apply: false, can_abandon: true, can_delete: false },
+	ripping: { can_resolve: false, can_apply: false, can_abandon: true, can_delete: false },
+	ripped: { can_resolve: true, can_apply: true, can_abandon: false, can_delete: true },
+	ripped_partial: { can_resolve: true, can_apply: true, can_abandon: false, can_delete: true },
+	ripped_awaiting_identify: { can_resolve: true, can_apply: true, can_abandon: false, can_delete: true },
+	abandoned: { can_resolve: false, can_apply: false, can_abandon: false, can_delete: true },
+	failed: { can_resolve: false, can_apply: false, can_abandon: false, can_delete: true }
+};
+
+export function actionsFor(status: JobStatus): JobActions {
+	return { ...ACTIONS[status] };
+}
 
 const jobDefaults: JobView = {
 	id: 'job_1',
 	drive_id: 'drv_1',
 	disc_type: 'bluray',
 	status: 'ripping',
+	actions: actionsFor('ripping'),
 	title: 'Test Movie',
 	year: 2024,
 	poster_url: null,
@@ -15,7 +35,8 @@ const jobDefaults: JobView = {
 };
 
 export function createJob(overrides: Partial<JobView> = {}): JobView {
-	return { ...jobDefaults, ...overrides };
+	const status = overrides.status ?? jobDefaults.status;
+	return { ...jobDefaults, actions: actionsFor(status), ...overrides };
 }
 
 const trackDefaults: TrackView = {
