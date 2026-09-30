@@ -1,15 +1,16 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { ConfigFieldMeta } from '$lib/types/api.gen';
+	import RankedListField from './RankedListField.svelte';
 
-	// Props accept the optional `config` (the live form values, keyed by
-	// field key) so a future field type can read a sibling's value without
-	// another prop-plumbing pass; nothing here reads it yet, so it's typed
-	// but not destructured.
+	// `config` (the live form values, keyed by field key) lets a field type
+	// read a sibling's value - the `ranked` branch below uses it to flag a
+	// source whose required API key isn't set.
 	let {
 		field,
 		value = $bindable(),
-		action
+		action,
+		config = {}
 	}: { field: ConfigFieldMeta; value: unknown; action?: Snippet; config?: Record<string, unknown> } = $props();
 
 	const HIDDEN = '<hidden>';
@@ -39,6 +40,15 @@
 				/>
 				<span class="field-label">{field.label}</span>
 			</label>
+		{/if}
+	{:else if field.type === 'ranked'}
+		<div class="field-label">{field.label}</div>
+		{#if field.editable}
+			<RankedListField {field} bind:value {config} />
+		{:else}
+			<div class="mono config-schema-field-value">
+				{(Array.isArray(value) ? (value as string[]) : []).map((v) => field.enum_labels?.[v] ?? v).join(', ') || '-'}
+			</div>
 		{/if}
 	{:else}
 		<div class="field-label">{field.label}</div>

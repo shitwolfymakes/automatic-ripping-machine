@@ -87,4 +87,38 @@ describe('ConfigSchemaField', () => {
 		const option = screen.getByRole('option', { name: 'TMDb' }) as HTMLOptionElement;
 		expect(option.value).toBe('tmdb');
 	});
+
+	it('renders a ranked field as a labelled list', () => {
+		renderComponent(ConfigSchemaField, {
+			props: {
+				field: f({
+					key: 'episode_sources',
+					type: 'ranked',
+					label: 'Episode sources',
+					enum_values: ['tmdb', 'tvmaze', 'tvdb'],
+					enum_labels: { tmdb: 'TMDb', tvmaze: 'TVmaze', tvdb: 'TVDB' }
+				}),
+				value: ['tmdb']
+			}
+		});
+		expect(screen.getByRole('list', { name: 'Episode sources' })).toBeInTheDocument();
+	});
+
+	it('renders a ranked, non-editable field as plain text with no list', () => {
+		renderComponent(ConfigSchemaField, {
+			props: {
+				field: f({
+					key: 'episode_sources',
+					type: 'ranked',
+					label: 'Episode sources',
+					editable: false,
+					enum_values: ['tmdb', 'tvmaze', 'tvdb'],
+					enum_labels: { tmdb: 'TMDb', tvmaze: 'TVmaze', tvdb: 'TVDB' }
+				}),
+				value: ['tvmaze', 'tmdb']
+			}
+		});
+		expect(screen.getByText('TVmaze, TMDb')).toBeInTheDocument();
+		expect(screen.queryByRole('list')).not.toBeInTheDocument();
+	});
 });
