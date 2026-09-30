@@ -3,6 +3,7 @@
 	import type { JoinedSession } from './sessionsData.svelte';
 	import { resolveSample } from './sampleTokens';
 	import { encodersStore, encoderLabel } from '$lib/stores/encoders.svelte';
+	import Glyph from '$lib/components/Glyph.svelte';
 
 	interface Props {
 		session: JoinedSession;
@@ -129,7 +130,7 @@
 		</div>
 
 		<!-- Arrow -->
-		<div class="session-card-recipe-arrow" aria-hidden="true">&gt;</div>
+		<div class="session-card-recipe-arrow" aria-hidden="true"><Glyph name="chevron-right" /></div>
 
 		<!-- Transcode preset -->
 		<div class="session-card-recipe-cell">
@@ -145,7 +146,7 @@
 		</div>
 
 		<!-- Arrow -->
-		<div class="session-card-recipe-arrow" aria-hidden="true">&gt;</div>
+		<div class="session-card-recipe-arrow" aria-hidden="true"><Glyph name="chevron-right" /></div>
 
 		<!-- Output path sample -->
 		<div class="session-card-recipe-cell">
@@ -349,13 +350,12 @@
 		word-break: break-all;
 		color: var(--color-text-secondary);
 	}
+	/* Separator is a glyph icon, not a text character */
 	.session-card-recipe-arrow {
 		display: none;
 		align-items: center;
 		justify-content: center;
 		padding: 0 0.25rem;
-		font-size: 1.125rem;
-		font-weight: 600;
 		color: var(--color-text-faint);
 	}
 	@media (min-width: 640px) {

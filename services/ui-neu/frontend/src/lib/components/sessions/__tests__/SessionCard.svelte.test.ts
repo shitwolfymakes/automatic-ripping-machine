@@ -61,3 +61,18 @@ it('custom: shows Edit label (not View)', () => {
 	expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument();
 	expect(screen.queryByRole('button', { name: /^view$/i })).toBeNull();
 });
+
+it('recipe row renders separators as chevron glyphs, not text', () => {
+	const { container } = renderComponent(SessionCard, {
+		session: joined(),
+		onedit: vi.fn(),
+		onclone: vi.fn(),
+		ondelete: vi.fn()
+	});
+	const arrows = container.querySelectorAll('.session-card-recipe-arrow');
+	expect(arrows).toHaveLength(2);
+	arrows.forEach((arrow) => {
+		expect(arrow.querySelector('svg')).toBeInTheDocument();
+		expect(arrow.textContent).not.toContain('>');
+	});
+});
