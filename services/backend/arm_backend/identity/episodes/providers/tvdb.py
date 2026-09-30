@@ -90,7 +90,10 @@ class TvdbEpisodes:
             return ids.tvdb
         if not ids.imdb:
             return None
-        body = await self._get_authed(f"{settings.ARM_TVDB_BASE_URL}/search/remoteid/{ids.imdb}")
+        try:
+            body = await self._get_authed(f"{settings.ARM_TVDB_BASE_URL}/search/remoteid/{ids.imdb}")
+        except SourceMiss:
+            return None
         try:
             results = body["data"]
             if not isinstance(results, list):

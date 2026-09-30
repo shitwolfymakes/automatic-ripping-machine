@@ -1,6 +1,8 @@
 """TvdbEpisodes provider: login/token caching, resolve_show_id, seasons, season
 (design spec 6.2)."""
 
+import asyncio
+
 import httpx
 import pytest
 import respx
@@ -118,6 +120,37 @@ async def test_token_not_refreshed_before_23_hours(provider, clock):
     clock.t += 23 * 3600 - 1
     await provider.seasons("1")
     assert login.call_count == 1
+
+
+@respx.mock
+async def test_concurrent_calls_after_token_expiry_all_use_fresh_token(provider, clock):
+    """Two concurrent `seasons()` calls made once the cached token has
+    expired must both succeed, and every authed request either of them
+    makes must carry the freshly-issued token — never the stale one."""
+    login_tokens = iter(["tok-old", "tok-new", "tok-new", "tok-new", "tok-new"])
+    respx.post(f"{BASE}/login").mock(
+        side_effect=lambda request: httpx.Response(200, json={"data": {"token": next(login_tokens)}})
+    )
+    # Show "0" primes the token; shows "1"/"2" are fresh URLs never requested
+    # before, so their GETs cannot be served from SourceHttp's cache — each
+    # must make a real request and therefore carry whatever token was
+    # current at that moment, isolating the thing under test (token
+    # freshness) from the unrelated 24h response cache.
+    respx.get(f"{BASE}/series/0/extended").mock(return_value=httpx.Response(200, json={"data": {"seasons": []}}))
+    respx.get(f"{BASE}/series/1/extended").mock(return_value=httpx.Response(200, json={"data": {"seasons": []}}))
+    respx.get(f"{BASE}/series/2/extended").mock(return_value=httpx.Response(200, json={"data": {"seasons": []}}))
+
+    await provider.seasons("0")  # primes the token as "tok-old"
+    clock.t += 23 * 3600  # the cached token is now stale
+
+    before = len(respx.calls)
+    results = await asyncio.gather(provider.seasons("1"), provider.seasons("2"))
+    assert results == [[], []]
+
+    get_calls = [c for c in respx.calls[before:] if c.request.method == "GET"]
+    assert len(get_calls) == 2
+    for c in get_calls:
+        assert c.request.headers["Authorization"] == "Bearer tok-new"
 
 
 @respx.mock
@@ -266,6 +299,16 @@ async def test_resolve_show_id_miss_returns_none(provider):
     _login_route()
     respx.get(f"{BASE}/search/remoteid/tt0000000").mock(return_value=httpx.Response(200, json={"data": []}))
     assert await provider.resolve_show_id(ExternalIds(imdb="tt0000000")) is None
+
+
+@respx.mock
+async def test_resolve_show_id_404_returns_none(provider):
+    """A 404 from /search/remoteid (TVDB has never heard of this imdb id)
+    must satisfy the protocol's "None if it cannot [resolve]" contract, not
+    leak SourceMiss up to the stage as if the provider itself had failed."""
+    _login_route()
+    respx.get(f"{BASE}/search/remoteid/tt0000404").mock(return_value=httpx.Response(404))
+    assert await provider.resolve_show_id(ExternalIds(imdb="tt0000404")) is None
 
 
 @respx.mock
@@ -452,6 +495,33 @@ async def test_pagination_follows_links_next(provider):
     assert route.call_count == 2
     assert route.calls[0].request.url.params["page"] == "0"
     assert route.calls[1].request.url.params["page"] == "1"
+
+
+@respx.mock
+async def test_pagination_mid_series_404_returns_collected_pages_no_fallback(provider):
+    """Page 0 succeeds (with links.next set) but page 1 404s: the episodes
+    already collected from page 0 must be returned, and since that
+    collected list is non-empty, /default must not be tried."""
+    _login_route()
+    dvd_route = respx.get(f"{BASE}/series/1/episodes/dvd").mock(
+        side_effect=[
+            httpx.Response(
+                200,
+                json={
+                    "data": {"episodes": [{"number": 1, "name": "One", "runtime": 30}]},
+                    "links": {"next": "page2"},
+                },
+            ),
+            httpx.Response(404),
+        ]
+    )
+    default_route = respx.get(f"{BASE}/series/1/episodes/default").mock(
+        return_value=httpx.Response(200, json={"data": {"episodes": [{"number": 99, "name": "Wrong", "runtime": 30}]}})
+    )
+    episodes = await provider.season("1", 1)
+    assert [e.number for e in episodes] == [1]
+    assert dvd_route.call_count == 2
+    assert default_route.call_count == 0
 
 
 @respx.mock
