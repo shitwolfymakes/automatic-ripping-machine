@@ -135,6 +135,18 @@ def test_hint_is_tv_false_for_cd() -> None:
     assert hint_is_tv(job) is False
 
 
+def test_hint_is_tv_ignores_a_season_claim_from_an_unlisted_source() -> None:
+    """PR 4: hint_is_tv only consults the passed `sources` -- a label claim with
+    a season (stored from a prior, differently-configured run) does not make
+    the job TV-shaped when `sources` narrows to bd_title alone."""
+    from arm_backend.identity.sources.registry import BD_TITLE, LABEL
+
+    job = Job(id="job_1", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.CREATED, metadata_json={})
+    run_disc_hints(job, ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3"), now=NOW, sources=(LABEL,))
+    assert claims_of(job).sources["label"].job.season == 2
+    assert hint_is_tv(job, (BD_TITLE,)) is False
+
+
 def test_run_disc_hints_handles_pathological_bd_name() -> None:
     # Pathological BD name (a disc-number digit run past int()'s digit-count
     # limit) no longer raises: parse_label's bounds check (finding 2, PR2
