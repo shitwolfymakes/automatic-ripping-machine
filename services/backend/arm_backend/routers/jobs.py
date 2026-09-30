@@ -21,6 +21,7 @@ from arm_backend.config import settings
 from arm_backend.db import get_session
 from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import record_manual_job, record_manual_track, revert_manual_track
+from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.routers._params import JobIdParam
 from arm_backend.routers.logs import per_job_log_path
@@ -33,6 +34,7 @@ from arm_common import (
     DriveMediaStatus,
     Job,
     JobStatus,
+    MediaType,
     Session,
     SessionApplication,
     SessionApplicationStatus,
@@ -77,6 +79,19 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 def _get_hub(request: Request) -> WSHub:
     hub: WSHub = request.app.state.ws_hub
     return hub
+
+
+def _get_stage_runner(request: Request) -> EpisodeStageRunner | None:
+    """None when `app.state` carries no runner (e.g. an existing router test
+    that never set one up) — callers then just skip scheduling."""
+    return getattr(request.app.state, "episode_stage", None)
+
+
+def _identity_snapshot(job: Job) -> tuple[int | None, int | None, MediaType | None, str | None]:
+    """`season`, `disc_number`, `media_type` and title — the fields the
+    background episode stage cares about. Compared before/after a mutating
+    request to decide whether to (re)schedule it (Task 8)."""
+    return (job.season, job.disc_number, job.media_type, job.title)
 
 
 # Resolver-owned attributes on TrackEditRequest / JobUpdateRequest: an edit to
@@ -837,6 +852,7 @@ async def update_job(
     _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
+    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
 ) -> Job:
     """Edit user-controlled fields on a Job + optional per-track operator edits.
     Job title/year stay behind identify/resolve; track `status` stays ripper-owned
@@ -844,6 +860,7 @@ async def update_job(
     job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
+    before_identity = _identity_snapshot(job)
 
     job_fields = req.model_dump(exclude_unset=True, exclude={"tracks"})
     job_identity = {k: v for k, v in job_fields.items() if k in _IDENTITY_JOB_ATTRS}
@@ -900,6 +917,8 @@ async def update_job(
         )
     await db.commit()
     await db.refresh(job)
+    if stage_runner is not None and _identity_snapshot(job) != before_identity:
+        stage_runner.schedule(job.id)
     return job
 
 
@@ -934,6 +953,7 @@ async def resolve(
     _: User = Depends(require_writer),
     session: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
+    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
 ) -> ResolveResponse:
     job = (await session.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
     if job is None:
@@ -943,6 +963,7 @@ async def resolve(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"job {job_id} is in status {job.status.value}, not in an identify-resolvable status",
         )
+    before_identity = _identity_snapshot(job)
 
     # Typed merge (G-03/§3.4): req.music / req.external_ids overlay the
     # matching typed sections of the existing metadata_json; everything else
@@ -1082,6 +1103,9 @@ async def resolve(
     await session.refresh(job)
     for outcome in fan_out_outcomes:
         await session.refresh(outcome.application)
+
+    if stage_runner is not None and _identity_snapshot(job) != before_identity:
+        stage_runner.schedule(job.id)
 
     return ResolveResponse(
         job=JobView.model_validate(job),

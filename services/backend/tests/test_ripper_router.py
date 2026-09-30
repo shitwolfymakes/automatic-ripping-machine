@@ -740,6 +740,74 @@ def test_identify_timeout_records_diagnostic() -> None:
     assert r.json()["metadata_json"]["flags"]["dispatch_timeout"] is True
 
 
+# --- /identify (background episode stage trigger) -----------------------------
+
+
+class _StageRunner:
+    """Recording fake `EpisodeStageRunner` (Task 8): records every job_id
+    `schedule` was called with, without running anything for real."""
+
+    def __init__(self) -> None:
+        self.scheduled: list[str] = []
+
+    def schedule(self, job_id: str) -> None:
+        self.scheduled.append(job_id)
+
+
+def test_identify_tv_disc_schedules_episode_stage() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(title="Some Show", year=2020, kind="tv", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    stage_runner = _StageRunner()
+    app.state.episode_stage = stage_runner
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    assert stage_runner.scheduled == [r.json()["id"]]
+
+
+def test_identify_movie_does_not_schedule_episode_stage() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    stage_runner = _StageRunner()
+    app.state.episode_stage = stage_runner
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    assert stage_runner.scheduled == []
+
+
+def test_identify_without_a_stage_runner_configured_skips_scheduling() -> None:
+    """No `app.state.episode_stage` (every other test in this module, and
+    real routers-under-test elsewhere): the dependency returns None and
+    identify proceeds exactly as before Task 8."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(title="Some Show", year=2020, kind="tv", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+
+
 # --- /identify (TheDiscDB match) ----------------------------------------------
 
 

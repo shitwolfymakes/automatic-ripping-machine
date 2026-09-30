@@ -69,6 +69,17 @@ class _Hub:
         self.events.append({"topic": topic, "event_type": event_type, "payload": payload})
 
 
+class _StageRunner:
+    """Recording fake `EpisodeStageRunner` (Task 8): records every job_id
+    `schedule` was called with, without running anything for real."""
+
+    def __init__(self) -> None:
+        self.scheduled: list[str] = []
+
+    def schedule(self, job_id: str) -> None:
+        self.scheduled.append(job_id)
+
+
 def _make_app(signing_key: bytes, db: FakeSession, hub: _Hub | None = None) -> tuple[FastAPI, str]:
     app = FastAPI()
     app.state.signing_key = signing_key
@@ -560,6 +571,57 @@ def test_resolve_success_preserves_scan_and_emits(signing_key: bytes) -> None:
     assert body["fan_out"] == []
     types = {e["event_type"] for e in hub.events}
     assert {"identify.resolved", "rip.identify_resolved"} <= types
+
+
+def test_resolve_new_season_schedules_episode_stage(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID)]
+    stage_runner = _StageRunner()
+    app.state.episode_stage = stage_runner
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Some Show", "season": 2},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    assert stage_runner.scheduled == ["job_01JZXR7K3M5Q8N4VWA00000001"]
+
+
+def test_resolve_unchanged_identity_does_not_schedule_episode_stage(signing_key: bytes) -> None:
+    """Same title, no season/disc_number/media_type change: the identity
+    fields the background stage cares about are unchanged, so it must not
+    schedule a run."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPED, title="X", year=2000)]
+    stage_runner = _StageRunner()
+    app.state.episode_stage = stage_runner
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "X", "year": 2001},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    assert stage_runner.scheduled == []
+
+
+def test_resolve_without_a_stage_runner_configured_skips_scheduling(signing_key: bytes) -> None:
+    """No `app.state.episode_stage` (every other resolve test in this
+    module): the dependency returns None and resolve proceeds exactly as
+    before Task 8."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID)]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Some Show", "season": 2},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
 
 
 def test_resolve_cd_writes_structured_metadata(signing_key: bytes) -> None:
@@ -1298,6 +1360,49 @@ def test_patch_job_disc_fields_are_manual_claims(signing_key: bytes) -> None:
     job = db.rows["jobs"][0]
     assert (job.disc_number, job.disc_total) == (2, 4)
     assert job.identity_provenance == {"disc_number": "manual", "disc_total": "manual"}
+
+
+def test_patch_disc_number_change_schedules_episode_stage(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    app, token = _make_app(signing_key, db)
+    stage_runner = _StageRunner()
+    app.state.episode_stage = stage_runner
+    with TestClient(app) as c:
+        r = c.patch(f"/api/jobs/{_JOB_ID_A}", json={"disc_number": 2}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert stage_runner.scheduled == [_JOB_ID_A]
+
+
+def test_patch_filename_only_does_not_schedule_episode_stage(signing_key: bytes) -> None:
+    """A PATCH that only touches a track's filename never changes
+    season/disc_number/media_type/title, so it must not schedule the
+    background episode stage."""
+    db = FakeSession()
+    _seed_job_with_track(db)
+    app, token = _make_app(signing_key, db)
+    stage_runner = _StageRunner()
+    app.state.episode_stage = stage_runner
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "custom_filename": "renamed"}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert stage_runner.scheduled == []
+
+
+def test_patch_without_a_stage_runner_configured_skips_scheduling(signing_key: bytes) -> None:
+    """No `app.state.episode_stage` (every other PATCH test in this module):
+    the dependency returns None and the request proceeds exactly as before
+    Task 8."""
+    db = FakeSession()
+    _seed_job_with_track(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(f"/api/jobs/{_JOB_ID_A}", json={"disc_number": 2}, headers=_auth(token))
+    assert r.status_code == 200, r.text
 
 
 def test_patch_rejects_unknown_revert_field(signing_key: bytes) -> None:
