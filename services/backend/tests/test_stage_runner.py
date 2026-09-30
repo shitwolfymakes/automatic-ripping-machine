@@ -630,6 +630,30 @@ def test_build_providers_wires_http_map_and_api_keys() -> None:
     assert by_id["episodes_tvmaze"].configured(cfg) is None
 
 
+def test_public_providers_method_returns_the_cached_list() -> None:
+    """`providers()` (controller ruling 1) is the identity router's only way
+    to reach this runner's providers -- it must be the same cached list
+    `_providers_for` hands the background stage, not a fresh build."""
+    db = _db()
+    hub = _Hub()
+    build_calls: list[Config] = []
+    provider = FakeProvider()
+
+    def factory(http_map: Any, cfg: Config) -> list[Any]:
+        build_calls.append(cfg)
+        return [provider]
+
+    runner = EpisodeStageRunner(lambda: db, httpx.AsyncClient(), hub, providers_factory=factory)
+
+    result = runner.providers(CFG)
+
+    assert result == [provider]
+    assert len(build_calls) == 1
+    # Same cfg key -> cached, not rebuilt.
+    assert runner.providers(CFG) == [provider]
+    assert len(build_calls) == 1
+
+
 # ---------------------------------------------------------------------------
 # sweep_startup (Review Focus 5)
 # ---------------------------------------------------------------------------

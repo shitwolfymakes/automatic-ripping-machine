@@ -143,6 +143,23 @@ def record_manual_job(job: Job, edits: dict[str, Any]) -> bool:
     return True
 
 
+def set_pin(job: Job, capability: str, source_id: str) -> None:
+    """Pin `source_id` as the operator's chosen source for `capability`
+    (e.g. "episode") -- it then outranks its tier-mates in the resolver."""
+    claims = claims_of(job)
+    claims.pin = {**claims.pin, capability: source_id}
+    _store(job, claims)
+
+
+def clear_pin(job: Job, capability: str) -> None:
+    """Remove any pin for `capability`. A no-op when nothing is pinned."""
+    claims = claims_of(job)
+    if capability not in claims.pin:
+        return
+    claims.pin = {k: v for k, v in claims.pin.items() if k != capability}
+    _store(job, claims)
+
+
 def record_preset(job: Job, tracks: Iterable[Track], *, now: datetime) -> None:
     """The rip preset's keep/drop decision is the lowest-tier proposal for
     `excluded`, so a disc map (or the operator) can override it by rule."""

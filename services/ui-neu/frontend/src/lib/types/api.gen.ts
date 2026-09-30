@@ -1312,6 +1312,54 @@ export type EncoderAvailabilityView = {
 };
 
 /**
+ * EpisodeListView
+ *
+ * `GET /api/jobs/{id}/identity/episodes` response.
+ */
+export type EpisodeListView = {
+    /**
+     * Source Id
+     */
+    source_id: string;
+    /**
+     * Show Id
+     */
+    show_id: string;
+    /**
+     * Season
+     */
+    season: number;
+    /**
+     * Episodes
+     */
+    episodes?: Array<EpisodeSummary>;
+};
+
+/**
+ * EpisodeSummary
+ *
+ * One episode in an `EpisodeListView`.
+ */
+export type EpisodeSummary = {
+    /**
+     * Number
+     */
+    number: number;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Runtime S
+     */
+    runtime_s?: number | null;
+    /**
+     * Special
+     */
+    special?: boolean;
+};
+
+/**
  * EventTypeInfo
  */
 export type EventTypeInfo = {
@@ -1353,6 +1401,14 @@ export type ExternalIds = {
      * Tvdb
      */
     tvdb?: string | null;
+    /**
+     * Tvmaze
+     */
+    tvmaze?: string | null;
+    /**
+     * Anidb
+     */
+    anidb?: string | null;
     /**
      * Musicbrainz Release
      */
@@ -1672,6 +1728,30 @@ export type IdentityClaims = {
     pin?: {
         [key: string]: string;
     };
+};
+
+/**
+ * IdentityView
+ *
+ * `GET /api/jobs/{id}/identity` response.
+ */
+export type IdentityView = {
+    /**
+     * Sources
+     */
+    sources?: {
+        [key: string]: SourceSummary;
+    };
+    /**
+     * Pin
+     */
+    pin?: {
+        [key: string]: string;
+    };
+    /**
+     * Tracks
+     */
+    tracks?: Array<TrackIdentityView>;
 };
 
 /**
@@ -2210,6 +2290,118 @@ export type ManualTriggerResponse = {
      * Session Id
      */
     session_id: string | null;
+};
+
+/**
+ * MatchEntryView
+ *
+ * One title's episode match within a `MatchOutcomeView`.
+ */
+export type MatchEntryView = {
+    /**
+     * Source Ref
+     */
+    source_ref: string;
+    /**
+     * Season
+     */
+    season?: number | null;
+    /**
+     * Episode
+     */
+    episode?: number | null;
+    /**
+     * Episode End
+     */
+    episode_end?: number | null;
+    /**
+     * Episode Name
+     */
+    episode_name?: string | null;
+    /**
+     * Confidence
+     */
+    confidence?: number | null;
+};
+
+/**
+ * MatchOutcomeView
+ *
+ * One provider's outcome from a `/identity/match` call.
+ */
+export type MatchOutcomeView = {
+    /**
+     * Source Id
+     */
+    source_id: string;
+    /**
+     * Status
+     */
+    status?: 'ok' | 'miss' | 'skipped' | 'error';
+    /**
+     * Detail
+     */
+    detail?: string | null;
+    /**
+     * Suggestion
+     */
+    suggestion?: boolean;
+    /**
+     * Coverage
+     */
+    coverage?: number | null;
+    /**
+     * Matches
+     */
+    matches?: Array<MatchEntryView>;
+    /**
+     * Alternatives
+     */
+    alternatives?: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+/**
+ * MatchPreview
+ *
+ * `POST /api/jobs/{id}/identity/match` response, for both
+ * `apply=False` (a preview, nothing written) and `apply=True` (reflects the
+ * stored outcomes).
+ */
+export type MatchPreview = {
+    /**
+     * Outcomes
+     */
+    outcomes?: Array<MatchOutcomeView>;
+};
+
+/**
+ * MatchRequest
+ *
+ * `POST /api/jobs/{id}/identity/match` body.
+ */
+export type MatchRequest = {
+    /**
+     * Source
+     */
+    source?: 'tmdb' | 'tvmaze' | 'tvdb' | null;
+    /**
+     * Season
+     */
+    season?: number | null;
+    /**
+     * Disc Number
+     */
+    disc_number?: number | null;
+    /**
+     * Tolerance
+     */
+    tolerance?: number | null;
+    /**
+     * Apply
+     */
+    apply?: boolean;
 };
 
 /**
@@ -3675,6 +3867,10 @@ export type SourceClaims = {
      */
     status?: 'ok' | 'miss' | 'skipped' | 'error';
     /**
+     * Suggestion
+     */
+    suggestion?: boolean;
+    /**
      * Detail
      */
     detail?: string | null;
@@ -3690,6 +3886,48 @@ export type SourceClaims = {
      */
     tracks?: {
         [key: string]: TrackClaim;
+    };
+    /**
+     * Alternatives
+     */
+    alternatives?: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Extra
+     */
+    extra?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * SourceSummary
+ *
+ * One source's claims for a job, display-shaped.
+ */
+export type SourceSummary = {
+    /**
+     * Status
+     */
+    status?: 'ok' | 'miss' | 'skipped' | 'error';
+    /**
+     * Detail
+     */
+    detail?: string | null;
+    /**
+     * Run At
+     */
+    run_at?: string | null;
+    /**
+     * Suggestion
+     */
+    suggestion?: boolean;
+    /**
+     * Inputs
+     */
+    inputs?: {
+        [key: string]: unknown;
     };
     /**
      * Alternatives
@@ -3947,6 +4185,64 @@ export type TrackEditRequest = {
      * Revert Fields
      */
     revert_fields?: Array<'role' | 'title' | 'season' | 'episode_number' | 'episode_number_end' | 'episode_name' | 'custom_filename' | 'excluded'>;
+};
+
+/**
+ * TrackIdentityView
+ *
+ * One track's currently-resolved identity values plus every source's
+ * competing proposal for it (`proposals`, keyed by source id).
+ */
+export type TrackIdentityView = {
+    /**
+     * Track Id
+     */
+    track_id: string;
+    /**
+     * Source Ref
+     */
+    source_ref: string;
+    role?: TrackRole | null;
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Season
+     */
+    season?: number | null;
+    /**
+     * Episode Number
+     */
+    episode_number?: number | null;
+    /**
+     * Episode Number End
+     */
+    episode_number_end?: number | null;
+    /**
+     * Episode Name
+     */
+    episode_name?: string | null;
+    /**
+     * Custom Filename
+     */
+    custom_filename?: string | null;
+    /**
+     * Excluded
+     */
+    excluded?: boolean;
+    /**
+     * Identity Provenance
+     */
+    identity_provenance?: {
+        [key: string]: string;
+    } | null;
+    /**
+     * Proposals
+     */
+    proposals?: {
+        [key: string]: TrackClaim;
+    };
 };
 
 /**
@@ -5648,6 +5944,159 @@ export type ApplySessionApiJobsJobIdTranscodePostResponses = {
 };
 
 export type ApplySessionApiJobsJobIdTranscodePostResponse = ApplySessionApiJobsJobIdTranscodePostResponses[keyof ApplySessionApiJobsJobIdTranscodePostResponses];
+
+export type GetIdentityApiJobsJobIdIdentityGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/jobs/{job_id}/identity';
+};
+
+export type GetIdentityApiJobsJobIdIdentityGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetIdentityApiJobsJobIdIdentityGetError = GetIdentityApiJobsJobIdIdentityGetErrors[keyof GetIdentityApiJobsJobIdIdentityGetErrors];
+
+export type GetIdentityApiJobsJobIdIdentityGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: IdentityView;
+};
+
+export type GetIdentityApiJobsJobIdIdentityGetResponse = GetIdentityApiJobsJobIdIdentityGetResponses[keyof GetIdentityApiJobsJobIdIdentityGetResponses];
+
+export type MatchIdentityApiJobsJobIdIdentityMatchPostData = {
+    body: MatchRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/jobs/{job_id}/identity/match';
+};
+
+export type MatchIdentityApiJobsJobIdIdentityMatchPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MatchIdentityApiJobsJobIdIdentityMatchPostError = MatchIdentityApiJobsJobIdIdentityMatchPostErrors[keyof MatchIdentityApiJobsJobIdIdentityMatchPostErrors];
+
+export type MatchIdentityApiJobsJobIdIdentityMatchPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: MatchPreview;
+};
+
+export type MatchIdentityApiJobsJobIdIdentityMatchPostResponse = MatchIdentityApiJobsJobIdIdentityMatchPostResponses[keyof MatchIdentityApiJobsJobIdIdentityMatchPostResponses];
+
+export type ClearIdentityPinApiJobsJobIdIdentityPinDeleteData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/jobs/{job_id}/identity/pin';
+};
+
+export type ClearIdentityPinApiJobsJobIdIdentityPinDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ClearIdentityPinApiJobsJobIdIdentityPinDeleteError = ClearIdentityPinApiJobsJobIdIdentityPinDeleteErrors[keyof ClearIdentityPinApiJobsJobIdIdentityPinDeleteErrors];
+
+export type ClearIdentityPinApiJobsJobIdIdentityPinDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: IdentityView;
+};
+
+export type ClearIdentityPinApiJobsJobIdIdentityPinDeleteResponse = ClearIdentityPinApiJobsJobIdIdentityPinDeleteResponses[keyof ClearIdentityPinApiJobsJobIdIdentityPinDeleteResponses];
+
+export type BrowseEpisodesApiJobsJobIdIdentityEpisodesGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query: {
+        /**
+         * Source
+         */
+        source: 'tmdb' | 'tvmaze' | 'tvdb';
+        /**
+         * Season
+         */
+        season: number;
+    };
+    url: '/api/jobs/{job_id}/identity/episodes';
+};
+
+export type BrowseEpisodesApiJobsJobIdIdentityEpisodesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type BrowseEpisodesApiJobsJobIdIdentityEpisodesGetError = BrowseEpisodesApiJobsJobIdIdentityEpisodesGetErrors[keyof BrowseEpisodesApiJobsJobIdIdentityEpisodesGetErrors];
+
+export type BrowseEpisodesApiJobsJobIdIdentityEpisodesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: EpisodeListView;
+};
+
+export type BrowseEpisodesApiJobsJobIdIdentityEpisodesGetResponse = BrowseEpisodesApiJobsJobIdIdentityEpisodesGetResponses[keyof BrowseEpisodesApiJobsJobIdIdentityEpisodesGetResponses];
 
 export type ListDrivesApiDrivesGetData = {
     body?: never;

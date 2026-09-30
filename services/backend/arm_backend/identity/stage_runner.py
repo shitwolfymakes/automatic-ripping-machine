@@ -40,13 +40,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
 
 from arm_backend.identity.episode_stage import (
+    SourceOutcome,
     StageOptions,
     apply_episode_outcomes,
     compute_episode_claims,
@@ -58,6 +59,7 @@ from arm_backend.identity.episodes.providers.tvdb import TvdbEpisodes
 from arm_backend.identity.episodes.providers.tvmaze import TvmazeEpisodes
 from arm_backend.identity.http import POLICIES, SourceHttp
 from arm_backend.identity.ids import current_ids, merge_new_ids
+from arm_backend.identity.pipeline import ResolveOutcome
 from arm_backend.identity.proposals import claims_of
 from arm_backend.identity.sources.registry import EPISODE_SOURCE_BY_SETTING
 from arm_backend.seeders import CONFIG_SINGLETON_ID
@@ -87,6 +89,45 @@ def build_providers(http_map: dict[str, SourceHttp], cfg: Config) -> list[Episod
         TvmazeEpisodes(http_map["episodes_tvmaze"]),
         TvdbEpisodes(http_map["episodes_tvdb"], cfg.tvdb_api_key),
     ]
+
+
+async def apply_outcomes_and_emit(
+    session: AsyncSession,
+    job: Job,
+    outcomes: Sequence[SourceOutcome],
+    hub: WSHub,
+) -> ResolveOutcome:
+    """Store `outcomes` (`apply_episode_outcomes`: put_source then resolve),
+    commit, then emit `job.identity_updated` plus one `track.updated` per
+    track the resolver changed, committing again. `job` must already be the
+    freshly re-selected row the caller intends to write to.
+
+    Shared by the background runner's apply phase and the identity router's
+    `apply=True` path (controller ruling 2) so both commit and emit
+    identically."""
+    resolved = await apply_episode_outcomes(session, job, outcomes)
+    await session.commit()
+    await hub.emit(
+        topic="ripper.events",
+        event_type="job.identity_updated",
+        payload={
+            "job_id": job.id,
+            "sources": {o.source_id: o.claims.status for o in outcomes},
+        },
+        job_id=job.id,
+        session=session,
+    )
+    for track_id in sorted(resolved.track_ids):
+        await hub.emit(
+            topic="ripper.events",
+            event_type="track.updated",
+            payload={"track_id": track_id, "job_id": job.id},
+            job_id=job.id,
+            track_id=track_id,
+            session=session,
+        )
+    await session.commit()
+    return resolved
 
 
 class EpisodeStageRunner:
@@ -123,6 +164,14 @@ class EpisodeStageRunner:
             self._providers = self._providers_factory(self._http_map, cfg)
             self._providers_key = key
         return self._providers
+
+    def providers(self, cfg: Config) -> list[EpisodeListProvider]:
+        """The current provider list for `cfg` (controller ruling 1): the
+        identity router's `/identity/match` and `/identity/episodes` take
+        providers from here rather than building their own, so rate limits,
+        TTL caches and the TVDB login token stay shared with the background
+        stage."""
+        return self._providers_for(cfg)
 
     # -- trigger ----------------------------------------------------------
 
@@ -246,28 +295,7 @@ class EpisodeStageRunner:
                     return
 
                 merge_new_ids(fresh_job, current_ids(snapshot))
-                resolved = await apply_episode_outcomes(apply_session, fresh_job, outcomes)
-                await apply_session.commit()
-                await self._hub.emit(
-                    topic="ripper.events",
-                    event_type="job.identity_updated",
-                    payload={
-                        "job_id": fresh_job.id,
-                        "sources": {o.source_id: o.claims.status for o in outcomes},
-                    },
-                    job_id=fresh_job.id,
-                    session=apply_session,
-                )
-                for track_id in sorted(resolved.track_ids):
-                    await self._hub.emit(
-                        topic="ripper.events",
-                        event_type="track.updated",
-                        payload={"track_id": track_id, "job_id": fresh_job.id},
-                        job_id=fresh_job.id,
-                        track_id=track_id,
-                        session=apply_session,
-                    )
-                await apply_session.commit()
+                await apply_outcomes_and_emit(apply_session, fresh_job, outcomes, self._hub)
         except Exception:
             # Never crash the loop: a provider outage or a DB hiccup on one
             # job must not take down every other job's background stage.
