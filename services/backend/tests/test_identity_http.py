@@ -169,6 +169,53 @@ async def test_403_is_auth_error(http_client) -> None:
 
 
 @respx.mock
+async def test_401_error_carries_status(http_client) -> None:
+    """`.status` lets a caller (e.g. TVDB's re-login flow) distinguish a 401
+    from a 403 — both raise the same "auth" message, so message-matching
+    can't tell them apart."""
+    respx.get(URL).mock(return_value=httpx.Response(401))
+    s = make(http_client, Clock())
+    with pytest.raises(SourceError) as exc_info:
+        await s.get_json(URL)
+    assert exc_info.value.status == 401
+
+
+@respx.mock
+async def test_5xx_error_carries_status(http_client) -> None:
+    respx.get(URL).mock(return_value=httpx.Response(503))
+    s = make(http_client, Clock())
+    with pytest.raises(SourceError) as exc_info:
+        await s.get_json(URL)
+    assert exc_info.value.status == 503
+
+
+@respx.mock
+async def test_timeout_error_status_is_none(http_client) -> None:
+    """No definite status to report for a timeout — `.status` stays None,
+    not e.g. 0 or a made-up value."""
+    respx.get(URL).mock(side_effect=httpx.ReadTimeout("slow"))
+    s = make(http_client, Clock())
+    with pytest.raises(SourceError) as exc_info:
+        await s.get_json(URL)
+    assert exc_info.value.status is None
+
+
+@respx.mock
+async def test_second_429_error_status_is_none(http_client) -> None:
+    respx.get(URL).mock(
+        side_effect=[
+            httpx.Response(429, headers={"Retry-After": "1"}),
+            httpx.Response(429, headers={"Retry-After": "1"}),
+        ]
+    )
+    c = Clock()
+    s = make(http_client, c)
+    with pytest.raises(SourceError) as exc_info:
+        await s.get_json(URL)
+    assert exc_info.value.status is None
+
+
+@respx.mock
 async def test_second_429_raises_source_error(http_client) -> None:
     respx.get(URL).mock(
         side_effect=[

@@ -22,7 +22,19 @@ logger = logging.getLogger("arm_backend.identity.http")
 
 class SourceError(Exception):
     """Transient failure: timeout, transport error, a second 429, a 5xx, or
-    an invalid JSON body. Callers may retry later."""
+    an invalid JSON body. Callers may retry later.
+
+    `status` carries the HTTP status code when this error came from a
+    definite status-code response (401/403/another non-2xx); it stays `None`
+    for timeouts, transport errors, invalid JSON, "backing off", and a
+    retried 429 — cases where there is no single status to report. Providers
+    that need to react to a specific status (TVDB re-logging in on a 401)
+    should check `.status` rather than pattern-matching the message, which
+    is fragile (403 gets the same "auth" message as 401)."""
+
+    def __init__(self, message: str, *, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class SourceMiss(Exception):
@@ -215,10 +227,10 @@ class SourceHttp:
         if status in (401, 403):
             logger.warning("auth_failed method=%s status=%d", method, status)
             self._record_error()
-            raise SourceError("auth")
+            raise SourceError("auth", status=status)
         if status < 200 or status >= 300:
             self._record_error()
-            raise SourceError(f"{method} status={status}")
+            raise SourceError(f"{method} status={status}", status=status)
         try:
             body = response.json()
         except ValueError as e:
