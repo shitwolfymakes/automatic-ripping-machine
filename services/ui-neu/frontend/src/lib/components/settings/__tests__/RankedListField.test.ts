@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import { tick } from 'svelte';
 import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
 import RankedListField from '../RankedListField.svelte';
 import type { ConfigFieldMeta } from '$lib/types/api.gen';
@@ -43,6 +44,9 @@ describe('RankedListField', () => {
 		const up = screen.getByRole('button', { name: 'Move TVmaze up' });
 		up.focus();
 		await fireEvent.click(up);
+		// move() clears the live region and sets it again on its own tick, so
+		// give the component one more tick to settle before reading its result.
+		await tick();
 		expect(names()).toEqual(['TVmaze', 'TMDb', 'TVDB']);
 		expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Move TVmaze down' }));
 		expect(screen.getByText('TVmaze moved to rank 1')).toBeInTheDocument();
@@ -66,5 +70,42 @@ describe('RankedListField', () => {
 	it('drops values the schema does not know', () => {
 		renderComponent(RankedListField, { props: { field: f(), value: ['bogus', 'tvmaze'] } });
 		expect(names()).toEqual(['TVmaze', 'TMDb', 'TVDB']);
+	});
+
+	it('dedupes a repeated value, rendering it once', () => {
+		renderComponent(RankedListField, { props: { field: f(), value: ['tvmaze', 'tvmaze', 'tmdb'] } });
+		expect(names()).toEqual(['TVmaze', 'TMDb', 'TVDB']);
+	});
+
+	it('renders the lead control as a plain checkbox, not a bordered field-control', () => {
+		renderComponent(RankedListField, { props: { field: f(), value: ['tmdb'] } });
+		const checkbox = screen.getByRole('checkbox', { name: 'Use TMDb' });
+		expect(checkbox).not.toHaveClass('field-control');
+	});
+
+	it('re-announces a move even when it produces the same wording as an earlier one', async () => {
+		renderComponent(RankedListField, { props: { field: f(), value: ['tmdb', 'tvmaze', 'tvdb'] } });
+
+		await fireEvent.click(screen.getByRole('button', { name: 'Move TVDB up' }));
+		await tick();
+		expect(screen.getByText('TVDB moved to rank 2')).toBeInTheDocument();
+
+		// Uncheck a row with no move, so the live region's text is untouched but
+		// TVDB's rank shifts from under it.
+		await fireEvent.click(screen.getByRole('checkbox', { name: 'Use TMDb' }));
+
+		const live = document.querySelector('[aria-live="polite"]') as HTMLElement;
+		const seen: string[] = [];
+		const observer = new MutationObserver(() => seen.push(live.textContent ?? ''));
+		observer.observe(live, { childList: true, characterData: true, subtree: true });
+
+		// Same wording as the first move ("TVDB moved to rank 2"): without a
+		// clear-then-set, Svelte would skip the DOM text update entirely.
+		await fireEvent.click(screen.getByRole('button', { name: 'Move TVDB down' }));
+		await tick();
+		observer.disconnect();
+
+		expect(seen).toContain('');
+		expect(seen.at(-1)).toBe('TVDB moved to rank 2');
 	});
 });

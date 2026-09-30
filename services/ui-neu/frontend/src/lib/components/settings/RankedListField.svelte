@@ -37,6 +37,11 @@
 		const next = [...selected];
 		[next[i], next[j]] = [next[j], next[i]];
 		value = next;
+		// Clear first: reassigning $state to an identical string is a no-op
+		// as far as the DOM text node is concerned, so back-to-back moves that
+		// land on the same wording would otherwise go unannounced.
+		announcement = '';
+		await tick();
 		announcement = `${labelOf(v)} moved to rank ${j + 1}`;
 		await tick();
 		const same = document.getElementById(buttonId(v, dir)) as HTMLButtonElement | null;
@@ -54,7 +59,6 @@
 			<div class="list-row-lead">
 				<input
 					type="checkbox"
-					class="field-control"
 					checked={isOn}
 					aria-label={`Use ${labelOf(v)}`}
 					aria-describedby={rankId(v)}
