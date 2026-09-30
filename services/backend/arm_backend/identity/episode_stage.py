@@ -23,7 +23,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_common import Config, Job, Track, TrackKind
+from arm_common import Config, Job, JobStatus, Track, TrackKind
 from arm_common.enums import MediaType, TrackRole
 from arm_common.schemas import ExternalIds
 from arm_common.schemas.identity import JobClaim, SourceClaims, TrackClaim
@@ -56,6 +56,8 @@ MIN_MEAN_CONFIDENCE = 0.4
 NEAR_TIE_COST_RATIO = 0.1
 
 _EPISODE_SOURCE_IDS = frozenset(EPISODE_SOURCE_BY_SETTING.values())
+# Jobs that never produced a disc's episodes; they are not siblings.
+_DEAD_STATUSES = frozenset({JobStatus.FAILED, JobStatus.ABANDONED})
 
 
 @dataclass(frozen=True)
@@ -78,6 +80,7 @@ class SourceOutcome:
 class _SeasonFit:
     result: MatchResult
     nominal: bool
+    sibling_conflict: bool
 
 
 def is_tv_candidate(job: Job, tracks: Sequence[Track]) -> bool:
@@ -126,12 +129,15 @@ async def _job_tracks(session: AsyncSession, job: Job) -> list[Track]:
 
 
 async def _sibling_rows(session: AsyncSession, job: Job) -> list[tuple[Job, list[Track]]]:
-    """Other TV jobs with the same title, with their tracks. Season and shared
-    show ids are checked per season / provider by `_siblings`."""
+    """Other live TV jobs with the same title, with their tracks. Season and
+    shared show ids are checked per season / provider by `_siblings`. Failed
+    and abandoned jobs never hold episodes."""
     if not job.title:
         return []
     stmt = select(Job).where(col(Job.title) == job.title, col(Job.media_type) == MediaType.TV)
-    jobs = [j for j in (await session.execute(stmt)).scalars().all() if j.id != job.id]
+    jobs = [
+        j for j in (await session.execute(stmt)).scalars().all() if j.id != job.id and j.status not in _DEAD_STATUSES
+    ]
     if not jobs:
         return []
     tracks = (await session.execute(select(Track).where(col(Track.job_id).in_([j.id for j in jobs])))).scalars().all()
@@ -143,24 +149,42 @@ def _shares_id(ids: ExternalIds, other: ExternalIds) -> bool:
     return any(value and theirs.get(key) == value for key, value in ids.model_dump(exclude_none=True).items())
 
 
-def _siblings(rows: Sequence[tuple[Job, list[Track]]], ids: ExternalIds, season: int) -> list[SiblingDisc]:
+def _held_numbers(sibling: Job, tracks: Sequence[Track], season: int) -> frozenset[int]:
+    numbers: set[int] = set()
+    for t in tracks:
+        track_season = t.season if t.season is not None else sibling.season
+        if track_season != season or t.episode_number is None:
+            continue
+        end = max(t.episode_number_end or t.episode_number, t.episode_number)
+        numbers.update(range(t.episode_number, end + 1))
+    return frozenset(numbers)
+
+
+def _siblings(
+    rows: Sequence[tuple[Job, list[Track]]], ids: ExternalIds, season: int, disc_number: int | None
+) -> tuple[list[SiblingDisc], bool]:
     """Sibling discs of the same show (a shared non-empty external id) and
-    season, with every episode number their resolved tracks hold."""
+    season, with every episode number their resolved tracks hold.
+
+    Only a sibling that is provably a different disc (both disc numbers known
+    and different) claims its episodes. A sibling holding episodes that may be
+    this same disc (an earlier rip of it, or either disc number unknown) is a
+    conflict: returned as True so the result becomes a suggestion."""
     out: list[SiblingDisc] = []
+    conflict = False
     for sibling, tracks in rows:
         if not _shares_id(ids, current_ids(sibling)):
             continue
         if sibling.season != season and not any(t.season == season for t in tracks):
             continue
-        numbers: set[int] = set()
-        for t in tracks:
-            track_season = t.season if t.season is not None else sibling.season
-            if track_season != season or t.episode_number is None:
-                continue
-            end = max(t.episode_number_end or t.episode_number, t.episode_number)
-            numbers.update(range(t.episode_number, end + 1))
-        out.append(SiblingDisc(sibling.disc_number, frozenset(numbers)))
-    return out
+        numbers = _held_numbers(sibling, tracks, season)
+        if not numbers:
+            continue
+        if disc_number is not None and sibling.disc_number is not None and sibling.disc_number != disc_number:
+            out.append(SiblingDisc(sibling.disc_number, numbers))
+        else:
+            conflict = True
+    return out, conflict
 
 
 def _nominal(remaining: Sequence[Episode], titles: Sequence[TitleIn], tolerance: int) -> bool:
@@ -184,32 +208,122 @@ def _near_tie(first: MatchResult, second: MatchResult) -> bool:
     return abs(a - b) <= NEAR_TIE_COST_RATIO * max(a, b)
 
 
-async def _fit_season(
-    provider: EpisodeListProvider,
-    show_id: str,
-    season: int,
-    *,
-    titles: Sequence[TitleIn],
-    rows: Sequence[tuple[Job, list[Track]]],
-    ids: ExternalIds,
-    disc_number: int | None,
-    disc_total: int | None,
-    tolerance: int,
-) -> _SeasonFit | None:
+@dataclass(frozen=True)
+class _Request:
+    """One provider's matching inputs."""
+
+    show_id: str
+    ids: ExternalIds
+    titles: Sequence[TitleIn]
+    rows: Sequence[tuple[Job, list[Track]]]
+    disc_number: int | None
+    disc_total: int | None
+    tolerance: int
+
+
+async def _fit_season(provider: EpisodeListProvider, req: _Request, season: int) -> _SeasonFit | None:
     try:
-        episodes = await provider.season(show_id, season)
+        episodes = await provider.season(req.show_id, season)
     except SourceMiss:
         return None
-    siblings = _siblings(rows, ids, season)
+    siblings, conflict = _siblings(req.rows, req.ids, season, req.disc_number)
     remaining, anchor = start_anchor(
-        episodes, disc_number=disc_number, disc_total=disc_total, n_titles=len(titles), siblings=siblings
+        episodes,
+        disc_number=req.disc_number,
+        disc_total=req.disc_total,
+        n_titles=len(req.titles),
+        siblings=siblings,
     )
-    nominal = _nominal(remaining, titles, tolerance)
+    nominal = _nominal(remaining, req.titles, req.tolerance)
     if nominal:
         remaining = [replace(e, runtime_s=None) for e in remaining]
     claimed = frozenset().union(*(s.episodes for s in siblings)) if siblings else frozenset()
-    result = align_runs(titles, remaining, claimed=claimed, tolerance=tolerance, anchor=anchor)
-    return _SeasonFit(result, nominal)
+    result = align_runs(req.titles, remaining, claimed=claimed, tolerance=req.tolerance, anchor=anchor)
+    return _SeasonFit(result, nominal, conflict)
+
+
+async def _pick_season(
+    provider: EpisodeListProvider, req: _Request, seasons: Sequence[int]
+) -> tuple[int, _SeasonFit, list[tuple[int, MatchResult]]] | None:
+    """The best-ranked season's fit, with the full ranking; None when no
+    season could be fetched."""
+    fits: dict[int, _SeasonFit] = {}
+    for season in seasons:
+        fit = await _fit_season(provider, req, season)
+        if fit is not None:
+            fits[season] = fit
+    ranked = rank_seasons({s: f.result for s, f in fits.items()})
+    if not ranked:
+        return None
+    season = ranked[0][0]
+    return season, fits[season], ranked
+
+
+def _ok_claims(
+    season: int,
+    fit: _SeasonFit,
+    ranked: Sequence[tuple[int, MatchResult]],
+    *,
+    scanned: bool,
+    inputs: dict[str, Any],
+    now: datetime,
+) -> SourceClaims:
+    result = fit.result
+    near_tie = len(ranked) > 1 and _near_tie(result, ranked[1][1])
+    mean_conf = sum(m.confidence for m in result.matches) / len(result.matches)
+    suggestion = (
+        (not EPISODE_AUTO_APPLY)
+        or result.ambiguous
+        or result.coverage < MIN_COVERAGE
+        or mean_conf < MIN_MEAN_CONFIDENCE
+        or near_tie
+        or fit.nominal
+        or fit.sibling_conflict
+    )
+    tracks: dict[str, TrackClaim] = {
+        m.ref: TrackClaim(
+            role=TrackRole.EPISODE,
+            season=season,
+            episode=m.episode,
+            episode_end=m.episode_end,
+            episode_name=m.name or f"Episode {m.episode}",
+            confidence=m.confidence,
+        )
+        for m in result.matches
+    }
+    for ref in (*result.skipped, *result.play_all):
+        tracks[ref] = TrackClaim(role=TrackRole.EXTRA)
+    return SourceClaims(
+        run_at=now,
+        status="ok",
+        suggestion=suggestion,
+        inputs={**inputs, "nominal_runtimes": fit.nominal},
+        job=JobClaim(season=season) if scanned else JobClaim(),
+        tracks=tracks,
+        alternatives=[
+            {"season": s, "coverage": r.coverage, "matches": len(r.matches)} for s, r in ranked[1:] if r.matches
+        ],
+        extra={
+            "coverage": result.coverage,
+            "ambiguous": result.ambiguous,
+            "near_tie": near_tie,
+            "sibling_conflict": fit.sibling_conflict,
+            "play_all": list(result.play_all),
+            "skipped": list(result.skipped),
+        },
+    )
+
+
+def _known_season(job: Job, opts: StageOptions) -> int | None:
+    """The season to match against without scanning: the option, else the
+    job's season unless this stage itself set it (F1). A season an episode
+    source picked by scanning stays a scan, so re-runs keep proposing it
+    and their inputs stay the same."""
+    if opts.season is not None:
+        return opts.season
+    if (job.identity_provenance or {}).get("season") in _EPISODE_SOURCE_IDS:
+        return None
+    return job.season
 
 
 async def _match(
@@ -236,79 +350,28 @@ async def _match(
     if not show_id:
         return SourceOutcome(source_id, SourceClaims(run_at=now, status="miss", detail="show not found"), None)
 
-    known_season = opts.season if opts.season is not None else job.season
+    known_season = _known_season(job, opts)
     disc_number = opts.disc_number if opts.disc_number is not None else job.disc_number
     inputs.update(show_id=show_id, season=known_season, disc_number=disc_number, tolerance=opts.tolerance)
 
-    seasons = [known_season] if known_season is not None else (await provider.seasons(show_id))[:MAX_SEASON_SCAN]
-    fits: dict[int, _SeasonFit] = {}
-    for season in seasons:
-        fit = await _fit_season(
-            provider,
-            show_id,
-            season,
-            titles=titles,
-            rows=rows,
-            ids=ids,
-            disc_number=disc_number,
-            disc_total=job.disc_total,
-            tolerance=opts.tolerance,
-        )
-        if fit is not None:
-            fits[season] = fit
+    if known_season is not None:
+        seasons = [known_season]
+    else:
+        try:
+            seasons = (await provider.seasons(show_id))[:MAX_SEASON_SCAN]
+        except SourceMiss:
+            # A stale cached show id: the provider no longer knows the show.
+            claims = SourceClaims(run_at=now, status="miss", detail="show not found", inputs=dict(inputs))
+            return SourceOutcome(source_id, claims, None)
 
-    ranked = rank_seasons({s: f.result for s, f in fits.items()})
-    if not ranked or not ranked[0][1].matches:
+    req = _Request(show_id, ids, titles, rows, disc_number, job.disc_total, opts.tolerance)
+    picked = await _pick_season(provider, req, seasons)
+    if picked is None or not picked[1].result.matches:
         claims = SourceClaims(run_at=now, status="miss", detail="no episodes matched", inputs=dict(inputs))
-        return SourceOutcome(source_id, claims, ranked[0][1] if ranked else None)
-
-    season, result = ranked[0]
-    nominal = fits[season].nominal
-    near_tie = len(ranked) > 1 and _near_tie(result, ranked[1][1])
-    mean_conf = sum(m.confidence for m in result.matches) / len(result.matches)
-    suggestion = (
-        (not EPISODE_AUTO_APPLY)
-        or result.ambiguous
-        or result.coverage < MIN_COVERAGE
-        or mean_conf < MIN_MEAN_CONFIDENCE
-        or near_tie
-        or nominal
-    )
-
-    tracks: dict[str, TrackClaim] = {
-        m.ref: TrackClaim(
-            role=TrackRole.EPISODE,
-            season=season,
-            episode=m.episode,
-            episode_end=m.episode_end,
-            episode_name=m.name or f"Episode {m.episode}",
-            confidence=m.confidence,
-        )
-        for m in result.matches
-    }
-    for ref in (*result.skipped, *result.play_all):
-        tracks[ref] = TrackClaim(role=TrackRole.EXTRA)
-
-    inputs["nominal_runtimes"] = nominal
-    claims = SourceClaims(
-        run_at=now,
-        status="ok",
-        suggestion=suggestion,
-        inputs=dict(inputs),
-        job=JobClaim(season=season) if known_season is None else JobClaim(),
-        tracks=tracks,
-        alternatives=[
-            {"season": s, "coverage": r.coverage, "matches": len(r.matches)} for s, r in ranked[1:] if r.matches
-        ],
-        extra={
-            "coverage": result.coverage,
-            "ambiguous": result.ambiguous,
-            "near_tie": near_tie,
-            "play_all": list(result.play_all),
-            "skipped": list(result.skipped),
-        },
-    )
-    return SourceOutcome(source_id, claims, result)
+        return SourceOutcome(source_id, claims, picked[1].result if picked else None)
+    season, fit, ranked = picked
+    claims = _ok_claims(season, fit, ranked, scanned=known_season is None, inputs=inputs, now=now)
+    return SourceOutcome(source_id, claims, fit.result)
 
 
 def _error(job: Job, source_id: str, e: Exception, inputs: dict[str, Any], now: datetime) -> SourceOutcome:
