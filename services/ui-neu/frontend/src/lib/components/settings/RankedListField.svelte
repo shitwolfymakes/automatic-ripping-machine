@@ -6,8 +6,14 @@
 	let {
 		field,
 		value = $bindable(),
-		config = {}
-	}: { field: ConfigFieldMeta; value: unknown; config?: Record<string, unknown> } = $props();
+		config = {},
+		helpId
+	}: {
+		field: ConfigFieldMeta;
+		value: unknown;
+		config?: Record<string, unknown>;
+		helpId?: string;
+	} = $props();
 
 	const known = $derived(field.enum_values ?? []);
 	const selected = $derived(
@@ -25,9 +31,20 @@
 	}
 	const buttonId = (v: string, dir: 'up' | 'down') => `ranked-${field.key}-${v}-${dir}`;
 	const rankId = (v: string) => `ranked-${field.key}-${v}-rank`;
+	const useId = (v: string) => `ranked-${field.key}-${v}-use`;
 
-	function toggle(v: string, on: boolean) {
-		value = on ? [...selected, v] : selected.filter((s) => s !== v);
+	async function toggle(v: string, on: boolean) {
+		const next = on ? [...selected, v] : selected.filter((s) => s !== v);
+		value = next;
+		// Clear first, same reasoning as move(): reassigning $state to
+		// identical wording (e.g. toggling the same row off twice in a row
+		// isn't possible, but two different rows landing on the same rank
+		// text would be) is otherwise a DOM no-op for the live region.
+		announcement = '';
+		await tick();
+		announcement = on ? `${labelOf(v)} added at rank ${next.length}` : `${labelOf(v)} not used`;
+		await tick();
+		(document.getElementById(useId(v)) as HTMLInputElement | null)?.focus();
 	}
 
 	async function move(v: string, dir: 'up' | 'down') {
@@ -50,7 +67,7 @@
 	}
 </script>
 
-<div class="ranked-list-field-list" role="list" aria-label={field.label}>
+<div class="ranked-list-field-list" role="list" aria-label={field.label} aria-describedby={helpId}>
 	{#each rows as v (v)}
 		{@const isOn = selected.includes(v)}
 		{@const rank = selected.indexOf(v)}
@@ -58,6 +75,7 @@
 		<div class="list-row list-row-compact ranked-list-field-row" role="listitem" data-on={isOn}>
 			<div class="list-row-lead">
 				<input
+					id={useId(v)}
 					type="checkbox"
 					checked={isOn}
 					aria-label={`Use ${labelOf(v)}`}

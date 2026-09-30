@@ -67,12 +67,43 @@ describe('ConfigSchemaField', () => {
 		expect(screen.getByText('Some guidance')).toBeInTheDocument();
 	});
 
+	it('gives the help text a stable id keyed to the field, for a ranked list to describe itself by', () => {
+		renderComponent(ConfigSchemaField, {
+			props: {
+				field: f({ key: 'episode_sources', label: 'Episode sources', help: 'Tried top to bottom.' }),
+				value: 'x'
+			}
+		});
+		expect(screen.getByText('Tried top to bottom.')).toHaveAttribute('id', 'setting-help-episode_sources');
+	});
+
+	it('wires the ranked list to the help text via aria-describedby', () => {
+		renderComponent(ConfigSchemaField, {
+			props: {
+				field: f({
+					key: 'episode_sources',
+					type: 'ranked',
+					label: 'Episode sources',
+					help: 'Tried top to bottom.',
+					enum_values: ['tmdb', 'tvmaze'],
+					enum_labels: { tmdb: 'TMDb', tvmaze: 'TVmaze' }
+				}),
+				value: ['tmdb']
+			}
+		});
+		expect(screen.getByRole('list', { name: 'Episode sources' })).toHaveAttribute(
+			'aria-describedby',
+			'setting-help-episode_sources'
+		);
+	});
+
 	it('renders an int field as a compact number input that emits numbers', async () => {
 		renderComponent(ConfigSchemaField, {
 			props: { field: f({ type: 'int', label: 'Match tolerance (seconds)' }), value: 300 }
 		});
 		const input = screen.getByRole('spinbutton', { name: 'Match tolerance (seconds)' });
 		expect(input).toHaveClass('field-control', 'config-schema-field-number');
+		expect(input).toHaveAttribute('step', '1');
 		await fireEvent.input(input, { target: { value: '120' } });
 		expect(input).toHaveValue(120);
 	});

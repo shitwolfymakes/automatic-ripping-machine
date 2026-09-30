@@ -19,6 +19,7 @@
 	const boolValue = $derived(Boolean(value));
 	const displayValue = $derived(isHiddenSecret ? '' : (value ?? ''));
 	const placeholder = $derived(isHiddenSecret ? '******** (set, leave blank to keep)' : '');
+	const helpId = $derived(field.help ? `setting-help-${field.key}` : undefined);
 </script>
 
 <div class="config-schema-field stack" id="setting-{field.key}" data-testid="setting-{field.key}">
@@ -44,7 +45,7 @@
 	{:else if field.type === 'ranked'}
 		<div class="field-label">{field.label}</div>
 		{#if field.editable}
-			<RankedListField {field} bind:value {config} />
+			<RankedListField {field} bind:value {config} {helpId} />
 		{:else}
 			<div class="mono config-schema-field-value">
 				{(Array.isArray(value) ? (value as string[]) : []).map((v) => field.enum_labels?.[v] ?? v).join(', ') || '-'}
@@ -76,6 +77,7 @@
 					     the validation (see SchemaConfigForm's save-error alert). -->
 					<input
 						type="number"
+						step="1"
 						inputmode="numeric"
 						aria-label={field.label}
 						value={value ?? ''}
@@ -100,7 +102,7 @@
 		{/if}
 	{/if}
 	{#if field.help}
-		<p class="field-help">{field.help}</p>
+		<p class="field-help" id={helpId}>{field.help}</p>
 	{/if}
 </div>
 

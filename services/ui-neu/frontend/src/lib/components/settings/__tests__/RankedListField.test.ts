@@ -38,6 +38,21 @@ describe('RankedListField', () => {
 		expect(names()).toEqual(['TVDB', 'TMDb', 'TVmaze']);
 	});
 
+	it('announces a rank on check and keeps focus on that row, then announces "not used" and keeps focus on uncheck', async () => {
+		renderComponent(RankedListField, { props: { field: f(), value: ['tmdb'] } });
+		const tvdbCheckbox = screen.getByRole('checkbox', { name: 'Use TVDB' });
+		tvdbCheckbox.focus();
+		await fireEvent.click(tvdbCheckbox);
+		await tick();
+		expect(screen.getByText('TVDB added at rank 2')).toBeInTheDocument();
+		expect(document.activeElement).toBe(tvdbCheckbox);
+
+		await fireEvent.click(tvdbCheckbox);
+		await tick();
+		expect(screen.getByText('TVDB not used')).toBeInTheDocument();
+		expect(document.activeElement).toBe(tvdbCheckbox);
+	});
+
 	it('moves rows, disables the ends, keeps focus and announces', async () => {
 		renderComponent(RankedListField, { props: { field: f(), value: ['tmdb', 'tvmaze'] } });
 		expect(screen.getByRole('button', { name: 'Move TMDb up' })).toBeDisabled();
@@ -75,6 +90,16 @@ describe('RankedListField', () => {
 	it('dedupes a repeated value, rendering it once', () => {
 		renderComponent(RankedListField, { props: { field: f(), value: ['tvmaze', 'tvmaze', 'tmdb'] } });
 		expect(names()).toEqual(['TVmaze', 'TMDb', 'TVDB']);
+	});
+
+	it('describes the list by the field help text id when helpId is passed', () => {
+		renderComponent(RankedListField, {
+			props: { field: f(), value: ['tmdb'], helpId: 'setting-help-episode_sources' }
+		});
+		expect(screen.getByRole('list', { name: 'Episode sources' })).toHaveAttribute(
+			'aria-describedby',
+			'setting-help-episode_sources'
+		);
 	});
 
 	it('renders the lead control as a plain checkbox, not a bordered field-control', () => {
