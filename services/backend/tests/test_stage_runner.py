@@ -20,6 +20,7 @@ from arm_common.schemas import ExternalIds  # noqa: E402
 from arm_backend.identity.episodes.model import Episode  # noqa: E402
 from arm_backend.identity.http import SourceError  # noqa: E402
 from arm_backend.identity.proposals import claims_of, record_manual_job  # noqa: E402
+from arm_backend.identity import stage_runner as stage_runner_module  # noqa: E402
 from arm_backend.identity.stage_runner import (  # noqa: E402
     EpisodeStageRunner,
     build_providers,
@@ -459,6 +460,68 @@ async def test_at_most_two_runs_compute_at_once_m5() -> None:
     assert all(claims_of(j).sources["episodes_tmdb"].status == "ok" for j in jobs)
 
 
+async def test_invalidated_job_queued_behind_the_cap_writes_nothing_first_r1(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R1: a job queued behind two gated runs is invalidated. Its first run,
+    once it gets a slot, writes nothing; only the rerun applies."""
+    jobs = [_job(f"job_{n}") for n in range(3)]
+    tracks = [_track(j.id, i, s) for j in jobs for i, s in enumerate(DISC)]
+    db = _db(*jobs, tracks=tracks)
+    gate = asyncio.Event()
+    provider = _CountingProvider(gate, seasons={1: _season(1, DISTINCT)})
+    runner = _runner(db, _Hub(), [provider])
+    applied: list[str] = []
+    real_apply = stage_runner_module.apply_outcomes_and_emit
+
+    async def recording_apply(session: Any, job: Job, outcomes: Any, hub: Any) -> Any:
+        applied.append(job.id)
+        return await real_apply(session, job, outcomes, hub)
+
+    monkeypatch.setattr(stage_runner_module, "apply_outcomes_and_emit", recording_apply)
+    computed: list[str] = []
+    real_compute = stage_runner_module.compute_episode_claims
+
+    async def recording_compute(session: Any, job: Job, *args: Any) -> Any:
+        computed.append(job.id)
+        return await real_compute(session, job, *args)
+
+    monkeypatch.setattr(stage_runner_module, "compute_episode_claims", recording_compute)
+
+    for j in jobs:
+        runner.schedule(j.id)
+    for _ in range(20):
+        await asyncio.sleep(0)
+    assert provider.active == 2
+    assert "job_2" not in runner._started  # queued behind the cap
+
+    runner.invalidate("job_2")
+    gate.set()
+    await runner.drain()
+
+    assert computed.count("job_2") == 2  # the first run, then the rerun
+    assert applied.count("job_2") == 1  # only the rerun wrote
+    assert claims_of(jobs[2]).sources["episodes_tmdb"].status == "ok"
+
+
+async def test_run_with_no_eligible_titles_writes_and_emits_nothing_c1() -> None:
+    """C1 polish: an identify-time run with no tracks yet stops right after
+    compute: no lock, no resolve, no event."""
+    job = _job()
+    db = _db(job, tracks=[])
+    hub = _Hub()
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    runner = _runner(db, hub, [provider])
+
+    runner.schedule(job.id)
+    await runner.drain()
+
+    assert hub.events == []
+    assert db.locked == []
+    assert db.committed == 0
+    assert provider.calls == []
+
+
 async def test_compute_phase_mutation_never_reaches_a_flush() -> None:
     """Fix round 2's core invariant: nothing the compute phase mutates can
     ever reach a flush. `resolve_show_ids` mutates the compute snapshot's
@@ -565,11 +628,11 @@ async def test_invalidate_noop_when_nothing_pending() -> None:
     assert runner._rerun == set()
 
 
-async def test_invalidate_noop_when_run_not_yet_started() -> None:
+async def test_invalidate_marks_rerun_for_a_run_not_yet_started_r1() -> None:
     """Immediately after `schedule()`, before any `await` yields control,
-    the task exists in `_pending` but hasn't run its first line (`_started`
-    is still empty): `invalidate` is a no-op -- that run will read current
-    state once it starts, so marking a rerun would be a wasted extra pass."""
+    the task exists in `_pending` but hasn't started. R1: `invalidate` still
+    marks a rerun, since a queued run can take its slot and compute while the
+    caller computes, then apply after the caller commits."""
     job = _job()
     db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
     provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
@@ -582,9 +645,10 @@ async def test_invalidate_noop_when_run_not_yet_started() -> None:
 
     runner.invalidate(job.id)
 
-    assert job.id not in runner._rerun
+    assert job.id in runner._rerun
 
     await runner.drain()
+    assert claims_of(job).sources["episodes_tmdb"].status == "ok"  # the rerun applied
 
 
 async def test_invalidate_marks_rerun_when_run_has_started() -> None:

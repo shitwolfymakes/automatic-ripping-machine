@@ -237,15 +237,16 @@ class EpisodeStageRunner:
         against pre-write state writes nothing when it reaches its apply
         phase instead of clobbering the write that's about to land.
 
-        Reuses `schedule`'s rerun-once bookkeeping (Task 8): a run that has
-        actually started gets marked for exactly one rerun, which applies
-        fresh outcomes once the caller's own write has landed. A run that's
-        merely queued needs no marking — it will read the current state once
-        it starts. A no-op when nothing is pending for this job at all, or
-        after `shutdown`."""
+        Reuses `schedule`'s rerun-once bookkeeping (Task 8): any pending run,
+        started or still queued behind the concurrency cap, gets marked for
+        exactly one rerun, which applies fresh outcomes once the caller's own
+        write has landed. A queued run must be marked too (R1): it can take
+        its slot and compute while the caller is still computing, then apply
+        after the caller commits. A no-op when nothing is pending for this
+        job at all, or after `shutdown`."""
         if self._shutdown:
             return
-        if job_id in self._pending and job_id in self._started:
+        if job_id in self._pending:
             self._rerun.add(job_id)
 
     async def drain(self) -> None:
@@ -322,6 +323,10 @@ class EpisodeStageRunner:
                 providers = self._providers_for(cfg)
                 ids_before = current_ids(job).model_dump(exclude_none=True)
                 outcomes = await compute_episode_claims(compute_session, job, providers, cfg, StageOptions())
+                if not outcomes:
+                    # Nothing to match yet (no eligible titles): no lock,
+                    # no resolve, no event.
+                    return
                 # I4: only the ids this compute newly found. An id the
                 # snapshot already had may since have been cleared on the
                 # fresh row (e.g. /resolve with a different show) and must
