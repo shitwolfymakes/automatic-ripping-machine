@@ -2,7 +2,15 @@
 	import type { Snippet } from 'svelte';
 	import type { ConfigFieldMeta } from '$lib/types/api.gen';
 
-	let { field, value = $bindable(), action }: { field: ConfigFieldMeta; value: unknown; action?: Snippet } = $props();
+	// Props accept the optional `config` (the live form values, keyed by
+	// field key) so a future field type can read a sibling's value without
+	// another prop-plumbing pass; nothing here reads it yet, so it's typed
+	// but not destructured.
+	let {
+		field,
+		value = $bindable(),
+		action
+	}: { field: ConfigFieldMeta; value: unknown; action?: Snippet; config?: Record<string, unknown> } = $props();
 
 	const HIDDEN = '<hidden>';
 	const isSecret = $derived(field.tier === 'secret');
@@ -48,9 +56,25 @@
 						class="field-control w-full"
 					>
 						{#each field.enum_values ?? [] as opt (opt)}
-							<option value={opt}>{opt}</option>
+							<option value={opt}>{field.enum_labels?.[opt] ?? opt}</option>
 						{/each}
 					</select>
+				{:else if field.type === 'int'}
+					<!-- Compact: an int field reads as a short number, not a full-width
+					     text box. Emits a number (or null when emptied), never a string -
+					     no min/max here, the backend's 400 on an out-of-range value is
+					     the validation (see SchemaConfigForm's save-error alert). -->
+					<input
+						type="number"
+						inputmode="numeric"
+						aria-label={field.label}
+						value={value ?? ''}
+						oninput={(e) => {
+							const raw = (e.currentTarget as HTMLInputElement).value;
+							value = raw === '' ? null : Number(raw);
+						}}
+						class="field-control config-schema-field-number"
+					/>
 				{:else}
 					<input
 						type={isSecret ? 'password' : 'text'}
@@ -87,5 +111,9 @@
 		font-size: 0.875rem;
 		line-height: 1.25rem;
 		color: var(--color-text-muted);
+	}
+	/* an int field is a short number, not a full-width text box. */
+	.config-schema-field-number {
+		width: 8rem;
 	}
 </style>

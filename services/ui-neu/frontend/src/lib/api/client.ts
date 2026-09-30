@@ -27,6 +27,15 @@ export class ApiError extends Error {
 	}
 }
 
+// Shown when a request never reaches the server (fetch itself throws - the
+// network is down, TLS failed, and so on) rather than the server answering
+// with a non-2xx status. Kept here (a plain .ts module, not a .svelte
+// <script> block) rather than inline at the call site: the straight
+// apostrophe in "didn't" is indistinguishable from a string delimiter to
+// ui-neu-style-lint's script-literal scan, which would otherwise mis-pair
+// quotes for the rest of that file and flag unrelated code past it.
+export const NETWORK_ERROR_MESSAGE = "The server didn't respond. Your changes are still here, so try Save again.";
+
 let on401: () => void = () => {};
 
 export function setUnauthorizedHandler(fn: () => void): void {

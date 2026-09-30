@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createRawSnippet } from 'svelte';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
 import SchemaConfigForm from '../SchemaConfigForm.svelte';
-import type { SettingsGroup, KeyCheckResponse } from '$lib/types/api.gen';
+import { ApiError } from '$lib/api/client';
+import { sectionFields } from '$lib/utils/settings-sections';
+import type { SettingsGroup, KeyCheckResponse, ConfigFieldMeta } from '$lib/types/api.gen';
 
 const saveArmConfig = vi.fn((_config: Record<string, unknown>) => Promise.resolve({ success: true }));
 const checkApiKey = vi.fn((_name: string, _value?: string): Promise<KeyCheckResponse> =>
@@ -12,6 +14,15 @@ vi.mock('$lib/api/settings', () => ({
 	saveArmConfig: (config: Record<string, unknown>) => saveArmConfig(config),
 	checkApiKey: (name: string, value?: string) => checkApiKey(name, value)
 }));
+
+// sectionFields itself is exercised end to end in settings-sections.test.ts;
+// here it's a spy over the real implementation so most tests see the real
+// Metadata sections while the layout-hints test below can swap in a fixed
+// shape without depending on the production section map.
+vi.mock('$lib/utils/settings-sections', async () => {
+	const actual = await vi.importActual<typeof import('$lib/utils/settings-sections')>('$lib/utils/settings-sections');
+	return { ...actual, sectionFields: vi.fn(actual.sectionFields) };
+});
 
 const GROUP: SettingsGroup = {
 	name: 'Metadata',
@@ -54,6 +65,7 @@ afterEach(() => {
 	cleanup();
 	saveArmConfig.mockClear();
 	checkApiKey.mockClear();
+	vi.mocked(sectionFields).mockClear();
 });
 
 describe('SchemaConfigForm', () => {
@@ -225,5 +237,97 @@ describe('SchemaConfigForm key-check button', () => {
 		await waitFor(() =>
 			expect(screen.getByTestId('key-check-makemkv_key')).toHaveTextContent('Valid, using the monthly beta key')
 		);
+	});
+});
+
+describe('SchemaConfigForm save feedback', () => {
+	it('shows the server message in an alert when Save is rejected', async () => {
+		const detail = 'episode_match_tolerance_seconds must be 1 to 1800';
+		saveArmConfig.mockRejectedValueOnce(new ApiError(400, detail, { detail }));
+		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save settings.");
+		expect(screen.getByRole('alert')).toHaveTextContent('must be 1 to 1800');
+	});
+
+	it('shows a network-failure message when the request never reaches the server', async () => {
+		saveArmConfig.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+		const alert = await screen.findByRole('alert');
+		expect(alert).toHaveTextContent("Couldn't save settings.");
+		expect(alert).toHaveTextContent("The server didn't respond. Your changes are still here, so try Save again.");
+	});
+
+	it('shows a check-circle glyph beside a successful save', async () => {
+		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+		await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
+		expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+	});
+});
+
+describe('SchemaConfigForm section layout hints', () => {
+	const fieldA: ConfigFieldMeta = {
+		key: 'a',
+		group: 'Metadata',
+		tier: 'operator',
+		label: 'Field A',
+		help: '',
+		type: 'bool',
+		editable: true,
+		enum_values: null
+	};
+	const fieldB: ConfigFieldMeta = { ...fieldA, key: 'b', label: 'Field B' };
+	const fieldC: ConfigFieldMeta = { ...fieldA, key: 'c', label: 'Field C' };
+	const fieldD: ConfigFieldMeta = { ...fieldA, key: 'd', label: 'Field D' };
+	const LAYOUT_GROUP: SettingsGroup = { name: 'Metadata', fields: [fieldA, fieldB, fieldC, fieldD] };
+	const LAYOUT_CONFIG = { a: true, b: true, c: true, d: true };
+
+	it('renders column and advanced groups without repeating keys', () => {
+		vi.mocked(sectionFields).mockReturnValueOnce([
+			{
+				title: 'Test section',
+				columns: [[fieldA, fieldB]],
+				fields: [fieldC],
+				advanced: [fieldD]
+			}
+		]);
+
+		renderComponent(SchemaConfigForm, { props: { group: LAYOUT_GROUP, config: LAYOUT_CONFIG } });
+
+		// Each key rendered exactly once.
+		expect(screen.getAllByRole('checkbox')).toHaveLength(4);
+
+		const columnsGrid = screen.getByTestId('settings-section-columns');
+		expect(within(columnsGrid).getByLabelText('Field A')).toBeInTheDocument();
+		expect(within(columnsGrid).getByLabelText('Field B')).toBeInTheDocument();
+		expect(within(columnsGrid).queryByLabelText('Field C')).not.toBeInTheDocument();
+		expect(within(columnsGrid).queryByLabelText('Field D')).not.toBeInTheDocument();
+
+		const advancedLabel = screen.getByText('Advanced');
+		const fieldDCheckbox = screen.getByLabelText('Field D');
+		// Field D renders after the "Advanced" label, not before it.
+		expect(advancedLabel.compareDocumentPosition(fieldDCheckbox) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		const fieldCCheckbox = screen.getByLabelText('Field C');
+		expect(fieldCCheckbox.compareDocumentPosition(advancedLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it('renders the summary slot as a no-op until a named component is wired up', () => {
+		// The 'tv-episodes' name is recognised (typed on SettingsSection), but
+		// this task only wires the slot - Task 6 supplies the component, so it
+		// still renders nothing today. Same outcome as an unrecognised name.
+		vi.mocked(sectionFields).mockReturnValueOnce([
+			{
+				title: 'Test section',
+				summary: 'tv-episodes',
+				columns: [],
+				fields: [fieldA],
+				advanced: []
+			}
+		]);
+		renderComponent(SchemaConfigForm, { props: { group: LAYOUT_GROUP, config: LAYOUT_CONFIG } });
+		expect(screen.queryByTestId('settings-section-columns')).not.toBeInTheDocument();
+		expect(screen.getByLabelText('Field A')).toBeInTheDocument();
 	});
 });
