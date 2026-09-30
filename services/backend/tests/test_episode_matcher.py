@@ -1,7 +1,7 @@
 """Ordered-alignment episode matcher (spec 6.2) incl. neu defect regressions."""
 
 from arm_backend.identity.episodes.continuity import align_runs
-from arm_backend.identity.episodes.matcher import align
+from arm_backend.identity.episodes.matcher import _is_ambiguous, align
 from arm_backend.identity.episodes.model import Episode, TitleIn
 
 
@@ -325,3 +325,15 @@ def test_ambiguous_when_the_anchor_beats_a_better_runtime_fit() -> None:
 def test_not_ambiguous_when_runtimes_clearly_decide() -> None:
     r = align(titles(1300, 3500), eps(2600, 2600, 1320, 3480, 2600))
     assert r.ambiguous is False
+
+
+def test_is_ambiguous_flags_a_shift_that_fits_much_better_one_sided() -> None:
+    # Built by hand (the DP would never choose a poor "chosen" mapping when a
+    # much better one is available, so this can't be produced through align()):
+    # the chosen mapping has a 100 s delta; shifting +1 gives a 0 s delta, a
+    # fit more than 60 s better. The old two-sided `abs(shifted - chosen) <= 60`
+    # rule does not flag this (|0 - 100| = 100 > 60); the new one-sided rule
+    # (`shifted <= chosen + 60`) does.
+    episodes = [Episode(season=1, number=1, runtime_s=3000), Episode(season=1, number=2, runtime_s=2900)]
+    singles = [(0, 2900)]  # position 0 (E1, rt 3000) matched to a 2900 s title: delta 100
+    assert _is_ambiguous(singles, frozenset(), episodes, 300, 3000) is True

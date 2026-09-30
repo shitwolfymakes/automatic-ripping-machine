@@ -1,5 +1,7 @@
 """Cross-disc continuity (spec 6.3) and season ranking, incl. neu defects 1 and 2."""
 
+import pytest
+
 from arm_backend.identity.episodes.continuity import SiblingDisc, align_runs, rank_seasons, start_anchor
 from arm_backend.identity.episodes.matcher import align
 from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn, TitleMatch
@@ -123,9 +125,18 @@ def test_rank_seasons_prefers_coverage_then_cost() -> None:
 
 
 def test_align_runs_without_claims_equals_align() -> None:
+    # Every anchor position, including start_anchor's past-the-end sentinel
+    # (len(remaining)), must land in the (only) run the same as plain align().
     s = season(10)
     t = five_titles()
-    assert align_runs(t, s, claimed=frozenset()) == align(t, s)
+    for a in (None, 0, 3, len(s)):
+        assert align_runs(t, s, claimed=frozenset(), anchor=a) == align(t, s, anchor=a)
+
+
+def test_align_runs_requires_single_season() -> None:
+    multi = [Episode(season=1, number=1, runtime_s=3000), Episode(season=2, number=1, runtime_s=3000)]
+    with pytest.raises(ValueError, match="single season"):
+        align_runs(five_titles(), multi, claimed=frozenset())
 
 
 def test_align_runs_prefers_run_after_sibling_block() -> None:

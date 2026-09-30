@@ -77,11 +77,12 @@ def rank_seasons(results: Mapping[int, MatchResult]) -> list[tuple[int, MatchRes
 
 
 def _runs(remaining: Sequence[Episode], claimed: frozenset[int]) -> list[tuple[int, list[Episode]]]:
-    """Split into (start index, episodes) runs at sibling-held numbers or a season change."""
+    """Split into (start index, episodes) runs at sibling-held numbers, within
+    the single season `align_runs` requires of `remaining`."""
     runs: list[tuple[int, list[Episode]]] = []
     for idx, ep in enumerate(remaining):
         prev = remaining[idx - 1] if idx else None
-        breaks = prev is None or prev.season != ep.season or any(prev.number < c < ep.number for c in claimed)
+        breaks = prev is None or any(prev.number < c < ep.number for c in claimed)
         if breaks:
             runs.append((idx, [ep]))
         else:
@@ -99,11 +100,22 @@ def align_runs(
 ) -> MatchResult:
     """Align within each run of episodes no sibling disc holds (spec 6.3): a
     disc can never span another disc's episodes, while plain gaps in the
-    provider's numbering stay inside one run."""
+    provider's numbering stay inside one run.
+
+    `remaining` must be a single season (raises `ValueError` otherwise);
+    `claimed` is that season's sibling-held episode numbers."""
+    if len({e.season for e in remaining}) > 1:
+        raise ValueError("align_runs requires remaining to hold a single season")
     runs = _runs(remaining, claimed) or [(0, [])]
+    last = len(runs) - 1
     results = []
     for order, (start, eps) in enumerate(runs):
-        local = anchor - start if anchor is not None and start <= anchor < start + len(eps) else None
+        local = (
+            anchor - start
+            if anchor is not None
+            and (start <= anchor < start + len(eps) or (order == last and anchor == start + len(eps)))
+            else None
+        )
         results.append((order, align(titles, eps, tolerance=tolerance, anchor=local)))
     ranked = sorted(results, key=lambda r: (-r[1].coverage, -len(r[1].matches), r[1].cost, r[0]))
     best = ranked[0][1]
