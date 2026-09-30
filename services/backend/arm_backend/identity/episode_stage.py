@@ -378,25 +378,31 @@ async def _match(
     if reason is not None:
         return SourceOutcome(source_id, SourceClaims(run_at=now, status="skipped", detail=reason), None)
     previous = claims_of(job).sources.get(source_id)
-    if provider.http.backing_off():
-        # I2: an error carrying the stored entry's inputs, so put_source keeps
-        # the last good claims (and records last_error) instead of wiping them.
-        claims = SourceClaims(
-            run_at=now, status="error", detail="backing off", inputs=dict(previous.inputs) if previous else {}
-        )
-        return SourceOutcome(source_id, claims, None)
-
     known_season = _known_season(job, opts)
     disc_number = opts.disc_number if opts.disc_number is not None else job.disc_number
     tolerance = _tolerance(job, source_id, opts)
+    # The keep-path inputs (I2, M3, R2): when the provider cannot be asked,
+    # the show id is the one the last stored entry used, and the rest is this
+    # request's, so put_source keeps the last good claims only when the
+    # request is unchanged. With no known previous show id (none stored, or
+    # cleared by /resolve naming a different show) nothing can be kept.
+    prior_inputs = previous.inputs if previous else {}
+    prior_show_id = prior_inputs.get("show_id")
+    kept = (
+        {"show_id": prior_show_id, "season": known_season, "disc_number": disc_number, "tolerance": tolerance}
+        if prior_show_id is not None
+        else {}
+    )
+    if provider.http.backing_off():
+        backoff_inputs = {**kept, "nominal_runtimes": prior_inputs.get("nominal_runtimes")} if kept else {}
+        claims = SourceClaims(run_at=now, status="error", detail="backing off", inputs=backoff_inputs)
+        return SourceOutcome(source_id, claims, None)
+
     try:
         ids = await resolve_show_ids(job, [provider], persist=opts.apply, raise_errors=True)
     except SourceError:
-        # M3: a transient failure, not "show not found". The provider could
-        # not be asked, so the show id is the one the last stored entry used;
-        # the rest is this request's, so claims are kept only when unchanged.
-        prior_show_id = previous.inputs.get("show_id") if previous else None
-        inputs.update(show_id=prior_show_id, season=known_season, disc_number=disc_number, tolerance=tolerance)
+        # M3: a transient failure, not "show not found".
+        inputs.update(kept)
         raise
     show_id = getattr(ids, provider.id_field, None)
     if not show_id:

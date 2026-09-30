@@ -146,6 +146,25 @@ def record_manual_job(job: Job, edits: dict[str, Any], *, keep_restated: bool = 
     return True
 
 
+# Episode-match source ids share this prefix (sources.registry).
+_EPISODE_SOURCE_PREFIX = "episodes_"
+
+
+def forget_episode_show_ids(job: Job) -> None:
+    """Set `inputs["show_id"]` to None in every stored episode-match entry
+    (R2): once the job names a different show, a stored entry must never
+    again look like "the same request", so an error or backoff re-run can
+    not keep claims made for the previous show."""
+    claims = claims_of(job)
+    changed = False
+    for source_id, entry in claims.sources.items():
+        if source_id.startswith(_EPISODE_SOURCE_PREFIX) and entry.inputs.get("show_id") is not None:
+            entry.inputs = {**entry.inputs, "show_id": None}
+            changed = True
+    if changed:
+        _store(job, claims)
+
+
 def set_pin(job: Job, capability: str, source_id: str) -> None:
     """Pin `source_id` as the operator's chosen source for `capability`
     (e.g. "episode") -- it then outranks its tier-mates in the resolver."""

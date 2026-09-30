@@ -21,7 +21,12 @@ from arm_backend.config import settings
 from arm_backend.db import get_session
 from arm_backend.identity.ids import current_ids
 from arm_backend.identity.pipeline import resolve_job
-from arm_backend.identity.proposals import record_manual_job, record_manual_track, revert_manual_track
+from arm_backend.identity.proposals import (
+    forget_episode_show_ids,
+    record_manual_job,
+    record_manual_track,
+    revert_manual_track,
+)
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.routers._params import JobIdParam
@@ -979,6 +984,7 @@ async def resolve(
     # partial-edit case ("just fix the title") sends neither field and must
     # NOT wipe auto-identified sections.
     md = JobMetadata.model_validate(job.metadata_json or {})
+    show_changed = False
     if req.music is not None:
         md.music = req.music
     # Fix 75-5: "external_ids" sent (even as {} or with some fields null) is
@@ -999,12 +1005,16 @@ async def resolve(
         # show id derived from the old one and not sent now is stale: clear
         # tvmaze, and tmdb / tvdb when absent from the request. An explicit
         # null only clears that one id; it names no other show.
-        if any(
+        # R3: filling a blank id names no different show, so only a stored,
+        # non-null id replaced by a different value triggers the clear.
+        show_changed = any(
             name in ids_set
             and getattr(req.external_ids, name) is not None
+            and getattr(existing_ids, name) is not None
             and getattr(req.external_ids, name) != getattr(existing_ids, name)
             for name in _SHOW_ID_FIELDS
-        ):
+        )
+        if show_changed:
             for name in ("tvmaze", "tmdb", "tvdb"):
                 if name not in ids_set:
                     setattr(existing_ids, name, None)
@@ -1045,6 +1055,10 @@ async def resolve(
         # IDENTIFIED — its rip is done (G-09).
         job.status = JobStatus.RIPPED if was_ripped_placeholder else JobStatus.IDENTIFIED
     job.metadata_json = new_metadata
+    if show_changed:
+        # R2: the stored episode entries were matched against the previous
+        # show; forgetting their show id means no keep-path can hold them.
+        forget_episode_show_ids(job)
     # Disc position and season are identity fields: they go through the
     # resolver as manual proposals so provenance is recorded and later
     # sources (episode matching, disc hints) never override them. This must

@@ -640,6 +640,58 @@ def test_resolve_changed_imdb_clears_derived_ids_and_reschedules(signing_key: by
     assert stage_runner.scheduled == ["job_01JZXR7K3M5Q8N4VWA00000001"]
 
 
+def test_resolve_changed_imdb_forgets_stored_episode_show_ids_r2(signing_key: bytes) -> None:
+    job = _ids_job()
+    job.metadata_json = {
+        **job.metadata_json,
+        "identity_claims": {
+            "sources": {
+                "episodes_tmdb": {"status": "ok", "inputs": {"show_id": "7", "season": 1}},
+                "episodes_tvmaze": {"status": "miss", "inputs": {}},
+                "label": {"status": "ok", "inputs": {"show_id": "keep"}},
+            }
+        },
+    }
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "X", "year": 2000, "external_ids": {"imdb": "tt2"}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    sources = db.rows["jobs"][0].metadata_json["identity_claims"]["sources"]
+    assert sources["episodes_tmdb"]["inputs"] == {"show_id": None, "season": 1}
+    assert sources["episodes_tvmaze"]["inputs"] == {}
+    assert sources["label"]["inputs"] == {"show_id": "keep"}  # not an episode source
+
+
+def test_resolve_filling_a_blank_imdb_keeps_tmdb_and_tvdb_r3(signing_key: bytes) -> None:
+    """R3: a TMDb-identified job with no imdb gets one; filling a blank id
+    names no different show, so tmdb and tvdb are kept."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [
+        _job(
+            status=JobStatus.IDENTIFIED,
+            title="X",
+            year=2000,
+            meta={"identity": {"provider": "tmdb", "external_ids": {"tmdb": "7", "tvdb": "8", "tvmaze": "9"}}},
+        )
+    ]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "X", "year": 2000, "external_ids": {"imdb": "tt1"}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    ids = {k: v for k, v in r.json()["job"]["metadata_json"]["identity"]["external_ids"].items() if v is not None}
+    assert ids == {"imdb": "tt1", "tmdb": "7", "tvdb": "8", "tvmaze": "9"}
+
+
 def test_resolve_restating_the_same_ids_keeps_derived_ids(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)

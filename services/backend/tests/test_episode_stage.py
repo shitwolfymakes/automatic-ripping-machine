@@ -24,7 +24,7 @@ from arm_backend.identity.episode_stage import (  # noqa: E402
 from arm_backend.identity.episodes.continuity import SiblingDisc  # noqa: E402
 from arm_backend.identity.episodes.model import Episode  # noqa: E402
 from arm_backend.identity.http import SourceError, SourceMiss  # noqa: E402
-from arm_backend.identity.proposals import claims_of, set_pin  # noqa: E402
+from arm_backend.identity.proposals import claims_of, forget_episode_show_ids, set_pin  # noqa: E402
 from tests._fakes import FakeSession  # noqa: E402
 
 CFG = Config(id=1)
@@ -542,13 +542,48 @@ async def test_show_id_source_error_without_previous_claims_m3() -> None:
     [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
 
     assert outcome.claims.status == "error"
-    assert outcome.claims.inputs == {
-        "show_id": None,
-        "season": 1,
-        "disc_number": None,
-        "tolerance": 300,
-        "nominal_runtimes": None,
-    }
+    assert outcome.claims.inputs == {}  # R2: no known previous show id, nothing to keep
+
+
+async def test_backoff_with_a_new_season_does_not_keep_the_old_season_r2() -> None:
+    """R2: the backoff keep-path uses this request's season, so a `/match`
+    for a different season during backoff replaces the old season's claims
+    instead of keeping them."""
+    job = _job()
+    db = _db(job, DISC)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    assert _tracks(db, job)["0"].episode_number == 3
+
+    provider.http = FakeHttp(backing_off=True)
+    [outcome], _ = await run_episode_stage(db, job, [provider], CFG, StageOptions(season=2))  # type: ignore[arg-type]
+
+    assert outcome.claims.inputs["season"] == 2
+    stored = claims_of(job).sources["episodes_tmdb"]
+    assert (stored.status, stored.detail) == ("error", "backing off")
+    assert all(t.episode_number is None for t in _tracks(db, job).values())
+
+
+@pytest.mark.parametrize("failure", ["backoff", "show_id_error"])
+async def test_forgotten_show_id_keeps_nothing_r2(failure: str) -> None:
+    """R2: after /resolve names a different show (`forget_episode_show_ids`),
+    neither keep-path can hold the previous show's claims."""
+    job = _job()
+    job.metadata_json = {}  # the show id is resolved on every run
+    db = _db(job, DISC)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    forget_episode_show_ids(job)
+
+    if failure == "backoff":
+        provider.http = FakeHttp(backing_off=True)
+    else:
+        provider.resolve_error = SourceError("HTTP 503")
+    [outcome], _ = await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    assert outcome.claims.inputs == {}
+    assert claims_of(job).sources["episodes_tmdb"].status == "error"
+    assert all(t.episode_number is None for t in _tracks(db, job).values())
 
 
 async def test_show_id_miss_is_still_a_miss_m3() -> None:
