@@ -82,7 +82,7 @@
 				const field = group.fields.find((f) => f.key === key);
 				if (field?.tier === 'secret') {
 					// Never keep the raw secret around as a comparison baseline (or
-					// on screen) once it's saved - both fall back to the masked
+					// on screen) once it is saved - both fall back to the masked
 					// sentinel, same as an untouched secret on load.
 					mergedOverrides[key] = HIDDEN;
 					mergedValues[key] = HIDDEN;
@@ -95,7 +95,7 @@
 			feedback = { type: 'success', message: 'Saved' };
 			onsaved?.(payload);
 		} catch (e) {
-			// An ApiError's message is already the backend's 400 detail (or a
+			// An ApiError message is already the 400 backend detail (or a
 			// generic "API {status}: {statusText}"); anything else (fetch itself
 			// throwing) means the request never reached the server.
 			const message = e instanceof ApiError ? e.message : NETWORK_ERROR_MESSAGE;
