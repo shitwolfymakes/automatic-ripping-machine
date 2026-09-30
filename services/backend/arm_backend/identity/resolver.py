@@ -12,6 +12,7 @@ from arm_common import Job, Track
 from arm_common.schemas.identity import JOB_CLAIM_FIELDS, TRACK_CLAIM_FIELDS, IdentityClaims
 
 from arm_backend.identity.proposals import MANUAL
+from arm_backend.identity.sources.base import TIER_BY_CAPABILITY, Capability
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,9 @@ logger = logging.getLogger(__name__)
 # field was fill-if-empty. Kept so pre-provenance rows behave as before.
 _UNGUARDED_ATTRS = {"role", "excluded"}
 _DEFAULTS: dict[str, Any] = {"excluded": False}
+# Episode matches are winner-takes-all: two providers' placements of the same
+# disc are alternatives, never parts to merge field by field.
+_EPISODE_TIER = TIER_BY_CAPABILITY[Capability.EPISODE_MATCH]
 
 
 @dataclass(frozen=True)
@@ -59,6 +63,11 @@ def resolve(claims: IdentityClaims, *, tiers: Mapping[str, int], ranks: Mapping[
             continue
         usable.append(source_id)
     usable.sort(key=lambda s: (tiers[s], 0 if s in pinned else 1, s not in ranks, ranks.get(s, 0), s))
+    # Keep only the first usable episode-match source (the pin sorts first);
+    # every other one contributes nothing, so a lower-ranked provider can
+    # never fill a track the winner called an extra with a duplicate number.
+    episode_sources = [s for s in usable if tiers[s] == _EPISODE_TIER]
+    usable = [s for s in usable if tiers[s] != _EPISODE_TIER or s == episode_sources[0]]
 
     res = Resolution(known_sources=frozenset(tiers))
     for source_id in usable:
