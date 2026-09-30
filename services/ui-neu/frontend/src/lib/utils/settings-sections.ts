@@ -50,7 +50,7 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 			blurb: 'How ARM works out season and episode numbers for TV discs.',
 			summary: 'tv-episodes',
 			keys: ['disc_hint_sources', 'episode_sources', 'episode_auto_apply', 'episode_match_tolerance_seconds'],
-			columns: [['disc_hint_sources', 'episode_sources']],
+			columns: [['disc_hint_sources'], ['episode_sources']],
 			advanced: ['episode_match_tolerance_seconds']
 		},
 		{

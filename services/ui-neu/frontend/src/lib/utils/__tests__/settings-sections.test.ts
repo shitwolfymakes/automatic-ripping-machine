@@ -15,8 +15,8 @@ const meta = (key: string, type = 'bool'): ConfigFieldMeta => ({
 describe('sectionFields layout hints', () => {
 	it('splits columns, fields and advanced, each key once', () => {
 		// The real "TV episodes" section: disc_hint_sources + episode_sources
-		// in one column group, episode_auto_apply in the plain stack,
-		// episode_match_tolerance_seconds after the Advanced divider.
+		// side by side (one column each), episode_auto_apply in the plain
+		// stack, episode_match_tolerance_seconds after the Advanced divider.
 		const fields = [
 			meta('disc_hint_sources', 'ranked'),
 			meta('episode_sources', 'ranked'),
@@ -28,7 +28,10 @@ describe('sectionFields layout hints', () => {
 		const tvEpisodes = sections.find((s) => s.title === 'TV episodes');
 		expect(tvEpisodes).toBeDefined();
 
-		expect(tvEpisodes?.columns.map((col) => col.map((f) => f.key))).toEqual([['disc_hint_sources', 'episode_sources']]);
+		expect(tvEpisodes?.columns.map((col) => col.map((f) => f.key))).toEqual([
+			['disc_hint_sources'],
+			['episode_sources']
+		]);
 		expect(tvEpisodes?.fields.map((f) => f.key)).toEqual(['episode_auto_apply']);
 		expect(tvEpisodes?.advanced.map((f) => f.key)).toEqual(['episode_match_tolerance_seconds']);
 		expect(tvEpisodes?.summary).toBe('tv-episodes');

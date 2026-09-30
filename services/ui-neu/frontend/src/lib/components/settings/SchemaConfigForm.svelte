@@ -5,6 +5,7 @@
 	import { ApiError, NETWORK_ERROR_MESSAGE } from '$lib/api/client';
 	import { groupBlurb, sectionFields, KEY_CHECK_NAMES } from '$lib/utils/settings-sections';
 	import { formatDateTime } from '$lib/utils/format';
+	import { unchanged } from '$lib/utils/unchanged';
 	import ConfigSchemaField from './ConfigSchemaField.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import TvEpisodesSummary, { tvEpisodesEmptyNote } from './TvEpisodesSummary.svelte';
@@ -38,17 +39,6 @@
 
 	let saving = $state(false);
 	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
-
-	// A ranked/string[] field value is an array - $state deep-proxies it, so
-	// even an untouched value is never === its raw counterpart in config.
-	// Compare element-wise for arrays; every other field type stays primitive
-	// (string/number/boolean), where === already means unchanged.
-	function unchanged(a: unknown, b: unknown): boolean {
-		if (Array.isArray(a) && Array.isArray(b)) {
-			return a.length === b.length && a.every((v, i) => v === b[i]);
-		}
-		return a === b;
-	}
 
 	function buildPayload(): Record<string, unknown> {
 		const out: Record<string, unknown> = {};

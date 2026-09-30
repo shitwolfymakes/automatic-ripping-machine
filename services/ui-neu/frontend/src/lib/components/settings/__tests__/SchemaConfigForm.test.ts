@@ -340,7 +340,7 @@ describe('SchemaConfigForm TV episodes section', () => {
 			type: 'ranked',
 			editable: true,
 			enum_values: ['bd_title', 'label'],
-			enum_labels: { bd_title: 'Blu-ray disc title', label: 'Volume label' }
+			enum_labels: { bd_title: 'Blu-ray disc title', label: 'Disc volume label' }
 		},
 		{
 			key: 'episode_sources',
@@ -394,6 +394,35 @@ describe('SchemaConfigForm TV episodes section', () => {
 		expect(screen.getByLabelText('Apply confident matches')).toBeInTheDocument();
 		expect(screen.getByText('Advanced')).toBeInTheDocument();
 		expect(screen.getByLabelText('Match tolerance (seconds)')).toBeInTheDocument();
+	});
+
+	it('places the two ranked lists in different column cells (side by side, not stacked)', () => {
+		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
+
+		const columnsGrid = screen.getByTestId('settings-section-columns');
+		const discHints = within(columnsGrid).getByRole('list', { name: 'Read season and disc number from' });
+		const episodeSources = within(columnsGrid).getByRole('list', { name: 'Episode sources' });
+
+		const cells = Array.from(columnsGrid.children);
+		expect(cells).toHaveLength(2);
+		const discHintsCell = cells.find((c) => c.contains(discHints));
+		const episodeSourcesCell = cells.find((c) => c.contains(episodeSources));
+		expect(discHintsCell).toBeDefined();
+		expect(episodeSourcesCell).toBeDefined();
+		expect(discHintsCell).not.toBe(episodeSourcesCell);
+	});
+
+	it('shows the empty-sources note when episode_sources is empty, and hides it otherwise', () => {
+		const { unmount } = renderComponent(SchemaConfigForm, {
+			props: { group: TV_GROUP, config: { ...TV_CONFIG, episode_sources: [] } }
+		});
+		expect(screen.getByTestId('tv-episodes-empty-note')).toHaveTextContent(
+			'With every source off, ARM does not match episodes automatically.'
+		);
+		unmount();
+
+		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
+		expect(screen.queryByTestId('tv-episodes-empty-note')).not.toBeInTheDocument();
 	});
 
 	it('moving TVmaze up updates the summary text before Save', async () => {

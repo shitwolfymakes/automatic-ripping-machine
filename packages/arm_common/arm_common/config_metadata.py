@@ -109,7 +109,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         type="ranked",
         editable=True,
         enum_values=["bd_title", "label"],
-        enum_labels={"bd_title": "Blu-ray disc title", "label": "Volume label"},
+        enum_labels={"bd_title": "Blu-ray disc title", "label": "Disc volume label"},
     ),
     ConfigFieldMeta(
         key="episode_match_tolerance_seconds",
