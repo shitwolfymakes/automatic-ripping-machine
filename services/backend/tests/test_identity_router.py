@@ -602,6 +602,7 @@ def test_clear_pin_removes_existing_pin(signing_key: bytes) -> None:
     assert r.status_code == 200
     assert claims_of(job).pin == {}
     assert r.json()["pin"] == {}
+    assert db.locked == ["jobs"]  # M2: the job row is locked before resolving
 
 
 def test_clear_pin_emits_identity_updated_and_track_updated(signing_key: bytes) -> None:

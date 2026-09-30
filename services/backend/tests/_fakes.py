@@ -164,6 +164,9 @@ class FakeSession:
         # `expire_all_calls` / `call_log`.
         self.expire_all_calls = 0
         self.call_log: list[str] = []
+        # Tables selected `FOR UPDATE`, in order (M2: routers lock the job row
+        # before its tracks). The fake takes no real lock.
+        self.locked: list[str] = []
 
     async def __aenter__(self) -> "FakeSession":
         return self
@@ -223,6 +226,8 @@ class FakeSession:
             return _Result([])
 
         table = _table_for_stmt(stmt)
+        if stmt._for_update_arg is not None and table:
+            self.locked.append(table)
         rows = list(self.rows.get(table, [])) if table else []
         filters = _all_filters(stmt)
         rows = [r for r in rows if _matches(r, filters)]

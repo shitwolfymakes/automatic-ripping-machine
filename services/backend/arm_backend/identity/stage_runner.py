@@ -73,6 +73,11 @@ logger = logging.getLogger("arm_backend.identity.stage_runner")
 # tier maps, which PR 4 will make operator-configurable).
 _EPISODE_SOURCE_IDS: tuple[str, ...] = tuple(EPISODE_SOURCE_BY_SETTING.values())
 
+# Most jobs whose episode stage computes and applies at once (M5): bounds
+# provider load and DB connections when many jobs are scheduled together
+# (e.g. the startup sweep).
+MAX_CONCURRENT_RUNS = 2
+
 # Statuses `sweep_startup` considers (Review Focus 5): a job that has been
 # identified but never had a chance to run the episode stage in-process
 # (e.g. the backend restarted between identify and the runner picking it
@@ -175,6 +180,7 @@ class EpisodeStageRunner:
         self._started: set[str] = set()
         self._rerun: set[str] = set()
         self._shutdown = False
+        self._run_slots = asyncio.Semaphore(MAX_CONCURRENT_RUNS)
 
     def _providers_for(self, cfg: Config) -> list[EpisodeListProvider]:
         key = (cfg.tmdb_api_key, cfg.tvdb_api_key)
@@ -276,7 +282,14 @@ class EpisodeStageRunner:
     # -- one run ------------------------------------------------------------
 
     async def _run_once(self, job_id: str) -> None:
-        self._started.add(job_id)
+        # M5: at most MAX_CONCURRENT_RUNS jobs compute and apply at a time. A
+        # run waiting for a slot has not started: a `schedule` for it meanwhile
+        # stays a no-op, since the run reads the current state once it starts.
+        async with self._run_slots:
+            self._started.add(job_id)
+            await self._run_body(job_id)
+
+    async def _run_body(self, job_id: str) -> None:
         try:
             # Phase 1 (fetch): load the snapshot and run the network phase
             # against ONE session, held open only for this session's own

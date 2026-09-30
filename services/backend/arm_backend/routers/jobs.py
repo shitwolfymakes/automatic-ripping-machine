@@ -859,7 +859,9 @@ async def update_job(
     """Edit user-controlled fields on a Job + optional per-track operator edits.
     Job title/year stay behind identify/resolve; track `status` stays ripper-owned
     (not in TrackEditRequest)."""
-    job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+    # M2: lock the job row (then its tracks) so a concurrent identity write
+    # (the episode stage's apply, /identity/match) serializes with this one.
+    job = (await db.execute(select(Job).where(col(Job.id) == job_id).with_for_update())).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
     before_identity = _identity_snapshot(job)
@@ -960,7 +962,8 @@ async def resolve(
     hub: WSHub = Depends(_get_hub),
     stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
 ) -> ResolveResponse:
-    job = (await session.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+    # M2: lock the job row before the identity write (lock order: job, then tracks).
+    job = (await session.execute(select(Job).where(col(Job.id) == job_id).with_for_update())).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
     if job.status not in _RESOLVABLE_STATUSES:

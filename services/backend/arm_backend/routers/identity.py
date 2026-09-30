@@ -68,8 +68,11 @@ router = APIRouter(prefix="/api/jobs", tags=["identity"])
 _EPISODE_PIN = "episode"
 
 
-async def _get_job(db: AsyncSession, job_id: str) -> Job:
-    job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+async def _get_job(db: AsyncSession, job_id: str, *, for_update: bool = False) -> Job:
+    stmt = select(Job).where(col(Job.id) == job_id)
+    if for_update:
+        stmt = stmt.with_for_update()
+    job = (await db.execute(stmt)).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
     return job
@@ -276,7 +279,8 @@ async def clear_identity_pin(
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
 ) -> IdentityView:
-    job = await _get_job(db, job_id)
+    # M2: lock the job row before the identity write (lock order: job, then tracks).
+    job = await _get_job(db, job_id, for_update=True)
     clear_pin(job, _EPISODE_PIN)
     db.add(job)
     resolved = await resolve_job(db, job)

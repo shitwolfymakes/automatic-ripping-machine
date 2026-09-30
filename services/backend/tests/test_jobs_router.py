@@ -1422,6 +1422,33 @@ def test_patch_disc_number_change_schedules_episode_stage(signing_key: bytes) ->
     assert stage_runner.scheduled == [_JOB_ID_A]
 
 
+def test_patch_locks_the_job_row_before_its_tracks(signing_key: bytes) -> None:
+    """M2: PATCH selects the job `FOR UPDATE` (lock order: job, then tracks)."""
+    db = FakeSession()
+    _seed_job_with_track(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "custom_filename": "a.mkv"}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert db.locked[0] == "jobs"
+
+
+def test_resolve_locks_the_job_row(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID)]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve", json={"title": "T"}, headers=_auth(token)
+        )
+    assert r.status_code == 200
+    assert db.locked[0] == "jobs"
+
+
 def test_patch_filename_only_does_not_schedule_episode_stage(signing_key: bytes) -> None:
     """A PATCH that only touches a track's filename never changes
     season/disc_number/media_type/title, so it must not schedule the

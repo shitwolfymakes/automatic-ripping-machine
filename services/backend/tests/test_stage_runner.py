@@ -416,6 +416,49 @@ async def test_in_flight_run_never_re_adds_a_cleared_id_i4() -> None:
     assert edited.metadata_json["identity"]["external_ids"] == {"imdb": "tt2", "tmdb": "999"}
 
 
+class _CountingProvider(FakeProvider):
+    """Counts `season()` calls in flight at once, each held on `gate`."""
+
+    def __init__(self, gate: asyncio.Event, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._hold = gate
+        self.active = 0
+        self.peak = 0
+
+    async def season(self, show_id: str, number: int) -> list[Episode]:
+        self.active += 1
+        self.peak = max(self.peak, self.active)
+        try:
+            await self._hold.wait()
+            return await super().season(show_id, number)
+        finally:
+            self.active -= 1
+
+
+async def test_at_most_two_runs_compute_at_once_m5() -> None:
+    """M5: the runner's semaphore lets two jobs compute and apply at a time;
+    the third waits its turn, then runs."""
+    jobs = [_job(f"job_{n}") for n in range(3)]
+    tracks = [_track(j.id, i, s) for j in jobs for i, s in enumerate(DISC)]
+    db = _db(*jobs, tracks=tracks)
+    gate = asyncio.Event()
+    provider = _CountingProvider(gate, seasons={1: _season(1, DISTINCT)})
+    runner = _runner(db, _Hub(), [provider])
+
+    for j in jobs:
+        runner.schedule(j.id)
+    for _ in range(20):
+        await asyncio.sleep(0)
+    assert provider.active == 2
+    assert len(runner._pending) == 3  # the third is scheduled, just waiting
+
+    gate.set()
+    await runner.drain()
+
+    assert provider.peak == 2
+    assert all(claims_of(j).sources["episodes_tmdb"].status == "ok" for j in jobs)
+
+
 async def test_compute_phase_mutation_never_reaches_a_flush() -> None:
     """Fix round 2's core invariant: nothing the compute phase mutates can
     ever reach a flush. `resolve_show_ids` mutates the compute snapshot's
