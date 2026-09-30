@@ -10,9 +10,10 @@ trailing rule toward "nothing here matches, skip the title")."""
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from arm_backend.identity.episodes.model import Episode, MatchResult
+from arm_backend.identity.episodes.matcher import align
+from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn
 
 
 @dataclass(frozen=True)
@@ -73,3 +74,46 @@ def rank_seasons(results: Mapping[int, MatchResult]) -> list[tuple[int, MatchRes
             item[0],
         ),
     )
+
+
+def _runs(remaining: Sequence[Episode], claimed: frozenset[int]) -> list[tuple[int, list[Episode]]]:
+    """Split into (start index, episodes) runs at sibling-held numbers or a season change."""
+    runs: list[tuple[int, list[Episode]]] = []
+    for idx, ep in enumerate(remaining):
+        prev = remaining[idx - 1] if idx else None
+        breaks = prev is None or prev.season != ep.season or any(prev.number < c < ep.number for c in claimed)
+        if breaks:
+            runs.append((idx, [ep]))
+        else:
+            runs[-1][1].append(ep)
+    return runs
+
+
+def align_runs(
+    titles: Sequence[TitleIn],
+    remaining: Sequence[Episode],
+    *,
+    claimed: frozenset[int],
+    tolerance: int = 300,
+    anchor: int | None = None,
+) -> MatchResult:
+    """Align within each run of episodes no sibling disc holds (spec 6.3): a
+    disc can never span another disc's episodes, while plain gaps in the
+    provider's numbering stay inside one run."""
+    runs = _runs(remaining, claimed) or [(0, [])]
+    results = []
+    for order, (start, eps) in enumerate(runs):
+        local = anchor - start if anchor is not None and start <= anchor < start + len(eps) else None
+        results.append((order, align(titles, eps, tolerance=tolerance, anchor=local)))
+    ranked = sorted(results, key=lambda r: (-r[1].coverage, -len(r[1].matches), r[1].cost, r[0]))
+    best = ranked[0][1]
+    if len(ranked) > 1:
+        second = ranked[1][1]
+        if (
+            second.coverage == best.coverage
+            and len(second.matches) == len(best.matches)
+            and abs(second.cost - best.cost) <= 60
+            and best.matches
+        ):
+            return replace(best, ambiguous=True)
+    return best

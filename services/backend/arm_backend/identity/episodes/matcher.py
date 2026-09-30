@@ -92,17 +92,19 @@ def _is_ambiguous(
     ref_rt: int,
 ) -> bool:
     """True when shifting every single-episode match (list position, title seconds)
-    by -1 or +1 is also valid and its total delta is within AMBIGUITY_WINDOW_S of
-    the chosen one. Unknown runtimes count as the reference-runtime delta."""
+    by -1 or +1 is also valid and its total delta is no worse than AMBIGUITY_WINDOW_S
+    over the chosen one (one-sided: a shift that fits as well or better is just as
+    ambiguous as one a little worse). Unknown runtimes count as the reference-runtime
+    delta."""
     if not singles:
         return False
 
     def delta(seconds: int, ep: Episode) -> int:
         return abs(seconds - (_known(ep.runtime_s) or ref_rt))
 
-    chosen = sum(delta(sec, episodes[j]) for j, sec in singles)
+    chosen_total = sum(delta(sec, episodes[j]) for j, sec in singles)
     for shift in (-1, 1):
-        total = 0
+        shifted_total = 0
         for j, sec in singles:
             k = j + shift
             if (
@@ -112,9 +114,9 @@ def _is_ambiguous(
                 or _one_cost(sec, episodes[k].runtime_s, tolerance, ref_rt) is None
             ):
                 break
-            total += delta(sec, episodes[k])
+            shifted_total += delta(sec, episodes[k])
         else:
-            if abs(total - chosen) <= AMBIGUITY_WINDOW_S:
+            if shifted_total <= chosen_total + AMBIGUITY_WINDOW_S:
                 return True
     return False
 

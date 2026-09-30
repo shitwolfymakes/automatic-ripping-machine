@@ -1,7 +1,6 @@
 """Ordered-alignment episode matcher (spec 6.2) incl. neu defect regressions."""
 
-import pytest
-
+from arm_backend.identity.episodes.continuity import align_runs
 from arm_backend.identity.episodes.matcher import align
 from arm_backend.identity.episodes.model import Episode, TitleIn
 
@@ -191,21 +190,20 @@ def test_two_episode_match_skips_provider_gap() -> None:
     assert (2, 4) not in mapping(r).values()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="known limitation: matcher crosses sibling-claimed holes; PR 3b splits alignment at sibling-claimed episodes",
-)
 def test_run_does_not_cross_a_sibling_claimed_hole() -> None:
     # A sibling claimed E12-E21, so the remaining list is E7-E11, E22 (a
     # ten-episode hole). Unlike a provider gap, this hole is claimed by
     # another disc, not missing data: the title whose runtime fits E22 must
-    # not be mapped across it. Currently xfails — the matcher still crosses
-    # sibling-claimed holes on runtime evidence alone; PR 3b fixes this by
-    # aligning only within runs between sibling-claimed episodes.
+    # not be mapped across it. align_runs splits alignment at sibling-claimed
+    # episodes, so the run holding E22 is scored (and loses) separately.
     remaining = [Episode(season=1, number=n, name=f"E{n}", runtime_s=2600) for n in (7, 8, 9, 10, 11, 22)]
-    r = align(titles(*[2600] * 6), remaining, anchor=0)
+    r = align_runs(titles(*[2600] * 6), remaining, claimed=frozenset(range(12, 22)), anchor=0)
     assert [m.episode for m in r.matches] == [7, 8, 9, 10, 11]
-    assert r.skipped == ("5",)
+    # 6 identical-runtime titles against 5 identical-runtime episodes is a genuine
+    # DP tie on which title is left over; align()'s existing (pre-Task-1) tie-break
+    # keeps title "0" unmatched here. The property under test is that none of the
+    # 6 titles maps across the sibling-claimed E12-E21 hole onto E22.
+    assert r.skipped == ("0",)
 
 
 # Numbering-hole penalty removal (a provider gap is missing data, not a hole to
@@ -314,3 +312,16 @@ def test_play_all_of_exactly_two_other_titles() -> None:
     r = align(titles(3480, 3490, 6970), eps(3600, 3600, 3600, 3600))
     assert r.play_all == ("2",)
     assert mapping(r) == {"0": (1, None), "1": (2, None)}
+
+
+def test_ambiguous_when_the_anchor_beats_a_better_runtime_fit() -> None:
+    # The anchor (30 s per position) pulls the start to E1 although the
+    # +1 shift fits the runtimes 20 s better in total.
+    r = align(titles(2990, 3000), eps(3000, 2990, 3000, 3000), anchor=0)
+    assert [m.episode for m in r.matches] == [1, 2]
+    assert r.ambiguous is True
+
+
+def test_not_ambiguous_when_runtimes_clearly_decide() -> None:
+    r = align(titles(1300, 3500), eps(2600, 2600, 1320, 3480, 2600))
+    assert r.ambiguous is False

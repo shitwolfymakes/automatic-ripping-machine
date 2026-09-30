@@ -8,13 +8,33 @@ from arm_backend.identity.sources.label_hints import LABEL
 SOURCE_TIERS: dict[str, int] = {
     "manual": TIER_BY_CAPABILITY[Capability.MANUAL],
     "thediscdb": TIER_BY_CAPABILITY[Capability.DISC_MAP],
+    "episodes_tmdb": TIER_BY_CAPABILITY[Capability.EPISODE_MATCH],
+    "episodes_tvmaze": TIER_BY_CAPABILITY[Capability.EPISODE_MATCH],
+    "episodes_tvdb": TIER_BY_CAPABILITY[Capability.EPISODE_MATCH],
     "bd_title": TIER_BY_CAPABILITY[Capability.DISC_HINT],
     "label": TIER_BY_CAPABILITY[Capability.DISC_HINT],
     "preset": TIER_BY_CAPABILITY[Capability.PRESET],
 }
 
 # Within a tier, lower rank wins. Spec 4.5 default for disc_hint_sources.
-DEFAULT_RANKS: dict[str, int] = {"bd_title": 0, "label": 1}
+DEFAULT_RANKS: dict[str, int] = {
+    "bd_title": 0,
+    "label": 1,
+    "episodes_tmdb": 0,
+    "episodes_tvmaze": 1,
+    "episodes_tvdb": 2,
+}
 
 # Disc-hint sources in default rank order (PR 4 makes this the operator's setting).
 HINT_SOURCES: tuple[Source, ...] = (BD_TITLE, LABEL)
+
+# Episode-match source id per operator-facing provider setting name.
+EPISODE_SOURCE_BY_SETTING: dict[str, str] = {
+    "tmdb": "episodes_tmdb",
+    "tvmaze": "episodes_tvmaze",
+    "tvdb": "episodes_tvdb",
+}
+
+# Episode-match provider settings in default rank order (spec 4.5 default;
+# PR 4 makes this the operator's setting).
+DEFAULT_EPISODE_SOURCES: tuple[str, ...] = ("tmdb", "tvmaze", "tvdb")

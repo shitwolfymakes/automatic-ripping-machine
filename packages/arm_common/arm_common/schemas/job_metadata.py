@@ -37,6 +37,8 @@ class ExternalIds(BaseModel):
     imdb: str | None = None
     tmdb: str | None = None
     tvdb: str | None = None
+    tvmaze: str | None = None
+    anidb: str | None = None  # reserved (design test, spec 10)
     musicbrainz_release: str | None = None
 
 

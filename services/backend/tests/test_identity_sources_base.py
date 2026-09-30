@@ -13,3 +13,12 @@ def test_tiers_follow_capabilities() -> None:
 
 def test_default_hint_ranks_prefer_bd_title() -> None:
     assert DEFAULT_RANKS["bd_title"] < DEFAULT_RANKS["label"]
+
+
+def test_episode_sources_are_tier_three_and_ranked() -> None:
+    from arm_backend.identity.sources.registry import DEFAULT_EPISODE_SOURCES, EPISODE_SOURCE_BY_SETTING
+
+    ids = [EPISODE_SOURCE_BY_SETTING[s] for s in DEFAULT_EPISODE_SOURCES]
+    assert ids == ["episodes_tmdb", "episodes_tvmaze", "episodes_tvdb"]
+    assert all(SOURCE_TIERS[i] == TIER_BY_CAPABILITY[Capability.EPISODE_MATCH] for i in ids)
+    assert [DEFAULT_RANKS[i] for i in ids] == [0, 1, 2]

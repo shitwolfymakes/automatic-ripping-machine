@@ -1,6 +1,6 @@
 """Cross-disc continuity (spec 6.3) and season ranking, incl. neu defects 1 and 2."""
 
-from arm_backend.identity.episodes.continuity import SiblingDisc, rank_seasons, start_anchor
+from arm_backend.identity.episodes.continuity import SiblingDisc, align_runs, rank_seasons, start_anchor
 from arm_backend.identity.episodes.matcher import align
 from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn, TitleMatch
 
@@ -120,6 +120,30 @@ def test_rank_seasons_prefers_coverage_then_cost() -> None:
     none = align(five_titles(), season(10, runtime=9000, number=3))
     ranked = rank_seasons({1: worse, 2: good, 3: none})
     assert [s for s, _ in ranked] == [2, 1, 3]
+
+
+def test_align_runs_without_claims_equals_align() -> None:
+    s = season(10)
+    t = five_titles()
+    assert align_runs(t, s, claimed=frozenset()) == align(t, s)
+
+
+def test_align_runs_prefers_run_after_sibling_block() -> None:
+    # siblings hold E6-E10; this disc's five titles fit E11-E15 by runtime
+    full = [Episode(1, n, runtime_s=2400 + 37 * n) for n in range(1, 21)]
+    claimed = frozenset(range(6, 11))
+    remaining = [e for e in full if e.number not in claimed]
+    t = [TitleIn(str(i), 2400 + 37 * n) for i, n in enumerate(range(11, 16))]
+    r = align_runs(t, remaining, claimed=claimed)
+    assert [m.episode for m in r.matches] == [11, 12, 13, 14, 15]
+
+
+def test_align_runs_equal_runs_are_ambiguous() -> None:
+    full = season(15)  # identical runtimes
+    claimed = frozenset(range(6, 11))
+    remaining = [e for e in full if e.number not in claimed]
+    r = align_runs(five_titles(), remaining, claimed=claimed)
+    assert r.ambiguous is True
 
 
 def test_rank_seasons_breaks_coverage_ties_by_match_count() -> None:

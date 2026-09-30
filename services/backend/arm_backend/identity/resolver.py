@@ -46,7 +46,7 @@ def resolve(claims: IdentityClaims, *, tiers: Mapping[str, int], ranks: Mapping[
         if source_id not in tiers:
             logger.debug("identity resolver: ignoring unknown source %s", source_id)
             continue
-        if source.status == "ok":
+        if source.status == "ok" and not source.suggestion:
             usable.append(source_id)
     usable.sort(key=lambda s: (tiers[s], 0 if s in pinned else 1, s not in ranks, ranks.get(s, 0), s))
 

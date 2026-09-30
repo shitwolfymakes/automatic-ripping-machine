@@ -226,6 +226,14 @@ def test_apply_reports_changed_track_ids() -> None:
     assert changed == {t2.id}
 
 
+def test_suggestion_sources_are_not_applied() -> None:
+    res = resolve(
+        _claims(ep_a=SourceClaims(suggestion=True, tracks={"1": TrackClaim(episode=4)})),
+        tiers=TIERS,
+    )
+    assert res.tracks == {}
+
+
 def test_tier_beats_pin() -> None:
     res = resolve(
         IdentityClaims(
