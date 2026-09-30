@@ -5,7 +5,7 @@ from arm_common.schemas import ExternalIds
 
 from arm_backend.identity.episodes.model import Episode
 from arm_backend.identity.http import SourceError, SourceMiss
-from arm_backend.identity.ids import current_ids, resolve_show_ids
+from arm_backend.identity.ids import current_ids, merge_new_ids, resolve_show_ids
 
 
 def _job(meta: dict | None = None) -> Job:
@@ -217,3 +217,64 @@ async def test_persist_false_resolves_without_writing() -> None:
     assert result.imdb == "tt1"
     assert job.metadata_json is before
     assert job.metadata_json["identity"]["external_ids"] == {"imdb": "tt1"}
+
+
+# ---------------------------------------------------------------------------
+# merge_new_ids (Task 8 fix round 2)
+# ---------------------------------------------------------------------------
+
+
+def test_merge_new_ids_fills_a_new_field_and_keeps_existing() -> None:
+    target = _job({"identity": {"provider": "manual", "external_ids": {"imdb": "tt1"}}})
+    found = ExternalIds(imdb="tt1", tmdb="1399")
+
+    changed = merge_new_ids(target, found)
+
+    assert changed is True
+    assert target.metadata_json["identity"]["external_ids"] == {"imdb": "tt1", "tmdb": "1399"}
+    assert target.metadata_json["identity"]["provider"] == "manual"  # other identity keys kept
+
+
+def test_merge_new_ids_never_overwrites_an_existing_field() -> None:
+    target = _job({"identity": {"external_ids": {"tmdb": "local"}}})
+    # `found` disagrees on tmdb (as if a concurrent edit changed it after
+    # compute captured its own snapshot) but also brings a genuinely new id.
+    found = ExternalIds(tmdb="different", tvmaze="200")
+
+    changed = merge_new_ids(target, found)
+
+    assert changed is True
+    assert target.metadata_json["identity"]["external_ids"] == {"tmdb": "local", "tvmaze": "200"}
+
+
+def test_merge_new_ids_nothing_new_returns_false() -> None:
+    target = _job({"identity": {"external_ids": {"imdb": "tt1"}}})
+    before = target.metadata_json
+    found = ExternalIds(imdb="tt1")  # nothing target doesn't already have
+
+    changed = merge_new_ids(target, found)
+
+    assert changed is False
+    assert target.metadata_json is before
+
+
+def test_merge_new_ids_no_identity_section_returns_false() -> None:
+    target = _job({"scan_result": {"x": 1}})
+    before = target.metadata_json
+    found = ExternalIds(tmdb="1399")
+
+    changed = merge_new_ids(target, found)
+
+    assert changed is False
+    assert target.metadata_json is before
+
+
+def test_merge_new_ids_non_dict_identity_section_returns_false() -> None:
+    target = _job({"identity": "garbage"})
+    before = target.metadata_json
+    found = ExternalIds(tmdb="1399")
+
+    changed = merge_new_ids(target, found)
+
+    assert changed is False
+    assert target.metadata_json is before

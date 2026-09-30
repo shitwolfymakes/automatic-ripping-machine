@@ -10,13 +10,23 @@ started on stale inputs, without ever running the stage twice concurrently
 for the same job or piling up more than one extra run. A second call for a
 run that is merely queued (not yet started) is a no-op.
 
-Each run splits fetch from apply (fix round 1): `compute_episode_claims`
-runs the network phase against a snapshot of the job, then the job is
-re-selected fresh (`populate_existing=True`) immediately before writing —
-never applying outcomes computed against a copy a concurrent PATCH/resolve
-may have since changed. If the job vanished, or another `schedule()` for it
-arrived while the network phase was in flight, the run writes, commits and
-emits nothing and lets the queued rerun-once apply fresh outcomes instead.
+Each run splits fetch from apply across two sessions (fix rounds 1 and 2).
+Phase 1 loads a snapshot (job + tracks + config) and runs the network phase
+(`compute_episode_claims`) against it, all on one session that is then
+closed with no further query, flush, or commit — so any in-memory mutation
+`compute_episode_claims` made to the snapshot (`resolve_show_ids` may cache
+a newly resolved show id onto it) is discarded on close rather than ever
+reaching the DB. A single shared session for fetch-then-apply is not safe:
+autoflush would otherwise write that stale mutation as a full-row UPDATE
+the moment the apply phase's own re-select ran on the same session — a
+lost-update window a concurrent PATCH/resolve could fall into just as
+easily as the one round 1 fixed. Phase 2 opens a fresh session, re-selects
+the job (`with_for_update` + `populate_existing`), folds in only the show
+ids phase 1 newly resolved (`merge_new_ids`, never overwriting a field the
+fresh row already has), then applies outcomes, commits, and emits. If the
+job vanished, or another `schedule()` for it arrived while phase 1 was in
+flight, phase 2 writes, commits and emits nothing and lets the queued
+rerun-once apply fresh outcomes instead.
 
 One `SourceHttp` per episode source id is built once, at construction, and
 kept for the runner's whole lifetime (`_http_map`): that is where rate
@@ -47,6 +57,7 @@ from arm_backend.identity.episodes.providers.tmdb import TmdbEpisodes
 from arm_backend.identity.episodes.providers.tvdb import TvdbEpisodes
 from arm_backend.identity.episodes.providers.tvmaze import TvmazeEpisodes
 from arm_backend.identity.http import POLICIES, SourceHttp
+from arm_backend.identity.ids import current_ids, merge_new_ids
 from arm_backend.identity.proposals import claims_of
 from arm_backend.identity.sources.registry import EPISODE_SOURCE_BY_SETTING
 from arm_backend.seeders import CONFIG_SINGLETON_ID
@@ -181,32 +192,45 @@ class EpisodeStageRunner:
     async def _run_once(self, job_id: str) -> None:
         self._started.add(job_id)
         try:
-            async with self._session_factory() as session:
-                job = (await session.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+            # Phase 1 (fetch): load the snapshot and run the network phase
+            # against ONE session, held open only for this session's own
+            # queries — the job/tracks/config load, then compute's own
+            # sibling/track reads, all of which happen before any provider
+            # is even tried. Nothing queries, flushes or commits this
+            # session again afterward, so `job`'s in-memory mutation (a
+            # newly resolved show id `compute_episode_claims` may cache via
+            # `resolve_show_ids` — see `ids.py`) is simply discarded when
+            # the session closes below (a rollback, never a write): it can
+            # NEVER reach the DB from here, regardless of what a concurrent
+            # PATCH/resolve commits while we're waiting on providers. This
+            # is the invariant fix round 2 restores — round 1's fix alone
+            # left a window where the apply phase's own re-select, sharing
+            # this session, would autoflush that mutation as a stale
+            # full-row UPDATE before returning the fresh row.
+            async with self._session_factory() as compute_session:
+                job = (await compute_session.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
                 if job is None:
                     # Vanished (deleted) between scheduling and running.
                     return
-                tracks = list((await session.execute(select(Track).where(col(Track.job_id) == job_id))).scalars().all())
+                tracks = list(
+                    (await compute_session.execute(select(Track).where(col(Track.job_id) == job_id))).scalars().all()
+                )
                 if not is_tv_candidate(job, tracks):
                     return
-                cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
+                cfg = (
+                    await compute_session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))
+                ).scalar_one()
                 providers = self._providers_for(cfg)
+                outcomes = await compute_episode_claims(compute_session, job, providers, cfg, StageOptions())
+                snapshot = job
 
-                # Network phase (can take seconds): compute against this
-                # snapshot only. No write yet — a PATCH or /resolve is free
-                # to commit its own edit to this same job while we wait.
-                outcomes = await compute_episode_claims(session, job, providers, cfg, StageOptions())
-
-                # Re-select the job fresh (locked) right before writing.
-                # `populate_existing` forces this session's identity map to
-                # refresh `job`'s attributes from the current row rather
-                # than handing back the snapshot we already read above (the
-                # lost-update bug: applying outcomes computed from a stale
-                # copy would silently clobber a manual claim a concurrent
-                # request committed during the network phase).
-                # `with_for_update` is a no-op against SQLite/FakeSession.
+            # Phase 2 (apply): a fresh session. `snapshot` is detached now
+            # (its own session closed above without a commit/flush) — never
+            # written anywhere itself; only the NEW show ids it resolved
+            # (if any) are folded into the fresh row below.
+            async with self._session_factory() as apply_session:
                 fresh_job = (
-                    await session.execute(
+                    await apply_session.execute(
                         select(Job)
                         .where(col(Job.id) == job_id)
                         .with_for_update()
@@ -221,8 +245,9 @@ class EpisodeStageRunner:
                     # the current state instead.
                     return
 
-                resolved = await apply_episode_outcomes(session, fresh_job, outcomes)
-                await session.commit()
+                merge_new_ids(fresh_job, current_ids(snapshot))
+                resolved = await apply_episode_outcomes(apply_session, fresh_job, outcomes)
+                await apply_session.commit()
                 await self._hub.emit(
                     topic="ripper.events",
                     event_type="job.identity_updated",
@@ -231,7 +256,7 @@ class EpisodeStageRunner:
                         "sources": {o.source_id: o.claims.status for o in outcomes},
                     },
                     job_id=fresh_job.id,
-                    session=session,
+                    session=apply_session,
                 )
                 for track_id in sorted(resolved.track_ids):
                     await self._hub.emit(
@@ -240,9 +265,9 @@ class EpisodeStageRunner:
                         payload={"track_id": track_id, "job_id": fresh_job.id},
                         job_id=fresh_job.id,
                         track_id=track_id,
-                        session=session,
+                        session=apply_session,
                     )
-                await session.commit()
+                await apply_session.commit()
         except Exception:
             # Never crash the loop: a provider outage or a DB hiccup on one
             # job must not take down every other job's background stage.

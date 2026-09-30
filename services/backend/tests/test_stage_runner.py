@@ -58,6 +58,79 @@ class _Hub:
         self.events.append({"topic": topic, "event_type": event_type, "payload": payload, "job_id": job_id})
 
 
+class _TrackingSession:
+    """Session double for fix round 2's no-flush invariant: `FakeSession`
+    has no identity map at all (a "fresh" re-select just returns the same
+    live object with whatever it currently holds), so it cannot see the
+    round-2 bug — a real SQLAlchemy session autoflushes a dirty *attached*
+    object as a full-row UPDATE the moment ANY query runs on that same
+    session, independent of what that query is even for.
+
+    This models just that: every `Job` a query returns becomes "attached"
+    to THIS session instance (mirroring a per-session identity map); every
+    subsequent `execute`/`flush`/`commit` on it snapshots each attached
+    job's CURRENT `metadata_json` into `flush_log` first — exactly the data
+    a real autoflush's UPDATE would carry, however stale. Multiple
+    `_TrackingSession` instances share one underlying `FakeSession` (a
+    stand-in for the same on-disk table) but each has its OWN `_attached`
+    set, exactly like separate SQLAlchemy sessions never see each other's
+    identity maps.
+    """
+
+    def __init__(self, fake: FakeSession) -> None:
+        self._fake = fake
+        self._attached: dict[str, Job] = {}
+        self.flush_log: list[tuple[str, dict[str, Any]]] = []
+
+    async def __aenter__(self) -> "_TrackingSession":
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+    def _autoflush(self) -> None:
+        for job_id, job in self._attached.items():
+            self.flush_log.append((job_id, dict(job.metadata_json or {})))
+
+    async def execute(self, stmt: Any) -> Any:
+        self._autoflush()
+        result = await self._fake.execute(stmt)
+        for row in result.rows:
+            if isinstance(row, Job):
+                self._attached[row.id] = row
+        return result
+
+    async def commit(self) -> None:
+        self._autoflush()
+        await self._fake.commit()
+
+    async def flush(self) -> None:
+        self._autoflush()
+        await self._fake.flush()
+
+    def add(self, obj: Any) -> None:
+        if isinstance(obj, Job):
+            self._attached[obj.id] = obj
+        self._fake.add(obj)
+
+    async def refresh(self, obj: Any) -> None:
+        await self._fake.refresh(obj)
+
+
+class _TrackingSessionFactory:
+    """`session_factory` double: a fresh `_TrackingSession` (its own
+    identity map) per call, all backed by the same underlying table."""
+
+    def __init__(self, fake: FakeSession) -> None:
+        self.fake = fake
+        self.sessions: list[_TrackingSession] = []
+
+    def __call__(self) -> _TrackingSession:
+        session = _TrackingSession(self.fake)
+        self.sessions.append(session)
+        return session
+
+
 class FakeHttp:
     def __init__(self, backing_off: bool = False) -> None:
         self._backing_off = backing_off
@@ -282,12 +355,14 @@ async def test_operator_edit_committed_during_network_phase_survives() -> None:
     """A manual claim a PATCH/resolve commits while the runner is
     mid-network-phase must survive: the runner re-selects the job fresh
     right before applying outcomes, not the stale copy it read before the
-    network wait."""
-    job = _job(season=1)
+    network wait. A show id newly resolved during that same network phase
+    (fix round 2) still ends up on the fresh row, merged in rather than
+    lost along with the detached snapshot it was resolved on."""
+    job = _job(season=1)  # default metadata: imdb only — tmdb gets resolved
     tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
     db = _db(job, tracks=tracks)
     gate = asyncio.Event()
-    provider = FakeProvider(seasons={1: _season(1, DISTINCT)}, gate=gate)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)}, gate=gate, show_id="999")
     hub = _Hub()
     runner = _runner(db, hub, [provider])
 
@@ -313,7 +388,64 @@ async def test_operator_edit_committed_during_network_phase_survives() -> None:
     assert db.rows["jobs"] == [edited]
     assert edited.season == 2  # the manual edit was not reverted
     assert edited.identity_provenance == {"season": "manual"}
+    assert edited.metadata_json["identity"]["external_ids"]["tmdb"] == "999"  # merged onto the fresh row
+    assert edited.metadata_json["identity"]["external_ids"]["imdb"] == "tt1"  # nothing else clobbered
     assert claims_of(edited).sources["episodes_tmdb"].status == "ok"  # the stage still ran
+
+
+async def test_compute_phase_mutation_never_reaches_a_flush() -> None:
+    """Fix round 2's core invariant: nothing the compute phase mutates can
+    ever reach a flush. `resolve_show_ids` mutates the compute snapshot's
+    `metadata_json` in memory (a newly resolved show id); this must never
+    show up in any session's autoflush log, on any session, at any point —
+    it can only land in the DB via the apply phase's own, deliberate
+    `merge_new_ids` + commit onto the FRESH row (a separate check, made by
+    `test_operator_edit_committed_during_network_phase_survives`).
+
+    `FakeSession` alone can't see this bug (no identity map, no autoflush,
+    a "fresh" re-select just returns the same live object) — `_TrackingSession`
+    adds exactly the one behavior that matters: a query on a session with a
+    dirty attached object autoflushes it first, using its current, possibly
+    stale, in-memory state."""
+    job = _job()  # default metadata: imdb only — tmdb gets newly resolved
+    tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
+    fake = FakeSession()
+    fake.rows["jobs"] = [job]
+    fake.rows["tracks"] = tracks
+    fake.rows["config"] = [CFG]
+    factory = _TrackingSessionFactory(fake)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)}, show_id="999")
+    hub = _Hub()
+    runner = EpisodeStageRunner(
+        factory,  # type: ignore[arg-type]
+        httpx.AsyncClient(),
+        hub,
+        providers_factory=lambda http_map, cfg: [provider],
+    )
+
+    runner.schedule(job.id)
+    await runner.drain()
+
+    # The run did resolve a new id (sanity: the mutation this test guards
+    # against actually happened).
+    assert job.metadata_json["identity"]["external_ids"]["tmdb"] == "999"
+
+    # `_run_once` opens exactly two sessions in order: compute, then apply.
+    # The apply session committing the merged id onto the fresh row is the
+    # intended write (covered by the operator-edit test above); what must
+    # NEVER happen is the *compute* session ever autoflushing `job` with
+    # that id already on it — that would mean the mutation reached a flush
+    # before the apply phase ever decided, deliberately, to write it.
+    assert len(factory.sessions) == 2
+    compute_session, apply_session = factory.sessions
+    assert apply_session is not compute_session
+
+    compute_flushes_with_the_new_id = [
+        meta
+        for jid, meta in compute_session.flush_log
+        if jid == job.id and "tmdb" in (meta.get("identity", {}) or {}).get("external_ids", {})
+    ]
+    assert compute_flushes_with_the_new_id == []
 
 
 # ---------------------------------------------------------------------------

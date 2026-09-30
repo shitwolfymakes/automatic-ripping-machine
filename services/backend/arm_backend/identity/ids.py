@@ -83,3 +83,38 @@ async def resolve_show_ids(job: Job, providers: Sequence[EpisodeListProvider], *
             }
 
     return ids
+
+
+def merge_new_ids(target_job: Job, found: ExternalIds) -> bool:
+    """Merge every id set on `found` that `target_job` doesn't already have
+    into `target_job.metadata_json["identity"]["external_ids"]`. Never
+    overwrites a field `target_job` already has. Returns whether anything
+    changed.
+
+    `found` is typically `current_ids` of a detached compute-phase snapshot
+    job, taken after `resolve_show_ids` ran against it (see
+    `EpisodeStageRunner`): that snapshot's session is closed once the
+    network phase finishes, so any show id it newly resolved would
+    otherwise be silently discarded along with it. This folds just those
+    new fields into the fresh, just-re-selected job the apply phase writes
+    to — never a field a concurrent edit may have set in the meantime."""
+    existing = current_ids(target_job)
+    new_values = {
+        field: value
+        for field, value in found.model_dump(exclude_none=True).items()
+        if getattr(existing, field, None) is None
+    }
+    if not new_values:
+        return False
+    identity = (target_job.metadata_json or {}).get("identity")
+    if not isinstance(identity, dict):
+        return False
+    merged = existing.model_copy(update=new_values)
+    target_job.metadata_json = {
+        **(target_job.metadata_json or {}),
+        "identity": {
+            **identity,
+            "external_ids": merged.model_dump(mode="json", exclude_none=True),
+        },
+    }
+    return True
