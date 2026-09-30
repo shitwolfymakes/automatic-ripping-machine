@@ -312,8 +312,11 @@ async def test_auto_apply_off_makes_every_result_a_suggestion(monkeypatch) -> No
 
 async def test_pin_rule_applies_despite_computed_suggestion(monkeypatch) -> None:
     """A pinned source whose own computed result would be a suggestion
-    (EPISODE_AUTO_APPLY off) still gets its stored claims forced non-
-    suggestion, and the resolver applies it -- the operator chose it."""
+    (EPISODE_AUTO_APPLY off) still gets applied -- the RESOLVER (Task 9 F4
+    round 2) lets a pinned "ok" source's suggestion through. The STORED
+    claims keep the computed `suggestion=True` unchanged (nothing rewrites
+    it); only the resolver's own usable-source selection treats it as
+    applicable while the pin holds."""
     monkeypatch.setattr(episode_stage, "EPISODE_AUTO_APPLY", False)
     job = _job()
     set_pin(job, "episode", "episodes_tmdb")
@@ -322,11 +325,11 @@ async def test_pin_rule_applies_despite_computed_suggestion(monkeypatch) -> None
 
     outcomes, resolved = await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
 
-    assert outcomes[0].claims.suggestion is True  # the computed value, pre-pin-rule
+    assert outcomes[0].claims.suggestion is True  # the computed value
     stored = claims_of(job).sources["episodes_tmdb"]
     assert stored.status == "ok"
-    assert stored.suggestion is False  # the pin rule forced it
-    assert resolved.changed > 0
+    assert stored.suggestion is True  # unchanged -- nothing forces it
+    assert resolved.changed > 0  # yet the resolver applied it, because it's pinned
     assert all(t.episode_number is not None for t in _tracks(db, job).values())
 
 
@@ -346,10 +349,13 @@ async def test_pin_rule_noop_when_unpinned_keeps_computed_suggestion(monkeypatch
     assert all(t.episode_number is None for t in _tracks(db, job).values())
 
 
-async def test_pin_rule_keeps_prior_entry_applied_across_a_same_inputs_error() -> None:
+async def test_pin_rule_keeps_prior_entry_applied_across_a_same_inputs_error(monkeypatch) -> None:
     """F8: `put_source`'s same-inputs-error "keep the last good claims"
-    behavior composes with the pin rule -- the kept (already pin-forced)
-    entry stays non-suggestion, and stays applied."""
+    behavior composes with the resolver's pin rule -- the kept entry is
+    still `status="ok"` and still named by the pin, so it stays applicable
+    (and applied) even though its `suggestion` (forced True here via
+    EPISODE_AUTO_APPLY off) was never touched."""
+    monkeypatch.setattr(episode_stage, "EPISODE_AUTO_APPLY", False)
     job = _job()
     set_pin(job, "episode", "episodes_tmdb")
     db = _db(job, DISC)
@@ -363,9 +369,9 @@ async def test_pin_rule_keeps_prior_entry_applied_across_a_same_inputs_error() -
 
     stored = claims_of(job).sources["episodes_tmdb"]
     assert stored.status == "ok"  # kept the prior good entry, not "error"
-    assert stored.suggestion is False  # still forced by the pin rule
+    assert stored.suggestion is True  # the computed value, unchanged
     assert stored.extra["last_error"]["detail"] == "SourceError: timeout"
-    assert all(t.episode_number is not None for t in _tracks(db, job).values())  # stays applied
+    assert all(t.episode_number is not None for t in _tracks(db, job).values())  # stays applied under the pin
 
 
 async def test_nominal_runtimes_are_not_applied_c4() -> None:

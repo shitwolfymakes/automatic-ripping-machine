@@ -6,7 +6,6 @@ from arm_common import DiscType, Job, JobStatus, Track, TrackKind
 from arm_common.schemas.identity import SourceClaims, TrackClaim
 
 from arm_backend.identity.proposals import (
-    apply_pin,
     claims_of,
     clear_pin,
     put_source,
@@ -212,33 +211,3 @@ def test_clear_pin_noop_when_nothing_pinned() -> None:
     job = _job()
     clear_pin(job, "episode")
     assert claims_of(job).pin == {}
-
-
-def test_apply_pin_noop_when_nothing_pinned() -> None:
-    job = _job()
-    put_source(job, "episodes_tmdb", SourceClaims(status="ok", suggestion=True))
-    apply_pin(job, "episode")
-    assert claims_of(job).sources["episodes_tmdb"].suggestion is True  # untouched
-
-
-def test_apply_pin_noop_when_pinned_source_has_no_stored_claims() -> None:
-    job = _job()
-    set_pin(job, "episode", "episodes_tmdb")  # pinned, but nothing stored for it yet
-    apply_pin(job, "episode")
-    assert "episodes_tmdb" not in claims_of(job).sources
-
-
-def test_apply_pin_noop_when_pinned_source_not_ok() -> None:
-    job = _job()
-    set_pin(job, "episode", "episodes_tmdb")
-    put_source(job, "episodes_tmdb", SourceClaims(status="miss", suggestion=False))
-    apply_pin(job, "episode")
-    assert claims_of(job).sources["episodes_tmdb"].status == "miss"
-
-
-def test_apply_pin_forces_suggestion_false_on_ok_entry() -> None:
-    job = _job()
-    set_pin(job, "episode", "episodes_tmdb")
-    put_source(job, "episodes_tmdb", SourceClaims(status="ok", suggestion=True))
-    apply_pin(job, "episode")
-    assert claims_of(job).sources["episodes_tmdb"].suggestion is False

@@ -234,6 +234,45 @@ def test_suggestion_sources_are_not_applied() -> None:
     assert res.tracks == {}
 
 
+def test_pinned_ok_suggestion_is_applied() -> None:
+    """Task 9 F4 round 2: the resolver (not a stored-claims rewrite) lets a
+    pinned "episode" source's suggestion through when its status is ok."""
+    res = resolve(
+        IdentityClaims(
+            sources={"ep_a": SourceClaims(suggestion=True, tracks={"1": TrackClaim(episode=4)})},
+            pin={"episode": "ep_a"},
+        ),
+        tiers=TIERS,
+    )
+    assert res.tracks["1"]["episode"] == Winner(4, "ep_a")
+
+
+def test_pinned_suggestion_not_ok_is_still_skipped() -> None:
+    """A pin never rescues a non-"ok" entry (error/miss stay inapplicable
+    exactly as before, regardless of the pin)."""
+    res = resolve(
+        IdentityClaims(
+            sources={"ep_a": SourceClaims(status="miss", suggestion=True, tracks={"1": TrackClaim(episode=4)})},
+            pin={"episode": "ep_a"},
+        ),
+        tiers=TIERS,
+    )
+    assert res.tracks == {}
+
+
+def test_unpinned_suggestion_is_skipped_even_with_a_different_pin() -> None:
+    """An unpinned suggestion source stays inapplicable -- pinning a
+    DIFFERENT source for "episode" doesn't make every suggestion usable."""
+    res = resolve(
+        IdentityClaims(
+            sources={"ep_a": SourceClaims(suggestion=True, tracks={"1": TrackClaim(episode=4)})},
+            pin={"episode": "ep_b"},
+        ),
+        tiers=TIERS,
+    )
+    assert res.tracks == {}
+
+
 def test_tier_beats_pin() -> None:
     res = resolve(
         IdentityClaims(

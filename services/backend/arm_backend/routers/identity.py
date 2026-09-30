@@ -238,8 +238,10 @@ async def match_identity(
     merge_new_ids(fresh_job, found_ids_from_outcomes(outcomes, providers))
     if source_id is not None:
         # The operator explicitly chose this source. Pinning it is enough --
-        # `apply_episode_outcomes`'s pin rule (F4) forces its stored claims'
-        # `suggestion` False for us, and keeps doing so on every later run.
+        # the stored claims keep whatever `suggestion` was computed, but the
+        # RESOLVER (Task 9 F4 round 2) lets a pinned "ok" source's suggestion
+        # through regardless, so it still gets applied. Unpinning (DELETE
+        # /identity/pin) reverts on the very next resolve.
         set_pin(fresh_job, _EPISODE_PIN, source_id)
 
     await apply_outcomes_and_emit(db, fresh_job, outcomes, hub)

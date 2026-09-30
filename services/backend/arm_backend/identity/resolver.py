@@ -41,13 +41,23 @@ class Resolution:
 def resolve(claims: IdentityClaims, *, tiers: Mapping[str, int], ranks: Mapping[str, int] | None = None) -> Resolution:
     ranks = ranks or {}
     pinned = set(claims.pin.values())
+    # The episode pin rule (Task 9 F4 round 2): a source's own computed
+    # `suggestion` is never rewritten (stored claims always keep the value
+    # the stage computed) -- instead, the RESOLVER lets a suggestion through
+    # when the operator pinned that exact source for "episode" and its
+    # status is "ok". Unpinning (or the pinned source erroring/missing) then
+    # reverts on the very next resolve, with no stale forced flag anywhere.
+    pinned_episode = claims.pin.get("episode")
     usable = []
     for source_id, source in claims.sources.items():
         if source_id not in tiers:
             logger.debug("identity resolver: ignoring unknown source %s", source_id)
             continue
-        if source.status == "ok" and not source.suggestion:
-            usable.append(source_id)
+        if source.status != "ok":
+            continue
+        if source.suggestion and source_id != pinned_episode:
+            continue
+        usable.append(source_id)
     usable.sort(key=lambda s: (tiers[s], 0 if s in pinned else 1, s not in ranks, ranks.get(s, 0), s))
 
     res = Resolution(known_sources=frozenset(tiers))

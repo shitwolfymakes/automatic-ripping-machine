@@ -393,10 +393,11 @@ def test_match_apply_with_source_pins_and_survives_forced_suggestion(
     signing_key: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """F4/F5: force every computed outcome to `suggestion=True`
-    (`EPISODE_AUTO_APPLY` off) and prove the pin rule still applies it --
-    the stored claims AND the response both read `suggestion=False`, and the
-    resolver actually wrote the episode numbers onto the tracks (not merely
-    proposed them, which the old test never distinguished)."""
+    (`EPISODE_AUTO_APPLY` off) and prove pinning still applies it -- the
+    RESOLVER (Task 9 F4 round 2) lets a pinned "ok" source's suggestion
+    through. The stored claims AND the response both keep the computed
+    `suggestion=True` unchanged; the proof that it was actually applied
+    (not merely proposed) is the track's `episode_number`."""
     monkeypatch.setattr(episode_stage, "EPISODE_AUTO_APPLY", False)
     job = _job()
     tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
@@ -417,12 +418,53 @@ def test_match_apply_with_source_pins_and_survives_forced_suggestion(
     claims = claims_of(job)
     assert claims.pin == {"episode": "episodes_tmdb"}
     assert claims.sources["episodes_tmdb"].status == "ok"
-    assert claims.sources["episodes_tmdb"].suggestion is False  # forced by the pin rule
+    assert claims.sources["episodes_tmdb"].suggestion is True  # unchanged -- nothing forces it
     track_0 = next(t for t in db.rows["tracks"] if t.source_ref == "0")
     assert track_0.episode_number is not None  # actually applied, not just proposed
     body = r.json()
     outcome = next(o for o in body["outcomes"] if o["source_id"] == "episodes_tmdb")
-    assert outcome["suggestion"] is False
+    assert outcome["suggestion"] is True
+
+
+def test_pin_then_unpin_reverts_tracks_and_emits_track_updated(
+    signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End to end (Task 9 F4 round 2): pin-apply a forced suggestion via
+    `/identity/match`, then `DELETE /identity/pin`. Nothing else claims these
+    tracks, so they revert immediately (episode_number cleared), and
+    `track.updated` fires for every track the resolver reverted."""
+    monkeypatch.setattr(episode_stage, "EPISODE_AUTO_APPLY", False)
+    job = _job()
+    tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
+    db = _db(job, tracks=tracks)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    hub = _Hub()
+    runner = _FakeStageRunner([provider])
+    app, admin_token, _ = _make_app(signing_key, db, hub=hub, stage_runner=runner)
+
+    with TestClient(app) as client:
+        r = client.post(
+            f"/api/jobs/{JOB_ID}/identity/match",
+            json={"apply": True, "source": "tmdb"},
+            headers=_auth(admin_token),
+        )
+    assert r.status_code == 200
+    applied_track_ids = {t.id for t in db.rows["tracks"] if t.episode_number is not None}
+    assert applied_track_ids == {t.id for t in tracks}  # sanity: the pinned apply wrote every track
+
+    hub.events.clear()  # only the unpin's own events matter below
+
+    with TestClient(app) as client:
+        r = client.delete(f"/api/jobs/{JOB_ID}/identity/pin", headers=_auth(admin_token))
+
+    assert r.status_code == 200
+    assert claims_of(job).pin == {}
+    assert all(t.episode_number is None for t in db.rows["tracks"])  # reverted: no other source claims them
+
+    identity_events = [e for e in hub.events if e["event_type"] == "job.identity_updated"]
+    assert len(identity_events) == 1
+    track_events = {e["payload"]["track_id"] for e in hub.events if e["event_type"] == "track.updated"}
+    assert track_events == applied_track_ids
 
 
 def test_match_unknown_job_404(signing_key: bytes) -> None:

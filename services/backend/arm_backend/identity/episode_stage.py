@@ -35,7 +35,7 @@ from arm_backend.identity.episodes.providers.base import EpisodeListProvider
 from arm_backend.identity.http import SourceError, SourceMiss
 from arm_backend.identity.ids import current_ids, resolve_show_ids
 from arm_backend.identity.pipeline import ResolveOutcome, resolve_job
-from arm_backend.identity.proposals import apply_pin, claims_of, put_source
+from arm_backend.identity.proposals import claims_of, put_source
 from arm_backend.identity.sources.registry import (
     COVERAGE_STOP,
     DEFAULT_EPISODE_SOURCES,
@@ -426,8 +426,8 @@ async def compute_episode_claims(
 
 
 async def apply_episode_outcomes(session: AsyncSession, job: Job, outcomes: Sequence[SourceOutcome]) -> ResolveOutcome:
-    """Store every outcome with `put_source`, apply the pin rule, then
-    resolve. Flushes; the caller commits.
+    """Store every outcome with `put_source`, then resolve. Flushes; the
+    caller commits.
 
     Split out from `run_episode_stage` (Task 8 fix round 1) so a caller that
     runs `compute_episode_claims` off a snapshot taken before a slow network
@@ -435,14 +435,15 @@ async def apply_episode_outcomes(session: AsyncSession, job: Job, outcomes: Sequ
     applying stale outcomes to a row a concurrent PATCH/resolve has since
     changed would silently revert that edit.
 
-    `apply_pin` (Task 9 F4/F8) runs after every `put_source` so the
-    operator's pinned episode source stays durably applied: a background
-    rerun of the pinned source whose own result would be a suggestion (or a
-    same-inputs error that makes `put_source` keep the prior good entry)
-    must not silently revert to a suggestion the resolver ignores."""
+    Stored claims always keep their computed `suggestion` flag (Task 9 F4
+    round 2): the operator's pinned episode source is applied by the
+    RESOLVER (`resolver.resolve`), which lets a pinned "ok" source's
+    suggestion through, rather than by rewriting the stored claim here --
+    unpinning then reverts on the very next resolve, with no stale forced
+    flag left behind (and a same-inputs error that makes `put_source` keep
+    the prior good "ok" entry stays pinned-applicable too, per F8)."""
     for outcome in outcomes:
         put_source(job, outcome.source_id, outcome.claims)
-    apply_pin(job, "episode")
     return await resolve_job(session, job)
 
 

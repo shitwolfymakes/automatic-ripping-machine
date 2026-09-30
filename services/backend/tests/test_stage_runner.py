@@ -522,29 +522,45 @@ async def test_invalidate_noop_when_run_not_yet_started() -> None:
 
 
 async def test_invalidate_marks_rerun_when_run_has_started() -> None:
-    """Invalidating a genuinely in-flight run discards its outcome (reuses
-    the rerun-once path fix round 1 tested via `schedule`) and its
-    done-callback reschedules exactly once, applying fresh outcomes."""
+    """Invalidating a genuinely in-flight run discards its outcome BEFORE it
+    ever writes: it commits nothing, emits nothing, and the job's claims stay
+    empty right up to the point the rerun-once it triggers applies fresh
+    outcomes -- exactly the no-stale-write guarantee `schedule()`'s own
+    mid-flight rerun gives (fix round 1), now reachable through
+    `invalidate()` too. Only the SECOND run's `job.identity_updated` ever
+    lands (exactly one), and the stored claims are that second run's."""
     job = _job()
-    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
-    gate = asyncio.Event()
-    provider = FakeProvider(seasons={1: _season(1, DISTINCT)}, gate=gate)
+    tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
+    db = _db(job, tracks=tracks)
+    gate1, gate2 = asyncio.Event(), asyncio.Event()
+    reached = asyncio.Event()
+    provider = _GatedSeasonProvider(seasons={1: _season(1, DISTINCT)}, gates=[gate1, gate2], reached=reached)
     hub = _Hub()
     runner = _runner(db, hub, [provider])
 
     runner.schedule(job.id)
-    await asyncio.sleep(0)  # let the task start and block on the gate
-    assert job.id in runner._pending
-    assert job.id in runner._started
+    await asyncio.wait_for(reached.wait(), timeout=1)  # run 1 is blocked in its network call
+    reached.clear()
 
-    runner.invalidate(job.id)
+    runner.invalidate(job.id)  # genuinely mid-flight: marks a rerun
     assert job.id in runner._rerun
 
-    gate.set()
+    gate1.set()  # let run 1's network call finish
+    await asyncio.wait_for(reached.wait(), timeout=1)  # run 1 bailed; run 2 reached its own network call
+
+    # Checkpoint: run 1 wrote, committed and emitted nothing at all.
+    assert job.id not in runner._rerun
+    assert db.committed == 0
+    assert hub.events == []
+    assert "episodes_tmdb" not in claims_of(job).sources
+
+    gate2.set()
     await runner.drain()
 
-    # Exactly one rerun (not zero, not more), and it applied fresh outcomes.
-    assert len([c for c in provider.calls if c[0] == "configured"]) == 2
+    # Only run 2 ever wrote or emitted: exactly one job.identity_updated,
+    # and the stored claims are run 2's (not a stale run-1 outcome).
+    identity_events = [e for e in hub.events if e["event_type"] == "job.identity_updated"]
+    assert len(identity_events) == 1
     assert claims_of(job).sources["episodes_tmdb"].status == "ok"
 
 
