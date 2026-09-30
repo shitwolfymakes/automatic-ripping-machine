@@ -208,6 +208,7 @@ class SourceHttp:
             self._record_miss()
             raise SourceMiss(f"{method} 404 not found")
         if status in (401, 403):
+            logger.warning("auth_failed method=%s status=%d", method, status)
             self._record_error()
             raise SourceError("auth")
         if status < 200 or status >= 300:
@@ -225,6 +226,7 @@ class SourceHttp:
         self._consecutive_errors += 1
         if self._consecutive_errors >= self._policy.backoff_after and self._backing_off_since is None:
             self._backing_off_since = self._clock()
+            logger.warning("backing_off consecutive_errors=%d", self._consecutive_errors)
 
     def _record_success(self) -> None:
         self._consecutive_errors = 0
