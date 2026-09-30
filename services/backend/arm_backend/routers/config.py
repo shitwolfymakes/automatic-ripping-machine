@@ -178,7 +178,11 @@ async def update_config(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key}: duplicate values")
     if "episode_match_tolerance_seconds" in fields:
         tol = fields["episode_match_tolerance_seconds"]
-        if tol is None or not 1 <= tol <= 1800:
+        # Pydantic's lax int validator accepts a JSON bool (bool is an int
+        # subclass) and coerces it to 0/1 before `fields` sees it, so the
+        # bool-ness check has to read the raw wire value, not `tol`.
+        raw_tol = raw.get("episode_match_tolerance_seconds")
+        if tol is None or isinstance(raw_tol, bool) or not 1 <= tol <= 1800:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="episode_match_tolerance_seconds must be 1 to 1800"
             )

@@ -125,6 +125,7 @@ def test_patch_keeps_the_sent_order(signing_key: bytes) -> None:
         {"episode_match_tolerance_seconds": 0},
         {"episode_match_tolerance_seconds": 1801},
         {"episode_match_tolerance_seconds": None},
+        {"episode_match_tolerance_seconds": True},
         {"episode_auto_apply": None},
     ],
 )
