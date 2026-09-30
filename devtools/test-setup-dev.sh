@@ -94,6 +94,51 @@ check "no retired container: nothing removed" \
     "$(retired armv3 '')"
 check "unreadable compose config: no docker calls" "" "$(retired '' c0ffee)"
 present "up removes retired services"   '^    remove_retired_services$' "${SETUP}"
+
+# remove_spawned_containers + respawn_rippers_if_needed, run for real against
+# stubbed compose/docker: prints RIPPERS_REMOVED and whether the backend was
+# restarted. The backend respawns rippers only at startup, so a deploy that
+# leaves it running must restart it.
+spawn_defs="$(awk '/^RIPPERS_REMOVED=0$/,/^}$/' "${SETUP}"; awk '/^backend_started_at\(\) \{$/,/^}$/' "${SETUP}"; awk '/^respawn_rippers_if_needed\(\) \{/,/^}$/' "${SETUP}")"
+respawn() {  # respawn <ripper ids> <transcoder ids> <StartedAt before> <StartedAt after>
+    # shellcheck disable=SC2034,SC2317,SC2329
+    (
+        stub_rippers="$1" stub_tasks="$2" before="$3" stub_after="$4"
+        BACKEND_SERVICE=arm-backend
+        compose() {
+            case "$1" in
+                ps) [[ -n "${stub_after}" ]] && echo backend-id ;;
+                restart) echo "restart $2" >&2 ;;
+            esac
+        }
+        docker() {
+            case "$1" in
+                ps) case "$4" in
+                        label=arm.drive_id) [[ -n "${stub_rippers}" ]] && printf '%s\n' "${stub_rippers}" ;;
+                        label=arm.task_id) [[ -n "${stub_tasks}" ]] && printf '%s\n' "${stub_tasks}" ;;
+                    esac ;;
+                rm) ;;
+                inspect) echo "${stub_after}" ;;
+            esac
+            return 0
+        }
+        eval "${spawn_defs}"
+        remove_spawned_containers >/dev/null
+        out="$(respawn_rippers_if_needed "${before}" 2>&1 >/dev/null)"
+        echo "removed=${RIPPERS_REMOVED} ${out:-no-restart}"
+    )
+}
+check "ripper removed, backend kept running: backend restarted" \
+    "removed=1 restart arm-backend" "$(respawn r1 '' T1 T1)"
+check "ripper removed, backend recreated by compose: no restart" \
+    "removed=1 no-restart" "$(respawn r1 '' T1 T2)"
+check "only a transcoder removed: no restart" \
+    "removed=0 no-restart" "$(respawn '' t1 T1 T1)"
+check "nothing removed: no restart" \
+    "removed=0 no-restart" "$(respawn '' '' T1 T1)"
+check "backend was not running before up: no restart" \
+    "removed=1 no-restart" "$(respawn r1 '' '' T2)"
+present "up restarts a kept backend after removing rippers" '^    respawn_rippers_if_needed "\$\{BACKEND_STARTED_BEFORE\}"$' "${SETUP}"
 absent  "setup-dev never runs --remove-orphans" '^[^#]*--remove-orphans' "${SETUP}"
 
 # --- compose template -----------------------------------------------------------

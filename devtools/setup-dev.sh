@@ -139,15 +139,42 @@ require_compose() {
 # `arm.task_id`, transcode_dispatcher.py). They are not compose services, so
 # `docker compose down` leaves them behind — still holding the old image, the
 # compose network, and the optical device nodes across a redeploy.
+RIPPERS_REMOVED=0
 remove_spawned_containers() {
-    local ids
-    ids="$( { docker ps -aq --filter "label=arm.drive_id"; docker ps -aq --filter "label=arm.task_id"; } | sort -u )"
+    local ids rippers
+    rippers="$(docker ps -aq --filter "label=arm.drive_id")"
+    ids="$( { printf '%s\n' "${rippers}"; docker ps -aq --filter "label=arm.task_id"; } | sed '/^$/d' | sort -u )"
+    # Rippers are respawned only by the backend's startup reconcile; `up`
+    # checks this flag to make sure that reconcile runs again (see below).
+    [[ -n "${rippers}" ]] && RIPPERS_REMOVED=1
     if [[ -n "${ids}" ]]; then
         echo "==> removing backend-spawned ripper/transcoder containers"
         # shellcheck disable=SC2086  # ids is a list of container ids by design
         docker rm -f ${ids} >/dev/null
     else
         echo "==> no backend-spawned ripper/transcoder containers to remove"
+    fi
+}
+
+# The backend's container start time, or empty when it is not running.
+backend_started_at() {
+    local id
+    id="$(compose ps -q "${BACKEND_SERVICE}" 2>/dev/null)" || true
+    [[ -n "${id}" ]] || return 0
+    docker inspect -f '{{.State.StartedAt}}' "${id}" 2>/dev/null || true
+}
+
+# The backend spawns rippers only at startup (reconcile_enrolled_rippers in
+# main.py). `up` removes them before `compose up`, and compose leaves the
+# backend running when its image and config are unchanged (a UI-only deploy),
+# so nothing would respawn them: restart the backend in that case.
+respawn_rippers_if_needed() {  # respawn_rippers_if_needed <backend StartedAt before up>
+    [[ "${RIPPERS_REMOVED}" -eq 1 ]] || return 0
+    local before="$1" after
+    after="$(backend_started_at)"
+    if [[ -n "${before}" && "${after}" == "${before}" ]]; then
+        echo "==> ${BACKEND_SERVICE} kept running; restarting it so it respawns the removed rippers"
+        compose restart "${BACKEND_SERVICE}"
     fi
 }
 
@@ -851,6 +878,8 @@ if [[ "${ACTION}" == "up" ]]; then
 
     # 5. Only now remove backend-spawned rippers/transcoders, and containers of
     #    services this stack no longer defines (they would hold their ports).
+    #    Note the backend's start time first, to tell whether step 6 restarts it.
+    BACKEND_STARTED_BEFORE="$(backend_started_at)"
     remove_spawned_containers
     remove_retired_services
 
@@ -862,6 +891,7 @@ if [[ "${ACTION}" == "up" ]]; then
     else
         compose up -d
     fi
+    respawn_rippers_if_needed "${BACKEND_STARTED_BEFORE}"
 
     # 7. Wait for the backend to answer its health check.
     wait_for_backend
