@@ -111,10 +111,21 @@ async def test_lookup_result_without_id_raises_source_error(provider):
 
 
 @respx.mock
-async def test_lookup_follows_redirects(provider):
-    route = respx.get(f"{BASE}/lookup/shows").mock(return_value=httpx.Response(200, json={"id": 169}))
+async def test_lookup_requests_follow_redirects(provider, monkeypatch):
+    """The lookup call must ask `SourceHttp` to follow redirects (TVmaze's
+    `/lookup/shows` may redirect to the show document) — assert the flag
+    actually reaches `get_json`, not just that the request happened."""
+    respx.get(f"{BASE}/lookup/shows").mock(return_value=httpx.Response(200, json={"id": 169}))
+    captured: dict[str, object] = {}
+    original = SourceHttp.get_json
+
+    async def _spy(self, url, **kwargs):
+        captured.update(kwargs)
+        return await original(self, url, **kwargs)
+
+    monkeypatch.setattr(SourceHttp, "get_json", _spy)
     await provider.resolve_show_id(ExternalIds(imdb="tt0944947"))
-    assert route.calls.last.request.url.params["imdb"] == "tt0944947"
+    assert captured["follow_redirects"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -282,3 +293,20 @@ async def test_episodes_503_raises_source_error(provider):
     respx.get(f"{BASE}/shows/169/episodes").mock(return_value=httpx.Response(503))
     with pytest.raises(SourceError):
         await provider.seasons("169")
+
+
+@respx.mock
+async def test_seasons_empty_episodes_raises_source_error(provider):
+    """An existing show whose episodes endpoint returns `200 []` is a
+    degenerate/transient response (C7), not a definitive miss — must not
+    read as "this show has no seasons"."""
+    respx.get(f"{BASE}/shows/169/episodes").mock(return_value=httpx.Response(200, json=[]))
+    with pytest.raises(SourceError):
+        await provider.seasons("169")
+
+
+@respx.mock
+async def test_season_empty_episodes_raises_source_error(provider):
+    respx.get(f"{BASE}/shows/169/episodes").mock(return_value=httpx.Response(200, json=[]))
+    with pytest.raises(SourceError):
+        await provider.season("169", 1)

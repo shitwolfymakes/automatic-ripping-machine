@@ -56,44 +56,42 @@ class TvmazeEpisodes:
         except (KeyError, TypeError, ValueError, AttributeError) as e:
             raise SourceError("tvmaze malformed response") from e
 
-    async def _episodes(self, show_id: str) -> object:
-        return await self.http.get_json(
+    async def _episodes(self, show_id: str) -> list[object]:
+        body = await self.http.get_json(
             f"{settings.ARM_TVMAZE_BASE_URL}/shows/{show_id}/episodes",
             params={"specials": "1"},
             cache_key=f"tvmaze:episodes:{show_id}",
         )
+        if not isinstance(body, list):
+            raise SourceError("tvmaze malformed response")
+        if not body:
+            # An existing show with a genuinely empty episode list is a
+            # degenerate/transient response (C7, mirroring TMDb's empty-season
+            # rule), not a definitive miss.
+            raise SourceError(f"tvmaze show {show_id} returned no episodes")
+        return body
 
     async def seasons(self, show_id: str) -> list[int]:
-        body = await self._episodes(show_id)
-        try:
-            if not isinstance(body, list):
-                raise TypeError("tvmaze episodes body is not a list")
-            numbers = {
-                e["season"]
-                for e in body
-                if isinstance(e, dict) and _is_int(e.get("season")) and e["season"] > 0 and _is_int(e.get("number"))
-            }
-        except (KeyError, TypeError, ValueError, AttributeError) as e:
-            raise SourceError("tvmaze malformed response") from e
+        episodes = await self._episodes(show_id)
+        numbers = {
+            e["season"]
+            for e in episodes
+            if isinstance(e, dict) and _is_int(e.get("season")) and e["season"] > 0 and _is_int(e.get("number"))
+        }
         return sorted(numbers)
 
     async def season(self, show_id: str, number: int) -> list[Episode]:
-        body = await self._episodes(show_id)
-        try:
-            if not isinstance(body, list):
-                raise TypeError("tvmaze episodes body is not a list")
-            result = [
-                Episode(
-                    season=number,
-                    number=e["number"],
-                    name=e.get("name") or None,
-                    runtime_s=_runtime_s(e.get("runtime")),
-                )
-                for e in body
-                if isinstance(e, dict) and e.get("season") == number and _is_int(e.get("number"))
-            ]
-        except (KeyError, TypeError, ValueError, AttributeError) as e:
-            raise SourceError("tvmaze malformed response") from e
+        episodes = await self._episodes(show_id)
+        result = [
+            Episode(
+                season=number,
+                number=e["number"],
+                name=e.get("name") or None,
+                runtime_s=_runtime_s(e.get("runtime")),
+            )
+            for e in episodes
+            if isinstance(e, dict) and e.get("season") == number and _is_int(e.get("number"))
+        ]
         if not result:
             raise SourceMiss(f"tvmaze season {number} for show {show_id} not found")
         result.sort(key=lambda ep: ep.number)
