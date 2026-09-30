@@ -54,6 +54,10 @@ NOMINAL_SLOT_S = 300
 MIN_COVERAGE = 0.5
 MIN_MEAN_CONFIDENCE = 0.4
 NEAR_TIE_COST_RATIO = 0.1
+# I5: a scanned season wins thinly when the runner-up's mean cost is within
+# max(THIN_WIN_RATIO * runner-up, THIN_WIN_MIN_S) seconds of the best.
+THIN_WIN_RATIO = 0.1
+THIN_WIN_MIN_S = 30
 
 _EPISODE_SOURCE_IDS = frozenset(EPISODE_SOURCE_BY_SETTING.values())
 # Jobs that never produced a disc's episodes; they are not siblings.
@@ -260,17 +264,27 @@ async def _pick_season(
     return season, fits[season], ranked
 
 
+def _thin_win(best: MatchResult, runner_up: MatchResult) -> bool:
+    gap = _mean_cost(runner_up) - _mean_cost(best)
+    return gap < max(THIN_WIN_RATIO * _mean_cost(runner_up), THIN_WIN_MIN_S)
+
+
 def _ok_claims(
     season: int,
     fit: _SeasonFit,
     ranked: Sequence[tuple[int, MatchResult]],
     *,
     scanned: bool,
+    truncated: bool,
     inputs: dict[str, Any],
     now: datetime,
 ) -> SourceClaims:
     result = fit.result
     near_tie = len(ranked) > 1 and _near_tie(result, ranked[1][1])
+    # I5: a scanned season is only as sure as its margin over the runner-up,
+    # and over the seasons the capped scan never looked at.
+    thin_win = scanned and len(ranked) > 1 and _thin_win(result, ranked[1][1])
+    scan_truncated = scanned and truncated
     mean_conf = sum(m.confidence for m in result.matches) / len(result.matches)
     suggestion = (
         (not EPISODE_AUTO_APPLY)
@@ -278,6 +292,8 @@ def _ok_claims(
         or result.coverage < MIN_COVERAGE
         or mean_conf < MIN_MEAN_CONFIDENCE
         or near_tie
+        or thin_win
+        or scan_truncated
         or fit.nominal
         or fit.sibling_conflict
     )
@@ -311,6 +327,8 @@ def _ok_claims(
             "sibling_conflict": fit.sibling_conflict,
             "play_all": list(result.play_all),
             "skipped": list(result.skipped),
+            **({"thin_win": True} if thin_win else {}),
+            **({"scan_truncated": True} if scan_truncated else {}),
         },
     )
 
@@ -386,15 +404,18 @@ async def _match(
 
     inputs.update(show_id=show_id, season=known_season, disc_number=disc_number, tolerance=tolerance)
 
+    truncated = False
     if known_season is not None:
         seasons = [known_season]
     else:
         try:
-            seasons = (await provider.seasons(show_id))[:MAX_SEASON_SCAN]
+            seasons = await provider.seasons(show_id)
         except SourceMiss:
             # A stale cached show id: the provider no longer knows the show.
             claims = SourceClaims(run_at=now, status="miss", detail="show not found", inputs=dict(inputs))
             return SourceOutcome(source_id, claims, None)
+        truncated = len(seasons) > MAX_SEASON_SCAN
+        seasons = seasons[:MAX_SEASON_SCAN]
 
     req = _Request(show_id, ids, titles, rows, disc_number, job.disc_total, tolerance)
     picked = await _pick_season(provider, req, seasons)
@@ -402,7 +423,7 @@ async def _match(
         claims = SourceClaims(run_at=now, status="miss", detail="no episodes matched", inputs=dict(inputs))
         return SourceOutcome(source_id, claims, picked[1].result if picked else None)
     season, fit, ranked = picked
-    claims = _ok_claims(season, fit, ranked, scanned=known_season is None, inputs=inputs, now=now)
+    claims = _ok_claims(season, fit, ranked, scanned=known_season is None, truncated=truncated, inputs=inputs, now=now)
     return SourceOutcome(source_id, claims, fit.result)
 
 

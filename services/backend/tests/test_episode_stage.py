@@ -1051,7 +1051,9 @@ async def test_near_tie_ratio_about_five_percent_is_a_tie_f5() -> None:
     assert outcome.claims.suggestion is True
 
 
-async def test_near_tie_ratio_about_twenty_percent_is_not_a_tie_f5() -> None:
+async def test_near_tie_ratio_about_twenty_percent_is_not_a_tie_but_a_thin_win_i5() -> None:
+    """Not a near tie (20% apart), but the runner-up is only 6.25 s worse on
+    mean cost, under the 30 s floor (I5): a thin scan win is a suggestion."""
     job = _job(season=None)
     db = _db(job, DISC)
     # Mean costs 100/4 = 25 vs 125/4 = 31.25: 20% apart.
@@ -1061,8 +1063,46 @@ async def test_near_tie_ratio_about_twenty_percent_is_not_a_tie_f5() -> None:
 
     assert outcome.claims.job.season == 1
     assert outcome.claims.extra["near_tie"] is False
-    assert outcome.claims.suggestion is False
+    assert outcome.claims.extra["thin_win"] is True
+    assert outcome.claims.suggestion is True
     assert outcome.claims.alternatives == [{"season": 2, "coverage": 1.0, "matches": 4}]
+
+
+async def test_clear_scan_win_applies_i5() -> None:
+    job = _job(season=None)
+    db = _db(job, DISC)
+    # Mean costs 100/4 = 25 vs 250/4 = 62.5: 37.5 s apart, over both floors.
+    provider = FakeProvider(seasons={1: _tie_season(1, 1600), 2: _tie_season(2, 1750)})
+
+    [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    assert outcome.claims.job.season == 1
+    assert "thin_win" not in outcome.claims.extra
+    assert outcome.claims.suggestion is False
+
+
+async def test_known_season_is_never_a_thin_win_i5() -> None:
+    job = _job(season=1)
+    db = _db(job, DISC)
+    provider = FakeProvider(seasons={1: _tie_season(1, 1600), 2: _tie_season(2, 1625)})
+
+    [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    assert outcome.claims.suggestion is False
+
+
+async def test_truncated_season_scan_is_a_suggestion_i5() -> None:
+    """More seasons than MAX_SEASON_SCAN: the best of the scanned ones may
+    not be the true best, so the win is a suggestion (I5)."""
+    job = _job(season=None)
+    db = _db(job, DISC)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)}, season_list=list(range(1, 12)))
+
+    [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    assert outcome.claims.job.season == 1
+    assert outcome.claims.extra["scan_truncated"] is True
+    assert outcome.claims.suggestion is True
 
 
 async def test_sibling_holding_no_episodes_is_no_conflict_f2() -> None:
