@@ -425,6 +425,20 @@ async def compute_episode_claims(
     return outcomes
 
 
+async def apply_episode_outcomes(session: AsyncSession, job: Job, outcomes: Sequence[SourceOutcome]) -> ResolveOutcome:
+    """Store every outcome with `put_source`, then resolve. Flushes; the
+    caller commits.
+
+    Split out from `run_episode_stage` (Task 8 fix round 1) so a caller that
+    runs `compute_episode_claims` off a snapshot taken before a slow network
+    round-trip can re-select `job` fresh immediately before this call —
+    applying stale outcomes to a row a concurrent PATCH/resolve has since
+    changed would silently revert that edit."""
+    for outcome in outcomes:
+        put_source(job, outcome.source_id, outcome.claims)
+    return await resolve_job(session, job)
+
+
 async def run_episode_stage(
     session: AsyncSession,
     job: Job,
@@ -434,7 +448,5 @@ async def run_episode_stage(
 ) -> tuple[list[SourceOutcome], ResolveOutcome]:
     """Compute, store every outcome, resolve, flush. The caller commits."""
     outcomes = await compute_episode_claims(session, job, providers, cfg, opts)
-    for outcome in outcomes:
-        put_source(job, outcome.source_id, outcome.claims)
-    resolved = await resolve_job(session, job)
+    resolved = await apply_episode_outcomes(session, job, outcomes)
     return outcomes, resolved

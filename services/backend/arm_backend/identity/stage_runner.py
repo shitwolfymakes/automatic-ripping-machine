@@ -1,13 +1,22 @@
 """Background runner for the episode stage (design spec 5, 6.2, 6.3, 9;
-plan Task 8): runs `run_episode_stage` off the request path so identify /
+plan Task 8): runs the episode stage off the request path so identify /
 resolve / PATCH never block on a provider round-trip.
 
 `EpisodeStageRunner.schedule(job_id)` is the only trigger surface routers
 use. It is idempotent while a run for that job is pending or in flight: a
-second `schedule` call during a run just marks "run again once" so the
-operator's latest edit is never lost to an in-flight run started on stale
-inputs, without ever running the stage twice concurrently for the same job
-or piling up more than one extra run.
+second `schedule` call for a run that has actually started marks "run again
+once" so the operator's latest edit is never lost to an in-flight run
+started on stale inputs, without ever running the stage twice concurrently
+for the same job or piling up more than one extra run. A second call for a
+run that is merely queued (not yet started) is a no-op.
+
+Each run splits fetch from apply (fix round 1): `compute_episode_claims`
+runs the network phase against a snapshot of the job, then the job is
+re-selected fresh (`populate_existing=True`) immediately before writing —
+never applying outcomes computed against a copy a concurrent PATCH/resolve
+may have since changed. If the job vanished, or another `schedule()` for it
+arrived while the network phase was in flight, the run writes, commits and
+emits nothing and lets the queued rerun-once apply fresh outcomes instead.
 
 One `SourceHttp` per episode source id is built once, at construction, and
 kept for the runner's whole lifetime (`_http_map`): that is where rate
@@ -27,7 +36,12 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
 
-from arm_backend.identity.episode_stage import StageOptions, is_tv_candidate, run_episode_stage
+from arm_backend.identity.episode_stage import (
+    StageOptions,
+    apply_episode_outcomes,
+    compute_episode_claims,
+    is_tv_candidate,
+)
 from arm_backend.identity.episodes.providers.base import EpisodeListProvider
 from arm_backend.identity.episodes.providers.tmdb import TmdbEpisodes
 from arm_backend.identity.episodes.providers.tvdb import TvdbEpisodes
@@ -84,6 +98,11 @@ class EpisodeStageRunner:
         self._providers: list[EpisodeListProvider] | None = None
         self._providers_key: tuple[str | None, str | None] | None = None
         self._pending: dict[str, asyncio.Task[None]] = {}
+        # job ids whose current run has actually started (past the top of
+        # `_run_once`) — only these need a rerun-once when re-scheduled; a
+        # job still sitting in `_pending` but not yet started will pick up
+        # the latest state on its own once it does start.
+        self._started: set[str] = set()
         self._rerun: set[str] = set()
         self._shutdown = False
 
@@ -99,12 +118,17 @@ class EpisodeStageRunner:
     def schedule(self, job_id: str) -> None:
         """Run the episode stage for `job_id` in the background. Idempotent
         while a run for this job is already pending/running: a second call
-        just marks "run again once" (never queues more than one extra run).
-        A no-op once `shutdown` has been called."""
+        for a run that has actually started marks "run again once" (never
+        queues more than one extra run); a second call for a run that is
+        merely queued (its task hasn't started yet) is a pure no-op — that
+        run will read the current state once it starts, so a rerun would
+        just be a wasted extra pass. A no-op once `shutdown` has been
+        called."""
         if self._shutdown:
             return
         if job_id in self._pending:
-            self._rerun.add(job_id)
+            if job_id in self._started:
+                self._rerun.add(job_id)
             return
         task = asyncio.create_task(self._run_once(job_id))
         self._pending[job_id] = task
@@ -114,6 +138,7 @@ class EpisodeStageRunner:
             # task cancelled before its first step never enters the
             # coroutine at all, and would otherwise never clear `_pending`.
             self._pending.pop(job_id, None)
+            self._started.discard(job_id)
             if job_id in self._rerun and not self._shutdown:
                 self._rerun.discard(job_id)
                 self.schedule(job_id)
@@ -124,14 +149,19 @@ class EpisodeStageRunner:
         """Wait for every scheduled run to finish, including any
         re-run-once each triggers. Tests only."""
         while self._pending:
-            await asyncio.gather(*list(self._pending.values()), return_exceptions=True)
-            # `gather` can resolve a just-finished task's future synchronously
-            # (its own done-callback bookkeeping fires before the task's
-            # *other* done-callback above has had its turn), so `_pending`
-            # may not be updated yet the instant `gather` returns. Yielding
-            # once here lets that callback run before we re-check — without
-            # it, a fast rerun-once can live-lock this loop against `gather`'s
-            # own synchronous fast path forever.
+            # Gather only the *live* tasks — as of 3.14, `gather()` can
+            # resolve an already-done task's future eagerly inside its own
+            # constructor, ahead of that same task's *other* done-callback
+            # (the one above that updates `_pending`/`_rerun`) getting its
+            # turn on the ready queue. Handing it an already-done task risks
+            # exactly that race. `gather()` with an empty list (every
+            # pending task already done, awaiting only its own callback)
+            # just resolves immediately — never re-triggers it.
+            live = [t for t in self._pending.values() if not t.done()]
+            await asyncio.gather(*live, return_exceptions=True)
+            # Yielding once here lets a just-finished task's own done-
+            # callback run before we re-check `_pending` — without it, a
+            # fast rerun-once can live-lock this loop forever.
             await asyncio.sleep(0)
 
     async def shutdown(self) -> None:
@@ -143,11 +173,13 @@ class EpisodeStageRunner:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._pending.clear()
+        self._started.clear()
         self._rerun.clear()
 
     # -- one run ------------------------------------------------------------
 
     async def _run_once(self, job_id: str) -> None:
+        self._started.add(job_id)
         try:
             async with self._session_factory() as session:
                 job = (await session.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
@@ -159,21 +191,54 @@ class EpisodeStageRunner:
                     return
                 cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
                 providers = self._providers_for(cfg)
-                outcomes, resolved = await run_episode_stage(session, job, providers, cfg, StageOptions())
+
+                # Network phase (can take seconds): compute against this
+                # snapshot only. No write yet — a PATCH or /resolve is free
+                # to commit its own edit to this same job while we wait.
+                outcomes = await compute_episode_claims(session, job, providers, cfg, StageOptions())
+
+                # Re-select the job fresh (locked) right before writing.
+                # `populate_existing` forces this session's identity map to
+                # refresh `job`'s attributes from the current row rather
+                # than handing back the snapshot we already read above (the
+                # lost-update bug: applying outcomes computed from a stale
+                # copy would silently clobber a manual claim a concurrent
+                # request committed during the network phase).
+                # `with_for_update` is a no-op against SQLite/FakeSession.
+                fresh_job = (
+                    await session.execute(
+                        select(Job)
+                        .where(col(Job.id) == job_id)
+                        .with_for_update()
+                        .execution_options(populate_existing=True)
+                    )
+                ).scalar_one_or_none()
+                if fresh_job is None or job_id in self._rerun:
+                    # Vanished meanwhile, or another `schedule()` for this
+                    # job arrived while we were waiting on providers: write
+                    # nothing, commit nothing, emit nothing. The queued
+                    # rerun-once (if any) will apply fresh outcomes against
+                    # the current state instead.
+                    return
+
+                resolved = await apply_episode_outcomes(session, fresh_job, outcomes)
                 await session.commit()
                 await self._hub.emit(
                     topic="ripper.events",
                     event_type="job.identity_updated",
-                    payload={"job_id": job.id, "sources": {o.source_id: o.claims.status for o in outcomes}},
-                    job_id=job.id,
+                    payload={
+                        "job_id": fresh_job.id,
+                        "sources": {o.source_id: o.claims.status for o in outcomes},
+                    },
+                    job_id=fresh_job.id,
                     session=session,
                 )
                 for track_id in sorted(resolved.track_ids):
                     await self._hub.emit(
                         topic="ripper.events",
                         event_type="track.updated",
-                        payload={"track_id": track_id, "job_id": job.id},
-                        job_id=job.id,
+                        payload={"track_id": track_id, "job_id": fresh_job.id},
+                        job_id=fresh_job.id,
                         track_id=track_id,
                         session=session,
                     )
