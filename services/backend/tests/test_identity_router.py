@@ -551,14 +551,45 @@ def test_match_unknown_job_404(signing_key: bytes) -> None:
     assert r.status_code == 404
 
 
-def test_match_non_tv_candidate_409(signing_key: bytes) -> None:
+def test_match_works_on_a_non_tv_job_m4(signing_key: bytes) -> None:
+    """M4 (spec 5): the manual match works on any job, TV or not; only the
+    background stage is gated on a TV candidate."""
     job = _job(media_type=MediaType.MOVIE)
-    db = _db(job, tracks=[_track(job.id, 0, 5400)])
-    runner = _FakeStageRunner([FakeProvider()])
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    runner = _FakeStageRunner([FakeProvider(seasons={1: _season(1, DISTINCT)})])
     app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
     with TestClient(app) as client:
         r = client.post(f"/api/jobs/{JOB_ID}/identity/match", json={"apply": False}, headers=_auth(admin_token))
-    assert r.status_code == 409
+    assert r.status_code == 200
+    outcome = next(o for o in r.json()["outcomes"] if o["source_id"] == "episodes_tmdb")
+    assert outcome["status"] == "ok"
+
+
+@pytest.mark.parametrize("body", [{"season": -1}, {"disc_number": 0}, {"disc_number": -2}])
+def test_match_out_of_range_season_or_disc_422_m6(signing_key: bytes, body: dict[str, int]) -> None:
+    job = _job()
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    runner = _FakeStageRunner([FakeProvider(seasons={1: _season(1, DISTINCT)})])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.post(
+            f"/api/jobs/{JOB_ID}/identity/match", json={"apply": False, **body}, headers=_auth(admin_token)
+        )
+    assert r.status_code == 422
+
+
+def test_match_season_zero_and_disc_one_are_valid_m6(signing_key: bytes) -> None:
+    job = _job()
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    runner = _FakeStageRunner([FakeProvider(seasons={0: _season(0, DISTINCT)})])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.post(
+            f"/api/jobs/{JOB_ID}/identity/match",
+            json={"apply": False, "season": 0, "disc_number": 1},
+            headers=_auth(admin_token),
+        )
+    assert r.status_code == 200
 
 
 def test_match_no_stage_runner_503(signing_key: bytes) -> None:

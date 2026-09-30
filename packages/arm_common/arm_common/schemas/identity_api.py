@@ -64,8 +64,8 @@ class MatchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     source: EpisodeSourceSetting | None = None
-    season: int | None = None
-    disc_number: int | None = None
+    season: int | None = Field(default=None, ge=0)
+    disc_number: int | None = Field(default=None, ge=1)
     tolerance: int | None = Field(default=None, ge=1, le=1800)
     apply: bool = False
 

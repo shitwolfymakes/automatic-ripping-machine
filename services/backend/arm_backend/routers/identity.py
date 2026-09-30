@@ -30,7 +30,6 @@ from arm_backend.identity.episode_stage import (
     StageOptions,
     compute_episode_claims,
     found_ids_from_outcomes,
-    is_tv_candidate,
 )
 from arm_backend.identity.episodes.model import Episode
 from arm_backend.identity.episodes.providers.base import EpisodeListProvider
@@ -177,13 +176,9 @@ async def match_identity(
     hub: WSHub = Depends(_get_hub),
     stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
 ) -> MatchPreview:
+    # M4 (spec 5): the manual match works on any job; only the background
+    # stage is gated on a TV candidate.
     job = await _get_job(db, job_id)
-    tracks = await _get_tracks(db, job_id)
-    if not is_tv_candidate(job, tracks):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"job {job_id} is not a TV candidate",
-        )
     if stage_runner is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -216,9 +211,9 @@ async def match_identity(
     # F6: end the read transaction before the (possibly slow) provider
     # round-trip. A plain commit, not a rollback: nothing is dirty yet in
     # either branch, and `db.py`'s `expire_on_commit=False` means committing
-    # does NOT expire `job`/`tracks` -- `compute_episode_claims` still reads
-    # their already-loaded attributes safely afterward. A rollback would
-    # unconditionally expire them regardless of that setting, which is
+    # does NOT expire `job` -- `compute_episode_claims` still reads its
+    # already-loaded attributes safely afterward. A rollback would
+    # unconditionally expire it regardless of that setting, which is
     # unsafe under asyncio (an expired attribute needs an explicit awaited
     # refresh; a bare `getattr` cannot lazy-load on an AsyncSession).
     await db.commit()
