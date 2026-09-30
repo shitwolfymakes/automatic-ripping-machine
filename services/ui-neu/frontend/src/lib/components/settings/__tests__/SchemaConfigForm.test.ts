@@ -313,10 +313,7 @@ describe('SchemaConfigForm section layout hints', () => {
 		expect(fieldCCheckbox.compareDocumentPosition(advancedLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 
-	it('renders the summary slot as a no-op until a named component is wired up', () => {
-		// The 'tv-episodes' name is recognised (typed on SettingsSection), but
-		// this task only wires the slot - Task 6 supplies the component, so it
-		// still renders nothing today. Same outcome as an unrecognised name.
+	it('renders the registered summary component for a section named "tv-episodes"', () => {
 		vi.mocked(sectionFields).mockReturnValueOnce([
 			{
 				title: 'Test section',
@@ -327,7 +324,94 @@ describe('SchemaConfigForm section layout hints', () => {
 			}
 		]);
 		renderComponent(SchemaConfigForm, { props: { group: LAYOUT_GROUP, config: LAYOUT_CONFIG } });
-		expect(screen.queryByTestId('settings-section-columns')).not.toBeInTheDocument();
+		expect(screen.getByRole('group', { name: 'Summary' })).toBeInTheDocument();
 		expect(screen.getByLabelText('Field A')).toBeInTheDocument();
+	});
+});
+
+describe('SchemaConfigForm TV episodes section', () => {
+	const TV_FIELDS: ConfigFieldMeta[] = [
+		{
+			key: 'disc_hint_sources',
+			group: 'Metadata',
+			tier: 'operator',
+			label: 'Read season and disc number from',
+			help: 'Read from the disc in this order, before ARM identifies it.',
+			type: 'ranked',
+			editable: true,
+			enum_values: ['bd_title', 'label'],
+			enum_labels: { bd_title: 'Blu-ray disc title', label: 'Volume label' }
+		},
+		{
+			key: 'episode_sources',
+			group: 'Metadata',
+			tier: 'operator',
+			label: 'Episode sources',
+			help: 'Tried top to bottom. ARM stops at the first confident match. TVmaze needs no key.',
+			type: 'ranked',
+			editable: true,
+			enum_values: ['tmdb', 'tvmaze', 'tvdb'],
+			enum_labels: { tmdb: 'TMDb', tvmaze: 'TVmaze', tvdb: 'TVDB' },
+			enum_requires: { tmdb: 'tmdb_api_key', tvdb: 'tvdb_api_key' }
+		},
+		{
+			key: 'episode_auto_apply',
+			group: 'Metadata',
+			tier: 'operator',
+			label: 'Apply confident matches',
+			help: 'When off, every match is kept as a suggestion to review on the job page.',
+			type: 'bool',
+			editable: true
+		},
+		{
+			key: 'episode_match_tolerance_seconds',
+			group: 'Metadata',
+			tier: 'operator',
+			label: 'Match tolerance (seconds)',
+			help: "How far a track's runtime may differ from an episode's and still match.",
+			type: 'int',
+			editable: true
+		}
+	];
+	const TV_GROUP: SettingsGroup = { name: 'Metadata', fields: TV_FIELDS };
+	const TV_CONFIG = {
+		disc_hint_sources: ['bd_title', 'label'],
+		episode_sources: ['tmdb', 'tvmaze', 'tvdb'],
+		episode_auto_apply: true,
+		episode_match_tolerance_seconds: 300
+	};
+
+	it('renders the panel with the summary, both ranked lists, the auto-apply toggle and the advanced tolerance field', () => {
+		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
+
+		const summary = screen.getByRole('group', { name: 'Summary' });
+		expect(summary).toHaveTextContent('TMDb, TVmaze, TVDB');
+
+		const columnsGrid = screen.getByTestId('settings-section-columns');
+		expect(within(columnsGrid).getByRole('list', { name: 'Read season and disc number from' })).toBeInTheDocument();
+		expect(within(columnsGrid).getByRole('list', { name: 'Episode sources' })).toBeInTheDocument();
+
+		expect(screen.getByLabelText('Apply confident matches')).toBeInTheDocument();
+		expect(screen.getByText('Advanced')).toBeInTheDocument();
+		expect(screen.getByLabelText('Match tolerance (seconds)')).toBeInTheDocument();
+	});
+
+	it('moving TVmaze up updates the summary text before Save', async () => {
+		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
+		const summary = screen.getByRole('group', { name: 'Summary' });
+		expect(summary).toHaveTextContent('TMDb, TVmaze, TVDB');
+
+		await fireEvent.click(screen.getByRole('button', { name: 'Move TVmaze up' }));
+
+		expect(summary).toHaveTextContent('TVmaze, TMDb, TVDB');
+		expect(saveArmConfig).not.toHaveBeenCalled();
+	});
+
+	it('saves the reordered episode_sources', async () => {
+		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Move TVmaze up' }));
+		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+		await waitFor(() => expect(saveArmConfig).toHaveBeenCalled());
+		expect(saveArmConfig.mock.calls[0][0]).toEqual({ episode_sources: ['tvmaze', 'tmdb', 'tvdb'] });
 	});
 });

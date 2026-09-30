@@ -7,6 +7,9 @@
 	import { formatDateTime } from '$lib/utils/format';
 	import ConfigSchemaField from './ConfigSchemaField.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
+	import TvEpisodesSummary, { tvEpisodesEmptyNote } from './TvEpisodesSummary.svelte';
+
+	const SECTION_SUMMARIES = { 'tv-episodes': TvEpisodesSummary };
 
 	let {
 		group,
@@ -36,12 +39,23 @@
 	let saving = $state(false);
 	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
 
+	// A ranked/string[] field value is an array - $state deep-proxies it, so
+	// even an untouched value is never === its raw counterpart in config.
+	// Compare element-wise for arrays; every other field type stays primitive
+	// (string/number/boolean), where === already means unchanged.
+	function unchanged(a: unknown, b: unknown): boolean {
+		if (Array.isArray(a) && Array.isArray(b)) {
+			return a.length === b.length && a.every((v, i) => v === b[i]);
+		}
+		return a === b;
+	}
+
 	function buildPayload(): Record<string, unknown> {
 		const out: Record<string, unknown> = {};
 		for (const f of editable) {
 			const v = values[f.key];
 			if (f.tier === 'secret' && (v === HIDDEN || v === '' || v == null)) continue;
-			if (v === config[f.key]) continue;
+			if (unchanged(v, config[f.key])) continue;
 			out[f.key] = v;
 		}
 		return out;
@@ -175,9 +189,11 @@
 				{:else}
 					<div class="schema-config-form-section-blurb"></div>
 				{/if}
-				{#if section.summary === 'tv-episodes'}
-					<!-- Task 6 renders the read-only pipeline-strip summary here; any
-					     other/unset name (this one included, for now) renders nothing. -->
+				{#if section.summary}
+					{@const Summary = SECTION_SUMMARIES[section.summary]}
+					{#if Summary}
+						<Summary {values} fields={group.fields} />
+					{/if}
 				{/if}
 				{#if section.columns.length > 0}
 					<div class="schema-config-form-columns" data-testid="settings-section-columns">
@@ -189,6 +205,12 @@
 							</div>
 						{/each}
 					</div>
+				{/if}
+				{#if section.summary === 'tv-episodes'}
+					{@const emptyNote = tvEpisodesEmptyNote(values)}
+					{#if emptyNote}
+						<p class="schema-config-form-description mb-4" data-testid="tv-episodes-empty-note">{emptyNote}</p>
+					{/if}
 				{/if}
 				<div class="stack">
 					{#each section.fields as field (field.key)}
