@@ -22,7 +22,10 @@ SOURCE_TIERS: dict[str, int] = {
     "preset": TIER_BY_CAPABILITY[Capability.PRESET],
 }
 
-# Within a tier, lower rank wins. Spec 4.5 default for disc_hint_sources.
+# Within a tier, lower rank wins. Spec 4.5 default for disc_hint_sources. This
+# is the rank map for the *default* settings only, kept as the oracle
+# `source_ranks(None)` is tested against; production code computes ranks from
+# the operator's config through `source_ranks()`, never by reading this map.
 DEFAULT_RANKS: dict[str, int] = {
     "bd_title": 0,
     "label": 1,
