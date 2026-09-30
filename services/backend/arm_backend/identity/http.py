@@ -8,6 +8,7 @@ Never logs headers or params — those may carry API keys.
 """
 
 import asyncio
+import copy
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -76,6 +77,10 @@ class SourceHttp:
         self._backing_off_since: float | None = None
 
     def backing_off(self) -> bool:
+        # Side effect is intentional: once `backoff_s` has elapsed, this call
+        # clears the backoff state AND resets the error streak, so the very
+        # next request gets a clean slate rather than tripping backoff again
+        # after a single new error.
         if self._backing_off_since is None:
             return False
         if self._clock() - self._backing_off_since >= self._policy.backoff_s:
@@ -250,10 +255,21 @@ class SourceHttp:
         if self._clock() - stored_at >= self._policy.cache_ttl_s:
             del self._cache[key]
             return _MISSING
-        return value
+        # Deep-copy out: callers (providers/stage) may mutate the returned
+        # JSON in place (sort/pop/append). Handing out the stored reference
+        # would let that mutation corrupt the cached value for every other
+        # caller sharing this SourceHttp, for up to cache_ttl_s.
+        return copy.deepcopy(value)
 
     def _cache_put(self, key: str, value: Any) -> None:
-        self._cache[key] = (self._clock(), value)
+        # Drop any existing entry for this key first so a re-put moves it to
+        # the end of the dict — eviction order (oldest-first) then reflects
+        # the latest write, not the key's original insertion position.
+        self._cache.pop(key, None)
+        # Deep-copy in: store our own copy so a caller mutating `value` after
+        # this call can't corrupt what's cached (see the mirror comment in
+        # _cache_get).
+        self._cache[key] = (self._clock(), copy.deepcopy(value))
         while len(self._cache) > self._policy.cache_max:
             oldest_key = next(iter(self._cache))
             del self._cache[oldest_key]
@@ -273,4 +289,4 @@ def _parse_retry_after(raw: str | None) -> float:
         value = int(raw)
     except ValueError:
         return _DEFAULT_RETRY_AFTER
-    return min(value, _MAX_RETRY_AFTER)
+    return max(0, min(value, _MAX_RETRY_AFTER))

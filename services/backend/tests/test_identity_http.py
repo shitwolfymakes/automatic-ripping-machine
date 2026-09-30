@@ -43,6 +43,29 @@ async def test_second_call_is_cached(http_client) -> None:
 
 
 @respx.mock
+async def test_cached_value_is_not_corrupted_by_caller_mutation(http_client) -> None:
+    """A caller (provider/stage) mutating a returned payload in place must
+    never corrupt the cached value for later callers — the cache must hand
+    out (and store) independent copies, not shared references."""
+    respx.get(URL).mock(return_value=httpx.Response(200, json={"a": [1, 2, 3]}))
+    c = Clock()
+    s = make(http_client, c)
+
+    first = await s.get_json(URL)
+    first["a"].append(999)  # mutate the freshly fetched value in place
+    first["b"] = "poison"
+
+    second = await s.get_json(URL)  # cache hit
+    assert second == {"a": [1, 2, 3]}
+    assert first is not second
+
+    second["a"].append(-1)  # mutate a cache-hit value in place too
+    third = await s.get_json(URL)  # another cache hit
+    assert third == {"a": [1, 2, 3]}
+    assert second is not third
+
+
+@respx.mock
 async def test_cache_expires(http_client) -> None:
     route = respx.get(URL).mock(return_value=httpx.Response(200, json={"a": 1}))
     c = Clock()
@@ -218,6 +241,15 @@ async def test_429_non_integer_retry_after_uses_default(http_client) -> None:
     s = make(http_client, c)
     assert await s.get_json(URL) == 1
     assert 5 in c.slept
+
+
+@respx.mock
+async def test_429_negative_retry_after_clamps_to_zero(http_client) -> None:
+    respx.get(URL).mock(side_effect=[httpx.Response(429, headers={"Retry-After": "-5"}), httpx.Response(200, json=1)])
+    c = Clock()
+    s = make(http_client, c)
+    assert await s.get_json(URL) == 1
+    assert 0 in c.slept
 
 
 @respx.mock
