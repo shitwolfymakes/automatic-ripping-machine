@@ -1002,9 +1002,10 @@ async def resolve(
         existing_ids = md.identity.external_ids
         ids_set = req.external_ids.model_fields_set
         # I4: a different imdb / tmdb / tvdb names a different show, so every
-        # show id derived from the old one and not sent now is stale: clear
-        # tvmaze, and tmdb / tvdb when absent from the request. An explicit
-        # null only clears that one id; it names no other show.
+        # show id belonging to the old one and not sent now is stale: clear
+        # tvmaze, and imdb / tmdb / tvdb when absent from the request (a
+        # kept old imdb would let providers re-resolve the old show). An
+        # explicit null only clears that one id; it names no other show.
         # R3: filling a blank id names no different show, so only a stored,
         # non-null id replaced by a different value triggers the clear.
         show_changed = any(
@@ -1015,7 +1016,7 @@ async def resolve(
             for name in _SHOW_ID_FIELDS
         )
         if show_changed:
-            for name in ("tvmaze", "tmdb", "tvdb"):
+            for name in ("tvmaze", *_SHOW_ID_FIELDS):
                 if name not in ids_set:
                     setattr(existing_ids, name, None)
         if "imdb" in ids_set:

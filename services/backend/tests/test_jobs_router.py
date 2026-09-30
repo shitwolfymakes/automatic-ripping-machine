@@ -640,6 +640,27 @@ def test_resolve_changed_imdb_clears_derived_ids_and_reschedules(signing_key: by
     assert stage_runner.scheduled == ["job_01JZXR7K3M5Q8N4VWA00000001"]
 
 
+def test_resolve_changed_tmdb_alone_clears_the_old_imdb(signing_key: bytes) -> None:
+    """Re-sending only a different tmdb names a different show: the old imdb
+    (and tvdb / tvmaze) belong to the previous show and are cleared, so no
+    provider can re-resolve the old show from them."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_ids_job()]
+    stage_runner = _StageRunner()
+    app.state.episode_stage = stage_runner
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "X", "year": 2000, "external_ids": {"tmdb": "70"}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    ids = {k: v for k, v in r.json()["job"]["metadata_json"]["identity"]["external_ids"].items() if v is not None}
+    assert ids == {"tmdb": "70"}
+    assert stage_runner.scheduled == ["job_01JZXR7K3M5Q8N4VWA00000001"]
+
+
 def test_resolve_changed_imdb_forgets_stored_episode_show_ids_r2(signing_key: bytes) -> None:
     job = _ids_job()
     job.metadata_json = {
@@ -969,9 +990,10 @@ def test_resolve_ripped_partial_placeholder_clears_unidentified_flag(signing_key
 
 def test_resolve_external_ids_overlay_existing_identity(signing_key: bytes) -> None:
     """req.external_ids overlays the existing identity.external_ids section
-    field-by-field, not a wholesale replace: sending only tmdb must not wipe
-    a previously stored imdb. Non-overlapping sections (scan_result) are
-    preserved too."""
+    field-by-field, not a wholesale replace. Sending only a DIFFERENT tmdb
+    names a different title, so the old imdb is stale and cleared (I4);
+    same-show partial updates keep the other ids (see the R3 and restate
+    tests). Non-overlapping sections (scan_result) are preserved."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [
@@ -992,7 +1014,7 @@ def test_resolve_external_ids_overlay_existing_identity(signing_key: bytes) -> N
     assert r.status_code == 200
     md = r.json()["job"]["metadata_json"]
     assert md["identity"]["external_ids"]["tmdb"] == "42"  # overwritten
-    assert md["identity"]["external_ids"]["imdb"] == "tt0111161"  # survives the partial update
+    assert md["identity"]["external_ids"]["imdb"] is None  # belonged to the old title
     assert md["identity"]["provider"] == "tmdb"  # preserved
     assert md["scan_result"]["disc_type"] == "dvd"  # preserved
 
