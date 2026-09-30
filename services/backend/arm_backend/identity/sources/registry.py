@@ -1,9 +1,15 @@
 """Tier and default rank per identity source id (1 is the highest tier).
-PR 4 replaces DEFAULT_RANKS with the operator's ranked settings."""
+PR 4 replaces the defaults with the operator's settings through the
+accessors below: `episode_sources_setting`/`enabled_episode_source_ids`,
+`hint_sources_setting`/`enabled_hint_sources`, `disabled_source_ids`,
+`source_ranks`, `episode_tolerance`, and `episode_auto_apply`."""
+
+from collections.abc import Mapping, Sequence
 
 from arm_backend.identity.sources.base import TIER_BY_CAPABILITY, Capability, Source
 from arm_backend.identity.sources.bd_title import BD_TITLE
 from arm_backend.identity.sources.label_hints import LABEL
+from arm_common import Config
 
 SOURCE_TIERS: dict[str, int] = {
     "manual": TIER_BY_CAPABILITY[Capability.MANUAL],
@@ -39,7 +45,7 @@ EPISODE_SOURCE_BY_SETTING: dict[str, str] = {
 # PR 4 makes this the operator's setting).
 DEFAULT_EPISODE_SOURCES: tuple[str, ...] = ("tmdb", "tvmaze", "tvdb")
 
-# Episode-stage settings until PR 4 adds them to Config.
+# Episode-stage defaults, used when a Config row has no value (legacy/in-memory rows).
 # Matcher runtime tolerance in seconds.
 EPISODE_TOLERANCE_S = 300
 # False: every episode-stage result is stored as a suggestion, never applied.
@@ -48,3 +54,59 @@ EPISODE_AUTO_APPLY = True
 COVERAGE_STOP = 0.8
 # Most seasons scanned when the job's season is unknown.
 MAX_SEASON_SCAN = 10
+
+# Disc-hint sources by setting value (spec 4.5 `disc_hint_sources`).
+HINT_SOURCE_BY_SETTING: dict[str, Source] = {BD_TITLE.id: BD_TITLE, LABEL.id: LABEL}
+_DEFAULT_HINT_SETTING: tuple[str, ...] = tuple(s.id for s in HINT_SOURCES)
+
+
+def _ranked(values: Sequence[str] | None, known: Mapping[str, object], default: tuple[str, ...]) -> tuple[str, ...]:
+    """The operator's ranked list, keeping known values in order, deduplicated;
+    the default when the column is missing (a legacy or in-memory row)."""
+    if values is None:
+        return default
+    seen: list[str] = []
+    for v in values:
+        if v in known and v not in seen:
+            seen.append(v)
+    return tuple(seen)
+
+
+def episode_sources_setting(cfg: Config | None) -> tuple[str, ...]:
+    return _ranked(getattr(cfg, "episode_sources", None), EPISODE_SOURCE_BY_SETTING, DEFAULT_EPISODE_SOURCES)
+
+
+def enabled_episode_source_ids(cfg: Config | None) -> tuple[str, ...]:
+    return tuple(EPISODE_SOURCE_BY_SETTING[s] for s in episode_sources_setting(cfg))
+
+
+def hint_sources_setting(cfg: Config | None) -> tuple[str, ...]:
+    return _ranked(getattr(cfg, "disc_hint_sources", None), HINT_SOURCE_BY_SETTING, _DEFAULT_HINT_SETTING)
+
+
+def enabled_hint_sources(cfg: Config | None) -> tuple[Source, ...]:
+    return tuple(HINT_SOURCE_BY_SETTING[s] for s in hint_sources_setting(cfg))
+
+
+def disabled_source_ids(cfg: Config | None) -> frozenset[str]:
+    """Ranked-capability sources the operator unchecked (spec 4.5: membership = enabled)."""
+    every = set(EPISODE_SOURCE_BY_SETTING.values()) | set(HINT_SOURCE_BY_SETTING)
+    enabled = set(enabled_episode_source_ids(cfg)) | {s.id for s in enabled_hint_sources(cfg)}
+    return frozenset(every - enabled)
+
+
+def source_ranks(cfg: Config | None) -> dict[str, int]:
+    """Within-tier rank per enabled source: its position in the operator's list."""
+    ranks = {sid: i for i, sid in enumerate(enabled_episode_source_ids(cfg))}
+    ranks.update({s.id: i for i, s in enumerate(enabled_hint_sources(cfg))})
+    return ranks
+
+
+def episode_tolerance(cfg: Config | None) -> int:
+    value = getattr(cfg, "episode_match_tolerance_seconds", None)
+    return EPISODE_TOLERANCE_S if value is None else int(value)
+
+
+def episode_auto_apply(cfg: Config | None) -> bool:
+    value = getattr(cfg, "episode_auto_apply", None)
+    return EPISODE_AUTO_APPLY if value is None else bool(value)

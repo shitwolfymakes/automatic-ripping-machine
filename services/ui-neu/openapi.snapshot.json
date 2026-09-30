@@ -9579,6 +9579,34 @@
               }
             ],
             "title": "Enum Values"
+          },
+          "enum_labels": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enum Labels"
+          },
+          "enum_requires": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enum Requires"
           }
         },
         "type": "object",
@@ -9772,6 +9800,56 @@
             ],
             "title": "Thediscdb Refresh Days"
           },
+          "episode_sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Sources"
+          },
+          "disc_hint_sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Hint Sources"
+          },
+          "episode_match_tolerance_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Match Tolerance Seconds"
+          },
+          "episode_auto_apply": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Auto Apply"
+          },
           "ripping_paused": {
             "anyOf": [
               {
@@ -9936,6 +10014,28 @@
             "type": "integer",
             "title": "Thediscdb Refresh Days"
           },
+          "episode_sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Episode Sources"
+          },
+          "disc_hint_sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Disc Hint Sources"
+          },
+          "episode_match_tolerance_seconds": {
+            "type": "integer",
+            "title": "Episode Match Tolerance Seconds"
+          },
+          "episode_auto_apply": {
+            "type": "boolean",
+            "title": "Episode Auto Apply"
+          },
           "ripping_paused": {
             "type": "boolean",
             "title": "Ripping Paused"
@@ -10043,6 +10143,10 @@
           "makemkv_sdf_enabled",
           "thediscdb_enabled",
           "thediscdb_refresh_days",
+          "episode_sources",
+          "disc_hint_sources",
+          "episode_match_tolerance_seconds",
+          "episode_auto_apply",
           "ripping_paused",
           "hold_for_review",
           "manual_wait_seconds",
