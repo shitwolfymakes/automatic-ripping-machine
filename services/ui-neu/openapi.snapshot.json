@@ -13061,6 +13061,17 @@
             ],
             "title": "Coverage"
           },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
           "matches": {
             "items": {
               "$ref": "#/components/schemas/MatchEntryView"

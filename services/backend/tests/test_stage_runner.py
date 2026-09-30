@@ -484,6 +484,89 @@ async def test_shutdown_cancels_in_flight_and_disables_schedule() -> None:
 
 
 # ---------------------------------------------------------------------------
+# invalidate (Task 9 F4 part 2): the identity router's `apply=True` path
+# calls this before computing so an in-flight background run can't clobber
+# the write it's about to commit.
+# ---------------------------------------------------------------------------
+
+
+async def test_invalidate_noop_when_nothing_pending() -> None:
+    hub = _Hub()
+    runner = _runner(_db(), hub, [FakeProvider()])
+
+    runner.invalidate("job_missing")
+
+    assert runner._rerun == set()
+
+
+async def test_invalidate_noop_when_run_not_yet_started() -> None:
+    """Immediately after `schedule()`, before any `await` yields control,
+    the task exists in `_pending` but hasn't run its first line (`_started`
+    is still empty): `invalidate` is a no-op -- that run will read current
+    state once it starts, so marking a rerun would be a wasted extra pass."""
+    job = _job()
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    hub = _Hub()
+    runner = _runner(db, hub, [provider])
+
+    runner.schedule(job.id)
+    assert job.id in runner._pending
+    assert job.id not in runner._started
+
+    runner.invalidate(job.id)
+
+    assert job.id not in runner._rerun
+
+    await runner.drain()
+
+
+async def test_invalidate_marks_rerun_when_run_has_started() -> None:
+    """Invalidating a genuinely in-flight run discards its outcome (reuses
+    the rerun-once path fix round 1 tested via `schedule`) and its
+    done-callback reschedules exactly once, applying fresh outcomes."""
+    job = _job()
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    gate = asyncio.Event()
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)}, gate=gate)
+    hub = _Hub()
+    runner = _runner(db, hub, [provider])
+
+    runner.schedule(job.id)
+    await asyncio.sleep(0)  # let the task start and block on the gate
+    assert job.id in runner._pending
+    assert job.id in runner._started
+
+    runner.invalidate(job.id)
+    assert job.id in runner._rerun
+
+    gate.set()
+    await runner.drain()
+
+    # Exactly one rerun (not zero, not more), and it applied fresh outcomes.
+    assert len([c for c in provider.calls if c[0] == "configured"]) == 2
+    assert claims_of(job).sources["episodes_tmdb"].status == "ok"
+
+
+async def test_invalidate_after_shutdown_is_noop() -> None:
+    job = _job()
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    gate = asyncio.Event()
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)}, gate=gate)
+    hub = _Hub()
+    runner = _runner(db, hub, [provider])
+
+    runner.schedule(job.id)
+    await asyncio.sleep(0)
+    assert job.id in runner._pending
+
+    await runner.shutdown()
+    runner.invalidate(job.id)  # no-op after shutdown
+
+    assert runner._rerun == set()
+
+
+# ---------------------------------------------------------------------------
 # one run: emits events, swallows exceptions
 # ---------------------------------------------------------------------------
 

@@ -35,7 +35,7 @@ from arm_backend.identity.episodes.providers.base import EpisodeListProvider
 from arm_backend.identity.http import SourceError, SourceMiss
 from arm_backend.identity.ids import current_ids, resolve_show_ids
 from arm_backend.identity.pipeline import ResolveOutcome, resolve_job
-from arm_backend.identity.proposals import claims_of, put_source
+from arm_backend.identity.proposals import apply_pin, claims_of, put_source
 from arm_backend.identity.sources.registry import (
     COVERAGE_STOP,
     DEFAULT_EPISODE_SOURCES,
@@ -426,17 +426,44 @@ async def compute_episode_claims(
 
 
 async def apply_episode_outcomes(session: AsyncSession, job: Job, outcomes: Sequence[SourceOutcome]) -> ResolveOutcome:
-    """Store every outcome with `put_source`, then resolve. Flushes; the
-    caller commits.
+    """Store every outcome with `put_source`, apply the pin rule, then
+    resolve. Flushes; the caller commits.
 
     Split out from `run_episode_stage` (Task 8 fix round 1) so a caller that
     runs `compute_episode_claims` off a snapshot taken before a slow network
     round-trip can re-select `job` fresh immediately before this call —
     applying stale outcomes to a row a concurrent PATCH/resolve has since
-    changed would silently revert that edit."""
+    changed would silently revert that edit.
+
+    `apply_pin` (Task 9 F4/F8) runs after every `put_source` so the
+    operator's pinned episode source stays durably applied: a background
+    rerun of the pinned source whose own result would be a suggestion (or a
+    same-inputs error that makes `put_source` keep the prior good entry)
+    must not silently revert to a suggestion the resolver ignores."""
     for outcome in outcomes:
         put_source(job, outcome.source_id, outcome.claims)
+    apply_pin(job, "episode")
     return await resolve_job(session, job)
+
+
+def found_ids_from_outcomes(outcomes: Sequence[SourceOutcome], providers: Sequence[EpisodeListProvider]) -> ExternalIds:
+    """Every outcome's resolved show id, keyed by its provider's `id_field`.
+
+    For a caller (the identity router's `/identity/match`) that computed
+    with show-id persistence off (`StageOptions.apply=False`) and needs to
+    fold newly found ids onto a job it re-selects and commits separately —
+    see `ids.merge_new_ids` — rather than relying on an in-place mutation
+    `compute_episode_claims` never made (Task 9 F2: `merge_new_ids(fresh_job,
+    current_ids(job))` was dead code once `job` and `fresh_job` are the same
+    object and persistence was off — nothing was ever mutated to merge)."""
+    id_field_by_source = {p.source_id: p.id_field for p in providers}
+    found: dict[str, str] = {}
+    for outcome in outcomes:
+        show_id = outcome.claims.inputs.get("show_id")
+        field = id_field_by_source.get(outcome.source_id)
+        if show_id and field:
+            found[field] = show_id
+    return ExternalIds(**found)
 
 
 async def run_episode_stage(

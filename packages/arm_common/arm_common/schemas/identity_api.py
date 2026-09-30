@@ -89,6 +89,9 @@ class MatchOutcomeView(BaseModel):
     detail: str | None = None
     suggestion: bool = False
     coverage: float | None = None
+    # Mean match confidence across this outcome's matched tracks; `None` when
+    # none matched (a miss/skipped/error outcome, or "ok" with zero matches).
+    score: float | None = None
     matches: list[MatchEntryView] = Field(default_factory=list)
     alternatives: list[dict[str, Any]] = Field(default_factory=list)
 

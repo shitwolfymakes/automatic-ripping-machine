@@ -91,29 +91,27 @@ def build_providers(http_map: dict[str, SourceHttp], cfg: Config) -> list[Episod
     ]
 
 
-async def apply_outcomes_and_emit(
+async def emit_identity_resolved(
     session: AsyncSession,
-    job: Job,
-    outcomes: Sequence[SourceOutcome],
     hub: WSHub,
-) -> ResolveOutcome:
-    """Store `outcomes` (`apply_episode_outcomes`: put_source then resolve),
-    commit, then emit `job.identity_updated` plus one `track.updated` per
-    track the resolver changed, committing again. `job` must already be the
-    freshly re-selected row the caller intends to write to.
+    job: Job,
+    resolved: ResolveOutcome,
+    *,
+    sources: dict[str, str],
+) -> None:
+    """Emit `job.identity_updated` (payload carries `sources`, a source id ->
+    status map) plus one `track.updated` per track `resolved` says the
+    resolver changed.
 
-    Shared by the background runner's apply phase and the identity router's
-    `apply=True` path (controller ruling 2) so both commit and emit
-    identically."""
-    resolved = await apply_episode_outcomes(session, job, outcomes)
-    await session.commit()
+    Shared by the episode stage's apply path (`apply_outcomes_and_emit`) and
+    the identity router's pin-clear (Task 9 F3), so every caller that runs
+    the resolver and wants to tell the UI about it reports identically —
+    spec 7 requires `job.identity_updated` whenever the resolver changes
+    anything, not just when the episode stage supplied new outcomes."""
     await hub.emit(
         topic="ripper.events",
         event_type="job.identity_updated",
-        payload={
-            "job_id": job.id,
-            "sources": {o.source_id: o.claims.status for o in outcomes},
-        },
+        payload={"job_id": job.id, "sources": sources},
         job_id=job.id,
         session=session,
     )
@@ -126,6 +124,25 @@ async def apply_outcomes_and_emit(
             track_id=track_id,
             session=session,
         )
+
+
+async def apply_outcomes_and_emit(
+    session: AsyncSession,
+    job: Job,
+    outcomes: Sequence[SourceOutcome],
+    hub: WSHub,
+) -> ResolveOutcome:
+    """Store `outcomes` (`apply_episode_outcomes`: put_source then resolve),
+    commit, then emit via `emit_identity_resolved`, committing again. `job`
+    must already be the freshly re-selected row the caller intends to write
+    to.
+
+    Shared by the background runner's apply phase and the identity router's
+    `apply=True` path (controller ruling 2) so both commit and emit
+    identically."""
+    resolved = await apply_episode_outcomes(session, job, outcomes)
+    await session.commit()
+    await emit_identity_resolved(session, hub, job, resolved, sources={o.source_id: o.claims.status for o in outcomes})
     await session.commit()
     return resolved
 
@@ -204,6 +221,25 @@ class EpisodeStageRunner:
                 self.schedule(job_id)
 
         task.add_done_callback(_done)
+
+    def invalidate(self, job_id: str) -> None:
+        """Discard an in-flight background run's about-to-be-stale outcome
+        for `job_id` (Task 9 F4): a caller about to commit its own identity
+        write for this job (the identity router's `apply=True` path, before
+        it computes) calls this first, so a run that already computed
+        against pre-write state writes nothing when it reaches its apply
+        phase instead of clobbering the write that's about to land.
+
+        Reuses `schedule`'s rerun-once bookkeeping (Task 8): a run that has
+        actually started gets marked for exactly one rerun, which applies
+        fresh outcomes once the caller's own write has landed. A run that's
+        merely queued needs no marking — it will read the current state once
+        it starts. A no-op when nothing is pending for this job at all, or
+        after `shutdown`."""
+        if self._shutdown:
+            return
+        if job_id in self._pending and job_id in self._started:
+            self._rerun.add(job_id)
 
     async def drain(self) -> None:
         """Wait for every scheduled run to finish, including any

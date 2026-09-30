@@ -160,6 +160,28 @@ def clear_pin(job: Job, capability: str) -> None:
     _store(job, claims)
 
 
+def apply_pin(job: Job, capability: str) -> None:
+    """Keep the source pinned for `capability` durable across later
+    `put_source` calls (Task 9 F4/F8): once pinned, its stored claims'
+    `suggestion` is forced False as long as its status is "ok" -- covering a
+    background rerun whose own computed result would be a suggestion the
+    resolver would otherwise ignore, and covering `put_source`'s
+    "keep the last good claims" behavior on a same-inputs error (the kept
+    entry stays forced too). A no-op when nothing is pinned, or the pinned
+    source has no stored "ok" claims yet. Unpinning reverts to whatever
+    `suggestion` the next run computes -- this only ever forces False, it
+    never sets True."""
+    claims = claims_of(job)
+    pinned = claims.pin.get(capability)
+    if pinned is None:
+        return
+    entry = claims.sources.get(pinned)
+    if entry is None or entry.status != "ok":
+        return
+    claims.sources = {**claims.sources, pinned: entry.model_copy(update={"suggestion": False})}
+    _store(job, claims)
+
+
 def record_preset(job: Job, tracks: Iterable[Track], *, now: datetime) -> None:
     """The rip preset's keep/drop decision is the lowest-tier proposal for
     `excluded`, so a disc map (or the operator) can override it by rule."""

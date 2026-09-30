@@ -27,6 +27,7 @@ from arm_common.models.user import GUEST_ROLE  # noqa: E402
 from arm_common.schemas import ExternalIds  # noqa: E402
 from arm_common import User  # noqa: E402
 
+from arm_backend.identity import episode_stage  # noqa: E402
 from arm_backend.identity.episodes.model import Episode  # noqa: E402
 from arm_backend.identity.http import SourceError, SourceMiss  # noqa: E402
 from arm_backend.identity.proposals import claims_of  # noqa: E402
@@ -48,8 +49,11 @@ def _season(number: int, runtimes: list[int]) -> list[Episode]:
 
 
 class FakeHttp:
+    def __init__(self, backing_off: bool = False) -> None:
+        self._backing_off = backing_off
+
     def backing_off(self) -> bool:
-        return False
+        return self._backing_off
 
 
 class FakeProvider:
@@ -63,18 +67,27 @@ class FakeProvider:
         seasons: dict[int, list[Episode]] | None = None,
         show_id: str | None = "100",
         error: Exception | None = None,
+        configured_reason: str | None = None,
+        backing_off: bool = False,
+        resolve_error: Exception | None = None,
     ) -> None:
         self.source_id = source_id
         self.id_field = id_field
-        self.http = FakeHttp()
+        self.http = FakeHttp(backing_off)
         self._seasons = seasons or {}
         self._show_id = show_id
         self.error = error
+        self._configured_reason = configured_reason
+        self._resolve_error = resolve_error
+        self.calls: list[str] = []
 
     def configured(self, cfg: Config) -> str | None:
-        return None
+        return self._configured_reason
 
     async def resolve_show_id(self, ids: ExternalIds) -> str | None:
+        self.calls.append("resolve_show_id")
+        if self._resolve_error is not None:
+            raise self._resolve_error
         return self._show_id
 
     async def seasons(self, show_id: str) -> list[int]:
@@ -114,10 +127,14 @@ class _FakeStageRunner:
     def __init__(self, providers: list[Any]) -> None:
         self._providers = providers
         self.provider_calls: list[Config] = []
+        self.invalidate_calls: list[str] = []
 
     def providers(self, cfg: Config) -> list[Any]:
         self.provider_calls.append(cfg)
         return self._providers
+
+    def invalidate(self, job_id: str) -> None:
+        self.invalidate_calls.append(job_id)
 
 
 @pytest.fixture
@@ -258,18 +275,57 @@ def test_match_preview_writes_nothing(signing_key: bytes) -> None:
     outcome = next(o for o in body["outcomes"] if o["source_id"] == "episodes_tmdb")
     assert outcome["status"] == "ok"
     assert len(outcome["matches"]) == len(DISC)
-    # Nothing written: no commit, no emit, metadata_json byte-identical.
-    assert db.committed == 0
+    assert outcome["score"] is not None
+    # Nothing WRITTEN: no emit, metadata_json byte-identical, no stored
+    # claims. F6: a harmless commit (nothing dirty) ends the read
+    # transaction before the provider round-trip -- `committed` ticks up by
+    # one, but that alone writes no data.
+    assert db.committed == 1
+    assert db.expire_all_calls == 0  # F1 only matters on the apply path
     assert hub.events == []
     assert job.metadata_json == before
     assert claims_of(job).sources == {}
+    assert runner.invalidate_calls == []  # only apply=True invalidates
 
 
-def test_match_apply_without_source_stores_claims_no_pin(signing_key: bytes) -> None:
+def test_match_preview_miss_outcome_has_no_score(signing_key: bytes) -> None:
     job = _job()
     tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
     db = _db(job, tracks=tracks)
-    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    provider = FakeProvider(show_id=None)  # miss: no show id resolvable
+    runner = _FakeStageRunner([provider])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{JOB_ID}/identity/match", json={"apply": False}, headers=_auth(admin_token))
+
+    assert r.status_code == 200
+    outcome = next(o for o in r.json()["outcomes"] if o["source_id"] == "episodes_tmdb")
+    assert outcome["status"] == "miss"
+    assert outcome["score"] is None
+    assert outcome["matches"] == []
+
+
+@pytest.mark.parametrize("tolerance", [0, 1801])
+def test_match_tolerance_out_of_range_422(signing_key: bytes, tolerance: int) -> None:
+    job = _job()
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    runner = _FakeStageRunner([FakeProvider(seasons={1: _season(1, DISTINCT)})])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.post(
+            f"/api/jobs/{JOB_ID}/identity/match",
+            json={"apply": False, "tolerance": tolerance},
+            headers=_auth(admin_token),
+        )
+    assert r.status_code == 422
+
+
+def test_match_apply_without_source_stores_claims_no_pin(signing_key: bytes) -> None:
+    job = _job()  # metadata: imdb only -- tmdb gets newly resolved
+    tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
+    db = _db(job, tracks=tracks)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)}, show_id="100")
     hub = _Hub()
     runner = _FakeStageRunner([provider])
     app, admin_token, _ = _make_app(signing_key, db, hub=hub, stage_runner=runner)
@@ -283,18 +339,68 @@ def test_match_apply_without_source_stores_claims_no_pin(signing_key: bytes) -> 
     assert db.committed >= 1
     assert any(e["event_type"] == "job.identity_updated" for e in hub.events)
     assert any(e["event_type"] == "track.updated" for e in hub.events)
+    assert runner.invalidate_calls == [JOB_ID]
     body = r.json()
     outcome = next(o for o in body["outcomes"] if o["source_id"] == "episodes_tmdb")
     assert outcome["status"] == "ok"
+    # F2: `found_ids_from_outcomes` + `merge_new_ids` persisted the show id
+    # this compute resolved onto the (fresh-reselected) job.
+    assert job.metadata_json["identity"]["external_ids"]["tmdb"] == "100"
+    assert job.metadata_json["identity"]["external_ids"]["imdb"] == "tt1"  # untouched
 
 
-def test_match_apply_with_source_pins_and_clears_suggestion(signing_key: bytes) -> None:
+def test_match_apply_with_a_miss_outcome_merges_no_ids(signing_key: bytes) -> None:
+    """`found_ids_from_outcomes` skips an outcome with no `show_id` in its
+    inputs (a miss never got that far) -- applying still succeeds, storing
+    the miss, without merging a bogus id."""
     job = _job()
     tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
     db = _db(job, tracks=tracks)
-    # EPISODE_AUTO_APPLY defaults suggestion True/False based on coverage etc.;
-    # force a low-confidence-ish scenario is unnecessary -- what matters here is
-    # that the OPERATOR's explicit source choice always clears `suggestion`.
+    provider = FakeProvider(show_id=None)  # miss: no show id resolvable
+    runner = _FakeStageRunner([provider])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{JOB_ID}/identity/match", json={"apply": True}, headers=_auth(admin_token))
+
+    assert r.status_code == 200
+    assert claims_of(job).sources["episodes_tmdb"].status == "miss"
+    assert "tmdb" not in job.metadata_json["identity"]["external_ids"]
+
+
+def test_match_apply_expires_before_the_fresh_reselect(signing_key: bytes) -> None:
+    """F1: `db.expire_all()` runs before the `with_for_update` re-select, so
+    that re-select (and `resolve_job`'s own track re-select right after it)
+    re-read current rows instead of diffing stale copies loaded before the
+    provider round-trip."""
+    job = _job()
+    tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
+    db = _db(job, tracks=tracks)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    runner = _FakeStageRunner([provider])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{JOB_ID}/identity/match", json={"apply": True}, headers=_auth(admin_token))
+
+    assert r.status_code == 200
+    assert db.expire_all_calls == 1
+    expire_idx = db.call_log.index("expire_all")
+    assert db.call_log[expire_idx + 1] == "execute"  # ordered right before the fresh re-select
+
+
+def test_match_apply_with_source_pins_and_survives_forced_suggestion(
+    signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F4/F5: force every computed outcome to `suggestion=True`
+    (`EPISODE_AUTO_APPLY` off) and prove the pin rule still applies it --
+    the stored claims AND the response both read `suggestion=False`, and the
+    resolver actually wrote the episode numbers onto the tracks (not merely
+    proposed them, which the old test never distinguished)."""
+    monkeypatch.setattr(episode_stage, "EPISODE_AUTO_APPLY", False)
+    job = _job()
+    tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
+    db = _db(job, tracks=tracks)
     provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
     hub = _Hub()
     runner = _FakeStageRunner([provider])
@@ -310,7 +416,10 @@ def test_match_apply_with_source_pins_and_clears_suggestion(signing_key: bytes) 
     assert r.status_code == 200
     claims = claims_of(job)
     assert claims.pin == {"episode": "episodes_tmdb"}
-    assert claims.sources["episodes_tmdb"].suggestion is False
+    assert claims.sources["episodes_tmdb"].status == "ok"
+    assert claims.sources["episodes_tmdb"].suggestion is False  # forced by the pin rule
+    track_0 = next(t for t in db.rows["tracks"] if t.source_ref == "0")
+    assert track_0.episode_number is not None  # actually applied, not just proposed
     body = r.json()
     outcome = next(o for o in body["outcomes"] if o["source_id"] == "episodes_tmdb")
     assert outcome["suggestion"] is False
@@ -376,6 +485,45 @@ def test_clear_pin_removes_existing_pin(signing_key: bytes) -> None:
     assert r.status_code == 200
     assert claims_of(job).pin == {}
     assert r.json()["pin"] == {}
+
+
+def test_clear_pin_emits_identity_updated_and_track_updated(signing_key: bytes) -> None:
+    """F3: spec 7 requires `job.identity_updated` whenever the resolver
+    changes anything, not only when `/identity/match` supplied fresh
+    outcomes. Here the stored "ok" claims were never yet applied to the
+    tracks -- clearing the pin still runs `resolve_job`, which applies them
+    for the first time, so both events must fire."""
+    job = _job(
+        meta={
+            "identity": {"external_ids": {"imdb": "tt1"}},
+            "identity_claims": {
+                "sources": {
+                    "episodes_tmdb": {
+                        "status": "ok",
+                        "suggestion": False,
+                        "tracks": {"0": {"role": "episode", "season": 1, "episode": 3, "episode_name": "Ep3"}},
+                    }
+                },
+                "pin": {"episode": "episodes_tmdb"},
+            },
+        }
+    )
+    tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
+    db = _db(job, tracks=tracks)
+    hub = _Hub()
+    app, admin_token, _ = _make_app(signing_key, db, hub=hub, stage_runner=None)
+
+    with TestClient(app) as client:
+        r = client.delete(f"/api/jobs/{JOB_ID}/identity/pin", headers=_auth(admin_token))
+
+    assert r.status_code == 200
+    identity_events = [e for e in hub.events if e["event_type"] == "job.identity_updated"]
+    assert len(identity_events) == 1
+    assert identity_events[0]["payload"] == {"job_id": JOB_ID, "sources": {}}
+    track_events = [e for e in hub.events if e["event_type"] == "track.updated"]
+    assert any(e["payload"]["track_id"] == tracks[0].id for e in track_events)
+    track_0 = next(t for t in db.rows["tracks"] if t.source_ref == "0")
+    assert track_0.episode_number == 3
 
 
 def test_clear_pin_when_nothing_pinned_is_a_noop(signing_key: bytes) -> None:
@@ -460,6 +608,8 @@ def test_episodes_browse_no_stage_runner_503(signing_key: bytes) -> None:
 
 
 def test_episodes_browse_no_show_id_404(signing_key: bytes) -> None:
+    """F7: no id cached (the job's metadata only has `imdb`), so
+    `resolve_show_id` is called directly; it returns `None` -> 404."""
     job = _job()
     db = _db(job)
     provider = FakeProvider(show_id=None)
@@ -472,6 +622,92 @@ def test_episodes_browse_no_show_id_404(signing_key: bytes) -> None:
             headers=_auth(admin_token),
         )
     assert r.status_code == 404
+    assert "resolve_show_id" in provider.calls
+
+
+def test_episodes_browse_uses_cached_id_skips_resolve_show_id(signing_key: bytes) -> None:
+    """F7: when the id is already cached, `resolve_show_id` is never called."""
+    job = _job(meta={"identity": {"external_ids": {"imdb": "tt1", "tmdb": "cached-100"}}})
+    db = _db(job)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    runner = _FakeStageRunner([provider])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.get(
+            f"/api/jobs/{JOB_ID}/identity/episodes",
+            params={"source": "tmdb", "season": 1},
+            headers=_auth(admin_token),
+        )
+    assert r.status_code == 200
+    assert r.json()["show_id"] == "cached-100"
+    assert "resolve_show_id" not in provider.calls
+
+
+def test_episodes_browse_resolve_show_id_miss_404(signing_key: bytes) -> None:
+    """F7: `resolve_show_id` raising `SourceMiss` (not just returning `None`)
+    is also a 404, not a 502 -- it's a definitive "no such show", not a
+    transient failure."""
+    job = _job()
+    db = _db(job)
+    provider = FakeProvider(resolve_error=SourceMiss("no such show"))
+    runner = _FakeStageRunner([provider])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.get(
+            f"/api/jobs/{JOB_ID}/identity/episodes",
+            params={"source": "tmdb", "season": 1},
+            headers=_auth(admin_token),
+        )
+    assert r.status_code == 404
+
+
+def test_episodes_browse_resolve_show_id_source_error_502(signing_key: bytes) -> None:
+    """F7: a transient failure resolving the show id (not yet cached) is a
+    502 naming the provider, not a misleading 404."""
+    job = _job()
+    db = _db(job)
+    provider = FakeProvider(resolve_error=SourceError("timeout"))
+    runner = _FakeStageRunner([provider])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.get(
+            f"/api/jobs/{JOB_ID}/identity/episodes",
+            params={"source": "tmdb", "season": 1},
+            headers=_auth(admin_token),
+        )
+    assert r.status_code == 502
+    assert "tmdb" in r.json()["detail"]
+
+
+def test_episodes_browse_configured_reason_409(signing_key: bytes) -> None:
+    job = _job()
+    db = _db(job)
+    provider = FakeProvider(configured_reason="no TMDb key")
+    runner = _FakeStageRunner([provider])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.get(
+            f"/api/jobs/{JOB_ID}/identity/episodes",
+            params={"source": "tmdb", "season": 1},
+            headers=_auth(admin_token),
+        )
+    assert r.status_code == 409
+    assert "no TMDb key" in r.json()["detail"]
+
+
+def test_episodes_browse_backing_off_503(signing_key: bytes) -> None:
+    job = _job()
+    db = _db(job)
+    provider = FakeProvider(backing_off=True)
+    runner = _FakeStageRunner([provider])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.get(
+            f"/api/jobs/{JOB_ID}/identity/episodes",
+            params={"source": "tmdb", "season": 1},
+            headers=_auth(admin_token),
+        )
+    assert r.status_code == 503
 
 
 def test_episodes_browse_season_miss_404(signing_key: bytes) -> None:

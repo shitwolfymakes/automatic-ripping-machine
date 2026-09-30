@@ -24,7 +24,7 @@ from arm_backend.identity.episode_stage import (  # noqa: E402
 from arm_backend.identity.episodes.continuity import SiblingDisc  # noqa: E402
 from arm_backend.identity.episodes.model import Episode  # noqa: E402
 from arm_backend.identity.http import SourceError, SourceMiss  # noqa: E402
-from arm_backend.identity.proposals import claims_of  # noqa: E402
+from arm_backend.identity.proposals import claims_of, set_pin  # noqa: E402
 from tests._fakes import FakeSession  # noqa: E402
 
 CFG = Config(id=1)
@@ -302,6 +302,70 @@ async def test_auto_apply_off_makes_every_result_a_suggestion(monkeypatch) -> No
     [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
 
     assert outcome.claims.suggestion is True
+
+
+# ---------------------------------------------------------------------------
+# The pin rule (Task 9 F4/F8): a pinned source's stored claims stay
+# non-suggestion, and applied, across later runs -- until unpinned.
+# ---------------------------------------------------------------------------
+
+
+async def test_pin_rule_applies_despite_computed_suggestion(monkeypatch) -> None:
+    """A pinned source whose own computed result would be a suggestion
+    (EPISODE_AUTO_APPLY off) still gets its stored claims forced non-
+    suggestion, and the resolver applies it -- the operator chose it."""
+    monkeypatch.setattr(episode_stage, "EPISODE_AUTO_APPLY", False)
+    job = _job()
+    set_pin(job, "episode", "episodes_tmdb")
+    db = _db(job, DISC)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+
+    outcomes, resolved = await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    assert outcomes[0].claims.suggestion is True  # the computed value, pre-pin-rule
+    stored = claims_of(job).sources["episodes_tmdb"]
+    assert stored.status == "ok"
+    assert stored.suggestion is False  # the pin rule forced it
+    assert resolved.changed > 0
+    assert all(t.episode_number is not None for t in _tracks(db, job).values())
+
+
+async def test_pin_rule_noop_when_unpinned_keeps_computed_suggestion(monkeypatch) -> None:
+    """Without a pin, the pin rule is a no-op: the stored `suggestion` is
+    exactly what was computed, and the resolver never applies it."""
+    monkeypatch.setattr(episode_stage, "EPISODE_AUTO_APPLY", False)
+    job = _job()  # no pin
+    db = _db(job, DISC)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+
+    outcomes, resolved = await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    assert outcomes[0].claims.suggestion is True
+    assert claims_of(job).sources["episodes_tmdb"].suggestion is True
+    assert resolved.changed == 0
+    assert all(t.episode_number is None for t in _tracks(db, job).values())
+
+
+async def test_pin_rule_keeps_prior_entry_applied_across_a_same_inputs_error() -> None:
+    """F8: `put_source`'s same-inputs-error "keep the last good claims"
+    behavior composes with the pin rule -- the kept (already pin-forced)
+    entry stays non-suggestion, and stays applied."""
+    job = _job()
+    set_pin(job, "episode", "episodes_tmdb")
+    db = _db(job, DISC)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+
+    await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    assert claims_of(job).sources["episodes_tmdb"].status == "ok"
+
+    provider.error = SourceError("timeout")  # same inputs: season/show_id/tolerance unchanged
+    await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    stored = claims_of(job).sources["episodes_tmdb"]
+    assert stored.status == "ok"  # kept the prior good entry, not "error"
+    assert stored.suggestion is False  # still forced by the pin rule
+    assert stored.extra["last_error"]["detail"] == "SourceError: timeout"
+    assert all(t.episode_number is not None for t in _tracks(db, job).values())  # stays applied
 
 
 async def test_nominal_runtimes_are_not_applied_c4() -> None:

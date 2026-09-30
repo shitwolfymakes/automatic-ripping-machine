@@ -2351,6 +2351,10 @@ export type MatchOutcomeView = {
      */
     coverage?: number | null;
     /**
+     * Score
+     */
+    score?: number | null;
+    /**
      * Matches
      */
     matches?: Array<MatchEntryView>;

@@ -24,13 +24,19 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.db import get_session
-from arm_backend.identity.episode_stage import SourceOutcome, StageOptions, compute_episode_claims, is_tv_candidate
+from arm_backend.identity.episode_stage import (
+    SourceOutcome,
+    StageOptions,
+    compute_episode_claims,
+    found_ids_from_outcomes,
+    is_tv_candidate,
+)
 from arm_backend.identity.http import SourceError, SourceMiss
-from arm_backend.identity.ids import current_ids, merge_new_ids, resolve_show_ids
+from arm_backend.identity.ids import current_ids, merge_new_ids
 from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import claims_of, clear_pin, set_pin
 from arm_backend.identity.sources.registry import EPISODE_SOURCE_BY_SETTING, EPISODE_TOLERANCE_S
-from arm_backend.identity.stage_runner import EpisodeStageRunner, apply_outcomes_and_emit
+from arm_backend.identity.stage_runner import EpisodeStageRunner, apply_outcomes_and_emit, emit_identity_resolved
 from arm_backend.routers._params import JobIdParam
 from arm_backend.routers.jobs import _get_hub, _get_stage_runner
 from arm_backend.seeders import CONFIG_SINGLETON_ID
@@ -125,6 +131,13 @@ def _match_entries(claims: SourceClaims) -> list[MatchEntryView]:
     ]
 
 
+def _mean_confidence(claims: SourceClaims) -> float | None:
+    confidences = [c.confidence for c in claims.tracks.values() if c.confidence is not None]
+    if not confidences:
+        return None
+    return sum(confidences) / len(confidences)
+
+
 def _outcome_view(source_id: str, claims: SourceClaims) -> MatchOutcomeView:
     return MatchOutcomeView(
         source_id=source_id,
@@ -132,6 +145,7 @@ def _outcome_view(source_id: str, claims: SourceClaims) -> MatchOutcomeView:
         detail=claims.detail,
         suggestion=claims.suggestion,
         coverage=claims.extra.get("coverage"),
+        score=_mean_confidence(claims),
         matches=_match_entries(claims),
         alternatives=claims.alternatives,
     )
@@ -170,6 +184,12 @@ async def match_identity(
             detail="episode stage runner not available",
         )
 
+    if req.apply:
+        # F4 part 2: discard any in-flight background run's about-to-be-
+        # stale outcome for this job BEFORE we start our own network round-
+        # trip, so it can't clobber the write we're about to commit.
+        stage_runner.invalidate(job_id)
+
     cfg = await _get_config(db)
     providers = stage_runner.providers(cfg)
     source_id = EPISODE_SOURCE_BY_SETTING[req.source] if req.source is not None else None
@@ -185,24 +205,41 @@ async def match_identity(
         # split exists to avoid.
         apply=False,
     )
+
+    # F6: end the read transaction before the (possibly slow) provider
+    # round-trip. A plain commit, not a rollback: nothing is dirty yet in
+    # either branch, and `db.py`'s `expire_on_commit=False` means committing
+    # does NOT expire `job`/`tracks` -- `compute_episode_claims` still reads
+    # their already-loaded attributes safely afterward. A rollback would
+    # unconditionally expire them regardless of that setting, which is
+    # unsafe under asyncio (an expired attribute needs an explicit awaited
+    # refresh; a bare `getattr` cannot lazy-load on an AsyncSession).
+    await db.commit()
+
     outcomes: list[SourceOutcome] = await compute_episode_claims(db, job, providers, cfg, opts)
 
     if not req.apply:
         return MatchPreview(outcomes=[_outcome_view(o.source_id, o.claims) for o in outcomes])
 
+    # F1: nothing is dirty here (persist was off) -- expire everything this
+    # session is holding so the re-select below, and `apply_episode_outcomes`
+    # -> `resolve_job`'s own track re-select, both re-read current rows
+    # instead of diffing against copies loaded before the network round-trip
+    # (which could otherwise silently overwrite a concurrent PATCH).
+    db.expire_all()
     fresh_job = (
         await db.execute(
             select(Job).where(col(Job.id) == job_id).with_for_update().execution_options(populate_existing=True)
         )
     ).scalar_one()
-    merge_new_ids(fresh_job, current_ids(job))
+    # F2: `job` was never mutated (compute ran with persist off), so there is
+    # nothing on it to merge -- fold in whatever show ids THIS compute
+    # resolved instead, read back off the outcomes themselves.
+    merge_new_ids(fresh_job, found_ids_from_outcomes(outcomes, providers))
     if source_id is not None:
-        # `only_source` restricted compute to this one provider, so every
-        # outcome here already belongs to it: the operator explicitly chose
-        # this source, so its claims are no longer a suggestion the resolver
-        # would otherwise ignore.
-        for outcome in outcomes:
-            outcome.claims.suggestion = False
+        # The operator explicitly chose this source. Pinning it is enough --
+        # `apply_episode_outcomes`'s pin rule (F4) forces its stored claims'
+        # `suggestion` False for us, and keeps doing so on every later run.
         set_pin(fresh_job, _EPISODE_PIN, source_id)
 
     await apply_outcomes_and_emit(db, fresh_job, outcomes, hub)
@@ -216,11 +253,18 @@ async def clear_identity_pin(
     job_id: JobIdParam,
     _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
 ) -> IdentityView:
     job = await _get_job(db, job_id)
     clear_pin(job, _EPISODE_PIN)
-    await resolve_job(db, job)
     db.add(job)
+    resolved = await resolve_job(db, job)
+    await db.commit()
+    # F3: spec 7 requires `job.identity_updated` whenever the resolver
+    # changes anything, not only when `/identity/match` supplied fresh
+    # outcomes -- there is no per-source status to report here, so `sources`
+    # is empty.
+    await emit_identity_resolved(db, hub, job, resolved, sources={})
     await db.commit()
     await db.refresh(job)
     tracks = await _get_tracks(db, job_id)
@@ -248,8 +292,25 @@ async def browse_episodes(
     source_id = EPISODE_SOURCE_BY_SETTING[source]
     provider = {p.source_id: p for p in providers}[source_id]
 
-    ids = await resolve_show_ids(job, [provider], persist=False)
-    show_id = getattr(ids, provider.id_field, None)
+    # F7: distinguish "not usable at all" (409 / 503) from "no show id" (404)
+    # from a transient provider failure resolving that id (502) -- the
+    # multi-provider `resolve_show_ids` wrapper swallows SourceError/SourceMiss
+    # around `resolve_show_id` for its own (best-effort, try-the-next-provider)
+    # purposes, which would otherwise flatten all three into the same 404.
+    reason = provider.configured(cfg)
+    if reason is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"{source}: {reason}")
+    if provider.http.backing_off():
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"{source}: backing off")
+
+    show_id = getattr(current_ids(job), provider.id_field, None)
+    if show_id is None:
+        try:
+            show_id = await provider.resolve_show_id(current_ids(job))
+        except SourceMiss:
+            show_id = None
+        except SourceError as e:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"{source}: {e}") from e
     if not show_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
