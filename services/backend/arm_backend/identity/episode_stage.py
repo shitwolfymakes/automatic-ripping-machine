@@ -64,7 +64,8 @@ _DEAD_STATUSES = frozenset({JobStatus.FAILED, JobStatus.ABANDONED})
 class StageOptions:
     season: int | None = None
     disc_number: int | None = None
-    tolerance: int = EPISODE_TOLERANCE_S
+    # None: the pinned source's stored tolerance, else EPISODE_TOLERANCE_S.
+    tolerance: int | None = None
     only_source: str | None = None
     apply: bool = True
 
@@ -326,6 +327,21 @@ def _known_season(job: Job, opts: StageOptions) -> int | None:
     return job.season
 
 
+def _tolerance(job: Job, source_id: str, opts: StageOptions) -> int:
+    """The option when given; else, for the pinned episode source, the
+    tolerance the operator's `/match` stored in its inputs (I3), so a default
+    background run asks the same question and C7 input equality holds."""
+    if opts.tolerance is not None:
+        return opts.tolerance
+    claims = claims_of(job)
+    stored = claims.sources.get(source_id)
+    if claims.pin.get("episode") == source_id and stored is not None:
+        tolerance = stored.inputs.get("tolerance")
+        if isinstance(tolerance, int) and not isinstance(tolerance, bool):
+            return tolerance
+    return EPISODE_TOLERANCE_S
+
+
 async def _match(
     provider: EpisodeListProvider,
     job: Job,
@@ -354,6 +370,7 @@ async def _match(
 
     known_season = _known_season(job, opts)
     disc_number = opts.disc_number if opts.disc_number is not None else job.disc_number
+    tolerance = _tolerance(job, source_id, opts)
     try:
         ids = await resolve_show_ids(job, [provider], persist=opts.apply, raise_errors=True)
     except SourceError:
@@ -361,13 +378,13 @@ async def _match(
         # not be asked, so the show id is the one the last stored entry used;
         # the rest is this request's, so claims are kept only when unchanged.
         prior_show_id = previous.inputs.get("show_id") if previous else None
-        inputs.update(show_id=prior_show_id, season=known_season, disc_number=disc_number, tolerance=opts.tolerance)
+        inputs.update(show_id=prior_show_id, season=known_season, disc_number=disc_number, tolerance=tolerance)
         raise
     show_id = getattr(ids, provider.id_field, None)
     if not show_id:
         return SourceOutcome(source_id, SourceClaims(run_at=now, status="miss", detail="show not found"), None)
 
-    inputs.update(show_id=show_id, season=known_season, disc_number=disc_number, tolerance=opts.tolerance)
+    inputs.update(show_id=show_id, season=known_season, disc_number=disc_number, tolerance=tolerance)
 
     if known_season is not None:
         seasons = [known_season]
@@ -379,7 +396,7 @@ async def _match(
             claims = SourceClaims(run_at=now, status="miss", detail="show not found", inputs=dict(inputs))
             return SourceOutcome(source_id, claims, None)
 
-    req = _Request(show_id, ids, titles, rows, disc_number, job.disc_total, opts.tolerance)
+    req = _Request(show_id, ids, titles, rows, disc_number, job.disc_total, tolerance)
     picked = await _pick_season(provider, req, seasons)
     if picked is None or not picked[1].result.matches:
         claims = SourceClaims(run_at=now, status="miss", detail="no episodes matched", inputs=dict(inputs))

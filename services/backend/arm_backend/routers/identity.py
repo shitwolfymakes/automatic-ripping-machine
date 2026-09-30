@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
+from dataclasses import replace
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,8 +35,8 @@ from arm_backend.identity.episode_stage import (
 from arm_backend.identity.http import SourceError, SourceMiss
 from arm_backend.identity.ids import current_ids, merge_new_ids
 from arm_backend.identity.pipeline import resolve_job
-from arm_backend.identity.proposals import claims_of, clear_pin, set_pin
-from arm_backend.identity.sources.registry import EPISODE_SOURCE_BY_SETTING, EPISODE_TOLERANCE_S
+from arm_backend.identity.proposals import claims_of, clear_pin, record_manual_job, set_pin
+from arm_backend.identity.sources.registry import EPISODE_SOURCE_BY_SETTING
 from arm_backend.identity.stage_runner import EpisodeStageRunner, apply_outcomes_and_emit, emit_identity_resolved
 from arm_backend.routers._params import JobIdParam
 from arm_backend.routers.jobs import _get_hub, _get_stage_runner
@@ -196,7 +197,8 @@ async def match_identity(
     opts = StageOptions(
         season=req.season,
         disc_number=req.disc_number,
-        tolerance=req.tolerance if req.tolerance is not None else EPISODE_TOLERANCE_S,
+        # None: the pinned source's stored tolerance, else the default (I3).
+        tolerance=req.tolerance,
         only_source=source_id,
         # Never persist a show id resolved during THIS compute onto the job
         # object we're about to re-select fresh (controller ruling 2) -- an
@@ -236,6 +238,21 @@ async def match_identity(
     # nothing on it to merge -- fold in whatever show ids THIS compute
     # resolved instead, read back off the outcomes themselves.
     merge_new_ids(fresh_job, found_ids_from_outcomes(outcomes, providers))
+    # I3: the operator's season / disc number become manual job claims, so a
+    # later background run treats them as known (spec 6.3) instead of
+    # scanning again. Recorded before the resolve in apply_outcomes_and_emit.
+    choices = {attr: value for attr, value in (("season", req.season), ("disc_number", req.disc_number)) if value is not None}
+    if choices:
+        record_manual_job(fresh_job, choices, keep_restated=True)
+    if source_id is not None and req.tolerance is not None:
+        # I3: keep the tolerance in the pinned source's stored inputs; the
+        # stage reuses it on a default run, so the inputs stay equal (C7).
+        outcomes = [
+            replace(o, claims=o.claims.model_copy(update={"inputs": {**o.claims.inputs, "tolerance": req.tolerance}}))
+            if o.source_id == source_id
+            else o
+            for o in outcomes
+        ]
     if source_id is not None:
         # The operator explicitly chose this source. Pinning it is enough --
         # the stored claims keep whatever `suggestion` was computed, but the

@@ -763,6 +763,41 @@ async def test_options_override_job_season_and_disc() -> None:
     assert "season" not in outcome.claims.job.model_fields_set
 
 
+async def test_pinned_source_reuses_its_stored_tolerance_i3() -> None:
+    """I3: with default options the pinned source runs at the tolerance the
+    operator's `/match` stored in its inputs; an unpinned source, or an
+    explicit option, does not."""
+    job = _job()
+    set_pin(job, "episode", "episodes_tmdb")
+    db = _db(job, DISC)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    await run_episode_stage(db, job, [provider], CFG, StageOptions(tolerance=400))  # type: ignore[arg-type]
+
+    [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    assert outcome.claims.inputs["tolerance"] == 400
+
+    [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions(tolerance=200))  # type: ignore[arg-type]
+    assert outcome.claims.inputs["tolerance"] == 200
+
+    other = FakeProvider("episodes_tvmaze", "tvmaze", seasons={1: _season(1, DISTINCT)})
+    await run_episode_stage(db, job, [other], CFG, StageOptions(tolerance=400))  # type: ignore[arg-type]
+    [outcome] = await compute_episode_claims(db, job, [other], CFG, StageOptions())  # type: ignore[arg-type]
+    assert outcome.claims.inputs["tolerance"] == 300
+
+
+async def test_pinned_source_without_a_stored_tolerance_uses_the_default() -> None:
+    job = _job()
+    set_pin(job, "episode", "episodes_tmdb")
+    db = _db(job, DISC)
+    provider = FakeProvider(show_id=None)
+    await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    assert claims_of(job).sources["episodes_tmdb"].inputs == {}
+
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    assert outcome.claims.inputs["tolerance"] == 300
+
+
 async def test_pinned_source_is_tried_first() -> None:
     job = _job()
     job.metadata_json = {**job.metadata_json, "identity_claims": {"pin": {"episode": "episodes_tvmaze"}}}

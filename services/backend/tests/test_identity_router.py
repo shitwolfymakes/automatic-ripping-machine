@@ -4,6 +4,7 @@ the preview/apply(+pin) split, 404/409/502, and the reader-write gate."""
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import secrets
 from typing import Any
@@ -91,6 +92,7 @@ class FakeProvider:
         return self._show_id
 
     async def seasons(self, show_id: str) -> list[int]:
+        self.calls.append("seasons")
         return sorted(self._seasons)
 
     async def season(self, show_id: str, number: int) -> list[Episode]:
@@ -465,6 +467,79 @@ def test_pin_then_unpin_reverts_tracks_and_emits_track_updated(
     assert len(identity_events) == 1
     track_events = {e["payload"]["track_id"] for e in hub.events if e["event_type"] == "track.updated"}
     assert track_events == applied_track_ids
+
+
+def test_match_apply_persists_season_disc_and_tolerance_i3(signing_key: bytes) -> None:
+    """I3: the operator's `/match` season and disc number become manual job
+    claims, and the tolerance is kept in the pinned source's stored inputs,
+    so a later background run with default options reuses all three: it
+    matches season 3 disc 2 without scanning, at the same tolerance, and its
+    inputs equal the stored ones (C7)."""
+    job = _job(season=None)
+    tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
+    db = _db(job, tracks=tracks)
+    provider = FakeProvider(seasons={1: _season(1, [6010] * 10), 3: _season(3, DISTINCT)})
+    runner = _FakeStageRunner([provider])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+
+    with TestClient(app) as client:
+        r = client.post(
+            f"/api/jobs/{JOB_ID}/identity/match",
+            json={"apply": True, "source": "tmdb", "season": 3, "disc_number": 2, "tolerance": 400},
+            headers=_auth(admin_token),
+        )
+
+    assert r.status_code == 200
+    manual = claims_of(job).sources["manual"].job
+    assert (manual.season, manual.disc_number) == (3, 2)
+    assert (job.season, job.disc_number) == (3, 2)
+    assert job.identity_provenance is not None
+    assert job.identity_provenance["season"] == "manual"
+    stored_inputs = claims_of(job).sources["episodes_tmdb"].inputs
+    assert stored_inputs["tolerance"] == 400
+
+    provider.calls.clear()
+    [outcome], _ = asyncio.run(
+        episode_stage.run_episode_stage(db, job, [provider], CFG, episode_stage.StageOptions())  # type: ignore[arg-type]
+    )
+    assert "seasons" not in provider.calls
+    assert outcome.claims.inputs == stored_inputs
+    assert (outcome.claims.inputs["season"], outcome.claims.inputs["disc_number"]) == (3, 2)
+
+
+def test_match_apply_season_equal_to_a_scan_picked_season_is_still_manual_i3(signing_key: bytes) -> None:
+    """A season the operator restates over one an episode source picked by
+    scanning is still recorded: otherwise the next background run would
+    scan again (F1 treats a stage-set season as unknown)."""
+    job = _job(season=1)
+    job.identity_provenance = {"season": "episodes_tmdb"}
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    runner = _FakeStageRunner([FakeProvider(seasons={1: _season(1, DISTINCT)})])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.post(
+            f"/api/jobs/{JOB_ID}/identity/match",
+            json={"apply": True, "source": "tmdb", "season": 1},
+            headers=_auth(admin_token),
+        )
+    assert r.status_code == 200
+    assert claims_of(job).sources["manual"].job.season == 1
+    assert job.identity_provenance is not None
+    assert job.identity_provenance["season"] == "manual"
+
+
+def test_match_apply_without_choices_records_no_manual_claims(signing_key: bytes) -> None:
+    job = _job()
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    runner = _FakeStageRunner([FakeProvider(seasons={1: _season(1, DISTINCT)})])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.post(
+            f"/api/jobs/{JOB_ID}/identity/match", json={"apply": True, "source": "tmdb"}, headers=_auth(admin_token)
+        )
+    assert r.status_code == 200
+    assert "manual" not in claims_of(job).sources
+    assert claims_of(job).sources["episodes_tmdb"].inputs["tolerance"] == 300
 
 
 def test_match_unknown_job_404(signing_key: bytes) -> None:

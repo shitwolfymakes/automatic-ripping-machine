@@ -126,10 +126,13 @@ def revert_manual_track(job: Job, source_ref: str, attrs: Iterable[str]) -> None
     _store(job, claims)
 
 
-def record_manual_job(job: Job, edits: dict[str, Any]) -> bool:
+def record_manual_job(job: Job, edits: dict[str, Any], *, keep_restated: bool = False) -> bool:
     """Record the operator's job edits as `manual` claims, skipping restated
-    values. Returns whether any claim was recorded."""
-    edits = {attr: value for attr, value in edits.items() if not _restated(job, attr, value)}
+    values unless `keep_restated` (an explicit operator choice, e.g. the
+    `/identity/match` season, that must pin even a value an automatic source
+    already set). Returns whether any claim was recorded."""
+    if not keep_restated:
+        edits = {attr: value for attr, value in edits.items() if not _restated(job, attr, value)}
     if not edits:
         return False
     claims = claims_of(job)
