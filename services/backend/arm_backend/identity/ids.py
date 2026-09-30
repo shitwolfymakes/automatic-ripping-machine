@@ -40,7 +40,9 @@ def current_ids(job: Job) -> ExternalIds:
         return ExternalIds()
 
 
-async def resolve_show_ids(job: Job, providers: Sequence[EpisodeListProvider], *, persist: bool = True) -> ExternalIds:
+async def resolve_show_ids(
+    job: Job, providers: Sequence[EpisodeListProvider], *, persist: bool = True, raise_errors: bool = False
+) -> ExternalIds:
     """Resolve each provider's own show id and cache the merged result.
 
     Providers are tried in the given order. Each is asked at most once, and
@@ -64,6 +66,8 @@ async def resolve_show_ids(job: Job, providers: Sequence[EpisodeListProvider], *
         try:
             show_id = await provider.resolve_show_id(ids)
         except (SourceError, SourceMiss) as e:
+            if raise_errors and isinstance(e, SourceError):
+                raise
             logger.warning("resolve_show_id failed source=%s job_id=%s: %s", provider.source_id, job.id, e)
             continue
         if show_id is None:

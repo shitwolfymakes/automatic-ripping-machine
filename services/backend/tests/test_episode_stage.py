@@ -74,6 +74,7 @@ class FakeProvider:
         self._show_id = show_id
         self._reason = reason
         self.error = error
+        self.resolve_error: Exception | None = None
         self.calls: list[tuple[str, Any]] = []
 
     def configured(self, cfg: Config) -> str | None:
@@ -82,6 +83,8 @@ class FakeProvider:
 
     async def resolve_show_id(self, ids: ExternalIds) -> str | None:
         self.calls.append(("resolve_show_id", ids))
+        if self.resolve_error is not None:
+            raise self.resolve_error
         return self._show_id
 
     async def seasons(self, show_id: str) -> list[int]:
@@ -484,6 +487,81 @@ async def test_provider_error_after_good_run_keeps_last_claims_c7() -> None:
     assert [_tracks(db, job)[r].episode_number for r in "0123"] == [3, 4, 5, 6]
 
 
+async def test_backoff_after_good_run_keeps_applied_episodes_i2() -> None:
+    """I2: a provider in backoff reports an error carrying the stored entry's
+    inputs, so put_source keeps the last good claims and records last_error
+    instead of a skipped entry wiping the applied episodes."""
+    job = _job()
+    db = _db(job, DISC)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    good_inputs = claims_of(job).sources["episodes_tmdb"].inputs
+
+    provider.http = FakeHttp(backing_off=True)
+    provider.calls.clear()
+    [outcome], _ = await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    assert (outcome.claims.status, outcome.claims.detail) == ("error", "backing off")
+    assert outcome.claims.inputs == good_inputs
+    assert provider.network_calls() == []
+    stored = claims_of(job).sources["episodes_tmdb"]
+    assert stored.status == "ok"
+    assert stored.extra["last_error"]["detail"] == "backing off"
+    assert [_tracks(db, job)[r].episode_number for r in "0123"] == [3, 4, 5, 6]
+
+
+async def test_show_id_source_error_after_good_run_keeps_last_claims_m3() -> None:
+    """M3: a SourceError while resolving the show id is an error, not a miss,
+    so a good run's claims survive when the request is otherwise unchanged.
+    No `identity` section on the job, so the show id is resolved every run."""
+    job = _job()
+    job.metadata_json = {}
+    db = _db(job, DISC)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    good_inputs = claims_of(job).sources["episodes_tmdb"].inputs
+
+    provider.resolve_error = SourceError("HTTP 503")
+    [outcome], _ = await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    assert outcome.claims.status == "error"
+    assert outcome.claims.detail == "SourceError: HTTP 503"
+    assert outcome.claims.inputs == good_inputs
+    stored = claims_of(job).sources["episodes_tmdb"]
+    assert stored.status == "ok"
+    assert stored.extra["last_error"]["detail"] == "SourceError: HTTP 503"
+    assert [_tracks(db, job)[r].episode_number for r in "0123"] == [3, 4, 5, 6]
+
+
+async def test_show_id_source_error_without_previous_claims_m3() -> None:
+    job = _job()
+    db = _db(job, DISC)
+    provider = FakeProvider(show_id=None)
+    provider.resolve_error = SourceError("HTTP 503")
+
+    [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    assert outcome.claims.status == "error"
+    assert outcome.claims.inputs == {
+        "show_id": None,
+        "season": 1,
+        "disc_number": None,
+        "tolerance": 300,
+        "nominal_runtimes": None,
+    }
+
+
+async def test_show_id_miss_is_still_a_miss_m3() -> None:
+    job = _job()
+    db = _db(job, DISC)
+    provider = FakeProvider()
+    provider.resolve_error = SourceMiss("no such show")
+
+    [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    assert (outcome.claims.status, outcome.claims.detail) == ("miss", "show not found")
+
+
 async def test_provider_error_without_previous_claims() -> None:
     job = _job()
     db = _db(job, DISC)
@@ -604,7 +682,7 @@ async def test_skipped_reasons() -> None:
 
     assert [(o.source_id, o.claims.status, o.claims.detail) for o in outcomes] == [
         ("episodes_tmdb", "skipped", "no TMDb key"),
-        ("episodes_tvmaze", "skipped", "backing off"),
+        ("episodes_tvmaze", "error", "backing off"),
         ("episodes_tvdb", "miss", "show not found"),
     ]
     assert no_key.network_calls() == []

@@ -343,15 +343,30 @@ async def _match(
     reason = provider.configured(cfg)
     if reason is not None:
         return SourceOutcome(source_id, SourceClaims(run_at=now, status="skipped", detail=reason), None)
+    previous = claims_of(job).sources.get(source_id)
     if provider.http.backing_off():
-        return SourceOutcome(source_id, SourceClaims(run_at=now, status="skipped", detail="backing off"), None)
-    ids = await resolve_show_ids(job, [provider], persist=opts.apply)
+        # I2: an error carrying the stored entry's inputs, so put_source keeps
+        # the last good claims (and records last_error) instead of wiping them.
+        claims = SourceClaims(
+            run_at=now, status="error", detail="backing off", inputs=dict(previous.inputs) if previous else {}
+        )
+        return SourceOutcome(source_id, claims, None)
+
+    known_season = _known_season(job, opts)
+    disc_number = opts.disc_number if opts.disc_number is not None else job.disc_number
+    try:
+        ids = await resolve_show_ids(job, [provider], persist=opts.apply, raise_errors=True)
+    except SourceError:
+        # M3: a transient failure, not "show not found". The provider could
+        # not be asked, so the show id is the one the last stored entry used;
+        # the rest is this request's, so claims are kept only when unchanged.
+        prior_show_id = previous.inputs.get("show_id") if previous else None
+        inputs.update(show_id=prior_show_id, season=known_season, disc_number=disc_number, tolerance=opts.tolerance)
+        raise
     show_id = getattr(ids, provider.id_field, None)
     if not show_id:
         return SourceOutcome(source_id, SourceClaims(run_at=now, status="miss", detail="show not found"), None)
 
-    known_season = _known_season(job, opts)
-    disc_number = opts.disc_number if opts.disc_number is not None else job.disc_number
     inputs.update(show_id=show_id, season=known_season, disc_number=disc_number, tolerance=opts.tolerance)
 
     if known_season is not None:

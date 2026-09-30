@@ -1,5 +1,7 @@
 """Show-id resolution across episode-list providers (design spec 6.2)."""
 
+import pytest
+
 from arm_common import Config, DiscType, Job, JobStatus
 from arm_common.schemas import ExternalIds
 
@@ -133,6 +135,25 @@ async def test_provider_error_leaves_field_empty_others_still_resolve(caplog) ->
     assert result.tvdb is None
     assert result.tmdb == "42"
     assert "resolve_show_id failed source=episodes_tvdb" in caplog.text
+
+
+async def test_raise_errors_propagates_source_error() -> None:
+    """M3: the episode stage passes `raise_errors=True` so a transient
+    failure is an error for that provider, not a silent miss."""
+    job = _job({"identity": {"external_ids": {}}})
+    failing = FakeProvider("episodes_tvdb", "tvdb", error=SourceError("boom"))
+
+    with pytest.raises(SourceError, match="boom"):
+        await resolve_show_ids(job, [failing], raise_errors=True)
+
+
+async def test_raise_errors_still_treats_a_miss_as_no_id() -> None:
+    job = _job({"identity": {"external_ids": {}}})
+    provider = FakeProvider("episodes_tvdb", "tvdb", error=SourceMiss("not found"))
+
+    result = await resolve_show_ids(job, [provider], raise_errors=True)
+
+    assert result.tvdb is None
 
 
 async def test_provider_miss_leaves_field_empty() -> None:
