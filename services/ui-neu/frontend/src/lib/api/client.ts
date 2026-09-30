@@ -71,10 +71,20 @@ async function handle<T>(res: Response): Promise<T> {
 		let body: unknown = null;
 		try {
 			body = await res.json();
-			// Only a string detail becomes the message; object detail stays on .body.
+			// A string detail becomes the message as-is; a Pydantic 422's detail is
+			// instead a list of {msg, loc, ...} error objects, so join their `msg`
+			// strings into one readable message. Any other shape keeps the
+			// status-text default, and the full body is always on .body.
 			const detail = (body as { detail?: unknown } | null)?.detail;
 			if (typeof detail === 'string') {
 				message = detail;
+			} else if (Array.isArray(detail) && detail.length > 0) {
+				const msgs = detail
+					.map((item) => (item as { msg?: unknown } | null)?.msg)
+					.filter((msg): msg is string => typeof msg === 'string');
+				if (msgs.length > 0) {
+					message = msgs.join('; ');
+				}
 			}
 		} catch {
 			/* use default message */
