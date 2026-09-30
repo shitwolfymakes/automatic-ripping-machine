@@ -52,35 +52,72 @@ class TmdbEpisodes:
             params={"external_source": external_source},
             headers=self._headers,
         )
-        results = body.get("tv_results") or []
-        if not results:
-            return None
-        return str(results[0]["id"])
+        try:
+            results = body.get("tv_results") or []
+            if not results:
+                return None
+            return str(results[0]["id"])
+        except (KeyError, TypeError, ValueError, AttributeError) as e:
+            raise SourceError("tmdb malformed response") from e
 
     async def seasons(self, show_id: str) -> list[int]:
         body = await self.http.get_json(f"{settings.ARM_TMDB_BASE_URL}/tv/{show_id}", headers=self._headers)
-        numbers = [s["season_number"] for s in body.get("seasons", []) if s["season_number"] > 0]
+        try:
+            raw_seasons = body.get("seasons", [])
+            if not isinstance(raw_seasons, list):
+                raise SourceError("tmdb malformed response")
+            numbers = [
+                s["season_number"]
+                for s in raw_seasons
+                if isinstance(s, dict) and _is_int(s.get("season_number")) and s["season_number"] > 0
+            ]
+        except (KeyError, TypeError, ValueError, AttributeError) as e:
+            raise SourceError("tmdb malformed response") from e
         return sorted(numbers)
 
     async def season(self, show_id: str, number: int) -> list[Episode]:
         body = await self.http.get_json(
             f"{settings.ARM_TMDB_BASE_URL}/tv/{show_id}/season/{number}", headers=self._headers
         )
-        raw_episodes = body.get("episodes") or []
-        if not raw_episodes:
-            # An existing season with no episodes is a degenerate/transient
-            # response (C7), not a definitive miss — the season route itself
-            # 404s when the season truly doesn't exist.
+        try:
+            raw_episodes = body.get("episodes") or []
+            if not isinstance(raw_episodes, list):
+                raise SourceError("tmdb malformed response")
+            episodes = [
+                Episode(
+                    season=number,
+                    number=e["episode_number"],
+                    name=e.get("name") or None,
+                    runtime_s=_runtime_s(e.get("runtime")),
+                    special=(number == 0),
+                )
+                for e in raw_episodes
+                if isinstance(e, dict) and _is_int(e.get("episode_number"))
+            ]
+        except (KeyError, TypeError, ValueError, AttributeError) as e:
+            raise SourceError("tmdb malformed response") from e
+        if not episodes:
+            # An existing season with no (usable) episodes is a degenerate/
+            # transient response (C7), not a definitive miss — the season
+            # route itself 404s when the season truly doesn't exist.
             raise SourceError(f"tmdb season {number} for show {show_id} returned no episodes")
-        episodes = [
-            Episode(
-                season=number,
-                number=e["episode_number"],
-                name=e.get("name") or None,
-                runtime_s=e["runtime"] * 60 if e.get("runtime") else None,
-                special=(number == 0),
-            )
-            for e in raw_episodes
-        ]
         episodes.sort(key=lambda ep: ep.number)
         return episodes
+
+
+def _is_int(value: object) -> bool:
+    """True for a real int, false for a bool (a `bool` is a `int` subclass
+    in Python but is never a valid season/episode number)."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _runtime_s(value: object) -> int | None:
+    """Minutes -> seconds, only for a genuine positive number; booleans,
+    strings, zero, negative and missing values all map to None (C7: a
+    malformed runtime must not crash the provider, and must not read as a
+    real runtime downstream)."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    if value <= 0:
+        return None
+    return int(value * 60)

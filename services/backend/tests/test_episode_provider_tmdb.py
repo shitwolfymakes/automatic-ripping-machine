@@ -117,6 +117,17 @@ async def test_resolve_show_id_with_no_ids_returns_none(provider):
     assert len(respx.calls) == 0
 
 
+@respx.mock
+async def test_find_result_without_id_raises_source_error(provider):
+    """A tv_results hit missing the "id" key is malformed, not a miss —
+    KeyError must be wrapped as SourceError, never leak past the provider."""
+    respx.get(f"{BASE}/find/tt0000009").mock(
+        return_value=httpx.Response(200, json={"tv_results": [{"name": "No Id"}], "movie_results": []})
+    )
+    with pytest.raises(SourceError):
+        await provider.resolve_show_id(ExternalIds(imdb="tt0000009"))
+
+
 # ---------------------------------------------------------------------------
 # seasons
 # ---------------------------------------------------------------------------
@@ -137,6 +148,35 @@ async def test_seasons_excludes_season_zero_and_sorts(provider):
         )
     )
     assert await provider.seasons("1399") == [1, 2]
+
+
+@respx.mock
+async def test_seasons_entry_missing_season_number_is_skipped(provider):
+    """A season entry with no season_number key is dropped, not an error —
+    only entries with a genuine int season_number count."""
+    respx.get(f"{BASE}/tv/1399").mock(
+        return_value=httpx.Response(
+            200,
+            json={"seasons": [{"name": "Specials"}, {"season_number": 1}]},
+        )
+    )
+    assert await provider.seasons("1399") == [1]
+
+
+@respx.mock
+async def test_seasons_non_list_seasons_raises_source_error(provider):
+    respx.get(f"{BASE}/tv/1399").mock(return_value=httpx.Response(200, json={"seasons": "not-a-list"}))
+    with pytest.raises(SourceError):
+        await provider.seasons("1399")
+
+
+@respx.mock
+async def test_top_level_list_body_raises_source_error(provider):
+    """A top-level JSON array instead of an object (e.g. a proxy error page
+    shaped wrong) must not raise an uncaught AttributeError from `.get`."""
+    respx.get(f"{BASE}/tv/1399").mock(return_value=httpx.Response(200, json=["unexpected"]))
+    with pytest.raises(SourceError):
+        await provider.seasons("1399")
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +213,63 @@ async def test_season_null_runtime_maps_to_none(provider):
     )
     episodes = await provider.season("1399", 1)
     assert episodes[0].runtime_s is None
+
+
+@respx.mock
+async def test_season_string_runtime_maps_to_none(provider):
+    """A malformed (string) runtime must not crash the mapping — it degrades
+    to None rather than raising or silently becoming a bogus runtime_s."""
+    respx.get(f"{BASE}/tv/1399/season/1").mock(
+        return_value=httpx.Response(
+            200,
+            json={"episodes": [{"episode_number": 1, "name": "X", "runtime": "sixty"}]},
+        )
+    )
+    episodes = await provider.season("1399", 1)
+    assert episodes[0].runtime_s is None
+
+
+@respx.mock
+async def test_season_zero_runtime_maps_to_none(provider):
+    respx.get(f"{BASE}/tv/1399/season/1").mock(
+        return_value=httpx.Response(
+            200,
+            json={"episodes": [{"episode_number": 1, "name": "X", "runtime": 0}]},
+        )
+    )
+    episodes = await provider.season("1399", 1)
+    assert episodes[0].runtime_s is None
+
+
+@respx.mock
+async def test_season_non_list_episodes_raises_source_error(provider):
+    respx.get(f"{BASE}/tv/1399/season/1").mock(return_value=httpx.Response(200, json={"episodes": "not-a-list"}))
+    with pytest.raises(SourceError):
+        await provider.season("1399", 1)
+
+
+@respx.mock
+async def test_season_top_level_list_body_raises_source_error(provider):
+    respx.get(f"{BASE}/tv/1399/season/1").mock(return_value=httpx.Response(200, json=["unexpected"]))
+    with pytest.raises(SourceError):
+        await provider.season("1399", 1)
+
+
+@respx.mock
+async def test_season_entry_without_episode_number_is_skipped(provider):
+    respx.get(f"{BASE}/tv/1399/season/1").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "episodes": [
+                    {"name": "No Number", "runtime": 30},
+                    {"episode_number": 1, "name": "One", "runtime": 30},
+                ]
+            },
+        )
+    )
+    episodes = await provider.season("1399", 1)
+    assert [e.number for e in episodes] == [1]
 
 
 @respx.mock
