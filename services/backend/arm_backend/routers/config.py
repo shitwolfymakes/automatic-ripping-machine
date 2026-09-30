@@ -72,6 +72,12 @@ def _to_view(cfg: Config) -> ConfigView:
         makemkv_sdf_enabled=bool(cfg.makemkv_sdf_enabled),
         thediscdb_enabled=bool(cfg.thediscdb_enabled),
         thediscdb_refresh_days=int(cfg.thediscdb_refresh_days) if cfg.thediscdb_refresh_days is not None else 7,
+        # TODO(task 2): replace with the registry accessors once config API
+        # validation lands; these four are here only to keep ConfigView total.
+        episode_sources=list(cfg.episode_sources or []),
+        disc_hint_sources=list(cfg.disc_hint_sources or []),
+        episode_match_tolerance_seconds=int(cfg.episode_match_tolerance_seconds or 300),
+        episode_auto_apply=True if cfg.episode_auto_apply is None else bool(cfg.episode_auto_apply),
         ripping_paused=bool(cfg.ripping_paused),
         # bool()/int() coerce the None a bare in-memory Config carries (DB-level
         # server_default only) for rows/fixtures predating these columns.

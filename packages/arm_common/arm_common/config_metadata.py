@@ -13,9 +13,13 @@ class ConfigFieldMeta(BaseModel):
     tier: str  # "secret" | "operator" | "infra"
     label: str
     help: str
-    type: str  # "string" | "bool" | "int" | "enum" | "string[]"
+    type: str  # "string" | "bool" | "int" | "enum" | "string[]" | "ranked"
     editable: bool
     enum_values: list[str] | None = None
+    # Display names for enum / ranked values (value -> label).
+    enum_labels: dict[str, str] | None = None
+    # Ranked only: value -> the secret config key it needs before it can run.
+    enum_requires: dict[str, str] | None = None
 
 
 CONFIG_FIELD_META: list[ConfigFieldMeta] = [
@@ -82,6 +86,47 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         label="TheDiscDB refresh interval (days)",
         help="How often the backend refreshes its TheDiscDB snapshot from GitHub.",
         type="int",
+        editable=True,
+    ),
+    ConfigFieldMeta(
+        key="episode_sources",
+        group="Metadata",
+        tier="operator",
+        label="Episode sources",
+        help="Episode lists matched against track runtimes, tried top to bottom. Unchecked sources are never used. TVmaze needs no key.",
+        type="ranked",
+        editable=True,
+        enum_values=["tmdb", "tvmaze", "tvdb"],
+        enum_labels={"tmdb": "TMDb", "tvmaze": "TVmaze", "tvdb": "TVDB"},
+        enum_requires={"tmdb": "tmdb_api_key", "tvdb": "tvdb_api_key"},
+    ),
+    ConfigFieldMeta(
+        key="disc_hint_sources",
+        group="Metadata",
+        tier="operator",
+        label="Disc hint sources",
+        help="Where the season, disc number and search title are read from before identify, top to bottom.",
+        type="ranked",
+        editable=True,
+        enum_values=["bd_title", "label"],
+        enum_labels={"bd_title": "Blu-ray disc title", "label": "Volume label"},
+    ),
+    ConfigFieldMeta(
+        key="episode_match_tolerance_seconds",
+        group="Metadata",
+        tier="operator",
+        label="Episode match tolerance (seconds)",
+        help="How far a track's runtime may differ from an episode's and still match, 1 to 1800.",
+        type="int",
+        editable=True,
+    ),
+    ConfigFieldMeta(
+        key="episode_auto_apply",
+        group="Metadata",
+        tier="operator",
+        label="Apply confident episode matches",
+        help="When off, every match is stored as a suggestion and nothing is applied until you pin a source.",
+        type="bool",
         editable=True,
     ),
     # NOTE: musicbrainz_user_agent is intentionally NOT registered — the column
