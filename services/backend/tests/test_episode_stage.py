@@ -296,13 +296,13 @@ async def test_identical_runtimes_are_a_suggestion_and_not_applied_c2() -> None:
     assert all(t.episode_number is None and t.role is None for t in _tracks(db, job).values())
 
 
-async def test_auto_apply_off_makes_every_result_a_suggestion(monkeypatch) -> None:
-    monkeypatch.setattr(episode_stage, "EPISODE_AUTO_APPLY", False)
+async def test_auto_apply_off_makes_every_result_a_suggestion() -> None:
+    cfg = Config(episode_auto_apply=False)
     job = _job()
     db = _db(job, DISC)
     provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
 
-    [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    [outcome] = await compute_episode_claims(db, job, [provider], cfg, StageOptions())  # type: ignore[arg-type]
 
     assert outcome.claims.suggestion is True
 
@@ -313,20 +313,20 @@ async def test_auto_apply_off_makes_every_result_a_suggestion(monkeypatch) -> No
 # ---------------------------------------------------------------------------
 
 
-async def test_pin_rule_applies_despite_computed_suggestion(monkeypatch) -> None:
+async def test_pin_rule_applies_despite_computed_suggestion() -> None:
     """A pinned source whose own computed result would be a suggestion
-    (EPISODE_AUTO_APPLY off) still gets applied -- the RESOLVER (Task 9 F4
+    (episode_auto_apply off) still gets applied -- the RESOLVER (Task 9 F4
     round 2) lets a pinned "ok" source's suggestion through. The STORED
     claims keep the computed `suggestion=True` unchanged (nothing rewrites
     it); only the resolver's own usable-source selection treats it as
     applicable while the pin holds."""
-    monkeypatch.setattr(episode_stage, "EPISODE_AUTO_APPLY", False)
+    cfg = Config(episode_auto_apply=False)
     job = _job()
     set_pin(job, "episode", "episodes_tmdb")
     db = _db(job, DISC)
     provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
 
-    outcomes, resolved = await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    outcomes, resolved = await run_episode_stage(db, job, [provider], cfg, StageOptions())  # type: ignore[arg-type]
 
     assert outcomes[0].claims.suggestion is True  # the computed value
     stored = claims_of(job).sources["episodes_tmdb"]
@@ -336,15 +336,15 @@ async def test_pin_rule_applies_despite_computed_suggestion(monkeypatch) -> None
     assert all(t.episode_number is not None for t in _tracks(db, job).values())
 
 
-async def test_pin_rule_noop_when_unpinned_keeps_computed_suggestion(monkeypatch) -> None:
+async def test_pin_rule_noop_when_unpinned_keeps_computed_suggestion() -> None:
     """Without a pin, the pin rule is a no-op: the stored `suggestion` is
     exactly what was computed, and the resolver never applies it."""
-    monkeypatch.setattr(episode_stage, "EPISODE_AUTO_APPLY", False)
+    cfg = Config(episode_auto_apply=False)
     job = _job()  # no pin
     db = _db(job, DISC)
     provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
 
-    outcomes, resolved = await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    outcomes, resolved = await run_episode_stage(db, job, [provider], cfg, StageOptions())  # type: ignore[arg-type]
 
     assert outcomes[0].claims.suggestion is True
     assert claims_of(job).sources["episodes_tmdb"].suggestion is True
@@ -352,29 +352,95 @@ async def test_pin_rule_noop_when_unpinned_keeps_computed_suggestion(monkeypatch
     assert all(t.episode_number is None for t in _tracks(db, job).values())
 
 
-async def test_pin_rule_keeps_prior_entry_applied_across_a_same_inputs_error(monkeypatch) -> None:
+async def test_pin_rule_keeps_prior_entry_applied_across_a_same_inputs_error() -> None:
     """F8: `put_source`'s same-inputs-error "keep the last good claims"
     behavior composes with the resolver's pin rule -- the kept entry is
     still `status="ok"` and still named by the pin, so it stays applicable
     (and applied) even though its `suggestion` (forced True here via
-    EPISODE_AUTO_APPLY off) was never touched."""
-    monkeypatch.setattr(episode_stage, "EPISODE_AUTO_APPLY", False)
+    episode_auto_apply off) was never touched."""
+    cfg = Config(episode_auto_apply=False)
     job = _job()
     set_pin(job, "episode", "episodes_tmdb")
     db = _db(job, DISC)
     provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
 
-    await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    await run_episode_stage(db, job, [provider], cfg, StageOptions())  # type: ignore[arg-type]
     assert claims_of(job).sources["episodes_tmdb"].status == "ok"
 
     provider.error = SourceError("timeout")  # same inputs: season/show_id/tolerance unchanged
-    await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    await run_episode_stage(db, job, [provider], cfg, StageOptions())  # type: ignore[arg-type]
 
     stored = claims_of(job).sources["episodes_tmdb"]
     assert stored.status == "ok"  # kept the prior good entry, not "error"
     assert stored.suggestion is True  # the computed value, unchanged
     assert stored.extra["last_error"]["detail"] == "SourceError: timeout"
     assert all(t.episode_number is not None for t in _tracks(db, job).values())  # stays applied under the pin
+
+
+# ---------------------------------------------------------------------------
+# Operator source settings (PR 4)
+# ---------------------------------------------------------------------------
+
+
+async def test_empty_episode_sources_runs_no_provider() -> None:
+    job = _job()
+    db = _db(job, DISC)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+
+    outcomes = await compute_episode_claims(db, job, [provider], Config(episode_sources=[]), StageOptions())  # type: ignore[arg-type]
+
+    assert outcomes == []
+    assert provider.calls == []
+
+
+async def test_operator_order_decides_which_provider_runs_first() -> None:
+    job = _job()
+    db = _db(job, DISC)
+    tmdb = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    tvmaze = FakeProvider("episodes_tvmaze", "tvmaze", seasons={1: _season(1, DISTINCT)})
+
+    outcomes = await compute_episode_claims(
+        db, job, [tmdb, tvmaze], Config(episode_sources=["tvmaze", "tmdb"]), StageOptions()
+    )  # type: ignore[arg-type]
+
+    assert [o.source_id for o in outcomes] == ["episodes_tvmaze"]  # stop rule: tmdb never called
+    assert tmdb.calls == []
+
+
+async def test_explicit_only_source_runs_even_when_disabled() -> None:
+    job = _job()
+    db = _db(job, DISC)
+    tvdb = FakeProvider("episodes_tvdb", "tvdb", seasons={1: _season(1, DISTINCT)})
+
+    outcomes = await compute_episode_claims(
+        db, job, [tvdb], Config(episode_sources=["tmdb"]), StageOptions(only_source="episodes_tvdb")
+    )  # type: ignore[arg-type]
+
+    assert [o.source_id for o in outcomes] == ["episodes_tvdb"]
+
+
+async def test_pinned_disabled_source_still_runs() -> None:
+    job = _job()
+    set_pin(job, "episode", "episodes_tvdb")
+    db = _db(job, DISC)
+    tmdb = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    tvdb = FakeProvider("episodes_tvdb", "tvdb", seasons={1: _season(1, DISTINCT)})
+
+    outcomes = await compute_episode_claims(db, job, [tmdb, tvdb], Config(episode_sources=["tmdb"]), StageOptions())  # type: ignore[arg-type]
+
+    assert outcomes[0].source_id == "episodes_tvdb"
+
+
+async def test_tolerance_comes_from_config() -> None:
+    job = _job()
+    db = _db(job, DISC)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+
+    [outcome] = await compute_episode_claims(
+        db, job, [provider], Config(episode_match_tolerance_seconds=45), StageOptions()
+    )  # type: ignore[arg-type]
+
+    assert outcome.claims.inputs["tolerance"] == 45
 
 
 async def test_nominal_runtimes_are_not_applied_c4() -> None:

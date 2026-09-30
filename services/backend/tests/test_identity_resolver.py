@@ -5,6 +5,7 @@ from arm_common.enums import TrackRole
 from arm_common.schemas.identity import IdentityClaims, JobClaim, SourceClaims, TrackClaim
 
 from arm_backend.identity.resolver import Winner, apply_resolution, resolve
+from arm_backend.identity.sources.registry import DEFAULT_RANKS, SOURCE_TIERS
 
 TIERS = {"manual": 1, "thediscdb": 2, "ep_a": 3, "ep_b": 3, "preset": 5}
 
@@ -331,6 +332,28 @@ def test_pinned_episode_source_leaves_the_other_sources_claims_unused() -> None:
     assert "5" not in res.tracks
     assert "episode_name" not in res.tracks["0"]
     assert {ref: slot["episode"].value for ref, slot in res.tracks.items()} == {str(i): 3 + i for i in range(5)}
+
+
+# --- PR 4: the operator's disabled sources ------------------------------------
+
+
+def test_disabled_source_claims_do_not_resolve() -> None:
+    claims = _claims(
+        episodes_tmdb=SourceClaims(tracks={"t0": TrackClaim(episode=5)}),
+        episodes_tvmaze=SourceClaims(tracks={"t0": TrackClaim(episode=3)}),
+    )
+    res = resolve(claims, tiers=SOURCE_TIERS, ranks=DEFAULT_RANKS, disabled=frozenset({"episodes_tmdb"}))
+    assert res.tracks["t0"]["episode"].value == 3
+    assert "episodes_tmdb" in res.known_sources  # its fields still reset when nothing else claims them
+
+
+def test_pinned_disabled_source_still_resolves() -> None:
+    claims = IdentityClaims(
+        sources={"episodes_tvdb": SourceClaims(tracks={"t0": TrackClaim(episode=7)})},
+        pin={"episode": "episodes_tvdb"},
+    )
+    res = resolve(claims, tiers=SOURCE_TIERS, ranks=DEFAULT_RANKS, disabled=frozenset({"episodes_tvdb"}))
+    assert res.tracks["t0"]["episode"].value == 7
 
 
 def test_unusable_episode_source_does_not_take_the_tier() -> None:

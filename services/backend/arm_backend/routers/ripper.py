@@ -22,6 +22,7 @@ from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_backend.identity.episode_stage import is_tv_candidate
 from arm_backend.identity.pipeline import hint_is_tv, hint_title, resolve_job, run_disc_hints
 from arm_backend.identity.proposals import put_source, record_preset
+from arm_backend.identity.sources.registry import enabled_hint_sources
 from arm_backend.identity.sources.thediscdb import SOURCE_ID as THEDISCDB, build_claims, external_imdb_id
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.track_selection import select_tracks, select_tracks_for_review
@@ -529,10 +530,12 @@ async def identify(
         session.add(DiscFingerprint(job_id=job.id, algo=algo, value=fp.value))
     await session.flush()
 
+    hints = enabled_hint_sources(cfg)
     if not already_identified:
         # Offline disc hints (volume label, Blu-ray BDMT title): season / disc /
-        # total proposals plus a cleaner search title for the dispatcher.
-        run_disc_hints(job, scan, now=datetime.now(timezone.utc))
+        # total proposals plus a cleaner search title for the dispatcher, in
+        # the operator's configured source order (PR 4).
+        run_disc_hints(job, scan, now=datetime.now(timezone.utc), sources=hints)
 
     thediscdb_match = None
     if not already_identified and cfg.thediscdb_enabled:
@@ -578,7 +581,7 @@ async def identify(
                         if exact is not None:
                             return exact
                 return await dispatcher.identify(
-                    scan, cfg, title_hint=hint_title(job), title_hint_is_tv=hint_is_tv(job)
+                    scan, cfg, title_hint=hint_title(job, hints), title_hint_is_tv=hint_is_tv(job, hints)
                 )
 
             result = await asyncio.wait_for(_identify(), timeout=DISPATCH_TIMEOUT_SECONDS)

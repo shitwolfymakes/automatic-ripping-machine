@@ -2278,6 +2278,30 @@ def test_identify_bd_title_beats_label() -> None:
     assert sources["label"]["job"]["disc_number"] == 3
 
 
+def test_identify_disc_hint_sources_excludes_bd_title() -> None:
+    """PR 4: `disc_hint_sources=["label"]` narrows run_disc_hints (and the
+    hint_title/hint_is_tv read that follows) to label only -- bd_title is
+    neither run nor recorded, even on a Blu-ray with BDMT meta."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    cfg = _config()
+    cfg.disc_hint_sources = ["label"]
+    db.rows["config"] = [cfg]
+    result = MetadataResult(title="The West Wing", year=1999, kind="tv", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    scan = _scan_dict("bluray")
+    scan["volume_label"] = "WW_D3"
+    scan["bd_meta"] = {"name": "The West Wing Season 3", "set_number": 2, "num_sets": 6}
+    body = {"drive_id": "drv_x", "scan_result": scan}
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    job = db.rows["jobs"][0]
+    sources = job.metadata_json["identity_claims"]["sources"]
+    assert "bd_title" not in sources
+    assert sources["label"]["status"] == "ok"
+
+
 def test_identify_passes_hint_title_to_dispatcher() -> None:
     """The BDMT-derived hint title reaches the dispatcher as title_hint."""
     db = FakeSession()

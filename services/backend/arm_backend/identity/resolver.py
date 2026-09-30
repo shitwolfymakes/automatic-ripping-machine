@@ -42,7 +42,13 @@ class Resolution:
     known_sources: frozenset[str] = frozenset()
 
 
-def resolve(claims: IdentityClaims, *, tiers: Mapping[str, int], ranks: Mapping[str, int] | None = None) -> Resolution:
+def resolve(
+    claims: IdentityClaims,
+    *,
+    tiers: Mapping[str, int],
+    ranks: Mapping[str, int] | None = None,
+    disabled: frozenset[str] = frozenset(),
+) -> Resolution:
     ranks = ranks or {}
     pinned = set(claims.pin.values())
     # The episode pin rule (Task 9 F4 round 2): a source's own computed
@@ -56,6 +62,11 @@ def resolve(claims: IdentityClaims, *, tiers: Mapping[str, int], ranks: Mapping[
     for source_id, source in claims.sources.items():
         if source_id not in tiers:
             logger.debug("identity resolver: ignoring unknown source %s", source_id)
+            continue
+        # PR 4: a source the operator unchecked contributes nothing unless
+        # pinned; it stays in `known_sources` (via `tiers`), so fields it
+        # owned still reset to default when nothing else claims them.
+        if source_id in disabled and source_id not in pinned:
             continue
         if source.status != "ok":
             continue

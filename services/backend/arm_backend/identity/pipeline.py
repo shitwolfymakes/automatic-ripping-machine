@@ -3,20 +3,21 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_common import Job, Track
+from arm_common import Config, Job, Track
 from arm_common.schemas import ScanResult
 from arm_common.schemas.identity import SourceClaims
 
 from arm_backend.identity.proposals import claims_of, put_source
 from arm_backend.identity.resolver import apply_resolution, resolve
 from arm_backend.identity.sources.base import JobContext, Source
-from arm_backend.identity.sources.registry import DEFAULT_RANKS, SOURCE_TIERS, HINT_SOURCES
+from arm_backend.identity.sources.registry import SOURCE_TIERS, HINT_SOURCES, disabled_source_ids, source_ranks
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +29,14 @@ class ResolveOutcome:
 
 
 async def resolve_job(session: AsyncSession, job: Job) -> ResolveOutcome:
-    """Apply every stored proposal to the job and its tracks. Idempotent;
-    returns the number of attributes changed and which tracks changed."""
+    """Apply every stored proposal to the job and its tracks, ranked and
+    filtered by the operator's source settings. Idempotent; returns the
+    number of attributes changed and which tracks changed."""
+    cfg = (await session.execute(select(Config).limit(1))).scalars().first()
     tracks = list((await session.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all())
     changed_ids: set[str] = set()
-    changed = apply_resolution(
-        job, tracks, resolve(claims_of(job), tiers=SOURCE_TIERS, ranks=DEFAULT_RANKS), changed_track_ids=changed_ids
-    )
+    resolution = resolve(claims_of(job), tiers=SOURCE_TIERS, ranks=source_ranks(cfg), disabled=disabled_source_ids(cfg))
+    changed = apply_resolution(job, tracks, resolution, changed_track_ids=changed_ids)
     for track in tracks:
         session.add(track)
     session.add(job)
@@ -55,10 +57,10 @@ def _error_claims(source: Source, ctx: JobContext, e: Exception) -> SourceClaims
     return SourceClaims(run_at=ctx.now, status="error", inputs=inputs, detail=f"{type(e).__name__}: {e}"[:200])
 
 
-def run_disc_hints(job: Job, scan: ScanResult, *, now: datetime) -> None:
+def run_disc_hints(job: Job, scan: ScanResult, *, now: datetime, sources: Sequence[Source] = HINT_SOURCES) -> None:
     """Record every disc-hint source's proposals (or why it was skipped)."""
     ctx = JobContext(job=job, scan=scan, now=now)
-    for source in HINT_SOURCES:
+    for source in sources:
         try:
             reason = source.applies_to(ctx)
         except Exception as e:
@@ -74,24 +76,24 @@ def run_disc_hints(job: Job, scan: ScanResult, *, now: datetime) -> None:
         put_source(job, source.id, claims)
 
 
-def hint_title(job: Job) -> str | None:
+def hint_title(job: Job, sources: Sequence[Source] = HINT_SOURCES) -> str | None:
     """The cleaned search title from the best-ranked disc-hint source, if any."""
-    sources = claims_of(job).sources
-    for source in HINT_SOURCES:
-        entry = sources.get(source.id)
+    claim_sources = claims_of(job).sources
+    for source in sources:
+        entry = claim_sources.get(source.id)
         if entry is not None and entry.status == "ok" and entry.job.title:
             return entry.job.title
     return None
 
 
-def hint_is_tv(job: Job) -> bool:
+def hint_is_tv(job: Job, sources: Sequence[Source] = HINT_SOURCES) -> bool:
     """True when any ok disc-hint source proposed a `season` — the hint title
     is then TV-shaped (a season/box-set disc) and should be searched TMDb-TV
     first, not movie-first (a movie label ending in a season-shaped number,
     e.g. a real season disc, must not be mismatched to TMDb's top movie hit)."""
-    sources = claims_of(job).sources
-    for source in HINT_SOURCES:
-        entry = sources.get(source.id)
+    claim_sources = claims_of(job).sources
+    for source in sources:
+        entry = claim_sources.get(source.id)
         if (
             entry is not None
             and entry.status == "ok"

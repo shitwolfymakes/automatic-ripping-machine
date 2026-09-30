@@ -38,11 +38,11 @@ from arm_backend.identity.pipeline import ResolveOutcome, resolve_job
 from arm_backend.identity.proposals import claims_of, put_source
 from arm_backend.identity.sources.registry import (
     COVERAGE_STOP,
-    DEFAULT_EPISODE_SOURCES,
-    EPISODE_AUTO_APPLY,
     EPISODE_SOURCE_BY_SETTING,
-    EPISODE_TOLERANCE_S,
     MAX_SEASON_SCAN,
+    enabled_episode_source_ids,
+    episode_auto_apply,
+    episode_tolerance,
 )
 
 logger = logging.getLogger(__name__)
@@ -68,7 +68,7 @@ _DEAD_STATUSES = frozenset({JobStatus.FAILED, JobStatus.ABANDONED})
 class StageOptions:
     season: int | None = None
     disc_number: int | None = None
-    # None: the pinned source's stored tolerance, else EPISODE_TOLERANCE_S.
+    # None: the pinned source's stored tolerance, else the config's tolerance.
     tolerance: int | None = None
     only_source: str | None = None
     apply: bool = True
@@ -116,17 +116,19 @@ def _eligible(tracks: Sequence[Track]) -> list[TitleIn]:
 
 
 def _ordered_providers(
-    job: Job, providers: Sequence[EpisodeListProvider], only_source: str | None
+    job: Job, providers: Sequence[EpisodeListProvider], only_source: str | None, cfg: Config
 ) -> list[EpisodeListProvider]:
+    """The operator's enabled sources in rank order (PR 4). The job's pinned
+    source runs first even when unchecked, and an explicit `only_source`
+    (a manual /match) runs regardless of the settings."""
     by_id = {p.source_id: p for p in providers}
-    order = [EPISODE_SOURCE_BY_SETTING[s] for s in DEFAULT_EPISODE_SOURCES if s in EPISODE_SOURCE_BY_SETTING]
-    ordered = [by_id[s] for s in order if s in by_id]
-    pinned = claims_of(job).pin.get("episode")
-    if pinned is not None and any(p.source_id == pinned for p in ordered):
-        ordered = sorted(ordered, key=lambda p: p.source_id != pinned)
     if only_source is not None:
-        ordered = [p for p in ordered if p.source_id == only_source]
-    return ordered
+        return [by_id[only_source]] if only_source in by_id else []
+    order = list(enabled_episode_source_ids(cfg))
+    pinned = claims_of(job).pin.get("episode")
+    if pinned in by_id:
+        order = [pinned, *[s for s in order if s != pinned]]
+    return [by_id[s] for s in order if s in by_id]
 
 
 async def _job_tracks(session: AsyncSession, job: Job) -> list[Track]:
@@ -278,6 +280,7 @@ def _ok_claims(
     truncated: bool,
     inputs: dict[str, Any],
     now: datetime,
+    auto_apply: bool,
 ) -> SourceClaims:
     result = fit.result
     near_tie = len(ranked) > 1 and _near_tie(result, ranked[1][1])
@@ -287,7 +290,7 @@ def _ok_claims(
     scan_truncated = scanned and truncated
     mean_conf = sum(m.confidence for m in result.matches) / len(result.matches)
     suggestion = (
-        (not EPISODE_AUTO_APPLY)
+        (not auto_apply)
         or result.ambiguous
         or result.coverage < MIN_COVERAGE
         or mean_conf < MIN_MEAN_CONFIDENCE
@@ -345,7 +348,7 @@ def _known_season(job: Job, opts: StageOptions) -> int | None:
     return job.season
 
 
-def _tolerance(job: Job, source_id: str, opts: StageOptions) -> int:
+def _tolerance(job: Job, source_id: str, opts: StageOptions, cfg: Config) -> int:
     """The option when given; else, for the pinned episode source, the
     tolerance the operator's `/match` stored in its inputs (I3), so a default
     background run asks the same question and C7 input equality holds."""
@@ -357,7 +360,7 @@ def _tolerance(job: Job, source_id: str, opts: StageOptions) -> int:
         tolerance = stored.inputs.get("tolerance")
         if isinstance(tolerance, int) and not isinstance(tolerance, bool):
             return tolerance
-    return EPISODE_TOLERANCE_S
+    return episode_tolerance(cfg)
 
 
 async def _match(
@@ -380,7 +383,7 @@ async def _match(
     previous = claims_of(job).sources.get(source_id)
     known_season = _known_season(job, opts)
     disc_number = opts.disc_number if opts.disc_number is not None else job.disc_number
-    tolerance = _tolerance(job, source_id, opts)
+    tolerance = _tolerance(job, source_id, opts, cfg)
     # The keep-path inputs (I2, M3, R2): when the provider cannot be asked,
     # the show id is the one the last stored entry used, and the rest is this
     # request's, so put_source keeps the last good claims only when the
@@ -429,7 +432,16 @@ async def _match(
         claims = SourceClaims(run_at=now, status="miss", detail="no episodes matched", inputs=dict(inputs))
         return SourceOutcome(source_id, claims, picked[1].result if picked else None)
     season, fit, ranked = picked
-    claims = _ok_claims(season, fit, ranked, scanned=known_season is None, truncated=truncated, inputs=inputs, now=now)
+    claims = _ok_claims(
+        season,
+        fit,
+        ranked,
+        scanned=known_season is None,
+        truncated=truncated,
+        inputs=inputs,
+        now=now,
+        auto_apply=episode_auto_apply(cfg),
+    )
     return SourceOutcome(source_id, claims, fit.result)
 
 
@@ -473,7 +485,7 @@ async def compute_episode_claims(
     rows = await _sibling_rows(session, job)
     now = datetime.now(UTC)
     outcomes: list[SourceOutcome] = []
-    for provider in _ordered_providers(job, providers, opts.only_source):
+    for provider in _ordered_providers(job, providers, opts.only_source, cfg):
         inputs: dict[str, Any] = {}
         try:
             outcome = await _match(provider, job, cfg, opts, titles=titles, rows=rows, now=now, inputs=inputs)
