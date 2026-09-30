@@ -17,6 +17,7 @@ from arm_common.schemas import ExternalIds
 
 from arm_backend.config import settings
 from arm_backend.identity.episodes.model import Episode
+from arm_backend.identity.episodes.providers.base import episode_name, is_int, runtime_s
 from arm_backend.identity.http import SourceError, SourceHttp, SourceMiss
 
 
@@ -76,7 +77,7 @@ class TvmazeEpisodes:
         numbers = {
             e["season"]
             for e in episodes
-            if isinstance(e, dict) and _is_int(e.get("season")) and e["season"] > 0 and _is_int(e.get("number"))
+            if isinstance(e, dict) and is_int(e.get("season")) and e["season"] > 0 and is_int(e.get("number"))
         }
         return sorted(numbers)
 
@@ -86,31 +87,13 @@ class TvmazeEpisodes:
             Episode(
                 season=number,
                 number=e["number"],
-                name=e.get("name") or None,
-                runtime_s=_runtime_s(e.get("runtime")),
+                name=episode_name(e.get("name")),
+                runtime_s=runtime_s(e.get("runtime")),
             )
             for e in episodes
-            if isinstance(e, dict) and e.get("season") == number and _is_int(e.get("number"))
+            if isinstance(e, dict) and e.get("season") == number and is_int(e.get("number"))
         ]
         if not result:
             raise SourceMiss(f"tvmaze season {number} for show {show_id} not found")
         result.sort(key=lambda ep: ep.number)
         return result
-
-
-def _is_int(value: object) -> bool:
-    """True for a real int, false for a bool (a `bool` is a `int` subclass
-    in Python but is never a valid season/episode number)."""
-    return isinstance(value, int) and not isinstance(value, bool)
-
-
-def _runtime_s(value: object) -> int | None:
-    """Minutes -> seconds, only for a genuine positive number; booleans,
-    strings, zero, negative and missing values all map to None (a malformed
-    runtime must not crash the provider, and must not read as a real runtime
-    downstream)."""
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return None
-    if value <= 0:
-        return None
-    return int(value * 60)

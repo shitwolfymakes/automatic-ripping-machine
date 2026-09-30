@@ -333,3 +333,32 @@ async def test_bearer_header_present_key_absent_from_url(provider):
     request = route.calls.last.request
     assert request.headers["Authorization"] == "Bearer the-key"
     assert "the-key" not in str(request.url)
+
+
+# ---------------------------------------------------------------------------
+# M1: bounded runtimes and names
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("raw", ["Infinity", "-Infinity", "NaN", "1e308", "1440", "99999"])
+@respx.mock
+async def test_season_out_of_range_runtime_maps_to_none(provider, raw):
+    """Non-finite values and runtimes of a day or more degrade to None, never
+    an OverflowError or a bogus runtime (`Infinity`/`NaN` are hand-built:
+    `json.dumps` refuses them, httpx's parser accepts them)."""
+    body = b'{"episodes": [{"episode_number": 1, "name": "X", "runtime": ' + raw.encode() + b"}]}"
+    respx.get(f"{BASE}/tv/1399/season/1").mock(
+        return_value=httpx.Response(200, content=body, headers={"content-type": "application/json"})
+    )
+    episodes = await provider.season("1399", 1)
+    assert episodes[0].runtime_s is None
+
+
+@pytest.mark.parametrize("name", [123, ["a"], {"x": 1}, True])
+@respx.mock
+async def test_season_non_str_name_maps_to_none(provider, name):
+    respx.get(f"{BASE}/tv/1399/season/1").mock(
+        return_value=httpx.Response(200, json={"episodes": [{"episode_number": 1, "name": name, "runtime": 30}]})
+    )
+    episodes = await provider.season("1399", 1)
+    assert episodes[0].name is None

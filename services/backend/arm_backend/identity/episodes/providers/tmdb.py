@@ -13,6 +13,7 @@ from arm_common.schemas import ExternalIds
 
 from arm_backend.config import settings
 from arm_backend.identity.episodes.model import Episode
+from arm_backend.identity.episodes.providers.base import episode_name, is_int, runtime_s
 from arm_backend.identity.http import SourceError, SourceHttp
 
 
@@ -69,7 +70,7 @@ class TmdbEpisodes:
             numbers = [
                 s["season_number"]
                 for s in raw_seasons
-                if isinstance(s, dict) and _is_int(s.get("season_number")) and s["season_number"] > 0
+                if isinstance(s, dict) and is_int(s.get("season_number")) and s["season_number"] > 0
             ]
         except (KeyError, TypeError, ValueError, AttributeError) as e:
             raise SourceError("tmdb malformed response") from e
@@ -87,12 +88,12 @@ class TmdbEpisodes:
                 Episode(
                     season=number,
                     number=e["episode_number"],
-                    name=e.get("name") or None,
-                    runtime_s=_runtime_s(e.get("runtime")),
+                    name=episode_name(e.get("name")),
+                    runtime_s=runtime_s(e.get("runtime")),
                     special=(number == 0),
                 )
                 for e in raw_episodes
-                if isinstance(e, dict) and _is_int(e.get("episode_number"))
+                if isinstance(e, dict) and is_int(e.get("episode_number"))
             ]
         except (KeyError, TypeError, ValueError, AttributeError) as e:
             raise SourceError("tmdb malformed response") from e
@@ -103,21 +104,3 @@ class TmdbEpisodes:
             raise SourceError(f"tmdb season {number} for show {show_id} returned no episodes")
         episodes.sort(key=lambda ep: ep.number)
         return episodes
-
-
-def _is_int(value: object) -> bool:
-    """True for a real int, false for a bool (a `bool` is a `int` subclass
-    in Python but is never a valid season/episode number)."""
-    return isinstance(value, int) and not isinstance(value, bool)
-
-
-def _runtime_s(value: object) -> int | None:
-    """Minutes -> seconds, only for a genuine positive number; booleans,
-    strings, zero, negative and missing values all map to None (C7: a
-    malformed runtime must not crash the provider, and must not read as a
-    real runtime downstream)."""
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return None
-    if value <= 0:
-        return None
-    return int(value * 60)

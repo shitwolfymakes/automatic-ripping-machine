@@ -728,3 +728,15 @@ async def test_season_huge_float_runtime_does_not_raise_overflow(provider):
     )
     episodes = await provider.season("1", 1)
     assert episodes[0].runtime_s is None
+
+
+@pytest.mark.parametrize("name", [123, ["a"], {"x": 1}, True])
+@respx.mock
+async def test_season_non_str_name_maps_to_none(provider, name):
+    """M1: a non-str episode name degrades to None."""
+    _login_route()
+    respx.get(f"{BASE}/series/1/episodes/dvd").mock(
+        return_value=httpx.Response(200, json={"data": {"episodes": [{"number": 1, "name": name, "runtime": 30}]}})
+    )
+    episodes = await provider.season("1", 1)
+    assert episodes[0].name is None

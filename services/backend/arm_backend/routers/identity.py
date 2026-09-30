@@ -32,6 +32,8 @@ from arm_backend.identity.episode_stage import (
     found_ids_from_outcomes,
     is_tv_candidate,
 )
+from arm_backend.identity.episodes.model import Episode
+from arm_backend.identity.episodes.providers.base import EpisodeListProvider
 from arm_backend.identity.http import SourceError, SourceMiss
 from arm_backend.identity.ids import current_ids, merge_new_ids
 from arm_backend.identity.pipeline import resolve_job
@@ -290,27 +292,11 @@ async def clear_identity_pin(
     return _identity_view(job, tracks)
 
 
-@router.get("/{job_id}/identity/episodes", response_model=EpisodeListView)
-async def browse_episodes(
-    job_id: JobIdParam,
-    source: EpisodeSourceSetting,
-    season: int = Query(..., ge=0),
-    _: User = Depends(require_jwt),
-    db: AsyncSession = Depends(get_session),
-    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
-) -> EpisodeListView:
-    job = await _get_job(db, job_id)
-    if stage_runner is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="episode stage runner not available",
-        )
-
-    cfg = await _get_config(db)
-    providers = stage_runner.providers(cfg)
-    source_id = EPISODE_SOURCE_BY_SETTING[source]
-    provider = {p.source_id: p for p in providers}[source_id]
-
+async def _browse_season(
+    provider: EpisodeListProvider, cfg: Config, job: Job, source: str, season: int
+) -> tuple[str, list[Episode]]:
+    """The show id and one season's episodes for `/identity/episodes`, or the
+    HTTPException that says why not."""
     # F7: distinguish "not usable at all" (409 / 503) from "no show id" (404)
     # from a transient provider failure resolving that id (502) -- the
     # multi-provider `resolve_show_ids` wrapper swallows SourceError/SourceMiss
@@ -333,7 +319,7 @@ async def browse_episodes(
     if not show_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"no {source} show id known for job {job_id}",
+            detail=f"no {source} show id known for job {job.id}",
         )
     try:
         episodes = await provider.season(show_id, season)
@@ -347,6 +333,40 @@ async def browse_episodes(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"{source}: {e}",
         ) from e
+
+    return show_id, episodes
+
+
+@router.get("/{job_id}/identity/episodes", response_model=EpisodeListView)
+async def browse_episodes(
+    job_id: JobIdParam,
+    source: EpisodeSourceSetting,
+    season: int = Query(..., ge=0),
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
+) -> EpisodeListView:
+    job = await _get_job(db, job_id)
+    if stage_runner is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="episode stage runner not available",
+        )
+
+    cfg = await _get_config(db)
+    providers = stage_runner.providers(cfg)
+    source_id = EPISODE_SOURCE_BY_SETTING[source]
+    provider = {p.source_id: p for p in providers}[source_id]
+
+    try:
+        show_id, episodes = await _browse_season(provider, cfg, job, source, season)
+    except HTTPException:
+        raise
+    except Exception as e:
+        # M1: a provider bug or an unmapped failure is the upstream's fault,
+        # not a server error of ours.
+        logger.exception("episodes browse: source %s raised job_id=%s", source_id, job_id)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"{source}: unexpected error") from e
 
     return EpisodeListView(
         source_id=source_id,

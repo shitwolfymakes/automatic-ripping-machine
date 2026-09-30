@@ -310,3 +310,29 @@ async def test_season_empty_episodes_raises_source_error(provider):
     respx.get(f"{BASE}/shows/169/episodes").mock(return_value=httpx.Response(200, json=[]))
     with pytest.raises(SourceError):
         await provider.season("169", 1)
+
+
+# ---------------------------------------------------------------------------
+# M1: bounded runtimes and names
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("raw", ["Infinity", "-Infinity", "NaN", "1e308", "1440", "99999"])
+@respx.mock
+async def test_season_out_of_range_runtime_maps_to_none(provider, raw):
+    body = b'[{"season": 1, "number": 1, "name": "X", "runtime": ' + raw.encode() + b"}]"
+    respx.get(f"{BASE}/shows/169/episodes").mock(
+        return_value=httpx.Response(200, content=body, headers={"content-type": "application/json"})
+    )
+    episodes = await provider.season("169", 1)
+    assert episodes[0].runtime_s is None
+
+
+@pytest.mark.parametrize("name", [123, ["a"], {"x": 1}, True])
+@respx.mock
+async def test_season_non_str_name_maps_to_none(provider, name):
+    respx.get(f"{BASE}/shows/169/episodes").mock(
+        return_value=httpx.Response(200, json=[{"season": 1, "number": 1, "name": name, "runtime": 30}])
+    )
+    episodes = await provider.season("169", 1)
+    assert episodes[0].name is None

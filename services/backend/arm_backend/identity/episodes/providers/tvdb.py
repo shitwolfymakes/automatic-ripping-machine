@@ -13,7 +13,6 @@ message, which is the literal string "auth" for both) — see `identity/http.py`
 
 from __future__ import annotations
 
-import math
 import time
 from collections.abc import Callable
 from typing import Any
@@ -23,6 +22,7 @@ from arm_common.schemas import ExternalIds
 
 from arm_backend.config import settings
 from arm_backend.identity.episodes.model import Episode
+from arm_backend.identity.episodes.providers.base import episode_name, is_int, runtime_s
 from arm_backend.identity.http import SourceError, SourceHttp, SourceMiss
 
 _TOKEN_TTL_S = 23 * 3600
@@ -122,7 +122,7 @@ class TvdbEpisodes:
                 if isinstance(s, dict)
                 and isinstance(s.get("type"), dict)
                 and s["type"].get("type") == "official"
-                and _is_int(s.get("number"))
+                and is_int(s.get("number"))
                 and s["number"] > 0
             }
         except (KeyError, TypeError, ValueError, AttributeError) as e:
@@ -172,30 +172,9 @@ class TvdbEpisodes:
             Episode(
                 season=number,
                 number=e["number"],
-                name=e.get("name") or None,
-                runtime_s=_runtime_s(e.get("runtime")),
+                name=episode_name(e.get("name")),
+                runtime_s=runtime_s(e.get("runtime")),
             )
             for e in raw
-            if isinstance(e, dict) and _is_int(e.get("number"))
+            if isinstance(e, dict) and is_int(e.get("number"))
         ]
-
-
-def _is_int(value: object) -> bool:
-    """True for a real int, false for a bool (a `bool` is an `int` subclass
-    in Python but is never a valid season/episode number)."""
-    return isinstance(value, int) and not isinstance(value, bool)
-
-
-def _runtime_s(value: object) -> int | None:
-    """Minutes -> seconds, only for a finite, sane positive runtime; booleans,
-    strings, non-finite floats, zero/negative values, and runtimes >= 1440
-    minutes (a day) all map to None. The upper bound guards against an
-    OverflowError converting a huge/`inf` float to an int after the `* 60`
-    (found in review) — TVDB has been seen to return garbage runtimes."""
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return None
-    if not math.isfinite(value):
-        return None
-    if value <= 0 or value >= 1440:
-        return None
-    return int(value * 60)

@@ -856,3 +856,28 @@ def test_episodes_browse_source_error_502(signing_key: bytes) -> None:
         )
     assert r.status_code == 502
     assert "tmdb" in r.json()["detail"]
+
+
+@pytest.mark.parametrize("where", ["season", "resolve_show_id"])
+def test_episodes_browse_unexpected_exception_502(
+    signing_key: bytes, where: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """M1: any unexpected provider exception maps to 502, logged with its
+    traceback, instead of a 500."""
+    job = _job(meta={})  # no cached show id: resolve_show_id runs
+    db = _db(job)
+    if where == "season":
+        provider = FakeProvider(seasons={1: _season(1, DISTINCT)}, error=RuntimeError("boom"))
+    else:
+        provider = FakeProvider(resolve_error=RuntimeError("boom"))
+    runner = _FakeStageRunner([provider])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.get(
+            f"/api/jobs/{JOB_ID}/identity/episodes",
+            params={"source": "tmdb", "season": 1},
+            headers=_auth(admin_token),
+        )
+    assert r.status_code == 502
+    assert r.json()["detail"] == "tmdb: unexpected error"
+    assert "Traceback" in caplog.text
