@@ -31,21 +31,40 @@
 	const blurb = $derived(groupBlurb(group.name));
 
 	let values = $state<Record<string, unknown>>({});
+
+	// Each key this form has itself saved, merged over `config` to form the
+	// real baseline for change detection (buildPayload). Without this, a
+	// revert-then-resave in one visit diffs against the original `config`
+	// prop (never refreshed by the parent) and silently drops the second
+	// change. Reset whenever `config` itself changes identity (e.g. the
+	// parent reloads settings), since the new prop is then the ground truth.
+	let savedOverrides = $state<Record<string, unknown>>({});
+	let configRef: Record<string, unknown> | null = null;
+
 	$effect(() => {
 		const next: Record<string, unknown> = {};
 		for (const f of group.fields) next[f.key] = config[f.key];
 		values = next;
+		if (config !== configRef) {
+			configRef = config;
+			savedOverrides = {};
+		}
 	});
 
 	let saving = $state(false);
 	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
 
+	function baseline(): Record<string, unknown> {
+		return { ...config, ...savedOverrides };
+	}
+
 	function buildPayload(): Record<string, unknown> {
+		const base = baseline();
 		const out: Record<string, unknown> = {};
 		for (const f of editable) {
 			const v = values[f.key];
 			if (f.tier === 'secret' && (v === HIDDEN || v === '' || v == null)) continue;
-			if (unchanged(v, config[f.key])) continue;
+			if (unchanged(v, base[f.key])) continue;
 			out[f.key] = v;
 		}
 		return out;
@@ -57,6 +76,22 @@
 		try {
 			const payload = buildPayload();
 			await saveArmConfig(payload as never);
+			const mergedOverrides = { ...savedOverrides };
+			const mergedValues = { ...values };
+			for (const key of Object.keys(payload)) {
+				const field = group.fields.find((f) => f.key === key);
+				if (field?.tier === 'secret') {
+					// Never keep the raw secret around as a comparison baseline (or
+					// on screen) once it's saved - both fall back to the masked
+					// sentinel, same as an untouched secret on load.
+					mergedOverrides[key] = HIDDEN;
+					mergedValues[key] = HIDDEN;
+				} else {
+					mergedOverrides[key] = payload[key];
+				}
+			}
+			savedOverrides = mergedOverrides;
+			values = mergedValues;
 			feedback = { type: 'success', message: 'Saved' };
 			onsaved?.(payload);
 		} catch (e) {

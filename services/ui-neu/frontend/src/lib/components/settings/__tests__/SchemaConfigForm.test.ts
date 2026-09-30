@@ -100,6 +100,42 @@ describe('SchemaConfigForm', () => {
 		await waitFor(() => expect(saveArmConfig).toHaveBeenCalled());
 		expect(saveArmConfig.mock.calls[0][0].tmdb_api_key).toBe('new-key');
 	});
+
+	it('resends a reverted field on a second save instead of diffing against the stale original config', async () => {
+		// I1: uncheck/re-check (here: change/revert) in one visit must not diff
+		// against the original `config` prop, which the parent never refreshes.
+		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
+		const select = screen.getByRole('combobox', { name: /provider/i });
+
+		await fireEvent.change(select, { target: { value: 'omdb' } });
+		await fireEvent.click(screen.getByRole('button', { name: /save/i }));
+		await waitFor(() => expect(saveArmConfig).toHaveBeenCalledTimes(1));
+		expect(saveArmConfig.mock.calls[0][0]).toEqual({ metadata_provider: 'omdb' });
+
+		await fireEvent.change(select, { target: { value: 'tmdb' } });
+		await fireEvent.click(screen.getByRole('button', { name: /save/i }));
+		await waitFor(() => expect(saveArmConfig).toHaveBeenCalledTimes(2));
+		expect(saveArmConfig.mock.calls[1][0]).toEqual({ metadata_provider: 'tmdb' });
+	});
+
+	it('holds a saved secret as <hidden> in the baseline and clears the field back to its masked state', async () => {
+		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
+		await fireEvent.input(screen.getByLabelText(/tmdb key/i), { target: { value: 'new-key' } });
+		await fireEvent.click(screen.getByRole('button', { name: /save/i }));
+		await waitFor(() => expect(saveArmConfig).toHaveBeenCalledTimes(1));
+
+		// The field itself goes back to the masked, empty state (never leaves the
+		// raw secret rendered once it's saved)...
+		const input = screen.getByLabelText(/tmdb key/i) as HTMLInputElement;
+		expect(input.value).toBe('');
+		expect(input.placeholder).toMatch(/set, leave blank to keep/i);
+
+		// ...and a resave with nothing further typed omits it again (baseline is
+		// '<hidden>', not the raw key just sent).
+		await fireEvent.click(screen.getByRole('button', { name: /save/i }));
+		await waitFor(() => expect(saveArmConfig).toHaveBeenCalledTimes(2));
+		expect('tmdb_api_key' in saveArmConfig.mock.calls[1][0]).toBe(false);
+	});
 });
 
 describe('SchemaConfigForm key-check button', () => {
@@ -324,7 +360,7 @@ describe('SchemaConfigForm section layout hints', () => {
 			}
 		]);
 		renderComponent(SchemaConfigForm, { props: { group: LAYOUT_GROUP, config: LAYOUT_CONFIG } });
-		expect(screen.getByRole('group', { name: 'Summary' })).toBeInTheDocument();
+		expect(screen.getByRole('group', { name: 'TV episodes summary' })).toBeInTheDocument();
 		expect(screen.getByLabelText('Field A')).toBeInTheDocument();
 	});
 });
@@ -384,7 +420,7 @@ describe('SchemaConfigForm TV episodes section', () => {
 	it('renders the panel with the summary, both ranked lists, the auto-apply toggle and the advanced tolerance field', () => {
 		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
 
-		const summary = screen.getByRole('group', { name: 'Summary' });
+		const summary = screen.getByRole('group', { name: 'TV episodes summary' });
 		expect(summary).toHaveTextContent('TMDb, TVmaze, TVDB');
 
 		const columnsGrid = screen.getByTestId('settings-section-columns');
@@ -427,7 +463,7 @@ describe('SchemaConfigForm TV episodes section', () => {
 
 	it('moving TVmaze up updates the summary text before Save', async () => {
 		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
-		const summary = screen.getByRole('group', { name: 'Summary' });
+		const summary = screen.getByRole('group', { name: 'TV episodes summary' });
 		expect(summary).toHaveTextContent('TMDb, TVmaze, TVDB');
 
 		await fireEvent.click(screen.getByRole('button', { name: 'Move TVmaze up' }));
