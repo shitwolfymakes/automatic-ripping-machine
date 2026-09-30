@@ -382,10 +382,11 @@
 			 stay hidden. -->
 			{#if activeTab === 'transcoding'}
 				{#if $transcoderEnabled && transcodingGroup}
-					<div class="space-y-6">
-						<SchemaConfigForm group={transcodingGroup} config={settings.config} onsaved={onTranscodingSaved} />
-						<GpusCard />
-					</div>
+					<SchemaConfigForm group={transcodingGroup} config={settings.config} onsaved={onTranscodingSaved}>
+						{#snippet beforeSave()}
+							<GpusCard />
+						{/snippet}
+					</SchemaConfigForm>
 				{:else}
 					<div class="stack" id="setting-transcode_enabled" data-testid="setting-transcode_enabled">
 						<label class="field field-row settings-page-notif-toggle-row">
