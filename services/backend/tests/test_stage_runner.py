@@ -393,6 +393,29 @@ async def test_operator_edit_committed_during_network_phase_survives() -> None:
     assert claims_of(edited).sources["episodes_tmdb"].status == "ok"  # the stage still ran
 
 
+async def test_in_flight_run_never_re_adds_a_cleared_id_i4() -> None:
+    """I4: the runner merges only the ids its compute phase newly found. An
+    id the snapshot already had, which a concurrent /resolve then cleared on
+    the fresh row, stays cleared."""
+    job = _job(season=1, meta={"identity": {"external_ids": {"imdb": "tt1", "tvmaze": "55"}}})
+    tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
+    db = _db(job, tracks=tracks)
+    gate = asyncio.Event()
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)}, gate=gate, show_id="999")
+    runner = _runner(db, _Hub(), [provider])
+
+    runner.schedule(job.id)
+    await asyncio.sleep(0)  # blocked in its network call
+
+    edited = _job(job.id, season=1, meta={"identity": {"external_ids": {"imdb": "tt2"}}})
+    db.rows["jobs"] = [edited]
+
+    gate.set()
+    await runner.drain()
+
+    assert edited.metadata_json["identity"]["external_ids"] == {"imdb": "tt2", "tmdb": "999"}
+
+
 async def test_compute_phase_mutation_never_reaches_a_flush() -> None:
     """Fix round 2's core invariant: nothing the compute phase mutates can
     ever reach a flush. `resolve_show_ids` mutates the compute snapshot's

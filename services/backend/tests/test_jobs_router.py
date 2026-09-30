@@ -608,6 +608,54 @@ def test_resolve_unchanged_identity_does_not_schedule_episode_stage(signing_key:
     assert stage_runner.scheduled == []
 
 
+def _ids_job() -> Any:
+    return _job(
+        status=JobStatus.IDENTIFIED,
+        title="X",
+        year=2000,
+        meta={"identity": {"provider": "tmdb", "external_ids": {"imdb": "tt1", "tmdb": "7", "tvdb": "8", "tvmaze": "9"}}},
+    )
+
+
+def test_resolve_changed_imdb_clears_derived_ids_and_reschedules(signing_key: bytes) -> None:
+    """I4: a different imdb means a different show, so the show ids derived
+    from the old one (tvmaze, and tmdb / tvdb unless sent too) are cleared,
+    and the ids change reschedules the episode stage."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_ids_job()]
+    stage_runner = _StageRunner()
+    app.state.episode_stage = stage_runner
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "X", "year": 2000, "external_ids": {"imdb": "tt2", "tvdb": "80"}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    ids = {k: v for k, v in r.json()["job"]["metadata_json"]["identity"]["external_ids"].items() if v is not None}
+    assert ids == {"imdb": "tt2", "tvdb": "80"}
+    assert stage_runner.scheduled == ["job_01JZXR7K3M5Q8N4VWA00000001"]
+
+
+def test_resolve_restating_the_same_ids_keeps_derived_ids(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_ids_job()]
+    stage_runner = _StageRunner()
+    app.state.episode_stage = stage_runner
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "X", "year": 2000, "external_ids": {"imdb": "tt1", "tmdb": "7"}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    ids = {k: v for k, v in r.json()["job"]["metadata_json"]["identity"]["external_ids"].items() if v is not None}
+    assert ids == {"imdb": "tt1", "tmdb": "7", "tvdb": "8", "tvmaze": "9"}
+    assert stage_runner.scheduled == []
+
+
 def test_resolve_without_a_stage_runner_configured_skips_scheduling(signing_key: bytes) -> None:
     """No `app.state.episode_stage` (every other resolve test in this
     module): the dependency returns None and resolve proceeds exactly as

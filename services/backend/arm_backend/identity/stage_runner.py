@@ -65,6 +65,7 @@ from arm_backend.identity.sources.registry import EPISODE_SOURCE_BY_SETTING
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_backend.ws import WSHub
 from arm_common import Config, Job, JobStatus, Track
+from arm_common.schemas import ExternalIds
 
 logger = logging.getLogger("arm_backend.identity.stage_runner")
 
@@ -306,10 +307,21 @@ class EpisodeStageRunner:
                     await compute_session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))
                 ).scalar_one()
                 providers = self._providers_for(cfg)
+                ids_before = current_ids(job).model_dump(exclude_none=True)
                 outcomes = await compute_episode_claims(compute_session, job, providers, cfg, StageOptions())
-                snapshot = job
+                # I4: only the ids this compute newly found. An id the
+                # snapshot already had may since have been cleared on the
+                # fresh row (e.g. /resolve with a different show) and must
+                # not come back.
+                found = ExternalIds(
+                    **{
+                        field: value
+                        for field, value in current_ids(job).model_dump(exclude_none=True).items()
+                        if field not in ids_before
+                    }
+                )
 
-            # Phase 2 (apply): a fresh session. `snapshot` is detached now
+            # Phase 2 (apply): a fresh session. The snapshot `job` is detached now
             # (its own session closed above without a commit/flush) — never
             # written anywhere itself; only the NEW show ids it resolved
             # (if any) are folded into the fresh row below.
@@ -330,7 +342,7 @@ class EpisodeStageRunner:
                     # the current state instead.
                     return
 
-                merge_new_ids(fresh_job, current_ids(snapshot))
+                merge_new_ids(fresh_job, found)
                 await apply_outcomes_and_emit(apply_session, fresh_job, outcomes, self._hub)
         except Exception:
             # Never crash the loop: a provider outage or a DB hiccup on one

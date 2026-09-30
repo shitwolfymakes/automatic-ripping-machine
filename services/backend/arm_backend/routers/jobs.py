@@ -19,6 +19,7 @@ from arm_backend.auto_session import (
 )
 from arm_backend.config import settings
 from arm_backend.db import get_session
+from arm_backend.identity.ids import current_ids
 from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import record_manual_job, record_manual_track, revert_manual_track
 from arm_backend.identity.stage_runner import EpisodeStageRunner
@@ -87,11 +88,12 @@ def _get_stage_runner(request: Request) -> EpisodeStageRunner | None:
     return getattr(request.app.state, "episode_stage", None)
 
 
-def _identity_snapshot(job: Job) -> tuple[int | None, int | None, MediaType | None, str | None]:
-    """`season`, `disc_number`, `media_type` and title — the fields the
-    background episode stage cares about. Compared before/after a mutating
-    request to decide whether to (re)schedule it (Task 8)."""
-    return (job.season, job.disc_number, job.media_type, job.title)
+def _identity_snapshot(job: Job) -> tuple[int | None, int | None, MediaType | None, str | None, dict[str, Any]]:
+    """`season`, `disc_number`, `media_type`, title and the show ids — the
+    fields the background episode stage cares about. Compared before/after a
+    mutating request to decide whether to (re)schedule it (Task 8; I4: an
+    ids change reschedules too)."""
+    return (job.season, job.disc_number, job.media_type, job.title, current_ids(job).model_dump())
 
 
 # Resolver-owned attributes on TrackEditRequest / JobUpdateRequest: an edit to
@@ -929,6 +931,9 @@ async def update_job(
 #      stale TMDB entry, etc.) and the user wants to correct title/year/metadata after the
 #      fact — possibly post-rip. The status MUST NOT change in this case; fan-out is a no-op
 #      because there are no WAITING_IDENTIFY apps on an already-identified job.
+# Show ids an operator can send on /resolve; tvmaze is only ever derived.
+_SHOW_ID_FIELDS: tuple[str, ...] = ("imdb", "tmdb", "tvdb")
+
 _RESOLVABLE_STATUSES_PROMOTE: frozenset[JobStatus] = frozenset(
     {JobStatus.AWAITING_USER_ID, JobStatus.RIPPED_AWAITING_IDENTIFY}
 )
@@ -987,6 +992,19 @@ async def resolve(
         # external_ids as set even when identity was just freshly created.
         existing_ids = md.identity.external_ids
         ids_set = req.external_ids.model_fields_set
+        # I4: a different imdb / tmdb / tvdb names a different show, so every
+        # show id derived from the old one and not sent now is stale: clear
+        # tvmaze, and tmdb / tvdb when absent from the request. An explicit
+        # null only clears that one id; it names no other show.
+        if any(
+            name in ids_set
+            and getattr(req.external_ids, name) is not None
+            and getattr(req.external_ids, name) != getattr(existing_ids, name)
+            for name in _SHOW_ID_FIELDS
+        ):
+            for name in ("tvmaze", "tmdb", "tvdb"):
+                if name not in ids_set:
+                    setattr(existing_ids, name, None)
         if "imdb" in ids_set:
             existing_ids.imdb = req.external_ids.imdb
         if "tmdb" in ids_set:
