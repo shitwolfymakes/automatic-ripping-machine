@@ -241,7 +241,9 @@ async def match_identity(
     # I3: the operator's season / disc number become manual job claims, so a
     # later background run treats them as known (spec 6.3) instead of
     # scanning again. Recorded before the resolve in apply_outcomes_and_emit.
-    choices = {attr: value for attr, value in (("season", req.season), ("disc_number", req.disc_number)) if value is not None}
+    choices = {
+        attr: value for attr, value in (("season", req.season), ("disc_number", req.disc_number)) if value is not None
+    }
     if choices:
         record_manual_job(fresh_job, choices, keep_restated=True)
     if source_id is not None and req.tolerance is not None:

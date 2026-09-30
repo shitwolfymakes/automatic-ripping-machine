@@ -613,7 +613,9 @@ def _ids_job() -> Any:
         status=JobStatus.IDENTIFIED,
         title="X",
         year=2000,
-        meta={"identity": {"provider": "tmdb", "external_ids": {"imdb": "tt1", "tmdb": "7", "tvdb": "8", "tvmaze": "9"}}},
+        meta={
+            "identity": {"provider": "tmdb", "external_ids": {"imdb": "tt1", "tmdb": "7", "tvdb": "8", "tvmaze": "9"}}
+        },
     )
 
 
@@ -654,6 +656,23 @@ def test_resolve_restating_the_same_ids_keeps_derived_ids(signing_key: bytes) ->
     ids = {k: v for k, v in r.json()["job"]["metadata_json"]["identity"]["external_ids"].items() if v is not None}
     assert ids == {"imdb": "tt1", "tmdb": "7", "tvdb": "8", "tvmaze": "9"}
     assert stage_runner.scheduled == []
+
+
+def test_resolve_musicbrainz_id_leaves_show_ids_alone(signing_key: bytes) -> None:
+    """A musicbrainz_release id names no show: it is stored, and no derived
+    show id is cleared."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_ids_job()]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "X", "year": 2000, "external_ids": {"musicbrainz_release": "mb-1"}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    ids = {k: v for k, v in r.json()["job"]["metadata_json"]["identity"]["external_ids"].items() if v is not None}
+    assert ids == {"imdb": "tt1", "tmdb": "7", "tvdb": "8", "tvmaze": "9", "musicbrainz_release": "mb-1"}
 
 
 def test_resolve_without_a_stage_runner_configured_skips_scheduling(signing_key: bytes) -> None:
@@ -1442,9 +1461,7 @@ def test_resolve_locks_the_job_row(signing_key: bytes) -> None:
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID)]
     with TestClient(app) as client:
-        r = client.post(
-            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve", json={"title": "T"}, headers=_auth(token)
-        )
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve", json={"title": "T"}, headers=_auth(token))
     assert r.status_code == 200
     assert db.locked[0] == "jobs"
 

@@ -572,9 +572,7 @@ def test_match_out_of_range_season_or_disc_422_m6(signing_key: bytes, body: dict
     runner = _FakeStageRunner([FakeProvider(seasons={1: _season(1, DISTINCT)})])
     app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
     with TestClient(app) as client:
-        r = client.post(
-            f"/api/jobs/{JOB_ID}/identity/match", json={"apply": False, **body}, headers=_auth(admin_token)
-        )
+        r = client.post(f"/api/jobs/{JOB_ID}/identity/match", json={"apply": False, **body}, headers=_auth(admin_token))
     assert r.status_code == 422
 
 
