@@ -116,7 +116,11 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         group="Metadata",
         tier="operator",
         label="Match tolerance (seconds)",
-        help="How far a track's runtime may differ from an episode's and still match. 1 to 1800, default 300.",
+        help=(
+            "The most a track's runtime may differ from an episode's and still match. "
+            "ARM narrows this to a tenth of the episode's runtime, at least 60 seconds. "
+            "1 to 1800, default 300."
+        ),
         type="int",
         editable=True,
     ),

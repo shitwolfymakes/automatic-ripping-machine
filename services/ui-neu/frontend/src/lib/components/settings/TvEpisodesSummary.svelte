@@ -33,8 +33,13 @@
 
 	const discHintsValue = $derived(discHintLabels.length > 0 ? discHintLabels.join(', ') : 'None');
 	const episodeSourcesValue = $derived(episodeSourceLabels.length > 0 ? episodeSourceLabels.join(', ') : 'None');
+	// M2: an emptied tolerance input sends `null` through - the sub-line then
+	// drops the runtime clause entirely rather than rendering "null s".
+	const toleranceClause = $derived(
+		typeof tolerance === 'number' && Number.isFinite(tolerance) ? `, runtime within ${tolerance} s at most` : ''
+	);
 	const episodeSourcesSub = $derived(
-		episodeSourceLabels.length > 0 ? `In order, runtime within ${tolerance} s` : 'No automatic episode matching'
+		episodeSourceLabels.length > 0 ? `In order${toleranceClause}` : 'No automatic episode matching'
 	);
 
 	const matchesValue = $derived(
@@ -57,7 +62,7 @@
      (rip -> transcode -> output), with the blue tinted surface token in place
      of that recipe's grey backdrop wash - this strip is a summary, not an
      item card, so the design calls for the info/primary tint instead. -->
-<div class="tv-episodes-summary-strip" role="group" aria-label="Summary">
+<div class="tv-episodes-summary-strip" role="group" aria-label="TV episodes summary">
 	<div class="tv-episodes-summary-cell">
 		<span class="tv-episodes-summary-label">Disc hints</span>
 		<span class="tv-episodes-summary-value">{discHintsValue}</span>

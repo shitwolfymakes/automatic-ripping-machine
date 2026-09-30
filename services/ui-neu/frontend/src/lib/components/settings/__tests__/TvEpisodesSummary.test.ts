@@ -45,10 +45,10 @@ afterEach(() => cleanup());
 describe('TvEpisodesSummary', () => {
 	it('summarises the defaults', () => {
 		renderComponent(TvEpisodesSummary, { props: { values: defaults(), fields: meta() } });
-		const group = screen.getByRole('group', { name: 'Summary' });
+		const group = screen.getByRole('group', { name: 'TV episodes summary' });
 		expect(group).toHaveTextContent('Blu-ray disc title, Disc volume label');
 		expect(group).toHaveTextContent('TMDb, TVmaze, TVDB');
-		expect(group).toHaveTextContent('In order, runtime within 300 s');
+		expect(group).toHaveTextContent('In order, runtime within 300 s at most');
 		expect(group).toHaveTextContent('Apply confident matches');
 	});
 
@@ -56,12 +56,12 @@ describe('TvEpisodesSummary', () => {
 		renderComponent(TvEpisodesSummary, {
 			props: { values: { ...defaults(), episode_sources: ['tvmaze', 'tmdb'] }, fields: meta() }
 		});
-		expect(screen.getByRole('group', { name: 'Summary' })).toHaveTextContent('TVmaze, TMDb');
+		expect(screen.getByRole('group', { name: 'TV episodes summary' })).toHaveTextContent('TVmaze, TMDb');
 	});
 
 	it('explains an empty source list', () => {
 		renderComponent(TvEpisodesSummary, { props: { values: { ...defaults(), episode_sources: [] }, fields: meta() } });
-		const group = screen.getByRole('group', { name: 'Summary' });
+		const group = screen.getByRole('group', { name: 'TV episodes summary' });
 		expect(group).toHaveTextContent('None');
 		expect(group).toHaveTextContent('No automatic episode matching');
 		expect(group).toHaveTextContent('Nothing to match');
@@ -71,7 +71,14 @@ describe('TvEpisodesSummary', () => {
 		renderComponent(TvEpisodesSummary, {
 			props: { values: { ...defaults(), episode_auto_apply: false }, fields: meta() }
 		});
-		expect(screen.getByRole('group', { name: 'Summary' })).toHaveTextContent('Suggest every match');
+		expect(screen.getByRole('group', { name: 'TV episodes summary' })).toHaveTextContent('Suggest every match');
+	});
+
+	it('drops the runtime clause when the tolerance is not a finite number (M2: an emptied input)', () => {
+		renderComponent(TvEpisodesSummary, {
+			props: { values: { ...defaults(), episode_match_tolerance_seconds: null }, fields: meta() }
+		});
+		expect(screen.getByText('In order', { exact: true })).toBeInTheDocument();
 	});
 });
 
