@@ -689,6 +689,7 @@ async def rip_start(
     job: Job = Depends(require_drive_owner_by_job),
     session: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
+    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
 ) -> RipStartResponse:
     # Fix 75-8: resolve the routed session ONCE for this request — the preset
     # choice and the min-length override both derive from the same `sess`
@@ -793,6 +794,11 @@ async def rip_start(
         session=session,
     )
     await session.commit()
+
+    # C1: without the review hold, identify creates no Track rows, so the
+    # stage it scheduled saw nothing to match. The tracks appear here.
+    if stage_runner is not None and is_tv_candidate(job, new_tracks):
+        stage_runner.schedule(job.id)
 
     return RipStartResponse(
         job_id=job.id,

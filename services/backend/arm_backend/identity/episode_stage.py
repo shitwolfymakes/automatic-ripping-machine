@@ -406,6 +406,11 @@ async def compute_episode_claims(
     first confident, well-covered result (spec 5); later providers are not
     called. One provider failing never fails the stage (spec 9)."""
     titles = _eligible(await _job_tracks(session, job))
+    if not titles:
+        # Nothing to match yet (e.g. identify without the review hold creates
+        # no tracks; rip-start schedules the stage again). No outcome means
+        # nothing is stored, so `sweep_startup` can still pick the job up.
+        return []
     rows = await _sibling_rows(session, job)
     now = datetime.now(UTC)
     outcomes: list[SourceOutcome] = []

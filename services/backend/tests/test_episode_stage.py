@@ -529,6 +529,21 @@ async def test_exception_before_show_id_has_empty_inputs() -> None:
     assert outcome.claims.inputs == {}
 
 
+async def test_no_eligible_titles_makes_no_provider_call_and_stores_nothing_c1() -> None:
+    """C1: a job with no Track rows yet (identify without the review hold)
+    returns no outcomes before any provider or network call, so nothing is
+    stored and `sweep_startup` can retry the job later."""
+    job = _job()
+    db = _db(job, [])
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+
+    outcomes, _ = await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    assert outcomes == []
+    assert provider.calls == []
+    assert claims_of(job).sources == {}
+
+
 async def test_no_episodes_matched_is_a_miss() -> None:
     job = _job()
     db = _db(job, DISC)
