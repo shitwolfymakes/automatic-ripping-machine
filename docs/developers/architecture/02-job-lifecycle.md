@@ -292,6 +292,10 @@ Season + disc + track + duration + session in a predictable, greppable pattern. 
 
 This is the one case where ARM has reliable track-level metadata (MusicBrainz, CD-Text), so we use it. Track titles are populated automatically. The transcode slug disambiguates parallel FLAC-and-MP3 sessions against the same CD (abcde profile name, slugified — same mechanism as the HandBrake case).
 
+### Episode matching
+
+Per-track season and episode numbers (the `{episode}` token above) come from a separate background stage, not from the identify step itself. A background stage (`identity/episode_stage.py`) matches a TV job's tracks against ranked episode-list providers, TMDb, then TVmaze, then TVDB (`DEFAULT_EPISODE_SOURCES` in `identity/sources/registry.py`), comparing track runtimes and titles against each provider's episode list. The stage runs after a TV candidate is identified, again whenever season, disc number, media type or the identity title changes (via `PATCH` or `/resolve`), and once at startup for any identified, `awaiting_review` or `awaiting_user_id` job that has no episode source entry yet, so a job is never left unmatched just because it finished before this stage existed. A result the stage is not confident about is stored with `suggestion=True` and is never applied automatically; the resolver only auto-applies a source's result once the operator has pinned that source and its status is `ok`. Operators inspect and act on matches through `GET /api/jobs/{id}/identity`, `POST /api/jobs/{id}/identity/match` (preview by default, or apply and optionally pin a source), `DELETE /api/jobs/{id}/identity/pin`, and `GET /api/jobs/{id}/identity/episodes` (browse a source's episode list, filterable by season). Any change the stage or the resolver makes to a job's episode identity fires a `job.identity_updated` WS event.
+
 ### `output_path_template` tokens
 
 Sessions own the relative path from the media-type root down to the leaf filename. Tokens available at expansion time depend on the session's `media_type`:
