@@ -82,8 +82,11 @@ MAX_CONCURRENT_RUNS = 2
 # identified but never had a chance to run the episode stage in-process
 # (e.g. the backend restarted between identify and the runner picking it
 # up, or PR 3b lands on a deployment with jobs already sitting here).
+# RIPPING covers a restart mid-rip: the run rip-start scheduled is lost, and
+# crash recovery keeps the job RIPPING. RIPPED is left out on purpose: it is
+# terminal, so including it would match every pre-PR-3b TV job on upgrade.
 _SWEEP_STATUSES: frozenset[JobStatus] = frozenset(
-    {JobStatus.IDENTIFIED, JobStatus.AWAITING_REVIEW, JobStatus.AWAITING_USER_ID}
+    {JobStatus.IDENTIFIED, JobStatus.AWAITING_REVIEW, JobStatus.AWAITING_USER_ID, JobStatus.RIPPING}
 )
 
 

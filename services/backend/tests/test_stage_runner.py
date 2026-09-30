@@ -892,22 +892,27 @@ async def test_sweep_startup_schedules_only_eligible_jobs_once() -> None:
     eligible = _job("job_eligible", status=JobStatus.IDENTIFIED)
     eligible_review = _job("job_review", status=JobStatus.AWAITING_REVIEW)
     eligible_user_id = _job("job_user_id", status=JobStatus.AWAITING_USER_ID)
+    # Restarted mid-rip: crash recovery keeps it RIPPING and the run
+    # rip-start scheduled was lost with the old process.
+    eligible_ripping = _job("job_ripping", status=JobStatus.RIPPING)
     already_ran = _job(
         "job_has_source",
         status=JobStatus.IDENTIFIED,
         meta={"identity_claims": {"sources": {"episodes_tmdb": {}}}},
     )
     not_tv = _job("job_movie", status=JobStatus.IDENTIFIED, media_type=MediaType.MOVIE)
-    wrong_status = _job("job_ripping", status=JobStatus.RIPPING)
+    # RIPPED is terminal: pre-PR-3b jobs must not all be matched on upgrade.
+    wrong_status = _job("job_ripped", status=JobStatus.RIPPED)
 
     db = _db(
         eligible,
         eligible_review,
         eligible_user_id,
+        eligible_ripping,
         already_ran,
         not_tv,
         wrong_status,
-        tracks=[_track(eligible.id, 0, 1500)],
+        tracks=[_track(eligible.id, 0, 1500), _track(eligible_ripping.id, 0, 1500)],
     )
     hub = _Hub()
     provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
@@ -915,8 +920,8 @@ async def test_sweep_startup_schedules_only_eligible_jobs_once() -> None:
 
     count = await runner.sweep_startup()
 
-    assert count == 3
-    assert set(runner._pending) == {"job_eligible", "job_review", "job_user_id"}
+    assert count == 4
+    assert set(runner._pending) == {"job_eligible", "job_review", "job_user_id", "job_ripping"}
 
     await runner.drain()
 
