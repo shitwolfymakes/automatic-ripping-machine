@@ -204,3 +204,16 @@ async def test_job_with_non_dict_identity_section_returns_ids_without_writing() 
 
     assert result.tmdb == "55"
     assert job.metadata_json is before
+
+
+async def test_persist_false_resolves_without_writing() -> None:
+    job = _job({"identity": {"provider": "tmdb", "external_ids": {"imdb": "tt1"}}})
+    before = job.metadata_json
+    provider = FakeProvider("episodes_tvmaze", "tvmaze", result="123")
+
+    result = await resolve_show_ids(job, [provider], persist=False)
+
+    assert result.tvmaze == "123"
+    assert result.imdb == "tt1"
+    assert job.metadata_json is before
+    assert job.metadata_json["identity"]["external_ids"] == {"imdb": "tt1"}

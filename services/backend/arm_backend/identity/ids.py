@@ -40,7 +40,7 @@ def current_ids(job: Job) -> ExternalIds:
         return ExternalIds()
 
 
-async def resolve_show_ids(job: Job, providers: Sequence[EpisodeListProvider]) -> ExternalIds:
+async def resolve_show_ids(job: Job, providers: Sequence[EpisodeListProvider], *, persist: bool = True) -> ExternalIds:
     """Resolve each provider's own show id and cache the merged result.
 
     Providers are tried in the given order. Each is asked at most once, and
@@ -53,7 +53,8 @@ async def resolve_show_ids(job: Job, providers: Sequence[EpisodeListProvider]) -
     (every other key of both `metadata_json` and `identity` is kept), but only
     when at least one new id was found and the job already has a dict
     `identity` section — otherwise the resolved ids are returned without
-    writing anything back.
+    writing anything back. With `persist=False` (a preview run) the ids are
+    resolved the same way but never written back.
     """
     ids = current_ids(job)
     found = False
@@ -70,7 +71,7 @@ async def resolve_show_ids(job: Job, providers: Sequence[EpisodeListProvider]) -
         ids = ids.model_copy(update={provider.id_field: show_id})
         found = True
 
-    if found:
+    if found and persist:
         identity = (job.metadata_json or {}).get("identity")
         if isinstance(identity, dict):
             job.metadata_json = {
