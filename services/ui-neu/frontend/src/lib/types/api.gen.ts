@@ -1846,6 +1846,78 @@ export type InAppChannelConfig = {
 };
 
 /**
+ * IsoLibraryEntry
+ */
+export type IsoLibraryEntry = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Kind
+     */
+    kind: 'folder' | 'iso';
+    /**
+     * Size Bytes
+     */
+    size_bytes?: number | null;
+    /**
+     * Modified At
+     */
+    modified_at?: string | null;
+    /**
+     * Ripping
+     */
+    ripping?: boolean;
+};
+
+/**
+ * IsoLibraryListing
+ */
+export type IsoLibraryListing = {
+    /**
+     * Host Path
+     */
+    host_path: string;
+    /**
+     * Subpath
+     */
+    subpath: string;
+    /**
+     * Parent Subpath
+     */
+    parent_subpath: string | null;
+    /**
+     * Entries
+     */
+    entries: Array<IsoLibraryEntry>;
+};
+
+/**
+ * IsoRipCreated
+ */
+export type IsoRipCreated = {
+    /**
+     * Drive Id
+     */
+    drive_id: string;
+};
+
+/**
+ * IsoRipRequest
+ */
+export type IsoRipRequest = {
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Session Id
+     */
+    session_id?: string | null;
+};
+
+/**
  * Job
  */
 export type Job = {
@@ -6511,6 +6583,109 @@ export type UnenrollDriveApiDrivesDriveIdUnenrollPostResponses = {
 };
 
 export type UnenrollDriveApiDrivesDriveIdUnenrollPostResponse = UnenrollDriveApiDrivesDriveIdUnenrollPostResponses[keyof UnenrollDriveApiDrivesDriveIdUnenrollPostResponses];
+
+export type LibraryApiIsoLibraryGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        /**
+         * Subpath
+         */
+        subpath?: string;
+    };
+    url: '/api/iso/library';
+};
+
+export type LibraryApiIsoLibraryGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type LibraryApiIsoLibraryGetError = LibraryApiIsoLibraryGetErrors[keyof LibraryApiIsoLibraryGetErrors];
+
+export type LibraryApiIsoLibraryGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: IsoLibraryListing;
+};
+
+export type LibraryApiIsoLibraryGetResponse = LibraryApiIsoLibraryGetResponses[keyof LibraryApiIsoLibraryGetResponses];
+
+export type CreateRipApiIsoRipsPostData = {
+    body: IsoRipRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/iso/rips';
+};
+
+export type CreateRipApiIsoRipsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateRipApiIsoRipsPostError = CreateRipApiIsoRipsPostErrors[keyof CreateRipApiIsoRipsPostErrors];
+
+export type CreateRipApiIsoRipsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: IsoRipCreated;
+};
+
+export type CreateRipApiIsoRipsPostResponse = CreateRipApiIsoRipsPostResponses[keyof CreateRipApiIsoRipsPostResponses];
+
+export type CancelRipApiIsoRipsDriveIdDeleteData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Drive Id
+         */
+        drive_id: string;
+    };
+    query?: never;
+    url: '/api/iso/rips/{drive_id}';
+};
+
+export type CancelRipApiIsoRipsDriveIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CancelRipApiIsoRipsDriveIdDeleteError = CancelRipApiIsoRipsDriveIdDeleteErrors[keyof CancelRipApiIsoRipsDriveIdDeleteErrors];
+
+export type CancelRipApiIsoRipsDriveIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CancelRipApiIsoRipsDriveIdDeleteResponse = CancelRipApiIsoRipsDriveIdDeleteResponses[keyof CancelRipApiIsoRipsDriveIdDeleteResponses];
 
 export type ListSessionsApiSessionsGetData = {
     body?: never;

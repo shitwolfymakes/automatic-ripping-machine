@@ -43,6 +43,7 @@ from arm_backend.routers import (
     health,
     identity as identity_router,
     images as images_router,
+    iso as iso_router,
     jobs,
     logs as logs_router,
     metadata as metadata_router,
@@ -457,6 +458,7 @@ app.include_router(ripper.router)
 app.include_router(jobs.router)
 app.include_router(identity_router.router)
 app.include_router(drives.router)
+app.include_router(iso_router.router)
 app.include_router(sessions.router)
 app.include_router(session_routes.router)
 app.include_router(rip_presets.router)

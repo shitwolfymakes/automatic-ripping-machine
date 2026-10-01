@@ -180,6 +180,49 @@ async def test_sweep_leaves_unknown_and_live_states_alone(state: str) -> None:
 
 
 @pytest.mark.asyncio
+async def test_sweep_grace_skips_missing_within_window() -> None:
+    """A `created_at` inside `SPAWN_GRACE_SECONDS`: the create-race window
+    (the row is committed before `ensure_running` makes the container) — a
+    "missing" container here is just that race, not a dead rip."""
+    db = FakeSession()
+    drive = _virtual()
+    drive.created_at = datetime.now(UTC) - timedelta(seconds=10)
+    db.rows["drives"] = [drive]
+    manager, hub = _Manager(), _Hub()  # no container at all -> "missing"
+    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
+    assert drive.lifecycle is DriveLifecycle.ENROLLED
+    assert manager.removed == [] and hub.events == []
+
+
+@pytest.mark.asyncio
+async def test_sweep_grace_expired_retires() -> None:
+    """Past the grace window, "missing" is judged the same as any other
+    dead state."""
+    db = FakeSession()
+    drive = _virtual()
+    drive.created_at = datetime.now(UTC) - timedelta(seconds=iso_rips.SPAWN_GRACE_SECONDS + 1)
+    db.rows["drives"] = [drive]
+    manager, hub = _Manager(), _Hub()
+    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
+    assert drive.lifecycle is DriveLifecycle.RETIRED
+    assert manager.removed == ["drv_iso1"]
+
+
+@pytest.mark.asyncio
+async def test_sweep_grace_none_created_at_retires_immediately() -> None:
+    """A drive with no `created_at` gets no grace — nothing to measure the
+    window from, so a "missing" container is judged immediately."""
+    db = FakeSession()
+    drive = _virtual()
+    assert drive.created_at is None
+    db.rows["drives"] = [drive]
+    manager, hub = _Manager(), _Hub()
+    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
+    assert drive.lifecycle is DriveLifecycle.RETIRED
+    assert manager.removed == ["drv_iso1"]
+
+
+@pytest.mark.asyncio
 async def test_sweep_retires_exited_with_terminal_job() -> None:
     db = FakeSession()
     drive = _virtual()
@@ -222,6 +265,7 @@ async def test_sweep_fails_unfinished_job_and_retires() -> None:
     manager, hub = _Manager(), _Hub()  # no container at all -> "missing"
     assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
     assert job.status is JobStatus.FAILED
+    assert job.ripped_at is not None  # same as every other rip_complete outcome
     assert drive.lifecycle is DriveLifecycle.RETIRED and manager.removed == ["drv_iso1"]
     assert len(hub.events) == 1
     event = hub.events[0]
