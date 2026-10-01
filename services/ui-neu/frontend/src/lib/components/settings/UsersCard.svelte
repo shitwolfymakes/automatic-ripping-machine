@@ -2,10 +2,10 @@
 	import { onMount } from 'svelte';
 	import { reveal } from '$lib/transitions';
 	import TimeAgo from '$lib/components/TimeAgo.svelte';
-	import Toggle from '$lib/components/notifications/Toggle.svelte';
+	import GuestAccessField from '$lib/components/settings/GuestAccessField.svelte';
 	import ChangePasswordForm from '$lib/components/settings/ChangePasswordForm.svelte';
 	import CloseButton from '$lib/components/CloseButton.svelte';
-	import { fetchUsers, setUserDisabled } from '$lib/api/users';
+	import { fetchUsers } from '$lib/api/users';
 	import type { UserView } from '$lib/types/api.gen';
 
 	let users = $state<UserView[]>([]);
@@ -53,19 +53,6 @@
 		showFeedback('success', 'Admin password changed');
 	}
 
-	// Guest toggle: PATCHes disabled directly both ways — no password step,
-	// since guest sessions are auto-acquired and passwordless.
-	async function handleGuestToggle(next: boolean) {
-		if (!guest) return;
-		try {
-			await setUserDisabled(guest.id, !next);
-			await load();
-			showFeedback('success', next ? 'Guest access enabled' : 'Guest access disabled');
-		} catch (e) {
-			showFeedback('error', e instanceof Error ? e.message : 'Failed to update guest access');
-		}
-	}
-
 	// bg-blue-100/text-blue-700 and bg-amber-100/text-amber-700 were soft
 	// tints, not badge-info/badge-warning's solid fills.
 	function roleBadgeClass(role: string): string {
@@ -110,20 +97,14 @@
 
 			<!-- Guest access: guests never sign in (sessions are anonymous), so there
 			     is no username, status or last-login to show, just the switch. -->
-			{#if guest}
-				<div class="panel-section users-card-row" data-testid="guest-access-row">
-					<div class="field users-card-guest-info">
-						<span class="field-label users-card-guest-label">Guest access</span>
-						<p class="field-help">
-							Let anyone on the network browse without signing in. Guests can view but not change anything.
-						</p>
-					</div>
-					<div class="flex shrink-0 items-center gap-2">
-						<span class="users-card-guest-state">{guest.disabled ? 'Off' : 'On'}</span>
-						<Toggle checked={!guest.disabled} label="guest" onchange={handleGuestToggle} />
-					</div>
-				</div>
-			{/if}
+			<GuestAccessField
+				{guest}
+				onsaved={async (enabled) => {
+					await load();
+					showFeedback('success', enabled ? 'Guest access enabled' : 'Guest access disabled');
+				}}
+				onerror={(message) => showFeedback('error', message)}
+			/>
 		</div>
 	{/if}
 </div>
@@ -207,19 +188,6 @@
 		align-items: center;
 		gap: 0.5rem;
 	}
-	/* the guest row's label + description stack vertically (the original
-	   was min-w-0 flex-1, a plain block wrapper) - .field already handles
-	   that layout; users-card-row-main's flex-row + align-items:center
-	   would put them side by side instead. */
-	.users-card-guest-info {
-		min-width: 0;
-		flex: 1 1 0%;
-	}
-	/* the original label was text-gray-900 dark:text-white - the full-
-	   contrast text role, not field-label's --color-text-secondary. */
-	.users-card-guest-label {
-		color: var(--color-text);
-	}
 	/* the original role badge was text-xs font-bold tracking-widest
 	   (12px/700/0.1em), not badge-sm's 10px/500/0.06em. */
 	.users-card-role-badge {
@@ -260,11 +228,6 @@
 	   it against its row siblings). */
 	.users-card-meta {
 		flex-shrink: 0;
-		font-size: 0.75rem;
-		line-height: 1rem;
-		color: var(--color-text-muted);
-	}
-	.users-card-guest-state {
 		font-size: 0.75rem;
 		line-height: 1rem;
 		color: var(--color-text-muted);
