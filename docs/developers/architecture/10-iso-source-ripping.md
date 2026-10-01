@@ -181,8 +181,10 @@ which only requires login (`services/backend/arm_backend/routers/iso.py`).
   Errors:
   - 400: not a `.iso`, or the path escapes the library;
   - 404: missing file, or unknown `session_id`;
-  - 409: ripping is paused (`"ripping is paused; no new jobs accepted"`,
-    the manual-trigger wording), the `max_parallel_iso_rips` cap is full
+  - 409: ripping is paused with the review hold off
+    (`"ripping is paused; no new jobs accepted"`; paused with the hold on,
+    as the UI Pause toggle sets it, starts the rip and parks it for review
+    like a disc in a drive), the `max_parallel_iso_rips` cap is full
     (the message names the cap), or that ISO is already ripping;
   - 503: not configured;
   - 500: spawn failed; the drive is retired before the response goes out.

@@ -423,8 +423,8 @@ def test_create_sweeps_a_finished_rip_before_the_cap_check(lib: Path, signing_ke
 
 
 def test_create_409_while_ripping_is_paused(lib: Path, signing_key: bytes) -> None:
-    """I4: the ripper's identify would be refused while paused, leaving a
-    retired drive and no job. Refuse up front with the manual-trigger wording."""
+    """Paused with the review hold off: the ripper's identify would be refused,
+    leaving a retired drive and no job. Refuse up front instead."""
     (lib / "Movies").mkdir()
     (lib / "Movies" / "x.iso").write_bytes(b"x")
     db = FakeSession()
@@ -438,6 +438,23 @@ def test_create_409_while_ripping_is_paused(lib: Path, signing_key: bytes) -> No
     assert r.json()["detail"] == "ripping is paused; no new jobs accepted"
     assert manager.ensured == []
     assert "drives" not in db.rows
+
+
+def test_create_spawns_while_paused_with_review_hold(lib: Path, signing_key: bytes) -> None:
+    """The UI Pause toggle sets ripping_paused and hold_for_review together.
+    Identify then parks the disc for review instead of refusing it, so an ISO
+    rip must start and wait at the review gate like a disc in a drive."""
+    (lib / "Movies").mkdir()
+    (lib / "Movies" / "x.iso").write_bytes(b"x")
+    db = FakeSession()
+    db.rows["config"] = [Config(id=CONFIG_SINGLETON_ID, ripping_paused=True, hold_for_review=True)]
+    token = _admin_token(db, signing_key)
+    manager = _StubManager()
+    app = _build_app(db, signing_key, manager)
+    with TestClient(app) as client:
+        r = client.post("/api/iso/rips", json={"path": "Movies/x.iso"}, headers=_auth(token))
+    assert r.status_code == 201, r.text
+    assert manager.ensured == [r.json()["drive_id"]]
 
 
 def test_create_409_when_already_ripping(lib: Path, signing_key: bytes) -> None:
