@@ -720,3 +720,116 @@ def test_thediscdb_refresh_now_denied_for_guest(signing_key: bytes, tmp_path) ->
     with TestClient(app) as c:
         r = c.post("/api/system/thediscdb/refresh", headers=_auth(guest_token))
     assert r.status_code == 403
+
+
+# --- Setup walkthrough detail (setup spec 2026-10-01 §6.3) ---
+
+
+def _diag(app: FastAPI, token: str) -> dict:
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_diagnostics_paths_carry_host_path_and_ids(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    from arm_backend.config import settings
+
+    monkeypatch.setattr(settings, "ARM_HOST_MEDIA_PATH", "/srv/arm/media")
+    monkeypatch.setattr(settings, "ARM_HOST_RAW_PATH", "")
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    body = _diag(app, token)
+    by_name = {p["name"]: p for p in body["paths"]}
+    assert by_name["MEDIA_ROOT"]["host_path"] == "/srv/arm/media"
+    assert by_name["RAW_ROOT"]["host_path"] is None
+    assert by_name["MEDIA_ROOT"]["uid"] == os.getuid()
+    assert by_name["MEDIA_ROOT"]["gid"] == os.getgid()
+
+
+def test_diagnostics_ripper_details_split_socket_and_image(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.ripper_manager = _StubRipperManager(probe=(False, "image arm-ripper:latest not present on docker host"))
+    check = _ripper_check(_diag(app, token))
+    assert check["details"] == [
+        {"label": "Docker socket", "ok": True, "message": None},
+        {"label": "Ripper image", "ok": False, "message": "image arm-ripper:latest not present on docker host"},
+    ]
+
+
+def test_diagnostics_ripper_details_socket_failure(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.ripper_manager = _StubRipperManager(probe=(False, "permission denied on /var/run/docker.sock"))
+    check = _ripper_check(_diag(app, token))
+    assert check["details"] == [
+        {"label": "Docker socket", "ok": False, "message": "permission denied on /var/run/docker.sock"},
+    ]
+
+
+def test_diagnostics_ripper_details_ok(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.ripper_manager = _StubRipperManager()
+    check = _ripper_check(_diag(app, token))
+    assert [d["ok"] for d in check["details"]] == [True, True]
+
+
+def test_diagnostics_ripper_details_absent_and_host_paths(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    assert _ripper_check(_diag(app, token))["details"] == [
+        {"label": "Docker socket", "ok": False, "message": "docker socket unavailable"}
+    ]
+    app.state.ripper_manager = _StubRipperManager(host_paths=False)
+    assert _ripper_check(_diag(app, token))["details"] == [
+        {"label": "Host paths", "ok": False, "message": "ARM_HOST_*_PATH not set"}
+    ]
+
+
+def _transcoder(body: dict) -> dict:
+    return next(ch for ch in body["checks"] if ch["name"] == "transcoder")
+
+
+def test_diagnostics_transcoder_location_local(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    from arm_backend.config import settings
+
+    monkeypatch.setattr(settings, "ARM_TRANSCODE_CAPABLE", True)
+    monkeypatch.setattr(settings, "ARM_TRANSCODE_DOCKER_HOST", "")
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.transcode_dispatcher = _StubDispatcher(host_paths=True)
+    tc = _transcoder(_diag(app, token))
+    assert tc["location"] == "local" and tc["remote_host"] is None
+    assert [d["label"] for d in tc["details"]] == ["Docker socket", "Transcode image"]
+
+
+def test_diagnostics_transcoder_location_remote(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    from arm_backend.config import settings
+
+    monkeypatch.setattr(settings, "ARM_TRANSCODE_DOCKER_HOST", "ssh://arm@gpu-box.lan")
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.transcode_dispatcher = _StubDispatcher(host_paths=True)
+    tc = _transcoder(_diag(app, token))
+    assert tc["location"] == "remote" and tc["remote_host"] == "arm@gpu-box.lan"
+
+
+def test_diagnostics_transcoder_location_none_when_ripper_only(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    from arm_backend.config import settings
+
+    monkeypatch.setattr(settings, "ARM_TRANSCODE_CAPABLE", False)
+    monkeypatch.setattr(settings, "ARM_TRANSCODE_DOCKER_HOST", "")
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    tc = _transcoder(_diag(app, token))
+    assert tc["location"] == "none" and tc["details"] == []
