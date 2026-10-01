@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SetupChecklistCard from '$lib/components/setup/SetupChecklistCard.svelte';
 	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { fetchDashboard } from '$lib/api/dashboard';
@@ -252,6 +253,7 @@
 <div class="stack-lg stack">
 	<div class="flex items-center justify-between">
 		<h1 class="page-title">Dashboard</h1>
+		<SetupChecklistCard />
 	</div>
 
 	<!-- Global pause banner -->
