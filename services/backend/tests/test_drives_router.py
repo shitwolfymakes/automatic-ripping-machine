@@ -672,3 +672,17 @@ def test_current_job_handles_none_created_at(signing_key: bytes) -> None:
     assert r.status_code == 200, r.text
     row = next(d for d in r.json() if d["id"] == "drv_x")
     assert row["current_job"]["id"] == "job_ts"  # real timestamp beats the None-sentinel
+
+
+def test_patch_drive_mode_null_returns_to_global_default(signing_key: bytes) -> None:
+    """drive_mode NULL means "follow the global auto-rip default" (setup spec D1);
+    an explicit null must clear an override, not be ignored."""
+    db = FakeSession()
+    _seed(db)
+    db.rows["drives"][0].drive_mode = DriveMode.MANUAL
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/drives/drv_x", json={"drive_mode": None}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["drive_mode"] is None
+    assert db.rows["drives"][0].drive_mode is None

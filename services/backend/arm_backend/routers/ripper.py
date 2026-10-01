@@ -36,6 +36,7 @@ from arm_common import (
     Drive,
     DriveLifecycle,
     DriveMediaStatus,
+    DriveMode,
     DriveStatus,
     Job,
     JobStatus,
@@ -286,17 +287,29 @@ def _get_stage_runner(request: Request) -> EpisodeStageRunner | None:
 
 
 @router.get("/config", response_model=RipperConfigView, dependencies=[Depends(require_service_token)])
-async def get_ripper_config(session: AsyncSession = Depends(get_session)) -> RipperConfigView:
+async def get_ripper_config(
+    drive_id: str | None = None,
+    session: AsyncSession = Depends(get_session),
+) -> RipperConfigView:
     """Subset of the global Config the ripper reads on each disc insert to
     decide whether to fire its scan/identify/rip pipeline. Cheap enough to
     poll per-insert; avoids the WS-event invalidation dance for a single
     boolean.
+
+    `drive_id` resolves auto-rip per drive: a non-null Drive.drive_mode
+    overrides the global Config.auto_rip_on_insert default; NULL follows it
+    (setup spec 2026-10-01 D1). Rippers that omit it get the global value.
     """
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     if cfg is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="config singleton missing")
+    auto_rip = bool(cfg.auto_rip_on_insert)
+    if drive_id is not None:
+        drive = (await session.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
+        if drive is not None and drive.drive_mode is not None:
+            auto_rip = drive.drive_mode == DriveMode.AUTO
     return RipperConfigView(
-        auto_rip_on_insert=cfg.auto_rip_on_insert,
+        auto_rip_on_insert=auto_rip,
         makemkv_key=cfg.makemkv_key,
         community_keydb_enabled=bool(cfg.community_keydb_enabled),
         makemkv_sdf_enabled=bool(cfg.makemkv_sdf_enabled),
