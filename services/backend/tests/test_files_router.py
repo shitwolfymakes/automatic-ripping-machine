@@ -21,6 +21,9 @@ from arm_common.schemas import FileRoot  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
+# Captured at import, before any fixture swaps the registry out.
+_REAL_ISO_ROOT = fb.ROOTS["ISO"]
+
 
 @pytest.fixture
 def app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -67,6 +70,30 @@ def test_roots(app):
         r = c.get("/api/files/roots", headers=_auth(app))
     assert r.status_code == 200
     assert {x["key"] for x in r.json()} == {"MEDIA", "LOG"}
+
+
+@pytest.fixture
+def iso_app(app, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """The real ISO root definition (label, writability), pointed at a tmp dir."""
+    iso = tmp_path / "iso"
+    iso.mkdir()
+    monkeypatch.setitem(fb.ROOTS, "ISO", _REAL_ISO_ROOT.model_copy(update={"path": str(iso)}))
+    return app
+
+
+def test_roots_label_the_iso_library_read_only(iso_app):
+    with TestClient(iso_app) as c:
+        r = c.get("/api/files/roots", headers=_auth(iso_app))
+    assert r.status_code == 200
+    iso = next(x for x in r.json() if x["key"] == "ISO")
+    assert iso["label"] == "ISO library" and iso["writable"] is False
+
+
+def test_mkdir_on_the_iso_library_403(iso_app):
+    with TestClient(iso_app) as c:
+        r = c.post("/api/files/mkdir", json={"root": "ISO", "subpath": "", "name": "new"}, headers=_auth(iso_app))
+    assert r.status_code == 403
+    assert r.json()["detail"] == "read_only_root"
 
 
 def test_list(app):

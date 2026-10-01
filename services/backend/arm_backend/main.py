@@ -30,6 +30,7 @@ from arm_backend.notification_dispatcher import (
 from arm_backend.notifications.apprise_listener import AppriseListener
 from arm_backend.notifications.bash_listener import BashListener
 from arm_backend.notifications.inbox_listener import InboxListener
+from arm_backend.iso_rips import run_virtual_drive_watchdog
 from arm_backend.ripper_manager import RipperManager, reconcile_enrolled_rippers
 from arm_backend.routers import (
     gpus as gpus_router,
@@ -299,6 +300,7 @@ async def _lifespan_services(app: FastAPI) -> AsyncIterator[None]:
     # client isn't safe to share across two independent docker-py callers
     # (each has its own connection pool / lifecycle expectations).
     ripper_manager: RipperManager | None = None
+    iso_watchdog_task: asyncio.Task[None] | None = None
     local_docker = _build_docker_client(purpose="ripper manager")
     if local_docker is not None:  # pragma: no cover — needs a real docker socket; integration tier
         ripper_manager = RipperManager(settings=settings, docker_client=local_docker)
@@ -309,10 +311,17 @@ async def _lifespan_services(app: FastAPI) -> AsyncIterator[None]:
             # (manager present, host_paths_set() False) — see routers/system.py.
             logger.warning("ripper manager disabled: ARM_HOST_*_PATH not set (set them via .env)")
         else:
+            # The reconcile runs the virtual-drive (ISO) sweep first, so a
+            # finished ISO rip is retired before the enrolled list is loaded
+            # and never respawned (spec 6.2). The hub exists by now.
             try:
-                await reconcile_enrolled_rippers(ripper_manager, SessionLocal)
+                await reconcile_enrolled_rippers(ripper_manager, SessionLocal, hub=app.state.ws_hub)
             except Exception as exc:
                 logger.exception("startup ripper reconcile failed: %s", exc)
+            # Rip from ISO: retire each virtual drive whose one-shot ripper has exited.
+            iso_watchdog_task = asyncio.create_task(
+                run_virtual_drive_watchdog(SessionLocal, ripper_manager, app.state.ws_hub)
+            )
     app.state.ripper_manager = ripper_manager
 
     # Phase 11 - outbound notifications (Apprise + bash hooks). Off out of the box;
@@ -382,6 +391,12 @@ async def _lifespan_services(app: FastAPI) -> AsyncIterator[None]:
         with contextlib.suppress(asyncio.CancelledError):
             await drive_scanner_task
 
+    async def _stop_iso_watchdog() -> None:
+        if iso_watchdog_task is not None:  # pragma: no cover — only with a real docker socket (see above)
+            iso_watchdog_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await iso_watchdog_task
+
     async def _stop_notifications() -> None:
         notification_dispatcher.stop()
         try:
@@ -403,6 +418,7 @@ async def _lifespan_services(app: FastAPI) -> AsyncIterator[None]:
         ("disk refresher", _stop_disk_refresher),
         ("log tailer", _stop_log_tailer),
         ("drive scanner", _stop_drive_scanner),
+        ("iso watchdog", _stop_iso_watchdog),
         ("notification dispatcher", _stop_notifications),
         # Cancels the boot pass and any re-probe, waiting briefly so each
         # cancelled probe removes its container.
