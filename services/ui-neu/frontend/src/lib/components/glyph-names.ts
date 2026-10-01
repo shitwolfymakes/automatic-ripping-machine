@@ -28,7 +28,9 @@ export type GlyphName =
 	| 'loader'
 	| 'external-link'
 	| 'minus-circle'
-	| 'download';
+	| 'download'
+	| 'sun'
+	| 'moon';
 
 export const GLYPH_PATHS: Record<GlyphName, string> = {
 	check: 'M5 13l4 4L19 7',
@@ -81,5 +83,7 @@ export const GLYPH_PATHS: Record<GlyphName, string> = {
 	loader: 'M21 12a9 9 0 11-6.219-8.56',
 	'external-link': 'M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14',
 	'minus-circle': 'M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z',
-	download: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4'
+	download: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4',
+	sun: 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z',
+	moon: 'M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z'
 };

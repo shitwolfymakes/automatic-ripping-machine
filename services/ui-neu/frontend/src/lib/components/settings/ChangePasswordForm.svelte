@@ -10,8 +10,15 @@
 	let {
 		onsuccess,
 		currentPasswordDefault,
-		hideSubmit = false
-	}: { onsuccess: () => void; currentPasswordDefault?: string; hideSubmit?: boolean } = $props();
+		hideSubmit = false,
+		onvalidchange
+	}: {
+		onsuccess: () => void;
+		currentPasswordDefault?: string;
+		hideSubmit?: boolean;
+		/** Reports whether the form would submit, for a parent-owned Continue button. */
+		onvalidchange?: (valid: boolean) => void;
+	} = $props();
 
 	const MIN_LENGTH = 8;
 
@@ -27,8 +34,14 @@
 	const longEnough = $derived(next.length >= MIN_LENGTH);
 	const matches = $derived(confirm.length > 0 && next === confirm);
 
+	const valid = $derived(longEnough && matches && next !== currentValue);
+
+	$effect(() => {
+		onvalidchange?.(valid);
+	});
+
 	export function isValid(): boolean {
-		return longEnough && matches && next !== currentValue;
+		return valid;
 	}
 
 	/** Validate and change the password. Resolves true on success. */
