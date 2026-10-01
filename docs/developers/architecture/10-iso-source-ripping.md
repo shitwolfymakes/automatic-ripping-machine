@@ -104,6 +104,12 @@ Docker state through `ripper_manager.container_statuses`:
   `"ISO ripper stopped unexpectedly"`), then the drive is retired and the
   container removed.
 
+Before it acts on a drive, the pass re-reads the drive and its latest job
+`FOR UPDATE`. A drive that is no longer `enrolled` (a cancel retired it after
+the listing) is skipped, and a job that has gone terminal is never failed.
+Every retire commits first and removes the container after, so a slow
+`docker stop` never holds the row lock.
+
 A freshly created drive's container can briefly read as "missing" between the
 `POST /api/iso/rips` row commit and the container actually starting, so a
 120-second spawn grace (`SPAWN_GRACE_SECONDS`) means only a drive older than
@@ -113,8 +119,11 @@ alone even if the container isn't up yet.
 **Cancel.** `DELETE /api/iso/rips/{drive_id}` abandons the job through the
 same transition `routers/jobs.py`'s manual abandon uses (both now call the
 shared `job_abandon.abandon_job_transition` helper), which tells the ripper to
-clean up over WebSocket. It then retires the drive and removes the container
-immediately, without waiting for the watchdog's next tick.
+clean up over WebSocket. It then retires the drive immediately, without
+waiting for the watchdog's next tick. Cancel locks the drive row first and
+commits the abandon and the retire together **before** it removes the
+container, so a watchdog pass that runs while the container is stopping sees
+the drive retired and cannot turn the abandoned job into a failed one.
 
 **Spawn failure.** If `ensure_running` fails in `POST /api/iso/rips`, the
 drive is retired at once and the request answers 500 with the reason. A
@@ -172,17 +181,19 @@ which only requires login (`services/backend/arm_backend/routers/iso.py`).
   Errors:
   - 400: not a `.iso`, or the path escapes the library;
   - 404: missing file, or unknown `session_id`;
-  - 409: the `max_parallel_iso_rips` cap is full (the message names the
-    cap), or that ISO is already ripping;
+  - 409: ripping is paused (`"ripping is paused; no new jobs accepted"`,
+    the manual-trigger wording), the `max_parallel_iso_rips` cap is full
+    (the message names the cap), or that ISO is already ripping;
   - 503: not configured;
   - 500: spawn failed; the drive is retired before the response goes out.
 
   Create is serialized by an in-process lock (`iso_rips._create_lock`) so two
   concurrent requests can't both pass the cap/duplicate checks before either
-  commits its row.
+  commits its row. Inside the lock it runs one watchdog pass first, so a rip
+  that finished since the last tick no longer counts against the cap.
 - **`DELETE /api/iso/rips/{drive_id}`**: cancels the rip. It abandons its job
-  if one exists and isn't already terminal, then removes the container and
-  retires the drive. Returns 409 for an optical drive, or one that's already
+  if one exists and isn't already terminal, retires the drive, commits, and
+  then removes the container. Returns 409 for an optical drive, or one that's already
   retired or not an active ISO rip.
 
 Ripper `register` accepts an `enrolled` virtual drive matched by id alone;
@@ -202,7 +213,11 @@ generated TypeScript types cover all three routes.
   calls `DELETE /api/iso/rips/{id}`. When the job ends, the card leaves the
   dashboard, and the job itself stays in All jobs.
 - Settings > Ripping has **"Max parallel ISO rips"** (1 to 8, default 1).
-  Settings > Drives is unaffected; it only ever listed optical drives.
+  Settings > Drives and the setup wizard's drive scan list optical drives
+  only; in-flight ISO rips never appear there.
+- The dashboard's drive-name map is built from `GET /api/drives?include_retired=true`,
+  so a finished ISO job still shows the file name, not a raw drive id.
+- The gear item and the picker are shown to writers and admins only.
 - The Files root "ISO library" (`services/backend/arm_backend/file_browser.py`)
   is read-only.
 
@@ -212,8 +227,9 @@ generated TypeScript types cover all three routes.
   template mounts it read-only into the backend at `ISO_INGRESS_ROOT`
   (`/ingress`), and the backend also gets it as an env var so it can build
   spawn mounts (`<host library>/<relative path>`) and show the operator the
-  host path. When unset, `GET /api/iso/library` and `POST /api/iso/rips` both
-  answer 503, and the UI shows a short setup note. See
+  host path. It must be an absolute path (a relative one would make Docker
+  read the bind source as a named volume). When unset or relative,
+  `GET /api/iso/library` and `POST /api/iso/rips` both answer 503, and the UI shows a short setup note. See
   [Configuring ARM, the `.env` file](../../user/Configuring-ARM.md).
 - **`config.max_parallel_iso_rips`** (Settings > Ripping; an int, default 1,
   range 1 to 8). Counts `enrolled` virtual drives, independent of any
