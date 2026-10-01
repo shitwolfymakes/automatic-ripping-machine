@@ -17,3 +17,9 @@
 - [No-transcode mode shipped (wolfy #85)](project_no_transcode_mode.md) — capability + toggle + in-process passthrough; dispatcher identity-map invariants; follow-up list
 - [Encoder-first presets + per-device GPU probe (wolfy #87)](project_encoder_first_presets.md) — encoder ids replace codec/hw_preference (migration 0038); probe-verified eligibility; vendor image variants; parked follow-ups
 - [Docs site architecture](project_docs_site.md) — `site/` builds `build/site` (Pages) and `build/app` (baked into ui-neu's `/docs-data/`, backing the `/help` route); broken doc links fail `npm test`; branch stacked at the end of the wolfy PR stack (after #87).
+- [Vue UI removed](project_vue_ui_deprecated.md) — Vue dropped 2026-09-09, `services/ui/` removed 2026-09-27; ui-neu (`arm-ui`) is the only UI — never propose Vue fixes.
+- [Automation Gap Register is the live gap analysis](project_automation_gap_register.md) — G-01..G-26 + R-1..R-6; phase 1 done, phase 2 on wolfy/feat/job-identity-columns; supersedes the stale June port-backlog board.
+- [PEP 758 parse checks](project_pep758_parse_checks.md) — unparenthesized except tuples are valid py3.14 + ruff canon; parse-check with uv run python
+- [No session links in commits/PRs](feedback_no_session_links.md) — owner directive 2026-09-25; Co-Authored-By only, no Claude-Session trailer or PR session URL
+- [Setup reuses Settings components](feedback_setup_reuses_settings_components.md) — first-run walkthrough composes the same components + CONFIG_FIELD_META (setup_step tag) as Settings; never re-implement a setting in setup.
+- [Transcode offload architecture](project_transcode_offload_architecture.md) - neu long-lived transcoder vs v3 ephemeral per-task spawn; comparison for moving transcode off the N97 (#69).
