@@ -641,6 +641,7 @@
 										{drive}
 										sessions={driveSessions}
 										transcodePresets={driveTranscodePresets}
+										globalAutoRip={settings?.config?.auto_rip_on_insert !== false}
 										onupdate={() => drives.refresh()}
 										globalDefaults={{
 											prescan_cache_mb: Number(settings?.arm_config?.PRESCAN_CACHE_MB) || 1,

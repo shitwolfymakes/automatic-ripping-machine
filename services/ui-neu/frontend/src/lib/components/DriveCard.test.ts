@@ -398,4 +398,62 @@ describe('DriveCard', () => {
 			expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
 		});
 	});
+
+	describe('rip mode (setup spec D1)', () => {
+		it('offers Default (follow the global switch), Auto and Manual; Default writes null', async () => {
+			renderComponent(DriveCard, { props: { drive: createDrive({ drive_mode: 'manual' }), globalAutoRip: true } });
+			const select = screen.getByLabelText(/rip mode/i) as HTMLSelectElement;
+			expect(select.value).toBe('manual');
+			expect(screen.getByRole('option', { name: 'Default (Auto)' })).toBeInTheDocument();
+			await fireEvent.change(select, { target: { value: '' } });
+			await waitFor(() => expect(updateDriveMock).toHaveBeenCalledWith('drv_1', { drive_mode: null }));
+		});
+
+		it('names the global default it would follow', () => {
+			renderComponent(DriveCard, { props: { drive: createDrive(), globalAutoRip: false } });
+			expect(screen.getByRole('option', { name: 'Default (Manual)' })).toBeInTheDocument();
+			expect((screen.getByLabelText(/rip mode/i) as HTMLSelectElement).value).toBe('');
+		});
+	});
+
+	describe('essentials variant (setup walkthrough)', () => {
+		it('shows Ready for an online drive and saves the name on blur and 4K on change', async () => {
+			renderComponent(DriveCard, {
+				props: {
+					drive: createDrive({ display_name: null, connection: 'usb' } as Partial<Drive>),
+					variant: 'essentials'
+				}
+			});
+			expect(screen.getByText('Ready')).toBeInTheDocument();
+			expect(screen.getByText('VENDOR MODEL')).toBeInTheDocument();
+			expect(screen.getByText('USB')).toBeInTheDocument();
+			expect(screen.queryByLabelText(/rip mode/i)).toBeNull();
+			const name = screen.getByLabelText(/friendly name/i);
+			await fireEvent.input(name, { target: { value: 'Living room' } });
+			await fireEvent.blur(name);
+			await waitFor(() => expect(updateDriveMock).toHaveBeenCalledWith('drv_1', { display_name: 'Living room' }));
+			await fireEvent.click(screen.getByLabelText(/4k uhd/i));
+			await waitFor(() => expect(updateDriveMock).toHaveBeenCalledWith('drv_1', { uhd_capable: true }));
+		});
+
+		it('shows Starting ripper until the drive comes online, and a reported error', () => {
+			const { unmount } = renderComponent(DriveCard, {
+				props: { drive: createDrive({ status: 'offline' }), variant: 'essentials' }
+			});
+			expect(screen.getByText('Starting ripper...')).toBeInTheDocument();
+			unmount();
+			renderComponent(DriveCard, {
+				props: { drive: createDrive({ last_error: 'container exited 125' }), variant: 'essentials' }
+			});
+			expect(screen.getByText('container exited 125')).toBeInTheDocument();
+		});
+
+		it('does not save an unchanged name', async () => {
+			renderComponent(DriveCard, { props: { drive: createDrive(), variant: 'essentials' } });
+			const name = screen.getByLabelText(/friendly name/i);
+			await fireEvent.input(name, { target: { value: 'Main Drive' } });
+			await fireEvent.blur(name);
+			expect(updateDriveMock).not.toHaveBeenCalled();
+		});
+	});
 });
