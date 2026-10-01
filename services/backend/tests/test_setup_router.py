@@ -299,3 +299,86 @@ async def test_diagnostics_ok_uses_collect_diagnostics(monkeypatch) -> None:
 
     monkeypatch.setattr(setup_router, "collect_diagnostics", fake_collect)
     assert await setup_router._diagnostics_ok(object(), object()) is True
+
+
+# --- disc-routes summary (setup step 6, read-only) ---
+
+
+def _session(sid: str, name: str, media_type, *, builtin: bool = True, tp: str | None = None, tpl: str = "x/{title}"):
+    from arm_common import Session
+
+    return Session(
+        id=sid,
+        name=name,
+        media_type=media_type,
+        is_builtin=builtin,
+        rip_preset_id="rp_main",
+        transcode_preset_id=tp,
+        output_path_template=tpl,
+    )
+
+
+def test_disc_routes_resolve_routes_then_builtin_fallback(signing_key, admin_user, guest_user) -> None:
+    from arm_common import (
+        ContainerFormat,
+        IdentificationMode,
+        MediaType,
+        OutputMode,
+        RipPreset,
+        SessionRoute,
+        TrackSelection,
+        TranscodePreset,
+        TranscodeTool,
+    )
+
+    db = _seeded(admin_user, guest_user)
+    db.rows["rip_presets"] = [
+        RipPreset(
+            id="rp_main",
+            name="Main feature",
+            media_type=MediaType.MOVIE,
+            track_selection=TrackSelection.MAIN_FEATURE,
+            identification_mode=IdentificationMode.REQUIRED,
+            output_mode=OutputMode.TRACKS,
+        )
+    ]
+    db.rows["transcode_presets"] = [
+        TranscodePreset(
+            id="tp_h265",
+            name="H.265 1080p",
+            media_type=MediaType.MOVIE,
+            tool=TranscodeTool.HANDBRAKE,
+            container=ContainerFormat.MKV,
+        )
+    ]
+    db.rows["sessions"] = [
+        _session("ses_movie_b", "Movie: Zeta", MediaType.MOVIE),
+        _session("ses_movie_a", "Movie: Plex", MediaType.MOVIE, tp="tp_h265", tpl="Movies/{title} ({year})"),
+        _session("ses_movie_custom", "Aaa custom", MediaType.MOVIE, builtin=False),
+        _session("ses_music", "Music: FLAC", MediaType.MUSIC, tpl="Music/{artist}/{album}"),
+    ]
+    db.rows["session_routes"] = [
+        SessionRoute(id="srt1", media_type=MediaType.MUSIC, disc_type=None, session_id="ses_music"),
+    ]
+    with TestClient(_make_app(signing_key, db)) as c:
+        r = c.get("/api/setup/disc-routes", headers=_auth(signing_key, admin_user))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert [row["kind"] for row in body] == ["movie", "tv", "music", "data", "iso"]
+    movie = body[0]
+    # no movie route: first built-in movie session by name ("Movie: Plex" < "Movie: Zeta"); custom ignored
+    assert movie["session_id"] == "ses_movie_a"
+    assert movie["session_name"] == "Movie: Plex"
+    assert movie["rip_summary"] == "Main feature"
+    assert movie["transcode_summary"] == "H.265 1080p"
+    assert movie["output_template"] == "Movies/{title} ({year})"
+    assert body[2]["session_id"] == "ses_music"  # routed
+    assert body[2]["transcode_summary"] is None
+    assert body[1] == {
+        "kind": "tv",
+        "session_id": None,
+        "session_name": None,
+        "rip_summary": None,
+        "transcode_summary": None,
+        "output_template": None,
+    }

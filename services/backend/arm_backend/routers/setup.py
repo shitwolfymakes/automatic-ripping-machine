@@ -16,12 +16,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.auth import require_writer
+from arm_backend.auto_session import route_session_id_for
 from arm_backend.db import get_session
 from arm_backend.routers.system import _app_version, collect_diagnostics
 from arm_backend.seeders import ADMIN_USERNAME, CONFIG_SINGLETON_ID
-from arm_common import Config, User
+from arm_common import Config, MediaType, RipPreset, Session, TranscodePreset, User
 from arm_common.enums import SETUP_STEP_ORDER, SetupStep, SetupStepState
 from arm_common.schemas import (
+    DiscRouteSummary,
     SetupStatusPublic,
     SetupStepProgress,
     SetupStepUpdate,
@@ -178,3 +180,44 @@ async def dismiss_checklist(_: User = Depends(require_writer), db: AsyncSession 
     cfg = await _config(db)
     cfg.setup_checklist_dismissed_at = _now()
     return await _save(db, cfg)
+
+
+# Kinds shown in setup step 6's "What happens to each kind of disc" table.
+_DISC_KINDS = (MediaType.MOVIE, MediaType.TV, MediaType.MUSIC, MediaType.DATA, MediaType.ISO)
+
+
+@router.get("/disc-routes", response_model=list[DiscRouteSummary])
+async def disc_routes(
+    _: User = Depends(require_writer),
+    db: AsyncSession = Depends(get_session),
+) -> list[DiscRouteSummary]:
+    """What each kind of disc gets with no drive default and no per-rip choice:
+    the session route for that media type, else the first built-in session of
+    that type by name (what an operator picking by type would get). Read-only."""
+    sessions = list((await db.execute(select(Session))).scalars().all())
+    by_id = {s.id: s for s in sessions}
+    rip = {p.id: p for p in (await db.execute(select(RipPreset))).scalars().all()}
+    tc = {p.id: p for p in (await db.execute(select(TranscodePreset))).scalars().all()}
+    out: list[DiscRouteSummary] = []
+    for kind in _DISC_KINDS:
+        sid = await route_session_id_for(db, kind, None)
+        if sid is None:
+            builtin = sorted((s for s in sessions if s.is_builtin and s.media_type == kind), key=lambda s: s.name)
+            sid = builtin[0].id if builtin else None
+        sess = by_id.get(sid) if sid else None
+        if sess is None:
+            out.append(DiscRouteSummary(kind=kind))
+            continue
+        rp = rip.get(sess.rip_preset_id)
+        tp = tc.get(sess.transcode_preset_id) if sess.transcode_preset_id else None
+        out.append(
+            DiscRouteSummary(
+                kind=kind,
+                session_id=sess.id,
+                session_name=sess.name,
+                rip_summary=rp.name if rp else None,
+                transcode_summary=tp.name if tp else None,
+                output_template=sess.output_path_template,
+            )
+        )
+    return out
