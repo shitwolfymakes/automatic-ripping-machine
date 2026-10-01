@@ -19,8 +19,8 @@ class DriveHandle:
 
     @classmethod
     def fixed(cls, path: str) -> DriveHandle:
-        """A handle for a source that never moves (an ISO file in
-        manual-trigger mode, or a test)."""
+        """A handle for a source that never moves (an ISO source
+        (ARM_SOURCE_PATH) or a test)."""
         return cls(path)
 
     @property

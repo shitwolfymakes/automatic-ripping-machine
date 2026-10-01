@@ -1,6 +1,6 @@
 """Source-path classification: real optical drive vs an .iso file on disk.
 
-`ARM_MANUAL_TRIGGER_ISO` lets the ripper run its scan → identify → rip
+`ARM_SOURCE_PATH` lets the ripper run its scan → identify → rip
 pipeline against a file image instead of `/dev/sr0`. Four code paths
 need to know which mode they're in (MakeMKV source URL on scan, MakeMKV
 source URL on rip, mount options on the disc probe, drive-status probe

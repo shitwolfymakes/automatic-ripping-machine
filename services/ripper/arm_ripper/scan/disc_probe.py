@@ -4,7 +4,7 @@ The CRC64 is read via PyCdlib (pydvdid) and needs only read access to the
 disc — no mount, no CAP_SYS_ADMIN. A DVD's CRC64 feeds the 1337server lookup
 that runs before OMDb/TMDB. pydvdid returns None for anything without a
 /VIDEO_TS tree, so it's a cheap no-op on Blu-ray / CD, and it reads ISO
-sources (ARM_MANUAL_TRIGGER_ISO) directly with no loop-mount.
+sources (ARM_SOURCE_PATH) directly with no loop-mount.
 
 Disc-type classification is handled upstream by MakeMKV's CINFO:1 (see
 makemkv.scan_disc), so the probe no longer mounts the disc — which is why the

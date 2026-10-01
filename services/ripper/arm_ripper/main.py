@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import ssl
+import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -224,17 +225,21 @@ async def _current_hint(client: BackendClient, drive_id: str, *, absent: bool, a
     `absent` is the PREVIOUS tick's state, not `handle.absent`: a node that
     resolves but answers ENXIO (Ruling C) is absence too, and it leaves the
     handle populated, so keying off the handle would never refresh there.
+
+    Only called from `poll_loop`, i.e. optical mode — `amain` has already
+    required ARM_DRIVE_DEV to be set there, so the `or ""` fallbacks below
+    are unreachable in practice; they exist to give mypy a plain `str`.
     """
     if settings.ARM_DRIVE_BY_ID or not absent:
-        return settings.ARM_DRIVE_DEV
+        return settings.ARM_DRIVE_DEV or ""
     if absent_ticks % _hint_refresh_every_n_ticks() != 0:
-        return settings.ARM_DRIVE_DEV
+        return settings.ARM_DRIVE_DEV or ""
     try:
         drive = await client.get_drive(drive_id)
     except (httpx.HTTPError, OSError) as exc:
         logger.debug("hint refresh failed: %s", exc)
-        return settings.ARM_DRIVE_DEV
-    return drive.device_path if drive is not None and drive.device_path else settings.ARM_DRIVE_DEV
+        return settings.ARM_DRIVE_DEV or ""
+    return drive.device_path if drive is not None and drive.device_path else (settings.ARM_DRIVE_DEV or "")
 
 
 async def _on_reattached(client: BackendClient, drive_id: str, handle: DriveHandle, controller: JobController) -> None:
@@ -347,6 +352,30 @@ def _ws_url_from_backend_url(base: str) -> str:
     return base.rstrip("/") + "/ws"
 
 
+async def run_source_mode(controller: JobController, session_id: str | None) -> None:
+    """One ISO, one pipeline run, then return so the container exits.
+
+    Runs the pipeline through `handle_manual_trigger` (not `handle_disc_inserted`):
+    the operator starting an ISO rip IS the explicit trigger, so it must not be
+    gated by `auto_rip_on_insert` the way a disc-insert event would be.
+
+    Cancellation (the job abandoned via `DELETE /api/iso/rips/{id}`, or the
+    operator otherwise walking away) stays inside the task and we return
+    normally so the container exits 0 — the backend's virtual-drive watchdog
+    owns the drive-retire + container-removal cleanup either way. A
+    CancelledError delivered to OUR OWN task (e.g. amain shutting down) is a
+    different thing and must keep propagating, which is why we only swallow
+    it when the inner task itself ended up cancelled.
+    """
+    task = asyncio.create_task(controller.handle_manual_trigger(session_id=session_id))
+    try:
+        await task
+    except asyncio.CancelledError:
+        if not task.cancelled():
+            raise
+        logger.info("source pipeline cancelled; exiting")
+
+
 async def amain() -> None:
     client = BackendClient(
         settings.ARM_BACKEND_URL,
@@ -355,17 +384,21 @@ async def amain() -> None:
     )
     ssl_ctx = ssl.create_default_context(cafile=CA_BUNDLE_PATH)
     ws_url = _ws_url_from_backend_url(settings.ARM_BACKEND_URL)
-    # In ISO mode the device_path is the ISO file; everything downstream
-    # (register, JobController, heartbeat) sees it as the bound device.
-    # Boot probe is also skipped — there's no crashed rip to recover.
-    iso_path = settings.ARM_MANUAL_TRIGGER_ISO
-    iso_mode = iso_path is not None
-    # Narrow on `iso_path` itself rather than the `iso_mode` alias, so mypy
-    # can see the str inside the branch without an ignore.
-    if iso_path is not None:
-        handle = DriveHandle.fixed(iso_path)
+    # In source mode the device_path is the bound ISO file; everything
+    # downstream (register, JobController, heartbeat) sees it as the bound
+    # device. Boot probe is also skipped — there's no crashed rip to
+    # recover (the backend spawns a fresh container per ISO rip).
+    source_path = settings.ARM_SOURCE_PATH
+    source_mode = source_path is not None
+    if source_path is None and settings.ARM_DRIVE_DEV is None:
+        logger.error("neither ARM_SOURCE_PATH nor ARM_DRIVE_DEV is set; nothing to rip")
+        sys.exit(2)
+    # Narrow on `source_path` itself rather than the `source_mode` alias, so
+    # mypy can see the str inside the branch without an ignore.
+    if source_path is not None:
+        handle = DriveHandle.fixed(source_path)
     else:
-        first = resolve_drive_device(settings.ARM_DRIVE_BY_ID, settings.ARM_DRIVE_DEV, **_resolve_paths())
+        first = resolve_drive_device(settings.ARM_DRIVE_BY_ID, settings.ARM_DRIVE_DEV or "", **_resolve_paths())
         handle = DriveHandle(first.path if first else None)
         if first is not None:
             logger.info("drive present at %s via %s", first.path, first.via)
@@ -373,7 +406,7 @@ async def amain() -> None:
             logger.warning("starting with the drive absent (by_id=%s); will poll for it", settings.ARM_DRIVE_BY_ID)
     # The backend's register payload needs a device path; the configured
     # node is the honest answer until the poll loop reports the real one.
-    device_path: str = handle.current or settings.ARM_DRIVE_DEV
+    device_path: str = handle.current or settings.ARM_DRIVE_DEV or ""
     try:
         drive_id = await register_with_retry(client, device_path)
         async with WSClient(
@@ -382,15 +415,28 @@ async def amain() -> None:
             hostname=settings.HOSTNAME,
             ssl_context=ssl_ctx,
         ) as ws:
-            controller = JobController(
-                client,
-                drive_id,
-                ws=ws,
-                device_path=handle,
-                default_min_length_seconds=settings.ARM_MIN_LENGTH_SECONDS,
-            )
+            if source_mode:
+                # The backend watchdog retires the drive once this container
+                # exits; it must not time out and exit FAILED while the
+                # operator is still parked at AWAITING_USER_ID / AWAITING_REVIEW.
+                controller = JobController(
+                    client,
+                    drive_id,
+                    ws=ws,
+                    device_path=handle,
+                    default_min_length_seconds=settings.ARM_MIN_LENGTH_SECONDS,
+                    resolution_timeout=None,
+                )
+            else:
+                controller = JobController(
+                    client,
+                    drive_id,
+                    ws=ws,
+                    device_path=handle,
+                    default_min_length_seconds=settings.ARM_MIN_LENGTH_SECONDS,
+                )
             await ws.subscribe(f"ripper.commands.{drive_id}", controller.on_ws_command)
-            if not iso_mode and not handle.absent:
+            if not source_mode and not handle.absent:
                 # Phase 9 — recover a crashed in-flight rip on this drive, if any.
                 # Logs + swallows all errors so a misbehaving probe never blocks boot.
                 # (If the drive is absent now, the poll loop re-runs this on reattach.)
@@ -401,19 +447,10 @@ async def amain() -> None:
             heartbeat_task = asyncio.create_task(heartbeat_loop(client, drive_id, handle, controller))
             keycheck_task = asyncio.create_task(makemkv_keycheck_loop(client))
             try:
-                if iso_mode:
-                    logger.info("ARM_MANUAL_TRIGGER_ISO=%s; running one-shot pipeline", handle.current)
-                    # handle_manual_trigger bypasses the auto_rip_on_insert
-                    # config check; handle_disc_inserted would no-op when
-                    # the operator has auto-rip disabled. The ISO env var
-                    # IS the explicit trigger so we want the manual path.
-                    await controller.handle_manual_trigger(session_id=None)
-                    logger.info("manual-trigger ISO pipeline complete; idling for cancellation")
-                    # Idle indefinitely so the WS stays subscribed and the
-                    # container stays "up" for `docker compose ps` /
-                    # `docker compose logs` observation. Operator kills the
-                    # container when done inspecting.
-                    await asyncio.Event().wait()
+                if source_mode:
+                    logger.info("ARM_SOURCE_PATH=%s; running one-shot pipeline", handle.current)
+                    await run_source_mode(controller, settings.ARM_SOURCE_SESSION_ID)
+                    logger.info("source pipeline complete; exiting")
                 else:
                     await poll_loop(controller, handle, client=client, drive_id=drive_id)
             finally:
