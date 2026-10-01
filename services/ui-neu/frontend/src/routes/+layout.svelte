@@ -15,7 +15,7 @@
 	import FlyoutDivider from '$lib/components/FlyoutDivider.svelte';
 	import { onMount } from 'svelte';
 	import { setUnauthorizedHandler } from '$lib/api/client';
-	import { logoutLocal, initAuth, isGuest } from '$lib/stores/auth';
+	import { logoutLocal, initAuth, isGuest, isAdmin } from '$lib/stores/auth';
 	import { uiPrefs } from '$lib/stores/uiPrefs';
 	import { isScreenEnabled } from '$lib/features';
 	import { logout as apiLogout } from '$lib/api/auth';
@@ -350,18 +350,21 @@
 								</button>
 							{/snippet}
 							{#snippet children({ close })}
-								<FlyoutItem
-									onclick={() => {
-										handleQuickAction('rip-iso');
-										close();
-									}}
-								>
-									{#snippet icon()}
-										<Glyph name="disc-3" />
-									{/snippet}
-									Rip from ISO
-								</FlyoutItem>
-								<FlyoutDivider />
+								<!-- Writers (admin) only: create/cancel are require_writer. -->
+								{#if $isAdmin}
+									<FlyoutItem
+										onclick={() => {
+											handleQuickAction('rip-iso');
+											close();
+										}}
+									>
+										{#snippet icon()}
+											<Glyph name="disc-3" />
+										{/snippet}
+										Rip from ISO
+									</FlyoutItem>
+									<FlyoutDivider />
+								{/if}
 								<FlyoutItem
 									onclick={() => {
 										handleQuickAction('settings');
@@ -491,8 +494,8 @@
 	<BottomStatsBar />
 {/if}
 
-<!-- ISO picker (global, triggered from gear menu) -->
-{#if !$isGuest}
+<!-- ISO picker (global, triggered from gear menu; writers only) -->
+{#if $isAdmin}
 	<IsoPicker
 		open={$showIsoPicker}
 		onclose={() => showIsoPicker.set(false)}

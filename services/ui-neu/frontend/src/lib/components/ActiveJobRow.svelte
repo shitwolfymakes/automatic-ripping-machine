@@ -14,6 +14,7 @@
 	import { slide } from 'svelte/transition';
 	import { isAdmin } from '$lib/stores/auth';
 	import { cancelIsoRip } from '$lib/api/iso';
+	import { addToast } from '$lib/stores/toast.svelte';
 
 	interface Props {
 		job?: JobView;
@@ -43,8 +44,9 @@
 		cancelling = true;
 		try {
 			await cancelIsoRip(job.drive_id);
-		} catch {
-			// ignore — the next dashboard poll reconciles
+		} catch (e) {
+			// The card stays; tell the operator why (e.g. 409 once the rip ended).
+			addToast({ tone: 'error', title: 'Cancel failed', body: e instanceof Error ? e.message : 'Unknown error' });
 		} finally {
 			cancelling = false;
 		}
@@ -84,6 +86,7 @@
 	<div
 		class="card card-status job-active-row"
 		data-status={effectiveJobStatus(job)}
+		data-source={isoSource ? 'iso' : undefined}
 		style:--jt-accent={typeConfig.accent}
 		onclick={toggle}
 		role="button"

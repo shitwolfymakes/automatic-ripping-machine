@@ -68,7 +68,14 @@ function fetchConfig(): Promise<ConfigView> {
  */
 export async function fetchDashboard(): Promise<DashboardData> {
 	const [configRes, jobsRes, drivesRes, transcodesRes, transcoderStatsRes, notificationsRes] = await Promise.allSettled(
-		[fetchConfig(), fetchJobs(), fetchDrives(), fetchTranscoderJobs(), fetchTranscoderStats(), fetchNotificationCount()]
+		[
+			fetchConfig(),
+			fetchJobs(),
+			fetchDrives({ includeRetired: true }),
+			fetchTranscoderJobs(),
+			fetchTranscoderStats(),
+			fetchNotificationCount()
+		]
 	);
 
 	const config = configRes.status === 'fulfilled' ? configRes.value : null;
@@ -86,9 +93,11 @@ export async function fetchDashboard(): Promise<DashboardData> {
 
 	const driveNames: Record<string, string> = {};
 	const isoSources: Record<string, string> = {};
+	// `drives` includes retired rows so a finished ISO job keeps its label in
+	// drive_names; the live-only maps below skip them.
 	for (const d of drives ?? []) {
 		driveNames[d.id] = d.display_name ?? d.device_path;
-		if (d.kind === 'virtual') {
+		if (d.kind === 'virtual' && d.lifecycle !== 'retired') {
 			// display_name is the ISO's file name for a virtual drive; fall back
 			// to the last path segment of source_path if it's ever missing.
 			isoSources[d.id] = d.display_name ?? d.source_path?.split('/').pop() ?? d.source_path ?? d.device_path;
@@ -103,7 +112,7 @@ export async function fetchDashboard(): Promise<DashboardData> {
 		db_available: config !== null,
 		arm_online: armOnline,
 		active_jobs: activeJobs,
-		drives_online: (drives ?? []).filter((d) => d.kind === 'optical').length,
+		drives_online: (drives ?? []).filter((d) => d.kind === 'optical' && d.lifecycle !== 'retired').length,
 		drive_names: driveNames,
 		iso_sources: isoSources,
 		notification_count: notifications?.unseen ?? 0,

@@ -18,6 +18,10 @@ vi.mock('$lib/api/iso', () => ({
 	cancelIsoRip: vi.fn(() => Promise.resolve())
 }));
 
+vi.mock('$lib/stores/toast.svelte', () => ({
+	addToast: vi.fn()
+}));
+
 describe('ActiveJobRow', () => {
 	afterEach(() => cleanup());
 
@@ -108,6 +112,34 @@ describe('ActiveJobRow', () => {
 			await fireEvent.click(screen.getByText('Cancel'));
 			await waitFor(() => expect(cancelIsoRip).toHaveBeenCalledWith('drv_iso_1'));
 			expect(screen.queryByText('Job ID')).not.toBeInTheDocument();
+		});
+
+		it('marks the row root data-source="iso" for an ISO rip only', () => {
+			const { container, unmount } = renderComponent(ActiveJobRow, {
+				props: { job: createJob({ drive_id: 'drv_iso_1' }), isoSource: 'a.iso' }
+			});
+			expect(container.querySelector('.job-active-row')?.getAttribute('data-source')).toBe('iso');
+			unmount();
+			const optical = renderComponent(ActiveJobRow, { props: { job: createJob() } });
+			expect(optical.container.querySelector('.job-active-row')?.hasAttribute('data-source')).toBe(false);
+		});
+
+		it('surfaces a failed cancel as an error toast', async () => {
+			const { cancelIsoRip } = await import('$lib/api/iso');
+			const { addToast } = await import('$lib/stores/toast.svelte');
+			vi.mocked(cancelIsoRip).mockRejectedValueOnce(new Error('cannot cancel: not an active ISO rip'));
+			renderComponent(ActiveJobRow, {
+				props: { job: createJob({ drive_id: 'drv_iso_1' }), isoSource: 'a.iso' }
+			});
+			await fireEvent.click(screen.getByText('Cancel'));
+			await waitFor(() =>
+				expect(addToast).toHaveBeenCalledWith({
+					tone: 'error',
+					title: 'Cancel failed',
+					body: 'cannot cancel: not an active ISO rip'
+				})
+			);
+			expect(screen.getByText('Cancel')).not.toBeDisabled();
 		});
 	});
 });

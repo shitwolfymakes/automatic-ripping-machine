@@ -5,6 +5,7 @@ import {
 	NO_SERIAL_LABEL,
 	driveStatusLabel,
 	isRipping,
+	opticalOnly,
 	partitionDrives,
 	serialLabel
 } from '$lib/utils/drives';
@@ -52,6 +53,16 @@ describe('utils/drives', () => {
 		expect(p.enrolled.map((d) => d.id)).toEqual(['b']);
 		expect(p.detected.map((d) => d.id)).toEqual(['a']);
 		expect(p.ignored.map((d) => d.id)).toEqual(['c']);
+	});
+	it('leaves virtual drives (in-flight ISO rips) out of every list', () => {
+		const p = partitionDrives([
+			drive({ id: 'opt' }),
+			drive({ id: 'iso', kind: 'virtual', source_kind: 'iso', device_path: '/source/x.iso' })
+		]);
+		expect(p.enrolled.map((d) => d.id)).toEqual(['opt']);
+		expect(opticalOnly([drive({ id: 'iso', kind: 'virtual' }), drive({ id: 'opt', kind: 'optical' })])).toEqual([
+			expect.objectContaining({ id: 'opt' })
+		]);
 	});
 	it('labels error before detached, detached before plain offline', () => {
 		expect(

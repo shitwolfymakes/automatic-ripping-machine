@@ -40,6 +40,23 @@ describe('DriveScanStep', () => {
 		});
 	});
 
+	it('lists optical drives only, never an in-flight ISO rip', async () => {
+		mockFetchJson([
+			{ ...sampleDrive, kind: 'optical' },
+			{
+				id: 'drv_iso',
+				display_name: 'Movie.iso',
+				device_path: '/source/Movie.iso',
+				hostname: 'iso-abc',
+				status: 'online',
+				kind: 'virtual'
+			}
+		]);
+		renderComponent(DriveScanStep);
+		await waitFor(() => expect(screen.getByText('Main Drive')).toBeInTheDocument());
+		expect(screen.queryByText('Movie.iso')).not.toBeInTheDocument();
+	});
+
 	it('renders scan again button', async () => {
 		mockFetchJson([]);
 		renderComponent(DriveScanStep);
