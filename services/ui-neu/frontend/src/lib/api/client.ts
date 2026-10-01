@@ -131,6 +131,13 @@ export function patch<T>(path: string, body?: unknown): Promise<T> {
 	});
 }
 
+export function put<T>(path: string, body?: unknown): Promise<T> {
+	return apiFetch<T>(path, {
+		method: 'PUT',
+		body: body !== undefined ? JSON.stringify(body) : undefined
+	});
+}
+
 export function del<T = void>(path: string): Promise<T> {
 	return apiFetch<T>(path, { method: 'DELETE' });
 }

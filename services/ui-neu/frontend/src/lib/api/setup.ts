@@ -1,27 +1,35 @@
-import { notAvailable } from './_stub';
+import type { DiscRouteSummary, SetupStatusPublic, SetupStep, SetupStepState, SetupView } from '$lib/types/api.gen';
+import { get, post, put } from './client';
 
-// The setup wizard backend is absent in v3 (MISSING). The Setup screen is
-// feature-flagged OFF, so these stubs reject before any fetch.
-//
-// SetupStatus is declared locally and re-exported; api.gen no longer carries it.
-export interface SetupStatus {
-	arm_version: string;
-	db_initialized: boolean;
-	db_exists?: boolean;
-	db_current?: boolean;
-	db_version?: string;
-	db_head?: string;
-	first_run?: boolean;
-	setup_steps?: {
-		drives?: number | string | null;
-		[key: string]: number | string | null | undefined;
-	} | null;
+// First-run setup walkthrough state (setup spec 2026-10-01 §6.1). The
+// walkthrough writes settings through each feature's own API; these calls only
+// record progress.
+
+/** Public: readable before sign-in. The backend fails closed to first_run=false. */
+export function fetchSetupStatus(): Promise<SetupStatusPublic> {
+	return get<SetupStatusPublic>('/api/setup/status');
 }
 
-export async function fetchSetupStatus(): Promise<SetupStatus> {
-	notAvailable('Setup status');
+export function fetchSetup(): Promise<SetupView> {
+	return get<SetupView>('/api/setup');
 }
 
-export async function completeSetup(): Promise<{ success: boolean }> {
-	notAvailable('Complete setup');
+export function putSetupStep(step: SetupStep, state: SetupStepState): Promise<SetupView> {
+	return put<SetupView>(`/api/setup/steps/${step}`, { state });
+}
+
+export function completeSetup(): Promise<SetupView> {
+	return post<SetupView>('/api/setup/complete');
+}
+
+export function restartSetup(): Promise<SetupView> {
+	return post<SetupView>('/api/setup/restart');
+}
+
+export function dismissSetupChecklist(): Promise<SetupView> {
+	return post<SetupView>('/api/setup/checklist/dismiss');
+}
+
+export function fetchDiscRoutes(): Promise<DiscRouteSummary[]> {
+	return get<DiscRouteSummary[]>('/api/setup/disc-routes');
 }
