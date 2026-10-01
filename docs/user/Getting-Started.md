@@ -13,9 +13,10 @@ v2, which is frozen and no longer developed.
 4. [What the installer creates](#what-the-installer-creates)
 5. [Start the stack](#start-the-stack)
 6. [First login](#first-login)
-7. [Trust the certificate (optional but recommended)](#trust-the-certificate)
-8. [Your first rip](#your-first-rip)
-9. [Next steps](#next-steps)
+7. [The setup walkthrough](#the-setup-walkthrough)
+8. [Trust the certificate (optional but recommended)](#trust-the-certificate)
+9. [Your first rip](#your-first-rip)
+10. [Next steps](#next-steps)
 
 ## Hardware
 
@@ -149,29 +150,50 @@ docker compose logs -f arm-backend
 ## First login
 
 On first boot the backend waits for Postgres, runs its database migrations, and
-seeds an `admin` account with a **default password of `admin`**:
-
-```text
-username: admin
-password: admin
-```
-
-These are also written to `logs/first-boot.log`:
+seeds an `admin` account with a **default password of `admin`**. The sign-in
+page reminds you where it is written down:
 
 ```bash
 docker exec armv3-backend cat /logs/first-boot.log
 ```
 
 Open **`https://localhost:8081`** (or `https://<host-ip>:8081` from another
-device), log in as `admin` / `admin`, and you'll be **forced to set a new
-password immediately** — the rest of the API stays locked (HTTP 403) until you
-do.
+device) and sign in as `admin` / `admin`. ARM opens the
+[setup walkthrough](Setup-Walkthrough).
+
+## The setup walkthrough
+
+The walkthrough takes you from "containers are running" to "insert a disc and
+it works". Each step saves when you press Continue, so you can close the tab and
+pick up where you left off.
+
+1. **Secure your account.** Set your own admin password (the rest of ARM stays
+   locked until you do) and choose whether guests on your network can look
+   around without signing in.
+2. **System check.** ARM checks the folders and services it was installed with.
+   A folder it can't write to comes with the exact `chown` command to run.
+3. **Drives.** Enroll each optical drive you want to rip with, and ignore the
+   rest. No drive? You can rip ISO image files instead.
+4. **MakeMKV.** Use the free monthly beta key or your purchased key. A drive
+   checks the key for you.
+5. **Find titles** (optional). Add a free [TMDb](https://www.themoviedb.org/settings/api)
+   and/or [OMDb](https://www.omdbapi.com/apikey.aspx) key and test it in place.
+   TV episodes and music CDs work without one.
+6. **Disc handling.** Fully automatic, review the title first, or manual.
+7. **Transcoding** (optional). Test your graphics card's encoders.
+8. **Notifications** (optional). Get a phone or chat message when a rip
+   finishes, needs you, or fails.
+9. **Finish.** Insert a disc and watch it start.
+
+Anything you skip stays on a checklist on the dashboard. To go through it again,
+use **Settings, System, Run setup again**.
 
 ## Trust the certificate
 
 The stack serves HTTPS using its own internal CA, so the first visit shows a
 browser certificate warning. You can click through it, but to silence it for
-good — on every device on your LAN — import the CA once:
+good on every device on your LAN, import the CA once. The Finish step has a
+**Download certificate** button, or use the file directly:
 
 - The CA file is `~/arm/certs/arm-ca.crt`.
 - Import it into your browser or OS trust store as a trusted **root**
@@ -179,27 +201,22 @@ good — on every device on your LAN — import the CA once:
 
 This is a one-time action per device. The per-service leaf certs are
 regenerated whenever you rerun the installer, but they're all signed by this CA,
-so trusting the CA is enough — you never re-import after a leaf changes.
+so trusting the CA is enough: you never re-import after a leaf changes.
 
 ## Your first rip
 
-1. **Configure metadata lookups (recommended).** In the UI, open **Settings**
-   and add a [TMDb](https://www.themoviedb.org/settings/api) and/or
-   [OMDb](https://www.omdbapi.com/apikey.aspx) API key so ARM can name your
-   discs. ARM also tries the community CRC64 database first (no key needed), and
-   audio CDs use MusicBrainz (no key needed). See [Configuration](Configuring-ARM).
-2. **Insert a disc.** The ripper polls the drive every couple of seconds — no
-   udev events needed — and a new job appears on the dashboard within a few
+1. **Insert a disc.** The ripper polls the drive every couple of seconds (no
+   udev events needed) and a new job appears on the dashboard within a few
    seconds of the drive spinning up.
-3. **Watch it work.** ARM identifies the disc, rips it with MakeMKV (video) or
+2. **Watch it work.** ARM identifies the disc, rips it with MakeMKV (video) or
    abcde (audio CD), and streams live progress to the browser. Video then
    transcodes with HandBrake into `~/arm/media/`.
-4. **Eject.** ARM ejects automatically when the rip finishes.
+3. **Eject.** ARM ejects automatically when the rip finishes.
 
 If the disc isn't identified and you've set `block_on_miss` (the default), ARM
 pauses and asks you to confirm or search for the title before ripping. You can
-also start a rip by hand from **Jobs → Manual** when a disc is already in the
-tray.
+also start a rip by hand from the drive's **Start rip** button when a disc is
+already in the tray.
 
 ## Next steps
 

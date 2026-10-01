@@ -901,7 +901,7 @@ if [[ "${ACTION}" == "up" ]]; then
     cat <<EOF
 
 stack is up; ${HEALTH_RESULT}
-open ${UI_URL} -> Drives -> Enroll each drive you want ARM to use
+open ${UI_URL} and follow the setup walkthrough (drives, keys, defaults)
 (spin it down with: bash devtools/setup-dev.sh down)
 
   optional — trust the local CA so browsers/curl skip the self-signed warning:
@@ -915,7 +915,7 @@ cat <<EOF
 done — next:
   bash devtools/setup-dev.sh up      # build, back up the DB, (re)start the stack, wait for health
                                      # (or: docker compose up -d --build; no backup or health wait)
-  then open https://localhost:8081 -> Drives -> Enroll each drive you want ARM to use
+  then open https://localhost:8081 and follow the setup walkthrough (drives, keys, defaults)
   spin it down (stack + spawned ripper/transcoder containers): bash devtools/setup-dev.sh down
 
   optional — trust the local CA so browsers/curl skip the self-signed warning:
