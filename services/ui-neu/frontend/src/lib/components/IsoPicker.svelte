@@ -574,10 +574,18 @@
 	.iso-picker-skeleton-main {
 		width: 60%;
 	}
+	/* The library path is the ISO file panel's bottom bar: full-bleed across
+	   the panel (negative margins cancel .panel's 1rem padding), with the
+	   panel's own bottom corners. */
 	.iso-picker-hostpath {
 		display: flex;
 		align-items: flex-start;
 		gap: 0.5rem;
+		margin: 0.25rem -1rem -1rem;
+		border-top: 1px solid var(--color-border);
+		border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+		background: var(--color-primary-tint-1);
+		padding: 0.625rem 1rem;
 		font-size: 0.75rem;
 		line-height: calc(1 / 0.75);
 	}
