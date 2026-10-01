@@ -65,3 +65,24 @@ def test_report_no_config_returns_404() -> None:
     with TestClient(app) as c:
         r = c.post("/api/ripper/makemkv-key-status", json={"state": "valid"}, headers=_SERVICE_AUTH)
     assert r.status_code == 404
+
+
+def test_report_records_the_checking_drive() -> None:
+    """Setup step 4 shows "Valid, checked by {drive}" (setup spec §6.7)."""
+    db = FakeSession()
+    db.rows["config"] = [Config(id=1)]
+    with TestClient(_app(db)) as c:
+        r = c.post(
+            "/api/ripper/makemkv-key-status", json={"state": "valid", "drive_id": "drv_7"}, headers=_SERVICE_AUTH
+        )
+    assert r.status_code == 204, r.text
+    assert db.rows["config"][0].makemkv_key_checked_by_drive_id == "drv_7"
+
+
+def test_report_without_drive_id_leaves_it_null() -> None:
+    """Older rippers don't send drive_id."""
+    db = FakeSession()
+    db.rows["config"] = [Config(id=1)]
+    with TestClient(_app(db)) as c:
+        c.post("/api/ripper/makemkv-key-status", json={"state": "valid"}, headers=_SERVICE_AUTH)
+    assert db.rows["config"][0].makemkv_key_checked_by_drive_id is None

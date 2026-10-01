@@ -185,3 +185,17 @@ async def test_get_ripper_config_without_drive_id_sends_no_param(monkeypatch) ->
 
     await _client(handler).get_ripper_config()
     assert seen["params"] == {}
+
+
+async def test_report_makemkv_key_status_names_this_drive(monkeypatch) -> None:
+    monkeypatch.setenv("ARM_DRIVE_ID", "drv_9")
+    seen = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(req.read())
+        return httpx.Response(204)
+
+    from arm_common import MakemkvKeyState
+
+    await _client(handler).report_makemkv_key_status(state=MakemkvKeyState.VALID, detail=None)
+    assert seen["body"]["drive_id"] == "drv_9"

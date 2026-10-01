@@ -426,6 +426,7 @@ async def makemkv_key_status(
     cfg.makemkv_key_state = req.state.value
     cfg.makemkv_key_valid = _valid_from_state(req.state)
     cfg.makemkv_key_checked_at = datetime.now(timezone.utc)
+    cfg.makemkv_key_checked_by_drive_id = req.drive_id
     session.add(cfg)
     await session.commit()
 

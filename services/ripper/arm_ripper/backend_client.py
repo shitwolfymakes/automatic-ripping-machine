@@ -204,7 +204,7 @@ class BackendClient:
         return RipStartResponse.model_validate(r.json())
 
     async def report_makemkv_key_status(self, *, state: MakemkvKeyState, detail: str | None = None) -> None:
-        req = MakemkvKeyStatusReport(state=state, detail=detail)
+        req = MakemkvKeyStatusReport(state=state, detail=detail, drive_id=os.environ.get("ARM_DRIVE_ID"))
         r = await self._client.post("/api/ripper/makemkv-key-status", json=req.model_dump(mode="json"))
         r.raise_for_status()
 

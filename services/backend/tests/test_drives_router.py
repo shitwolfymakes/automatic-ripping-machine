@@ -686,3 +686,20 @@ def test_patch_drive_mode_null_returns_to_global_default(signing_key: bytes) -> 
     assert r.status_code == 200, r.text
     assert r.json()["drive_mode"] is None
     assert db.rows["drives"][0].drive_mode is None
+
+
+@pytest.mark.parametrize(
+    ("by_id", "expected"),
+    [
+        ("usb-HL-DT-ST_BD-RE_WH16NS60_KLAM6E92143-0:0", "usb"),
+        ("ata-ASUS_DRW-24B1ST_K8D0CL123456", "sata"),
+        ("scsi-SATA_something", "other"),
+        (None, None),
+    ],
+)
+def test_drive_view_connection_from_by_id_prefix(by_id: str | None, expected: str | None) -> None:
+    """The setup drive card's USB / SATA chip (setup spec §6.6): derived, not stored."""
+    from arm_backend.routers import drives as drives_router
+
+    d = Drive(id="drv_1", hostname="h", device_path="/dev/sr0", status=DriveStatus.ONLINE, by_id_name=by_id)
+    assert drives_router._to_view(d, []).connection == expected
