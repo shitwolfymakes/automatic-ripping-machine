@@ -3,7 +3,7 @@
 	import type { JoinedSession } from './sessionsData.svelte';
 	import { resolveSample } from './sampleTokens';
 	import { encodersStore, encoderLabel } from '$lib/stores/encoders.svelte';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import RecipeStrip from './RecipeStrip.svelte';
 
 	interface Props {
 		session: JoinedSession;
@@ -118,41 +118,20 @@
 		</div>
 	</div>
 
-	<!-- Recipe container: rip → transcode → output, each area divided -->
+	<!-- Recipe: rip > transcode > output (shared with the setup walkthrough) -->
 	<div class="session-card-recipe">
-		<!-- Rip preset -->
-		<div class="session-card-recipe-cell">
-			<span class="session-card-recipe-label">Rip preset</span>
-			<span class="session-card-recipe-value">
-				{session.ripPreset?.name ?? session.rip_preset_id}
-			</span>
-			<span class="session-card-recipe-sub">{ripSummary}</span>
-		</div>
-
-		<!-- Arrow -->
-		<div class="session-card-recipe-arrow" aria-hidden="true"><Glyph name="chevron-right" /></div>
-
-		<!-- Transcode preset -->
-		<div class="session-card-recipe-cell">
-			<span class="session-card-recipe-label">Transcode</span>
-			{#if session.transcodePreset}
-				<span class="session-card-recipe-value">
-					{session.transcodePreset.name}
-				</span>
-				<span class="session-card-recipe-sub">{transcodeSummary}</span>
-			{:else}
-				<span class="session-card-recipe-empty">No transcode</span>
-			{/if}
-		</div>
-
-		<!-- Arrow -->
-		<div class="session-card-recipe-arrow" aria-hidden="true"><Glyph name="chevron-right" /></div>
-
-		<!-- Output path sample -->
-		<div class="session-card-recipe-cell">
-			<span class="session-card-recipe-label">Output path</span>
-			<span class="mono session-card-recipe-path">{samplePath}</span>
-		</div>
+		<RecipeStrip
+			cells={[
+				{ label: 'Rip preset', value: session.ripPreset?.name ?? session.rip_preset_id, sub: ripSummary },
+				{
+					label: 'Transcode',
+					value: session.transcodePreset?.name ?? null,
+					sub: transcodeSummary,
+					empty: 'No transcode'
+				},
+				{ label: 'Output path', value: samplePath, mono: true }
+			]}
+		/>
 	</div>
 </div>
 
@@ -286,81 +265,7 @@
 	   font-size inherits the taller Tailwind Preflight body default (1.5)
 	   instead, which stacks per line across three-line cells and drifts
 	   every card below the first (Task 5 lesson). */
-	/* original: bg-black/10 (light) / bg-black/20 (dark). No semantic token
-	   covers a literal black-alpha wash and the strict token set forbids
-	   raw rgb() regardless; --color-backdrop (a fixed-black token in both
-	   themes) scaled down via color-mix is the nearest equivalent (a
-	   slightly different composited value than Tailwind's own output -
-	   recorded as a deviation if it pushes a screen over threshold). */
 	.session-card-recipe {
 		margin-top: 0.75rem;
-		display: grid;
-		grid-template-columns: 1fr;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		background: color-mix(in srgb, var(--color-backdrop) 20%, transparent);
-		font-size: 0.75rem;
-		line-height: 1rem;
-	}
-	/* token collapse: scaled backdrop stands in for the dark literal black/20 wash */
-	:global(.dark) .session-card-recipe {
-		background: color-mix(in srgb, var(--color-backdrop) 33%, transparent);
-	}
-	.session-card-recipe > :not(:last-child) {
-		border-bottom: 1px solid var(--color-border);
-	}
-	@media (min-width: 640px) {
-		.session-card-recipe {
-			grid-template-columns: 1fr auto 1fr auto 1fr;
-		}
-		.session-card-recipe > :not(:last-child) {
-			border-bottom: 0;
-		}
-		.session-card-recipe > :not(:first-child) {
-			border-left: 1px solid var(--color-border);
-		}
-	}
-	.session-card-recipe-cell {
-		display: flex;
-		flex-direction: column;
-		gap: 0.125rem;
-		padding: 0.75rem 1rem;
-	}
-	.session-card-recipe-label {
-		font-weight: 500;
-		text-transform: uppercase;
-		letter-spacing: 0.025em;
-		color: var(--color-text-faint);
-	}
-	.session-card-recipe-value {
-		font-weight: 500;
-		color: var(--color-text-secondary);
-	}
-	.session-card-recipe-sub {
-		color: var(--color-text-muted);
-	}
-	.session-card-recipe-empty {
-		font-style: italic;
-		color: var(--color-text-faint);
-	}
-	/* original: break-all (word-break: break-all), not overflow-wrap's word-
-	   preferring break-word - break-all allows a mid-word split at the exact
-	   column edge, which is why the original wraps at a different point. */
-	.session-card-recipe-path {
-		word-break: break-all;
-		color: var(--color-text-secondary);
-	}
-	/* Separator is a glyph icon, not a text character */
-	.session-card-recipe-arrow {
-		display: none;
-		align-items: center;
-		justify-content: center;
-		padding: 0 0.25rem;
-		color: var(--color-text-faint);
-	}
-	@media (min-width: 640px) {
-		.session-card-recipe-arrow {
-			display: flex;
-		}
 	}
 </style>

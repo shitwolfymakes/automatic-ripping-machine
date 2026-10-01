@@ -69,7 +69,7 @@ it('recipe row renders separators as chevron glyphs, not text', () => {
 		onclone: vi.fn(),
 		ondelete: vi.fn()
 	});
-	const arrows = container.querySelectorAll('.session-card-recipe-arrow');
+	const arrows = container.querySelectorAll('.recipe-strip-arrow');
 	expect(arrows).toHaveLength(2);
 	arrows.forEach((arrow) => {
 		expect(arrow.querySelector('svg')).toBeInTheDocument();
