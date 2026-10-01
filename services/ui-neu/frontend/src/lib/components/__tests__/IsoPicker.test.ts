@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, cleanup, fireEvent, waitFor, within } from '$lib/test-utils';
 import { ApiError } from '$lib/api/client';
+import { toasts, dismissToast } from '$lib/stores/toast.svelte';
 import IsoPicker from '../IsoPicker.svelte';
 
 const fetchIsoLibraryMock = vi.fn();
@@ -64,7 +65,10 @@ beforeEach(() => {
 	});
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+	for (const t of toasts.value) dismissToast(t.id);
+	cleanup();
+});
 
 describe('IsoPicker', () => {
 	it('lists folders then ISOs and selects an ISO by click and by keyboard', async () => {
@@ -86,16 +90,20 @@ describe('IsoPicker', () => {
 		expect(screen.getByText('Selected: c.iso')).toBeInTheDocument();
 	});
 
-	it('opens a folder with Enter and goes up with Backspace', async () => {
+	it('opens a folder with Enter and goes up with Backspace, restoring keyboard focus each time', async () => {
 		renderComponent(IsoPicker, { props: defaultProps() });
 		await waitFor(() => expect(screen.getByRole('option', { name: 'Movies' })).toBeInTheDocument());
 
 		await fireEvent.keyDown(screen.getByRole('option', { name: 'Movies' }), { key: 'Enter' });
 		await waitFor(() => expect(screen.getByRole('option', { name: 'inner.iso' })).toBeInTheDocument());
 		expect(screen.getByText('Movies')).toBeInTheDocument();
+		// The loading skeleton unmounted the "Movies" row that held focus — the
+		// first row of the new (Movies) listing must now hold it.
+		await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('option', { name: 'inner.iso' })));
 
 		await fireEvent.keyDown(screen.getByRole('option', { name: 'inner.iso' }), { key: 'Backspace' });
 		await waitFor(() => expect(screen.getByRole('option', { name: 'Movies' })).toBeInTheDocument());
+		await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('option', { name: 'Movies' })));
 	});
 
 	it('announces the selection', async () => {
@@ -141,6 +149,15 @@ describe('IsoPicker', () => {
 
 		await waitFor(() => expect(startIsoRipMock).toHaveBeenCalledWith('a.iso', 'ses_1'));
 		expect(props.onstarted).toHaveBeenCalledWith('drv_iso1');
+
+		// The success notice links to the new card (spec 7.2 / design frame 1n).
+		const toast = toasts.value.at(-1);
+		expect(toast).toMatchObject({
+			tone: 'success',
+			title: 'ISO rip started',
+			body: 'a.iso is in the ripping queue.',
+			link: { href: '/', label: 'View card' }
+		});
 	});
 
 	it('shows the server message and stays open on 409', async () => {
@@ -163,6 +180,7 @@ describe('IsoPicker', () => {
 
 		await waitFor(() => expect(screen.getByText('Set up your ISO library first')).toBeInTheDocument());
 		expect(screen.getByText(/bash devtools\/setup-dev\.sh up/)).toBeInTheDocument();
+		expect(screen.getByText('Open Rip from ISO again and pick a file.')).toBeInTheDocument();
 		expect(screen.getByText('Nothing to pick until the library is set up.')).toBeInTheDocument();
 		expect(screen.queryByRole('button', { name: 'Start rip' })).not.toBeInTheDocument();
 	});
@@ -177,5 +195,58 @@ describe('IsoPicker', () => {
 		renderComponent(IsoPicker, { props: defaultProps() });
 
 		await waitFor(() => expect(screen.getByText('This folder has no ISO files or folders.')).toBeInTheDocument());
+	});
+
+	it('shows a retryable error (not a spinning skeleton) when the library fails to load', async () => {
+		fetchIsoLibraryMock.mockRejectedValueOnce(new Error('boom'));
+		renderComponent(IsoPicker, { props: defaultProps() });
+
+		await waitFor(() => expect(screen.getByText("Couldn't load the library")).toBeInTheDocument());
+		expect(screen.getByText('boom')).toBeInTheDocument();
+
+		// Retry reuses the refresh action; the base mock implementation (set in
+		// beforeEach) resolves the next call normally.
+		await fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+		await waitFor(() => expect(screen.getByRole('option', { name: 'a.iso' })).toBeInTheDocument());
+		expect(screen.queryByText("Couldn't load the library")).not.toBeInTheDocument();
+	});
+
+	it('discards a stale response and keeps the rip path in sync with the displayed listing', async () => {
+		let resolveMovies: (value: unknown) => void = () => {};
+		let callCount = 0;
+		fetchIsoLibraryMock.mockImplementation(() => {
+			callCount += 1;
+			if (callCount === 1) return Promise.resolve(ROOT_LISTING); // the initial root load
+			if (callCount === 2) {
+				// The "Movies" navigation — left pending so it resolves LAST.
+				return new Promise((resolve) => {
+					resolveMovies = resolve;
+				});
+			}
+			// The third call: navigating back to Library while Movies is still in flight.
+			return Promise.resolve(ROOT_LISTING);
+		});
+		startIsoRipMock.mockResolvedValue({ drive_id: 'drv_iso1' });
+
+		renderComponent(IsoPicker, { props: defaultProps() });
+		await waitFor(() => expect(screen.getByRole('option', { name: 'Movies' })).toBeInTheDocument());
+
+		await fireEvent.click(screen.getByRole('option', { name: 'Movies' })); // call #2, pending
+		await waitFor(() => expect(screen.getByText('Library')).toBeInTheDocument());
+		await fireEvent.click(screen.getByText('Library')); // call #3, resolves immediately -> back to root
+		await waitFor(() => expect(screen.getByRole('option', { name: 'a.iso' })).toBeInTheDocument());
+
+		// The stale "Movies" response finally resolves — it must be discarded,
+		// not clobber the (correct, newer) root listing already on screen.
+		resolveMovies(MOVIES_LISTING);
+		await new Promise((r) => setTimeout(r, 0));
+		expect(screen.getByRole('option', { name: 'a.iso' })).toBeInTheDocument();
+		expect(screen.queryByRole('option', { name: 'inner.iso' })).not.toBeInTheDocument();
+
+		// Selecting from the (correctly) displayed root listing sends a path
+		// built from the server's own subpath, not any stale local state.
+		await fireEvent.click(screen.getByRole('option', { name: 'a.iso' }));
+		await fireEvent.click(screen.getByRole('button', { name: 'Start rip' }));
+		await waitFor(() => expect(startIsoRipMock).toHaveBeenCalledWith('a.iso', null));
 	});
 });

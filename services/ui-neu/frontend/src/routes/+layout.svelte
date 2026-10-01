@@ -9,6 +9,7 @@
 	import { goto } from '$app/navigation';
 	import { showIsoPicker } from '$lib/stores/isoPicker';
 	import IsoPicker from '$lib/components/IsoPicker.svelte';
+	import Glyph from '$lib/components/Glyph.svelte';
 	import Flyout from '$lib/components/Flyout.svelte';
 	import FlyoutItem from '$lib/components/FlyoutItem.svelte';
 	import FlyoutDivider from '$lib/components/FlyoutDivider.svelte';
@@ -356,14 +357,7 @@
 									}}
 								>
 									{#snippet icon()}
-										<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M12 21a9 9 0 100-18 9 9 0 000 18zm0-7a2 2 0 100-4 2 2 0 000 4zM6 12a6 6 0 016-6m6 6a6 6 0 01-6 6"
-											/>
-										</svg>
+										<Glyph name="disc-3" />
 									{/snippet}
 									Rip from ISO
 								</FlyoutItem>

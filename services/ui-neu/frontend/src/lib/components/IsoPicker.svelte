@@ -22,6 +22,17 @@
 	let hostPath = $state('');
 	let loading = $state(false);
 	let notConfigured = $state(false);
+	let loadError = $state<Error | null>(null);
+	// Monotonic request counter: a load's own response is applied only if it
+	// is still the most recently started one — an older, slower-resolving
+	// request (e.g. a folder navigated away from) is discarded instead of
+	// clobbering the newer listing.
+	let loadSeq = 0;
+	// False only for the very first load after the picker opens, so that
+	// initial render never steals focus; every subsequent load (a folder
+	// open, Up, or refresh) restores it to the first row once the new data
+	// is in, since LoadState's skeleton swap unmounts whatever row held it.
+	let loadedOnce = false;
 
 	let sessions = $state<SessionView[]>([]);
 	let sessionId = $state('');
@@ -54,8 +65,13 @@
 	});
 	const currentLabel = $derived(breadcrumbItems[breadcrumbItems.length - 1].label);
 
+	// Built from the server's own `listing.subpath`, not the optimistic
+	// `subpath` state — the two can briefly disagree while a navigation is
+	// in flight, and this is what decides the path sent to startIsoRip, so it
+	// must always match whichever listing is actually on screen.
 	function entryPath(name: string): string {
-		return subpath ? `${subpath}/${name}` : name;
+		const base = listing?.subpath ?? '';
+		return base ? `${base}/${name}` : name;
 	}
 
 	function formatSize(bytes: number | null | undefined): string {
@@ -74,21 +90,37 @@
 		subpath = path;
 		loading = true;
 		notConfigured = false;
+		loadError = null;
+		const seq = ++loadSeq;
 		try {
 			const result = await fetchIsoLibrary(path);
+			if (seq !== loadSeq) return; // a newer navigation has since started; discard this stale response
 			listing = result;
 			hostPath = result.host_path;
 			activeIndex = 0;
+			// Clear loading BEFORE the refocus wait below, not in a trailing
+			// `finally` — LoadState only mounts the ready rows once `loading`
+			// goes false, so focusRow() would still find the skeleton (no row
+			// with that id yet) if it ran first.
+			loading = false;
+			const shouldRefocus = loadedOnce;
+			loadedOnce = true;
+			if (shouldRefocus) {
+				// The row that held focus just unmounted (LoadState swapped the
+				// skeleton in while this load was pending) — bring focus back
+				// into the list rather than stranding it on the body.
+				await tick();
+				focusRow(0);
+			}
 		} catch (e) {
+			if (seq !== loadSeq) return;
 			listing = null;
+			loading = false;
 			if (e instanceof ApiError && e.status === 503) {
 				notConfigured = true;
+			} else {
+				loadError = e instanceof Error ? e : new Error('Could not load the library.');
 			}
-			// Any other failure (a stale subpath, say) has no dedicated design —
-			// every subpath a user can reach comes from a server-provided entry,
-			// so this is not expected in normal navigation.
-		} finally {
-			loading = false;
 		}
 	}
 
@@ -179,7 +211,8 @@
 			addToast({
 				tone: 'success',
 				title: 'ISO rip started',
-				body: `${selectedName} is in the ripping queue.`
+				body: `${selectedName} is in the ripping queue.`,
+				link: { href: '/', label: 'View card' }
 			});
 			onstarted(created.drive_id);
 		} catch (e) {
@@ -194,6 +227,8 @@
 		listing = null;
 		hostPath = '';
 		notConfigured = false;
+		loadError = null;
+		loadedOnce = false;
 		sessionId = '';
 		selectedPath = null;
 		selectedName = null;
@@ -243,6 +278,7 @@
 					<li>
 						Redeploy with <code class="mono">bash devtools/setup-dev.sh up</code> so the container can see the folder.
 					</li>
+					<li>Open Rip from ISO again and pick a file.</li>
 				</ol>
 				<p>ARM only reads this folder. It never moves, renames or deletes your ISO files.</p>
 			</div>
@@ -271,7 +307,7 @@
 				{/each}
 			</nav>
 
-			<LoadState data={listing} {loading} minDelay={0} isEmpty={(d) => d.entries.length === 0}>
+			<LoadState data={listing} {loading} error={loadError} minDelay={0} isEmpty={(d) => d.entries.length === 0}>
 				{#snippet loadingSlot()}
 					<div class="panel iso-picker-list iso-picker-skeleton" aria-hidden="true">
 						{#each Array.from({ length: 5 }) as _, i (i)}
@@ -284,6 +320,16 @@
 				{/snippet}
 				{#snippet empty()}
 					<p class="iso-picker-empty">This folder has no ISO files or folders.</p>
+				{/snippet}
+				{#snippet errorSlot(err)}
+					<div class="alert alert-danger iso-picker-error">
+						<p class="alert-title flex items-center gap-2">
+							<Glyph name="x-circle" />
+							Couldn't load the library
+						</p>
+						<p class="alert-body">{err.message}</p>
+						<button type="button" class="btn btn-sm iso-picker-retry" onclick={refresh}>Retry</button>
+					</div>
 				{/snippet}
 				{#snippet ready(data)}
 					<div class="panel iso-picker-list" role="listbox" aria-label="ISO library">
@@ -416,6 +462,9 @@
 	}
 	.iso-picker-list {
 		padding: 0;
+	}
+	.iso-picker-retry {
+		margin-top: 0.5rem;
 	}
 	.iso-picker-row {
 		grid-template-columns: auto 1fr auto auto;
