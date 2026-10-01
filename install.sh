@@ -1379,6 +1379,9 @@ services:
       # still wins, for independent overrides.
       ARM_TRANSCODE_IMAGE: \${ARM_TRANSCODE_IMAGE:-\${ARM_IMAGE_PREFIX:-${ARM_IMAGE_PREFIX_DEFAULT}}/arm-transcode:\${ARM_IMAGE_TAG:-${ARM_IMAGE_TAG_DEFAULT}}}
       ARM_HOST_RAW_PATH: \${ARM_HOST_RAW_PATH}
+      # Rip from ISO (optional): empty (the default) means the feature
+      # reports "not configured". See ARM_HOST_ISO_LIBRARY_PATH in .env.example.
+      ARM_HOST_ISO_LIBRARY_PATH: \${ARM_HOST_ISO_LIBRARY_PATH:-}
       ARM_HOST_MEDIA_PATH: \${ARM_HOST_MEDIA_PATH}
       ARM_HOST_LOGS_PATH: \${ARM_HOST_LOGS_PATH}
       ARM_HOST_CERTS_PATH: \${ARM_HOST_CERTS_PATH}
@@ -1391,6 +1394,9 @@ services:
       ARM_TRANSCODE_PGID: \${ARM_TRANSCODE_PGID:-}
     volumes:
       - ./raw:/raw
+      # Rip from ISO (optional): read-only; the backend browses it and mounts
+      # only the chosen .iso into each one-shot ripper it spawns.
+      - \${ARM_HOST_ISO_LIBRARY_PATH:-./iso-library}:/ingress:ro
       - ./media:/media
       - ./logs:/logs
       - ./certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
