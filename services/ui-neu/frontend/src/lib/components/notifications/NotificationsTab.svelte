@@ -1,10 +1,9 @@
 <script lang="ts">
-	import type { Channel, Catalog, ChannelCreate, AppriseConfig } from '$lib/types/notifications';
+	import type { Channel, Catalog, AppriseConfig } from '$lib/types/notifications';
 	import {
 		fetchChannels,
 		fetchServices,
 		fetchEventTypes,
-		createChannel,
 		updateChannel,
 		deleteChannel,
 		testSendChannel,
@@ -16,6 +15,7 @@
 	import FilterPills, { type ChannelFilter } from './FilterPills.svelte';
 	import ChannelList from './ChannelList.svelte';
 	import AddChannelForm, { type AddChannelBody } from './AddChannelForm.svelte';
+	import { createChannelFromBody, toConfig } from './channelActions';
 	import type { EditorBody } from './ChannelEditor.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 
@@ -74,26 +74,9 @@
 		return c.type === 'apprise' ? 'Service' : c.type;
 	}
 
-	async function toConfig(body: { type: string; config: Record<string, unknown>; serviceId: string | null }) {
-		if (body.type === 'apprise' && body.serviceId) {
-			// neu composes the url server-side from {service_id, fields}.
-			return { type: 'apprise', url: '', service_id: body.serviceId, fields: body.config };
-		}
-		return { type: body.type, ...body.config };
-	}
-
 	async function handleAdd(body: AddChannelBody) {
 		try {
-			const config = await toConfig(body);
-			const payload: ChannelCreate = {
-				type: body.type,
-				name: body.name,
-				enabled: body.enabled,
-				config: config as ChannelCreate['config'],
-				subscribed_events: body.subscribed_events,
-				templates: body.templates
-			};
-			const created = await createChannel(payload);
+			const created = await createChannelFromBody(body);
 			channels = [created, ...channels];
 			addOpen = false;
 			addToast({ tone: 'success', title: 'Channel added', body: `${created.name} is now listening for events.` });
@@ -178,8 +161,7 @@
 
 	async function handleTestUnsaved(body: AddChannelBody) {
 		try {
-			const config = await toConfig(body);
-			await testConfigAndToast(body.type, config, body.subscribed_events[0] ?? firstEventKey());
+			await testConfigAndToast(body.type, toConfig(body), body.subscribed_events[0] ?? firstEventKey());
 		} catch (e) {
 			addToast({ tone: 'error', title: 'Test failed', body: e instanceof Error ? e.message : '' });
 		}

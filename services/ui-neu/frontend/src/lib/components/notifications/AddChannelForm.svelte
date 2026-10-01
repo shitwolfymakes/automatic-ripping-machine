@@ -20,26 +20,34 @@
 		serviceId: string | null;
 	}
 
+	// `compact` (setup walkthrough): a service channel only, no header, no
+	// Save/Cancel (the parent saves on Continue through getBody()/isReady()),
+	// with the three events most people want preselected.
 	let {
 		catalog,
 		eventTypes = [],
 		onsave,
 		oncancel,
-		ontest
+		ontest,
+		variant = 'full'
 	}: {
 		catalog: Catalog;
 		eventTypes?: EventTypeInfo[];
-		onsave: (body: AddChannelBody) => void;
-		oncancel: () => void;
+		onsave?: (body: AddChannelBody) => void;
+		oncancel?: () => void;
 		ontest: (body: AddChannelBody) => void;
+		variant?: 'full' | 'compact';
 	} = $props();
+
+	const COMPACT_EVENTS = ['rip.completed', 'rip.needs_user_input', 'rip.failed'];
 
 	let type = $state<ChannelType>('apprise');
 	let serviceId = $state<string | null>(null);
 	let name = $state('');
 	let enabled = $state(true);
 	let config = $state<Record<string, unknown>>({});
-	let events = $state<string[]>([]);
+	// svelte-ignore state_referenced_locally
+	let events = $state<string[]>(variant === 'compact' ? [...COMPACT_EVENTS] : []);
 	let templates = $state<Record<string, ChannelTemplate>>({});
 	let scriptInputs = $state<ScriptInput[]>([]);
 
@@ -60,9 +68,21 @@
 	function pickService(id: string) {
 		serviceId = id;
 		config = {};
+		// Compact has no label row: name the channel after its service.
+		if (variant === 'compact' && !name.trim()) name = catalog.services.find((s) => s.id === id)?.name ?? id;
 	}
 	function body(): AddChannelBody {
 		return { type, name, enabled, config, subscribed_events: events, templates, serviceId };
+	}
+	export function getBody(): AddChannelBody {
+		return body();
+	}
+	export function isReady(): boolean {
+		return ready;
+	}
+	/** True once a service is picked (compact: Continue then means "add it"). */
+	export function isStarted(): boolean {
+		return serviceId !== null;
 	}
 
 	const types: { key: ChannelType; label: string; recommended?: boolean }[] = [
@@ -72,34 +92,38 @@
 	];
 </script>
 
-<div class="add-channel-form">
-	<div class="add-channel-form-header">
-		<h3 class="add-channel-form-title">Add notification channel</h3>
-		<button type="button" onclick={oncancel} class="btn btn-link add-channel-form-cancel"
-			><Glyph name="x" /> Cancel</button
-		>
-	</div>
+<div class="add-channel-form" data-variant={variant}>
+	{#if variant === 'full'}
+		<div class="add-channel-form-header">
+			<h3 class="add-channel-form-title">Add notification channel</h3>
+			<button type="button" onclick={() => oncancel?.()} class="btn btn-link add-channel-form-cancel"
+				><Glyph name="x" /> Cancel</button
+			>
+		</div>
+	{/if}
 
 	<div class="stack add-channel-form-body">
-		<fieldset class="add-channel-form-types">
-			<legend class="sr-only">Delivery type</legend>
-			{#each types as t (t.key)}
-				<label class="channel-type-option" aria-checked={type === t.key}>
-					<input
-						type="radio"
-						name="delivery"
-						class="sr-only"
-						aria-label={t.label}
-						checked={type === t.key}
-						onchange={() => setType(t.key)}
-					/>
-					<span class="channel-type-option-label">{t.label}</span>
-					{#if t.recommended}<span class="badge badge-sm channel-type-option-badge">RECOMMENDED</span>{/if}
-				</label>
-			{/each}
-		</fieldset>
+		{#if variant === 'full'}
+			<fieldset class="add-channel-form-types">
+				<legend class="sr-only">Delivery type</legend>
+				{#each types as t (t.key)}
+					<label class="channel-type-option" aria-checked={type === t.key}>
+						<input
+							type="radio"
+							name="delivery"
+							class="sr-only"
+							aria-label={t.label}
+							checked={type === t.key}
+							onchange={() => setType(t.key)}
+						/>
+						<span class="channel-type-option-label">{t.label}</span>
+						{#if t.recommended}<span class="badge badge-sm channel-type-option-badge">RECOMMENDED</span>{/if}
+					</label>
+				{/each}
+			</fieldset>
 
-		<LabelEnabledRow bind:name bind:enabled />
+			<LabelEnabledRow bind:name bind:enabled />
+		{/if}
 
 		{#if type === 'apprise'}
 			<div class="panel-section">
@@ -127,13 +151,19 @@
 			{#if ready}<Glyph name="check" class="h-3.5 w-3.5" /> Ready to save{:else}Needs: {missing.join(', ')}{/if}
 		</span>
 		<div class="cluster">
-			<button type="button" onclick={oncancel} class="btn btn-ghost">Cancel</button>
-			{#if type !== 'bash'}
-				<button type="button" onclick={() => ontest(body())} class="btn">Send test</button>
+			{#if variant === 'full'}
+				<button type="button" onclick={() => oncancel?.()} class="btn btn-ghost">Cancel</button>
 			{/if}
-			<button type="button" disabled={!ready} onclick={() => onsave(body())} class="btn btn-primary"
-				>Save channel</button
-			>
+			{#if type !== 'bash'}
+				<button type="button" onclick={() => ontest(body())} disabled={variant === 'compact' && !ready} class="btn"
+					>Send test</button
+				>
+			{/if}
+			{#if variant === 'full'}
+				<button type="button" disabled={!ready} onclick={() => onsave?.(body())} class="btn btn-primary"
+					>Save channel</button
+				>
+			{/if}
 		</div>
 	</div>
 </div>
