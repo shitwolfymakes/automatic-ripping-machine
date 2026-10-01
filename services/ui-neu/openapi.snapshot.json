@@ -2373,6 +2373,18 @@
         "operationId": "list_drives_api_drives_get",
         "parameters": [
           {
+            "name": "include_retired",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include retired (one-shot ISO rip) drive rows.",
+              "default": false,
+              "title": "Include Retired"
+            },
+            "description": "Include retired (one-shot ISO rip) drive rows."
+          },
+          {
             "name": "authorization",
             "in": "header",
             "required": false,
@@ -2423,7 +2435,7 @@
           "drives"
         ],
         "summary": "Drive Diagnostic",
-        "description": "\"Look for issues\": every drive row judged against the lifecycle model,\nplus the health of the parts that make the model work (scanner, ripper\nmanager, the host's by-id mount). Never 503s \u2014 a missing subsystem is\nitself a finding.",
+        "description": "\"Look for issues\": every drive row judged against the lifecycle model,\nplus the health of the parts that make the model work (scanner, ripper\nmanager, the host's by-id mount). Never 503s \u2014 a missing subsystem is\nitself a finding. Virtual (ISO) drives are excluded entirely: they have\nno scanner/by-id/container health to report, and the lifecycle-else\nbranch below (\"ignored\") assumes only an optical row can be here.",
         "operationId": "drive_diagnostic_api_drives_diagnostic_get",
         "parameters": [
           {

@@ -33,7 +33,9 @@ from arm_common import (  # noqa: E402
     DiscFingerprint,
     DiscType,
     Drive,
+    DriveKind,
     DriveLifecycle,
+    DriveSourceKind,
     DriveStatus,
     Job,
     JobStatus,
@@ -364,6 +366,74 @@ def test_register_compares_identity_only_against_a_bound_row(
         assert "unenroll and re-enroll" in detail
         assert row.status is DriveStatus.ERROR
         assert row.last_error == detail
+
+
+def test_register_accepts_enrolled_virtual_drive() -> None:
+    """A virtual (ISO) drive row has no by-id identity at all (by_id_name is
+    None on both sides) and a /source path instead of a /dev node — register
+    needs no code change for this: the existing lifecycle + identity checks
+    already accept it as-is. This test pins that behaviour."""
+    db = FakeSession()
+    db.rows["drives"] = [
+        Drive(
+            id="drv_iso",
+            hostname="scan-drv_iso",
+            device_path="/source/x.iso",
+            status=DriveStatus.ONLINE,
+            lifecycle=DriveLifecycle.ENROLLED,
+            kind=DriveKind.VIRTUAL,
+            source_kind=DriveSourceKind.ISO,
+            source_path="Movies/x.iso",
+            by_id_name=None,
+            present=False,
+        )
+    ]
+    with TestClient(_make_app(db)) as client:
+        r = client.post(
+            "/api/ripper/register",
+            json=_register_body(
+                drive_id="drv_iso",
+                hostname="arm-ripper-iso-drv_iso",
+                device_path="/source/x.iso",
+                by_id_name=None,
+            ),
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    row = db.rows["drives"][0]
+    assert row.hostname == "arm-ripper-iso-drv_iso"
+    assert row.device_path == "/source/x.iso"
+    assert row.status is DriveStatus.ONLINE
+
+
+def test_register_refuses_a_retired_virtual_drive() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [
+        Drive(
+            id="drv_iso",
+            hostname="scan-drv_iso",
+            device_path="/source/x.iso",
+            status=DriveStatus.ONLINE,
+            lifecycle=DriveLifecycle.RETIRED,
+            kind=DriveKind.VIRTUAL,
+            source_kind=DriveSourceKind.ISO,
+            source_path="Movies/x.iso",
+            by_id_name=None,
+        )
+    ]
+    with TestClient(_make_app(db)) as client:
+        r = client.post(
+            "/api/ripper/register",
+            json=_register_body(
+                drive_id="drv_iso",
+                hostname="arm-ripper-iso-drv_iso",
+                device_path="/source/x.iso",
+                by_id_name=None,
+            ),
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 409, r.text
+    assert "not enrolled" in r.json()["detail"]
 
 
 # --- /identify ---------------------------------------------------------------

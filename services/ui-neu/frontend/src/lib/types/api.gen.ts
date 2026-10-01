@@ -6192,7 +6192,14 @@ export type ListDrivesApiDrivesGetData = {
         authorization?: string | null;
     };
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Include Retired
+         *
+         * Include retired (one-shot ISO rip) drive rows.
+         */
+        include_retired?: boolean;
+    };
     url: '/api/drives';
 };
 
