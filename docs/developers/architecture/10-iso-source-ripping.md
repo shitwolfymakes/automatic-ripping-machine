@@ -1,270 +1,263 @@
-# 10 — ISO-Source Ripping
+# 10 - Rip from ISO (ISO-source ripping)
 
-**Status: proposed (design only).** Nothing here is built yet. This doc is the
-design we agreed to write before touching code, so the shape can be reviewed
-first. Open decisions are collected in [§ Decisions needed](#decisions-needed).
+**Status: built.** This doc describes what shipped, superseding the earlier
+"proposed design" draft and the rip-tasks/dispatcher sketch it contained.
 
-## What this is — and the name clash to avoid up front
+## What this is, and the name clash to avoid up front
 
 "ISO" means two unrelated things in v3, pointing in opposite directions:
 
-- **ISO as _output_** — `rip_presets.output_mode = 'iso'` produces a full-disc
+- **ISO as _output_**: `rip_presets.output_mode = 'iso'` produces a full-disc
   `.iso` image *from a physical disc* instead of per-title MKVs (see
-  [04-data-model.md](04-data-model.md)). Already in the data model.
-- **ISO as _source_** — rip *from* an existing `.iso` file as input, through the
-  normal scan → identify → rip (→ transcode) pipeline, no physical disc involved.
-
-**This document is exclusively about the second one.** It's always called
-*ISO-source ripping* or *ISO ingestion*, never just "ISO ripping".
+  [04-data-model.md](04-data-model.md)). Unrelated to this feature.
+- **ISO as _source_**: rip *from* an existing `.iso` file as input, through the
+  normal scan, identify, rip and transcode pipeline, with no physical disc
+  involved. **This document is exclusively about this one.** It is always
+  called *ISO-source ripping* or *"Rip from ISO"*, never just "ISO ripping".
 
 ## The shape, in one sentence
 
-An ISO-source ripper is an **ephemeral, backend-spawned worker container** — the
-**transcode-container lifecycle**, not a long-running service: the backend
-spawns one per ISO on demand, it runs the rip, reports, and **exits**
-(`auto_remove`). It is *not* a persistent `arm-ripper-iso` daemon, and the
-backend never hand-rolls `docker run` plumbing in a script.
+An operator picks an `.iso` from a read-only library folder on the server.
+The backend creates a **virtual drive** for it and spawns a dedicated,
+one-shot ripper container, which runs the ISO through the same scan, identify,
+review, rip and transcode pipeline a physical disc uses. When the rip ends,
+the container exits and the backend retires the virtual drive. No physical
+drive's state is touched, and several ISO rips can run at once, up to an
+operator setting.
 
-> **Design directive (owner):** ISO rippers must be spawned on demand like the
-> GPU/transcode containers, not run long. The eventual front door is **UI file
-> upload → spawn an ephemeral ISO ripper per upload**; the upload half is
-> deferred, the ephemeral-spawn architecture is what we lock in now.
+## Virtual drives
 
-## Why now / what's wrong with today
+Each ISO rip is a temporary row in `drives`, not a new table. Three columns
+added by migration `0041_virtual_drives`:
 
-ISO-source ripping already half-exists, but only as a **test hook**:
+| Column | Type | Notes |
+|---|---|---|
+| `kind` | VARCHAR, not null, default `optical` | `optical` or `virtual`. App-layer validated, never a Postgres `CREATE TYPE` enum. |
+| `source_kind` | VARCHAR, nullable | `iso` today (a later `folder` kind is planned, not built). Set only for `virtual` drives. |
+| `source_path` | VARCHAR, nullable | The ISO's path **relative to the ISO library**, never absolute or client-chosen. Set only for `virtual` drives. |
 
-- The ripper takes `ARM_MANUAL_TRIGGER_ISO=/path/to.iso`
-  ([main.py:121-161](../../../services/ripper/arm_ripper/main.py#L121-L161)): treats
-  the ISO as its bound "device", rips **once** on startup, then **idles forever**
-  so an operator can poke at it — the exact opposite of ephemeral.
-- No API, no UI, no spawn mechanism. You hand-launch a privileged container per
-  ISO, which is why [devtools/iso-smoke.sh](../../../devtools/iso-smoke.sh) grew
-  into a ~580-line orchestrator (fixture fetch, key scrape, `docker run`
-  assembly, live-ripper stop/restart, transcode trigger, polling, teardown).
+`DriveLifecycle` gained a `retired` value. A virtual drive is created
+`enrolled`, so the existing register, heartbeat and reconcile paths treat it
+as a live drive with no special-casing, and becomes `retired` once its rip
+ends. Retired rows are kept, not deleted, so `Job.drive_id` and the job's
+history stay intact; `GET /api/drives` hides them unless
+`include_retired=true` is passed. A virtual drive's `hostname` is
+`iso-<last 12 chars of its id>`; `serial` and `by_id_name` stay null.
 
-The good news: **the backend already spawns ephemeral workers exactly this way
-for transcoding.** ISO ingestion is the same mechanism pointed at a different
-image — almost no new orchestration primitives.
+`source_path`, `kind` and `source_kind` round-trip through `GET /api/drives`
+and the UI's drive types.
 
-## Design principle: reuse two things verbatim
+### Optical-only endpoints
 
-1. **The disc pipeline.** An ISO is a source the scan layer already understands —
-   [source.py](../../../services/ripper/arm_ripper/source.py) routes
-   `makemkv_source_url()` to `iso:<path>` vs `dev:<path>`, and scan loop-mounts a
-   file ([disc_probe.py](../../../services/ripper/arm_ripper/scan/disc_probe.py)).
-   Everything downstream of scan — identify, track selection, rip-start,
-   `PATCH /tracks`, rip-complete, session auto-apply, transcode — is
-   **source-blind and untouched.**
-2. **The transcode dispatcher.** The backend's
-   [transcode_dispatcher.py](../../../services/backend/arm_backend/transcode_dispatcher.py)
-   is the template: a task table, a dispatcher tick that spawns
-   `containers.run(..., detach=True, auto_remove=True)`
-   ([:392-403](../../../services/backend/arm_backend/transcode_dispatcher.py#L392-L403)),
-   a worker that claims its task and exits, a concurrency cap, a stale-claim
-   sweep. ISO ingestion clones this with a `rip_tasks` table and the ripper image.
+The drive scanner, prune, enroll, unenroll, ignore, unignore, rescan and
+delete all apply to `optical` drives only: each returns 409 for a virtual
+drive (`services/backend/arm_backend/routers/drives.py`). Settings > Drives
+keeps listing optical drives only; the dashboard header's drive count also
+counts `kind == optical` rows (the "N ripping" count still includes ISO
+rips).
 
-So this feature is **not** a new rip path and **not** a new orchestration
-pattern. It is: a task table + dispatcher (cloned from transcode), an enqueue
-endpoint, and a small "run one task then exit" mode in the ripper.
+### Container spec
 
-## Target architecture (mirror of the transcode dispatcher)
+`ripper_manager.container_spec` branches on `drive.kind`
+(`services/backend/arm_backend/ripper_manager.py`). A virtual drive's
+container differs from an optical one in exactly what it needs to:
 
-```
- UI / smoke         Backend                              ephemeral arm-ripper-iso
-  │  pick ISO+sess     │                                  (spawned per task, --rm)
-  ├─POST /api/iso/rips▶│ validate ISO under library root          │
-  │  {iso, session}    │ INSERT rip_tasks (QUEUED) ─┐             │
-  │◀── {task_id} ──────┤                            │             │
-  │                    │  ── rip dispatcher tick ──◀┘             │
-  │                    │  slots = MAX_PARALLEL_ISO_RIPS - in_prog │
-  │                    │  docker containers.run(ARM_ISO_RIPPER_IMAGE,
-  │                    │      env ARM_RIP_TASK_ID, --rm) ────────▶│ starts
-  │                    │◀─ POST /ripper/iso-tasks/{id}/claim ─────┤ claim (CAS)
-  │                    │   → {drive_id, /isos/<name>, session}    │
-  │                    │◀─ POST /ripper/identify (creates Job) ───┤ scan→identify
-  │                    │◀─ rip-start, PATCH /tracks, rip-complete ┤ rip (pipeline)
-  │◀─ job in /api/jobs │   session auto-applies → transcode       │ exits, auto-removed
-```
+- **Mount:** only the chosen ISO, read-only, at `/source/<file name>`
+  (`drive.device_path`). No `/dev/disk` bind, no device cgroup rules, no
+  CDROM group.
+- **Env:** `ARM_DRIVE_ID`, `ARM_SOURCE_PATH=/source/<file name>`,
+  `ARM_SOURCE_KIND` (`iso`), and `ARM_SOURCE_SESSION_ID` when the operator
+  picked a session at create time. No `ARM_DRIVE_DEV` or `ARM_DRIVE_BY_ID`.
+- **Labels:** `arm.drive_id` (the usual one) plus `arm.virtual=1`.
+- **Restart policy:** `no`. A one-shot container is meant to exit; the
+  backend watchdog (below) does the cleanup, not Docker's restart logic.
+- **Unchanged:** image, `/raw`, `/logs`, the CA cert, the service token,
+  `PUID`/`PGID`.
 
-### The rip-task table + dispatcher
+Startup `reconcile` handles virtual drives the same way as optical ones,
+after the watchdog's boot pass has already retired anything already finished
+(see [Startup ordering](#startup-ordering)): an `enrolled` virtual drive whose
+container is still alive and whose job is unfinished is respawned, so a rip
+interrupted by a host crash restarts from scratch.
 
-A `rip_tasks` table mirroring `transcode_tasks`: `status`
-(QUEUED|IN_PROGRESS|DONE|FAILED), `claimed_by`, `claim_heartbeat_at`, `attempts`,
-plus `source_ref` (library-relative ISO name) and `session_id`. A **rip
-dispatcher** background loop — a near-copy of `spawn_pending()`
-([transcode_dispatcher.py:229-299](../../../services/backend/arm_backend/transcode_dispatcher.py#L229-L299))
-— each tick:
+## The watchdog
 
-1. counts live `rip_tasks` IN_PROGRESS, computes free slots vs
-   `MAX_PARALLEL_ISO_RIPS`,
-2. dequeues QUEUED rows FIFO with `FOR UPDATE SKIP LOCKED`,
-3. spawns one ephemeral ripper per task via the existing docker-py client
-   ([main.py:98-108](../../../services/backend/arm_backend/main.py#L98-L108)) with
-   `auto_remove=True`, a unique hostname `arm-ripper-iso-{task_id[-12:]}`, and a
-   `{label: task_id}` for cancel/force-stop,
-4. a **stale-claim sweep** (reusing the 90 s threshold pattern,
-   [config.py:63](../../../services/backend/arm_backend/config.py#L63)) requeues or
-   fails tasks whose worker died mid-rip — this *is* the crash-recovery story for
-   ISO jobs, replacing the physical ripper's boot-probe.
+Virtual-drive cleanup is a backend-owned watchdog, not something the ripper
+or a per-handler hook does
+(`services/backend/arm_backend/iso_rips.py::sweep_virtual_drives`). The
+backend has no heartbeat timeout and no shared job-terminal hook, so one
+sweep owns the whole lifecycle instead of threading cleanup through every
+rip-complete, rip-failed and abandon path.
 
-### The worker: a "run one task, then exit" ripper mode
+**The pass.** `sweep_virtual_drives` runs every 30 seconds as a lifespan task,
+and once at startup, **before** `reconcile_enrolled_rippers` loads the
+enrolled list. For each `enrolled` virtual drive, it reads the container's
+Docker state through `ripper_manager.container_statuses`:
 
-The ripper gains a third entry mode beside "poll a physical drive" and the
-legacy one-shot env var. Given `ARM_RIP_TASK_ID`, it:
+- **Running** (or any other live/transitional state, or `unknown` meaning
+  Docker itself is unreachable): nothing happens. A Docker blip must never
+  fail a live rip.
+- **Exited, dead, or missing, with a terminal job or no job at all:** the
+  drive is retired and its container removed.
+- **Exited, dead, or missing, with a job that isn't terminal:** the job is
+  marked `failed` (`ripped_at` set, a `rip.failed` event with reason
+  `"ISO ripper stopped unexpectedly"`), then the drive is retired and the
+  container removed.
 
-1. `POST /api/ripper/iso-tasks/{id}/claim` (atomic CAS to IN_PROGRESS, owner =
-   hostname) — the same handshake transcoders use
-   ([routers/transcoder.py register/claim](../../../services/backend/arm_backend/routers/transcoder.py)),
-   and gets back `{drive_id, container_iso_path, session_id}`,
-2. runs `_run_pipeline(container_iso_path, pending_session_id=session_id)` — the
-   **existing** pipeline
-   ([job_controller.py:175](../../../services/ripper/arm_ripper/job_controller.py#L175)),
-3. on rip-complete (or failure) marks the task terminal and **exits** — no
-   idle-forever, no WS command loop. The container is auto-removed.
+A freshly created drive's container can briefly read as "missing" between the
+`POST /api/iso/rips` row commit and the container actually starting, so a
+120-second spawn grace (`SPAWN_GRACE_SECONDS`) means only a drive older than
+that gets retired on "missing". A drive still inside its grace window is left
+alone even if the container isn't up yet.
 
-There's **no `iso.rip` WS command** in this model (my first draft had one); the
-dispatcher-spawn handshake replaces it, matching how transcoders are dispatched.
-WS stays only for in-flight **cancel**, which mirrors transcode cancel: the
-backend force-stops the labeled container.
+**Cancel.** `DELETE /api/iso/rips/{drive_id}` abandons the job through the
+same transition `routers/jobs.py`'s manual abandon uses (both now call the
+shared `job_abandon.abandon_job_transition` helper), which tells the ripper to
+clean up over WebSocket. It then retires the drive and removes the container
+immediately, without waiting for the watchdog's next tick.
 
-## Drive identity — the one genuine new wrinkle
+**Spawn failure.** If `ensure_running` fails in `POST /api/iso/rips`, the
+drive is retired at once and the request answers 500 with the reason. A
+virtual drive never sits `enrolled` with no container behind it.
 
-Transcoders don't create jobs, so they need no drive. ISO rippers **do** — and
-`Job.drive_id` is a non-null FK
-([job.py](../../../packages/arm_common/arm_common/models/job.py)). Two options:
+### Startup ordering
 
-- **(A) Per-spawn ephemeral drive (recommended for v1).** The backend creates a
-  `Drive` row when it spawns the worker (hostname `arm-ripper-iso-{suffix}`,
-  `device_path` = the ISO ref) and hands its `drive_id` back at claim. The job
-  attaches to it; the row persists as provenance ("ripped by ephemeral ISO worker
-  X"). Add a `kind` discriminator (`optical` | `iso`) so the UI's live-drive list
-  hides them. **Pipeline and owner-auth stay byte-identical** — biggest win.
-- **(B) Decouple — nullable `Job.drive_id` + `Job.source`.** Cleaner long-term,
-  but `drive_id` is load-bearing in drive-owner auth, `get_in_flight_job`, and
-  rip-start/track/complete; relaxing it touches the whole rip path. Bigger, later.
+The boot-time watchdog pass runs inside `reconcile_enrolled_rippers`, before
+it loads the enrolled list. Otherwise reconcile would recreate the container
+of an ISO rip that already finished while the backend was down, and rip it
+again.
 
-Recommend **(A)** now, revisit **(B)** if ephemeral drive rows become noise.
+## Source mode (the ripper)
 
-## The ISO source: library now, uploads later
+The ripper's `ARM_MANUAL_TRIGGER_ISO` test hook is gone. In its place:
 
-- **v1 (today): a server-side library directory.** A host path (e.g.
-  `./iso-library`, NAS mount, etc.) bind-mounted **into the spawned worker** at
-  `/isos` (read-only). Because the backend spawns via the host Docker daemon, the
-  mount uses a **host path** the same way transcode mounts do
-  (`ARM_HOST_RAW_PATH`/`ARM_HOST_MEDIA_PATH`,
-  [config.py:78-80](../../../services/backend/arm_backend/config.py#L78-L80)) — add
-  `ARM_HOST_ISO_LIBRARY_PATH`. `GET /api/iso/library` lists what's available for
-  the picker; the backend also mounts it read-only so it can enumerate + validate.
-- **Future (deferred): UI upload.** A browser upload writes the `.iso` into the
-  same library/staging dir, then enqueues an identical `rip_tasks` row. **The
-  ephemeral-spawn core does not change** — uploads are just a new way to populate
-  the library. Multi-GB resumable upload, staging storage, and GC are the real
-  work and are out of scope for v1.
+- **`ARM_SOURCE_PATH`** (the in-container ISO path) and **`ARM_SOURCE_KIND`**
+  (`iso`) select source mode. `ARM_DRIVE_DEV` becomes optional when
+  `ARM_SOURCE_PATH` is set; `ARM_DRIVE_ID` is still required either way.
+- **`ARM_SOURCE_SESSION_ID`** carries the session the operator picked at
+  create time, if any. When unset, the usual automatic session selection
+  applies.
+- The drive handle is `DriveHandle.fixed(ARM_SOURCE_PATH)`; the heartbeat
+  reports `LOADED`. Device readiness, eject, and the seated-disc guard keep
+  their existing ISO branches (unchanged from before this feature).
+- On start, the ripper registers, then runs the pipeline exactly once through
+  `handle_manual_trigger(session_id=...)`, the same `_run_pipeline` a disc
+  insert runs, except it does **not** check `auto_rip_on_insert`: the operator
+  starting an ISO rip from the picker already is the explicit trigger
+  (`services/ripper/arm_ripper/main.py::run_source_mode`).
+- `JobController`'s review/identify wait (`resolution_timeout`) is `None` in
+  source mode, so the ripper waits indefinitely at a review or identify gate
+  instead of timing out after the usual 30 minutes. A parked ISO rip holds
+  its slot until the operator resolves it or cancels.
+- The ripper exits (code 0) whenever its one pipeline run ends: rip complete,
+  rip failed, abandoned (cancellation), or an early end such as a scan
+  failure or a rejected identify. Its restart policy is `no`; the backend
+  watchdog does the rest.
 
-## Backend changes
+## The API
 
-- **`POST /api/iso/rips`** (JWT): body `{ iso, session_id }`. **Enforce path
-  containment** — `iso` names a file *relative to the library root*; resolve with
-  `realpath` and reject anything escaping it, the same barrier just added for
-  `job_id` path sinks (commits `144d063d`, `6443d24b`). **Never accept an
-  absolute/arbitrary client path** — this is the feature's #1 security property.
-  Inserts a QUEUED `rip_tasks` row; returns `task_id`.
-- **`GET /api/iso/library`** (JWT): enumerate the mounted library for the picker.
-- **`POST /api/ripper/iso-tasks/{id}/claim`** + heartbeat (service token): the
-  worker handshake, cloned from the transcoder claim
-  ([routers/transcoder.py:134](../../../services/backend/arm_backend/routers/transcoder.py#L134)).
-- **Rip dispatcher + `rip_tasks` migration**, cloned from transcode.
-- **Cancel**: force-stop the labeled container, mirroring transcode cancel.
+All routes under `/api/iso` require writer (admin) access, except the `GET`,
+which only requires login (`services/backend/arm_backend/routers/iso.py`).
 
-The Docker socket is **already** mounted into the backend for transcode spawns
-([docker-compose.yml.example:68-70](../../../docker-compose.yml.example#L68-L70)) — no new privilege
-is taken on; the root-equivalent risk is already accepted in
-[06-deployment.md](06-deployment.md).
+- **`GET /api/iso/library?subpath=`**: `IsoLibraryListing { host_path,
+  subpath, parent_subpath, entries: [{ name, kind: "folder"|"iso",
+  size_bytes?, modified_at?, ripping }] }`. It reuses the Files browser's
+  `(root, subpath)` resolution (`file_browser.resolve("ISO", ...)`), so `..`
+  and symlinks that escape the library root are rejected (400). It lists
+  folders before `.iso` files, lowercase only, and hides anything else.
+  Answers 503 `{detail}` when the library isn't configured (the env var
+  unset, or the read-only mount missing).
+- **`POST /api/iso/rips`**: body `IsoRipRequest { path, session_id? }`,
+  `path` relative to the library. Returns `201 IsoRipCreated { drive_id }`.
+  Errors:
+  - 400: not a `.iso`, or the path escapes the library;
+  - 404: missing file, or unknown `session_id`;
+  - 409: the `max_parallel_iso_rips` cap is full (the message names the
+    cap), or that ISO is already ripping;
+  - 503: not configured;
+  - 500: spawn failed; the drive is retired before the response goes out.
 
-## Ripper changes
+  Create is serialized by an in-process lock (`iso_rips._create_lock`) so two
+  concurrent requests can't both pass the cap/duplicate checks before either
+  commits its row.
+- **`DELETE /api/iso/rips/{drive_id}`**: cancels the rip. It abandons its job
+  if one exists and isn't already terminal, then removes the container and
+  retires the drive. Returns 409 for an optical drive, or one that's already
+  retired or not an active ISO rip.
 
-- **Task-mode entrypoint** keyed off `ARM_RIP_TASK_ID`: claim → `_run_pipeline`
-  → exit. No poll loop, no idle.
-- **Auth model = transcoder, not physical ripper.** Transcoders mount only the CA
-  cert and auth with `ARM_SERVICE_TOKEN`; they have no per-container leaf cert.
-  Ephemeral ISO rippers should do the same — which sidesteps the "issue a stable
-  `arm-ripper-iso` leaf cert" problem entirely (an ephemeral worker can't have a
-  stable cert). *Confirm* whether the ripper REST/WS surface currently mandates a
-  client leaf cert; if so, relax it to token-only for task-mode workers.
-- **Log identity from an explicit name, not the device.** Today the log file is
-  derived from `ARM_DRIVE_DEV`
-  ([main.py:33](../../../services/ripper/arm_ripper/main.py#L33)); the transcoder
-  instead takes an explicit `ARM_SERVICE_NAME`. Adopt the same so each worker
-  logs to `arm-ripper-iso-{suffix}.log` — unique per spawn, zero collision.
+Ripper `register` accepts an `enrolled` virtual drive matched by id alone;
+optical drives keep the existing `by_id_name` check. The OpenAPI snapshot and
+generated TypeScript types cover all three routes.
 
-## What disappears
+## The UI
 
-- The **"pause the enrolled drive's managed container"** dance in the smoke
-  script — ephemeral workers have unique hostnames + unique log names and never
-  touch a real `/dev/sr*` node, so there's no interaction with the enrolled
-  drive's `arm-ripper-<serial>` container at all. (The script's "same
-  drive_id" rationale was already inaccurate — different hostnames, different
-  drive_ids.)
-- The **idle-forever** container and the bespoke **`docker run`** block.
-- The original **compose-overlay** idea from our discussion. An ephemeral worker
-  isn't a compose service, so there's no `docker-compose.iso.yml` — exactly like
-  there's no `docker-compose.transcode.yml`. The GPU-overlay analogy dissolves;
-  the correct analogy is the transcoder, which ships as an **image + backend
-  settings**, not a service.
+- The gear menu's "Rip from ISO" item opens the `IsoPicker` slide-over (the
+  old Import wizard, `ImportWizard.svelte` / `IngressBrowser.svelte`, and the
+  `import-jobs.ts` client are all deleted). The picker lists the library via
+  `GET /api/iso/library`, lets the operator navigate folders and pick an
+  `.iso`, optionally choose a session, and calls `POST /api/iso/rips`.
+- An ISO rip reuses the existing disc dashboard card, states and buttons. Its
+  drive chip is replaced by a source chip (file name, middle-truncated), and
+  drive-only actions (eject, enroll, manual trigger) are absent; Cancel
+  calls `DELETE /api/iso/rips/{id}`. When the job ends, the card leaves the
+  dashboard, and the job itself stays in All jobs.
+- Settings > Ripping has **"Max parallel ISO rips"** (1 to 8, default 1).
+  Settings > Drives is unaffected; it only ever listed optical drives.
+- The Files root "ISO library" (`services/backend/arm_backend/file_browser.py`)
+  is read-only.
 
-## Deployment
+## Configuration
 
-No long-running service. Just:
+- **`ARM_HOST_ISO_LIBRARY_PATH`** (`.env`, host path). When set, the compose
+  template mounts it read-only into the backend at `ISO_INGRESS_ROOT`
+  (`/ingress`), and the backend also gets it as an env var so it can build
+  spawn mounts (`<host library>/<relative path>`) and show the operator the
+  host path. When unset, `GET /api/iso/library` and `POST /api/iso/rips` both
+  answer 503, and the UI shows a short setup note. See
+  [Configuring ARM, the `.env` file](../../user/Configuring-ARM.md).
+- **`config.max_parallel_iso_rips`** (Settings > Ripping; an int, default 1,
+  range 1 to 8). Counts `enrolled` virtual drives, independent of any
+  physical-drive concurrency.
+- `devtools/setup-dev.sh up` creates `arm/iso-library` so a dev stack has
+  somewhere to drop fixture ISOs.
 
-- Build the **`arm-ripper-iso` image** (likely the existing ripper image with the
-  task-mode entrypoint; possibly the same image, different command).
-- Backend settings, mirroring the transcode ones
-  ([config.py:53-86](../../../services/backend/arm_backend/config.py#L53-L86)):
-  `ARM_ISO_RIPPER_IMAGE`, `MAX_PARALLEL_ISO_RIPS`, `ARM_HOST_ISO_LIBRARY_PATH`,
-  reusing `ARM_DOCKER_NETWORK` and the existing host-path settings.
-- GPU is irrelevant to ripping (it's a MakeMKV/file op); the spawn omits the GPU
-  kwargs entirely.
+## Limits
 
-## Concurrency
+These are deliberate non-goals of this feature, not oversights:
 
-Falls out of the dispatcher for free: natural parallelism, one container per
-task, capped by `MAX_PARALLEL_ISO_RIPS` (default 1, like transcodes), queued FIFO
-in `rip_tasks`. No 409-when-busy, no manual serialization — the queue handles it,
-and it's the first real consumer of the deferred "queue mechanism" in
-[07-open-questions.md](07-open-questions.md).
+- **Only `.iso` files.** Extracted disc folders (`BDMV` / `VIDEO_TS`) are a
+  planned next `source_kind` (`folder`, using MakeMKV's `file:` source) but
+  are not built.
+- **No queueing.** When the `max_parallel_iso_rips` cap is full, or the same
+  ISO is already ripping, `POST /api/iso/rips` is refused with 409. There is
+  no queue to land in and retry automatically.
+- **No browser upload.** The library is a server-side, read-only folder the
+  operator populates themselves (or via a NAS mount); there is no UI upload
+  path.
+- **Duplicate-disc reuse doesn't apply.** `disc_dedupe.find_reusable_job_for_disc`
+  only matches unfinished jobs on the same drive, and each ISO rip gets a
+  fresh virtual drive, so re-ripping the same ISO always creates a new job
+  and never reuses a previous one.
 
-## Migration: the smoke test becomes a thin client
+## Testing
 
-[devtools/iso-smoke.sh](../../../devtools/iso-smoke.sh) collapses to: drop the
-fixture in the library → `POST /api/iso/rips` → wait for the job → (optional)
-existing transcode assertions. The fixture-fetch and key-resolution helpers stay
-(genuine test scaffolding); the `docker run` block, the live-ripper stop/restart,
-and the idle container all go away. `ARM_MANUAL_TRIGGER_ISO` is retired unless we
-still want a no-backend single-container smoke.
-
-## Decisions needed
-
-1. **Drive identity** — per-spawn ephemeral drive + `kind` discriminator
-   (recommended) vs decouple `Job.drive_id` (cleaner, bigger).
-2. **Same image or a dedicated `arm-ripper-iso` image** — reuse the ripper image
-   with a task-mode command (recommended) vs a separate build.
-3. **`rip_tasks` shared with `transcode_tasks` patterns** — clone the table/sweep
-   (recommended) vs a generalized `worker_tasks` abstraction over both.
-4. **Library catalog** — backend enumerates a mounted dir (recommended) vs the
-   worker reports inventory.
-5. **Cancel semantics** — label force-stop like transcode (recommended) vs a WS
-   abandon command.
-6. **`MAX_PARALLEL_ISO_RIPS` default** — 1 (match transcode) vs higher (ripping is
-   I/O-bound, not GPU-bound, so concurrency is cheaper).
+`devtools/iso-smoke.sh` drives the full pipeline end to end, with no physical
+disc involved: it stages a fixture ISO into the library, calls
+`POST /api/iso/rips`, follows the job to `ripped`, then applies and polls a
+transcode session. It no longer borrows or pauses a real drive's ripper. See
+[Real-disc smoke, ISO fixture](../contributing/real-disc-smoke.md#run-the-test-iso-fixture--no-physical-disc-needed).
+The backend-side tier-1 suite covers the drive-kind rules, the library
+listing, every `POST`/`DELETE /api/iso/rips` error path, the virtual
+container spec, every watchdog branch, startup ordering, and the
+migration's upgrade/downgrade, at 100% statement coverage.
 
 ## References
 
-- [01-architecture.md](01-architecture.md) — the transcode-container topology this clones.
-- [02-job-lifecycle.md](02-job-lifecycle.md) — the pipeline ISO ingestion reuses verbatim.
-- [04-data-model.md](04-data-model.md) — `Drive`/`Job`/`transcode_tasks`; note the `output_mode='iso'` name clash.
-- [06-deployment.md](06-deployment.md) — Docker-socket access already accepted for transcode spawns.
-- [07-open-questions.md](07-open-questions.md) — the deferred queue mechanism this first exercises.
-- [transcode_dispatcher.py](../../../services/backend/arm_backend/transcode_dispatcher.py) — the spawn/dispatch/sweep template to clone.
-- [Phase 15 in MASTER_IMPLEMENTATION_PLAN.md](../../plans/MASTER_IMPLEMENTATION_PLAN.md) — where ISO-as-source is currently parked.
-- [contributors/real-disc-smoke.md](../contributing/real-disc-smoke.md) — current `ARM_MANUAL_TRIGGER_ISO` smoke procedure.
+- [01-architecture.md](01-architecture.md): service topology.
+- [02-job-lifecycle.md](02-job-lifecycle.md): the pipeline an ISO rip reuses verbatim downstream of scan.
+- [04-data-model.md](04-data-model.md): `Drive`/`Job`, and the unrelated `output_mode='iso'` name clash.
+- [09-testing.md](09-testing.md): the tier-1/e2e test split this feature's suite follows.
+- `services/backend/arm_backend/iso_library.py`, `iso_rips.py`, `job_abandon.py`, `routers/iso.py`: the backend implementation.
+- `services/backend/migrations/versions/0041_virtual_drives.py`: the schema change.
+- `services/ripper/arm_ripper/main.py` (`run_source_mode`, `amain`): the ripper's source mode.
+- [devtools/iso-smoke.sh](../../../devtools/iso-smoke.sh): the end-to-end smoke test.

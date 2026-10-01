@@ -58,14 +58,18 @@ docker logs -f arm-ripper-<serial> &          # watch ripper events (enroll the 
 ## Run the test (ISO fixture — no physical disc needed)
 
 For hosts without a Blu-ray/DVD drive, or for fixture-driven CI-adjacent
-runs, the ripper accepts an `ARM_MANUAL_TRIGGER_ISO` env var that bypasses
-the poll loop and runs scan → identify → rip exactly once against an
-`.iso` file. [devtools/iso-smoke.sh](../../../devtools/iso-smoke.sh)
-orchestrates the full flow against the
+runs, use the backend's "Rip from ISO" API
+(`docs/developers/architecture/10-iso-source-ripping.md`):
+`POST /api/iso/rips` spawns a dedicated, one-shot ripper container for a
+chosen `.iso` file. No physical drive is touched or borrowed.
+[devtools/iso-smoke.sh](../../../devtools/iso-smoke.sh) drives the whole
+flow against the
 [matrix256-corpus](https://github.com/shitwolfymakes/matrix256-corpus)
 Sintel ISO:
 
 ```bash
+# .env needs ARM_HOST_ISO_LIBRARY_PATH set; devtools/setup-dev.sh up
+# creates arm/iso-library and wires the mount.
 docker compose up -d arm-db arm-backend arm-ui       # if not already up
 ./devtools/iso-smoke.sh
 ```
@@ -84,20 +88,18 @@ The script:
   explicitly when the forum scrape is flaky (Cloudflare 525s and
   challenge pages, intermittent timeouts) — the in-container scrape
   that the ripper does on boot has the same failure mode.
-- Pauses the enrolled drive's managed container (the ISO-mode ripper
-  registers as the same `drive_id`, so the two would conflict) and
-  launches a one-shot `docker run` of the ripper image (unprivileged,
-  matching the enrolled container) with the ISO bind-mounted at
-  `/corpus`.
-- Tails the container logs until the `rip-complete` milestone fires,
-  then prints the `job_id` along with the `curl` to apply a GPU-preferred
-  Plex transcode session and the cleanup commands.
+- Stages the ISO into the ISO library (`ARM_HOST_ISO_LIBRARY_PATH`) and
+  calls `POST /api/iso/rips`. The backend creates a virtual drive and
+  spawns its own one-shot ripper container (source mode); it never
+  pauses or reuses an enrolled drive's container.
+- Polls `GET /api/jobs?drive_id=<id>` until the job is ripped, then
+  applies the GPU-preferred Plex transcode session and polls until the
+  transcode tasks finish.
 
-The ripper container idles after the one-shot pipeline (the WS
-subscription stays open for cancellation) and the enrolled drive's
-managed container stays stopped — bring it back with
-`bash devtools/ripper-containers.sh list` to find it and `docker start`
-once you're done with the ISO smoke.
+The ripper container exits on its own once the rip ends. The backend's
+watchdog retires the virtual drive within about 30 seconds of the
+container exiting; `--no-cleanup` skips the script's own
+`DELETE /api/iso/rips/{id}` call and leaves that to the watchdog.
 
 **Gotchas** (already in the matrix's ISO-row notes):
 

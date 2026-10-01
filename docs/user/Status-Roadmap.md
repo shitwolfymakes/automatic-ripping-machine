@@ -25,18 +25,18 @@ The architectural goals that defined v3 are in place:
 - **Notifications** via Apprise, configured from the UI.
 - **GPU transcoding** for Intel QSV / AMD VAAPI / NVIDIA NVENC via an opt-in
   overlay. See [Hardware Transcoding](Hardware-Transcoding).
+- **Ripping from an `.iso` source** (vs a physical disc). The gear menu's
+  **Rip from ISO** picker lets an operator pick an `.iso` from a read-only
+  library folder on the server; ARM spawns a dedicated virtual ripper for it
+  and runs it through the normal scan, identify, rip and transcode pipeline.
+  See
+  [`docs/developers/architecture/10-iso-source-ripping.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/developers/architecture/10-iso-source-ripping.md).
 
 ## In progress / ahead
 
 - **Stabilising the alpha** toward a v3.0 release: published, signed images for
   every supported platform, and CI-built release tags. See
   [Known Issues](Status-Known-Issues).
-- **Ripping from an `.iso` source** (vs a physical disc) — designed but not yet
-  built as a user feature. Design doc:
-  [`docs/developers/architecture/10-iso-source-ripping.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/developers/architecture/10-iso-source-ripping.md).
-  The UI's **Import** wizard (browse the ingress folder, scan a folder or `.iso`,
-  create the job) is built and waits on this backend, so it stays hidden until
-  then.
 - **TV-series-aware ripping** (episode detection and naming conventions) and
   further session ergonomics, building on the sessions/presets foundation. The
   UI already has **TVDB episode matching** for mapping titles to episodes; it
@@ -47,6 +47,9 @@ The architectural goals that defined v3 are in place:
 - **First-run setup wizard**: a guided first boot (drive scan, readiness
   checks, settings review). Built in the UI, switched off until the v3 setup
   status endpoints land.
+- **Extracted disc folders as a rip source** (a `BDMV` or `VIDEO_TS` folder
+  already on disk, rather than an `.iso` file). Next up for the ISO-source
+  picker; see the non-goals in the design doc linked above.
 
 ## Where to follow along
 
