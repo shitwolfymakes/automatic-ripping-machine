@@ -106,6 +106,12 @@
 	.setup-shell-main {
 		min-width: 0;
 	}
+	/* inline text links inside steps (buttons styled as links keep their own look) */
+	.setup-shell-main :global(a:not(.btn)) {
+		color: var(--color-primary-text);
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
 	@media (min-width: 900px) {
 		.setup-shell-body {
 			grid-template-columns: 18rem minmax(0, 44rem);

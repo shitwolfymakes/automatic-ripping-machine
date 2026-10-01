@@ -85,13 +85,10 @@
 	}
 	.discs-step-row {
 		display: grid;
-		grid-template-columns: 6rem minmax(0, 1fr);
-		align-items: start;
-		gap: 0.75rem;
+		gap: 0.375rem;
 	}
 	.discs-step-kind {
 		justify-self: start;
-		margin-top: 0.75rem;
 	}
 	.discs-step-example {
 		display: grid;
@@ -107,14 +104,5 @@
 		letter-spacing: 0.05em;
 		text-transform: uppercase;
 		color: var(--color-text-faint);
-	}
-	@media (max-width: 639px) {
-		.discs-step-row {
-			grid-template-columns: 1fr;
-			gap: 0.375rem;
-		}
-		.discs-step-kind {
-			margin-top: 0;
-		}
 	}
 </style>

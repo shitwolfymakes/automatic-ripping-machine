@@ -244,7 +244,7 @@
 				</div>
 			</section>
 
-			{#if otherChecks.length > 0}
+			{#if otherChecks.length > 0 && (scope === 'all' || otherChecks.some((c) => c.status !== 'ok'))}
 				<section class="panel system-health-group" aria-labelledby="system-health-other">
 					<h3 id="system-health-other" class="system-health-title">Other checks</h3>
 					<ul class="mt-2">

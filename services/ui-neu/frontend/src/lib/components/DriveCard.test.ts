@@ -448,6 +448,17 @@ describe('DriveCard', () => {
 			expect(screen.getByText('container exited 125')).toBeInTheDocument();
 		});
 
+		it('says a detached drive is not connected instead of starting', () => {
+			renderComponent(DriveCard, {
+				props: {
+					drive: createDrive({ status: 'offline', present: false, media_status: 'detached' }),
+					variant: 'essentials'
+				}
+			});
+			expect(screen.getByText('Not connected')).toBeInTheDocument();
+			expect(screen.queryByText('Starting ripper...')).toBeNull();
+		});
+
 		it('does not save an unchanged name', async () => {
 			renderComponent(DriveCard, { props: { drive: createDrive(), variant: 'essentials' } });
 			const name = screen.getByLabelText(/friendly name/i);

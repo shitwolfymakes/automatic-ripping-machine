@@ -17,7 +17,10 @@
 	let { cells }: { cells: RecipeCell[] } = $props();
 </script>
 
-<div class="recipe-strip">
+<div
+	class="recipe-strip"
+	style="--recipe-columns: {cells.map((_, i) => (i ? 'auto minmax(0, 1fr)' : 'minmax(0, 1fr)')).join(' ')}"
+>
 	{#each cells as cell, i (i)}
 		{#if i > 0}
 			<div class="recipe-strip-arrow" aria-hidden="true"><Glyph name="chevron-right" /></div>
@@ -51,12 +54,10 @@
 	}
 	@media (min-width: 640px) {
 		.recipe-strip {
-			grid-auto-flow: column;
-			grid-template-columns: none;
-			grid-auto-columns: minmax(0, 1fr);
+			grid-template-columns: var(--recipe-columns);
 		}
 		.recipe-strip > .recipe-strip-arrow {
-			width: 1.5rem;
+			padding: 0 0.25rem;
 		}
 		.recipe-strip > :not(:first-child) {
 			border-left: 1px solid var(--color-border);

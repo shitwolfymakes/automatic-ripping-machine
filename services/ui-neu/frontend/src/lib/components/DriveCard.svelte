@@ -381,6 +381,12 @@
 		</div>
 		{#if drive.last_error}
 			<StatusStrip tone="danger" title="The ripper for this drive reported a problem." message={drive.last_error} />
+		{:else if drive.present === false || drive.media_status === 'detached'}
+			<StatusStrip
+				tone="warning"
+				title="Not connected"
+				detail="Reconnect the drive. It shows Ready once its ripper checks in."
+			/>
 		{:else if isRipping(drive)}
 			<StatusStrip tone="busy" title="Ripping" detail="A disc is being ripped right now." />
 		{:else if drive.status === 'online'}

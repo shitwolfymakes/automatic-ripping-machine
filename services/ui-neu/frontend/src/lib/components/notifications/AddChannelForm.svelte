@@ -140,7 +140,15 @@
 			showLabelRow={false}
 			onscript={(i: BashScriptInfo | null) => (scriptInputs = i?.inputs ?? [])}
 		/>
-		<EventsSection bind:selected={events} bind:templates {eventTypes} inputs={scriptInputs} />
+		{#if variant === 'full' || serviceId}
+			<EventsSection
+				bind:selected={events}
+				bind:templates
+				{eventTypes}
+				inputs={scriptInputs}
+				compact={variant === 'compact'}
+			/>
+		{/if}
 		{#if type === 'bash'}
 			<BashTestPanel {config} {templates} {events} {eventTypes} inputs={scriptInputs} />
 		{/if}

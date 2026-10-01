@@ -36,31 +36,33 @@
 </script>
 
 <div class="setup-footer">
-	<div class="setup-footer-inner">
-		{#if !first}
-			<button type="button" class="btn" onclick={onback} disabled={busy}>
-				<Glyph name="arrow-left" /> Back
-			</button>
-		{/if}
-		<span class="setup-footer-hint" aria-live="polite">{hint}</span>
-		<span class="setup-footer-actions">
-			{#if step.optional}
+	<div class="setup-footer-grid">
+		<div class="setup-footer-inner">
+			{#if !first}
+				<button type="button" class="btn" onclick={onback} disabled={busy}>
+					<Glyph name="arrow-left" /> Back
+				</button>
+			{/if}
+			<span class="setup-footer-hint" aria-live="polite">{hint}</span>
+			<span class="setup-footer-actions">
+				{#if step.optional}
+					<button
+						type="button"
+						class="btn {step.id === 'notifications' ? '' : 'btn-link'} setup-footer-skip"
+						onclick={onskip}
+						disabled={busy}>Skip for now</button
+					>
+				{/if}
 				<button
 					type="button"
-					class="btn {step.id === 'notifications' ? '' : 'btn-link'} setup-footer-skip"
-					onclick={onskip}
-					disabled={busy}>Skip for now</button
+					class="btn btn-primary setup-footer-continue"
+					onclick={oncontinue}
+					disabled={busy || !canContinue}
 				>
-			{/if}
-			<button
-				type="button"
-				class="btn btn-primary setup-footer-continue"
-				onclick={oncontinue}
-				disabled={busy || !canContinue}
-			>
-				{#if busy}Saving...{:else}{last ? 'Go to dashboard' : 'Continue'} <Glyph name="arrow-right" />{/if}
-			</button>
-		</span>
+					{#if busy}Saving...{:else}{last ? 'Go to dashboard' : 'Continue'} <Glyph name="arrow-right" />{/if}
+				</button>
+			</span>
+		</div>
 	</div>
 </div>
 
@@ -100,13 +102,23 @@
 		gap: 0.375rem;
 		padding-inline: 1.25rem;
 	}
+	/* desktop: line the actions up with the content column of SetupShell's grid */
 	@media (min-width: 900px) {
-		.setup-footer-inner {
-			max-width: none;
-			padding-left: calc(18rem + 3rem);
-			padding-right: 0;
+		.setup-footer {
+			padding-left: 1.5rem;
+			padding-right: 1.5rem;
+		}
+		.setup-footer-grid {
+			display: grid;
+			grid-template-columns: 18rem minmax(0, 44rem);
+			gap: 3rem;
+			max-width: 69rem;
 			margin: 0 auto;
-			width: min(100%, 72rem);
+		}
+		.setup-footer-inner {
+			grid-column: 2;
+			max-width: none;
+			margin: 0;
 		}
 	}
 </style>
