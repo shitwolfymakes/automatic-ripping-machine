@@ -608,6 +608,10 @@ export type ConfigUpdateRequest = {
      */
     max_parallel_transcodes?: number | null;
     /**
+     * Max Parallel Iso Rips
+     */
+    max_parallel_iso_rips?: number | null;
+    /**
      * Transcode Enabled
      */
     transcode_enabled?: boolean | null;
@@ -715,6 +719,10 @@ export type ConfigView = {
      * Max Parallel Transcodes
      */
     max_parallel_transcodes: number;
+    /**
+     * Max Parallel Iso Rips
+     */
+    max_parallel_iso_rips: number;
     /**
      * Transcode Enabled
      */
@@ -930,6 +938,12 @@ export type Drive = {
     sysfs_port?: string | null;
     identity_kind?: DriveIdentityKind | null;
     lifecycle?: DriveLifecycle;
+    kind?: DriveKind;
+    source_kind?: DriveSourceKind | null;
+    /**
+     * Source Path
+     */
+    source_path?: string | null;
     /**
      * Present
      */
@@ -1103,12 +1117,22 @@ export type DriveDiagnosticResponse = {
 export type DriveIdentityKind = 'by_id' | 'port';
 
 /**
+ * DriveKind
+ *
+ * What a Drive row represents. OPTICAL is a physical drive the scanner
+ * found; VIRTUAL is an ephemeral per-ISO-rip drive row (source_kind /
+ * source_path identify the ISO), created enrolled and retired when its one
+ * rip ends.
+ */
+export type DriveKind = 'optical' | 'virtual';
+
+/**
  * DriveLifecycle
  *
  * Operator-owned state of a physical optical drive the backend has seen.
  * Presence (plugged in right now) is a separate, orthogonal fact.
  */
-export type DriveLifecycle = 'detected' | 'ignored' | 'enrolled';
+export type DriveLifecycle = 'detected' | 'ignored' | 'enrolled' | 'retired';
 
 /**
  * DriveMediaStatus
@@ -1157,6 +1181,13 @@ export type DriveRescanResponse = {
      */
     pruned?: number;
 };
+
+/**
+ * DriveSourceKind
+ *
+ * What a virtual drive's source is. Only ISO exists today.
+ */
+export type DriveSourceKind = 'iso';
 
 /**
  * DriveStatus
@@ -1302,6 +1333,12 @@ export type DriveView = {
      */
     last_error: string | null;
     current_job?: DriveCurrentJobView | null;
+    kind?: DriveKind;
+    source_kind?: DriveSourceKind | null;
+    /**
+     * Source Path
+     */
+    source_path?: string | null;
 };
 
 /**

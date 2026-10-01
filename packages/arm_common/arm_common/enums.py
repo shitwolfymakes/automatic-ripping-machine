@@ -48,6 +48,23 @@ class DriveLifecycle(StrEnum):
     DETECTED = "detected"  # seen by the scanner, no decision yet
     IGNORED = "ignored"  # operator said "not ARM's" — never nag, never prune
     ENROLLED = "enrolled"  # operator said "ARM's" — a ripper serves it (Plan 3 spawns it)
+    RETIRED = "retired"  # a virtual (ISO) drive whose one-shot rip has ended
+
+
+class DriveKind(StrEnum):
+    """What a Drive row represents. OPTICAL is a physical drive the scanner
+    found; VIRTUAL is an ephemeral per-ISO-rip drive row (source_kind /
+    source_path identify the ISO), created enrolled and retired when its one
+    rip ends."""
+
+    OPTICAL = "optical"
+    VIRTUAL = "virtual"
+
+
+class DriveSourceKind(StrEnum):
+    """What a virtual drive's source is. Only ISO exists today."""
+
+    ISO = "iso"
 
 
 class DriveIdentityKind(StrEnum):

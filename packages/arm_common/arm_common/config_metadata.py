@@ -207,6 +207,15 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         type="int",
         editable=True,
     ),
+    ConfigFieldMeta(
+        key="max_parallel_iso_rips",
+        group="Ripping",
+        tier="operator",
+        label="Max parallel ISO rips",
+        help="How many ISO files can rip at the same time, 1 to 8. Each runs its own ripper.",
+        type="int",
+        editable=True,
+    ),
     # NOTE: default_retention_policy is intentionally NOT registered — the column
     # + RetentionPolicy enum persist, but no consumer prunes raw rips yet, so the
     # knob is hidden rather than shown-but-inert. Re-add when retention lands.

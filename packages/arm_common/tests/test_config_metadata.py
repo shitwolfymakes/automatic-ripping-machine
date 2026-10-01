@@ -103,3 +103,17 @@ def test_config_model_defaults_for_identity_settings() -> None:
     assert cfg.episode_match_tolerance_seconds == 300
     assert cfg.episode_auto_apply is True
     assert Config().episode_sources is not cfg.episode_sources  # no shared mutable default
+
+
+def test_iso_cap_meta() -> None:
+    m = {x.key: x for x in CONFIG_FIELD_META}["max_parallel_iso_rips"]
+    assert (m.group, m.tier, m.type, m.editable) == ("Ripping", "operator", "int", True)
+
+
+def test_drive_defaults_optical() -> None:
+    from arm_common import Drive
+
+    d = Drive(hostname="h", device_path="/dev/sr0")
+    assert d.kind == "optical"
+    assert d.source_kind is None
+    assert d.source_path is None

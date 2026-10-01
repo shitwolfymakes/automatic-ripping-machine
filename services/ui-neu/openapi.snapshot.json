@@ -9756,6 +9756,17 @@
             ],
             "title": "Max Parallel Transcodes"
           },
+          "max_parallel_iso_rips": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Parallel Iso Rips"
+          },
           "transcode_enabled": {
             "anyOf": [
               {
@@ -9994,6 +10005,10 @@
             "type": "integer",
             "title": "Max Parallel Transcodes"
           },
+          "max_parallel_iso_rips": {
+            "type": "integer",
+            "title": "Max Parallel Iso Rips"
+          },
           "transcode_enabled": {
             "type": "boolean",
             "title": "Transcode Enabled"
@@ -10138,6 +10153,7 @@
           "drive_scan_interval_seconds",
           "drive_detected_prune_days",
           "max_parallel_transcodes",
+          "max_parallel_iso_rips",
           "transcode_enabled",
           "transcode_capable",
           "makemkv_sdf_enabled",
@@ -10375,6 +10391,31 @@
           "lifecycle": {
             "$ref": "#/components/schemas/DriveLifecycle",
             "default": "enrolled"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DriveKind",
+            "default": "optical"
+          },
+          "source_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveSourceKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Path"
           },
           "present": {
             "type": "boolean",
@@ -10773,12 +10814,22 @@
         "title": "DriveIdentityKind",
         "description": "What a Drive row's identity is keyed on. BY_ID is the udev\n/dev/disk/by-id link name (stable across replug and renumbering); PORT\nis the sysfs device path \u2014 the degraded fallback for drives that expose\nno serial, and the UI says so."
       },
+      "DriveKind": {
+        "type": "string",
+        "enum": [
+          "optical",
+          "virtual"
+        ],
+        "title": "DriveKind",
+        "description": "What a Drive row represents. OPTICAL is a physical drive the scanner\nfound; VIRTUAL is an ephemeral per-ISO-rip drive row (source_kind /\nsource_path identify the ISO), created enrolled and retired when its one\nrip ends."
+      },
       "DriveLifecycle": {
         "type": "string",
         "enum": [
           "detected",
           "ignored",
-          "enrolled"
+          "enrolled",
+          "retired"
         ],
         "title": "DriveLifecycle",
         "description": "Operator-owned state of a physical optical drive the backend has seen.\nPresence (plugged in right now) is a separate, orthogonal fact."
@@ -10847,6 +10898,14 @@
           "stale"
         ],
         "title": "DriveRescanResponse"
+      },
+      "DriveSourceKind": {
+        "type": "string",
+        "enum": [
+          "iso"
+        ],
+        "title": "DriveSourceKind",
+        "description": "What a virtual drive's source is. Only ISO exists today."
       },
       "DriveStatus": {
         "type": "string",
@@ -11218,6 +11277,31 @@
                 "type": "null"
               }
             ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DriveKind",
+            "default": "optical"
+          },
+          "source_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveSourceKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Path"
           }
         },
         "type": "object",
