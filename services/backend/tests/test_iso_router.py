@@ -45,6 +45,22 @@ from tests._fakes import FakeSession  # noqa: E402
 _REAL_ISO_ROOT = fb.ROOTS["ISO"]
 
 
+class _YieldingFakeSession(FakeSession):
+    """`FakeSession.execute` never actually suspends (tests/_fakes.py has no
+    real I/O to await), so two concurrent `create_iso_rip` calls against a
+    plain `FakeSession` never interleave at all: the first just runs to
+    completion — through its own `asyncio.to_thread(ensure_running)` — before
+    the second's coroutine is ever scheduled, which would make
+    `test_create_is_serialised` pass even with `_create_lock` gutted to a
+    no-op. Only used by that test: a real forced suspension point before
+    every read, so both requests can genuinely race to read `live` before
+    either commits — which is exactly what `_create_lock` must prevent."""
+
+    async def execute(self, stmt: Any) -> Any:
+        await asyncio.sleep(0)
+        return await super().execute(stmt)
+
+
 @pytest.fixture
 def signing_key() -> bytes:
     return secrets.token_bytes(32)
@@ -391,7 +407,7 @@ def test_create_409_when_already_ripping(lib: Path, signing_key: bytes) -> None:
 async def test_create_is_serialised(lib: Path, signing_key: bytes) -> None:
     (lib / "Movies").mkdir()
     (lib / "Movies" / "x.iso").write_bytes(b"x")
-    db = FakeSession()
+    db = _YieldingFakeSession()
     token = _admin_token(db, signing_key)
     manager = _StubManager()
     app = _build_app(db, signing_key, manager)
