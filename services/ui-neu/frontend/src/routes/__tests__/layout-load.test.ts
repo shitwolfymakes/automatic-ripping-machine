@@ -30,6 +30,8 @@ describe('+layout.ts load guard', () => {
 		getTokenMock.mockReset();
 		getTokenMock.mockReturnValue(null);
 		hydrateConfigMock.mockClear();
+		localStorage.clear();
+		sessionStorage.clear();
 	});
 
 	it('no token + non-auth route: hydrates config and does not redirect', async () => {
@@ -56,26 +58,65 @@ describe('+layout.ts load guard', () => {
 		expect(result).toEqual({});
 	});
 
-	it('re-throws a genuine SvelteKit redirect from the setup-status check', async () => {
-		vi.doMock('$lib/features', () => ({ features: { setup: true } }));
-		const fetchImpl = vi.fn(() =>
-			Promise.resolve({
-				ok: true,
-				json: () => Promise.resolve({ first_run: true })
-			})
-		) as unknown as typeof fetch;
+	function statusFetch(body: unknown, ok = true) {
+		return vi.fn(() => Promise.resolve({ ok, json: () => Promise.resolve(body) })) as unknown as typeof fetch;
+	}
+	function asAdmin() {
+		getTokenMock.mockReturnValue('tok');
+		localStorage.setItem('arm_role', 'admin');
+	}
 
+	it('admin + first run redirects to /setup', async () => {
+		asAdmin();
 		const { load } = await import('../+layout');
-
 		let caught: unknown;
 		try {
-			await load(loadArgs('/', fetchImpl));
+			await load(loadArgs('/', statusFetch({ first_run: true })));
 		} catch (e) {
 			caught = e;
 		}
 		expect(isRedirect(caught)).toBe(true);
 		expect((caught as { location: string }).location).toBe('/setup');
+	});
 
-		vi.doUnmock('$lib/features');
+	it('guests and anonymous visitors are never sent to /setup', async () => {
+		const fetchImpl = statusFetch({ first_run: true });
+		const { load } = await import('../+layout');
+		expect(await load(loadArgs('/', fetchImpl))).toEqual({});
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it('Finish later pauses the redirect for the browser session', async () => {
+		asAdmin();
+		sessionStorage.setItem('arm_setup_finish_later', '1');
+		const fetchImpl = statusFetch({ first_run: true });
+		const { load } = await import('../+layout');
+		expect(await load(loadArgs('/', fetchImpl))).toEqual({});
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it('an unreachable backend never redirects', async () => {
+		asAdmin();
+		const fetchImpl = vi.fn(() => Promise.reject(new Error('down'))) as unknown as typeof fetch;
+		const { load } = await import('../+layout');
+		expect(await load(loadArgs('/', fetchImpl))).toEqual({});
+	});
+
+	it('caches a completed setup so later navigations skip the check', async () => {
+		asAdmin();
+		const fetchImpl = statusFetch({ first_run: false });
+		const { load } = await import('../+layout');
+		await load(loadArgs('/', fetchImpl));
+		await load(loadArgs('/jobs', fetchImpl));
+		expect(fetchImpl).toHaveBeenCalledTimes(1);
+	});
+
+	it('the walkthrough and sign-in pages never check', async () => {
+		asAdmin();
+		const fetchImpl = statusFetch({ first_run: true });
+		const { load } = await import('../+layout');
+		expect(await load(loadArgs('/setup/drives', fetchImpl))).toEqual({});
+		expect(await load(loadArgs('/change-password', fetchImpl))).toEqual({});
+		expect(fetchImpl).not.toHaveBeenCalled();
 	});
 });

@@ -4,6 +4,9 @@
 	import { reveal } from '$lib/transitions';
 	import { login } from '$lib/api/auth';
 	import { applyLogin, isGuest } from '$lib/stores/auth';
+	import CopyBlock from '$lib/components/CopyBlock.svelte';
+
+	const FIRST_BOOT_COMMAND = 'docker exec armv3-backend cat /logs/first-boot.log';
 
 	let username = $state('');
 	let password = $state('');
@@ -16,12 +19,21 @@
 	// not fire for a probe. 200 = guest access enabled, anything else = hide
 	// the Continue-as-Guest button.
 	let guestEnabled = $state(false);
+	// First run (setup not finished): say where the admin password is, hide
+	// guest browsing (it's off until setup), and send the admin into setup.
+	let firstRun = $state(false);
 	onMount(async () => {
 		try {
 			const res = await fetch('/api/system/version');
 			guestEnabled = res.ok;
 		} catch {
 			guestEnabled = false;
+		}
+		try {
+			const res = await fetch('/api/setup/status');
+			firstRun = res.ok && (await res.json()).first_run === true;
+		} catch {
+			firstRun = false;
 		}
 	});
 
@@ -33,7 +45,8 @@
 		try {
 			const result = await login(username, password);
 			applyLogin(result);
-			goto(result.password_must_change ? '/change-password' : '/');
+			if (firstRun && result.role === 'admin') goto('/setup');
+			else goto(result.password_must_change ? '/change-password' : '/');
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Login failed';
 		} finally {
@@ -59,7 +72,13 @@
 		<button type="submit" disabled={submitting} class="btn btn-primary login-page-submit">
 			{submitting ? 'Signing in...' : 'Sign in'}
 		</button>
-		{#if $isGuest && guestEnabled}
+		{#if firstRun}
+			<div class="login-page-first-run" data-testid="login-first-run">
+				<p>First time? The admin password is in ARM's first-boot log. Run this on the server:</p>
+				<CopyBlock text={FIRST_BOOT_COMMAND} />
+			</div>
+		{/if}
+		{#if $isGuest && guestEnabled && !firstRun}
 			<button type="button" onclick={() => goto('/')} in:reveal class="btn btn-warning login-page-guest">
 				Continue as Guest
 			</button>
@@ -128,6 +147,12 @@
 	/* darkens on hover like the original's bg-amber-500 -> hover:bg-amber-600;
 	   no darker warning token exists, so filter substitutes for a literal
 	   colour (the lint bans raw colour keywords, even inside color-mix) */
+	.login-page-first-run {
+		display: grid;
+		gap: 0.5rem;
+		font-size: 0.875rem;
+		color: var(--color-text-muted);
+	}
 	.login-page-guest:hover {
 		filter: brightness(0.9);
 	}

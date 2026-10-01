@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const createChannel = vi.fn((b: unknown) => Promise.resolve({ id: 1, ...(b as object) }));
-const testConfig = vi.fn(() => Promise.resolve({ ok: true }));
+const testConfig = vi.fn((_b?: unknown) => Promise.resolve({ ok: true }));
 vi.mock('$lib/api/channels', () => ({
 	createChannel: (b: unknown) => createChannel(b),
-	testConfig: (b: unknown) => testConfig(b as never)
+	testConfig: (b: unknown) => testConfig(b)
 }));
 
 import { toConfig, createChannelFromBody, testUnsavedBody } from '../channelActions';

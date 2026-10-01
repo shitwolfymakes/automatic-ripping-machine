@@ -12,16 +12,16 @@ const eventTypes = [
 	{ key: 'rip.failed', label: 'Rip failed' }
 ];
 const createChannel = vi.fn((b: unknown) => Promise.resolve({ id: 1, ...(b as object) }));
-const testConfig = vi.fn(() => Promise.resolve({ ok: true }));
+const testConfig = vi.fn((_b?: unknown) => Promise.resolve({ ok: true }));
 vi.mock('$lib/api/channels', () => ({
 	fetchServices: () => Promise.resolve(catalog),
 	fetchEventTypes: () => Promise.resolve(eventTypes),
 	fetchScripts: () => Promise.resolve([]),
 	createChannel: (b: unknown) => createChannel(b),
-	testConfig: (b: unknown) => testConfig(b as never)
+	testConfig: (b: unknown) => testConfig(b)
 }));
-const saveArmConfig = vi.fn(() => Promise.resolve({ success: true }));
-vi.mock('$lib/api/settings', () => ({ saveArmConfig: (c: unknown) => saveArmConfig(c as never) }));
+const saveArmConfig = vi.fn((_c?: unknown) => Promise.resolve({ success: true }));
+vi.mock('$lib/api/settings', () => ({ saveArmConfig: (c: unknown) => saveArmConfig(c) }));
 
 import ChannelQuickAdd from '../ChannelQuickAdd.svelte';
 
