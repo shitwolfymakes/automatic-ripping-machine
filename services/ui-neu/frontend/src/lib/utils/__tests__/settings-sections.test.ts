@@ -65,3 +65,61 @@ describe('sectionFields layout hints', () => {
 		expect(sections[0].fields.map((f) => f.key)).toEqual(['some_future_field']);
 	});
 });
+
+describe('setup step field selection (setup spec 2026-10-01 §7.2)', () => {
+	const f = (key: string, extra: Partial<ConfigFieldMeta> = {}): ConfigFieldMeta => ({
+		key,
+		group: 'Ripping',
+		tier: 'operator',
+		label: key,
+		help: '',
+		type: 'bool',
+		editable: true,
+		...extra
+	});
+
+	it('stepFields picks tagged fields across groups in setup_order, plus their part_of fields', async () => {
+		const { stepFields } = await import('../settings-sections');
+		const groups = [
+			{
+				name: 'Ripping',
+				fields: [
+					f('hold_for_review', { part_of: 'auto_rip_on_insert' }),
+					f('auto_rip_on_insert', { setup_step: 'discs', setup_order: 1, widget: 'disc_handling' }),
+					f('block_on_miss')
+				]
+			},
+			{ name: 'Metadata', fields: [f('tmdb_api_key', { setup_step: 'metadata', setup_order: 1 })] }
+		];
+		expect(stepFields(groups, 'discs').map((x) => x.key)).toEqual(['auto_rip_on_insert', 'hold_for_review']);
+		expect(stepFields(groups, 'metadata').map((x) => x.key)).toEqual(['tmdb_api_key']);
+		expect(stepFields(groups, 'drives')).toEqual([]);
+	});
+
+	it('stepGroup wraps them in a synthetic group', async () => {
+		const { stepGroup } = await import('../settings-sections');
+		const g = stepGroup(
+			[
+				{
+					name: 'X',
+					fields: [f('a', { setup_step: 'makemkv', setup_order: 2 }), f('b', { setup_step: 'makemkv', setup_order: 1 })]
+				}
+			],
+			'makemkv'
+		);
+		expect(g.name).toBe('setup:makemkv');
+		expect(g.fields.map((x) => x.key)).toEqual(['b', 'a']);
+	});
+
+	it('sectionFields never renders a part_of field on its own', () => {
+		const out = sectionFields('Ripping', [
+			f('auto_rip_on_insert', { widget: 'disc_handling' }),
+			f('hold_for_review', { part_of: 'auto_rip_on_insert' }),
+			f('manual_wait_seconds', { type: 'int' })
+		]);
+		const keys = out.flatMap((s) => [...s.columns.flat(), ...s.fields, ...s.advanced]).map((x) => x.key);
+		expect(keys).toContain('auto_rip_on_insert');
+		expect(keys).toContain('manual_wait_seconds');
+		expect(keys).not.toContain('hold_for_review');
+	});
+});

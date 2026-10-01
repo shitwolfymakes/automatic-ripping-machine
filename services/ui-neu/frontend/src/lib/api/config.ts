@@ -20,3 +20,8 @@ export async function fetchConfig(): Promise<AppConfig> {
 		metadata_provider: cfg.metadata_provider ?? null
 	};
 }
+
+/** The full config view (secrets masked as '<hidden>'). Read-only. */
+export function fetchConfigView(): Promise<ConfigView> {
+	return get<ConfigView>('/api/config');
+}

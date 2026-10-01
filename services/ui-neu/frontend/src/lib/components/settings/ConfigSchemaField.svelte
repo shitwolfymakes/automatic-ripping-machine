@@ -1,21 +1,44 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { ConfigFieldMeta } from '$lib/types/api.gen';
+	import Glyph from '$lib/components/Glyph.svelte';
 	import RankedListField from './RankedListField.svelte';
+	import MakemkvKeyField from './MakemkvKeyField.svelte';
+	import DiscHandlingField from './DiscHandlingField.svelte';
 
 	// `config` (the live form values, keyed by field key) lets a field type
 	// read a sibling's value - the `ranked` branch below uses it to flag a
-	// source whose required API key isn't set.
+	// source whose required API key isn't set, and widgets write their
+	// `part_of` siblings through it. `context` is the full saved config, for
+	// widgets that read a value outside the form (setup steps render a subset).
+	// `onclear` reports that a saved secret was removed (the form sends null).
 	let {
 		field,
 		value = $bindable(),
 		action,
-		config = {}
-	}: { field: ConfigFieldMeta; value: unknown; action?: Snippet; config?: Record<string, unknown> } = $props();
+		config = {},
+		context = {},
+		onclear
+	}: {
+		field: ConfigFieldMeta;
+		value: unknown;
+		action?: Snippet;
+		config?: Record<string, unknown>;
+		context?: Record<string, unknown>;
+		onclear?: () => void;
+	} = $props();
 
 	const HIDDEN = '<hidden>';
 	const isSecret = $derived(field.tier === 'secret');
 	const isHiddenSecret = $derived(isSecret && value === HIDDEN);
+	let reveal = $state(false);
+	let removed = $state(false);
+
+	function removeSecret() {
+		value = null;
+		removed = true;
+		onclear?.();
+	}
 	const boolValue = $derived(Boolean(value));
 	const displayValue = $derived(isHiddenSecret ? '' : (value ?? ''));
 	const placeholder = $derived(isHiddenSecret ? '******** (set, leave blank to keep)' : '');
@@ -23,7 +46,11 @@
 </script>
 
 <div class="config-schema-field stack" id="setting-{field.key}" data-testid="setting-{field.key}">
-	{#if field.type === 'bool'}
+	{#if field.widget === 'makemkv_key' && field.editable}
+		<MakemkvKeyField {field} bind:value {onclear} />
+	{:else if field.widget === 'disc_handling' && field.editable}
+		<DiscHandlingField values={config} {context} />
+	{:else if field.type === 'bool'}
 		{#if !field.editable}
 			<!-- Same read-only idiom as the string/enum branch below (a plain
 			     muted value under the label, no interactive control) rather than
@@ -52,7 +79,14 @@
 			</div>
 		{/if}
 	{:else}
-		<div class="field-label">{field.label}</div>
+		<div class="config-schema-field-label-row">
+			<div class="field-label">{field.label}</div>
+			{#if field.signup_url}
+				<a class="config-schema-field-signup" href={field.signup_url} target="_blank" rel="noopener noreferrer">
+					Get a free key <Glyph name="external-link" class="h-3.5 w-3.5" />
+				</a>
+			{/if}
+		</div>
 		{#if !field.editable}
 			<div class="mono config-schema-field-value">{value ?? '-'}</div>
 		{:else}
@@ -89,19 +123,45 @@
 					/>
 				{:else}
 					<input
-						type={isSecret ? 'password' : 'text'}
+						type={isSecret && !reveal ? 'password' : 'text'}
 						aria-label={field.label}
 						value={displayValue}
 						{placeholder}
-						oninput={(e) => (value = (e.currentTarget as HTMLInputElement).value)}
+						oninput={(e) => {
+							value = (e.currentTarget as HTMLInputElement).value;
+							removed = false;
+						}}
 						class="field-control w-full"
 					/>
+					{#if isSecret}
+						<button
+							type="button"
+							class="btn btn-icon"
+							aria-label="Show hidden value"
+							aria-pressed={reveal}
+							onclick={() => (reveal = !reveal)}
+						>
+							<Glyph name={reveal ? 'eye-off' : 'eye'} />
+						</button>
+					{/if}
 				{/if}
 				{#if action}{@render action()}{/if}
 			</div>
+			{#if isHiddenSecret}
+				<div class="config-schema-field-saved">
+					<span class="chip chip-sm chip-success"><Glyph name="check" class="h-3 w-3" /> Saved</span>
+					<span class="config-schema-field-saved-note">Type a new key to replace it.</span>
+					<button type="button" class="btn btn-link btn-sm" onclick={removeSecret}>Remove</button>
+				</div>
+			{:else if removed}
+				<div class="config-schema-field-saved">
+					<span class="chip chip-sm chip-warning"><Glyph name="minus-circle" class="h-3 w-3" /> Will be removed</span>
+					<span class="config-schema-field-saved-note">The key is cleared when you save.</span>
+				</div>
+			{/if}
 		{/if}
 	{/if}
-	{#if field.help}
+	{#if field.help && field.widget == null}
 		<p class="field-help" id={helpId}>{field.help}</p>
 	{/if}
 </div>
@@ -122,6 +182,29 @@
 	.config-schema-field-value {
 		font-size: 0.875rem;
 		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
+	.config-schema-field-label-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 0.25rem 0.75rem;
+	}
+	.config-schema-field-signup {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.8125rem;
+	}
+	.config-schema-field-saved {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.25rem 0.5rem;
+		font-size: 0.8125rem;
+	}
+	.config-schema-field-saved-note {
 		color: var(--color-text-muted);
 	}
 	/* an int field is a short number, not a full-width text box. */
