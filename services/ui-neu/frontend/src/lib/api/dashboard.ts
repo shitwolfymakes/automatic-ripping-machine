@@ -28,8 +28,14 @@ export interface DashboardData {
 	db_available: boolean;
 	arm_online: boolean;
 	active_jobs: JobView[];
+	// Physical optical drives only (Decision 11) — a virtual (ISO) drive row
+	// isn't a drive an operator can plug/unplug, so it never counts here.
 	drives_online: number;
 	drive_names: Record<string, string>;
+	// drive id -> ISO file name, for the currently-enrolled virtual drives
+	// (one per in-flight ISO rip). Lets the dashboard swap the drive chip for
+	// an ISO source chip without a second fetch.
+	iso_sources: Record<string, string>;
 	notification_count: number;
 	ripping_enabled: boolean;
 	makemkv_key_valid: boolean | null;
@@ -79,8 +85,14 @@ export async function fetchDashboard(): Promise<DashboardData> {
 	const activeJobs = (jobs ?? []).filter(isActiveJob);
 
 	const driveNames: Record<string, string> = {};
+	const isoSources: Record<string, string> = {};
 	for (const d of drives ?? []) {
 		driveNames[d.id] = d.display_name ?? d.device_path;
+		if (d.kind === 'virtual') {
+			// display_name is the ISO's file name for a virtual drive; fall back
+			// to the last path segment of source_path if it's ever missing.
+			isoSources[d.id] = d.display_name ?? d.source_path?.split('/').pop() ?? d.source_path ?? d.device_path;
+		}
 	}
 
 	const activeTranscodes = (transcodes ?? []).filter((t) => IN_PROGRESS_TRANSCODE_STATUSES.has(t.status));
@@ -91,8 +103,9 @@ export async function fetchDashboard(): Promise<DashboardData> {
 		db_available: config !== null,
 		arm_online: armOnline,
 		active_jobs: activeJobs,
-		drives_online: drives?.length ?? 0,
+		drives_online: (drives ?? []).filter((d) => d.kind === 'optical').length,
 		drive_names: driveNames,
+		iso_sources: isoSources,
 		notification_count: notifications?.unseen ?? 0,
 		ripping_enabled: config ? !config.ripping_paused : true,
 		makemkv_key_valid: config?.makemkv_key_valid ?? null,

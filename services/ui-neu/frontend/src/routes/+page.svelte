@@ -284,6 +284,7 @@
 							<DiscReviewWidget
 								{job}
 								driveNames={dash.drive_names}
+								isoSources={dash.iso_sources}
 								paused={!dash.ripping_enabled}
 								onrefresh={refreshDashboard}
 								ondismiss={() => dismissJob(job.id)}
@@ -306,7 +307,7 @@
 				<div class="space-y-2">
 					{#each scanningJobs as job (job.id)}
 						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
-							<ActiveJobRow {job} />
+							<ActiveJobRow {job} isoSource={job.drive_id ? (dash.iso_sources?.[job.drive_id] ?? null) : null} />
 						</div>
 					{/each}
 				</div>
@@ -329,6 +330,7 @@
 								{job}
 								progress={ripProgress.value[job.id]?.progress_pct ?? null}
 								eta={ripProgress.value[job.id]?.eta_seconds ?? null}
+								isoSource={job.drive_id ? (dash.iso_sources?.[job.drive_id] ?? null) : null}
 							/>
 						</div>
 					{/each}

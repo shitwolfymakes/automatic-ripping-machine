@@ -6,6 +6,7 @@ export const emptyDashboard: DashboardData = {
 	active_jobs: [],
 	drives_online: 0,
 	drive_names: {},
+	iso_sources: {},
 	notification_count: 0,
 	ripping_enabled: true,
 	makemkv_key_valid: null,

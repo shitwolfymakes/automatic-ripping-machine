@@ -7,6 +7,7 @@ const emptyDashboard: DashboardData = {
 	active_jobs: [],
 	drives_online: 0,
 	drive_names: {},
+	iso_sources: {},
 	notification_count: 0,
 	ripping_enabled: true,
 	makemkv_key_valid: null,
@@ -23,6 +24,7 @@ const STICKY_FIELDS = [
 	'active_jobs',
 	'drives_online',
 	'drive_names',
+	'iso_sources',
 	'notification_count',
 	'ripping_enabled'
 ] as const satisfies readonly (keyof DashboardData)[];

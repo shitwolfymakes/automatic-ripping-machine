@@ -206,6 +206,7 @@ describe('Layout', () => {
 			] as never[],
 			drives_online: 1,
 			drive_names: {},
+			iso_sources: {},
 			notification_count: 0,
 			ripping_enabled: true,
 			makemkv_key_valid: null,

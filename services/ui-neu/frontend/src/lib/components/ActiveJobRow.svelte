@@ -9,8 +9,11 @@
 	import PosterImage from './PosterImage.svelte';
 	import { jobPoster } from '$lib/utils/poster';
 	import SkeletonCard from './SkeletonCard.svelte';
+	import IsoSourceChip from './IsoSourceChip.svelte';
 	import { formatEta } from '$lib/stores/rips.svelte';
 	import { slide } from 'svelte/transition';
+	import { isAdmin } from '$lib/stores/auth';
+	import { cancelIsoRip } from '$lib/api/iso';
 
 	interface Props {
 		job?: JobView;
@@ -19,6 +22,8 @@
 		tracksRipped?: number | null;
 		tracksTotal?: number | null;
 		eta?: number | null;
+		/** ISO file name for this job's (virtual) drive, when it's an ISO rip. */
+		isoSource?: string | null;
 	}
 
 	let {
@@ -27,8 +32,23 @@
 		progressStage = null,
 		tracksRipped = null,
 		tracksTotal = null,
-		eta = null
+		eta = null,
+		isoSource = null
 	}: Props = $props();
+
+	let cancelling = $state(false);
+
+	async function handleCancelIso() {
+		if (!job?.drive_id) return;
+		cancelling = true;
+		try {
+			await cancelIsoRip(job.drive_id);
+		} catch {
+			// ignore — the next dashboard poll reconciles
+		} finally {
+			cancelling = false;
+		}
+	}
 
 	function formatStage(s: string): string {
 		if (s === 'scratch-to-media') return 'Copying to shared storage';
@@ -89,6 +109,13 @@
 					<span class="shrink-0 job-active-row-meta">{job.year}</span>
 				{/if}
 
+				<!-- ISO source chip (replaces the absent drive pill for a virtual drive) -->
+				{#if isoSource}
+					<span class="shrink-0">
+						<IsoSourceChip name={isoSource} />
+					</span>
+				{/if}
+
 				<!-- Status badge -->
 				<div class="shrink-0 flex items-center gap-1.5">
 					<StatusBadge status={effectiveJobStatus(job)} />
@@ -126,6 +153,18 @@
 
 				<!-- Details -->
 				<a href="/jobs/{job.id}" class="shrink-0 job-active-row-details">Details</a>
+
+				<!-- ISO rip: admin-only Cancel (removes the virtual drive too) -->
+				{#if isoSource && $isAdmin}
+					<button
+						onclick={handleCancelIso}
+						disabled={cancelling}
+						class="btn btn-danger btn-sm shrink-0"
+						title="Cancel the rip and remove the virtual drive"
+					>
+						{cancelling ? 'Cancelling...' : 'Cancel'}
+					</button>
+				{/if}
 
 				<!-- Expand chevron -->
 				<button
