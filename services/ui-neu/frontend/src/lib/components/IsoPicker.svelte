@@ -287,122 +287,134 @@
 				</div>
 			{:else}
 				<div class="stack">
-					<div class="flex items-center justify-between">
-						<h3 class="field-label">ISO file</h3>
-						<button type="button" class="btn btn-icon" onclick={refresh} title="Refresh" aria-label="Refresh">
-							<Glyph name="refresh" />
-						</button>
-					</div>
+					<section class="panel stack stack-sm iso-picker-panel" aria-labelledby="iso-picker-file-title">
+						<div class="iso-picker-panel-head">
+							<h3 id="iso-picker-file-title" class="panel-title iso-picker-panel-title">ISO file</h3>
+							<button type="button" class="btn btn-icon" onclick={refresh} title="Refresh" aria-label="Refresh">
+								<Glyph name="refresh" />
+							</button>
+						</div>
 
-					<nav class="iso-picker-breadcrumb" aria-label="Library">
-						{#each breadcrumbItems as item, i (item.path)}
-							{#if i > 0}
-								<Glyph name="chevron-right" class="h-3 w-3 iso-picker-breadcrumb-sep" />
-							{/if}
-							{#if i === breadcrumbItems.length - 1}
-								<span class="iso-picker-breadcrumb-current" aria-current="page">{item.label}</span>
-							{:else}
-								<button type="button" class="iso-picker-breadcrumb-link" onclick={() => goTo(item.path)}>
-									{item.label}
-								</button>
-							{/if}
-						{/each}
-					</nav>
-
-					<LoadState data={listing} {loading} error={loadError} minDelay={0} isEmpty={(d) => d.entries.length === 0}>
-						{#snippet loadingSlot()}
-							<div class="panel iso-picker-list iso-picker-skeleton" aria-hidden="true">
-								{#each Array.from({ length: 5 }) as _, i (i)}
-									<div class="list-row list-row-compact">
-										<span class="skeleton skeleton-text iso-picker-skeleton-lead"></span>
-										<span class="skeleton skeleton-text iso-picker-skeleton-main"></span>
-									</div>
-								{/each}
-							</div>
-						{/snippet}
-						{#snippet empty()}
-							<p class="iso-picker-empty">This folder has no ISO files or folders.</p>
-						{/snippet}
-						{#snippet errorSlot(err)}
-							<div class="alert alert-danger iso-picker-error">
-								<p class="alert-title flex items-center gap-2">
-									<Glyph name="x-circle" />
-									Couldn't load the library
-								</p>
-								<p class="alert-body">{err.message}</p>
-								<button type="button" class="btn btn-sm iso-picker-retry" onclick={refresh}>Retry</button>
-							</div>
-						{/snippet}
-						{#snippet ready(data)}
-							<div class="panel iso-picker-list" role="listbox" aria-label="ISO library">
-								{#each data.entries as entry, i (entry.name)}
-									{@const selected = isSelected(entry)}
-									{@const disabled = entry.kind === 'iso' && entry.ripping}
-									<div
-										role="option"
-										id={rowId(i)}
-										class="list-row list-row-compact iso-picker-row"
-										data-kind={entry.kind}
-										aria-selected={selected}
-										aria-disabled={disabled || undefined}
-										data-state={disabled ? 'ripping' : undefined}
-										aria-label={entry.name}
-										tabindex={i === activeIndex ? 0 : -1}
-										onclick={() => activate(entry, i)}
-										onkeydown={(e) => handleRowKeydown(e, entry, i)}
-									>
-										<div class="list-row-lead">
-											{#if entry.kind === 'folder'}
-												<Glyph name="folder" class="iso-picker-icon-folder" />
-											{:else}
-												<Glyph name="disc-3" class="iso-picker-icon-disc" />
-											{/if}
-										</div>
-										<div class="list-row-main">
-											<div class="iso-picker-row-name" data-selected={selected} title={entry.name}>
-												{entry.name}
-											</div>
-										</div>
-										{#if entry.kind === 'iso'}
-											<div class="list-row-meta iso-picker-meta">
-												<span>{formatSize(entry.size_bytes)}</span>
-												<span>{formatDate(entry.modified_at)}</span>
-											</div>
-										{/if}
-										<div class="list-row-actions">
-											{#if entry.kind === 'folder'}
-												<Glyph name="chevron-right" />
-											{:else if disabled}
-												<span class="chip chip-warning chip-sm">Ripping</span>
-											{:else if selected}
-												<Glyph name="check-circle" class="iso-picker-icon-selected" />
-											{/if}
-										</div>
-									</div>
-								{/each}
-							</div>
-						{/snippet}
-					</LoadState>
-
-					<div class="iso-picker-hostpath">
-						<p class="mono">{hostPath}</p>
-						{#if loading}
-							<p class="field-help">Loading {currentLabel}...</p>
-						{:else}
-							<p class="field-help">Read-only. Only .iso files are listed.</p>
-						{/if}
-					</div>
-
-					<label class="field">
-						<span class="field-label">Session <span class="iso-picker-optional">(optional)</span></span>
-						<select bind:value={sessionId}>
-							<option value="">Automatic</option>
-							{#each sessions as s (s.id)}
-								<option value={s.id}>{s.name}</option>
+						<nav class="iso-picker-breadcrumb" aria-label="Library">
+							{#each breadcrumbItems as item, i (item.path)}
+								{#if i > 0}
+									<Glyph name="chevron-right" class="h-3 w-3 iso-picker-breadcrumb-sep" />
+								{/if}
+								{#if i === breadcrumbItems.length - 1}
+									<span class="iso-picker-breadcrumb-current" aria-current="page">{item.label}</span>
+								{:else}
+									<button type="button" class="iso-picker-breadcrumb-link" onclick={() => goTo(item.path)}>
+										{item.label}
+									</button>
+								{/if}
 							{/each}
-						</select>
-						<span class="field-help">Automatic picks a session the same way it does for a disc in a drive.</span>
-					</label>
+						</nav>
+
+						<LoadState data={listing} {loading} error={loadError} minDelay={0} isEmpty={(d) => d.entries.length === 0}>
+							{#snippet loadingSlot()}
+								<div class="iso-picker-list iso-picker-skeleton" aria-hidden="true">
+									{#each Array.from({ length: 5 }) as _, i (i)}
+										<div class="list-row list-row-compact">
+											<span class="skeleton skeleton-text iso-picker-skeleton-lead"></span>
+											<span class="skeleton skeleton-text iso-picker-skeleton-main"></span>
+										</div>
+									{/each}
+								</div>
+							{/snippet}
+							{#snippet empty()}
+								<div class="iso-picker-list iso-picker-empty">
+									<Glyph name="disc-3" class="iso-picker-empty-icon" />
+									<p class="iso-picker-empty-title">This folder has no ISO files or folders.</p>
+									<p class="iso-picker-empty-hint">Copy .iso files into the library on the server, then refresh.</p>
+								</div>
+							{/snippet}
+							{#snippet errorSlot(err)}
+								<div class="alert alert-danger iso-picker-error">
+									<p class="alert-title flex items-center gap-2">
+										<Glyph name="x-circle" />
+										Couldn't load the library
+									</p>
+									<p class="alert-body">{err.message}</p>
+									<button type="button" class="btn btn-sm iso-picker-retry" onclick={refresh}>Retry</button>
+								</div>
+							{/snippet}
+							{#snippet ready(data)}
+								<div class="iso-picker-list" role="listbox" aria-label="ISO library">
+									{#each data.entries as entry, i (entry.name)}
+										{@const selected = isSelected(entry)}
+										{@const disabled = entry.kind === 'iso' && entry.ripping}
+										<div
+											role="option"
+											id={rowId(i)}
+											class="list-row list-row-compact iso-picker-row"
+											data-kind={entry.kind}
+											aria-selected={selected}
+											aria-disabled={disabled || undefined}
+											data-state={disabled ? 'ripping' : undefined}
+											aria-label={entry.name}
+											tabindex={i === activeIndex ? 0 : -1}
+											onclick={() => activate(entry, i)}
+											onkeydown={(e) => handleRowKeydown(e, entry, i)}
+										>
+											<div class="list-row-lead">
+												{#if entry.kind === 'folder'}
+													<Glyph name="folder" class="iso-picker-icon-folder" />
+												{:else}
+													<Glyph name="disc-3" class="iso-picker-icon-disc" />
+												{/if}
+											</div>
+											<div class="list-row-main">
+												<div class="iso-picker-row-name" data-selected={selected} title={entry.name}>
+													{entry.name}
+												</div>
+												{#if entry.kind === 'iso'}
+													<div class="iso-picker-row-detail">
+														{formatSize(entry.size_bytes)} · {formatDate(entry.modified_at)}
+													</div>
+												{/if}
+											</div>
+											<div class="list-row-actions">
+												{#if entry.kind === 'folder'}
+													<Glyph name="chevron-right" />
+												{:else if disabled}
+													<span class="chip chip-warning chip-sm">Ripping</span>
+												{:else if selected}
+													<Glyph name="check-circle" class="iso-picker-icon-selected" />
+												{/if}
+											</div>
+										</div>
+									{/each}
+								</div>
+							{/snippet}
+						</LoadState>
+
+						<div class="iso-picker-hostpath">
+							<Glyph name="folder" class="iso-picker-hostpath-icon" />
+							<div>
+								<p class="mono iso-picker-hostpath-path">{hostPath}</p>
+								{#if loading}
+									<p class="iso-picker-hostpath-note">Loading {currentLabel}...</p>
+								{:else}
+									<p class="iso-picker-hostpath-note">Read-only. Only .iso files are listed.</p>
+								{/if}
+							</div>
+						</div>
+					</section>
+
+					<section class="panel stack stack-sm iso-picker-panel">
+						<label class="field">
+							<span class="panel-title iso-picker-panel-title">
+								Session <span class="iso-picker-optional">optional</span>
+							</span>
+							<select bind:value={sessionId}>
+								<option value="">Automatic</option>
+								{#each sessions as s (s.id)}
+									<option value={s.id}>{s.name}</option>
+								{/each}
+							</select>
+							<span class="field-help">Automatic picks a session the same way it does for a disc in a drive.</span>
+						</label>
+					</section>
 
 					{#if startError}
 						<div class="alert alert-danger iso-picker-error">
@@ -464,14 +476,30 @@
 	:global(.iso-picker-breadcrumb-sep) {
 		color: var(--color-text-faint);
 	}
+	/* Each section is a site panel with an eyebrow title, as in Settings. */
+	.iso-picker-panel-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+	/* panel-title's own bottom margin is replaced by the panel's stack gap. */
+	.iso-picker-panel-title {
+		margin-bottom: 0;
+	}
+	/* The file list (and its loading and empty states) sits in one framed
+	   box inside the panel, so the panel keeps the same shape in every state. */
 	.iso-picker-list {
-		padding: 0;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		background: var(--color-surface);
+		overflow: hidden;
 	}
 	.iso-picker-retry {
 		margin-top: 0.5rem;
 	}
 	.iso-picker-row {
-		grid-template-columns: auto 1fr auto auto;
+		grid-template-columns: auto minmax(0, 1fr) auto;
 	}
 	.iso-picker-row[aria-disabled='true'] {
 		/* Disabled per spec's own convention (opacity 0.4 + not-allowed), keyed
@@ -498,15 +526,44 @@
 	:global(.iso-picker-icon-selected) {
 		color: var(--color-primary);
 	}
-	.iso-picker-meta {
-		display: flex;
-		flex-direction: column;
-		gap: 0.125rem;
+	.iso-picker-row-name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	/* Size and date sit under the name, so a long file name gets the row's
+	   full width instead of sharing it with a data column. */
+	.iso-picker-row-detail {
+		font-size: 0.75rem;
+		line-height: calc(1 / 0.75);
+		color: var(--color-text-muted);
 	}
 	.iso-picker-empty {
-		padding: 1.5rem 1rem;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 2rem 1rem;
 		text-align: center;
+		background: var(--color-primary-tint-1);
+	}
+	/* :global: forwarded through Glyph's class prop */
+	:global(.iso-picker-empty-icon) {
+		width: 2rem;
+		height: 2rem;
+		margin-bottom: 0.25rem;
 		color: var(--color-text-faint);
+	}
+	.iso-picker-empty-title {
+		font-size: 0.875rem;
+		line-height: calc(1.25 / 0.875);
+		font-weight: 500;
+		color: var(--color-text);
+	}
+	.iso-picker-empty-hint {
+		font-size: 0.75rem;
+		line-height: calc(1 / 0.75);
+		color: var(--color-text-muted);
 	}
 	.iso-picker-skeleton {
 		gap: 0;
@@ -518,13 +575,32 @@
 		width: 60%;
 	}
 	.iso-picker-hostpath {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.5rem;
 		font-size: 0.75rem;
 		line-height: calc(1 / 0.75);
 	}
+	/* :global: forwarded through Glyph's class prop */
+	:global(.iso-picker-hostpath-icon) {
+		flex-shrink: 0;
+		width: 1rem;
+		height: 1rem;
+		color: var(--color-text-faint);
+	}
+	.iso-picker-hostpath-path {
+		color: var(--color-text);
+		word-break: break-all;
+	}
+	.iso-picker-hostpath-note {
+		color: var(--color-text-muted);
+	}
+	/* Sits inside the eyebrow title, so it drops the uppercase and tracking. */
 	.iso-picker-optional {
 		margin-left: 0.25rem;
-		font-size: 0.75rem;
-		line-height: 1rem;
+		font-weight: 400;
+		letter-spacing: normal;
+		text-transform: none;
 		color: var(--color-text-faint);
 	}
 	.iso-picker-setup-code {
