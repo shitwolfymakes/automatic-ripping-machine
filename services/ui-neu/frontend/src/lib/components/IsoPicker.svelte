@@ -261,178 +261,182 @@
 </script>
 
 <SlideOver {open} title="Rip from ISO" onclose={handleClose}>
-	{#if notConfigured}
-		<div class="alert alert-info iso-picker-setup">
-			<p class="alert-title flex items-center gap-2">
-				<Glyph name="info" />
-				Set up your ISO library first
-			</p>
-			<div class="alert-body stack stack-sm">
-				<p>ARM reads ISO files from one folder on the server. It doesn't know which folder yet.</p>
-				<ol class="stack stack-sm iso-picker-setup-steps">
-					<li>
-						Point <code class="mono">ARM_HOST_ISO_LIBRARY_PATH</code> at the folder that holds your ISO files, for
-						example a share on your NAS.
-						<pre class="code-block iso-picker-setup-code">ARM_HOST_ISO_LIBRARY_PATH=/mnt/nas/iso</pre>
-					</li>
-					<li>
-						Redeploy with <code class="mono">bash devtools/setup-dev.sh up</code> so the container can see the folder.
-					</li>
-					<li>Open Rip from ISO again and pick a file.</li>
-				</ol>
-				<p>ARM only reads this folder. It never moves, renames or deletes your ISO files.</p>
-			</div>
-		</div>
-	{:else}
-		<div class="stack">
-			<div class="flex items-center justify-between">
-				<h3 class="field-label">ISO file</h3>
-				<button type="button" class="btn btn-icon" onclick={refresh} title="Refresh" aria-label="Refresh">
-					<Glyph name="refresh" />
-				</button>
-			</div>
-
-			<nav class="iso-picker-breadcrumb" aria-label="Library">
-				{#each breadcrumbItems as item, i (item.path)}
-					{#if i > 0}
-						<Glyph name="chevron-right" class="h-3 w-3 iso-picker-breadcrumb-sep" />
-					{/if}
-					{#if i === breadcrumbItems.length - 1}
-						<span class="iso-picker-breadcrumb-current" aria-current="page">{item.label}</span>
-					{:else}
-						<button type="button" class="iso-picker-breadcrumb-link" onclick={() => goTo(item.path)}>
-							{item.label}
-						</button>
-					{/if}
-				{/each}
-			</nav>
-
-			<LoadState data={listing} {loading} error={loadError} minDelay={0} isEmpty={(d) => d.entries.length === 0}>
-				{#snippet loadingSlot()}
-					<div class="panel iso-picker-list iso-picker-skeleton" aria-hidden="true">
-						{#each Array.from({ length: 5 }) as _, i (i)}
-							<div class="list-row list-row-compact">
-								<span class="skeleton skeleton-text iso-picker-skeleton-lead"></span>
-								<span class="skeleton skeleton-text iso-picker-skeleton-main"></span>
-							</div>
-						{/each}
-					</div>
-				{/snippet}
-				{#snippet empty()}
-					<p class="iso-picker-empty">This folder has no ISO files or folders.</p>
-				{/snippet}
-				{#snippet errorSlot(err)}
-					<div class="alert alert-danger iso-picker-error">
-						<p class="alert-title flex items-center gap-2">
-							<Glyph name="x-circle" />
-							Couldn't load the library
-						</p>
-						<p class="alert-body">{err.message}</p>
-						<button type="button" class="btn btn-sm iso-picker-retry" onclick={refresh}>Retry</button>
-					</div>
-				{/snippet}
-				{#snippet ready(data)}
-					<div class="panel iso-picker-list" role="listbox" aria-label="ISO library">
-						{#each data.entries as entry, i (entry.name)}
-							{@const selected = isSelected(entry)}
-							{@const disabled = entry.kind === 'iso' && entry.ripping}
-							<div
-								role="option"
-								id={rowId(i)}
-								class="list-row list-row-compact iso-picker-row"
-								data-kind={entry.kind}
-								aria-selected={selected}
-								aria-disabled={disabled || undefined}
-								data-state={disabled ? 'ripping' : undefined}
-								aria-label={entry.name}
-								tabindex={i === activeIndex ? 0 : -1}
-								onclick={() => activate(entry, i)}
-								onkeydown={(e) => handleRowKeydown(e, entry, i)}
-							>
-								<div class="list-row-lead">
-									{#if entry.kind === 'folder'}
-										<Glyph name="folder" class="iso-picker-icon-folder" />
-									{:else}
-										<Glyph name="disc-3" class="iso-picker-icon-disc" />
-									{/if}
-								</div>
-								<div class="list-row-main">
-									<div class="iso-picker-row-name" data-selected={selected} title={entry.name}>
-										{entry.name}
-									</div>
-								</div>
-								{#if entry.kind === 'iso'}
-									<div class="list-row-meta iso-picker-meta">
-										<span>{formatSize(entry.size_bytes)}</span>
-										<span>{formatDate(entry.modified_at)}</span>
-									</div>
-								{/if}
-								<div class="list-row-actions">
-									{#if entry.kind === 'folder'}
-										<Glyph name="chevron-right" />
-									{:else if disabled}
-										<span class="chip chip-warning chip-sm">Ripping</span>
-									{:else if selected}
-										<Glyph name="check-circle" class="iso-picker-icon-selected" />
-									{/if}
-								</div>
-							</div>
-						{/each}
-					</div>
-				{/snippet}
-			</LoadState>
-
-			<div class="iso-picker-hostpath">
-				<p class="mono">{hostPath}</p>
-				{#if loading}
-					<p class="field-help">Loading {currentLabel}...</p>
-				{:else}
-					<p class="field-help">Read-only. Only .iso files are listed.</p>
-				{/if}
-			</div>
-
-			<label class="field">
-				<span class="field-label">Session <span class="iso-picker-optional">(optional)</span></span>
-				<select bind:value={sessionId}>
-					<option value="">Automatic</option>
-					{#each sessions as s (s.id)}
-						<option value={s.id}>{s.name}</option>
-					{/each}
-				</select>
-				<span class="field-help">Automatic picks a session the same way it does for a disc in a drive.</span>
-			</label>
-
-			{#if startError}
-				<div class="alert alert-danger iso-picker-error">
+	<div class="iso-picker">
+		<div class="iso-picker-main">
+			{#if notConfigured}
+				<div class="alert alert-info iso-picker-setup">
 					<p class="alert-title flex items-center gap-2">
-						<Glyph name="x-circle" />
-						Couldn't start the rip
+						<Glyph name="info" />
+						Set up your ISO library first
 					</p>
-					<p class="alert-body">{startError}</p>
+					<div class="alert-body stack stack-sm">
+						<p>ARM reads ISO files from one folder on the server. It doesn't know which folder yet.</p>
+						<ol class="stack stack-sm iso-picker-setup-steps">
+							<li>
+								Point <code class="mono">ARM_HOST_ISO_LIBRARY_PATH</code> at the folder that holds your ISO files, for
+								example a share on your NAS.
+								<pre class="code-block iso-picker-setup-code">ARM_HOST_ISO_LIBRARY_PATH=/mnt/nas/iso</pre>
+							</li>
+							<li>
+								Redeploy with <code class="mono">bash devtools/setup-dev.sh up</code> so the container can see the folder.
+							</li>
+							<li>Open Rip from ISO again and pick a file.</li>
+						</ol>
+						<p>ARM only reads this folder. It never moves, renames or deletes your ISO files.</p>
+					</div>
+				</div>
+			{:else}
+				<div class="stack">
+					<div class="flex items-center justify-between">
+						<h3 class="field-label">ISO file</h3>
+						<button type="button" class="btn btn-icon" onclick={refresh} title="Refresh" aria-label="Refresh">
+							<Glyph name="refresh" />
+						</button>
+					</div>
+
+					<nav class="iso-picker-breadcrumb" aria-label="Library">
+						{#each breadcrumbItems as item, i (item.path)}
+							{#if i > 0}
+								<Glyph name="chevron-right" class="h-3 w-3 iso-picker-breadcrumb-sep" />
+							{/if}
+							{#if i === breadcrumbItems.length - 1}
+								<span class="iso-picker-breadcrumb-current" aria-current="page">{item.label}</span>
+							{:else}
+								<button type="button" class="iso-picker-breadcrumb-link" onclick={() => goTo(item.path)}>
+									{item.label}
+								</button>
+							{/if}
+						{/each}
+					</nav>
+
+					<LoadState data={listing} {loading} error={loadError} minDelay={0} isEmpty={(d) => d.entries.length === 0}>
+						{#snippet loadingSlot()}
+							<div class="panel iso-picker-list iso-picker-skeleton" aria-hidden="true">
+								{#each Array.from({ length: 5 }) as _, i (i)}
+									<div class="list-row list-row-compact">
+										<span class="skeleton skeleton-text iso-picker-skeleton-lead"></span>
+										<span class="skeleton skeleton-text iso-picker-skeleton-main"></span>
+									</div>
+								{/each}
+							</div>
+						{/snippet}
+						{#snippet empty()}
+							<p class="iso-picker-empty">This folder has no ISO files or folders.</p>
+						{/snippet}
+						{#snippet errorSlot(err)}
+							<div class="alert alert-danger iso-picker-error">
+								<p class="alert-title flex items-center gap-2">
+									<Glyph name="x-circle" />
+									Couldn't load the library
+								</p>
+								<p class="alert-body">{err.message}</p>
+								<button type="button" class="btn btn-sm iso-picker-retry" onclick={refresh}>Retry</button>
+							</div>
+						{/snippet}
+						{#snippet ready(data)}
+							<div class="panel iso-picker-list" role="listbox" aria-label="ISO library">
+								{#each data.entries as entry, i (entry.name)}
+									{@const selected = isSelected(entry)}
+									{@const disabled = entry.kind === 'iso' && entry.ripping}
+									<div
+										role="option"
+										id={rowId(i)}
+										class="list-row list-row-compact iso-picker-row"
+										data-kind={entry.kind}
+										aria-selected={selected}
+										aria-disabled={disabled || undefined}
+										data-state={disabled ? 'ripping' : undefined}
+										aria-label={entry.name}
+										tabindex={i === activeIndex ? 0 : -1}
+										onclick={() => activate(entry, i)}
+										onkeydown={(e) => handleRowKeydown(e, entry, i)}
+									>
+										<div class="list-row-lead">
+											{#if entry.kind === 'folder'}
+												<Glyph name="folder" class="iso-picker-icon-folder" />
+											{:else}
+												<Glyph name="disc-3" class="iso-picker-icon-disc" />
+											{/if}
+										</div>
+										<div class="list-row-main">
+											<div class="iso-picker-row-name" data-selected={selected} title={entry.name}>
+												{entry.name}
+											</div>
+										</div>
+										{#if entry.kind === 'iso'}
+											<div class="list-row-meta iso-picker-meta">
+												<span>{formatSize(entry.size_bytes)}</span>
+												<span>{formatDate(entry.modified_at)}</span>
+											</div>
+										{/if}
+										<div class="list-row-actions">
+											{#if entry.kind === 'folder'}
+												<Glyph name="chevron-right" />
+											{:else if disabled}
+												<span class="chip chip-warning chip-sm">Ripping</span>
+											{:else if selected}
+												<Glyph name="check-circle" class="iso-picker-icon-selected" />
+											{/if}
+										</div>
+									</div>
+								{/each}
+							</div>
+						{/snippet}
+					</LoadState>
+
+					<div class="iso-picker-hostpath">
+						<p class="mono">{hostPath}</p>
+						{#if loading}
+							<p class="field-help">Loading {currentLabel}...</p>
+						{:else}
+							<p class="field-help">Read-only. Only .iso files are listed.</p>
+						{/if}
+					</div>
+
+					<label class="field">
+						<span class="field-label">Session <span class="iso-picker-optional">(optional)</span></span>
+						<select bind:value={sessionId}>
+							<option value="">Automatic</option>
+							{#each sessions as s (s.id)}
+								<option value={s.id}>{s.name}</option>
+							{/each}
+						</select>
+						<span class="field-help">Automatic picks a session the same way it does for a disc in a drive.</span>
+					</label>
+
+					{#if startError}
+						<div class="alert alert-danger iso-picker-error">
+							<p class="alert-title flex items-center gap-2">
+								<Glyph name="x-circle" />
+								Couldn't start the rip
+							</p>
+							<p class="alert-body">{startError}</p>
+						</div>
+					{/if}
+				</div>
+			{/if}
+
+			<div class="sr-only" aria-live="polite">{announcement}</div>
+		</div>
+
+		<div class="iso-picker-footer">
+			{#if notConfigured}
+				<p class="iso-picker-footer-helper">Nothing to pick until the library is set up.</p>
+				<div class="flex gap-2">
+					<button type="button" class="btn" onclick={handleClose}>Close</button>
+				</div>
+			{:else}
+				<p class="iso-picker-footer-helper">
+					{selectedName ? `Selected: ${selectedName}` : 'Pick an ISO to start.'}
+				</p>
+				<div class="flex gap-2">
+					<button type="button" class="btn" onclick={handleClose} disabled={starting}>Cancel</button>
+					<button type="button" class="btn btn-primary" onclick={handleStart} disabled={!selectedPath || starting}>
+						{starting ? 'Starting...' : 'Start rip'}
+					</button>
 				</div>
 			{/if}
 		</div>
-	{/if}
-
-	<div class="sr-only" aria-live="polite">{announcement}</div>
-
-	<div class="iso-picker-footer">
-		{#if notConfigured}
-			<p class="iso-picker-footer-helper">Nothing to pick until the library is set up.</p>
-			<div class="flex gap-2">
-				<button type="button" class="btn" onclick={handleClose}>Close</button>
-			</div>
-		{:else}
-			<p class="iso-picker-footer-helper">
-				{selectedName ? `Selected: ${selectedName}` : 'Pick an ISO to start.'}
-			</p>
-			<div class="flex gap-2">
-				<button type="button" class="btn" onclick={handleClose} disabled={starting}>Cancel</button>
-				<button type="button" class="btn btn-primary" onclick={handleStart} disabled={!selectedPath || starting}>
-					{starting ? 'Starting...' : 'Start rip'}
-				</button>
-			</div>
-		{/if}
 	</div>
 </SlideOver>
 
@@ -535,10 +539,23 @@
 	   scroll away with the content) is this component's one deliberate
 	   departure from the New-session slide-over pattern (spec 7.1). Negative
 	   margins cancel that body's p-6 so the footer spans full-bleed. */
+	/* The picker fills SlideOver's scrolling body (min-height: 100% of its
+	   content box) as a column, so the footer sits at the panel's bottom
+	   even when the library is short or empty; sticky keeps it there when a
+	   long list scrolls. */
+	.iso-picker {
+		display: flex;
+		flex-direction: column;
+		min-height: 100%;
+	}
+	.iso-picker-main {
+		flex: 1 0 auto;
+		padding-bottom: 1rem;
+	}
 	.iso-picker-footer {
 		position: sticky;
 		bottom: -1.5rem;
-		margin: 1rem -1.5rem -1.5rem;
+		margin: 0 -1.5rem -1.5rem;
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
