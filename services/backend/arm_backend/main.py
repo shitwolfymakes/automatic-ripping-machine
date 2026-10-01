@@ -54,6 +54,7 @@ from arm_backend.routers import (
     session_routes,
     sessions,
     settings as settings_router,
+    setup as setup_router,
     system as system_router,
     themes as themes_router,
     transcode_presets,
@@ -477,6 +478,7 @@ app.include_router(images_router.router)
 app.include_router(themes_router.router)
 app.include_router(settings_router.router)
 app.include_router(system_router.router)
+app.include_router(setup_router.router)
 app.include_router(files_router.router)
 app.include_router(users_router.router)
 app.include_router(ws_router)
