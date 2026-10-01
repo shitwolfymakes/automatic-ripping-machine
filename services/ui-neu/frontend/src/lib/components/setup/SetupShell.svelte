@@ -96,6 +96,7 @@
 	}
 	.setup-shell-body {
 		display: grid;
+		align-content: start;
 		flex: 1 1 auto;
 		gap: 1.5rem;
 		width: 100%;
