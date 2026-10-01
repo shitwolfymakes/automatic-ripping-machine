@@ -111,8 +111,9 @@ async def create_rip(
     db: AsyncSession = Depends(get_session),
 ) -> IsoRipCreated:
     manager = _manager(request)
+    hub = _get_hub(request)
     try:
-        drive = await create_iso_rip(db, manager, req.path, req.session_id)
+        drive = await create_iso_rip(db, manager, hub, req.path, req.session_id)
     except IsoRipError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     return IsoRipCreated(drive_id=drive.id)

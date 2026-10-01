@@ -54,6 +54,38 @@ class _Manager:
         return 1
 
 
+class _OrderingManager(_Manager):
+    """A `_Manager` that logs `remove` into the session's `call_log`, so a
+    test can assert removal came after the commit."""
+
+    def __init__(self, db: FakeSession, states: dict[str, str] | None = None) -> None:
+        super().__init__(states)
+        self._db = db
+        self.committed_at_remove: list[int] = []
+
+    def remove(self, drive_id: str) -> int:
+        self._db.call_log.append("remove")
+        self.committed_at_remove.append(self._db.committed)
+        return super().remove(drive_id)
+
+
+class _RaceSession(FakeSession):
+    """Runs `on_lock(table)` the first time a table is selected FOR UPDATE:
+    stands in for a cancel that committed while the sweep waited for the
+    lock (between its listing and its action)."""
+
+    def __init__(self, on_lock: dict[str, Any]) -> None:
+        super().__init__()
+        self._on_lock = dict(on_lock)
+
+    async def execute(self, stmt: Any) -> Any:
+        if getattr(stmt, "_for_update_arg", None) is not None:
+            hook = self._on_lock.pop(stmt.get_final_froms()[0].name, None)
+            if hook is not None:
+                hook()
+        return await super().execute(stmt)
+
+
 class _Hub:
     def __init__(self) -> None:
         self.events: list[dict[str, Any]] = []
@@ -105,6 +137,16 @@ def test_library_configured_requires_env_and_dir(tmp_path: Path, monkeypatch: py
     assert iso_library.library_configured() is False  # mount missing
 
 
+def test_library_configured_rejects_a_relative_host_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Docker reads a relative bind source as a named volume, so a relative
+    ARM_HOST_ISO_LIBRARY_PATH is "not configured" even with the mount present."""
+    monkeypatch.setattr(settings, "ISO_INGRESS_ROOT", str(tmp_path))
+    monkeypatch.setattr(settings, "ARM_HOST_ISO_LIBRARY_PATH", "isos")
+    assert iso_library.library_configured() is False
+    monkeypatch.setattr(settings, "ARM_HOST_ISO_LIBRARY_PATH", "./mnt/iso")
+    assert iso_library.library_configured() is False
+
+
 def test_iso_host_path_joins_relative_path(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "ARM_HOST_ISO_LIBRARY_PATH", "/mnt/nas/iso/")
     assert iso_library.iso_host_path("Movies/Blade Runner.iso") == "/mnt/nas/iso/Movies/Blade Runner.iso"
@@ -127,6 +169,19 @@ async def test_retire_marks_retired_offline_absent_and_removes_the_container() -
     assert drive.present is False
     assert manager.removed == ["drv_iso1"]
     assert drive in db.added
+    assert db.committed == 1
+
+
+@pytest.mark.asyncio
+async def test_retire_commits_before_removing_the_container() -> None:
+    """I1: the commit lands first, so a slow docker stop never holds the
+    transaction (and the drive's row lock) open."""
+    db = FakeSession()
+    drive = _virtual()
+    manager = _OrderingManager(db)
+    await iso_rips.retire_virtual_drive(db, manager, drive)  # type: ignore[arg-type]
+    assert db.call_log[-2:] == ["commit", "remove"]
+    assert manager.committed_at_remove == [1]
 
 
 @pytest.mark.asyncio
@@ -309,6 +364,77 @@ async def test_sweep_ignores_optical_and_retired() -> None:
     assert optical.lifecycle is DriveLifecycle.ENROLLED and retired.lifecycle is DriveLifecycle.RETIRED
     assert all(j.status is JobStatus.RIPPING for j in db.rows["jobs"])
     assert manager.removed == [] and manager.status_calls == []
+
+
+@pytest.mark.asyncio
+async def test_sweep_skips_a_drive_retired_after_the_listing() -> None:
+    """I1: a cancel abandoned the job and retired the drive between the
+    sweep's listing and its action. The locked re-read sees that, so the
+    abandoned job is not turned into a failure and nothing is removed twice."""
+    job = _job("job_1", "drv_iso1", JobStatus.RIPPING)
+    drive = _virtual()
+
+    def cancel_committed() -> None:
+        job.status = JobStatus.ABANDONED
+        drive.lifecycle = DriveLifecycle.RETIRED
+
+    db = _RaceSession({"drives": cancel_committed})
+    db.rows["drives"] = [drive]
+    db.rows["jobs"] = [job]
+    manager, hub = _Manager({"drv_iso1": "exited"}), _Hub()
+    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
+    assert job.status is JobStatus.ABANDONED
+    assert hub.events == [] and manager.removed == []
+    assert db.locked == ["drives"]
+    assert db.committed == 1  # the lock is released
+
+
+@pytest.mark.asyncio
+async def test_sweep_does_not_fail_a_job_that_became_terminal_after_the_listing() -> None:
+    """I1: the job went terminal after the listing while the drive is still
+    enrolled. The fresh job read wins: retire only, no `rip.failed`."""
+    job = _job("job_1", "drv_iso1", JobStatus.RIPPING)
+    drive = _virtual()
+
+    def finished() -> None:
+        job.status = JobStatus.ABANDONED
+
+    db = _RaceSession({"jobs": finished})
+    db.rows["drives"] = [drive]
+    db.rows["jobs"] = [job]
+    manager, hub = _OrderingManager(db, {"drv_iso1": "exited"}), _Hub()
+    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
+    assert job.status is JobStatus.ABANDONED and hub.events == []
+    assert drive.lifecycle is DriveLifecycle.RETIRED
+    assert db.locked == ["drives", "jobs"]
+    assert db.call_log[-2:] == ["commit", "remove"]
+
+
+@pytest.mark.asyncio
+async def test_sweep_skips_a_drive_deleted_after_the_listing() -> None:
+    drive = _virtual()
+    db = _RaceSession({"drives": lambda: db.rows["drives"].clear()})
+    db.rows["drives"] = [drive]
+    manager = _Manager({"drv_iso1": "exited"})
+    assert await iso_rips.sweep_virtual_drives(db, manager, _Hub()) == 0  # type: ignore[arg-type]
+    assert manager.removed == []
+
+
+@pytest.mark.asyncio
+async def test_cancel_commits_the_abandon_before_removing_the_container() -> None:
+    """I1: cancel locks the drive, stages abandon + retire, commits, and
+    only then removes the container."""
+    db = FakeSession()
+    drive = _virtual()
+    job = _job("job_1", "drv_iso1", JobStatus.RIPPING)
+    db.rows["drives"] = [drive]
+    db.rows["jobs"] = [job]
+    manager, hub = _OrderingManager(db), _Hub()
+    await iso_rips.cancel_iso_rip(db, manager, hub, "drv_iso1")  # type: ignore[arg-type]
+    assert job.status is JobStatus.ABANDONED and drive.lifecycle is DriveLifecycle.RETIRED
+    assert db.locked == ["drives", "jobs"]
+    assert db.call_log[-2:] == ["commit", "remove"]
+    assert manager.committed_at_remove == [1]
 
 
 # --- watchdog ----------------------------------------------------------------

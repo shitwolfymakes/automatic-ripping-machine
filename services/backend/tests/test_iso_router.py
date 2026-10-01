@@ -85,13 +85,25 @@ class _Hub:
 
 
 class _StubManager:
-    """Records `ensure_running` / `remove` calls; raises when told to."""
+    """Records `ensure_running` / `remove` calls; raises when told to.
+    `container_statuses` (the sweep `create_iso_rip` runs first) reports
+    every container "running" unless `states` says otherwise."""
 
-    def __init__(self, *, ensure_fail: str | None = None, remove_fail: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        ensure_fail: str | None = None,
+        remove_fail: str | None = None,
+        states: dict[str, str] | None = None,
+    ) -> None:
         self.ensure_fail = ensure_fail
         self.remove_fail = remove_fail
+        self.states = states or {}
         self.ensured: list[str] = []
         self.removed: list[str] = []
+
+    def container_statuses(self, drive_ids: Any) -> dict[str, tuple[str, None]]:
+        return {i: (self.states.get(i, "running"), None) for i in drive_ids}
 
     def ensure_running(self, drive: Drive) -> str:
         if self.ensure_fail:
@@ -388,6 +400,46 @@ def test_create_409_when_cap_full(lib: Path, signing_key: bytes) -> None:
     assert manager.ensured == []
 
 
+def test_create_sweeps_a_finished_rip_before_the_cap_check(lib: Path, signing_key: bytes) -> None:
+    """M1: the last rip's container has exited but the 30 s watchdog has not
+    run yet. Create sweeps first, so the finished drive is retired and no
+    longer fills the default cap of 1."""
+    (lib / "Movies").mkdir()
+    (lib / "Movies" / "x.iso").write_bytes(b"x")
+    db = FakeSession()
+    db.rows["config"] = [Config(id=CONFIG_SINGLETON_ID, max_parallel_iso_rips=1)]
+    old = _virtual("drv_old", source_path="Movies/x.iso")  # same ISO: not a duplicate either
+    db.rows["drives"] = [old]
+    db.rows["jobs"] = [Job(id="job_old", drive_id="drv_old", status=JobStatus.RIPPED)]
+    token = _admin_token(db, signing_key)
+    manager = _StubManager(states={"drv_old": "exited"})
+    app = _build_app(db, signing_key, manager)
+    with TestClient(app) as client:
+        r = client.post("/api/iso/rips", json={"path": "Movies/x.iso"}, headers=_auth(token))
+    assert r.status_code == 201, r.text
+    assert old.lifecycle is DriveLifecycle.RETIRED
+    assert manager.removed == ["drv_old"]
+    assert manager.ensured == [r.json()["drive_id"]]
+
+
+def test_create_409_while_ripping_is_paused(lib: Path, signing_key: bytes) -> None:
+    """I4: the ripper's identify would be refused while paused, leaving a
+    retired drive and no job. Refuse up front with the manual-trigger wording."""
+    (lib / "Movies").mkdir()
+    (lib / "Movies" / "x.iso").write_bytes(b"x")
+    db = FakeSession()
+    db.rows["config"] = [Config(id=CONFIG_SINGLETON_ID, ripping_paused=True, hold_for_review=False)]
+    token = _admin_token(db, signing_key)
+    manager = _StubManager()
+    app = _build_app(db, signing_key, manager)
+    with TestClient(app) as client:
+        r = client.post("/api/iso/rips", json={"path": "Movies/x.iso"}, headers=_auth(token))
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"] == "ripping is paused; no new jobs accepted"
+    assert manager.ensured == []
+    assert "drives" not in db.rows
+
+
 def test_create_409_when_already_ripping(lib: Path, signing_key: bytes) -> None:
     (lib / "Movies").mkdir()
     (lib / "Movies" / "x.iso").write_bytes(b"x")
@@ -467,12 +519,16 @@ def test_cancel_abandons_and_retires(signing_key: bytes) -> None:
 def test_cancel_refuses_retired_and_optical(signing_key: bytes, make_drive) -> None:
     db = FakeSession()
     drive = make_drive()
+    lifecycle_before = drive.lifecycle
     db.rows["drives"] = [drive]
     token = _admin_token(db, signing_key)
-    app = _build_app(db, signing_key, _StubManager())
+    manager = _StubManager()
+    app = _build_app(db, signing_key, manager)
     with TestClient(app) as client:
         r = client.delete(f"/api/iso/rips/{drive.id}", headers=_auth(token))
     assert r.status_code == 409, r.text
+    assert manager.removed == []
+    assert drive.lifecycle is lifecycle_before
 
 
 def test_cancel_404_unknown_drive(signing_key: bytes) -> None:

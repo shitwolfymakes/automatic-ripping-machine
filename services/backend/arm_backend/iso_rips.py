@@ -70,19 +70,57 @@ _DEAD_STATES = frozenset({"exited", "dead", "missing"})
 _EPOCH = datetime.min.replace(tzinfo=UTC)
 
 
-async def retire_virtual_drive(db: AsyncSession, manager: RipperManager, drive: Drive) -> None:
-    """Mark the drive retired (offline, not present) and remove its container.
-    The caller commits. A docker failure is logged, not raised: once the row
-    is retired its container belongs to no enrolled drive, so the next
-    reconcile removes it as an orphan."""
+def _mark_retired(db: AsyncSession, drive: Drive) -> None:
     drive.lifecycle = DriveLifecycle.RETIRED
     drive.status = DriveStatus.OFFLINE
     drive.present = False
     db.add(drive)
+
+
+async def retire_virtual_drive(db: AsyncSession, manager: RipperManager, drive: Drive) -> None:
+    """Mark the drive retired (offline, not present), COMMIT, and only then
+    remove its container. The commit carries whatever the caller staged in
+    the same transaction (an abandoned or failed job) and releases the row
+    lock the caller took, so a docker stop that takes its full timeout never
+    holds the transaction open: a watchdog pass that runs meanwhile sees the
+    drive retired and leaves it alone. A docker failure is logged, not
+    raised: once the row is retired its container belongs to no enrolled
+    drive, so the next reconcile removes it as an orphan."""
+    _mark_retired(db, drive)
+    await db.commit()
     try:
         await asyncio.to_thread(manager.remove, drive.id)
     except RipperManagerError as exc:
         logger.warning("iso drive_id=%s retired but its container was not removed: %s", drive.id, exc)
+
+
+async def _locked_drive(db: AsyncSession, drive_id: str) -> Drive | None:
+    """Re-read one drive row `FOR UPDATE`, overwriting any cached copy, so a
+    cancel and a watchdog pass on the same drive serialize and the second
+    one sees the first one's committed lifecycle."""
+    return (
+        await db.execute(
+            select(Drive).where(col(Drive.id) == drive_id).with_for_update().execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+
+
+async def _latest_job(db: AsyncSession, drive_id: str) -> Job | None:
+    """The drive's latest job, re-read fresh and locked (a virtual drive
+    normally has exactly one; picked in Python)."""
+    jobs = (
+        (
+            await db.execute(
+                select(Job)
+                .where(col(Job.drive_id) == drive_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return max(jobs, key=lambda j: j.created_at or _EPOCH, default=None)
 
 
 async def _fail_job(db: AsyncSession, hub: WSHub, job: Job) -> None:
@@ -128,6 +166,11 @@ async def sweep_virtual_drives(db: AsyncSession, manager: RipperManager, hub: WS
     - container exited or missing, latest job terminal or no job: retire;
     - container exited or missing, latest job not terminal: fail the job
       ("ISO ripper stopped unexpectedly", `rip.failed`), then retire.
+
+    Each drive is re-read `FOR UPDATE` before it is acted on and skipped if
+    it is no longer enrolled; its job is re-read too, so a job a cancel has
+    just abandoned is never turned into a failure. Each retire commits on
+    its own.
     """
     drives = list(
         (
@@ -144,21 +187,25 @@ async def sweep_virtual_drives(db: AsyncSession, manager: RipperManager, hub: WS
         return 0
     statuses = await asyncio.to_thread(manager.container_statuses, [d.id for d in drives])
     retired = 0
-    for drive in drives:
-        state, _image_current = statuses.get(drive.id, ("missing", None))
+    for listed in drives:
+        state, _image_current = statuses.get(listed.id, ("missing", None))
         if state not in _DEAD_STATES:
             continue
-        if state == "missing" and _within_spawn_grace(drive):
+        if state == "missing" and _within_spawn_grace(listed):
             continue
-        jobs = (await db.execute(select(Job).where(col(Job.drive_id) == drive.id))).scalars().all()
-        # Latest job, picked in Python (a virtual drive normally has exactly one).
-        job = max(jobs, key=lambda j: j.created_at or _EPOCH, default=None)
+        # The listing above is a snapshot: a cancel may have retired this
+        # drive (and abandoned its job) since. Re-read both under a row
+        # lock and act only on what is still current.
+        drive = await _locked_drive(db, listed.id)
+        if drive is None or drive.lifecycle != DriveLifecycle.ENROLLED:
+            await db.commit()  # release the lock; nothing to do
+            continue
+        job = await _latest_job(db, drive.id)
         if job is not None and job.status not in TERMINAL_JOB_STATUSES:
             await _fail_job(db, hub, job)
         await retire_virtual_drive(db, manager, drive)
         logger.info("iso drive_id=%s retired (container %s)", drive.id, state)
         retired += 1
-    await db.commit()
     return retired
 
 
@@ -221,23 +268,34 @@ async def _iso_cap(db: AsyncSession) -> int:
     return int(cfg.max_parallel_iso_rips)
 
 
-async def create_iso_rip(db: AsyncSession, manager: RipperManager, rel: str, session_id: str | None) -> Drive:
+async def create_iso_rip(
+    db: AsyncSession, manager: RipperManager, hub: WSHub, rel: str, session_id: str | None
+) -> Drive:
     """Create and spawn a virtual drive for the ISO at `rel` (library-relative).
 
     Serialized by `_create_lock` so two concurrent requests can't both pass
     the duplicate/cap checks before either commits. A docker failure after
     the row is committed retires the drive instead of leaving a stuck
     "enrolled" row with no container.
+
+    Refused (409, the manual-trigger wording) while ripping is paused: the
+    ripper's identify would be refused and the drive retired with no job.
+    A watchdog pass runs first, inside the lock, so a rip that finished in
+    the last 30 seconds no longer counts against the cap or as a duplicate.
     """
     if not library_configured():
         raise IsoRipError(503, "the ISO library is not configured")
     async with _create_lock:
         target = resolve_iso(rel)
+        cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+        if cfg is not None and cfg.ripping_paused:
+            raise IsoRipError(409, "ripping is paused; no new jobs accepted")
         rel_norm = str(target.relative_to(Path(settings.ISO_INGRESS_ROOT).resolve()))
         if session_id is not None:
             session = (await db.execute(select(Session).where(col(Session.id) == session_id))).scalar_one_or_none()
             if session is None:
                 raise IsoRipError(404, "unknown session")
+        await sweep_virtual_drives(db, manager, hub)
         live = list(
             (
                 await db.execute(
@@ -278,8 +336,7 @@ async def create_iso_rip(db: AsyncSession, manager: RipperManager, rel: str, ses
         try:
             await asyncio.to_thread(manager.ensure_running, drive)
         except RipperManagerError as exc:
-            await retire_virtual_drive(db, manager, drive)
-            await db.commit()
+            await retire_virtual_drive(db, manager, drive)  # commits
             raise IsoRipError(500, f"could not start the ISO ripper: {exc}") from exc
         return drive
 
@@ -287,16 +344,15 @@ async def create_iso_rip(db: AsyncSession, manager: RipperManager, rel: str, ses
 async def cancel_iso_rip(db: AsyncSession, manager: RipperManager, hub: WSHub, drive_id: str) -> None:
     """Cancel an in-progress ISO rip: abandon its job (if any, and still
     non-terminal) exactly like `routers/jobs.py` `abandon_job`, then retire
-    the virtual drive."""
-    drive = (await db.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
+    the virtual drive. The drive row is locked first, so a watchdog pass on
+    the same drive waits for this commit and then sees it retired."""
+    drive = await _locked_drive(db, drive_id)
     if drive is None:
         raise IsoRipError(404, f"unknown drive_id: {drive_id}")
     if drive.kind != DriveKind.VIRTUAL or drive.lifecycle != DriveLifecycle.ENROLLED:
         raise IsoRipError(409, f"cannot cancel: drive_id={drive_id} is not an active ISO rip")
-    jobs = (await db.execute(select(Job).where(col(Job.drive_id) == drive_id))).scalars().all()
-    # Latest job, picked in Python (a virtual drive normally has exactly one).
-    job = max(jobs, key=lambda j: j.created_at or _EPOCH, default=None)
+    job = await _latest_job(db, drive_id)
     if job is not None and job.status in NON_TERMINAL_JOB_STATUSES:
         await abandon_job_transition(db, hub, job)
+    # Commits the abandon + retire together, then removes the container.
     await retire_virtual_drive(db, manager, drive)
-    await db.commit()

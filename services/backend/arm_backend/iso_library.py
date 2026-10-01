@@ -13,8 +13,11 @@ from arm_backend.config import settings
 
 
 def library_configured() -> bool:
-    """The host path is set and the backend's read-only mount of it exists."""
-    return bool(settings.ARM_HOST_ISO_LIBRARY_PATH) and Path(settings.ISO_INGRESS_ROOT).is_dir()
+    """The host path is set, absolute, and the backend's read-only mount of it
+    exists. A relative value would make docker read the ripper's bind source
+    as a named volume, so it counts as not configured."""
+    host = settings.ARM_HOST_ISO_LIBRARY_PATH
+    return bool(host) and Path(host).is_absolute() and Path(settings.ISO_INGRESS_ROOT).is_dir()
 
 
 def library_host_path() -> str:
