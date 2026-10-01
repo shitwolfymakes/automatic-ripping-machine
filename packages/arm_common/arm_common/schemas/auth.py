@@ -81,6 +81,8 @@ class ConfigView(BaseModel):
     makemkv_key_valid: bool | None = None
     makemkv_key_state: str | None = None
     makemkv_key_checked_at: datetime | None = None
+    # Drive whose ripper last reported the key status (setup step 4 "checked by").
+    makemkv_key_checked_by_drive_id: str | None = None
     updated_by_user_id: str | None
     updated_at: datetime | None
 

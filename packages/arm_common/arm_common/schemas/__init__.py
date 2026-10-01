@@ -178,6 +178,13 @@ from arm_common.schemas.system import (
     SystemResourcesResponse,
     SystemVersionResponse,
 )
+from arm_common.schemas.setup import (
+    DiscRouteSummary,
+    SetupStatusPublic,
+    SetupStepProgress,
+    SetupStepUpdate,
+    SetupView,
+)
 from arm_common.schemas.settings import (
     SettingsGroup,
     SettingsSchemaResponse,
@@ -363,6 +370,11 @@ __all__ = [
     "SessionUpdateRequest",
     "SessionView",
     "SettingsGroup",
+    "DiscRouteSummary",
+    "SetupStatusPublic",
+    "SetupStepProgress",
+    "SetupStepUpdate",
+    "SetupView",
     "SettingsSchemaResponse",
     "StatsResponse",
     "StorageRoot",
