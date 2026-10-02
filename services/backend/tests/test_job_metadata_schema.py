@@ -174,3 +174,37 @@ def test_migration_0033_strip_mirror_keys_is_idempotent() -> None:
     second_out, second_changed = strip_mirror_keys(first_out)
     assert second_changed is False
     assert second_out == first_out
+
+
+_KOLCHAK_TITLES = [{"index": i, "duration_seconds": d} for i, d in enumerate((3093, 3033, 3092, 3070, 3078, 542))]
+
+
+def _scan(titles: list[dict]) -> dict:
+    return {"disc_type": "bluray", "titles": titles}
+
+
+def test_jobview_looks_episodic_from_the_stored_scan() -> None:
+    assert (
+        JobView.model_validate(make_job(metadata_json={"scan_result": _scan(_KOLCHAK_TITLES)})).looks_episodic is True
+    )
+    feature = [{"index": 0, "duration_seconds": 6960}, {"index": 1, "duration_seconds": 900}]
+    assert JobView.model_validate(make_job(metadata_json={"scan_result": _scan(feature)})).looks_episodic is False
+    assert JobView.model_validate(make_job(metadata_json={})).looks_episodic is False
+
+
+def _ids(**ids: str) -> dict:
+    return {"identity": {"provider": "tmdb", "external_ids": ids}}
+
+
+def test_jobview_has_series_by_ids() -> None:
+    assert JobView.model_validate(make_job(metadata_json=_ids(tmdb="5084", tmdb_kind="tv"))).has_series is True
+    assert JobView.model_validate(make_job(metadata_json=_ids(tvdb="77170"))).has_series is True
+    assert JobView.model_validate(make_job(metadata_json=_ids(tvmaze="1234"))).has_series is True
+    assert JobView.model_validate(make_job(metadata_json=_ids(tmdb="1749913", tmdb_kind="movie"))).has_series is False
+    assert JobView.model_validate(make_job(metadata_json=_ids(imdb="tt0071003"))).has_series is False
+    assert JobView.model_validate(make_job(metadata_json={})).has_series is False
+
+
+def test_jobview_has_series_when_a_source_resolved_a_show() -> None:
+    md = {"identity_claims": {"sources": {"episodes_tvmaze": {"status": "ok", "inputs": {"show_id": "1234"}}}}}
+    assert JobView.model_validate(make_job(metadata_json=md)).has_series is True
