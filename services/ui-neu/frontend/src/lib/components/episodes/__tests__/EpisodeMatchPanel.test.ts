@@ -24,8 +24,8 @@ vi.mock('$lib/api/jobs', () => ({
 }));
 
 import EpisodeMatchPanel from '../EpisodeMatchPanel.svelte';
-import { fetchNamingPreview } from '$lib/api/jobs';
-import { matchIdentity, unpinIdentity } from '$lib/api/identity';
+import { fetchNamingPreview, updateTrack } from '$lib/api/jobs';
+import { fetchEpisodes, matchIdentity, unpinIdentity } from '$lib/api/identity';
 import type { IdentityView, JobView, MatchPreview, TrackView } from '$lib/types/api.gen';
 
 const LENGTHS = [3093, 3033, 3092, 3070, 3078, 542];
@@ -347,6 +347,119 @@ describe('EpisodeMatchPanel actions', () => {
 			await screen.findByText(/1 track changes/);
 			expect(screen.getByText('S01E01').closest('s')).not.toBeNull();
 			expect(screen.getByText('S01E02', { selector: '.episode-rows-proposed *' })).toBeInTheDocument();
+		} finally {
+			globalThis.matchMedia = real;
+		}
+	});
+});
+
+const kolchakS1 = {
+	source_id: 'episodes_tmdb',
+	show_id: '5084',
+	season: 1,
+	episodes: [
+		{ number: 4, name: 'The Vampire', runtime_s: 3060 },
+		{ number: 1, name: 'The Night Stalker', runtime_s: 4440, special: true }
+	]
+};
+
+describe('EpisodeMatchPanel set by hand', () => {
+	beforeEach(() => vi.mocked(fetchEpisodes).mockResolvedValue(kolchakS1));
+
+	it('sets a track to Extra by hand', async () => {
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		const select = await screen.findByLabelText('Set placement for t04');
+		await waitFor(() => expect(screen.getAllByText(/E04 The Vampire · 51m/).length).toBeGreaterThan(0));
+		const before = fetchIdentity.mock.calls.length;
+		await fireEvent.change(select, { target: { value: 'extra' } });
+		expect(updateTrack).toHaveBeenCalledWith('job_1', 'trk_4', { role: 'extra' });
+		await waitFor(() => expect(fetchIdentity.mock.calls.length).toBe(before + 1));
+	});
+
+	it('picks an episode by hand', async () => {
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		const select = await screen.findByLabelText('Set placement for t03');
+		await waitFor(() => expect(screen.getAllByText(/E04 The Vampire/).length).toBeGreaterThan(0));
+		await fireEvent.change(select, { target: { value: 's1e4' } });
+		expect(updateTrack).toHaveBeenCalledWith('job_1', 'trk_3', {
+			role: 'episode',
+			season: 1,
+			episode_number: 4,
+			episode_name: 'The Vampire'
+		});
+	});
+
+	it('lists specials as season 0 and offers Extra / Trailer / Other', async () => {
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		const select = (await screen.findByLabelText('Set placement for t00')) as HTMLSelectElement;
+		await waitFor(() => expect(select.options.length).toBe(6));
+		expect([...select.options].map((o) => [o.value, o.text])).toEqual([
+			['', 'Change…'],
+			['s1e4', 'E04 The Vampire · 51m'],
+			['s0e1', 'S00E01 The Night Stalker · 74m · special'],
+			['extra', 'Extra'],
+			['trailer', 'Trailer'],
+			['other', 'Other']
+		]);
+		await fireEvent.change(select, { target: { value: 's0e1' } });
+		expect(updateTrack).toHaveBeenCalledWith('job_1', 'trk_0', {
+			role: 'episode',
+			season: 0,
+			episode_number: 1,
+			episode_name: 'The Night Stalker'
+		});
+	});
+
+	it('loads the episode list once per source and season', async () => {
+		const { component } = renderComponent(EpisodeMatchPanel, {
+			props: { job: job({ season: 2 }), tracks, matching: false }
+		});
+		await screen.findByLabelText('Set placement for t00');
+		await (component as unknown as { reload: () => Promise<void> }).reload();
+		await waitFor(() => expect(fetchEpisodes).toHaveBeenCalledTimes(1));
+		expect(fetchEpisodes).toHaveBeenCalledWith('job_1', 'tmdb', 2);
+	});
+
+	it('reverts a hand-set row', async () => {
+		const handSet = structuredClone(applied);
+		handSet.tracks![5].identity_provenance = { role: 'manual' };
+		fetchIdentity.mockResolvedValue(handSet);
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await fireEvent.click(await screen.findByRole('button', { name: 'Revert' }));
+		expect(updateTrack).toHaveBeenCalledWith('job_1', 'trk_5', {
+			revert_fields: ['role', 'season', 'episode_number', 'episode_number_end', 'episode_name']
+		});
+	});
+
+	it('hides the pickers while a preview is shown', async () => {
+		vi.mocked(matchIdentity).mockResolvedValueOnce(tvmazePreview);
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await screen.findByLabelText('Set placement for t00');
+		await openRerun();
+		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+		await screen.findByText(/1 track changes/);
+		expect(screen.queryByLabelText(/Set placement for/)).toBeNull();
+	});
+
+	it('guests get no picker or revert', async () => {
+		await setRole('guest');
+		const handSet = structuredClone(applied);
+		handSet.tracks![5].identity_provenance = { role: 'manual' };
+		fetchIdentity.mockResolvedValue(handSet);
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		expect(await screen.findByText('Set by you')).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Revert' })).toBeNull();
+		expect(screen.queryByLabelText(/Set placement for/)).toBeNull();
+		expect(fetchEpisodes).not.toHaveBeenCalled();
+	});
+
+	it('renders a full-width picker in phone cards', async () => {
+		const real = globalThis.matchMedia;
+		globalThis.matchMedia = ((q: string) => ({ ...real(q), matches: q.includes('max-width: 639px') })) as typeof real;
+		try {
+			renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+			const select = await screen.findByLabelText('Set placement for t04');
+			expect(select.closest('li')).not.toBeNull();
 		} finally {
 			globalThis.matchMedia = real;
 		}

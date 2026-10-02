@@ -15,8 +15,27 @@
 		phone?: boolean;
 		/** Label of the source being previewed; null when no preview is shown. */
 		proposedLabel?: string | null;
+		/** Set-by-hand choices; null hides the pickers and Revert (guest, matching, preview). */
+		options?: { value: string; label: string }[] | null;
+		onpick?: (trackId: string, value: string) => void;
+		onrevert?: (trackId: string) => void;
 	}
-	let { rows, fileNames, matching = false, phone = false, proposedLabel = null }: Props = $props();
+	let {
+		rows,
+		fileNames,
+		matching = false,
+		phone = false,
+		proposedLabel = null,
+		options = null,
+		onpick,
+		onrevert
+	}: Props = $props();
+
+	function pick(trackId: string, e: Event & { currentTarget: HTMLSelectElement }) {
+		const value = e.currentTarget.value;
+		e.currentTarget.value = '';
+		if (value) onpick?.(trackId, value);
+	}
 
 	const ORIGIN_CHIP = { auto: 'chip-info', suggestion: 'chip-warning', you: '', none: '' } as const;
 
@@ -55,6 +74,28 @@
 	<span class="chip chip-sm chip-warning">CHANGED</span>
 {/snippet}
 
+{#snippet byHand(row: EpisodeRow)}
+	{#if options}
+		<div class="episode-rows-hand">
+			<select
+				class="field-control episode-rows-select"
+				aria-label="Set placement for {row.ref}"
+				onchange={(e) => pick(row.trackId, e)}
+			>
+				<option value="">Change…</option>
+				{#each options as o (o.value)}
+					<option value={o.value}>{o.label}</option>
+				{/each}
+			</select>
+			{#if row.handSet}
+				<button type="button" class="btn btn-ghost btn-sm episode-rows-revert" onclick={() => onrevert?.(row.trackId)}
+					>Revert</button
+				>
+			{/if}
+		</div>
+	{/if}
+{/snippet}
+
 {#snippet origin(row: EpisodeRow)}
 	{#if matching || row.origin.kind === 'none'}
 		<span class="episode-rows-muted">—</span>
@@ -79,44 +120,49 @@
 				{#if !matching && row.confidence != null}
 					<span class="episode-rows-muted">Confidence {conf(row.confidence)}</span>
 				{/if}
+				{@render byHand(row)}
 			</li>
 		{/each}
 	</ul>
 {:else}
-	<table class="table table-compact episode-rows-table">
-		<thead>
-			<tr>
-				<th class="table-header">Track</th>
-				<th class="table-header">Length</th>
-				<th class="table-header">Placement</th>
-				{#if proposedLabel}<th class="table-header">Proposed · {proposedLabel}</th>{/if}
-				<th class="table-header">Origin</th>
-				<th class="table-header table-right">Conf.</th>
-			</tr>
-		</thead>
-		<tbody>
-			{#each rows as row (row.trackId)}
-				<tr class="table-row">
-					<td class="table-cell episode-rows-ref">{row.ref}</td>
-					<td class="table-cell tabular-nums">{row.length}</td>
-					<td class="table-cell"><div class="episode-rows-placement">{@render placement(row)}</div></td>
-					{#if proposedLabel}
-						<td class="table-cell" data-changed={row.changed}>
-							{#if row.proposed && row.changed}
-								<div class="episode-rows-placement episode-rows-proposed">{@render proposal(row.proposed)}</div>
-							{:else if row.proposed}
-								<span class="episode-rows-muted">Same</span>
-							{:else}
-								<span class="episode-rows-muted">—</span>
-							{/if}
-						</td>
-					{/if}
-					<td class="table-cell">{@render origin(row)}</td>
-					<td class="table-cell table-right tabular-nums">{matching ? '—' : conf(row.confidence)}</td>
+	<div class="overflow-x-auto">
+		<table class="table table-compact episode-rows-table">
+			<thead>
+				<tr>
+					<th class="table-header">Track</th>
+					<th class="table-header">Length</th>
+					<th class="table-header">Placement</th>
+					{#if proposedLabel}<th class="table-header">Proposed · {proposedLabel}</th>{/if}
+					<th class="table-header">Origin</th>
+					<th class="table-header table-right">Conf.</th>
+					{#if options}<th class="table-header">Set by hand</th>{/if}
 				</tr>
-			{/each}
-		</tbody>
-	</table>
+			</thead>
+			<tbody>
+				{#each rows as row (row.trackId)}
+					<tr class="table-row">
+						<td class="table-cell episode-rows-ref">{row.ref}</td>
+						<td class="table-cell tabular-nums">{row.length}</td>
+						<td class="table-cell"><div class="episode-rows-placement">{@render placement(row)}</div></td>
+						{#if proposedLabel}
+							<td class="table-cell" data-changed={row.changed}>
+								{#if row.proposed && row.changed}
+									<div class="episode-rows-placement episode-rows-proposed">{@render proposal(row.proposed)}</div>
+								{:else if row.proposed}
+									<span class="episode-rows-muted">Same</span>
+								{:else}
+									<span class="episode-rows-muted">—</span>
+								{/if}
+							</td>
+						{/if}
+						<td class="table-cell">{@render origin(row)}</td>
+						<td class="table-cell table-right tabular-nums">{matching ? '—' : conf(row.confidence)}</td>
+						{#if options}<td class="table-cell">{@render byHand(row)}</td>{/if}
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
 {/if}
 
 <style>
@@ -164,6 +210,27 @@
 	}
 	td[data-changed='true'] {
 		background: var(--color-warning-soft);
+	}
+	.episode-rows-hand {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		min-width: 0;
+	}
+	.episode-rows-select {
+		min-width: 0;
+		max-width: 16rem;
+	}
+	.episode-rows-card .episode-rows-hand {
+		flex-wrap: wrap;
+	}
+	.episode-rows-card .episode-rows-select {
+		flex: 1 1 100%;
+		max-width: none;
+		min-height: 2.75rem;
+	}
+	.episode-rows-card .episode-rows-revert {
+		min-height: 2.75rem;
 	}
 	.episode-rows-muted {
 		color: var(--color-text-muted);

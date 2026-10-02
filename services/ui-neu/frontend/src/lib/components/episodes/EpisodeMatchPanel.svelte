@@ -2,9 +2,16 @@
 	// The Match Episodes tab (design spec 2026-10-02 section 4): which source
 	// placed this disc's tracks, how sure it was, and the per-track placement.
 	import { MediaQuery } from 'svelte/reactivity';
-	import type { IdentityView, JobView, MatchPreview, MatchRequest, TrackView } from '$lib/types/api.gen';
-	import { fetchIdentity, matchIdentity, unpinIdentity, type EpisodeSource } from '$lib/api/identity';
-	import { fetchNamingPreview } from '$lib/api/jobs';
+	import type {
+		EpisodeSummary,
+		IdentityView,
+		JobView,
+		MatchPreview,
+		MatchRequest,
+		TrackView
+	} from '$lib/types/api.gen';
+	import { fetchEpisodes, fetchIdentity, matchIdentity, unpinIdentity, type EpisodeSource } from '$lib/api/identity';
+	import { fetchNamingPreview, updateTrack } from '$lib/api/jobs';
 	import { isAdmin } from '$lib/stores/auth';
 	import {
 		panelState,
@@ -44,6 +51,11 @@
 	let lastRequest = $state.raw<MatchRequest | null>(null);
 	let unpinAsk = $state(false);
 	let unpinError = $state<string | null>(null);
+	let episodes = $state<EpisodeSummary[]>([]);
+	let episodesKey = '';
+	let handError = $state<string | null>(null);
+	const ROLES = ['extra', 'trailer', 'other'] as const;
+	const REVERT = ['role', 'season', 'episode_number', 'episode_number_end', 'episode_name'] as const;
 
 	export async function reload(): Promise<void> {
 		if (!job.has_series) return;
@@ -139,6 +151,66 @@
 		} finally {
 			busy = false;
 		}
+	}
+
+	// The episode list behind the per-row picker: the active source's, else the
+	// first source that ran and could answer (a nomatch disc still gets a list).
+	const pickerSource = $derived.by((): EpisodeSource | null => {
+		if (source) return shortId(source);
+		const ran = sourceOptions.find((o) => {
+			const st = identity?.sources?.[`episodes_${o.id}`]?.status;
+			return st === 'ok' || st === 'miss';
+		});
+		return ran?.id ?? null;
+	});
+
+	$effect(() => {
+		const src = pickerSource;
+		const season = job.season ?? 1;
+		const key = `${job.id}:${src}:${season}`;
+		if (!src || !canAct || key === episodesKey) return;
+		episodesKey = key;
+		fetchEpisodes(job.id, src, season).then(
+			(r) => (episodes = r.episodes ?? []),
+			() => (episodes = [])
+		);
+	});
+
+	const pad = (n: number) => String(n).padStart(2, '0');
+	const pickOptions = $derived.by(() => {
+		const season = job.season ?? 1;
+		const eps = episodes.map((e) => {
+			const mins = e.runtime_s != null ? ` · ${Math.round(e.runtime_s / 60)}m` : '';
+			return e.special
+				? { value: `s0e${e.number}`, label: `S00E${pad(e.number)} ${e.name ?? ''}${mins} · special` }
+				: { value: `s${season}e${e.number}`, label: `E${pad(e.number)} ${e.name ?? ''}${mins}` };
+		});
+		return [...eps, ...ROLES.map((r) => ({ value: r, label: r[0].toUpperCase() + r.slice(1) }))];
+	});
+
+	async function saveTrack(trackId: string, data: Parameters<typeof updateTrack>[2]) {
+		handError = null;
+		try {
+			await updateTrack(job.id, trackId, data);
+		} catch (e) {
+			handError = e instanceof Error ? e.message : 'Could not save';
+			return;
+		}
+		await reload();
+	}
+
+	function setByHand(trackId: string, value: string) {
+		const role = ROLES.find((r) => r === value);
+		if (role) return saveTrack(trackId, { role });
+		const m = /^s(\d+)e(\d+)$/.exec(value);
+		if (!m) return;
+		const [season, n] = [Number(m[1]), Number(m[2])];
+		const ep = episodes.find((e) => e.number === n && !!e.special === (season === 0));
+		return saveTrack(trackId, { role: 'episode', season, episode_number: n, episode_name: ep?.name ?? null });
+	}
+
+	function revert(trackId: string) {
+		return saveTrack(trackId, { revert_fields: [...REVERT] });
 	}
 
 	function accept() {
@@ -313,7 +385,11 @@
 				matching={view === 'matching'}
 				phone={phoneQuery.current}
 				proposedLabel={preview && previewSource ? labelOf(previewSource) : null}
+				options={canAct && !preview ? pickOptions : null}
+				onpick={setByHand}
+				onrevert={revert}
 			/>
+			{#if handError}<p class="field-error" role="alert">Could not save the track: {handError}</p>{/if}
 		{/if}
 	{/if}
 
