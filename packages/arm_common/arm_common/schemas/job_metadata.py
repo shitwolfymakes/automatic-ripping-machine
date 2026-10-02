@@ -23,7 +23,7 @@ whatever was there; tighten to `forbid` once those rows are confirmed gone.
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -40,6 +40,10 @@ class ExternalIds(BaseModel):
     tvmaze: str | None = None
     anidb: str | None = None  # reserved (design test, spec 10)
     musicbrainz_release: str | None = None
+    # Whether `tmdb` names a movie or a TV show: TMDb numbers the two
+    # separately, so a movie's id must never be used as a show id (episode
+    # stage). None for ids stored before this field existed.
+    tmdb_kind: Literal["movie", "tv"] | None = None
 
 
 class JobIdentity(BaseModel):
