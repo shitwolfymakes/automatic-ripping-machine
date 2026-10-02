@@ -75,3 +75,19 @@ def test_7z_failure_is_none(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(udf_image.shutil, "which", lambda _n: "/usr/bin/7z")
     monkeypatch.setattr(udf_image.subprocess, "run", fake_run)
     assert udf_image.list_files("/source/x.iso") is None
+
+
+def test_7zz_is_used_when_7z_is_not_installed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Debian 12's `7zip` package (the ripper image's base) ships only `7zz`."""
+    monkeypatch.setattr(udf_image.shutil, "which", lambda name: "/usr/bin/7zz" if name == "7zz" else None)
+    argv: list[str] = []
+
+    def _run(args, **_k):
+        argv.extend(args)
+        return subprocess.CompletedProcess(args, 0, b"listing", b"")
+
+    monkeypatch.setattr(udf_image.subprocess, "run", _run)
+
+    assert udf_image.available() is True
+    assert udf_image._run(["l"], 1.0) == b"listing"
+    assert argv[0] == "/usr/bin/7zz"
