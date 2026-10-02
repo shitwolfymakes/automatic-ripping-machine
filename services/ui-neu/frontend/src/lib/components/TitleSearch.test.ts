@@ -375,5 +375,26 @@ describe('TitleSearch', () => {
 			expect(onseries).toHaveBeenCalled();
 			expect(onapply).not.toHaveBeenCalled();
 		});
+
+		it('does not send a TV candidate ids when the form type is switched to Movie', async () => {
+			const ids = { tmdb: '5084', tmdb_kind: 'tv' as const };
+			mockSearchMetadata.mockResolvedValue({
+				candidates: [createCandidate({ title: 'Kolchak', year: 1974, kind: 'tv', external_ids: ids })]
+			});
+			const onseries = vi.fn();
+			const onapply = vi.fn();
+			renderComponent(TitleSearch, {
+				props: { job: createJob({ id: 'job_9', status: 'ripped', title: 'kolchak' }), onseries, onapply }
+			});
+			await fireEvent.click(screen.getByText('Search'));
+			await fireEvent.click(await screen.findByText('Kolchak'));
+			await fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'movie' } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+			await waitFor(() => expect(mockResolve).toHaveBeenCalled());
+			expect(mockResolve.mock.calls[0][1].external_ids).toBeUndefined();
+			expect(mockResolve.mock.calls[0][1].media_type).toBe('movie');
+			expect(onapply).toHaveBeenCalled();
+			expect(onseries).not.toHaveBeenCalled();
+		});
 	});
 });

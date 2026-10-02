@@ -131,7 +131,9 @@
 		const year = Number.isFinite(parsedYear as number) ? parsedYear : null;
 		const poster = editPosterUrl.trim() || null;
 		const isSeries = editType === 'series';
-		const externalIds = selected?.external_ids ?? undefined;
+		// Only send the candidate's ids when the form's type still matches its kind.
+		const candidateIsSeries = selected?.kind === 'series' || selected?.kind === 'tv';
+		const externalIds = selected && candidateIsSeries === isSeries ? (selected.external_ids ?? undefined) : undefined;
 		try {
 			if (canResolve) {
 				await resolveJob(job.id, {
