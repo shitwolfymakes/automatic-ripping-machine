@@ -465,3 +465,105 @@ describe('EpisodeMatchPanel set by hand', () => {
 		}
 	});
 });
+
+function deferred<T>() {
+	let resolve: (v: T) => void = () => {};
+	const promise = new Promise<T>((r) => (resolve = r));
+	return { promise, resolve };
+}
+
+describe('EpisodeMatchPanel fix round 1', () => {
+	it('shows a neutral loading line, not "unavailable", before the first fetch settles', async () => {
+		const first = deferred<IdentityView>();
+		fetchIdentity.mockReturnValue(first.promise);
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		expect(screen.getByText('Loading episodes…')).toBeInTheDocument();
+		expect(screen.queryByText('No episode source is set up')).toBeNull();
+		first.resolve(applied);
+		expect(await screen.findByText('Applied automatically')).toBeInTheDocument();
+		expect(screen.queryByText('Loading episodes…')).toBeNull();
+	});
+
+	it('ignores a late identity for the previous job', async () => {
+		const forA = deferred<IdentityView>();
+		fetchIdentity.mockImplementation((id: string) => (id === 'job_A' ? forA.promise : Promise.resolve(applied)));
+		const { rerender } = renderComponent(EpisodeMatchPanel, {
+			props: { job: job({ id: 'job_A' }), tracks, matching: false }
+		});
+		await rerender({ job: job({ id: 'job_B' }), tracks, matching: false });
+		expect(await screen.findByText('Applied automatically')).toBeInTheDocument();
+		forA.resolve({ ...applied, sources: { episodes_tmdb: { status: 'ok', suggestion: true } } });
+		await new Promise((r) => setTimeout(r, 0));
+		expect(screen.queryByText('Suggestion, not applied')).toBeNull();
+		expect(screen.getByText('Applied automatically')).toBeInTheDocument();
+	});
+
+	it('resets the re-run panel and preview when the job changes', async () => {
+		vi.mocked(matchIdentity).mockResolvedValueOnce(tvmazePreview);
+		const { rerender } = renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await openRerun();
+		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+		await screen.findByText(/1 track changes/);
+		await rerender({ job: job({ id: 'job_2' }), tracks, matching: false });
+		await screen.findByText('Applied automatically');
+		expect(screen.queryByText(/1 track changes/)).toBeNull();
+		expect(screen.queryByLabelText('Source')).toBeNull();
+	});
+
+	it('drops a preview whose form changed while it was in flight; apply sends the previewed request', async () => {
+		const slow = deferred<MatchPreview>();
+		vi.mocked(matchIdentity).mockReturnValueOnce(slow.promise);
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await openRerun();
+		await fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'tvmaze' } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+		await fireEvent.input(screen.getByLabelText('Season'), { target: { value: '2' } });
+		slow.resolve(tvmazePreview);
+		await new Promise((r) => setTimeout(r, 0));
+		expect(screen.queryByText(/track changes? if you apply/)).toBeNull();
+
+		vi.mocked(matchIdentity).mockResolvedValueOnce(tvmazePreview).mockResolvedValueOnce({ outcomes: [] });
+		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+		await screen.findByText(/1 track changes if you apply TVmaze/);
+		const previewed = vi.mocked(matchIdentity).mock.calls[1][1];
+		expect(previewed).toEqual({ source: 'tvmaze', season: 2, disc_number: 1, apply: false });
+		await fireEvent.click(screen.getByRole('button', { name: 'Apply & pin TVmaze' }));
+		expect(vi.mocked(matchIdentity).mock.calls[2][1]).toEqual({ ...previewed, apply: true });
+	});
+
+	it('drops the preview when matching starts', async () => {
+		vi.mocked(matchIdentity).mockResolvedValueOnce(tvmazePreview);
+		const { rerender } = renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await openRerun();
+		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+		await screen.findByText(/1 track changes/);
+		await rerender({ job: job(), tracks, matching: true });
+		await rerender({ job: job(), tracks, matching: false });
+		expect(screen.queryByText(/1 track changes/)).toBeNull();
+		expect(screen.queryByText('CHANGED')).toBeNull();
+	});
+
+	it('disables Unpin while the request runs', async () => {
+		fetchIdentity.mockResolvedValue({ ...applied, pin: { episode: 'episodes_tmdb' } });
+		const slow = deferred<IdentityView>();
+		vi.mocked(unpinIdentity).mockReturnValue(slow.promise);
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await fireEvent.click(await screen.findByRole('button', { name: 'Unpin…' }));
+		const button = screen.getByRole('button', { name: 'Unpin' });
+		await fireEvent.click(button);
+		expect(button).toBeDisabled();
+		await fireEvent.click(button);
+		expect(unpinIdentity).toHaveBeenCalledTimes(1);
+		slow.resolve({ ...applied, pin: {} });
+		expect(await screen.findByText('Applied automatically')).toBeInTheDocument();
+	});
+
+	it('labels Accept as accepting even with the re-run panel open', async () => {
+		fetchIdentity.mockResolvedValue({ ...applied, sources: { episodes_tmdb: { status: 'ok', suggestion: true } } });
+		vi.mocked(matchIdentity).mockReturnValue(new Promise(() => {}));
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await openRerun();
+		await fireEvent.click(screen.getByRole('button', { name: 'Accept suggestion' }));
+		expect(screen.getByRole('button', { name: 'Accepting…' })).toBeDisabled();
+	});
+});

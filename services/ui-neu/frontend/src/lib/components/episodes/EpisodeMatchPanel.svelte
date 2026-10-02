@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The Match Episodes tab (design spec 2026-10-02 section 4): which source
 	// placed this disc's tracks, how sure it was, and the per-track placement.
+	import { untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
 	import type {
 		EpisodeSummary,
@@ -39,6 +40,8 @@
 	let fileNames = $state(new Map<string, { name: string; path: string }>());
 	let othersOpen = $state(false);
 	let loadError = $state<string | null>(null);
+	let loaded = $state(false);
+	let loadedFor: string | null = null;
 	const phoneQuery = new MediaQuery('(max-width: 639px)', false);
 
 	const EPISODE_SOURCES: EpisodeSource[] = ['tmdb', 'tvmaze', 'tvdb'];
@@ -46,7 +49,13 @@
 	let rerun = $state<RerunForm>({ source: 'tmdb', season: 1, disc: 1, tolerance: null });
 	let preview = $state<MatchPreview | null>(null);
 	let previewSource = $state<EpisodeSource | null>(null);
+	// The request that produced the preview on screen: Apply & pin sends exactly
+	// it. previewSeq invalidates a preview still in flight when the form changes.
+	let previewRequest: MatchRequest | null = null;
+	let previewSeq = 0;
 	let busy = $state(false);
+	let accepting = $state(false);
+	let unpinBusy = $state(false);
 	let actionError = $state<string | null>(null);
 	let lastRequest = $state.raw<MatchRequest | null>(null);
 	let unpinAsk = $state(false);
@@ -61,26 +70,59 @@
 		if (!job.has_series) return;
 		const jobId = job.id;
 		try {
-			identity = await fetchIdentity(jobId);
+			const next = await fetchIdentity(jobId);
+			if (job.id !== jobId) return;
+			identity = next;
 			loadError = null;
 		} catch (e) {
+			if (job.id !== jobId) return;
 			loadError = e instanceof Error ? e.message : 'Could not load episodes';
 		}
+		loaded = true;
 		try {
 			const preview = await fetchNamingPreview(jobId);
+			if (job.id !== jobId) return;
 			fileNames = new Map((preview.items ?? []).map((i) => [i.track_id, { name: i.output_name, path: i.output_path }]));
 		} catch {
 			/* file names are a nicety */
 		}
 	}
 
+	// Everything that belongs to one job is dropped when the panel is handed
+	// another, so nothing (a preview, an open form, a late response) leaks across.
+	function resetForJob() {
+		identity = null;
+		loaded = false;
+		loadError = null;
+		fileNames = new Map();
+		othersOpen = false;
+		rerunOpen = false;
+		rerun = { source: 'tmdb', season: 1, disc: 1, tolerance: null };
+		dropPreview();
+		lastRequest = null;
+		unpinAsk = false;
+		unpinError = null;
+		episodes = [];
+		episodesKey = '';
+		handError = null;
+	}
+
 	$effect(() => {
-		void job.id;
+		const id = job.id;
 		void job.has_series;
-		reload();
+		untrack(() => {
+			if (loadedFor !== null && loadedFor !== id) resetForJob();
+			loadedFor = id;
+			reload();
+		});
+	});
+
+	$effect(() => {
+		if (matching) untrack(dropPreview);
 	});
 
 	const view = $derived(panelState(job, identity, matching));
+	const loading = $derived(!loaded && view !== 'noseries' && view !== 'matching');
 	const rows = $derived(view === 'noseries' ? [] : buildRows(tracks, identity ?? {}, preview));
 	const source = $derived(identity ? activeSource(identity) : null);
 	const sourceLabel = $derived(source ? (SOURCE_LABEL[source] ?? source) : null);
@@ -88,8 +130,8 @@
 		Object.entries(identity?.sources ?? {}).filter(([id]) => id.startsWith('episodes_') && id !== source)
 	);
 	const failed = $derived(identity ? failedSources(identity) : []);
-	const showRows = $derived(view !== 'noseries' && view !== 'unavailable');
-	const canAct = $derived($isAdmin && view !== 'noseries' && view !== 'matching' && view !== 'unavailable');
+	const showRows = $derived(!loading && view !== 'noseries' && view !== 'unavailable');
+	const canAct = $derived($isAdmin && !loading && view !== 'noseries' && view !== 'matching' && view !== 'unavailable');
 	const sourceOptions = $derived(
 		EPISODE_SOURCES.map((id) => {
 			const s = identity?.sources?.[`episodes_${id}`];
@@ -115,6 +157,8 @@
 	}
 
 	function dropPreview() {
+		previewSeq++;
+		previewRequest = null;
 		preview = null;
 		previewSource = null;
 		actionError = null;
@@ -131,8 +175,13 @@
 		actionError = null;
 		lastRequest = req;
 		const label = labelOf(req.source);
+		const jobId = job.id;
+		const seq = ++previewSeq;
+		// A preview is stale once the form (or the job) changed while it ran.
+		const stale = () => job.id !== jobId || (!req.apply && seq !== previewSeq);
 		try {
-			const out = await matchIdentity(job.id, req);
+			const out = await matchIdentity(jobId, req);
+			if (stale()) return;
 			const failed = out.outcomes?.find((o) => o.status === 'error');
 			if (failed) throw new Error(failed.detail ?? 'error');
 			if (req.apply) {
@@ -142,8 +191,10 @@
 			} else {
 				preview = out;
 				previewSource = req.source ?? null;
+				previewRequest = req;
 			}
 		} catch (e) {
+			if (stale()) return;
 			const still = sourceLabel
 				? ` the placement below is still ${sourceLabel}'s.`
 				: ' the placement below is unchanged.';
@@ -171,8 +222,12 @@
 		if (!src || !canAct || key === episodesKey) return;
 		episodesKey = key;
 		fetchEpisodes(job.id, src, season).then(
-			(r) => (episodes = r.episodes ?? []),
-			() => (episodes = [])
+			(r) => {
+				if (episodesKey === key) episodes = r.episodes ?? [];
+			},
+			() => {
+				if (episodesKey === key) episodes = [];
+			}
 		);
 	});
 
@@ -213,17 +268,33 @@
 		return saveTrack(trackId, { revert_fields: [...REVERT] });
 	}
 
-	function accept() {
-		return run({ source: shortId(source), apply: true });
+	async function accept() {
+		accepting = true;
+		try {
+			await run({ source: shortId(source), apply: true });
+		} finally {
+			accepting = false;
+		}
+	}
+
+	function applyPreview() {
+		if (previewRequest) return run({ ...previewRequest, apply: true });
 	}
 
 	async function unpin() {
+		if (unpinBusy) return;
+		unpinBusy = true;
 		unpinError = null;
+		const jobId = job.id;
 		try {
-			identity = await unpinIdentity(job.id);
+			const next = await unpinIdentity(jobId);
+			if (job.id !== jobId) return;
+			identity = next;
 			unpinAsk = false;
 		} catch (e) {
-			unpinError = e instanceof Error ? e.message : 'Could not unpin';
+			if (job.id === jobId) unpinError = e instanceof Error ? e.message : 'Could not unpin';
+		} finally {
+			unpinBusy = false;
 		}
 	}
 </script>
@@ -257,6 +328,8 @@
 			<span class="eyebrow">Episodes</span>
 			{#if view === 'matching'}
 				<span class="episode-panel-text">Matching episodes…</span>
+			{:else if loading}
+				<span class="episode-panel-text">Loading episodes…</span>
 			{:else}
 				{#if sourceLabel}<span class="chip chip-sm chip-info">{sourceLabel}</span>{/if}
 				{#if view === 'applied'}
@@ -307,7 +380,9 @@
 			</ul>
 		{/if}
 
-		{#if loadError}
+		{#if loading}
+			<!-- first fetch still running: no state to show yet -->
+		{:else if loadError}
 			<div class="alert alert-danger">
 				<p class="alert-title">Could not load the episode match</p>
 				<p class="alert-body">{loadError}</p>
@@ -327,7 +402,7 @@
 				{#if canAct}
 					<div class="episode-panel-banner-actions">
 						<button type="button" class="btn btn-primary btn-sm" disabled={busy} onclick={accept}>
-							{busy && lastRequest?.apply && !rerunOpen ? 'Accepting…' : 'Accept suggestion'}
+							{accepting ? 'Accepting…' : 'Accept suggestion'}
 						</button>
 					</div>
 				{/if}
@@ -340,8 +415,10 @@
 					<div class="episode-panel-banner-actions">
 						{#if unpinAsk}
 							<span class="alert-body">Unpin and let ARM pick the source again?</span>
-							<button type="button" class="btn btn-primary btn-sm" onclick={unpin}>Unpin</button>
-							<button type="button" class="btn btn-ghost btn-sm" onclick={() => (unpinAsk = false)}>Cancel</button>
+							<button type="button" class="btn btn-primary btn-sm" disabled={unpinBusy} onclick={unpin}>Unpin</button>
+							<button type="button" class="btn btn-ghost btn-sm" disabled={unpinBusy} onclick={() => (unpinAsk = false)}
+								>Cancel</button
+							>
 						{:else}
 							<button type="button" class="btn btn-sm" onclick={() => (unpinAsk = true)}>Unpin…</button>
 						{/if}
@@ -370,7 +447,7 @@
 				onfieldchange={dropPreview}
 				onpreview={() => run(request(false))}
 				ondiscard={dropPreview}
-				onapply={() => run(request(true))}
+				onapply={applyPreview}
 			>
 				{@render errorAlert()}
 			</RerunPanel>
