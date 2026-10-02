@@ -291,3 +291,19 @@ async def test_extract_drops_a_fatal_7z_failure(
     _fake_7z(monkeypatch, rc=2, stderr=b"ERROR: /source/m.iso\nCan not open the file as archive\n")
 
     assert await iso_extract.extract(str(iso)) is None
+
+
+def test_a_rejected_extraction_logs_every_damaged_file(caplog: pytest.LogCaptureFixture) -> None:
+    """The whole list, not the tail of 7z's stderr: a 300-character tail once
+    showed only harmless CERTIFICATE files and hid 104 unreadable streams."""
+    streams = [f"BDMV/STREAM/{i:05}.m2ts" for i in range(11, 120)]
+    stderr = "\nERRORS:\nHeaders Error\nUnexpected end of archive\n\n" + "".join(
+        f"ERROR: Data Error : {p}\n" for p in [*streams, "CERTIFICATE/id.bdmv"]
+    )
+    with caplog.at_level("ERROR", logger="arm_ripper.iso_extract"):
+        assert iso_extract._usable(Path("m.iso"), 2, stderr) is False
+
+    text = caplog.text
+    assert "110 unreadable file(s)" in text
+    assert "BDMV/STREAM/00011.m2ts" in text and "BDMV/STREAM/00119.m2ts" in text
+    assert "Headers Error" in text and "Unexpected end of archive" in text

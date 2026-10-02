@@ -196,6 +196,18 @@ image's own volume label (blkid) replaces the folder name MakeMKV reports.
   where a movie was expected. An operator who wants the raw copy picks that
   session deliberately, and rip-start honours it whatever the scan found.
 
+### Incomplete images are refused up front
+
+A copy or download that stopped partway leaves an image shorter than its own
+file system (seen on hifi: a 13.8 GB file of a 32 GB BD-50, which made
+MakeMKV crash and 7-Zip find 104 of 114 streams unreadable after a 17-minute
+unpack). `POST /api/iso/rips` reads the ISO 9660 volume size and the UDF
+partition descriptors (`arm_backend/iso_image.py`; milliseconds, stdlib
+only) and refuses a file more than 64 MB short of its declared end with a
+422: "This ISO is incomplete: 13.8 GB of 32.0 GB is present ...". Layouts it
+can't read are not judged. When an unpack is still rejected, the ripper logs
+every unreadable file and 7-Zip's archive-level errors in full.
+
 ### Preparing: before the job exists
 
 An ISO rip has no job until identify, and the scan before it can be long

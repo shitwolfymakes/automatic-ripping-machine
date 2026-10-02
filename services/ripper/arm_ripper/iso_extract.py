@@ -152,7 +152,21 @@ def _usable(image: Path, rc: int | None, stderr: str) -> bool:
             ", ".join(damaged),
         )
         return True
-    logger.error("iso extract: 7z exited %s: %s", rc, stderr[-300:])
+    # The whole picture, never a tail of stderr: a tail once showed only the
+    # harmless CERTIFICATE files and hid a hundred unreadable streams.
+    archive_errors = [
+        line.strip()
+        for line in stderr.splitlines()
+        if line.strip() and line.strip() != "ERRORS:" and not _FILE_ERROR.match(line.strip())
+    ]
+    logger.error(
+        "iso extract: %s: 7z exited %s; %d unreadable file(s): %s; archive errors: %s",
+        image,
+        rc,
+        len(damaged),
+        ", ".join(damaged) or "none",
+        "; ".join(archive_errors) or "none",
+    )
     return False
 
 

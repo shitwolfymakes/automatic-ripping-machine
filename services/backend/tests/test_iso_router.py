@@ -409,6 +409,23 @@ def test_create_spawns_virtual_drive(lib: Path, signing_key: bytes) -> None:
     assert r.json()["drive_id"] == d.id
 
 
+def test_create_refuses_an_incomplete_iso_before_spawning(lib: Path, signing_key: bytes) -> None:
+    """A copy that stopped partway is refused at once, with the reason, instead
+    of after a long unpack and a titleless scan."""
+    from tests.test_iso_image import GB, udf_image
+
+    udf_image(lib / "MirrorMask.iso", declared_bytes=32 * GB, file_bytes=13 * GB)
+    db = FakeSession()
+    token = _admin_token(db, signing_key)
+    manager = _StubManager()
+    with TestClient(_build_app(db, signing_key, manager)) as client:
+        r = client.post("/api/iso/rips", json={"path": "MirrorMask.iso"}, headers=_auth(token))
+    assert r.status_code == 422
+    assert r.json()["detail"].startswith("This ISO is incomplete: 14.0 GB of 34.4 GB is present")
+    assert manager.ensured == []
+    assert db.rows.get("drives", []) == []
+
+
 def test_create_409_when_cap_full(lib: Path, signing_key: bytes) -> None:
     (lib / "Movies").mkdir()
     (lib / "Movies" / "x.iso").write_bytes(b"x")

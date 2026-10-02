@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlmodel import col, select
 
-from arm_backend import file_browser, iso_prepare
+from arm_backend import file_browser, iso_image, iso_prepare
 from arm_backend.config import settings
 from arm_backend.file_browser import PathError
 from arm_backend.iso_library import library_configured
@@ -299,6 +299,11 @@ async def create_iso_rip(
         # Off the event loop: the library is usually a network share and a stat
         # there can take seconds (minutes under load).
         target = await asyncio.to_thread(resolve_iso, rel)
+        # A copy that stopped partway can never rip whole: say so now, not
+        # after a long unpack and a titleless scan.
+        cut = await asyncio.to_thread(iso_image.truncation, target)
+        if cut is not None:
+            raise IsoRipError(422, cut.message())
         cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
         # Same rule as the ripper's identify: paused with the review hold off
         # refuses new discs, but paused with the hold on (the UI Pause toggle)
