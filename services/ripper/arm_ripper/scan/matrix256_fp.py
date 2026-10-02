@@ -144,7 +144,14 @@ def probe_matrix256(source_path: str) -> str | None:
     like thediscdb we never fingerprint nothing.
     """
     try:
-        collected = collect_tree_records(source_path)
+        try:
+            collected = collect_tree_records(source_path)
+        except Exception as e:  # noqa: BLE001 — pycdlib refuses UDF-only images (no ISO 9660 PVD)
+            logger.debug("matrix256 pycdlib walk failed for %s: %s; trying 7z", source_path, e)
+            from arm_ripper.scan import udf_image
+
+            udf_records = udf_image.list_files(source_path)
+            collected = (udf_records, "udf-7z") if udf_records else None
         if collected is None:
             return None
         records, view = collected

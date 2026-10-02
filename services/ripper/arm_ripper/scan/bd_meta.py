@@ -81,13 +81,36 @@ def _read_bdmt(source_path: str) -> tuple[bytes, str] | None:
         iso.close()
 
 
+def _read_bdmt_udf(source_path: str) -> tuple[bytes, str] | None:
+    """7-Zip fallback for a UDF-only image PyCdlib refuses (no ISO 9660 PVD)."""
+    from arm_ripper.scan import udf_image
+
+    files = udf_image.list_files(source_path)
+    if not files:
+        return None
+    prefix = _META_DIR.lstrip("/") + "/"
+    names = [path[len(prefix) :] for path, _size in files if path.startswith(prefix) and "/" not in path[len(prefix) :]]
+    picked = pick_bdmt_file(names)
+    if picked is None:
+        return None
+    name, lang = picked
+    data = udf_image.read_file(source_path, f"{prefix}{name}")
+    if data is None:
+        return None
+    return data, lang
+
+
 def probe_bd_meta(source_path: str) -> BdDiscMeta | None:
     """Never raises."""
     try:
         read = _read_bdmt(source_path)
     except Exception as e:  # noqa: BLE001 — pycdlib raises several flavours; no UDF / no META dir
-        logger.debug("bdmt probe failed for %s: %s", source_path, e)
-        return None
+        logger.debug("bdmt probe via pycdlib failed for %s: %s; trying 7z", source_path, e)
+        try:
+            read = _read_bdmt_udf(source_path)
+        except Exception as e2:  # noqa: BLE001
+            logger.debug("bdmt probe via 7z failed for %s: %s", source_path, e2)
+            return None
     if read is None:
         return None
     data, lang = read
