@@ -211,6 +211,26 @@ def test_complete_marks_pending_skipped_and_finish_done(signing_key, admin_user,
     assert db.rows["config"][0].setup_completed_at is not None
 
 
+def test_complete_marks_account_done_when_password_already_changed(signing_key, admin_user, guest_user) -> None:
+    # The walkthrough resumed at step 2 (password changed through /api/auth/password
+    # before the account step was visited): Finish must record account as done.
+    db = _seeded(admin_user, guest_user)
+    with TestClient(_make_app(signing_key, db)) as c:
+        body = c.post("/api/setup/complete", headers=_auth(signing_key, admin_user)).json()
+    assert body["progress"]["account"]["state"] == "done"
+    assert db.rows["config"][0].setup_progress["account"]["state"] == "done"
+
+
+def test_complete_marks_account_skipped_while_password_must_change(signing_key, admin_user, guest_user) -> None:
+    admin_user.password_must_change = True
+    db = _seeded(admin_user, guest_user)
+    with TestClient(_make_app(signing_key, db)) as c:
+        r = c.post("/api/setup/complete", headers=_auth(signing_key, admin_user))
+    # Completing setup is refused outright while the seeded password stands.
+    assert r.status_code == 403, r.text
+    assert "account" not in (db.rows["config"][0].setup_progress or {})
+
+
 def test_restart_clears_completion_and_dismissal_keeps_progress(signing_key, admin_user, guest_user) -> None:
     db = _seeded(admin_user, guest_user)
     cfg = db.rows["config"][0]

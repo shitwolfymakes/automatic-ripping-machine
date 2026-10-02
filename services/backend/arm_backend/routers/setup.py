@@ -153,11 +153,18 @@ async def put_step(
 async def complete_setup(_: User = Depends(require_writer), db: AsyncSession = Depends(get_session)) -> SetupView:
     cfg = await _config(db)
     progress = _progress(cfg)
+    # The account step is "done" the moment the seeded password is gone, even
+    # when the walkthrough never visited it (an admin who changed the password
+    # elsewhere resumes at step 2). Persist it as done, not skipped, so the
+    # dashboard checklist agrees with the Finish summary.
+    admin = (await db.execute(select(User).where(col(User.username) == ADMIN_USERNAME))).scalar_one_or_none()
+    password_changed = admin is not None and not admin.password_must_change
     for step in SETUP_STEP_ORDER:
         if step is SetupStep.FINISH:
             progress[step.value] = _entry(SetupStepState.DONE)
         elif step.value not in progress:
-            progress[step.value] = _entry(SetupStepState.SKIPPED)
+            done = step is SetupStep.ACCOUNT and password_changed
+            progress[step.value] = _entry(SetupStepState.DONE if done else SetupStepState.SKIPPED)
     cfg.setup_progress = progress
     cfg.setup_completed_at = _now()
     return await _save(db, cfg)

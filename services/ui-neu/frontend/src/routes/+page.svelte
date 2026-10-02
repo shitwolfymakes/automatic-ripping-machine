@@ -251,7 +251,7 @@
 </svelte:head>
 
 <div class="stack-lg stack">
-	<div class="flex items-center justify-between">
+	<div class="flex flex-wrap items-center justify-between gap-3">
 		<h1 class="page-title">Dashboard</h1>
 		<SetupChecklistCard />
 	</div>

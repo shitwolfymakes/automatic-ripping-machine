@@ -92,6 +92,13 @@
 		gap: 0.875rem;
 		padding: 1.25rem;
 	}
+	/* Beside the page title on wide screens; on a phone the header row wraps
+	   and the card takes the full width instead of a 200px column. */
+	@media (max-width: 639px) {
+		.setup-checklist {
+			flex-basis: 100%;
+		}
+	}
 	.setup-checklist-head {
 		display: flex;
 		align-items: flex-start;
