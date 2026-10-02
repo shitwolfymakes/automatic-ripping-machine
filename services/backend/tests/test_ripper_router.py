@@ -2543,3 +2543,99 @@ async def test_resolve_manual_season_beats_label_hint() -> None:
     assert outcome.changed == 0
     assert job2.season == 5
     assert job2.identity_provenance.get("season") == "manual"
+
+
+# --- rip-start: ISO image with no titles falls back to the full-disc dump --------
+
+
+def _virtual_drive() -> Drive:
+    return Drive(
+        id="drv_x",
+        hostname=_HOSTNAME,
+        device_path="/source/movie.iso",
+        status=DriveStatus.ONLINE,
+        kind=DriveKind.VIRTUAL,
+    )
+
+
+def _iso_dump_preset() -> RipPreset:
+    return RipPreset(
+        id="rpr_builtin_iso_dump",
+        name="ISO: Full-disc dump",
+        media_type=MediaType.ISO,
+        is_builtin=True,
+        track_selection=TrackSelection.ALL_TRACKS,
+        identification_mode=IdentificationMode.SKIP,
+        output_mode=OutputMode.ISO,
+    )
+
+
+def _iso_dump_session() -> Session:
+    return Session(
+        id="ses_builtin_iso_dump",
+        name="ISO: Full-disc dump",
+        media_type=MediaType.ISO,
+        is_builtin=True,
+        rip_preset_id="rpr_builtin_iso_dump",
+        transcode_preset_id=None,
+        output_path_template="{title} ({year})/{title} ({year}).iso",
+    )
+
+
+def _titleless_bluray_job() -> Job:
+    scan = _scan_dict("bluray")
+    scan["titles"] = []
+    job = _job(status=JobStatus.IDENTIFIED, disc_type=DiscType.BLURAY, meta={"scan_result": scan})
+    job.pending_session_id = "ses_r"
+    return job
+
+
+def test_rip_start_iso_without_titles_falls_back_to_full_disc_dump() -> None:
+    """MakeMKV could not open the image (zero titles on a bluray scan): the
+    routed movie session selects nothing, so rip-start switches the job to the
+    built-in full-disc dump session and synthesises its single dump track."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [_virtual_drive()]
+    job = _titleless_bluray_job()
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row(), _iso_dump_session()]
+    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session"), _iso_dump_preset()]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["rip_preset_id"] == "rpr_builtin_iso_dump"
+    assert [t["kind"] for t in body["tracks"]] == ["data_dump"]
+    assert job.pending_session_id == "ses_builtin_iso_dump"
+    assert job.status == JobStatus.RIPPING
+
+
+def test_rip_start_optical_without_titles_is_still_422() -> None:
+    """The fallback is for ISO sources only: a physical disc that scans to no
+    titles keeps the 422 (the ripper abandons it, as before)."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_titleless_bluray_job()]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row(), _iso_dump_session()]
+    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session"), _iso_dump_preset()]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 422
+    assert "zero tracks" in r.json()["detail"]
+
+
+def test_rip_start_iso_without_titles_422_when_dump_session_missing() -> None:
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [_virtual_drive()]
+    db.rows["jobs"] = [_titleless_bluray_job()]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row()]
+    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session")]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 422

@@ -43,7 +43,7 @@ from arm_common import (
     Session,
     TrackStatus,
 )
-from arm_common.enums import NON_TERMINAL_JOB_STATUSES
+from arm_common.enums import NON_TERMINAL_JOB_STATUSES, DriveKind
 from arm_common.models import Track
 from arm_common.models._columns import enum_value_str
 from arm_common.schemas import (
@@ -90,6 +90,24 @@ class RipPresetUnavailable(Exception):
         super().__init__(detail)
         self.reason = reason
         self.detail = detail
+
+
+# The built-in session rip-start falls back to for an ISO image whose scan has no
+# titles: MakeMKV could not open it (seen with DVDFab UDF 2.50 Blu-ray backups,
+# makemkvcon exits with SIGSEGV), so the only rip that can succeed is a whole-file
+# dump, which the ISO passthrough then files under the identified title.
+_FULL_DISC_DUMP_SESSION_ID = "ses_builtin_iso_dump"
+
+
+async def _is_iso_source_job(db: AsyncSession, job: Job) -> bool:
+    if job.drive_id is None:
+        return False
+    drive = (await db.execute(select(Drive).where(col(Drive.id) == job.drive_id))).scalar_one_or_none()
+    return drive is not None and drive.kind == DriveKind.VIRTUAL
+
+
+async def _full_disc_dump_session(db: AsyncSession) -> Session | None:
+    return (await db.execute(select(Session).where(col(Session.id) == _FULL_DISC_DUMP_SESSION_ID))).scalar_one_or_none()
 
 
 async def _load_routed_session(db: AsyncSession, job: Job) -> Session | None:
@@ -758,6 +776,31 @@ async def rip_start(
         raise _rip_preset_or_http(RipPresetUnavailable("not_seeded", f"built-in rip preset {preset_id} not seeded"))
 
     new_tracks = select_tracks(job.id, scan, preset)
+    if not new_tracks and not scan.titles and await _is_iso_source_job(session, job):
+        fallback = await _full_disc_dump_session(session)
+        if fallback is not None:
+            logger.warning(
+                "rip-start job_id=%s: ISO image scanned to no titles (MakeMKV could not read it); "
+                "switching to session %s so the image is dumped whole",
+                job.id,
+                fallback.id,
+            )
+            job.pending_session_id = fallback.id
+            sess = fallback
+            try:
+                preset_id = _rip_preset_id_from_session(sess, job.disc_type)
+            except RipPresetUnavailable as exc:
+                raise _rip_preset_or_http(exc) from exc
+            min_length_seconds = _min_length_override_from_session(sess)
+            preset = (
+                await session.execute(select(RipPreset).where(col(RipPreset.id) == preset_id))
+            ).scalar_one_or_none()
+            if preset is None:
+                raise _rip_preset_or_http(
+                    RipPresetUnavailable("not_seeded", f"built-in rip preset {preset_id} not seeded")
+                )
+            # select_tracks synthesises the single full-dump track for DATA discs.
+            new_tracks = select_tracks(job.id, scan.model_copy(update={"disc_type": DiscType.DATA}), preset)
     if not new_tracks:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
