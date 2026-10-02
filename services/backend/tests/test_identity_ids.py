@@ -314,7 +314,9 @@ async def test_movie_kind_tmdb_is_not_a_show_id() -> None:
     tmdb = FakeProvider("episodes_tmdb", "tmdb", result=None)
     ids = await resolve_show_ids(_ids_job({"tmdb": "1749913", "tmdb_kind": "movie"}), [tmdb])
     assert ids.tmdb is None
+    assert ids.tmdb_kind is None  # never a tmdb=None + tmdb_kind="movie" pair
     assert tmdb.calls and tmdb.calls[0].tmdb is None
+    assert tmdb.calls[0].tmdb_kind is None
 
 
 async def test_movie_kind_tmdb_replaced_by_the_resolved_show() -> None:

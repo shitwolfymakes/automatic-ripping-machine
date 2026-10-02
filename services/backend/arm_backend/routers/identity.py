@@ -311,7 +311,7 @@ async def _browse_season(
 
     ids = current_ids(job)
     if ids.tmdb_kind == "movie":
-        ids = ids.model_copy(update={"tmdb": None})  # a movie's TMDb id is not a show id
+        ids = ids.model_copy(update={"tmdb": None, "tmdb_kind": None})  # a movie's TMDb id is not a show id
     show_id = getattr(ids, provider.id_field, None)
     if show_id is None:
         try:

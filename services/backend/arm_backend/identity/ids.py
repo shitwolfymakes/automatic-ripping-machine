@@ -61,7 +61,7 @@ async def resolve_show_ids(
     stored = current_ids(job)
     # A movie's TMDb id is not a show id (TMDb numbers movies and shows
     # separately): episode sources look the show up by IMDb / TVDB instead.
-    ids = stored.model_copy(update={"tmdb": None}) if stored.tmdb_kind == "movie" else stored
+    ids = stored.model_copy(update={"tmdb": None, "tmdb_kind": None}) if stored.tmdb_kind == "movie" else stored
     found = False
     for provider in providers:
         if getattr(ids, provider.id_field, None):
@@ -99,8 +99,10 @@ async def resolve_show_ids(
 def merge_new_ids(target_job: Job, found: ExternalIds) -> bool:
     """Merge every id set on `found` that `target_job` doesn't already have
     into `target_job.metadata_json["identity"]["external_ids"]`. Never
-    overwrites a field `target_job` already has. Returns whether anything
-    changed.
+    overwrites a field `target_job` already has, with one exception: a
+    movie-kind TMDb id (`tmdb_kind="movie"`, not a show id) is replaced by a
+    `found` TV-kind one (`tmdb` + `tmdb_kind="tv"`). Returns whether
+    anything changed.
 
     `found` is typically `current_ids` of a detached compute-phase snapshot
     job, taken after `resolve_show_ids` ran against it (see
