@@ -138,6 +138,9 @@ class Config(SQLModel, table=True):
     setup_checklist_dismissed_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
+    # "Finish later": the walkthrough stops redirecting, for every browser,
+    # until Settings > "Run setup again" (restart) or completing it clears it.
+    setup_deferred_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     # Which drive's ripper last reported the MakeMKV key status (setup "checked by").
     makemkv_key_checked_by_drive_id: str | None = Field(default=None, sa_column=Column(String, nullable=True))
     updated_by_user_id: str | None = Field(

@@ -1,5 +1,5 @@
 import type { SetupStep, SetupStepState, SetupView } from '$lib/types/api.gen';
-import { fetchSetup, putSetupStep } from '$lib/api/setup';
+import { deferSetup, fetchSetup, putSetupStep } from '$lib/api/setup';
 
 // First-run walkthrough state shared by the /setup route, the dashboard
 // checklist card and Settings > System (setup spec 2026-10-01 §5.11).
@@ -31,30 +31,11 @@ export async function markStep(step: SetupStep, state: SetupStepState): Promise<
 	return view;
 }
 
-// "Finish later": stop the first-run redirect for the rest of this browser
-// session so the operator can use the app; the next sign-in resumes setup.
-export const FINISH_LATER_KEY = 'arm_setup_finish_later';
-
-export function finishLater(): void {
-	try {
-		sessionStorage.setItem(FINISH_LATER_KEY, '1');
-	} catch {
-		/* storage blocked: the redirect simply comes back */
-	}
-}
-
-export function clearFinishLater(): void {
-	try {
-		sessionStorage.removeItem(FINISH_LATER_KEY);
-	} catch {
-		/* ignore */
-	}
-}
-
-export function finishLaterActive(): boolean {
-	try {
-		return sessionStorage.getItem(FINISH_LATER_KEY) !== null;
-	} catch {
-		return false;
-	}
+// "Finish later": recorded on the server, so the first-run redirect stops for
+// every browser and sign-in, not just this tab. Settings > System "Run setup
+// again" (restartSetup) picks it back up. Throws if the server didn't record it.
+export async function finishLater(): Promise<SetupView> {
+	const view = await deferSetup();
+	setupState.view = view;
+	return view;
 }

@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { restartSetup } from '$lib/api/setup';
-	import { clearFinishLater } from '$lib/stores/setup.svelte';
 	import { slide } from 'svelte/transition';
 	import { onMount } from 'svelte';
 	import { reveal } from '$lib/transitions';
@@ -254,7 +253,6 @@
 		restartingSetup = true;
 		try {
 			await restartSetup();
-			clearFinishLater();
 			goto('/setup/system');
 		} finally {
 			restartingSetup = false;

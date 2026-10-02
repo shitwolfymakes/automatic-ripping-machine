@@ -90,6 +90,7 @@ async def _view(db: AsyncSession, cfg: Config) -> SetupView:
         current_step=_current_step(progress),
         admin_default_password=must_change,
         checklist_dismissed=cfg.setup_checklist_dismissed_at is not None,
+        deferred=cfg.setup_deferred_at is not None,
     )
 
 
@@ -102,10 +103,13 @@ async def _save(db: AsyncSession, cfg: Config) -> SetupView:
 @router.get("/status", response_model=SetupStatusPublic)
 async def setup_status(db: AsyncSession = Depends(get_session)) -> SetupStatusPublic:
     """Public: the login page and the first-run guard read it before anyone
-    signs in. Fails closed to first_run=false, so a backend or DB hiccup never
-    traps the UI in /setup."""
+    signs in. `first_run` is false once setup is completed or deferred ("Finish
+    later" holds for every browser, not just the one that clicked it). Fails
+    closed to first_run=false, so a backend or DB hiccup never traps the UI in
+    /setup."""
     try:
-        first_run = (await _config(db)).setup_completed_at is None
+        cfg = await _config(db)
+        first_run = cfg.setup_completed_at is None and cfg.setup_deferred_at is None
     except Exception:  # noqa: BLE001 - any failure means "don't redirect"
         logger.warning("setup status unavailable; reporting first_run=false", exc_info=True)
         first_run = False
@@ -167,6 +171,7 @@ async def complete_setup(_: User = Depends(require_writer), db: AsyncSession = D
             progress[step.value] = _entry(SetupStepState.DONE if done else SetupStepState.SKIPPED)
     cfg.setup_progress = progress
     cfg.setup_completed_at = _now()
+    cfg.setup_deferred_at = None
     return await _save(db, cfg)
 
 
@@ -179,6 +184,17 @@ async def restart_setup(_: User = Depends(require_writer), db: AsyncSession = De
     cfg.setup_progress = progress
     cfg.setup_completed_at = None
     cfg.setup_checklist_dismissed_at = None
+    cfg.setup_deferred_at = None
+    return await _save(db, cfg)
+
+
+@router.post("/defer", response_model=SetupView)
+async def defer_setup(_: User = Depends(require_writer), db: AsyncSession = Depends(get_session)) -> SetupView:
+    """The walkthrough's Finish later: stop the first-run redirect for every browser and sign-in
+    (the dashboard checklist still lists what is left). Settings > "Run setup
+    again" (`/restart`) picks it back up."""
+    cfg = await _config(db)
+    cfg.setup_deferred_at = _now()
     return await _save(db, cfg)
 
 

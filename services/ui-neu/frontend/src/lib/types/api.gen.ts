@@ -4278,6 +4278,10 @@ export type SetupView = {
      * Checklist Dismissed
      */
     checklist_dismissed: boolean;
+    /**
+     * Deferred
+     */
+    deferred?: boolean;
 };
 
 /**
@@ -10254,6 +10258,37 @@ export type RestartSetupApiSetupRestartPostResponses = {
 };
 
 export type RestartSetupApiSetupRestartPostResponse = RestartSetupApiSetupRestartPostResponses[keyof RestartSetupApiSetupRestartPostResponses];
+
+export type DeferSetupApiSetupDeferPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/setup/defer';
+};
+
+export type DeferSetupApiSetupDeferPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeferSetupApiSetupDeferPostError = DeferSetupApiSetupDeferPostErrors[keyof DeferSetupApiSetupDeferPostErrors];
+
+export type DeferSetupApiSetupDeferPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SetupView;
+};
+
+export type DeferSetupApiSetupDeferPostResponse = DeferSetupApiSetupDeferPostResponses[keyof DeferSetupApiSetupDeferPostResponses];
 
 export type DismissChecklistApiSetupChecklistDismissPostData = {
     body?: never;

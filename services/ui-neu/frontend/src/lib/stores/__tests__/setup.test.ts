@@ -2,12 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const fetchSetup = vi.fn();
 const putSetupStep = vi.fn();
+const deferSetup = vi.fn();
 vi.mock('$lib/api/setup', () => ({
 	fetchSetup: () => fetchSetup(),
-	putSetupStep: (s: string, st: string) => putSetupStep(s, st)
+	putSetupStep: (s: string, st: string) => putSetupStep(s, st),
+	deferSetup: () => deferSetup()
 }));
 
-import { setupState, loadSetup, markStep, finishLater, finishLaterActive, clearFinishLater } from '../setup.svelte';
+import { setupState, loadSetup, markStep, finishLater } from '../setup.svelte';
 
 const view = {
 	completed_at: null,
@@ -43,11 +45,18 @@ describe('setup store', () => {
 		expect(setupState.view?.current_step).toBe('system');
 	});
 
-	it('Finish later lasts for the browser session', () => {
-		expect(finishLaterActive()).toBe(false);
-		finishLater();
-		expect(finishLaterActive()).toBe(true);
-		clearFinishLater();
-		expect(finishLaterActive()).toBe(false);
+	it('Finish later defers setup on the server, for every browser', async () => {
+		deferSetup.mockResolvedValue({ ...view, deferred: true });
+		await finishLater();
+		expect(deferSetup).toHaveBeenCalledOnce();
+		expect(setupState.view?.deferred).toBe(true);
+		// Nothing browser-local: another browser must see the same answer.
+		expect(sessionStorage.length).toBe(0);
+		expect(localStorage.getItem('arm_setup_finish_later')).toBeNull();
+	});
+
+	it('a failed deferral is reported to the caller', async () => {
+		deferSetup.mockRejectedValue(new Error('down'));
+		await expect(finishLater()).rejects.toThrow('down');
 	});
 });

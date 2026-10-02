@@ -25,6 +25,9 @@ class SetupView(BaseModel):
     current_step: SetupStep
     admin_default_password: bool
     checklist_dismissed: bool
+    # "Finish later" was chosen: no browser is sent to /setup until it is
+    # restarted from Settings or completed.
+    deferred: bool = False
 
 
 class SetupStepUpdate(BaseModel):

@@ -14,9 +14,22 @@
 		showFinishLater = true
 	}: { stepper: Snippet; footer: Snippet; children: Snippet; showFinishLater?: boolean } = $props();
 
-	function later() {
-		finishLater();
-		goto('/');
+	let deferring = $state(false);
+	let deferError = $state<string | null>(null);
+
+	// Finish later is recorded server-wide, so wait for it: leaving before the
+	// server agrees would just bounce this browser back to /setup.
+	async function later() {
+		deferring = true;
+		deferError = null;
+		try {
+			await finishLater();
+			goto('/');
+		} catch (e) {
+			deferError = e instanceof Error ? e.message : 'Could not save Finish later.';
+		} finally {
+			deferring = false;
+		}
 	}
 </script>
 
@@ -29,7 +42,7 @@
 		</div>
 		<div class="setup-shell-tools">
 			{#if showFinishLater}
-				<button type="button" class="btn btn-link" onclick={later}>Finish later</button>
+				<button type="button" class="btn btn-link" onclick={later} disabled={deferring}>Finish later</button>
 			{/if}
 			<button
 				type="button"
@@ -42,6 +55,13 @@
 		</div>
 	</header>
 
+	{#if deferError}
+		<div class="alert alert-danger setup-shell-alert" role="alert">
+			<p class="alert-title">Couldn't save Finish later</p>
+			<p class="alert-body">{deferError}</p>
+		</div>
+	{/if}
+
 	<div class="setup-shell-body">
 		<aside class="setup-shell-steps">{@render stepper()}</aside>
 		<main class="setup-shell-main">{@render children()}</main>
@@ -51,6 +71,9 @@
 </div>
 
 <style>
+	.setup-shell-alert {
+		margin: 0.75rem 1rem 0;
+	}
 	.setup-shell {
 		display: flex;
 		min-height: 100vh;

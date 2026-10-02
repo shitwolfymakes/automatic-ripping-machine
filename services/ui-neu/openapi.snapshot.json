@@ -8477,7 +8477,7 @@
           "setup"
         ],
         "summary": "Setup Status",
-        "description": "Public: the login page and the first-run guard read it before anyone\nsigns in. Fails closed to first_run=false, so a backend or DB hiccup never\ntraps the UI in /setup.",
+        "description": "Public: the login page and the first-run guard read it before anyone\nsigns in. `first_run` is false once setup is completed or deferred (\"Finish\nlater\" holds for every browser, not just the one that clicked it). Fails\nclosed to first_run=false, so a backend or DB hiccup never traps the UI in\n/setup.",
         "operationId": "setup_status_api_setup_status_get",
         "responses": {
           "200": {
@@ -8667,6 +8667,56 @@
         "summary": "Restart Setup",
         "description": "Settings > System \"Run setup again\": keep what was recorded, reopen the walkthrough.",
         "operationId": "restart_setup_api_setup_restart_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/setup/defer": {
+      "post": {
+        "tags": [
+          "setup"
+        ],
+        "summary": "Defer Setup",
+        "description": "The walkthrough's Finish later: stop the first-run redirect for every browser and sign-in\n(the dashboard checklist still lists what is left). Settings > \"Run setup\nagain\" (`/restart`) picks it back up.",
+        "operationId": "defer_setup_api_setup_defer_post",
         "parameters": [
           {
             "name": "authorization",
@@ -17318,6 +17368,11 @@
           "checklist_dismissed": {
             "type": "boolean",
             "title": "Checklist Dismissed"
+          },
+          "deferred": {
+            "type": "boolean",
+            "title": "Deferred",
+            "default": false
           }
         },
         "type": "object",

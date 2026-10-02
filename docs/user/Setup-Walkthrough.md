@@ -10,8 +10,10 @@ Settings shows.
   first step you haven't finished.
 - **Only the first step is required.** Every other step lets you continue even
   with a problem; it is then marked **Needs attention**.
-- **Finish later** (top right) takes you to the dashboard. The walkthrough comes
-  back the next time you sign in.
+- **Finish later** (top right) takes you to the dashboard and turns the
+  walkthrough off for the whole server: it won't open again on any browser or
+  at the next sign-in. The dashboard keeps a checklist of what's left. To pick
+  setup back up, use **Settings, System, Run setup again**.
 
 ## 1. Secure your account
 

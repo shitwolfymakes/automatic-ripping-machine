@@ -402,3 +402,48 @@ def test_disc_routes_resolve_routes_then_builtin_fallback(signing_key, admin_use
         "transcode_summary": None,
         "output_template": None,
     }
+
+
+# --- "Finish later": deferred server-wide ---
+
+
+def test_finish_later_defers_setup_for_every_browser(signing_key, admin_user, guest_user) -> None:
+    """Deferring is recorded on the server, so the public status stops sending
+    any browser (or the next sign-in) to /setup."""
+    db = _seeded(admin_user, guest_user)
+    with TestClient(_make_app(signing_key, db)) as c:
+        body = c.post("/api/setup/defer", headers=_auth(signing_key, admin_user)).json()
+        status = c.get("/api/setup/status").json()
+    assert body["deferred"] is True
+    assert body["completed_at"] is None
+    assert db.rows["config"][0].setup_deferred_at is not None
+    assert status["first_run"] is False
+
+
+def test_deferring_needs_a_writer(signing_key, admin_user, guest_user) -> None:
+    db = _seeded(admin_user, guest_user)
+    with TestClient(_make_app(signing_key, db)) as c:
+        r = c.post("/api/setup/defer", headers=_auth(signing_key, guest_user))
+    assert r.status_code in (401, 403)
+    assert db.rows["config"][0].setup_deferred_at is None
+
+
+def test_run_setup_again_clears_the_deferral(signing_key, admin_user, guest_user) -> None:
+    """Settings > "Run setup again" is how a deferred setup is picked back up."""
+    db = _seeded(admin_user, guest_user)
+    db.rows["config"][0].setup_deferred_at = datetime.now(timezone.utc)
+    with TestClient(_make_app(signing_key, db)) as c:
+        body = c.post("/api/setup/restart", headers=_auth(signing_key, admin_user)).json()
+        status = c.get("/api/setup/status").json()
+    assert body["deferred"] is False
+    assert db.rows["config"][0].setup_deferred_at is None
+    assert status["first_run"] is True
+
+
+def test_completing_setup_clears_the_deferral(signing_key, admin_user, guest_user) -> None:
+    db = _seeded(admin_user, guest_user)
+    db.rows["config"][0].setup_deferred_at = datetime.now(timezone.utc)
+    with TestClient(_make_app(signing_key, db)) as c:
+        body = c.post("/api/setup/complete", headers=_auth(signing_key, admin_user)).json()
+    assert body["deferred"] is False
+    assert db.rows["config"][0].setup_deferred_at is None

@@ -16,7 +16,7 @@
 	import NotificationsStep from '$lib/components/setup/steps/NotificationsStep.svelte';
 	import FinishStep from '$lib/components/setup/steps/FinishStep.svelte';
 	import { completeSetup } from '$lib/api/setup';
-	import { setupState, loadSetup, markStep, clearFinishLater } from '$lib/stores/setup.svelte';
+	import { setupState, loadSetup, markStep } from '$lib/stores/setup.svelte';
 
 	let { data }: { data: { step: SetupStep } } = $props();
 
@@ -75,7 +75,6 @@
 			if (result === false) return;
 			if (data.step === 'finish') {
 				await completeSetup();
-				clearFinishLater();
 				goto('/');
 				return;
 			}

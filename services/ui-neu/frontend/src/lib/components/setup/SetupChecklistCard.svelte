@@ -4,7 +4,6 @@
 	import type { SetupView } from '$lib/types/api.gen';
 	import { fetchSetup, dismissSetupChecklist } from '$lib/api/setup';
 	import { isAdmin } from '$lib/stores/auth';
-	import { clearFinishLater } from '$lib/stores/setup.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import CloseButton from '$lib/components/CloseButton.svelte';
 	import { STEPS } from './steps';
@@ -41,7 +40,6 @@
 	}
 
 	function resume() {
-		clearFinishLater();
 		goto('/setup');
 	}
 </script>

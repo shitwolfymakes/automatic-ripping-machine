@@ -2,7 +2,6 @@ import { redirect } from '@sveltejs/kit';
 import type { LayoutLoad } from './$types';
 import { hydrateConfig } from '$lib/stores/config';
 import { getToken } from '$lib/api/client';
-import { finishLaterActive } from '$lib/stores/setup.svelte';
 
 export const prerender = false;
 export const ssr = false;
@@ -36,9 +35,9 @@ export const load: LayoutLoad = async ({ url, fetch }) => {
 	// Skip if we already know setup is done (cached from a previous navigation)
 	if (setupConfirmedComplete) return {};
 
-	// Only the admin runs setup; guests browse normally. "Finish later" pauses
-	// the redirect for this browser session (setup spec §5.11).
-	if (!isAdminSession() || finishLaterActive()) return {};
+	// Only the admin runs setup; guests browse normally. "Finish later" is
+	// server-wide: the status endpoint then reports first_run=false.
+	if (!isAdminSession()) return {};
 
 	try {
 		const resp = await fetch('/api/setup/status');
@@ -47,7 +46,7 @@ export const load: LayoutLoad = async ({ url, fetch }) => {
 			if (status.first_run === true) {
 				redirect(307, '/setup');
 			}
-			// Setup is complete - cache this so we don't re-check on every click
+			// Setup is complete or deferred - cache this so we don't re-check on every click
 			setupConfirmedComplete = true;
 		}
 		// Non-ok response (503, etc.) - ARM unreachable, don't redirect

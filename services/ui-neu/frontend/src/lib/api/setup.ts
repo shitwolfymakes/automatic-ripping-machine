@@ -26,6 +26,11 @@ export function restartSetup(): Promise<SetupView> {
 	return post<SetupView>('/api/setup/restart');
 }
 
+/** "Finish later": stop the first-run redirect server-wide (every browser, every sign-in). */
+export function deferSetup(): Promise<SetupView> {
+	return post<SetupView>('/api/setup/defer');
+}
+
 export function dismissSetupChecklist(): Promise<SetupView> {
 	return post<SetupView>('/api/setup/checklist/dismiss');
 }

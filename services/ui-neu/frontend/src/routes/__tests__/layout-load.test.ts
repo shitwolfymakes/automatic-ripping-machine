@@ -86,13 +86,21 @@ describe('+layout.ts load guard', () => {
 		expect(fetchImpl).not.toHaveBeenCalled();
 	});
 
-	it('Finish later pauses the redirect for the browser session', async () => {
+	it('the server decides: an old browser-session Finish later flag no longer pauses the redirect', async () => {
+		// Finish later is recorded server-wide now (the status endpoint then
+		// reports first_run=false for everyone); a leftover flag from an older
+		// build must not hide a setup the server says is still pending.
 		asAdmin();
 		sessionStorage.setItem('arm_setup_finish_later', '1');
 		const fetchImpl = statusFetch({ first_run: true });
 		const { load } = await import('../+layout');
-		expect(await load(loadArgs('/', fetchImpl))).toEqual({});
-		expect(fetchImpl).not.toHaveBeenCalled();
+		let caught: unknown;
+		try {
+			await load(loadArgs('/', fetchImpl));
+		} catch (e) {
+			caught = e;
+		}
+		expect(isRedirect(caught)).toBe(true);
 	});
 
 	it('an unreachable backend never redirects', async () => {
