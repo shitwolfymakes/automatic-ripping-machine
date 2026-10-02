@@ -26,11 +26,15 @@ def _disc(tmp_path: Path, name: str, video_dir: str = "BDMV") -> Path:
     return d
 
 
-def test_a_disc_folder_is_read_by_makemkv_as_a_folder(tmp_path: Path) -> None:
+def test_a_disc_folder_is_read_by_makemkv_through_its_disc_tree(tmp_path: Path) -> None:
+    """`file:<folder>/BDMV`, never `file:<folder>`: the ripper bind-mounts the
+    disc folder itself at /source/<name>, and MakeMKV finds no disc at a mount
+    root ("can't find any usable optical drives") while it reads the BDMV /
+    VIDEO_TS directory below it (checked against a BD-50 folder on hifi)."""
     bd = _disc(tmp_path, "MirrorMask (2005)")
     dvd = _disc(tmp_path, "Half Baked", "VIDEO_TS")
-    assert makemkv_source_url(str(bd)) == f"file:{bd}"
-    assert makemkv_source_url(str(dvd)) == f"file:{dvd}"
+    assert makemkv_source_url(str(bd)) == f"file:{bd}/BDMV"
+    assert makemkv_source_url(str(dvd)) == f"file:{dvd}/VIDEO_TS"
 
 
 def test_source_kinds(tmp_path: Path) -> None:

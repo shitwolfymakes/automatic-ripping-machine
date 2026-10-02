@@ -52,7 +52,19 @@ def makemkv_source_url(path: str) -> str:
     """
     folder = iso_extract.extracted_dir(path)
     if folder is not None:
-        return f"file:{folder}"
+        return f"file:{_disc_tree(folder)}"
     if is_folder_source(path):
-        return f"file:{path}"
+        return f"file:{_disc_tree(Path(path))}"
     return f"iso:{path}" if is_iso_source(path) else f"dev:{path}"
+
+
+def _disc_tree(folder: Path) -> Path:
+    """The BDMV (or VIDEO_TS) directory of a disc folder, which is what
+    MakeMKV is pointed at. Never the disc folder itself: the ripper
+    bind-mounts a disc folder at /source/<name>, and MakeMKV finds no disc at
+    a mount root ("can't find any usable optical drives") while it reads the
+    BDMV / VIDEO_TS directory below it fine."""
+    for name in _DISC_DIRS:
+        if (folder / name).is_dir():
+            return folder / name
+    return folder

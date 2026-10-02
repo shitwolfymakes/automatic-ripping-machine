@@ -176,7 +176,7 @@ So when the direct scan of an ISO yields no titles, the scan dispatcher
 (`arm_ripper/scan/dispatcher.py::_scan_extracted`) unpacks the image with
 7-Zip's UDF reader (`arm_ripper/iso_extract.py`, `7z x -tudf`) into
 `/raw/.iso-extract/<drive_id>/<image name>/` and scans again. Once an
-extraction exists, `source.makemkv_source_url` answers `file:<folder>` for the
+extraction exists, `source.makemkv_source_url` answers `file:<folder>/BDMV` (or `/VIDEO_TS`) for the
 image, so the rescan and the later rip both read the folder: the job shows the
 disc's titles and rips them like a disc (one `makemkvcon mkv … all`). The
 image's own volume label (blkid) replaces the folder name MakeMKV reports.
@@ -231,6 +231,11 @@ over a network share). So the ripper reports a **preparing** phase instead:
 
 ### Rip from folder (`source_kind=folder`)
 
+> MakeMKV is pinned to 1.18.4 in the ripper image: 2.0.0's `makemkvcon`
+> segfaults on every unencrypted (decrypted-backup) Blu-ray, which is what ISO
+> and folder sources usually are. See `docs/ops/makemkv.md` (failure modes) on
+> the `fix/pin-makemkv-1.18.4` branch.
+
 A disc folder is a directory with a `BDMV` (Blu-ray) or `VIDEO_TS` (DVD)
 tree at its root: an extracted or backed-up disc. It lives in the same ISO
 library and rips through the same virtual-drive machinery; only the source
@@ -245,7 +250,10 @@ differs.
   (`iso_rips.resolve_source`); the drive gets `source_kind=folder` and the
   folder is bind-mounted read-only at `/source/<name>`. The incomplete-image
   check applies to ISOs only.
-- The ripper reads it as `file:/source/<name>` (`source.is_folder_source`).
+- The ripper reads it as `file:/source/<name>/BDMV` (or `/VIDEO_TS`;
+  `source.is_folder_source`, `source._disc_tree`). Never the folder itself:
+  it is the root of its bind mount, and MakeMKV finds no disc at a mount
+  root ("can't find any usable optical drives").
   `source.is_file_source` (ISO or folder) gates every drive-only step; the
   optical fingerprint probe is skipped; a folder MakeMKV lists nothing in is
   still classified BD / DVD by its tree and fails at rip-start with "MakeMKV

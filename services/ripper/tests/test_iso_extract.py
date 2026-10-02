@@ -87,7 +87,7 @@ async def test_extract_unpacks_a_video_image_and_routes_makemkv_to_the_folder(tm
     assert root is not None
     assert (root / "BDMV" / "a.bin").is_file()
     assert root.name == "The Movie"
-    assert makemkv_source_url(str(iso)) == f"file:{root}"
+    assert makemkv_source_url(str(iso)) == f"file:{root}/BDMV"
 
 
 @needs_7z
@@ -175,6 +175,7 @@ async def test_scan_rescues_an_unreadable_image_through_the_extracted_folder(
     iso = tmp_path / "m.iso"
     iso.write_bytes(b"\0")
     folder = tmp_path / "m"
+    (folder / "BDMV").mkdir(parents=True)
     rescan = ScanResult(disc_type=DiscType.BLURAY, volume_label="m", titles=[_TITLE])
     seen = _patch_scan(monkeypatch, rescan=rescan, extracted=folder)
 
@@ -184,7 +185,7 @@ async def test_scan_rescues_an_unreadable_image_through_the_extracted_folder(
     assert result.disc_type == DiscType.BLURAY
     # The image's own volume label wins over the scratch folder's name.
     assert result.volume_label == "BD_LABEL"
-    assert seen["urls"] == [f"iso:{iso}", f"file:{folder}"]
+    assert seen["urls"] == [f"iso:{iso}", f"file:{folder}/BDMV"]
     assert seen["discarded"] == []
 
 
@@ -265,7 +266,7 @@ async def test_extract_keeps_a_disc_whose_only_damage_is_outside_the_video_tree(
     root = await iso_extract.extract(str(iso))
 
     assert root is not None
-    assert makemkv_source_url(str(iso)) == f"file:{root}"
+    assert makemkv_source_url(str(iso)) == f"file:{root}/BDMV"
 
 
 async def test_extract_drops_a_disc_with_damage_inside_the_video_tree(
