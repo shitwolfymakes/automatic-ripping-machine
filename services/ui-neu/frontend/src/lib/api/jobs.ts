@@ -1,4 +1,5 @@
 import type {
+	ExternalIds,
 	JobView,
 	JobDetailView,
 	TrackEditRequest,
@@ -117,6 +118,11 @@ export function updateJobTitle(jobId: string, data: { poster_url_manual?: string
 	return patchJob(jobId, { poster_url_manual: data.poster_url_manual ?? null });
 }
 
+// Header Movie | TV switch: the type alone; ids and title stay (spec 3.2).
+export function setJobMediaType(jobId: string, mediaType: 'movie' | 'tv'): Promise<JobView> {
+	return patchJob(jobId, { media_type: mediaType });
+}
+
 export function updateJobConfig(jobId: string, data: JobUpdateRequest): Promise<JobView> {
 	return patchJob(jobId, data);
 }
@@ -145,6 +151,7 @@ export function resolveJob(
 		disc_total?: number | null;
 		media_type?: MediaType | null;
 		music?: MusicMeta;
+		external_ids?: ExternalIds | null;
 	}
 ): Promise<ResolveResponse> {
 	const payload: Record<string, unknown> = {
@@ -159,6 +166,9 @@ export function resolveJob(
 	}
 	payload.media_type = body.media_type;
 	payload.music = body.music;
+	if (body.external_ids !== undefined) {
+		payload.external_ids = body.external_ids;
+	}
 	return post<ResolveResponse>(`/api/jobs/${jobId}/resolve`, payload);
 }
 
