@@ -212,6 +212,18 @@
 		return `${m}:${String(s).padStart(2, '0')}`;
 	}
 
+	// Client-side navigation from one job page to another keeps this component
+	// mounted, so onMount never re-runs: reload whenever the route's job id changes
+	// (a notification link, or Back/Forward between two jobs).
+	let loadedId = $page.params.id ?? '';
+	$effect(() => {
+		const id = $page.params.id ?? '';
+		if (id && id !== loadedId) {
+			loadedId = id;
+			loadJob();
+		}
+	});
+
 	onMount(() => {
 		let stopped = false;
 		fetchSessions()
