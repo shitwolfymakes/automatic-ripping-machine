@@ -76,7 +76,7 @@ Settings > Metadata > TV episodes section.
   (provenance `manual`), the switch asks for confirmation first, naming how
   many tracks are affected.
 
-### 3.3 `JobView.looks_episodic` (the only backend change)
+### 3.3 `JobView.looks_episodic`
 
 - `JobView` gains `looks_episodic: bool`: `identity.disc_shape.looks_episodic`
   over the job's stored `scan_result.titles` (false with no scan).
@@ -87,6 +87,50 @@ Settings > Metadata > TV episodes section.
   `integration/all-prs-3` (`065d96d4`). This branch brings that module over
   as-is; the dispatcher half of `065d96d4` stays where it is.
 - Regenerate the OpenAPI snapshot and `api.gen.ts`.
+
+### 3.4 Every id in the identity object
+
+All episode sources find the show from `metadata_json.identity.external_ids`
+(`identity/ids.py`, `resolve_show_ids`): TMDb uses `tmdb` as-is, else
+`/find` by IMDb / TVDB (TV results only); TVmaze uses `tvmaze`, else a
+lookup by IMDb, then TVDB; TVDB uses `tvdb`, else IMDb. Today that object
+is incomplete, so TVmaze and TVDB mostly cannot find the show, and one path
+is unsafe:
+
+- Title-search apply sends **no ids** (`resolveJob` gets title, year and
+  media type only), so picking a series keeps whatever id was stored, e.g.
+  Kolchak's placeholder *movie* id 1749913.
+- Identify's chosen TMDb hit stores only `tmdb` (the single-hit search is not
+  enriched), so TVmaze and TVDB, which need IMDb or TVDB, miss.
+- `TMDBClient.get_external_ids` keeps `imdb_id` and drops `tvdb_id`.
+- Nothing records whether `tmdb` is a movie or a TV show (TMDb numbers the
+  two separately), so a movie's id on a TV job is used as a show id: a miss,
+  or a different series matched with confidence.
+
+Changes:
+
+1. `ExternalIds` gains `tmdb_kind: "movie" | "tv" | None`.
+2. `get_external_ids` returns both IMDb and TVDB ids; title-search
+   candidates carry `imdb_id` and `tvdb_id`.
+3. Identify enriches the chosen TMDb hit with one `external_ids` call and
+   `metadata_with_identity` stores `tmdb`, `imdb`, `tvdb` and `tmdb_kind`
+   (from the result's kind). The TheDiscDB `/find` path stores the kind of
+   the result it found.
+4. Title-search apply sends the picked result's `external_ids` (`tmdb`,
+   `imdb`, `tvdb`, `tmdb_kind`) to `resolve`, so the stored identity is the
+   one picked. The resolve handler's existing rule (a different id names a
+   different show, so stale ids are cleared) applies.
+5. The TMDb episode provider uses `ids.tmdb` only when `tmdb_kind` is `tv`
+   or unknown (jobs stored before this keep today's behaviour); for a movie
+   id it falls back to `/find` by IMDb / TVDB.
+6. `JobView.has_series: bool`: true when a TV-capable id is known
+   (`tmdb` with kind `tv`, `tvdb`, or `tvmaze`), or an episode source has
+   resolved a show id. Drives the **Pick the series first** state.
+
+The header type switch (3.2) keeps the ids. With (5), Kolchak flipped to TV
+keeps its movie id, the stage ignores it, and the tab asks for the series;
+picking it stores `tmdb=5084, tmdb_kind=tv` plus its IMDb and TVDB ids, and
+all three sources can match.
 
 ## 4. The Match Episodes tab
 
@@ -171,17 +215,45 @@ Delete `EpisodeMatch.svelte`, `TvdbMatch.svelte`, their tests, and the
 ## 6. Design handoff
 
 The look and interaction details come from Claude Design, using the prompt
-in section 10. The operator reviews the prompt, runs it, and the approved
-screens become the target the UI is built and reviewed against. No UI code
-is written before that.
+in section 10. Result: claude.ai/design project
+`c9e32e06-7be6-44c0-9fae-85ca48a37861` ("Design system integration form"):
+
+- `MatchEpisodesPanel.dc.html`: the tab, with a `state` prop for all
+  eleven states (applied, suggestion, pinned, preview-column,
+  preview-inline, matching, noseries, nomatch, unavailable, error, guest)
+  and a `phone` layout; the header Movie | TV switch is shown for context.
+- `TV Episode Matching.dc.html`: frames 1a-1n with interaction notes.
+
+Decisions taken from it: "Other sources" is an inline strip, collapsed by
+default; a hand pick saves on change (no Save button); Revert needs no
+confirmation, Unpin asks inline; while matching, pickers and Re-run are
+hidden (a hand fix would race the stage); changing a re-run field drops the
+preview; for guests, controls are removed rather than disabled; each row
+shows its file name from the naming preview. **Preview layout: the
+"Proposed" column (1d) on desktop, the inline strike-through diff (1e) on
+phone.**
+
+Not designed yet: the title-search Movie / TV toggle and the header switch's
+confirmation ("next pass" in the canvas). They follow the existing
+TitleSearch and confirm patterns until a design exists.
 
 ## 7. Testing
 
 Test-first throughout; every suite's exit code checked, not only its
 summary line.
 
-- **Backend (pytest)**: `JobView.looks_episodic` for an episodic scan, a
-  feature disc, and a job with no scan.
+- **Backend (pytest)**:
+  - `JobView.looks_episodic` for an episodic scan, a feature disc, and a job
+    with no scan;
+  - `get_external_ids` returns IMDb and TVDB; identify stores `tmdb`,
+    `imdb`, `tvdb` and `tmdb_kind` for a movie hit and a TV hit; the
+    TheDiscDB path stores the found kind;
+  - `resolve` with picked `external_ids` replaces a stored movie id (and its
+    stale siblings) with the series' ids and kind;
+  - the TMDb episode provider ignores a `tmdb` of kind `movie` (falls back to
+    `/find`), uses kind `tv` and unknown as before; TVmaze and TVDB resolve
+    the show from the stored IMDb / TVDB ids;
+  - `JobView.has_series` for each id combination.
 - **UI (vitest)**, identity API mocked at the module boundary:
   - toggle default (job type, `looks_episodic`, movie) and the `type=tv`
     search request;
@@ -194,8 +266,10 @@ summary line.
   - Preview sends `apply: false`, Apply & pin `apply: true`, Unpin the
     `DELETE`; hand fix and revert send the expected `PATCH` bodies;
   - refetch on `job.identity_updated`.
-- **Live (hifi)**: flip Kolchak to TV through the search, watch the
-  automatic match land, preview TVmaze against TMDb, set the 9 minute title
+- **Live (hifi)**: flip Kolchak to TV with the header switch and see **Pick
+  the series first** (its movie id ignored); pick "Kolchak: The Night
+  Stalker (1974)" in the TV search and check the stored ids (`tmdb=5084`,
+  `tmdb_kind=tv`, IMDb, TVDB); watch the automatic match land, preview TVmaze against TMDb, set the 9 minute title
   to Extra by hand, revert it, check the naming preview.
 
 ## 8. Delivery
@@ -204,18 +278,11 @@ summary line.
 - New PR stacked on #100; mirrored to `integration/all-prs-3`.
 - OpenAPI snapshot and TS types regenerated with the `JobView` change.
 
-## 9. Open questions (resolve while planning, before UI code)
+## 9. Resolved questions
 
-1. **A TV job carrying a movie id.** The header switch keeps the job's ids,
-   so Kolchak switched with it would be TV with TMDb *movie* id 1749913.
-   Verify how the episode stage resolves the show for such a job (search by
-   title, or use the stored id), and how the tab can tell. If the stage
-   cannot recover, the tab treats it as **No series yet** and asks for a
-   series search; the header switch may then also offer "Search the series"
-   right after flipping to TV.
-2. **"No series yet" detection.** Confirm which field marks a job as having
-   a series (a TV provider id in `metadata_json.identity.external_ids`, or a
-   source summary's `inputs`), so 4.4's first state keys off real data.
+1. **A TV job carrying a movie id.** The TMDb provider used `ids.tmdb` as a
+   show id whatever it was. Fixed by `tmdb_kind` (3.4).
+2. **"No series yet" detection.** `JobView.has_series` (3.4).
 
 ## 10. Claude Design prompt
 
