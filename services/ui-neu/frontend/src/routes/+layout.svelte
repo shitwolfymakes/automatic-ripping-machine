@@ -419,7 +419,12 @@
 					{/if}
 					<!-- Dark mode toggle (hidden when theme locks the mode) -->
 					{#if !$schemeLocksMode}
-						<button onclick={toggleTheme} class="btn btn-icon layout-header-icon" title="Switch theme" aria-label="Switch theme">
+						<button
+							onclick={toggleTheme}
+							class="btn btn-icon layout-header-icon"
+							title="Switch theme"
+							aria-label="Switch theme"
+						>
 							{#if $theme === 'dark'}
 								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path
