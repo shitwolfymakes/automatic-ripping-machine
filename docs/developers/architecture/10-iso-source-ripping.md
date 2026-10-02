@@ -187,9 +187,14 @@ image's own volume label (blkid) replaces the folder name MakeMKV reports.
 - The ripper removes the extraction when its pipeline ends
   (`run_source_mode`); `retire_virtual_drive` removes
   `<RAW_ROOT>/.iso-extract/<drive_id>` too, for a ripper stopped first.
-- If the extracted folder has no titles either, the extraction is dropped and
-  the old path applies: `scan_data` classifies the image by its directory
-  names, and rip-start switches the job to the "ISO: Full-disc dump" session.
+- If the extracted folder has no titles either, the extraction is dropped:
+  `scan_data` classifies the image by its directory names (so it can still be
+  identified), and rip-start **fails** the job with "MakeMKV found no titles in
+  this ISO, even after unpacking it" (a `rip.failed` event carrying that
+  reason, then 422), like a disc with no titles. It is never switched to the
+  "ISO: Full-disc dump" session automatically: that once filed the `.iso`
+  where a movie was expected. An operator who wants the raw copy picks that
+  session deliberately, and rip-start honours it whatever the scan found.
 
 ### Preparing: before the job exists
 

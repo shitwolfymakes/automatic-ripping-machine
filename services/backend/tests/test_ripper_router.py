@@ -2545,7 +2545,7 @@ async def test_resolve_manual_season_beats_label_hint() -> None:
     assert job2.identity_provenance.get("season") == "manual"
 
 
-# --- rip-start: ISO image with no titles falls back to the full-disc dump --------
+# --- rip-start: an ISO image with no titles fails like a disc, never a silent dump --
 
 
 def _virtual_drive() -> Drive:
@@ -2590,14 +2590,50 @@ def _titleless_bluray_job() -> Job:
     return job
 
 
-def test_rip_start_iso_without_titles_falls_back_to_full_disc_dump() -> None:
-    """MakeMKV could not open the image (zero titles on a bluray scan): the
-    routed movie session selects nothing, so rip-start switches the job to the
-    built-in full-disc dump session and synthesises its single dump track."""
+class _RecordingHub:
+    def __init__(self) -> None:
+        self.events: list[dict[str, Any]] = []
+
+    async def emit(self, topic, event_type, payload, *, persist=True, job_id=None, track_id=None, session=None):
+        self.events.append({"topic": topic, "event_type": event_type, "payload": payload})
+
+
+def test_rip_start_iso_without_titles_fails_the_job_instead_of_dumping_it() -> None:
+    """MakeMKV found no titles in the image, not even unpacked: the job fails
+    with that reason, like a disc with no titles. It is never switched to the
+    full-disc dump behind the operator's back (that copied the .iso into the
+    library where a movie was expected)."""
     db = FakeSession()
     db.rows["config"] = [_config()]
     db.rows["drives"] = [_virtual_drive()]
     job = _titleless_bluray_job()
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row(), _iso_dump_session()]
+    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session"), _iso_dump_preset()]
+    hub = _RecordingHub()
+    app = _make_app(db)
+    app.state.ws_hub = hub
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 422
+    assert "no titles" in r.json()["detail"]
+    assert job.status == JobStatus.FAILED
+    assert job.pending_session_id == "ses_r"
+    assert db.rows["tracks"] == []
+    failed = [e for e in hub.events if e["event_type"] == "rip.failed"]
+    assert len(failed) == 1
+    assert "no titles" in failed[0]["payload"]["reason"]
+
+
+def test_rip_start_iso_dump_still_works_when_the_operator_chose_it() -> None:
+    """Picking the "ISO: Full-disc dump" session on purpose still copies the
+    image whole, titles or not."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [_virtual_drive()]
+    job = _titleless_bluray_job()
+    job.pending_session_id = "ses_builtin_iso_dump"
     db.rows["jobs"] = [job]
     db.rows["tracks"] = []
     db.rows["sessions"] = [_session_row(), _iso_dump_session()]
@@ -2608,7 +2644,6 @@ def test_rip_start_iso_without_titles_falls_back_to_full_disc_dump() -> None:
     body = r.json()
     assert body["rip_preset_id"] == "rpr_builtin_iso_dump"
     assert [t["kind"] for t in body["tracks"]] == ["data_dump"]
-    assert job.pending_session_id == "ses_builtin_iso_dump"
     assert job.status == JobStatus.RIPPING
 
 
@@ -2626,16 +2661,3 @@ def test_rip_start_optical_without_titles_is_still_422() -> None:
         r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 422
     assert "zero tracks" in r.json()["detail"]
-
-
-def test_rip_start_iso_without_titles_422_when_dump_session_missing() -> None:
-    db = FakeSession()
-    db.rows["config"] = [_config()]
-    db.rows["drives"] = [_virtual_drive()]
-    db.rows["jobs"] = [_titleless_bluray_job()]
-    db.rows["tracks"] = []
-    db.rows["sessions"] = [_session_row()]
-    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session")]
-    with TestClient(_make_app(db)) as client:
-        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
-    assert r.status_code == 422

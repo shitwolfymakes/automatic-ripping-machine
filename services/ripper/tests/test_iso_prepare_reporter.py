@@ -92,7 +92,12 @@ async def test_phase_changes_are_sent_and_progress_is_throttled() -> None:
     await prepare.report(SCANNING)  # a phase change always goes out
     await prepare.finish()
 
-    assert client.sent == [(SCANNING, None, None), (EXTRACTING, 1, "BDMV/a"), (EXTRACTING, 5, "BDMV/b"), (SCANNING, None, None)]
+    assert client.sent == [
+        (SCANNING, None, None),
+        (EXTRACTING, 1, "BDMV/a"),
+        (EXTRACTING, 5, "BDMV/b"),
+        (SCANNING, None, None),
+    ]
 
 
 async def test_the_current_phase_is_resent_as_a_keepalive_until_finish() -> None:
@@ -181,7 +186,9 @@ async def test_extract_reports_7z_progress(tmp_path: Path, monkeypatch: pytest.M
         returncode = 0
 
         def __init__(self, out: str) -> None:
-            self.stdout = _Stream([b"  0% Open\b\b\b\b\b\b\b\b\b", b" 40% 1 - BDMV/STREAM/0.m2ts\b\b", b" 90% 2 - BDMV/STREAM/1.m2ts"])
+            self.stdout = _Stream(
+                [b"  0% Open\b\b\b\b\b\b\b\b\b", b" 40% 1 - BDMV/STREAM/0.m2ts\b\b", b" 90% 2 - BDMV/STREAM/1.m2ts"]
+            )
             self.stderr = _Stream([])
             (Path(out) / "BDMV").mkdir(parents=True)
 

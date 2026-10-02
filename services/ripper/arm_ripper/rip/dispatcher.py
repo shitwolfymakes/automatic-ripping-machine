@@ -48,10 +48,9 @@ async def rip_all(
     - DATA: a single dd dump assigned to the first (only) track.
     """
     if tracks and all(t.kind == TrackKind.DATA_DUMP for t in tracks):
-        # A full-disc dump is a dump whatever the scan called the disc: the
-        # backend routes an ISO image MakeMKV could not open (bluray/dvd scan,
-        # zero titles) to the full-disc dump session, and makemkvcon must not
-        # be asked to rip it again.
+        # A full-disc dump is a dump whatever the scan called the disc: an
+        # operator can pick the full-disc dump session for a bluray/dvd ISO,
+        # and makemkvcon must not be asked to rip it.
         disc_type = DiscType.DATA
     if disc_type in (DiscType.DVD, DiscType.BLURAY):
         await _rip_optical(

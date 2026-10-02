@@ -39,6 +39,7 @@ from arm_common import (
     DriveStatus,
     Job,
     JobStatus,
+    OutputMode,
     MakemkvKeyState,
     RipPreset,
     Session,
@@ -94,11 +95,10 @@ class RipPresetUnavailable(Exception):
         self.detail = detail
 
 
-# The built-in session rip-start falls back to for an ISO image whose scan has no
-# titles: MakeMKV could not open it (seen with DVDFab UDF 2.50 Blu-ray backups,
-# makemkvcon exits with SIGSEGV), so the only rip that can succeed is a whole-file
-# dump, which the ISO passthrough then files under the identified title.
-_FULL_DISC_DUMP_SESSION_ID = "ses_builtin_iso_dump"
+ISO_NO_TITLES = (
+    "MakeMKV found no titles in this ISO, even after unpacking it. "
+    'To keep a copy of the image anyway, rip it again with the "ISO: Full-disc dump" session.'
+)
 
 
 async def _is_iso_source_job(db: AsyncSession, job: Job) -> bool:
@@ -108,8 +108,27 @@ async def _is_iso_source_job(db: AsyncSession, job: Job) -> bool:
     return drive is not None and drive.kind == DriveKind.VIRTUAL
 
 
-async def _full_disc_dump_session(db: AsyncSession) -> Session | None:
-    return (await db.execute(select(Session).where(col(Session.id) == _FULL_DISC_DUMP_SESSION_ID))).scalar_one_or_none()
+async def _fail_titleless_iso(db: AsyncSession, hub: WSHub, job: Job) -> None:
+    job.status = JobStatus.FAILED
+    job.ripped_at = datetime.now(timezone.utc)
+    db.add(job)
+    await hub.emit(
+        topic="ripper.events",
+        event_type="rip.failed",
+        payload={
+            "job_id": job.id,
+            "drive_id": job.drive_id,
+            "status": job.status.value,
+            "tracks_done": 0,
+            "tracks_failed": 0,
+            "tracks_total": 0,
+            "reason": ISO_NO_TITLES,
+        },
+        job_id=job.id,
+        session=db,
+    )
+    await db.commit()
+    logger.warning("rip-start job_id=%s failed: %s", job.id, ISO_NO_TITLES)
 
 
 async def _load_routed_session(db: AsyncSession, job: Job) -> Session | None:
@@ -800,31 +819,19 @@ async def rip_start(
         raise _rip_preset_or_http(RipPresetUnavailable("not_seeded", f"built-in rip preset {preset_id} not seeded"))
 
     new_tracks = select_tracks(job.id, scan, preset)
+    if not new_tracks and preset.output_mode == OutputMode.ISO:
+        # A full-disc dump copies the image whole and needs no titles; the
+        # operator picked it, so honour it whatever the scan found.
+        # select_tracks synthesises the single dump track for DATA discs.
+        new_tracks = select_tracks(job.id, scan.model_copy(update={"disc_type": DiscType.DATA}), preset)
     if not new_tracks and not scan.titles and await _is_iso_source_job(session, job):
-        fallback = await _full_disc_dump_session(session)
-        if fallback is not None:
-            logger.warning(
-                "rip-start job_id=%s: ISO image scanned to no titles (MakeMKV could not read it); "
-                "switching to session %s so the image is dumped whole",
-                job.id,
-                fallback.id,
-            )
-            job.pending_session_id = fallback.id
-            sess = fallback
-            try:
-                preset_id = _rip_preset_id_from_session(sess, job.disc_type)
-            except RipPresetUnavailable as exc:
-                raise _rip_preset_or_http(exc) from exc
-            min_length_seconds = _min_length_override_from_session(sess)
-            preset = (
-                await session.execute(select(RipPreset).where(col(RipPreset.id) == preset_id))
-            ).scalar_one_or_none()
-            if preset is None:
-                raise _rip_preset_or_http(
-                    RipPresetUnavailable("not_seeded", f"built-in rip preset {preset_id} not seeded")
-                )
-            # select_tracks synthesises the single full-dump track for DATA discs.
-            new_tracks = select_tracks(job.id, scan.model_copy(update={"disc_type": DiscType.DATA}), preset)
+        # MakeMKV found nothing in the image, not even once it was unpacked
+        # (arm_ripper.iso_extract). Fail it like a disc with no titles, with
+        # the reason on the job's event; never switch it to a full-disc dump
+        # behind the operator's back (that filed the .iso where a movie was
+        # expected). The ripper then exits and the watchdog retires the drive.
+        await _fail_titleless_iso(session, hub, job)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=ISO_NO_TITLES)
     if not new_tracks:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
