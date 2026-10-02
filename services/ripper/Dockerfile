@@ -35,6 +35,9 @@ RUN apt-get update \
 # stage; the password is a BuildKit secret so it never enters image history
 # or logs (pass with --secret id=makemkv_mirror_password[,env=...]).
 ARG MAKEMKV_MIRROR_URL=
+# Pin a MakeMKV release instead of building whatever makemkv.com advertises
+# (empty = current upstream version).
+ARG MAKEMKV_VERSION=
 
 COPY services/ripper/install/install_makemkv.sh /install_makemkv.sh
 RUN --mount=type=secret,id=makemkv_mirror_password \

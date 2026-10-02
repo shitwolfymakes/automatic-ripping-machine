@@ -70,11 +70,17 @@ fetch_any() {
     return 1
 }
 
-# Version: upstream's download page first; the mirror's LATEST only when
-# upstream cannot be scraped.
-MAKEMKV_VERSION="$(curl -fsSL "$UPSTREAM_BASE/" 2>/dev/null | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
+# Version: an explicit MAKEMKV_VERSION (build arg) wins, so an image can pin a
+# known-good release when the current one misbehaves (2.0.0 segfaults opening
+# DVDFab UDF 2.50 Blu-ray images); otherwise upstream's download page, and the
+# mirror's LATEST only when upstream cannot be scraped.
+if [[ -n "${MAKEMKV_VERSION:-}" ]]; then
+    echo "Building MakeMKV ${MAKEMKV_VERSION} (pinned by MAKEMKV_VERSION)"
+else
+    MAKEMKV_VERSION="$(curl -fsSL "$UPSTREAM_BASE/" 2>/dev/null | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
+fi
 if [[ -n "$MAKEMKV_VERSION" ]]; then
-    echo "Building MakeMKV ${MAKEMKV_VERSION} (version from makemkv.com)"
+    echo "Building MakeMKV ${MAKEMKV_VERSION}"
 elif [[ -n "$MAKEMKV_MIRROR_URL" ]]; then
     echo "WARNING: makemkv.com unreachable; resolving the version from the mirror" >&2
     MAKEMKV_VERSION="$(fetch "$MAKEMKV_MIRROR_URL/LATEST" | tr -d '[:space:]')"
