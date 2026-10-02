@@ -51,11 +51,24 @@ export function formatLength(seconds: number | null | undefined): string {
 	return `${m}:${pad(seconds % 60)}`;
 }
 
+/** The episode source the resolver applied, in its order: the pin, then the
+ * source the tracks' provenance names (what actually won), then the first ok
+ * non-suggestion source (the resolver skips unpinned suggestions), then the
+ * first ok suggestion (shown as a suggestion). */
 export function activeSource(identity: IdentityView): string | null {
 	const pinned = identity.pin?.episode;
 	if (pinned) return pinned.startsWith(EPISODE_PREFIX) ? pinned : `${EPISODE_PREFIX}${pinned}`;
 	const sources = identity.sources ?? {};
-	return Object.keys(sources).find((id) => id.startsWith(EPISODE_PREFIX) && sources[id]?.status === 'ok') ?? null;
+	const ok = Object.keys(sources).filter((id) => id.startsWith(EPISODE_PREFIX) && sources[id]?.status === 'ok');
+	const counts = new Map<string, number>();
+	for (const t of identity.tracks ?? []) {
+		for (const src of Object.values(t.identity_provenance ?? {})) {
+			if (ok.includes(src)) counts.set(src, (counts.get(src) ?? 0) + 1);
+		}
+	}
+	let applied: string | null = null;
+	for (const [src, n] of counts) if (applied === null || n > (counts.get(applied) ?? 0)) applied = src;
+	return applied ?? ok.find((id) => !sources[id]?.suggestion) ?? ok[0] ?? null;
 }
 
 export function failedSources(identity: IdentityView): { id: string; label: string; detail: string | null }[] {

@@ -141,3 +141,28 @@ describe('fix round 1', () => {
 		expect(panelState(job(), identity({ sources: { manual: { status: 'ok' } } }), false)).toBe('unavailable');
 	});
 });
+
+describe('activeSource agrees with the resolver', () => {
+	const tvmazeApplied = (): IdentityView => {
+		const base = identity();
+		return {
+			...base,
+			sources: { episodes_tmdb: { status: 'ok', suggestion: true }, episodes_tvmaze: { status: 'ok' } },
+			tracks: (base.tracks ?? []).map((t) =>
+				t.role === 'extra' ? t : { ...t, identity_provenance: { episode_number: 'episodes_tvmaze' } }
+			)
+		};
+	};
+	it('the source named in the tracks provenance beats an earlier unpinned suggestion', () => {
+		expect(activeSource(tvmazeApplied())).toBe('episodes_tvmaze');
+		expect(panelState(job(), tvmazeApplied(), false)).toBe('applied');
+	});
+	it('without provenance a non-suggestion ok source beats a suggestion', () => {
+		const id = { ...tvmazeApplied(), tracks: [] };
+		expect(activeSource(id)).toBe('episodes_tvmaze');
+	});
+	it('falls back to an ok suggestion when nothing else is ok', () => {
+		const id = identity({ sources: { episodes_tmdb: { status: 'ok', suggestion: true } }, tracks: [] });
+		expect(activeSource(id)).toBe('episodes_tmdb');
+	});
+});
