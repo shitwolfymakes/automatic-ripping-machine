@@ -20,6 +20,7 @@ from arm_backend.metadata import MetadataDispatcher
 from arm_backend.metadata.base import MetadataResult, extract_poster_url, metadata_with_identity
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
 from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.identity.disc_shape import looks_episodic
 from arm_backend.identity.episode_stage import is_tv_candidate
 from arm_backend.identity.pipeline import hint_is_tv, hint_title, resolve_job, run_disc_hints
 from arm_backend.identity.proposals import put_source, record_preset
@@ -658,7 +659,13 @@ async def identify(
                         if exact is not None:
                             return exact
                 return await dispatcher.identify(
-                    scan, cfg, title_hint=hint_title(job, hints), title_hint_is_tv=hint_is_tv(job, hints)
+                    scan,
+                    cfg,
+                    title_hint=hint_title(job, hints),
+                    title_hint_is_tv=hint_is_tv(job, hints),
+                    # Several same-length episode titles and no feature: a TV
+                    # disc, whatever the label says (identity.disc_shape).
+                    prefer_tv=looks_episodic(scan.titles),
                 )
 
             result = await asyncio.wait_for(_identify(), timeout=DISPATCH_TIMEOUT_SECONDS)
