@@ -160,7 +160,7 @@ class MetadataDispatcher:
                 seen.add(key)
                 unique.append((title, year, tv_first))
         if prefer_tv:
-            # The disc itself is TV-shaped (identity.disc_shape): search TV for
+            # The disc itself is TV-shaped (arm_common.disc_shape): search TV for
             # every candidate before any movie, so one candidate's movie
             # fallback (e.g. a TMDb placeholder "Collection" movie) can't win
             # while another candidate would have found the series.
