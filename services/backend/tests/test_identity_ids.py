@@ -299,3 +299,48 @@ def test_merge_new_ids_non_dict_identity_section_returns_false() -> None:
 
     assert changed is False
     assert target.metadata_json is before
+
+
+# ---------------------------------------------------------------------------
+# A movie's TMDb id is never a show id
+# ---------------------------------------------------------------------------
+
+
+def _ids_job(ids: dict) -> Job:
+    return _job({"identity": {"provider": "tmdb", "external_ids": ids}})
+
+
+async def test_movie_kind_tmdb_is_not_a_show_id() -> None:
+    tmdb = FakeProvider("episodes_tmdb", "tmdb", result=None)
+    ids = await resolve_show_ids(_ids_job({"tmdb": "1749913", "tmdb_kind": "movie"}), [tmdb])
+    assert ids.tmdb is None
+    assert tmdb.calls and tmdb.calls[0].tmdb is None
+
+
+async def test_movie_kind_tmdb_replaced_by_the_resolved_show() -> None:
+    job = _ids_job({"tmdb": "1749913", "tmdb_kind": "movie", "imdb": "tt0071003"})
+    ids = await resolve_show_ids(job, [FakeProvider("episodes_tmdb", "tmdb", result="5084")])
+    assert (ids.tmdb, ids.tmdb_kind) == ("5084", "tv")
+    stored = job.metadata_json["identity"]["external_ids"]
+    assert (stored["tmdb"], stored["tmdb_kind"]) == ("5084", "tv")
+
+
+async def test_movie_kind_tmdb_kept_in_storage_when_nothing_resolves_it() -> None:
+    job = _ids_job({"tmdb": "1749913", "tmdb_kind": "movie"})
+    other = FakeProvider("episodes_tvmaze", "tvmaze", result="77")
+    await resolve_show_ids(job, [other])
+    stored = job.metadata_json["identity"]["external_ids"]
+    assert (stored["tmdb"], stored["tmdb_kind"], stored["tvmaze"]) == ("1749913", "movie", "77")
+
+
+async def test_unknown_kind_tmdb_is_still_used() -> None:
+    tmdb = FakeProvider("episodes_tmdb", "tmdb", result="should-not-be-asked")
+    ids = await resolve_show_ids(_ids_job({"tmdb": "1399"}), [tmdb])
+    assert ids.tmdb == "1399" and tmdb.calls == []
+
+
+def test_merge_new_ids_replaces_a_movie_tmdb_with_a_show() -> None:
+    job = _ids_job({"tmdb": "1749913", "tmdb_kind": "movie"})
+    assert merge_new_ids(job, ExternalIds(tmdb="5084", tmdb_kind="tv")) is True
+    stored = job.metadata_json["identity"]["external_ids"]
+    assert (stored["tmdb"], stored["tmdb_kind"]) == ("5084", "tv")

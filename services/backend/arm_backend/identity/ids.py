@@ -58,7 +58,10 @@ async def resolve_show_ids(
     writing anything back. With `persist=False` (a preview run) the ids are
     resolved the same way but never written back.
     """
-    ids = current_ids(job)
+    stored = current_ids(job)
+    # A movie's TMDb id is not a show id (TMDb numbers movies and shows
+    # separately): episode sources look the show up by IMDb / TVDB instead.
+    ids = stored.model_copy(update={"tmdb": None}) if stored.tmdb_kind == "movie" else stored
     found = False
     for provider in providers:
         if getattr(ids, provider.id_field, None):
@@ -72,7 +75,11 @@ async def resolve_show_ids(
             continue
         if show_id is None:
             continue
-        ids = ids.model_copy(update={provider.id_field: show_id})
+        update: dict[str, str] = {provider.id_field: show_id}
+        if provider.id_field == "tmdb":
+            update["tmdb_kind"] = "tv"
+        ids = ids.model_copy(update=update)
+        stored = stored.model_copy(update=update)
         found = True
 
     if found and persist:
@@ -82,7 +89,7 @@ async def resolve_show_ids(
                 **(job.metadata_json or {}),
                 "identity": {
                     **identity,
-                    "external_ids": ids.model_dump(mode="json", exclude_none=True),
+                    "external_ids": stored.model_dump(mode="json", exclude_none=True),
                 },
             }
 
@@ -103,10 +110,11 @@ def merge_new_ids(target_job: Job, found: ExternalIds) -> bool:
     new fields into the fresh, just-re-selected job the apply phase writes
     to — never a field a concurrent edit may have set in the meantime."""
     existing = current_ids(target_job)
+    replace_movie = existing.tmdb_kind == "movie" and found.tmdb_kind == "tv" and found.tmdb is not None
     new_values = {
         field: value
         for field, value in found.model_dump(exclude_none=True).items()
-        if getattr(existing, field, None) is None
+        if getattr(existing, field, None) is None or (replace_movie and field in ("tmdb", "tmdb_kind"))
     }
     if not new_values:
         return False

@@ -414,7 +414,7 @@ async def test_in_flight_run_never_re_adds_a_cleared_id_i4() -> None:
     gate.set()
     await runner.drain()
 
-    assert edited.metadata_json["identity"]["external_ids"] == {"imdb": "tt2", "tmdb": "999"}
+    assert edited.metadata_json["identity"]["external_ids"] == {"imdb": "tt2", "tmdb": "999", "tmdb_kind": "tv"}
 
 
 class _CountingProvider(FakeProvider):
@@ -982,3 +982,19 @@ async def test_review_focus_4_season_change_then_error_drops_stale_claims() -> N
     assert len(identity_events) == 2
     assert identity_events[0]["payload"]["sources"]["episodes_tmdb"] == "ok"
     assert identity_events[1]["payload"]["sources"]["episodes_tmdb"] == "error"
+
+
+async def test_movie_tmdb_swapped_for_the_resolved_show_is_merged() -> None:
+    """A stored movie-kind TMDb id replaced by a resolved show id (tmdb_kind
+    tv) reaches the fresh row even though `tmdb` was already a key."""
+    job = _job(season=1, meta={"identity": {"external_ids": {"imdb": "tt1", "tmdb": "1749913", "tmdb_kind": "movie"}}})
+    tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
+    db = _db(job, tracks=tracks)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)}, show_id="999")
+    runner = _runner(db, _Hub(), [provider])
+
+    runner.schedule(job.id)
+    await runner.drain()
+
+    stored = job.metadata_json["identity"]["external_ids"]
+    assert (stored["tmdb"], stored["tmdb_kind"]) == ("999", "tv")

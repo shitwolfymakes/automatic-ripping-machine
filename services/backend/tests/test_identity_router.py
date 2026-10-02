@@ -905,3 +905,20 @@ def test_episodes_browse_unexpected_exception_502(
     assert r.status_code == 502
     assert r.json()["detail"] == "tmdb: unexpected error"
     assert "Traceback" in caplog.text
+
+
+def test_episodes_browse_never_offers_a_movie_tmdb_id_as_a_show_id(signing_key: bytes) -> None:
+    job = _job(meta={"identity": {"external_ids": {"imdb": "tt1", "tmdb": "1749913", "tmdb_kind": "movie"}}})
+    db = _db(job)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)}, show_id="5084")
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=_FakeStageRunner([provider]))
+
+    with TestClient(app) as client:
+        r = client.get(
+            f"/api/jobs/{JOB_ID}/identity/episodes",
+            params={"source": "tmdb", "season": 1},
+            headers=_auth(admin_token),
+        )
+
+    assert r.status_code == 200
+    assert r.json()["show_id"] == "5084"  # resolved afresh, not the movie id
