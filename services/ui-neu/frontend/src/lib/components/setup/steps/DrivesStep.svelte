@@ -21,7 +21,7 @@
 	const drives = createPollingStore(fetchDrives, [] as DriveView[], 3000);
 	const parts = $derived(partitionDrives($drives));
 	let enrollDisabledReason = $state<string | null>(null);
-	let iso = $state<{ on: boolean; count: number } | null>(null);
+	let iso = $state<{ on: boolean; count: number; path: string | null } | null>(null);
 
 	onMount(async () => {
 		drives.start();
@@ -33,8 +33,8 @@
 		}
 		iso =
 			lib.status === 'fulfilled'
-				? { on: true, count: lib.value.entries.filter((e) => e.kind === 'iso').length }
-				: { on: false, count: 0 };
+				? { on: true, count: lib.value.entries.filter((e) => e.kind === 'iso').length, path: lib.value.host_path }
+				: { on: false, count: 0, path: null };
 	});
 	onDestroy(() => drives.stop());
 
@@ -72,8 +72,8 @@
 			<h2 class="drives-step-title">No drives found</h2>
 			<ol class="drives-step-steps">
 				<li>Plug in the drive and wait 30 seconds.</li>
-				<li>Check that /dev/disk/by-id is mounted into the backend.</li>
-				<li>Run the drive diagnostics in <a href="/settings#drives">Settings, Drives</a>.</li>
+				<li>Check that the drives are mounted into the backend (for example /dev/sr0).</li>
+				<li>After setup, run the drive diagnostics in Settings, Drives.</li>
 			</ol>
 		</section>
 	{:else}
@@ -95,6 +95,9 @@
 				</span>
 			</div>
 			<p class="drives-step-help">ARM can rip ISO image files with no drive at all.</p>
+			{#if iso.on && iso.path}
+				<p class="drives-step-help">Images are read from <code class="mono">{iso.path}</code> on the server.</p>
+			{/if}
 			{#if !iso.on}
 				<p class="drives-step-help">To turn it on, add this line to .env:</p>
 				<CopyBlock text="ARM_HOST_ISO_LIBRARY_PATH=/path/to/your/isos" />
@@ -105,7 +108,7 @@
 		</section>
 	{/if}
 
-	<p class="drives-step-help">More drive options are in <a href="/settings#drives">Settings, Drives</a>.</p>
+	<p class="drives-step-help">More drive options are in Settings, Drives once setup is finished.</p>
 </div>
 
 <style>

@@ -13,7 +13,8 @@
 	const KEYLESS = [
 		{ name: 'TVmaze', what: 'TV episode lookup' },
 		{ name: 'MusicBrainz', what: 'Music CDs' },
-		{ name: 'ARM disc database', what: 'Disc fingerprints from other ARM users' }
+		{ name: 'ARM disc database', what: 'Disc fingerprints from other ARM users' },
+		{ name: 'TheDiscDB', what: 'Disc maps that label titles and pick the main feature' }
 	];
 
 	export async function commit(): Promise<StepCommitResult> {
@@ -27,7 +28,7 @@
 
 	<section class="panel stack">
 		<h2 class="metadata-step-title">Already working</h2>
-		<p class="metadata-step-help">TV episode lookup and music CDs work without any key.</p>
+		<p class="metadata-step-help">TV episode lookup, music CDs and disc matching work without any key.</p>
 		<ul class="metadata-step-keyless">
 			{#each KEYLESS as k (k.name)}
 				<li class="list-row list-row-compact metadata-step-row">

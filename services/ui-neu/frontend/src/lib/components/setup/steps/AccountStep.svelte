@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import type { SetupView, SystemResourcesResponse } from '$lib/types/api.gen';
 	import ChangePasswordForm from '$lib/components/settings/ChangePasswordForm.svelte';
-	import GuestAccessField from '$lib/components/settings/GuestAccessField.svelte';
 	import { fetchResources } from '$lib/api/resources';
 	import { fetchSystemVersion } from '$lib/api/system';
 	import { clearPasswordMustChange } from '$lib/stores/auth';
@@ -15,7 +14,6 @@
 	let version = $state<string | null>(null);
 	let resources = $state<SystemResourcesResponse | null>(null);
 	let pw: ChangePasswordForm | undefined = $state();
-	let guest: GuestAccessField | undefined = $state();
 
 	const mediaFree = $derived(resources?.storage.find((r) => r.name === 'MEDIA_ROOT')?.free_gb ?? null);
 
@@ -34,7 +32,6 @@
 		if (view.admin_default_password) {
 			if (!pw || !(await pw.submit())) return false;
 		}
-		await guest?.save();
 		return 'done';
 	}
 </script>
@@ -64,21 +61,18 @@
 			<p class="account-step-help">
 				You signed in with the first-boot password. Choose your own; you'll use it from now on.
 			</p>
-			<ChangePasswordForm
-				bind:this={pw}
-				currentPasswordDefault="admin"
-				hideSubmit
-				onsuccess={clearPasswordMustChange}
-				onvalidchange={onValid}
-			/>
+			<div class="account-step-password">
+				<ChangePasswordForm
+					bind:this={pw}
+					currentPasswordDefault="admin"
+					hideSubmit
+					onsuccess={clearPasswordMustChange}
+					onvalidchange={onValid}
+				/>
+			</div>
 		{:else}
 			<p class="account-step-help">Your admin password is already set. Change it any time in Settings, Users.</p>
 		{/if}
-	</section>
-
-	<section class="panel stack">
-		<h2 class="account-step-title">Guest access</h2>
-		<GuestAccessField bind:this={guest} deferred />
 	</section>
 </div>
 
@@ -111,8 +105,11 @@
 		font-size: 0.875rem;
 		color: var(--color-text-muted);
 	}
-	/* the shared form sits inside this step's panel: drop its own panel chrome */
 	.account-step-welcome {
 		padding: 1rem 1.25rem;
+	}
+	/* :global: the shared password form caps itself at 24rem for Settings; here it fills the panel */
+	.account-step-password :global(.change-password-form) {
+		max-width: none;
 	}
 </style>

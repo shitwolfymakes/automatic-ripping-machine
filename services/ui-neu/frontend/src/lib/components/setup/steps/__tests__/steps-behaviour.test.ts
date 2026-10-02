@@ -63,7 +63,7 @@ afterEach(() => {
 });
 
 describe('AccountStep', () => {
-	it('blocks Continue until the password is valid, then changes it and saves guest access', async () => {
+	it('blocks Continue until the password is valid, then changes it; guest access is not part of the step', async () => {
 		const setBlocked = vi.fn();
 		const { component } = renderComponent(AccountStep, { props: { view: view(), setBlocked } });
 		await waitFor(() => expect(setBlocked).toHaveBeenCalledWith(expect.stringMatching(/password/i)));
@@ -74,10 +74,10 @@ describe('AccountStep', () => {
 		await fireEvent.input(screen.getByLabelText(/^new password$/i), { target: { value: 'longenough1' } });
 		await fireEvent.input(screen.getByLabelText(/confirm new password/i), { target: { value: 'longenough1' } });
 		await waitFor(() => expect(setBlocked).toHaveBeenLastCalledWith(null));
-		await fireEvent.click(await screen.findByRole('checkbox', { name: /without signing in/i }));
+		expect(screen.queryByText(/guest access/i)).toBeNull();
 		expect(await (component as unknown as Step).commit()).toBe('done');
 		expect(changePassword).toHaveBeenCalledWith('admin', 'longenough1');
-		expect(setUserDisabled).toHaveBeenCalledWith('usr_guest', false);
+		expect(setUserDisabled).not.toHaveBeenCalled();
 	});
 
 	it('skips the password when it was already changed', async () => {

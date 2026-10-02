@@ -70,7 +70,7 @@
 				</div>
 			{/if}
 		{/if}
-		<p class="discs-step-help"><a href="/settings#sessions">Customise in Settings, Sessions</a></p>
+		<p class="discs-step-help">You can change these later in Settings, Sessions.</p>
 	</section>
 </div>
 

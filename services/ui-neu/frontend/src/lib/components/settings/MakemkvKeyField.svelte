@@ -81,6 +81,11 @@
 			{ value: 'own', title: 'I have a purchased key', description: 'Use your own registration key. It never expires.' }
 		]}
 	/>
+	<p class="makemkv-key-field-buy">
+		Registration keys are sold at
+		<a href="https://www.makemkv.com/buy/" target="_blank" rel="noopener noreferrer">makemkv.com/buy</a>; the beta key
+		is free but changes monthly.
+	</p>
 	{#if mode === 'own'}
 		<div class="field">
 			<label class="field-label" for="makemkv-key-input">Registration key</label>
@@ -118,6 +123,10 @@
 </div>
 
 <style>
+	.makemkv-key-field-buy {
+		font-size: 0.875rem;
+		color: var(--color-text-muted);
+	}
 	.makemkv-key-field {
 		gap: 0.75rem;
 	}

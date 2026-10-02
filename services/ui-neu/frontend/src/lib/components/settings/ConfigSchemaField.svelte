@@ -79,14 +79,7 @@
 			</div>
 		{/if}
 	{:else}
-		<div class="config-schema-field-label-row">
-			<div class="field-label">{field.label}</div>
-			{#if field.signup_url}
-				<a class="config-schema-field-signup" href={field.signup_url} target="_blank" rel="noopener noreferrer">
-					Get a free key <Glyph name="external-link" class="h-3.5 w-3.5" />
-				</a>
-			{/if}
-		</div>
+		<div class="field-label">{field.label}</div>
 		{#if !field.editable}
 			<div class="mono config-schema-field-value">{value ?? '-'}</div>
 		{:else}
@@ -147,6 +140,11 @@
 				{/if}
 				{#if action}{@render action()}{/if}
 			</div>
+			{#if field.signup_url}
+				<a class="config-schema-field-signup" href={field.signup_url} target="_blank" rel="noopener noreferrer">
+					Get a free key <Glyph name="external-link" class="h-3.5 w-3.5" />
+				</a>
+			{/if}
 			{#if isHiddenSecret}
 				<div class="config-schema-field-saved">
 					<span class="chip chip-sm chip-success"><Glyph name="check" class="h-3 w-3" /> Saved</span>
@@ -184,15 +182,9 @@
 		line-height: 1.25rem;
 		color: var(--color-text-muted);
 	}
-	.config-schema-field-label-row {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: 0.25rem 0.75rem;
-	}
 	.config-schema-field-signup {
 		display: inline-flex;
+		align-self: flex-start;
 		align-items: center;
 		gap: 0.25rem;
 		font-size: 0.8125rem;
