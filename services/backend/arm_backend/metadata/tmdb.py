@@ -110,45 +110,50 @@ class TMDBClient:
             parsed = self._parse_one(top, kind)
             if parsed is not None:
                 out.append(parsed)
-        # Enrich each candidate with its imdb_id concurrently. Use .get("id") (not
-        # an index): a result without an id can't be enriched, so it skips the call
-        # and degrades to imdb_id=None rather than raising KeyError synchronously —
-        # which would escape the gather guard below. gather(return_exceptions=True)
-        # ensures one external_ids failure can't fail the batch.
+        # Enrich each candidate with its imdb/tvdb ids concurrently. A result
+        # without an id can't be enriched and degrades to None ids.
+        # gather(return_exceptions=True) keeps one failure from failing the batch.
         enrichable = [r for r in out if r.payload.get("id") is not None]
-        if enrichable:
-            ids = await asyncio.gather(
-                *(self.get_external_ids(r.payload["id"], kind) for r in enrichable),
-                return_exceptions=True,
-            )
-            resolved = {id(r): (imdb if isinstance(imdb, str) else None) for r, imdb in zip(enrichable, ids)}
-        else:
-            resolved = {}
+        maps = await asyncio.gather(
+            *(self.get_external_id_map(r.payload["id"], kind) for r in enrichable),
+            return_exceptions=True,
+        )
+        resolved = {id(r): (m if isinstance(m, dict) else {}) for r, m in zip(enrichable, maps)}
         for r in out:
-            r.payload["imdb_id"] = resolved.get(id(r))
+            found = resolved.get(id(r), {})
+            r.payload["imdb_id"] = found.get("imdb_id")
+            r.payload["tvdb_id"] = found.get("tvdb_id")
         return out
 
-    async def get_external_ids(self, tmdb_id: int | str, kind: Literal["movie", "tv"]) -> str | None:
-        """Fetch a result's imdb_id via TMDB external_ids. Returns None on any
-        failure (null imdb, non-200, transport error) — NEVER raises, since this
-        runs per-candidate in the search enrichment fan-out and one failure must
-        not fail the whole search."""
+    async def get_external_id_map(self, tmdb_id: int | str, kind: Literal["movie", "tv"]) -> dict[str, str]:
+        """A result's IMDb and TVDB ids via TMDb `external_ids`, as
+        `{"imdb_id": ..., "tvdb_id": ...}` with only the known ones present.
+        Empty on any failure; NEVER raises (it runs per candidate in the search
+        fan-out and per identify hit, and one failure must fail neither)."""
         try:
             r = await self._http.get(f"{_base_url()}/{kind}/{tmdb_id}/external_ids", headers=self._headers)
         except httpx.HTTPError:
-            return None
+            return {}
         if r.status_code != 200:
-            return None
+            return {}
         try:
             body = r.json()
         except ValueError:
-            return None
-        # A 200 whose body is JSON but not an object (e.g. a bare array) would make
-        # .get() raise AttributeError, breaking the never-raises contract — guard it.
+            return {}
         if not isinstance(body, dict):
-            return None
+            return {}
+        out: dict[str, str] = {}
         imdb = body.get("imdb_id")
-        return imdb if isinstance(imdb, str) and imdb else None
+        if isinstance(imdb, str) and imdb:
+            out["imdb_id"] = imdb
+        tvdb = body.get("tvdb_id")
+        if isinstance(tvdb, int) or (isinstance(tvdb, str) and tvdb):
+            out["tvdb_id"] = str(tvdb)
+        return out
+
+    async def get_external_ids(self, tmdb_id: int | str, kind: Literal["movie", "tv"]) -> str | None:
+        """The result's IMDb id only (kept for callers that need just that)."""
+        return (await self.get_external_id_map(tmdb_id, kind)).get("imdb_id")
 
     async def find_by_imdb_id(self, imdb_id: str) -> MetadataResult:
         """Resolve an imdb_id to a TMDB record via /find. Used by the
