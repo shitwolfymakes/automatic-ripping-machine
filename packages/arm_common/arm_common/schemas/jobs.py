@@ -273,6 +273,9 @@ class JobUpdateRequest(BaseModel):
     poster_url_manual: str | None = None
     disc_number: int | None = None
     disc_total: int | None = None
+    # The header Movie | TV switch: the type alone, ids untouched. The episode
+    # stage re-runs on the change (routers/jobs.py identity snapshot).
+    media_type: MediaType | None = None
     tracks: list[TrackEditRequest] | None = None
 
 
