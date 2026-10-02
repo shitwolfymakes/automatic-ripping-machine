@@ -567,3 +567,41 @@ describe('EpisodeMatchPanel fix round 1', () => {
 		expect(screen.getByRole('button', { name: 'Accepting…' })).toBeDisabled();
 	});
 });
+
+describe('EpisodeMatchPanel final review fixes', () => {
+	it('re-run controls use the shared field-control class', async () => {
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await openRerun();
+		for (const label of ['Source', 'Season', 'Disc', 'Tolerance (s)']) {
+			expect(screen.getByLabelText(label)).toHaveClass('field-control');
+		}
+	});
+
+	it('retries the episode list on a later reload after it failed', async () => {
+		vi.mocked(fetchEpisodes).mockRejectedValueOnce(new Error('HTTP 502')).mockResolvedValue(kolchakS1);
+		const { component } = renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await screen.findByLabelText('Set placement for t00');
+		await waitFor(() => expect(fetchEpisodes).toHaveBeenCalledTimes(1));
+		await (component as unknown as { reload: () => Promise<void> }).reload();
+		await waitFor(() => expect(fetchEpisodes).toHaveBeenCalledTimes(2));
+		await waitFor(() => expect(screen.getAllByText(/E04 The Vampire/).length).toBeGreaterThan(0));
+	});
+
+	it('reloads the identity after an apply that came back with an error outcome', async () => {
+		vi.mocked(matchIdentity)
+			.mockResolvedValueOnce(tvmazePreview)
+			.mockResolvedValueOnce({ outcomes: [{ source_id: 'episodes_tvmaze', status: 'error', detail: 'HTTP 502' }] });
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await openRerun();
+		await fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'tvmaze' } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+		await screen.findByText(/1 track changes/);
+		fetchIdentity.mockResolvedValue({ ...applied, pin: { episode: 'episodes_tvmaze' } });
+		const before = fetchIdentity.mock.calls.length;
+		await fireEvent.click(screen.getByRole('button', { name: 'Apply & pin TVmaze' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent("TVmaze didn't answer (HTTP 502)");
+		await waitFor(() => expect(fetchIdentity.mock.calls.length).toBe(before + 1));
+		expect(await screen.findByText('Pinned by you')).toBeInTheDocument();
+		expect(screen.getByRole('alert')).toHaveTextContent("TVmaze didn't answer (HTTP 502)");
+	});
+});

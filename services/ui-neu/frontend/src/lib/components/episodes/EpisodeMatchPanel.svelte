@@ -183,7 +183,13 @@
 			const out = await matchIdentity(jobId, req);
 			if (stale()) return;
 			const failed = out.outcomes?.find((o) => o.status === 'error');
-			if (failed) throw new Error(failed.detail ?? 'error');
+			if (failed) {
+				// An apply pins its source even when that source failed: reload so
+				// the pinned state shows, then report the failure.
+				if (req.apply) await reload();
+				if (stale()) return;
+				throw new Error(failed.detail ?? 'error');
+			}
 			if (req.apply) {
 				dropPreview();
 				rerunOpen = false;
@@ -219,6 +225,9 @@
 		const src = pickerSource;
 		const season = job.season ?? 1;
 		const key = `${job.id}:${src}:${season}`;
+		// Tracked so each identity reload re-runs this: a list that failed to
+		// load is fetched again then (a loaded one is skipped by its key).
+		void identity;
 		if (!src || !canAct || key === episodesKey) return;
 		episodesKey = key;
 		fetchEpisodes(job.id, src, season).then(
@@ -226,7 +235,9 @@
 				if (episodesKey === key) episodes = r.episodes ?? [];
 			},
 			() => {
-				if (episodesKey === key) episodes = [];
+				if (episodesKey !== key) return;
+				episodes = [];
+				episodesKey = '';
 			}
 		);
 	});
