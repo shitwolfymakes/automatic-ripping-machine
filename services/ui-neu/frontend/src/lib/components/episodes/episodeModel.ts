@@ -15,6 +15,15 @@ export interface EpisodeRow {
 	handSet: boolean;
 }
 
+/** The Re-run form; a number input left empty binds as null. */
+export interface RerunForm {
+	source: 'tmdb' | 'tvmaze' | 'tvdb';
+	season: number | null;
+	disc: number | null;
+	/** Empty means the backend's default. */
+	tolerance: number | null;
+}
+
 export const SOURCE_LABEL: Record<string, string> = {
 	episodes_tmdb: 'TMDb',
 	episodes_tvmaze: 'TVmaze',

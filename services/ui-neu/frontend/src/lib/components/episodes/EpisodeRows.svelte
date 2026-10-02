@@ -13,8 +13,10 @@
 		fileNames: Map<string, FileName>;
 		matching?: boolean;
 		phone?: boolean;
+		/** Label of the source being previewed; null when no preview is shown. */
+		proposedLabel?: string | null;
 	}
-	let { rows, fileNames, matching = false, phone = false }: Props = $props();
+	let { rows, fileNames, matching = false, phone = false, proposedLabel = null }: Props = $props();
 
 	const ORIGIN_CHIP = { auto: 'chip-info', suggestion: 'chip-warning', you: '', none: '' } as const;
 
@@ -31,6 +33,12 @@
 {#snippet placement(row: EpisodeRow)}
 	{#if matching}
 		<span class="episode-rows-muted">Waiting for matcher</span>
+	{:else if phone && proposedLabel && row.changed && row.proposed}
+		<s class="episode-rows-old"
+			><span class="episode-rows-code">{row.code}</span>
+			{#if row.name}<span class="episode-rows-name">{row.name}</span>{/if}</s
+		>
+		<span class="episode-rows-proposed">{@render proposal(row.proposed)}</span>
 	{:else}
 		<span class="episode-rows-code">{row.code}</span>
 		{#if row.name}<span class="episode-rows-name">{row.name}</span>{/if}
@@ -39,6 +47,12 @@
 		{@const file = fileNames.get(row.trackId)}
 		<span class="episode-rows-file" title={file?.path}>{file?.name}</span>
 	{/if}
+{/snippet}
+
+{#snippet proposal(p: { code: string; name: string })}
+	<span class="episode-rows-code">{p.code}</span>
+	{#if p.name}<span class="episode-rows-name">{p.name}</span>{/if}
+	<span class="chip chip-sm chip-warning">CHANGED</span>
 {/snippet}
 
 {#snippet origin(row: EpisodeRow)}
@@ -75,6 +89,7 @@
 				<th class="table-header">Track</th>
 				<th class="table-header">Length</th>
 				<th class="table-header">Placement</th>
+				{#if proposedLabel}<th class="table-header">Proposed · {proposedLabel}</th>{/if}
 				<th class="table-header">Origin</th>
 				<th class="table-header table-right">Conf.</th>
 			</tr>
@@ -85,6 +100,17 @@
 					<td class="table-cell episode-rows-ref">{row.ref}</td>
 					<td class="table-cell tabular-nums">{row.length}</td>
 					<td class="table-cell"><div class="episode-rows-placement">{@render placement(row)}</div></td>
+					{#if proposedLabel}
+						<td class="table-cell" data-changed={row.changed}>
+							{#if row.proposed && row.changed}
+								<div class="episode-rows-placement episode-rows-proposed">{@render proposal(row.proposed)}</div>
+							{:else if row.proposed}
+								<span class="episode-rows-muted">Same</span>
+							{:else}
+								<span class="episode-rows-muted">—</span>
+							{/if}
+						</td>
+					{/if}
 					<td class="table-cell">{@render origin(row)}</td>
 					<td class="table-cell table-right tabular-nums">{matching ? '—' : conf(row.confidence)}</td>
 				</tr>
@@ -123,6 +149,21 @@
 		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		color: var(--color-text-muted);
+	}
+	.episode-rows-old {
+		display: flex;
+		flex-wrap: wrap;
+		column-gap: 0.375rem;
+		color: var(--color-text-muted);
+	}
+	.episode-rows-proposed {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		column-gap: 0.375rem;
+	}
+	td[data-changed='true'] {
+		background: var(--color-warning-soft);
 	}
 	.episode-rows-muted {
 		color: var(--color-text-muted);

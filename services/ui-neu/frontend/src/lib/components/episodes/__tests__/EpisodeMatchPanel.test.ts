@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/test-utils';
 
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');
@@ -25,7 +25,8 @@ vi.mock('$lib/api/jobs', () => ({
 
 import EpisodeMatchPanel from '../EpisodeMatchPanel.svelte';
 import { fetchNamingPreview } from '$lib/api/jobs';
-import type { IdentityView, JobView, TrackView } from '$lib/types/api.gen';
+import { matchIdentity, unpinIdentity } from '$lib/api/identity';
+import type { IdentityView, JobView, MatchPreview, TrackView } from '$lib/types/api.gen';
 
 const LENGTHS = [3093, 3033, 3092, 3070, 3078, 542];
 const tracks = LENGTHS.map((d, i) => ({ id: `trk_${i}`, source_ref: `t0${i}`, duration_seconds: d }) as TrackView);
@@ -194,5 +195,160 @@ describe('EpisodeMatchPanel', () => {
 		const before = fetchIdentity.mock.calls.length;
 		await (component as unknown as { reload: () => Promise<void> }).reload();
 		expect(fetchIdentity.mock.calls.length).toBe(before + 1);
+	});
+});
+
+const tvmazePreview: MatchPreview = {
+	outcomes: [
+		{
+			source_id: 'episodes_tvmaze',
+			matches: [{ source_ref: 't00', season: 1, episode: 2, episode_name: 'Ep 2', confidence: 0.81 }]
+		}
+	]
+};
+
+async function openRerun() {
+	await fireEvent.click(await screen.findByRole('button', { name: /Re-run/ }));
+}
+
+describe('EpisodeMatchPanel actions', () => {
+	it('previews then applies & pins', async () => {
+		vi.mocked(matchIdentity).mockResolvedValueOnce(tvmazePreview).mockResolvedValueOnce({ outcomes: [] });
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await openRerun();
+		await fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'tvmaze' } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+		expect(matchIdentity).toHaveBeenCalledWith(
+			'job_1',
+			expect.objectContaining({ source: 'tvmaze', season: 1, disc_number: 1, apply: false })
+		);
+		expect(vi.mocked(matchIdentity).mock.calls[0][1]).not.toHaveProperty('tolerance');
+		expect(await screen.findByText(/1 track changes if you apply TVmaze/)).toBeInTheDocument();
+		expect(screen.getByText('Nothing is saved yet.', { exact: false })).toBeInTheDocument();
+		expect(screen.getByRole('columnheader', { name: 'Proposed · TVmaze' })).toBeInTheDocument();
+		expect(screen.getAllByText('CHANGED')).toHaveLength(1);
+		const before = fetchIdentity.mock.calls.length;
+		await fireEvent.click(screen.getByRole('button', { name: 'Apply & pin TVmaze' }));
+		expect(matchIdentity).toHaveBeenLastCalledWith('job_1', expect.objectContaining({ source: 'tvmaze', apply: true }));
+		await waitFor(() => expect(fetchIdentity.mock.calls.length).toBe(before + 1));
+		expect(screen.queryByText(/tracks? changes? if you apply/)).toBeNull();
+	});
+
+	it('sends the tolerance only when one is given', async () => {
+		vi.mocked(matchIdentity).mockResolvedValueOnce(tvmazePreview);
+		renderComponent(EpisodeMatchPanel, {
+			props: { job: job({ season: 2, disc_number: 3 }), tracks, matching: false }
+		});
+		await openRerun();
+		await fireEvent.input(screen.getByLabelText('Tolerance (s)'), { target: { value: '120' } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+		expect(matchIdentity).toHaveBeenCalledWith('job_1', {
+			source: 'tmdb',
+			season: 2,
+			disc_number: 3,
+			tolerance: 120,
+			apply: false
+		});
+	});
+
+	it('discard and field changes drop the preview', async () => {
+		vi.mocked(matchIdentity).mockResolvedValue(tvmazePreview);
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await openRerun();
+		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+		await screen.findByText(/1 track changes/);
+		await fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+		expect(screen.queryByText(/1 track changes/)).toBeNull();
+		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+		await screen.findByText(/1 track changes/);
+		await fireEvent.input(screen.getByLabelText('Season'), { target: { value: '2' } });
+		await waitFor(() => expect(screen.queryByText(/1 track changes/)).toBeNull());
+	});
+
+	it('disables a source that is not configured', async () => {
+		fetchIdentity.mockResolvedValue({
+			...applied,
+			sources: { ...applied.sources, episodes_tvdb: { status: 'skipped', detail: 'TVDB not configured' } }
+		});
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await openRerun();
+		const tvdb = screen.getByRole('option', { name: /TVDB/ }) as HTMLOptionElement;
+		expect(tvdb.disabled).toBe(true);
+		expect((screen.getByRole('option', { name: /TVmaze/ }) as HTMLOptionElement).disabled).toBe(false);
+	});
+
+	it('keeps the current placement when preview fails', async () => {
+		vi.mocked(matchIdentity).mockRejectedValueOnce(new Error('HTTP 502')).mockResolvedValueOnce(tvmazePreview);
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await openRerun();
+		await fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'tvmaze' } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+		const alert = await screen.findByRole('alert');
+		expect(alert).toHaveTextContent("TVmaze didn't answer (HTTP 502)");
+		expect(alert).toHaveTextContent("still TMDb's");
+		expect(screen.getAllByText('S01E01').length).toBeGreaterThan(0);
+		await fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+		expect(matchIdentity).toHaveBeenCalledTimes(2);
+		expect(vi.mocked(matchIdentity).mock.calls[1]).toEqual(vi.mocked(matchIdentity).mock.calls[0]);
+		expect(await screen.findByText(/1 track changes/)).toBeInTheDocument();
+		expect(screen.queryByRole('alert')).toBeNull();
+	});
+
+	it('accepts a suggestion by pinning its source', async () => {
+		fetchIdentity.mockResolvedValue({ ...applied, sources: { episodes_tmdb: { status: 'ok', suggestion: true } } });
+		let resolve: (v: MatchPreview) => void = () => {};
+		vi.mocked(matchIdentity).mockReturnValue(new Promise((r) => (resolve = r)));
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await fireEvent.click(await screen.findByRole('button', { name: 'Accept suggestion' }));
+		expect(matchIdentity).toHaveBeenCalledWith('job_1', { source: 'tmdb', apply: true });
+		expect(screen.getByRole('button', { name: 'Accepting…' })).toBeDisabled();
+		const before = fetchIdentity.mock.calls.length;
+		resolve({ outcomes: [] });
+		await waitFor(() => expect(fetchIdentity.mock.calls.length).toBe(before + 1));
+	});
+
+	it('unpin asks inline first', async () => {
+		fetchIdentity.mockResolvedValue({ ...applied, pin: { episode: 'episodes_tmdb' } });
+		vi.mocked(unpinIdentity).mockResolvedValue({ ...applied, pin: {} });
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await fireEvent.click(await screen.findByRole('button', { name: 'Unpin…' }));
+		expect(unpinIdentity).not.toHaveBeenCalled();
+		expect(screen.getByText('Unpin and let ARM pick the source again?')).toBeInTheDocument();
+		await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+		expect(screen.queryByText('Unpin and let ARM pick the source again?')).toBeNull();
+		await fireEvent.click(screen.getByRole('button', { name: 'Unpin…' }));
+		await fireEvent.click(screen.getByRole('button', { name: 'Unpin' }));
+		expect(unpinIdentity).toHaveBeenCalledWith('job_1');
+		expect(await screen.findByText('Applied automatically')).toBeInTheDocument();
+	});
+
+	it('guests get no accept or unpin', async () => {
+		await setRole('guest');
+		fetchIdentity.mockResolvedValue({ ...applied, pin: { episode: 'episodes_tmdb' } });
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		expect(await screen.findByText('TMDb is pinned.')).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: /Unpin/ })).toBeNull();
+		cleanup();
+		fetchIdentity.mockResolvedValue({ ...applied, sources: { episodes_tmdb: { status: 'ok', suggestion: true } } });
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		expect(await screen.findByText('Suggestion, not applied')).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: /Accept/ })).toBeNull();
+	});
+
+	it('shows the preview inline with the old placement struck through on a phone', async () => {
+		const real = globalThis.matchMedia;
+		globalThis.matchMedia = ((q: string) => ({ ...real(q), matches: q.includes('max-width: 639px') })) as typeof real;
+		vi.mocked(matchIdentity).mockResolvedValueOnce(tvmazePreview);
+		try {
+			renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+			await openRerun();
+			await fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'tvmaze' } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+			await screen.findByText(/1 track changes/);
+			expect(screen.getByText('S01E01').closest('s')).not.toBeNull();
+			expect(screen.getByText('S01E02', { selector: '.episode-rows-proposed *' })).toBeInTheDocument();
+		} finally {
+			globalThis.matchMedia = real;
+		}
 	});
 });

@@ -2,12 +2,21 @@
 	// The Match Episodes tab (design spec 2026-10-02 section 4): which source
 	// placed this disc's tracks, how sure it was, and the per-track placement.
 	import { MediaQuery } from 'svelte/reactivity';
-	import type { IdentityView, JobView, TrackView } from '$lib/types/api.gen';
-	import { fetchIdentity } from '$lib/api/identity';
+	import type { IdentityView, JobView, MatchPreview, MatchRequest, TrackView } from '$lib/types/api.gen';
+	import { fetchIdentity, matchIdentity, unpinIdentity, type EpisodeSource } from '$lib/api/identity';
 	import { fetchNamingPreview } from '$lib/api/jobs';
 	import { isAdmin } from '$lib/stores/auth';
-	import { panelState, buildRows, placedCount, activeSource, failedSources, SOURCE_LABEL } from './episodeModel';
+	import {
+		panelState,
+		buildRows,
+		placedCount,
+		activeSource,
+		failedSources,
+		SOURCE_LABEL,
+		type RerunForm
+	} from './episodeModel';
 	import EpisodeRows from './EpisodeRows.svelte';
+	import RerunPanel from './RerunPanel.svelte';
 
 	interface Props {
 		job: JobView;
@@ -24,6 +33,17 @@
 	let othersOpen = $state(false);
 	let loadError = $state<string | null>(null);
 	const phoneQuery = new MediaQuery('(max-width: 639px)', false);
+
+	const EPISODE_SOURCES: EpisodeSource[] = ['tmdb', 'tvmaze', 'tvdb'];
+	let rerunOpen = $state(false);
+	let rerun = $state<RerunForm>({ source: 'tmdb', season: 1, disc: 1, tolerance: null });
+	let preview = $state<MatchPreview | null>(null);
+	let previewSource = $state<EpisodeSource | null>(null);
+	let busy = $state(false);
+	let actionError = $state<string | null>(null);
+	let lastRequest = $state.raw<MatchRequest | null>(null);
+	let unpinAsk = $state(false);
+	let unpinError = $state<string | null>(null);
 
 	export async function reload(): Promise<void> {
 		if (!job.has_series) return;
@@ -49,7 +69,7 @@
 	});
 
 	const view = $derived(panelState(job, identity, matching));
-	const rows = $derived(view === 'noseries' ? [] : buildRows(tracks, identity ?? {}, null));
+	const rows = $derived(view === 'noseries' ? [] : buildRows(tracks, identity ?? {}, preview));
 	const source = $derived(identity ? activeSource(identity) : null);
 	const sourceLabel = $derived(source ? (SOURCE_LABEL[source] ?? source) : null);
 	const others = $derived(
@@ -57,7 +77,95 @@
 	);
 	const failed = $derived(identity ? failedSources(identity) : []);
 	const showRows = $derived(view !== 'noseries' && view !== 'unavailable');
+	const canAct = $derived($isAdmin && view !== 'noseries' && view !== 'matching' && view !== 'unavailable');
+	const sourceOptions = $derived(
+		EPISODE_SOURCES.map((id) => {
+			const s = identity?.sources?.[`episodes_${id}`];
+			const off = s?.status === 'skipped' && /not configured/i.test(s?.detail ?? '');
+			return { id, label: SOURCE_LABEL[`episodes_${id}`], disabled: off };
+		})
+	);
+	const labelOf = (id: string | null | undefined) => SOURCE_LABEL[`episodes_${id}`] ?? id ?? '';
+	const shortId = (id: string | null) => (id ?? '').replace(/^episodes_/, '') as EpisodeSource;
+
+	function openRerun() {
+		rerunOpen = !rerunOpen;
+		if (!rerunOpen) return;
+		const current = source ? shortId(source) : null;
+		const first = sourceOptions.find((o) => !o.disabled)?.id ?? 'tmdb';
+		rerun = {
+			source: current && EPISODE_SOURCES.includes(current) ? current : first,
+			season: job.season ?? 1,
+			disc: job.disc_number ?? 1,
+			tolerance: null
+		};
+		dropPreview();
+	}
+
+	function dropPreview() {
+		preview = null;
+		previewSource = null;
+		actionError = null;
+	}
+
+	function request(apply: boolean): MatchRequest {
+		const req: MatchRequest = { source: rerun.source, season: rerun.season, disc_number: rerun.disc, apply };
+		if (rerun.tolerance != null) req.tolerance = rerun.tolerance;
+		return req;
+	}
+
+	async function run(req: MatchRequest) {
+		busy = true;
+		actionError = null;
+		lastRequest = req;
+		const label = labelOf(req.source);
+		try {
+			const out = await matchIdentity(job.id, req);
+			const failed = out.outcomes?.find((o) => o.status === 'error');
+			if (failed) throw new Error(failed.detail ?? 'error');
+			if (req.apply) {
+				dropPreview();
+				rerunOpen = false;
+				await reload();
+			} else {
+				preview = out;
+				previewSource = req.source ?? null;
+			}
+		} catch (e) {
+			const still = sourceLabel
+				? ` the placement below is still ${sourceLabel}'s.`
+				: ' the placement below is unchanged.';
+			actionError = `${label} didn't answer (${e instanceof Error ? e.message : 'error'}). Nothing changed;${still}`;
+		} finally {
+			busy = false;
+		}
+	}
+
+	function accept() {
+		return run({ source: shortId(source), apply: true });
+	}
+
+	async function unpin() {
+		unpinError = null;
+		try {
+			identity = await unpinIdentity(job.id);
+			unpinAsk = false;
+		} catch (e) {
+			unpinError = e instanceof Error ? e.message : 'Could not unpin';
+		}
+	}
 </script>
+
+{#snippet errorAlert()}
+	{#if actionError}
+		<div class="alert alert-danger episode-panel-error" role="alert">
+			<p class="alert-body">{actionError}</p>
+			<button type="button" class="btn btn-sm" disabled={busy} onclick={() => lastRequest && run(lastRequest)}
+				>Try again</button
+			>
+		</div>
+	{/if}
+{/snippet}
 
 <section class="episode-panel" aria-label="Match episodes">
 	{#if view === 'noseries'}
@@ -93,6 +201,9 @@
 				{/if}
 			{/if}
 			<span class="episode-panel-status-actions">
+				{#if canAct}
+					<button type="button" class="btn btn-sm" aria-expanded={rerunOpen} onclick={openRerun}>Re-run…</button>
+				{/if}
 				{#if others.length > 0 && view !== 'matching'}
 					<button
 						type="button"
@@ -141,11 +252,30 @@
 			<div class="alert alert-warning">
 				<p class="alert-title">{sourceLabel}'s best match is too uncertain to apply on its own</p>
 				<p class="alert-body">The placement below is a suggestion. Nothing is applied until you accept it.</p>
+				{#if canAct}
+					<div class="episode-panel-banner-actions">
+						<button type="button" class="btn btn-primary btn-sm" disabled={busy} onclick={accept}>
+							{busy && lastRequest?.apply && !rerunOpen ? 'Accepting…' : 'Accept suggestion'}
+						</button>
+					</div>
+				{/if}
 			</div>
 		{:else if view === 'pinned'}
 			<div class="alert alert-info">
 				<p class="alert-title">{sourceLabel} is pinned.</p>
 				<p class="alert-body">ARM uses its placement and won't switch to another source on its own.</p>
+				{#if canAct}
+					<div class="episode-panel-banner-actions">
+						{#if unpinAsk}
+							<span class="alert-body">Unpin and let ARM pick the source again?</span>
+							<button type="button" class="btn btn-primary btn-sm" onclick={unpin}>Unpin</button>
+							<button type="button" class="btn btn-ghost btn-sm" onclick={() => (unpinAsk = false)}>Cancel</button>
+						{:else}
+							<button type="button" class="btn btn-sm" onclick={() => (unpinAsk = true)}>Unpin…</button>
+						{/if}
+					</div>
+					{#if unpinError}<p class="field-error">Could not unpin: {unpinError}</p>{/if}
+				{/if}
 			</div>
 		{:else if view === 'nomatch'}
 			<div class="alert alert-info">
@@ -157,8 +287,33 @@
 			</div>
 		{/if}
 
+		{#if canAct && rerunOpen}
+			<RerunPanel
+				bind:form={rerun}
+				sources={sourceOptions}
+				{busy}
+				preview={preview && previewSource
+					? { changed: rows.filter((r) => r.changed).length, label: labelOf(previewSource) }
+					: null}
+				onfieldchange={dropPreview}
+				onpreview={() => run(request(false))}
+				ondiscard={dropPreview}
+				onapply={() => run(request(true))}
+			>
+				{@render errorAlert()}
+			</RerunPanel>
+		{:else}
+			{@render errorAlert()}
+		{/if}
+
 		{#if showRows}
-			<EpisodeRows {rows} {fileNames} matching={view === 'matching'} phone={phoneQuery.current} />
+			<EpisodeRows
+				{rows}
+				{fileNames}
+				matching={view === 'matching'}
+				phone={phoneQuery.current}
+				proposedLabel={preview && previewSource ? labelOf(previewSource) : null}
+			/>
 		{/if}
 	{/if}
 
@@ -212,6 +367,20 @@
 	.episode-panel-noseries-title {
 		font-weight: 600;
 		color: var(--color-text);
+	}
+	.episode-panel-banner-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+		margin-top: 0.5rem;
+	}
+	.episode-panel-error {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+		justify-content: space-between;
 	}
 	.episode-panel-guest {
 		font-size: 0.8125rem;
