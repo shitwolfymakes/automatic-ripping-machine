@@ -110,6 +110,11 @@ class LogTailer:
             await self._drain_file(path)
 
     async def _discover_files(self) -> None:
+        # /logs is usually on a network share: every filesystem call here runs
+        # in a worker thread so a slow share never stalls the event loop.
+        await asyncio.to_thread(self._discover_files_sync)
+
+    def _discover_files_sync(self) -> None:
         if not self._log_dir.exists():
             return
         for entry in os.scandir(self._log_dir):
@@ -146,7 +151,7 @@ class LogTailer:
         # Detect rotation: stat the path; if inode changed the
         # RotatingFileHandler renamed the file and opened a new one.
         try:
-            new_inode = os.stat(path).st_ino
+            new_inode = (await asyncio.to_thread(os.stat, path)).st_ino
         except FileNotFoundError:
             # File temporarily gone (rotation in progress). Keep old fd;
             # next tick will retry the stat.
@@ -158,7 +163,7 @@ class LogTailer:
             except Exception:
                 pass
             try:
-                fd = open(path, "r", encoding="utf-8", errors="replace")
+                fd = await asyncio.to_thread(open, path, "r", encoding="utf-8", errors="replace")
                 # On a fresh post-rotation file, read from the start —
                 # `RotatingFileHandler` opened the new file empty, so any
                 # bytes already there are unread by us.
@@ -192,7 +197,7 @@ class LogTailer:
 
         # Per-job aggregated log — append before WS emit so the file is
         # the source of truth even if the hub fan-out fails.
-        self._append_per_job_log(job_id, line)
+        await asyncio.to_thread(self._append_per_job_log, job_id, line)
 
         # Loop guard: don't re-emit hub's own emit-failure logs.
         extra = record.get("extra")
