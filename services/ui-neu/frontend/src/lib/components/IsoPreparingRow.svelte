@@ -23,9 +23,13 @@
 		scanning: 'Scanning image',
 		extracting: 'Unpacking image'
 	};
+	const FOLDER_PHASE_LABELS: Record<string, string> = { scanning: 'Scanning disc folder' };
 
 	let cancelling = $state(false);
-	let phaseLabel = $derived(PHASE_LABELS[prepare.phase] ?? prepare.phase);
+	let isFolder = $derived(prepare.iso_kind === 'folder');
+	let phaseLabel = $derived(
+		(isFolder ? FOLDER_PHASE_LABELS[prepare.phase] : undefined) ?? PHASE_LABELS[prepare.phase] ?? prepare.phase
+	);
 	const accentVar = 'var(--color-status-scanning)';
 
 	async function handleCancel() {
@@ -42,7 +46,7 @@
 
 <div class="card card-status iso-preparing-row" data-status="scanning" data-source="iso">
 	<div class="iso-preparing-row-head flex items-center gap-3">
-		<span class="shrink-0"><IsoSourceChip name={prepare.iso_name} /></span>
+		<span class="shrink-0"><IsoSourceChip name={prepare.iso_name} kind={prepare.iso_kind} /></span>
 		<span class="shrink-0"><StatusBadge status="preparing" /></span>
 		<span class="min-w-0 truncate iso-preparing-row-phase">{phaseLabel}</span>
 		<span class="flex-1"></span>

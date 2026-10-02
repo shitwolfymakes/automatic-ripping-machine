@@ -19,7 +19,7 @@ from arm_ripper.rip import RipResult, rip_all
 from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS
 from arm_ripper.drive_poll import _ABSENT_ERRNOS, DriveState, read_drive_status
 from arm_ripper.scan import ScanError, scan as scan_disc
-from arm_ripper.source import is_iso_source
+from arm_ripper.source import is_file_source
 from arm_ripper.ws_client import WSClient
 
 logger = logging.getLogger("arm_ripper.job_controller")
@@ -287,7 +287,7 @@ class JobController:
         """True when the drive currently reports a seated disc (DISC_OK) —
         guards abandon-eject so abandoning an old job from history with an
         empty (or already-ejected) drive doesn't pop the tray."""
-        if self._device_path is None or is_iso_source(self._device_path):
+        if self._device_path is None or is_file_source(self._device_path):
             return False
         try:
             return read_drive_status(self._device_path) == DriveState.DISC_OK
@@ -442,7 +442,7 @@ class JobController:
             # An ISO file has no drive to settle: the CDROM_DRIVE_STATUS ioctl
             # below is invalid on a regular file (ENOTTY) and would crash the
             # one-shot source pipeline. Zero titles from a file is final.
-            if is_iso_source(device_path):
+            if is_file_source(device_path):
                 logger.warning("scan: 0 titles from ISO source %s — nothing to retry", device_path)
                 return result
 
@@ -903,7 +903,7 @@ class JobController:
         # ISO sources have no tray to eject. probe_disc reads the file
         # directly via PyCdlib and makemkvcon opens it read-only; nothing
         # mounts it, so there's nothing to umount or eject.
-        if is_iso_source(device_path):
+        if is_file_source(device_path):
             logger.info("eject skipped: source is ISO file %s", device_path)
             return
         await self._run_command("umount", device_path, log_failure=False)

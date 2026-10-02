@@ -632,3 +632,68 @@ def test_reader_cannot_create_or_cancel(lib: Path, signing_key: bytes) -> None:
         assert r.status_code == 403, r.text
         r = client.delete("/api/iso/rips/drv_iso1", headers=_auth(token))
         assert r.status_code == 403, r.text
+
+
+# --- Rip from folder -------------------------------------------------------
+
+
+def _disc_dir(lib: Path, rel: str, video_dir: str = "BDMV") -> Path:
+    d = lib / rel
+    (d / video_dir).mkdir(parents=True)
+    return d
+
+
+def test_folders_lists_disc_folders_with_parent_and_ripping(lib: Path, signing_key: bytes) -> None:
+    _disc_dir(lib, "LOTR/Fellowship/Disc 1")
+    _disc_dir(lib, "Half Baked", "VIDEO_TS")
+    (lib / "x.iso").write_bytes(b"x")
+    db = FakeSession()
+    db.rows["drives"] = [_virtual(source_path="Half Baked")]
+    token = _admin_token(db, signing_key)
+    with TestClient(_build_app(db, signing_key, _StubManager())) as client:
+        body = client.get("/api/iso/folders", headers=_auth(token)).json()
+    assert body["host_path"] == "/mnt/nas/iso"
+    assert body["partial"] is False
+    assert body["entries"] == [
+        {"path": "Half Baked", "name": "Half Baked", "parent": "", "disc_type": "dvd", "ripping": True},
+        {
+            "path": "LOTR/Fellowship/Disc 1",
+            "name": "Disc 1",
+            "parent": "LOTR/Fellowship",
+            "disc_type": "bluray",
+            "ripping": False,
+        },
+    ]
+
+
+def test_folders_503_when_not_configured(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, signing_key: bytes) -> None:
+    monkeypatch.setattr(settings, "ARM_HOST_ISO_LIBRARY_PATH", "")
+    db = FakeSession()
+    token = _admin_token(db, signing_key)
+    with TestClient(_build_app(db, signing_key, _StubManager())) as client:
+        assert client.get("/api/iso/folders", headers=_auth(token)).status_code == 503
+
+
+def test_create_from_a_disc_folder_spawns_a_folder_drive(lib: Path, signing_key: bytes) -> None:
+    _disc_dir(lib, "Movies/MirrorMask (2005)")
+    db = FakeSession()
+    token = _admin_token(db, signing_key)
+    manager = _StubManager()
+    with TestClient(_build_app(db, signing_key, manager)) as client:
+        r = client.post("/api/iso/rips", json={"path": "Movies/MirrorMask (2005)"}, headers=_auth(token))
+    assert r.status_code == 201, r.text
+    d = db.rows["drives"][-1]
+    assert (d.source_kind, d.source_path) == (DriveSourceKind.FOLDER, "Movies/MirrorMask (2005)")
+    assert d.device_path == "/source/MirrorMask (2005)"
+    assert d.display_name == "MirrorMask (2005)"
+    assert manager.ensured == [d.id]
+
+
+def test_create_refuses_a_folder_without_a_disc(lib: Path, signing_key: bytes) -> None:
+    (lib / "Movies").mkdir()
+    db = FakeSession()
+    token = _admin_token(db, signing_key)
+    with TestClient(_build_app(db, signing_key, _StubManager())) as client:
+        r = client.post("/api/iso/rips", json={"path": "Movies"}, headers=_auth(token))
+    assert r.status_code == 400
+    assert r.json()["detail"] == "only .iso files or disc folders (with BDMV or VIDEO_TS) can be ripped"

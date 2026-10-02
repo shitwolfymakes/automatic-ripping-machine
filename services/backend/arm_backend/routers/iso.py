@@ -8,22 +8,31 @@ import asyncio
 
 import logging
 from datetime import datetime
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend import file_browser, iso_prepare
+from arm_backend import disc_folders, file_browser, iso_prepare
 from arm_backend.auth import require_jwt, require_writer
+from arm_backend.config import settings
 from arm_backend.db import get_session
 from arm_backend.iso_library import library_configured, library_host_path
 from arm_backend.iso_rips import IsoRipError, cancel_iso_rip, create_iso_rip
 from arm_backend.ripper_manager import RipperManager
 from arm_backend.ws import WSHub
 from arm_common import Drive, DriveKind, DriveLifecycle, User
-from arm_common.schemas import IsoLibraryEntry, IsoLibraryListing, IsoPrepareView, IsoRipCreated, IsoRipRequest
+from arm_common.schemas import (
+    IsoFolderEntry,
+    IsoFolderListing,
+    IsoLibraryEntry,
+    IsoLibraryListing,
+    IsoPrepareView,
+    IsoRipCreated,
+    IsoRipRequest,
+)
 
 logger = logging.getLogger("arm_backend.routers.iso")
 
@@ -49,6 +58,22 @@ def _manager(request: Request) -> RipperManager:
     return manager
 
 
+async def _ripping_paths(db: AsyncSession) -> set[str]:
+    """Library paths (ISOs and disc folders) a live virtual drive is ripping."""
+    live = (
+        (
+            await db.execute(
+                select(Drive).where(
+                    col(Drive.kind) == DriveKind.VIRTUAL, col(Drive.lifecycle) == DriveLifecycle.ENROLLED
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {d.source_path for d in live if d.source_path}
+
+
 @router.get("/library", response_model=IsoLibraryListing)
 async def library(
     subpath: str = "",
@@ -66,18 +91,7 @@ async def library(
             status_code=_LIST_STATUS.get(exc.code, status.HTTP_400_BAD_REQUEST), detail=exc.code
         ) from exc
 
-    live = list(
-        (
-            await db.execute(
-                select(Drive).where(
-                    col(Drive.kind) == DriveKind.VIRTUAL, col(Drive.lifecycle) == DriveLifecycle.ENROLLED
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    ripping_paths = {d.source_path for d in live if d.source_path}
+    ripping_paths = await _ripping_paths(db)
 
     entries: list[IsoLibraryEntry] = []
     for fe in listing.entries:
@@ -105,6 +119,31 @@ async def library(
         parent_subpath=listing.parent_subpath,
         entries=entries,
     )
+
+
+@router.get("/folders", response_model=IsoFolderListing)
+async def folders(
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> IsoFolderListing:
+    """Every disc folder (BDMV / VIDEO_TS at its root) in the library, as one
+    flat list sorted by path, for "Rip from folder" (`disc_folders`)."""
+    if not library_configured():
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="the ISO library is not configured")
+    # Off the event loop: a walk of a network share can take a while.
+    found, partial = await asyncio.to_thread(disc_folders.find, Path(settings.ISO_INGRESS_ROOT))
+    ripping = await _ripping_paths(db)
+    entries = [
+        IsoFolderEntry(
+            path=f.path,
+            name=PurePosixPath(f.path).name,
+            parent=str(PurePosixPath(f.path).parent).removeprefix("."),
+            disc_type=f.disc_type,
+            ripping=f.path in ripping,
+        )
+        for f in found
+    ]
+    return IsoFolderListing(host_path=library_host_path(), entries=entries, partial=partial)
 
 
 @router.get("/rips/preparing", response_model=list[IsoPrepareView])

@@ -62,9 +62,11 @@ class DriveKind(StrEnum):
 
 
 class DriveSourceKind(StrEnum):
-    """What a virtual drive's source is. Only ISO exists today."""
+    """What a virtual drive's source is: an .iso image, or a disc folder (a
+    BDMV / VIDEO_TS tree MakeMKV reads directly)."""
 
     ISO = "iso"
+    FOLDER = "folder"
 
 
 class IsoPreparePhase(StrEnum):

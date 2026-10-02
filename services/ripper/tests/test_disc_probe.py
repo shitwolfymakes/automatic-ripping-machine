@@ -105,7 +105,7 @@ async def test_await_device_ready_true_after_settle(monkeypatch: pytest.MonkeyPa
 @pytest.mark.asyncio
 async def test_await_device_ready_iso_skips_ioctl(monkeypatch: pytest.MonkeyPatch) -> None:
     # ISO source → always ready, read_drive_status must NOT be called.
-    monkeypatch.setattr(disc_probe, "is_iso_source", lambda _p: True)
+    monkeypatch.setattr(disc_probe, "is_file_source", lambda _p: True)
 
     def _boom(_dev: str) -> object:
         raise AssertionError("read_drive_status must not be called for an ISO source")
@@ -118,7 +118,7 @@ async def test_await_device_ready_iso_skips_ioctl(monkeypatch: pytest.MonkeyPatc
 async def test_await_device_ready_false_on_no_disc(monkeypatch: pytest.MonkeyPatch) -> None:
     from arm_ripper.drive_poll import DriveState
 
-    monkeypatch.setattr(disc_probe, "is_iso_source", lambda _p: False)
+    monkeypatch.setattr(disc_probe, "is_file_source", lambda _p: False)
     monkeypatch.setattr(disc_probe, "read_drive_status", lambda _dev: DriveState.NO_DISC)
     assert await disc_probe.await_device_ready("/dev/sr0") is False
 
@@ -127,7 +127,7 @@ async def test_await_device_ready_false_on_no_disc(monkeypatch: pytest.MonkeyPat
 async def test_await_device_ready_false_on_tray_open(monkeypatch: pytest.MonkeyPatch) -> None:
     from arm_ripper.drive_poll import DriveState
 
-    monkeypatch.setattr(disc_probe, "is_iso_source", lambda _p: False)
+    monkeypatch.setattr(disc_probe, "is_file_source", lambda _p: False)
     monkeypatch.setattr(disc_probe, "read_drive_status", lambda _dev: DriveState.TRAY_OPEN)
     assert await disc_probe.await_device_ready("/dev/sr0") is False
 
@@ -136,7 +136,7 @@ async def test_await_device_ready_false_on_tray_open(monkeypatch: pytest.MonkeyP
 async def test_await_device_ready_false_on_budget_exhausted(monkeypatch: pytest.MonkeyPatch) -> None:
     from arm_ripper.drive_poll import DriveState
 
-    monkeypatch.setattr(disc_probe, "is_iso_source", lambda _p: False)
+    monkeypatch.setattr(disc_probe, "is_file_source", lambda _p: False)
     monkeypatch.setattr(disc_probe, "read_drive_status", lambda _dev: DriveState.NOT_READY)
     monkeypatch.setattr(disc_probe, "DEVICE_READY_TIMEOUT_SECONDS", 6.0)
     monkeypatch.setattr("arm_ripper.config.settings.POLL_INTERVAL_SECONDS", 2.0)
@@ -184,7 +184,7 @@ async def test_probe_disc_computes_when_ready(monkeypatch: pytest.MonkeyPatch) -
 async def test_await_device_ready_false_on_oserror(monkeypatch: pytest.MonkeyPatch) -> None:
     # read_drive_status raising OSError (e.g. ENOMEDIUM mid-resettle) must be
     # caught and treated as not-ready — never propagate. Budget then expires → False.
-    monkeypatch.setattr(disc_probe, "is_iso_source", lambda _p: False)
+    monkeypatch.setattr(disc_probe, "is_file_source", lambda _p: False)
 
     def _raise(_dev: str) -> object:
         raise OSError(123, "No medium found")
@@ -201,7 +201,7 @@ async def test_await_device_ready_false_on_oserror(monkeypatch: pytest.MonkeyPat
 @pytest.mark.asyncio
 async def test_probe_disc_none_when_read_status_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     # End-to-end: read_drive_status raising OSError must NOT propagate out of probe_disc.
-    monkeypatch.setattr(disc_probe, "is_iso_source", lambda _p: False)
+    monkeypatch.setattr(disc_probe, "is_file_source", lambda _p: False)
 
     def _raise(_dev: str) -> object:
         raise OSError(123, "No medium found")

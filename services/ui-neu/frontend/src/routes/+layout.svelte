@@ -7,7 +7,7 @@
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { setRippingEnabled } from '$lib/api/dashboard';
 	import { goto } from '$app/navigation';
-	import { showIsoPicker } from '$lib/stores/isoPicker';
+	import { isoPickerMode, showIsoPicker } from '$lib/stores/isoPicker';
 	import IsoPicker from '$lib/components/IsoPicker.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import Flyout from '$lib/components/Flyout.svelte';
@@ -44,7 +44,8 @@
 	const rippingCount = $derived(countRipping($dashboard.active_jobs ?? []));
 
 	function handleQuickAction(action: string) {
-		if (action === 'rip-iso') {
+		if (action === 'rip-iso' || action === 'rip-folder') {
+			isoPickerMode.set(action === 'rip-folder' ? 'folder' : 'iso');
 			showIsoPicker.set(true);
 		} else if (action === 'settings') {
 			goto('/settings');
@@ -363,6 +364,17 @@
 										{/snippet}
 										Rip from ISO
 									</FlyoutItem>
+									<FlyoutItem
+										onclick={() => {
+											handleQuickAction('rip-folder');
+											close();
+										}}
+									>
+										{#snippet icon()}
+											<Glyph name="folder" />
+										{/snippet}
+										Rip from folder
+									</FlyoutItem>
 									<FlyoutDivider />
 								{/if}
 								<FlyoutItem
@@ -498,6 +510,7 @@
 {#if $isAdmin}
 	<IsoPicker
 		open={$showIsoPicker}
+		mode={$isoPickerMode}
 		onclose={() => showIsoPicker.set(false)}
 		onstarted={() => {
 			showIsoPicker.set(false);

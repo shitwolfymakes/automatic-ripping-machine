@@ -19,7 +19,7 @@ from arm_ripper.makemkv_key import refresh_makemkv_key
 from arm_ripper.recovery import boot_probe
 from arm_ripper.scan.makemkv import probe_makemkv_key
 from arm_ripper import iso_extract, prepare
-from arm_ripper.source import is_iso_source
+from arm_ripper.source import is_file_source
 from arm_ripper.ws_client import WSClient
 
 CA_BUNDLE_PATH = "/etc/ssl/certs/ca-certificates.crt"
@@ -149,7 +149,7 @@ async def heartbeat_loop(client: BackendClient, drive_id: str, handle: DriveHand
             device_path = handle.current
             if device_path is None:
                 status = DriveMediaStatus.DETACHED
-            elif is_iso_source(device_path):
+            elif is_file_source(device_path):
                 status = DriveMediaStatus.LOADED
             else:
                 status, _ = probe_drive_media(device_path)

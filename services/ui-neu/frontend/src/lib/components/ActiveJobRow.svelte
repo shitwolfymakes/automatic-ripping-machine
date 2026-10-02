@@ -25,6 +25,8 @@
 		eta?: number | null;
 		/** ISO file name for this job's (virtual) drive, when it's an ISO rip. */
 		isoSource?: string | null;
+		/** Whether that virtual drive rips an .iso file or a disc folder. */
+		isoKind?: 'iso' | 'folder';
 	}
 
 	let {
@@ -34,7 +36,8 @@
 		tracksRipped = null,
 		tracksTotal = null,
 		eta = null,
-		isoSource = null
+		isoSource = null,
+		isoKind = 'iso'
 	}: Props = $props();
 
 	let cancelling = $state(false);
@@ -115,7 +118,7 @@
 				<!-- ISO source chip (replaces the absent drive pill for a virtual drive) -->
 				{#if isoSource}
 					<span class="shrink-0">
-						<IsoSourceChip name={isoSource} />
+						<IsoSourceChip name={isoSource} kind={isoKind} />
 					</span>
 				{/if}
 

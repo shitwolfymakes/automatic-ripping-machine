@@ -51,4 +51,14 @@ describe('IsoPreparingRow', () => {
 		await fireEvent.click(getByRole('button', { name: 'Cancel' }));
 		expect(cancelIsoRip).toHaveBeenCalledWith('drv_1');
 	});
+
+	it('labels a disc-folder rip as a folder', () => {
+		const { getByText } = renderComponent(IsoPreparingRow, {
+			props: {
+				prepare: { drive_id: 'drv_1', phase: 'scanning', updated_at: AT, iso_name: 'Disc 1', iso_kind: 'folder' }
+			}
+		});
+		expect(getByText('Folder')).toBeInTheDocument();
+		expect(getByText('Scanning disc folder')).toBeInTheDocument();
+	});
 });

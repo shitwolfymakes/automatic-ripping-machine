@@ -28,7 +28,11 @@ export interface TranscoderStats {
 /** An ISO rip whose ripper is scanning or unpacking the image: no job yet. */
 export interface IsoPreparing extends IsoPrepareView {
 	iso_name: string;
+	iso_kind: IsoSourceKind;
 }
+
+/** What a virtual drive rips: an .iso file or a disc folder. */
+export type IsoSourceKind = 'iso' | 'folder';
 
 export interface DashboardData {
 	db_available: boolean;
@@ -42,6 +46,9 @@ export interface DashboardData {
 	// (one per in-flight ISO rip). Lets the dashboard swap the drive chip for
 	// an ISO source chip without a second fetch.
 	iso_sources: Record<string, string>;
+	// drive id -> 'iso' / 'folder' for the same drives, so the source chip
+	// says ISO or Folder.
+	iso_source_kinds: Record<string, IsoSourceKind>;
 	// ISO rips with no job yet (scanning / unpacking the image), so the
 	// dashboard can show them before identify creates the job.
 	preparing: IsoPreparing[];
@@ -102,6 +109,7 @@ export async function fetchDashboard(): Promise<DashboardData> {
 
 	const driveNames: Record<string, string> = {};
 	const isoSources: Record<string, string> = {};
+	const isoSourceKinds: Record<string, IsoSourceKind> = {};
 	// `drives` includes retired rows so a finished ISO job keeps its label in
 	// drive_names; the live-only maps below skip them.
 	for (const d of drives ?? []) {
@@ -110,6 +118,7 @@ export async function fetchDashboard(): Promise<DashboardData> {
 			// display_name is the ISO's file name for a virtual drive; fall back
 			// to the last path segment of source_path if it's ever missing.
 			isoSources[d.id] = d.display_name ?? d.source_path?.split('/').pop() ?? d.source_path ?? d.device_path;
+			isoSourceKinds[d.id] = d.source_kind === 'folder' ? 'folder' : 'iso';
 		}
 	}
 
@@ -118,7 +127,7 @@ export async function fetchDashboard(): Promise<DashboardData> {
 	const jobDrives = new Set(activeJobs.map((j) => j.drive_id));
 	const preparing: IsoPreparing[] = (preparingRes.status === 'fulfilled' ? preparingRes.value : [])
 		.filter((p) => p.drive_id in isoSources && !jobDrives.has(p.drive_id))
-		.map((p) => ({ ...p, iso_name: isoSources[p.drive_id] }));
+		.map((p) => ({ ...p, iso_name: isoSources[p.drive_id], iso_kind: isoSourceKinds[p.drive_id] }));
 
 	const activeTranscodes = (transcodes ?? []).filter((t) => IN_PROGRESS_TRANSCODE_STATUSES.has(t.status));
 
@@ -131,6 +140,7 @@ export async function fetchDashboard(): Promise<DashboardData> {
 		drives_online: (drives ?? []).filter((d) => d.kind === 'optical' && d.lifecycle !== 'retired').length,
 		drive_names: driveNames,
 		iso_sources: isoSources,
+		iso_source_kinds: isoSourceKinds,
 		preparing,
 		notification_count: notifications?.unseen ?? 0,
 		ripping_enabled: config ? !config.ripping_paused : true,

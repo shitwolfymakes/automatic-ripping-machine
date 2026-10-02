@@ -1185,9 +1185,10 @@ export type DriveRescanResponse = {
 /**
  * DriveSourceKind
  *
- * What a virtual drive's source is. Only ISO exists today.
+ * What a virtual drive's source is: an .iso image, or a disc folder (a
+ * BDMV / VIDEO_TS tree MakeMKV reads directly).
  */
-export type DriveSourceKind = 'iso';
+export type DriveSourceKind = 'iso' | 'folder';
 
 /**
  * DriveStatus
@@ -1843,6 +1844,52 @@ export type InAppChannelConfig = {
      * Type
      */
     type?: 'inapp';
+};
+
+/**
+ * IsoFolderEntry
+ *
+ * One disc folder in the library (GET /api/iso/folders).
+ */
+export type IsoFolderEntry = {
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Parent
+     */
+    parent: string;
+    /**
+     * Disc Type
+     */
+    disc_type: 'bluray' | 'dvd';
+    /**
+     * Ripping
+     */
+    ripping?: boolean;
+};
+
+/**
+ * IsoFolderListing
+ */
+export type IsoFolderListing = {
+    /**
+     * Host Path
+     */
+    host_path: string;
+    /**
+     * Entries
+     */
+    entries: Array<IsoFolderEntry>;
+    /**
+     * Partial
+     */
+    partial?: boolean;
 };
 
 /**
@@ -6706,6 +6753,37 @@ export type LibraryApiIsoLibraryGetResponses = {
 };
 
 export type LibraryApiIsoLibraryGetResponse = LibraryApiIsoLibraryGetResponses[keyof LibraryApiIsoLibraryGetResponses];
+
+export type FoldersApiIsoFoldersGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/iso/folders';
+};
+
+export type FoldersApiIsoFoldersGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type FoldersApiIsoFoldersGetError = FoldersApiIsoFoldersGetErrors[keyof FoldersApiIsoFoldersGetErrors];
+
+export type FoldersApiIsoFoldersGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: IsoFolderListing;
+};
+
+export type FoldersApiIsoFoldersGetResponse = FoldersApiIsoFoldersGetResponses[keyof FoldersApiIsoFoldersGetResponses];
 
 export type PreparingApiIsoRipsPreparingGetData = {
     body?: never;

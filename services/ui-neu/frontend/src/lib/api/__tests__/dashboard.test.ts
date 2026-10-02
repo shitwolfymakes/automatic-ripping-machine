@@ -108,7 +108,8 @@ describe('fetchDashboard', () => {
 				progress_pct: 42,
 				current_file: 'BDMV/STREAM/1.m2ts',
 				updated_at: at,
-				iso_name: 'MirrorMask.iso'
+				iso_name: 'MirrorMask.iso',
+				iso_kind: 'iso'
 			}
 		]);
 	});
@@ -118,5 +119,21 @@ describe('fetchDashboard', () => {
 		vi.mocked(fetchIsoPreparing).mockRejectedValueOnce(new Error('boom'));
 
 		expect((await fetchDashboard()).preparing).toEqual([]);
+	});
+
+	it('records whether each live virtual drive rips an ISO or a disc folder', async () => {
+		mockFetchDrives.mockResolvedValue([
+			{ id: 'drv_iso', kind: 'virtual', lifecycle: 'enrolled', display_name: 'a.iso', source_kind: 'iso' },
+			{ id: 'drv_dir', kind: 'virtual', lifecycle: 'enrolled', display_name: 'Disc 1', source_kind: 'folder' },
+			{ id: 'drv_old', kind: 'virtual', lifecycle: 'enrolled', display_name: 'b.iso' }
+		] as DriveView[]);
+		vi.mocked(fetchIsoPreparing).mockResolvedValueOnce([
+			{ drive_id: 'drv_dir', phase: 'scanning', updated_at: '2026-10-02T14:00:00Z' }
+		] as IsoPrepareView[]);
+
+		const dash = await fetchDashboard();
+
+		expect(dash.iso_source_kinds).toEqual({ drv_iso: 'iso', drv_dir: 'folder', drv_old: 'iso' });
+		expect(dash.preparing[0].iso_kind).toBe('folder');
 	});
 });

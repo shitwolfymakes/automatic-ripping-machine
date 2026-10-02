@@ -198,6 +198,19 @@ describe('Layout guest gating', () => {
 		await fireEvent.click(screen.getByTitle('Quick actions'));
 		expect(screen.getByRole('menuitem', { name: 'Settings' })).toBeInTheDocument();
 		expect(screen.getByRole('menuitem', { name: 'Rip from ISO' })).toBeInTheDocument();
+		expect(screen.getByRole('menuitem', { name: 'Rip from folder' })).toBeInTheDocument();
+	});
+
+	it('Rip from folder opens the picker in folder mode', async () => {
+		const { showIsoPicker } = await import('$lib/stores/isoPicker');
+		try {
+			renderComponent(Layout, { props: { children: childSnippet() } });
+			await fireEvent.click(screen.getByTitle('Quick actions'));
+			await fireEvent.click(screen.getByRole('menuitem', { name: 'Rip from folder' }));
+			expect(await screen.findByRole('heading', { name: 'Rip from folder' })).toBeInTheDocument();
+		} finally {
+			showIsoPicker.set(false);
+		}
 	});
 
 	it('hides the Rip from ISO item and mounts no picker for guests', async () => {
@@ -210,6 +223,7 @@ describe('Layout guest gating', () => {
 		try {
 			renderComponent(Layout, { props: { children: childSnippet() } });
 			expect(screen.queryByRole('menuitem', { name: 'Rip from ISO' })).not.toBeInTheDocument();
+			expect(screen.queryByRole('menuitem', { name: 'Rip from folder' })).not.toBeInTheDocument();
 			expect(screen.queryByRole('heading', { name: 'Rip from ISO' })).not.toBeInTheDocument();
 		} finally {
 			showIsoPicker.set(false);
@@ -226,6 +240,7 @@ describe('Layout guest gating', () => {
 			await fireEvent.click(screen.getByTitle('Quick actions'));
 			expect(screen.getByRole('menuitem', { name: 'Settings' })).toBeInTheDocument();
 			expect(screen.queryByRole('menuitem', { name: 'Rip from ISO' })).not.toBeInTheDocument();
+			expect(screen.queryByRole('menuitem', { name: 'Rip from folder' })).not.toBeInTheDocument();
 			expect(screen.queryByRole('heading', { name: 'Rip from ISO' })).not.toBeInTheDocument();
 		} finally {
 			showIsoPicker.set(false);

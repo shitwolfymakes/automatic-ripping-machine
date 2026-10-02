@@ -2661,3 +2661,19 @@ def test_rip_start_optical_without_titles_is_still_422() -> None:
         r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 422
     assert "zero tracks" in r.json()["detail"]
+
+
+def test_rip_start_titleless_disc_folder_says_folder_not_iso() -> None:
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    drive = _virtual_drive()
+    drive.source_kind = DriveSourceKind.FOLDER
+    db.rows["drives"] = [drive]
+    db.rows["jobs"] = [_titleless_bluray_job()]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row()]
+    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session")]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 422
+    assert r.json()["detail"].startswith("MakeMKV found no titles in this disc folder.")

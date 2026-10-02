@@ -1,9 +1,10 @@
 import asyncio
 import logging
+from pathlib import Path
 
 from arm_common import DiscType
 from arm_common.schemas import ScanResult
-from arm_ripper.source import is_iso_source
+from arm_ripper.source import is_folder_source, is_iso_source
 
 logger = logging.getLogger("arm_ripper.scan.data")
 
@@ -46,6 +47,12 @@ async def scan_data(device_path: str) -> ScanResult:
     layout, so an image MakeMKV cannot open still becomes a video job (with no
     titles) rather than a data disc.
     """
+    if is_folder_source(device_path):
+        # A disc folder MakeMKV listed nothing in: still a Blu-ray / DVD by its
+        # tree (blkid has no volume to read), named after the folder.
+        folder = Path(device_path)
+        folder_type = DiscType.BLURAY if (folder / "BDMV").is_dir() else DiscType.DVD
+        return ScanResult(disc_type=folder_type, volume_label=folder.name)
     proc = await asyncio.create_subprocess_exec(
         "blkid",
         "-o",

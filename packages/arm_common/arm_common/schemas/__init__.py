@@ -56,6 +56,8 @@ from arm_common.schemas.identity_api import (
     TrackIdentityView,
 )
 from arm_common.schemas.iso import (
+    IsoFolderEntry,
+    IsoFolderListing,
     IsoLibraryEntry,
     IsoLibraryListing,
     IsoPrepareReport,
@@ -276,6 +278,8 @@ __all__ = [
     "IdentifyRequest",
     "IdentityClaims",
     "InAppChannelConfig",
+    "IsoFolderEntry",
+    "IsoFolderListing",
     "IsoLibraryEntry",
     "IsoLibraryListing",
     "IsoPrepareReport",

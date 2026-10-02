@@ -27,8 +27,25 @@ class IsoLibraryListing(BaseModel):
     entries: list[IsoLibraryEntry]
 
 
+class IsoFolderEntry(BaseModel):
+    """One disc folder in the library (GET /api/iso/folders)."""
+
+    path: str  # relative to the library; what POST /api/iso/rips takes
+    name: str
+    parent: str  # the path above it ("" at the library root)
+    disc_type: Literal["bluray", "dvd"]
+    ripping: bool = False
+
+
+class IsoFolderListing(BaseModel):
+    host_path: str
+    entries: list[IsoFolderEntry]
+    # The walk gave up before covering the whole library (folder budget).
+    partial: bool = False
+
+
 class IsoRipRequest(BaseModel):
-    path: str = Field(min_length=1)  # relative to the library
+    path: str = Field(min_length=1)  # relative to the library: an .iso file or a disc folder
     session_id: str | None = None
 
 

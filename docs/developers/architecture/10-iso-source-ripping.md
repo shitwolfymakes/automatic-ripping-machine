@@ -229,6 +229,33 @@ over a network share). So the ripper reports a **preparing** phase instead:
   **PREPARING** section (`IsoPreparingRow`) for every live virtual drive that
   has no active job yet, with the phase, progress, current file and Cancel.
 
+### Rip from folder (`source_kind=folder`)
+
+A disc folder is a directory with a `BDMV` (Blu-ray) or `VIDEO_TS` (DVD)
+tree at its root: an extracted or backed-up disc. It lives in the same ISO
+library and rips through the same virtual-drive machinery; only the source
+differs.
+
+- `GET /api/iso/folders` (`arm_backend/disc_folders.py`) lists every disc
+  folder in the library as one flat list sorted by path, each with its
+  parent path, `bluray` / `dvd`, and whether it is ripping. The walk runs in
+  a worker thread, never enters a disc folder, skips hidden folders, stops
+  at 8 levels and gives up after 10,000 folders (`partial: true`).
+- `POST /api/iso/rips` takes a disc folder path as well as an `.iso`
+  (`iso_rips.resolve_source`); the drive gets `source_kind=folder` and the
+  folder is bind-mounted read-only at `/source/<name>`. The incomplete-image
+  check applies to ISOs only.
+- The ripper reads it as `file:/source/<name>` (`source.is_folder_source`).
+  `source.is_file_source` (ISO or folder) gates every drive-only step; the
+  optical fingerprint probe is skipped; a folder MakeMKV lists nothing in is
+  still classified BD / DVD by its tree and fails at rip-start with "MakeMKV
+  found no titles in this disc folder".
+- UI: the gear menu's **Rip from folder** opens the same `IsoPicker` in
+  `mode="folder"`: a filter box (matches anywhere in the path) over a flat
+  list of folder name + parent path (shortened from the left,
+  `pathTailTruncate`) + BD/DVD chip. The dashboard's source chip reads
+  **Folder** for these rips.
+
 ## The API
 
 All routes under `/api/iso` require writer (admin) access, except the `GET`,

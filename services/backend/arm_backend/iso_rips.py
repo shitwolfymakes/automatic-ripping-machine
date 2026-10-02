@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlmodel import col, select
 
-from arm_backend import file_browser, iso_image, iso_prepare
+from arm_backend import disc_folders, file_browser, iso_image, iso_prepare
 from arm_backend.config import settings
 from arm_backend.file_browser import PathError
 from arm_backend.iso_library import library_configured
@@ -249,12 +249,12 @@ class IsoRipError(Exception):
         self.detail = detail
 
 
-def resolve_iso(rel: str) -> Path:
-    """The library file for `rel`, relative to the ISO library.
+def resolve_source(rel: str) -> tuple[Path, DriveSourceKind]:
+    """The library source for `rel` (relative to the ISO library) and its kind:
+    an `.iso` regular file, or a disc folder (BDMV / VIDEO_TS at its root).
 
     Rejects an absolute path, an escape outside the library (including a
-    symlink that points out, per `file_browser.resolve`), and anything that
-    isn't a `.iso` regular file.
+    symlink that points out, per `file_browser.resolve`), and anything else.
     """
     if Path(rel).is_absolute():
         raise IsoRipError(400, "path must be relative to the ISO library")
@@ -262,11 +262,15 @@ def resolve_iso(rel: str) -> Path:
         target = file_browser.resolve("ISO", rel)
     except PathError as exc:
         raise IsoRipError(400, "path is outside the ISO library") from exc
+    if target.is_dir():
+        if disc_folders.disc_type(target) is None:
+            raise IsoRipError(400, "only .iso files or disc folders (with BDMV or VIDEO_TS) can be ripped")
+        return target, DriveSourceKind.FOLDER
     if not target.name.endswith(".iso"):
-        raise IsoRipError(400, "only .iso files can be ripped")
+        raise IsoRipError(400, "only .iso files or disc folders (with BDMV or VIDEO_TS) can be ripped")
     if not target.is_file():
         raise IsoRipError(404, "no such ISO file")
-    return target
+    return target, DriveSourceKind.ISO
 
 
 async def _iso_cap(db: AsyncSession) -> int:
@@ -281,7 +285,8 @@ async def _iso_cap(db: AsyncSession) -> int:
 async def create_iso_rip(
     db: AsyncSession, manager: RipperManager, hub: WSHub, rel: str, session_id: str | None
 ) -> Drive:
-    """Create and spawn a virtual drive for the ISO at `rel` (library-relative).
+    """Create and spawn a virtual drive for the ISO or disc folder at `rel`
+    (library-relative).
 
     Serialized by `_create_lock` so two concurrent requests can't both pass
     the duplicate/cap checks before either commits. A docker failure after
@@ -298,12 +303,13 @@ async def create_iso_rip(
     async with _create_lock:
         # Off the event loop: the library is usually a network share and a stat
         # there can take seconds (minutes under load).
-        target = await asyncio.to_thread(resolve_iso, rel)
-        # A copy that stopped partway can never rip whole: say so now, not
-        # after a long unpack and a titleless scan.
-        cut = await asyncio.to_thread(iso_image.truncation, target)
-        if cut is not None:
-            raise IsoRipError(422, cut.message())
+        target, source_kind = await asyncio.to_thread(resolve_source, rel)
+        if source_kind is DriveSourceKind.ISO:
+            # A copy that stopped partway can never rip whole: say so now, not
+            # after a long unpack and a titleless scan.
+            cut = await asyncio.to_thread(iso_image.truncation, target)
+            if cut is not None:
+                raise IsoRipError(422, cut.message())
         cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
         # Same rule as the ripper's identify: paused with the review hold off
         # refuses new discs, but paused with the hold on (the UI Pause toggle)
@@ -341,7 +347,7 @@ async def create_iso_rip(
             id=drive_id,
             hostname=f"iso-{drive_id[-12:].lower()}",
             kind=DriveKind.VIRTUAL,
-            source_kind=DriveSourceKind.ISO,
+            source_kind=source_kind,
             source_path=rel_norm,
             lifecycle=DriveLifecycle.ENROLLED,
             device_path=f"/source/{target.name}",

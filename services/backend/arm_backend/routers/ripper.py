@@ -45,7 +45,7 @@ from arm_common import (
     Session,
     TrackStatus,
 )
-from arm_common.enums import NON_TERMINAL_JOB_STATUSES, DriveKind
+from arm_common.enums import NON_TERMINAL_JOB_STATUSES, DriveKind, DriveSourceKind
 from arm_common.models import Track
 from arm_common.models._columns import enum_value_str
 from arm_common.schemas import (
@@ -99,16 +99,18 @@ ISO_NO_TITLES = (
     "MakeMKV found no titles in this ISO, even after unpacking it. "
     'To keep a copy of the image anyway, rip it again with the "ISO: Full-disc dump" session.'
 )
+FOLDER_NO_TITLES = "MakeMKV found no titles in this disc folder. Check that its BDMV or VIDEO_TS tree is complete."
 
 
-async def _is_iso_source_job(db: AsyncSession, job: Job) -> bool:
+async def _virtual_source_drive(db: AsyncSession, job: Job) -> Drive | None:
+    """The job's drive when it is a virtual one (an ISO or disc-folder rip)."""
     if job.drive_id is None:
-        return False
+        return None
     drive = (await db.execute(select(Drive).where(col(Drive.id) == job.drive_id))).scalar_one_or_none()
-    return drive is not None and drive.kind == DriveKind.VIRTUAL
+    return drive if drive is not None and drive.kind == DriveKind.VIRTUAL else None
 
 
-async def _fail_titleless_iso(db: AsyncSession, hub: WSHub, job: Job) -> None:
+async def _fail_titleless_source(db: AsyncSession, hub: WSHub, job: Job, reason: str) -> None:
     job.status = JobStatus.FAILED
     job.ripped_at = datetime.now(timezone.utc)
     db.add(job)
@@ -122,13 +124,13 @@ async def _fail_titleless_iso(db: AsyncSession, hub: WSHub, job: Job) -> None:
             "tracks_done": 0,
             "tracks_failed": 0,
             "tracks_total": 0,
-            "reason": ISO_NO_TITLES,
+            "reason": reason,
         },
         job_id=job.id,
         session=db,
     )
     await db.commit()
-    logger.warning("rip-start job_id=%s failed: %s", job.id, ISO_NO_TITLES)
+    logger.warning("rip-start job_id=%s failed: %s", job.id, reason)
 
 
 async def _load_routed_session(db: AsyncSession, job: Job) -> Session | None:
@@ -824,14 +826,16 @@ async def rip_start(
         # operator picked it, so honour it whatever the scan found.
         # select_tracks synthesises the single dump track for DATA discs.
         new_tracks = select_tracks(job.id, scan.model_copy(update={"disc_type": DiscType.DATA}), preset)
-    if not new_tracks and not scan.titles and await _is_iso_source_job(session, job):
-        # MakeMKV found nothing in the image, not even once it was unpacked
-        # (arm_ripper.iso_extract). Fail it like a disc with no titles, with
+    virtual = None if new_tracks or scan.titles else await _virtual_source_drive(session, job)
+    if virtual is not None:
+        # MakeMKV found nothing in the image (not even once it was unpacked,
+        # arm_ripper.iso_extract) or in the disc folder. Fail it like a disc with no titles, with
         # the reason on the job's event; never switch it to a full-disc dump
         # behind the operator's back (that filed the .iso where a movie was
         # expected). The ripper then exits and the watchdog retires the drive.
-        await _fail_titleless_iso(session, hub, job)
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=ISO_NO_TITLES)
+        reason = FOLDER_NO_TITLES if virtual.source_kind == DriveSourceKind.FOLDER else ISO_NO_TITLES
+        await _fail_titleless_source(session, hub, job, reason)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=reason)
     if not new_tracks:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

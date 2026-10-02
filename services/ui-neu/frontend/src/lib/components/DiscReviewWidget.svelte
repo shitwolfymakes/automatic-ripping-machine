@@ -27,6 +27,8 @@
 		 *  virtual drives. Presence of `job.drive_id` here swaps the drive pill
 		 *  for an ISO source chip and reroutes Cancel through cancelIsoRip. */
 		isoSources?: Record<string, string> | null;
+		/** drive id -> 'iso' / 'folder' for the same drives. */
+		isoSourceKinds?: Record<string, 'iso' | 'folder'> | null;
 		paused?: boolean;
 		/** Review countdown duration (config manual_wait_seconds). Cosmetic — the
 		 *  ripper owns the authoritative clock; this only drives the UI timer. */
@@ -35,7 +37,16 @@
 		ondismiss?: () => void;
 	}
 
-	let { job, driveNames, isoSources, paused = false, manualWaitSeconds = 60, onrefresh, ondismiss }: Props = $props();
+	let {
+		job,
+		driveNames,
+		isoSources,
+		isoSourceKinds,
+		paused = false,
+		manualWaitSeconds = 60,
+		onrefresh,
+		ondismiss
+	}: Props = $props();
 
 	// awaiting_review = the timed review gate (Start / countdown); other waiting
 	// statuses (awaiting_user_id / ripped_awaiting_identify) are identify-only.
@@ -286,7 +297,10 @@
 				</div>
 				<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 disc-review-widget-meta">
 					{#if isoName}
-						<IsoSourceChip name={isoName} />
+						<IsoSourceChip
+							name={isoName}
+							kind={displayJob.drive_id ? (isoSourceKinds?.[displayJob.drive_id] ?? 'iso') : 'iso'}
+						/>
 					{:else}
 						<span class="disc-review-widget-pill">{driveLabel(displayJob.drive_id, driveNames)}</span>
 					{/if}

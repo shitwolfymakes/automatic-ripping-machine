@@ -3008,6 +3008,56 @@
         }
       }
     },
+    "/api/iso/folders": {
+      "get": {
+        "tags": [
+          "iso"
+        ],
+        "summary": "Folders",
+        "description": "Every disc folder (BDMV / VIDEO_TS at its root) in the library, as one\nflat list sorted by path, for \"Rip from folder\" (`disc_folders`).",
+        "operationId": "folders_api_iso_folders_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IsoFolderListing"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/iso/rips/preparing": {
       "get": {
         "tags": [
@@ -11190,10 +11240,11 @@
       "DriveSourceKind": {
         "type": "string",
         "enum": [
-          "iso"
+          "iso",
+          "folder"
         ],
         "title": "DriveSourceKind",
-        "description": "What a virtual drive's source is. Only ISO exists today."
+        "description": "What a virtual drive's source is: an .iso image, or a disc folder (a\nBDMV / VIDEO_TS tree MakeMKV reads directly)."
       },
       "DriveStatus": {
         "type": "string",
@@ -12402,6 +12453,70 @@
         },
         "type": "object",
         "title": "InAppChannelConfig"
+      },
+      "IsoFolderEntry": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "parent": {
+            "type": "string",
+            "title": "Parent"
+          },
+          "disc_type": {
+            "type": "string",
+            "enum": [
+              "bluray",
+              "dvd"
+            ],
+            "title": "Disc Type"
+          },
+          "ripping": {
+            "type": "boolean",
+            "title": "Ripping",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "name",
+          "parent",
+          "disc_type"
+        ],
+        "title": "IsoFolderEntry",
+        "description": "One disc folder in the library (GET /api/iso/folders)."
+      },
+      "IsoFolderListing": {
+        "properties": {
+          "host_path": {
+            "type": "string",
+            "title": "Host Path"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/IsoFolderEntry"
+            },
+            "type": "array",
+            "title": "Entries"
+          },
+          "partial": {
+            "type": "boolean",
+            "title": "Partial",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "host_path",
+          "entries"
+        ],
+        "title": "IsoFolderListing"
       },
       "IsoLibraryEntry": {
         "properties": {

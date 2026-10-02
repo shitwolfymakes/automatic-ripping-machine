@@ -43,3 +43,13 @@ describe('IsoSourceChip', () => {
 		expect(mobile.textContent).toBe('a.iso');
 	});
 });
+
+describe('IsoSourceChip for a disc folder', () => {
+	afterEach(() => cleanup());
+
+	it('labels a folder source as a folder', () => {
+		const { container, getByText } = renderComponent(IsoSourceChip, { props: { name: 'Disc 1', kind: 'folder' } });
+		expect(getByText('Folder')).toBeInTheDocument();
+		expect(container.querySelector('.chip')).toHaveAttribute('aria-label', 'Disc folder Disc 1');
+	});
+});
