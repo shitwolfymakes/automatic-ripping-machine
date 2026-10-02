@@ -79,9 +79,11 @@
 	.setup-shell-logo-dark {
 		display: none;
 	}
+	/* :global: .dark is the app-level scheme class on <html>, outside this component */
 	:global(.dark) .setup-shell-logo-light {
 		display: none;
 	}
+	/* :global: .dark is the app-level scheme class on <html>, outside this component */
 	:global(.dark) .setup-shell-logo-dark {
 		display: block;
 	}

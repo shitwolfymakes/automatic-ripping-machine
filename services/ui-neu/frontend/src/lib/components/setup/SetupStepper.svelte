@@ -69,7 +69,7 @@
 			<Glyph name={open ? 'chevron-up' : 'chevron-down'} />
 		</button>
 		<div class="setup-stepper-bar" aria-hidden="true">
-			<span style="width: {((currentIndex + 1) / STEPS.length) * 100}%"></span>
+			<span style:--progress="{((currentIndex + 1) / STEPS.length) * 100}%"></span>
 		</div>
 		{#if open}
 			<div id="setup-stepper-mobile-list" class="setup-stepper-mobile-list">{@render list()}</div>
@@ -184,6 +184,7 @@
 	}
 	.setup-stepper-bar span {
 		display: block;
+		width: var(--progress);
 		height: 100%;
 		background: var(--color-primary);
 	}

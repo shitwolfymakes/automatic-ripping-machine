@@ -19,7 +19,7 @@
 
 <div
 	class="recipe-strip"
-	style="--recipe-columns: {cells.map((_, i) => (i ? 'auto minmax(0, 1fr)' : 'minmax(0, 1fr)')).join(' ')}"
+	style:--recipe-columns={cells.map((_, i) => (i ? 'auto minmax(0, 1fr)' : 'minmax(0, 1fr)')).join(' ')}
 >
 	{#each cells as cell, i (i)}
 		{#if i > 0}
@@ -49,6 +49,7 @@
 		font-size: 0.75rem;
 		line-height: 1rem;
 	}
+	/* :global: .dark is the app-level scheme class on <html>, outside this component */
 	:global(.dark) .recipe-strip {
 		background: color-mix(in srgb, var(--color-backdrop) 33%, transparent);
 	}
@@ -102,10 +103,12 @@
 		justify-content: center;
 		color: var(--color-text-faint);
 	}
+	/* :global: the svg is rendered by the Glyph child component */
 	.recipe-strip-arrow :global(svg) {
 		transform: rotate(90deg);
 	}
 	@media (min-width: 640px) {
+		/* :global: the svg is rendered by the Glyph child component */
 		.recipe-strip-arrow :global(svg) {
 			transform: none;
 		}
