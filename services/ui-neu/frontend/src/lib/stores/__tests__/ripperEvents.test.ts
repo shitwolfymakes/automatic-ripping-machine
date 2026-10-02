@@ -75,7 +75,7 @@ describe('ripperEvents store', () => {
 		expect(listener).not.toHaveBeenCalled(); // not before the window
 		vi.advanceTimersByTime(300);
 		expect(listener).toHaveBeenCalledTimes(1);
-		expect(listener).toHaveBeenCalledWith(new Set(['job_a']));
+		expect(listener).toHaveBeenCalledWith(new Set(['job_a']), new Map([['job_a', new Set(['rip.completed'])]]));
 	});
 
 	it('a burst inside one window coalesces to a single call with the union of ids', () => {
@@ -87,7 +87,13 @@ describe('ripperEvents store', () => {
 		emit(eventEnv('job_b', {}, 'rip.started'));
 		vi.advanceTimersByTime(300);
 		expect(listener).toHaveBeenCalledTimes(1);
-		expect(listener).toHaveBeenCalledWith(new Set(['job_a', 'job_b']));
+		expect(listener).toHaveBeenCalledWith(
+			new Set(['job_a', 'job_b']),
+			new Map([
+				['job_a', new Set(['track.completed', 'rip.completed'])],
+				['job_b', new Set(['rip.started'])]
+			])
+		);
 	});
 
 	it('events straddling two windows produce two correctly-partitioned calls', () => {
@@ -98,8 +104,8 @@ describe('ripperEvents store', () => {
 		emit(eventEnv('job_b'));
 		vi.advanceTimersByTime(300);
 		expect(listener).toHaveBeenCalledTimes(2);
-		expect(listener).toHaveBeenNthCalledWith(1, new Set(['job_a']));
-		expect(listener).toHaveBeenNthCalledWith(2, new Set(['job_b']));
+		expect(listener).toHaveBeenNthCalledWith(1, new Set(['job_a']), new Map([['job_a', new Set(['rip.completed'])]]));
+		expect(listener).toHaveBeenNthCalledWith(2, new Set(['job_b']), new Map([['job_b', new Set(['rip.completed'])]]));
 	});
 
 	it('an unregistered listener receives no further calls', () => {
@@ -151,6 +157,23 @@ describe('ripperEvents store', () => {
 		emit(eventEnv(null, {})); // no id anywhere — dropped
 		vi.advanceTimersByTime(300);
 		expect(listener).toHaveBeenCalledTimes(1);
-		expect(listener).toHaveBeenCalledWith(new Set(['job_top', 'job_payload']));
+		expect(listener).toHaveBeenCalledWith(
+			new Set(['job_top', 'job_payload']),
+			new Map([
+				['job_top', new Set(['rip.completed'])],
+				['job_payload', new Set(['rip.completed'])]
+			])
+		);
+	});
+
+	it('a new window starts with empty event-type sets', () => {
+		startRipperEvents();
+		const listener = listen();
+		emit(eventEnv('job_a', {}, 'rip.identify_resolved'));
+		vi.advanceTimersByTime(300);
+		emit(eventEnv('job_a', {}, 'job.identity_updated'));
+		vi.advanceTimersByTime(300);
+		expect(listener.mock.calls[0][1]).toEqual(new Map([['job_a', new Set(['rip.identify_resolved'])]]));
+		expect(listener.mock.calls[1][1]).toEqual(new Map([['job_a', new Set(['job.identity_updated'])]]));
 	});
 });

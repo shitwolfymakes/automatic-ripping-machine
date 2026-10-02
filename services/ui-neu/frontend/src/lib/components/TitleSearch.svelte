@@ -156,7 +156,8 @@
 				await updateJobTitle(job.id, { poster_url_manual: poster });
 				feedback = { type: 'success', message: 'Poster updated' };
 			}
-			if (isSeries) onseries?.();
+			// Episode matching only starts after a resolve; a poster-only save is a plain apply.
+			if (isSeries && canResolve) onseries?.();
 			else onapply?.();
 		} catch (e) {
 			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Apply failed' };

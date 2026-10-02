@@ -39,8 +39,8 @@
 	let episodePanel = $state<{ reload: () => Promise<void> } | undefined>(undefined);
 
 	// True while the Backend re-matches episodes after a type flip or a series
-	// apply. Cleared by the next ripper event for this job (it carries
-	// job.identity_updated), or after MATCHING_TIMEOUT_MS so it never sticks.
+	// apply. Cleared when job.identity_updated arrives for this job (the stage
+	// finished), or after MATCHING_TIMEOUT_MS so it never sticks.
 	const MATCHING_TIMEOUT_MS = 60_000;
 	let matching = $state(false);
 	let matchingTimer: ReturnType<typeof setTimeout> | null = null;
@@ -222,14 +222,15 @@
 		// events don't disturb the page. The 5s poll below stays as
 		// reconciliation.
 		startRipperEvents();
-		const offRipperEvents = onRipperEvent((jobIds) => {
+		const offRipperEvents = onRipperEvent((jobIds, eventTypes) => {
 			const id = $page.params.id ?? '';
 			if (id === '' || !jobIds.has(id)) return;
-			// The event set doesn't say which event fired, so any refresh for
-			// this job ends the matching state.
-			loadJob().then(() => {
-				episodePanel?.reload();
-				stopMatching();
+			// Refresh on every event; only the identity update ends matching
+			// (rip.identify_resolved fires before the episode stage has run).
+			const identityUpdated = eventTypes.get(id)?.has('job.identity_updated') ?? false;
+			loadJob().then(async () => {
+				await episodePanel?.reload();
+				if (identityUpdated) stopMatching();
 			});
 		});
 		async function poll() {
@@ -289,9 +290,7 @@
 						{#if $isAdmin}
 							<MediaTypeSwitch {job} {handSetCount} onchanged={handleMediaTypeChanged} />
 						{:else}
-							<span class="job-detail-media-type" data-testid="media-type-text"
-								>{job.media_type === 'tv' ? 'TV' : 'Movie'}</span
-							>
+							<span class="badge" data-testid="media-type-text">{job.media_type === 'tv' ? 'TV' : 'Movie'}</span>
 						{/if}
 					{/if}
 					{#if jobMeta.imdb_id && !isCdDisc}
@@ -810,14 +809,6 @@
 		font-weight: 500;
 		background: color-mix(in srgb, var(--color-accent-3) 15%, transparent);
 		color: var(--color-accent-3);
-	}
-	.job-detail-media-type {
-		border-radius: var(--radius-sm);
-		padding: 0.125rem 0.5rem;
-		font-size: 0.75rem;
-		font-weight: 500;
-		background: var(--color-primary-tint-2);
-		color: var(--color-text-secondary);
 	}
 	.job-detail-poster-cell {
 		border-bottom: 1px solid var(--color-border);

@@ -396,5 +396,26 @@ describe('TitleSearch', () => {
 			expect(onapply).toHaveBeenCalled();
 			expect(onseries).not.toHaveBeenCalled();
 		});
+
+		it('a poster-only apply on a TV job does not start episode matching', async () => {
+			mockSearchMetadata.mockResolvedValue({
+				candidates: [createCandidate({ title: 'Kolchak', year: 1974, kind: 'tv' })]
+			});
+			const onseries = vi.fn();
+			const onapply = vi.fn();
+			renderComponent(TitleSearch, {
+				props: {
+					job: createJob({ id: 'job_9', status: 'ripping', title: 'kolchak', media_type: 'tv' }),
+					onseries,
+					onapply
+				}
+			});
+			await fireEvent.click(screen.getByText('Search'));
+			await fireEvent.click(await screen.findByText('Kolchak'));
+			await fireEvent.click(screen.getByRole('button', { name: 'Apply Poster' }));
+			await waitFor(() => expect(onapply).toHaveBeenCalled());
+			expect(mockResolve).not.toHaveBeenCalled();
+			expect(onseries).not.toHaveBeenCalled();
+		});
 	});
 });

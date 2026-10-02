@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-utils';
 import Page from './+page.svelte';
 import { createJob, createJobDetail, createTrack } from '$lib/components/__fixtures__/job';
-import type { JobView, TrackView } from '$lib/types/api.gen';
+import type { IdentityView, JobView, TrackView } from '$lib/types/api.gen';
 
 // --- Mocks ---
 
@@ -90,10 +90,14 @@ vi.mock('$lib/api/ws', () => ({
 }));
 
 // Capture the page's ripper-event listener so a test can fire an event for this job.
-const ripperListeners: ((jobIds: Set<string>) => void)[] = [];
+type RipperListener = (jobIds: Set<string>, eventTypes: Map<string, Set<string>>) => void;
+const ripperListeners: RipperListener[] = [];
+function fireRipperEvent(jobId: string, eventType: string) {
+	ripperListeners.forEach((fn) => fn(new Set([jobId]), new Map([[jobId, new Set([eventType])]])));
+}
 vi.mock('$lib/stores/ripperEvents.svelte', () => ({
 	startRipperEvents: vi.fn(),
-	onRipperEvent: (fn: (jobIds: Set<string>) => void) => {
+	onRipperEvent: (fn: RipperListener) => {
 		ripperListeners.push(fn);
 		return () => ripperListeners.splice(ripperListeners.indexOf(fn), 1);
 	}
@@ -510,6 +514,7 @@ describe('Job detail page (v3)', () => {
 	describe('TV episode matching', () => {
 		afterEach(() => {
 			(authStore as unknown as { __setRole: (r: string | null) => void }).__setRole('admin');
+			vi.mocked(fetchIdentity).mockImplementation(() => new Promise(() => {}));
 		});
 
 		const tvJob = ({ tracks = [], ...job }: Partial<JobView> & { tracks?: TrackView[] } = {}) => ({
@@ -550,17 +555,27 @@ describe('Job detail page (v3)', () => {
 			);
 		});
 
-		it('shows matching after the flip until a ripper event for the job arrives', async () => {
+		it('shows matching after the flip until job.identity_updated arrives for the job', async () => {
 			mockFetchJob.mockResolvedValueOnce(tvJob({ media_type: 'movie', has_series: false }));
 			mockFetchJob.mockResolvedValue(tvJob());
 			renderComponent(Page);
 			await fireEvent.click(await screen.findByRole('radio', { name: 'TV' }));
 			expect(await screen.findByText('Matching episodes…')).toBeInTheDocument();
+			// The page awaits the panel's reload before clearing, so the identity must load.
+			vi.mocked(fetchIdentity).mockResolvedValue({ sources: {}, pin: null } as unknown as IdentityView);
 			const identityCalls = vi.mocked(fetchIdentity).mock.calls.length;
-			// Another job's event leaves it matching.
-			ripperListeners.forEach((fn) => fn(new Set(['job_other'])));
+			// Another job's identity update leaves it matching.
+			fireRipperEvent('job_other', 'job.identity_updated');
 			expect(screen.getByText('Matching episodes…')).toBeInTheDocument();
-			ripperListeners.forEach((fn) => fn(new Set(['job_42'])));
+			// The resolve's own event refreshes the job but the stage is still running.
+			const fetches = mockFetchJob.mock.calls.length;
+			fireRipperEvent('job_42', 'rip.identify_resolved');
+			await waitFor(() => expect(mockFetchJob.mock.calls.length).toBeGreaterThan(fetches));
+			await waitFor(() => expect(vi.mocked(fetchIdentity).mock.calls.length).toBeGreaterThan(identityCalls));
+			// Let the refresh fully settle before checking the state stuck.
+			await new Promise((r) => setTimeout(r, 50));
+			expect(screen.getByText('Matching episodes…')).toBeInTheDocument();
+			fireRipperEvent('job_42', 'job.identity_updated');
 			await waitFor(() => expect(screen.queryByText('Matching episodes…')).not.toBeInTheDocument());
 			expect(vi.mocked(fetchIdentity).mock.calls.length).toBeGreaterThan(identityCalls);
 		});
@@ -578,6 +593,17 @@ describe('Job detail page (v3)', () => {
 			} finally {
 				vi.useRealTimers();
 			}
+		});
+
+		it('keeps the type and shows an alert when the switch fails', async () => {
+			mockFetchJob.mockResolvedValue(tvJob({ media_type: 'movie', has_series: false }));
+			vi.mocked(setJobMediaType).mockRejectedValueOnce(new Error('409 Conflict'));
+			renderComponent(Page);
+			await fireEvent.click(await screen.findByRole('radio', { name: 'TV' }));
+			expect(await screen.findByRole('alert')).toHaveTextContent('409 Conflict');
+			expect(screen.getByRole('radio', { name: 'TV' })).toHaveAttribute('aria-checked', 'false');
+			expect(screen.getByRole('radio', { name: 'Movie' })).toHaveAttribute('aria-checked', 'true');
+			expect(screen.queryByRole('button', { name: 'Match Episodes' })).not.toBeInTheDocument();
 		});
 
 		it('asks before switching a job with hand-set episodes to Movie', async () => {
@@ -617,6 +643,7 @@ describe('Job detail page (v3)', () => {
 			expect(await screen.findByRole('button', { name: 'Match Episodes' })).toBeInTheDocument();
 			expect(screen.queryByRole('radiogroup', { name: 'Media type' })).not.toBeInTheDocument();
 			expect(screen.getByTestId('media-type-text')).toHaveTextContent('TV');
+			expect(screen.getByTestId('media-type-text')).toHaveClass('badge');
 		});
 	});
 });

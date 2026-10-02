@@ -2,9 +2,11 @@
 // NOTIFIER, not a data store: it holds no job state. It subscribes once to
 // the bare `ripper.events` and `transcode.events` topics, coalesces the
 // job_ids seen within a debounce window, and invokes each registered
-// listener once per flush with the accumulated set. Every listener (the
-// dashboard included) therefore also refreshes on transcode lifecycle
-// events, debounced. The name predates the transcode topic and is kept.
+// listener once per flush with the accumulated set, plus the event types
+// seen per job in that window (for listeners that care which event fired,
+// e.g. job.identity_updated). Every listener (the dashboard included)
+// therefore also refreshes on transcode lifecycle events, debounced. The
+// name predates the transcode topic and is kept.
 // Listeners re-run their own existing fetchers; polling stays untouched as
 // reconciliation (WS down => exactly today's behavior).
 //
@@ -19,12 +21,15 @@ import { wsClient, type WSEnvelope } from '$lib/api/ws';
 // back-to-back) into a single refresh.
 const DEBOUNCE_MS = 300;
 
-type Listener = (jobIds: Set<string>) => void;
+export type RipperEventTypes = Map<string, Set<string>>;
+type Listener = (jobIds: Set<string>, eventTypes: RipperEventTypes) => void;
 
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- notifier bookkeeping, never read reactively
 const listeners = new Set<Listener>();
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- notifier bookkeeping, never read reactively
 let pendingJobIds = new Set<string>();
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- notifier bookkeeping, never read reactively
+let pendingTypes: RipperEventTypes = new Map();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let unsubs: Array<() => void> = [];
 
@@ -38,6 +43,13 @@ function onEvent(env: WSEnvelope): void {
 	const id = jobIdOf(env);
 	if (id === null) return; // nothing to attribute — the poll covers it
 	pendingJobIds.add(id);
+	let types = pendingTypes.get(id);
+	if (!types) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- notifier bookkeeping, never read reactively
+		types = new Set();
+		pendingTypes.set(id, types);
+	}
+	types.add(env.event_type);
 	if (timer !== null) clearTimeout(timer);
 	timer = setTimeout(flush, DEBOUNCE_MS);
 }
@@ -45,10 +57,12 @@ function onEvent(env: WSEnvelope): void {
 function flush(): void {
 	timer = null;
 	const ids = pendingJobIds;
+	const types = pendingTypes;
 	pendingJobIds = new Set();
+	pendingTypes = new Map();
 	for (const listener of listeners) {
 		try {
-			listener(ids);
+			listener(ids, types);
 		} catch (err) {
 			// One page's throwing callback must not starve the others.
 			console.error('ripperEvents listener failed', err);
@@ -72,6 +86,8 @@ export function stopRipperEvents(): void {
 	}
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- notifier bookkeeping, never read reactively
 	pendingJobIds = new Set();
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- notifier bookkeeping, never read reactively
+	pendingTypes = new Map();
 }
 
 export function onRipperEvent(listener: Listener): () => void {
