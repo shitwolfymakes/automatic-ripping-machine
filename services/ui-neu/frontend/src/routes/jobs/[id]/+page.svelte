@@ -286,12 +286,8 @@
 						<span class="job-detail-year">({job.year})</span>
 					{/if}
 					<StatusBadge status={effectiveJobStatus(job)} />
-					{#if isVideoDisc}
-						{#if $isAdmin}
-							<MediaTypeSwitch {job} {handSetCount} onchanged={handleMediaTypeChanged} />
-						{:else}
-							<span class="badge" data-testid="media-type-text">{job.media_type === 'tv' ? 'TV' : 'Movie'}</span>
-						{/if}
+					{#if isVideoDisc && !$isAdmin}
+						<span class="badge" data-testid="media-type-text">{job.media_type === 'tv' ? 'TV' : 'Movie'}</span>
 					{/if}
 					{#if jobMeta.imdb_id && !isCdDisc}
 						<a
@@ -312,6 +308,10 @@
 
 					<!-- Action buttons pushed right -->
 					<div class="flex flex-wrap items-center gap-2 ml-auto">
+						<!-- The type is part of the identity, so its switch sits beside Edit identity. -->
+						{#if isVideoDisc && $isAdmin}
+							<MediaTypeSwitch {job} {handSetCount} onchanged={handleMediaTypeChanged} />
+						{/if}
 						{#if canResolve && $isAdmin}
 							<button
 								type="button"

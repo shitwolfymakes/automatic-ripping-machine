@@ -535,6 +535,18 @@ describe('Job detail page (v3)', () => {
 			expect(await screen.findByRole('button', { name: 'Match Episodes' })).toBeInTheDocument();
 		});
 
+		it('puts the Movie | TV switch, as one control, right before Edit identity', async () => {
+			mockFetchJob.mockResolvedValue(tvJob());
+			renderComponent(Page);
+			const editIdentity = await screen.findByTestId('identify-open');
+			const group = screen.getByRole('radiogroup', { name: 'Media type' });
+			expect(group).toContainElement(screen.getByRole('radio', { name: 'Movie' }));
+			expect(group).toContainElement(screen.getByRole('radio', { name: 'TV' }));
+			const switchRoot = group.parentElement!;
+			expect(switchRoot.parentElement).toBe(editIdentity.parentElement);
+			expect(switchRoot.nextElementSibling).toBe(editIdentity);
+		});
+
 		it('hides Match Episodes for a movie job', async () => {
 			mockFetchJob.mockResolvedValue(tvJob({ media_type: 'movie', has_series: false }));
 			renderComponent(Page);
