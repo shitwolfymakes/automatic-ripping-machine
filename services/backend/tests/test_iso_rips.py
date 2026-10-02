@@ -195,6 +195,23 @@ async def test_retire_logs_and_continues_when_removal_fails(caplog: pytest.LogCa
     assert "boom" in caplog.text
 
 
+@pytest.mark.asyncio
+async def test_retire_removes_the_rippers_iso_extraction(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A ripper stopped mid-rip (cancel, crash) can't remove its unpacked
+    image; retiring the drive does, and leaves other drives' extractions."""
+    monkeypatch.setattr(settings, "RAW_ROOT", str(tmp_path))
+    mine = tmp_path / ".iso-extract" / "drv_iso1" / "Blade Runner" / "BDMV"
+    other = tmp_path / ".iso-extract" / "drv_iso2" / "Alien" / "BDMV"
+    mine.mkdir(parents=True)
+    other.mkdir(parents=True)
+    (mine / "index.bdmv").write_bytes(b"x")
+
+    await iso_rips.retire_virtual_drive(FakeSession(), _Manager(), _virtual())  # type: ignore[arg-type]
+
+    assert not (tmp_path / ".iso-extract" / "drv_iso1").exists()
+    assert other.is_dir()
+
+
 # --- sweep -------------------------------------------------------------------
 
 

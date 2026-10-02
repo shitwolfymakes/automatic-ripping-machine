@@ -163,6 +163,34 @@ The ripper's `ARM_MANUAL_TRIGGER_ISO` test hook is gone. In its place:
   failure or a rejected identify. Its restart policy is `no`; the backend
   watchdog does the rest.
 
+### Images MakeMKV cannot open: the extract fallback
+
+MakeMKV normally reads the image directly (`iso:<file>`). Some images crash
+its image reader before it lists a title (seen with DVDFab UDF 2.50 Blu-ray
+backups: `makemkvcon info iso:` exits with SIGSEGV), although MakeMKV reads
+the same disc fine from a folder. Mounting the image is not an option: it
+needs `CAP_SYS_ADMIN`, loop devices and an AppArmor exception, and the ripper
+runs unprivileged.
+
+So when the direct scan of an ISO yields no titles, the scan dispatcher
+(`arm_ripper/scan/dispatcher.py::_scan_extracted`) unpacks the image with
+7-Zip's UDF reader (`arm_ripper/iso_extract.py`, `7z x -tudf`) into
+`/raw/.iso-extract/<drive_id>/<image name>/` and scans again. Once an
+extraction exists, `source.makemkv_source_url` answers `file:<folder>` for the
+image, so the rescan and the later rip both read the folder: the job shows the
+disc's titles and rips them like a disc (one `makemkvcon mkv … all`). The
+image's own volume label (blkid) replaces the folder name MakeMKV reports.
+
+- The fallback needs free space under `/raw` of at least the image size; it is
+  skipped (logged) otherwise. It also refuses an image with no `BDMV` or
+  `VIDEO_TS` folder at its root.
+- The ripper removes the extraction when its pipeline ends
+  (`run_source_mode`); `retire_virtual_drive` removes
+  `<RAW_ROOT>/.iso-extract/<drive_id>` too, for a ripper stopped first.
+- If the extracted folder has no titles either, the extraction is dropped and
+  the old path applies: `scan_data` classifies the image by its directory
+  names, and rip-start switches the job to the "ISO: Full-disc dump" session.
+
 ## The API
 
 All routes under `/api/iso` require writer (admin) access, except the `GET`,

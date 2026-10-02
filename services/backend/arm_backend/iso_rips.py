@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -69,6 +70,10 @@ _DEAD_STATES = frozenset({"exited", "dead", "missing"})
 
 _EPOCH = datetime.min.replace(tzinfo=UTC)
 
+# Where an ISO ripper unpacks an image MakeMKV could not open directly
+# (`arm_ripper.iso_extract.EXTRACT_ROOT`, one dir per drive id), under RAW_ROOT.
+EXTRACT_DIRNAME = ".iso-extract"
+
 
 def _mark_retired(db: AsyncSession, drive: Drive) -> None:
     drive.lifecycle = DriveLifecycle.RETIRED
@@ -92,6 +97,10 @@ async def retire_virtual_drive(db: AsyncSession, manager: RipperManager, drive: 
         await asyncio.to_thread(manager.remove, drive.id)
     except RipperManagerError as exc:
         logger.warning("iso drive_id=%s retired but its container was not removed: %s", drive.id, exc)
+    # The ripper removes its own extraction when its pipeline ends; this is the
+    # backstop for one stopped first (a cancel, a crash). Drive ids are ULIDs,
+    # so the path can't climb out of the extract root.
+    await asyncio.to_thread(shutil.rmtree, Path(settings.RAW_ROOT) / EXTRACT_DIRNAME / drive.id, True)
 
 
 async def _locked_drive(db: AsyncSession, drive_id: str) -> Drive | None:

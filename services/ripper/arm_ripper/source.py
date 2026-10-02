@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from arm_ripper import iso_extract
+
 
 def is_iso_source(path: str) -> bool:
     """True when `path` points at an `.iso` file on disk.
@@ -26,9 +28,13 @@ def is_iso_source(path: str) -> bool:
 
 
 def makemkv_source_url(path: str) -> str:
-    """Build the `dev:<device>` or `iso:<file>` URL MakeMKV expects.
+    """Build the `dev:<device>`, `iso:<file>` or `file:<folder>` URL MakeMKV expects.
 
-    Used by both `scan_disc` and `rip_disc`; centralising it here keeps
-    the two callsites in lockstep.
+    An ISO that `iso_extract` has unpacked (MakeMKV could not open the image
+    itself) is read as its extracted disc folder. Used by both `scan_disc`
+    and `rip_disc`; centralising it here keeps the two callsites in lockstep.
     """
+    folder = iso_extract.extracted_dir(path)
+    if folder is not None:
+        return f"file:{folder}"
     return f"iso:{path}" if is_iso_source(path) else f"dev:{path}"

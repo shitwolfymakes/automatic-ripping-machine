@@ -18,6 +18,7 @@ from arm_ripper.job_controller import JobController
 from arm_ripper.makemkv_key import refresh_makemkv_key
 from arm_ripper.recovery import boot_probe
 from arm_ripper.scan.makemkv import probe_makemkv_key
+from arm_ripper import iso_extract
 from arm_ripper.source import is_iso_source
 from arm_ripper.ws_client import WSClient
 
@@ -374,6 +375,9 @@ async def run_source_mode(controller: JobController, session_id: str | None) -> 
         if not task.cancelled():
             raise
         logger.info("source pipeline cancelled; exiting")
+    finally:
+        # The scratch copy of an image MakeMKV could only read once unpacked.
+        await asyncio.to_thread(iso_extract.discard_all)
 
 
 async def amain() -> None:
