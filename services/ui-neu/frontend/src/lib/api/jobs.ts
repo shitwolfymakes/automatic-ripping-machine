@@ -19,7 +19,6 @@ import type {
 	ManualTriggerResponse
 } from '$lib/types/api.gen';
 import { apiFetch, post } from './client';
-import { notAvailable } from './_stub';
 
 // ---------------------------------------------------------------------------
 // Job listing / detail (EXISTS in v3)
@@ -295,26 +294,4 @@ export function startWaitingJob(id: string): Promise<JobView> {
 // countdown; paused=false resumes with a fresh countdown.
 export function pauseWaitingJob(id: string, paused = true): Promise<JobView> {
 	return apiFetch<JobView>(`/api/jobs/${id}/review-pause?paused=${paused}`, { method: 'POST' });
-}
-
-// ---------------------------------------------------------------------------
-// MISSING in v3: no TVDB matching endpoint. TvdbMatch/EpisodeMatch are not
-// mounted yet; these reject before any fetch so a hidden path fails loudly.
-// ---------------------------------------------------------------------------
-
-export async function tvdbMatch(
-	_jobId: string,
-	_opts?: {
-		season?: number | null;
-		tolerance?: number | null;
-		apply?: boolean;
-		disc_number?: number | null;
-		disc_total?: number | null;
-	}
-): Promise<never> {
-	notAvailable('TVDB episode matching');
-}
-
-export async function fetchTvdbEpisodes(_jobId: string, _season: number): Promise<never> {
-	notAvailable('TVDB episode listing');
 }

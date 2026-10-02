@@ -16,10 +16,7 @@ import {
 	fetchNamingVariables,
 	namingPreview,
 	resolveJob,
-	applySession,
-	// MISSING in v3
-	tvdbMatch,
-	fetchTvdbEpisodes
+	applySession
 } from '../api/jobs';
 
 beforeEach(() => mockFetch.mockReset());
@@ -228,19 +225,5 @@ describe('applySession', () => {
 				body: JSON.stringify({ session_id: 'ses_1', overwrite: true })
 			})
 		);
-	});
-});
-
-// ---------------------------------------------------------------------------
-// MISSING in v3 — reject before any fetch
-// ---------------------------------------------------------------------------
-
-describe('MISSING in v3', () => {
-	it.each([
-		['tvdbMatch', () => tvdbMatch('job_1', { season: 2, apply: true })],
-		['fetchTvdbEpisodes', () => fetchTvdbEpisodes('job_1', 1)]
-	])('%s rejects with /not yet available in v3/', async (_name, call) => {
-		await expect(call()).rejects.toThrow(/not yet available in v3/);
-		expect(mockFetch).not.toHaveBeenCalled();
 	});
 });
