@@ -164,6 +164,8 @@ describe('Job detail page (v3)', () => {
 		const stores = (await import('$app/stores')) as unknown as { __setPageId: (id: string) => void };
 		stores.__setPageId('job_43');
 		await waitFor(() => expect(mockFetchJob).toHaveBeenCalledWith('job_43'));
+		// The mocked store is module-wide: put the id back for the tests that follow.
+		stores.__setPageId('job_42');
 	});
 
 	it('redirects to home on 404', async () => {
