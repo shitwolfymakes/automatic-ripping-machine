@@ -35,7 +35,7 @@ class DiscFolder:
 
 
 def disc_type(folder: Path) -> DiscType | None:
-    """"bluray" / "dvd" when `folder` holds a BDMV / VIDEO_TS tree, else None."""
+    """The disc type of `folder`: bluray / dvd by its BDMV / VIDEO_TS tree, else None."""
     if (folder / "BDMV").is_dir():
         return "bluray"
     if (folder / "VIDEO_TS").is_dir():
