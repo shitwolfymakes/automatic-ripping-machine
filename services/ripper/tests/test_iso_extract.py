@@ -219,3 +219,66 @@ async def test_extract_runs_7zz_when_that_is_the_only_7zip_binary(
     await iso_extract.extract(str(iso))
 
     assert argv[:2] == ["/usr/bin/7zz", "x"]
+
+
+def _fake_7z(monkeypatch: pytest.MonkeyPatch, *, rc: int, stderr: bytes) -> None:
+    """A 7z that writes a BDMV tree into its `-o` directory, then exits `rc`."""
+    monkeypatch.setattr(iso_extract.shutil, "which", lambda name: "/usr/bin/7zz" if name == "7zz" else None)
+
+    class _Proc:
+        returncode = rc
+
+        async def communicate(self) -> tuple[bytes, bytes]:
+            return b"", stderr
+
+    async def _exec(*args: str, **_k: object) -> _Proc:
+        out = next(a for a in args if a.startswith("-o"))[2:]
+        (Path(out) / "BDMV" / "STREAM").mkdir(parents=True)
+        return _Proc()
+
+    monkeypatch.setattr(iso_extract.asyncio, "create_subprocess_exec", _exec)
+
+
+async def test_extract_keeps_a_disc_whose_only_damage_is_outside_the_video_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DVDFab backups often carry unreadable CERTIFICATE / PS3_UPDATE files; 7z
+    then exits 2, but MakeMKV never reads those."""
+    iso = tmp_path / "MirrorMask.iso"
+    iso.write_bytes(b"\0")
+    _fake_7z(
+        monkeypatch,
+        rc=2,
+        stderr=b"ERROR: Data Error : CERTIFICATE/id.bdmv\nERROR: Data Error : PS3_UPDATE/PS3UPDAT.PUP\n"
+        b"ERROR: Data Error : PS3_VPRM/PARAM.SFO\n\nSub items Errors: 3\nArchives with Errors: 1\n",
+    )
+
+    root = await iso_extract.extract(str(iso))
+
+    assert root is not None
+    assert makemkv_source_url(str(iso)) == f"file:{root}"
+
+
+async def test_extract_drops_a_disc_with_damage_inside_the_video_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _scratch: Path
+) -> None:
+    iso = tmp_path / "m.iso"
+    iso.write_bytes(b"\0")
+    _fake_7z(
+        monkeypatch,
+        rc=2,
+        stderr=b"ERROR: Data Error : CERTIFICATE/id.bdmv\nERROR: Data Error : BDMV/STREAM/00001.m2ts\n",
+    )
+
+    assert await iso_extract.extract(str(iso)) is None
+    assert not any(_scratch.rglob("*"))
+
+
+async def test_extract_drops_a_fatal_7z_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _scratch: Path
+) -> None:
+    iso = tmp_path / "m.iso"
+    iso.write_bytes(b"\0")
+    _fake_7z(monkeypatch, rc=2, stderr=b"ERROR: /source/m.iso\nCan not open the file as archive\n")
+
+    assert await iso_extract.extract(str(iso)) is None

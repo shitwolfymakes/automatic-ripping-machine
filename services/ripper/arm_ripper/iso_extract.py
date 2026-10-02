@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import re
 import shutil
 from pathlib import Path
 
@@ -34,6 +35,9 @@ _VIDEO_DIRS = ("BDMV", "VIDEO_TS")
 # A 50 GB Blu-ray from a network share can take a while; this only stops a
 # 7z that hangs for good.
 _EXTRACT_TIMEOUT_SECONDS = 4 * 3600
+
+# 7-Zip's per-file failure lines, e.g. "ERROR: Data Error : CERTIFICATE/id.bdmv".
+_FILE_ERROR = re.compile(r"^ERROR: [^:\n]+ : (.+)$", re.MULTILINE)
 
 # Image path -> the extracted disc folder MakeMKV should read instead.
 _extracted: dict[str, Path] = {}
@@ -66,13 +70,13 @@ def _has_space(image: Path, scratch: Path) -> bool:
     return True
 
 
-async def _run_7z(image: Path, dest: Path) -> int | None:
+async def _run_7z(image: Path, dest: Path) -> bool:
     # Debian 12's `7zip` package (the ripper image) ships only `7zz`; p7zip
     # and newer Debian install `7z`.
     exe = shutil.which("7z") or shutil.which("7zz")
     if exe is None:
         logger.error("iso extract: 7-Zip (7z / 7zz) is not installed")
-        return None
+        return False
     proc = await asyncio.create_subprocess_exec(
         exe,
         "x",
@@ -93,9 +97,31 @@ async def _run_7z(image: Path, dest: Path) -> int | None:
             proc.kill()
         await proc.wait()
         raise
-    if proc.returncode not in (0, 1):  # 1 is 7-Zip's "warning", the files are out
-        logger.error("iso extract: 7z exited %s: %s", proc.returncode, stderr[-300:].decode(errors="replace"))
-    return proc.returncode
+    return _usable(image, proc.returncode, stderr.decode(errors="replace"))
+
+
+def _usable(image: Path, rc: int | None, stderr: str) -> bool:
+    """Whether 7z's result can be read as a disc folder.
+
+    0 is clean and 1 is 7-Zip's warning (the files are out). 2 is an error,
+    but DVDFab backups routinely carry unreadable CERTIFICATE / PS3_UPDATE /
+    PS3_VPRM files that MakeMKV never reads; when every failed file is outside
+    the BDMV / VIDEO_TS tree the disc is still usable. Any other failure (one
+    in the video tree, or one 7z can't attribute to a file) is fatal.
+    """
+    if rc in (0, 1):
+        return True
+    damaged = _FILE_ERROR.findall(stderr)
+    if rc == 2 and damaged and not any(p.split("/", 1)[0].upper() in _VIDEO_DIRS for p in damaged):
+        logger.warning(
+            "iso extract: %s: %d unreadable file(s) outside the video tree, ignored: %s",
+            image,
+            len(damaged),
+            ", ".join(damaged),
+        )
+        return True
+    logger.error("iso extract: 7z exited %s: %s", rc, stderr[-300:])
+    return False
 
 
 async def extract(image_path: str) -> Path | None:
@@ -115,12 +141,12 @@ async def extract(image_path: str) -> Path | None:
     await asyncio.to_thread(root.mkdir, parents=True)
     logger.info("iso extract: unpacking %s into %s", image, root)
     try:
-        rc = await _run_7z(image, root)
+        ok = await _run_7z(image, root)
     except BaseException:
         await asyncio.to_thread(shutil.rmtree, base, True)
         raise
-    if rc not in (0, 1) or not any((root / d).is_dir() for d in _VIDEO_DIRS):
-        if rc in (0, 1):
+    if not ok or not any((root / d).is_dir() for d in _VIDEO_DIRS):
+        if ok:
             logger.warning("iso extract: %s has no BDMV or VIDEO_TS folder; not a video disc", image)
         await asyncio.to_thread(shutil.rmtree, base, True)
         return None
