@@ -55,11 +55,13 @@ fetch() { # fetch <url> [curl-args...] — the mirror auth header goes to the mi
 }
 
 # fetch_any <file> <name> — download artifact <name> from upstream
-# ($UPSTREAM_BASE/<name>), then from the mirror ($MIRROR/<ver>/<name>), into
-# <file>. Fails only when every source fails. Needs MAKEMKV_VERSION.
+# ($UPSTREAM_BASE/<name>; makemkv.com keeps every release but the current one
+# under $UPSTREAM_BASE/old/, so a pinned MAKEMKV_VERSION resolves there), then
+# from the mirror ($MIRROR/<ver>/<name>), into <file>. Fails only when every
+# source fails. Needs MAKEMKV_VERSION.
 fetch_any() {
     local out="$1" name="$2" base
-    for base in "$UPSTREAM_BASE" ${MAKEMKV_MIRROR_URL:+"$MAKEMKV_MIRROR_URL/$MAKEMKV_VERSION"}; do
+    for base in "$UPSTREAM_BASE" "$UPSTREAM_BASE/old" ${MAKEMKV_MIRROR_URL:+"$MAKEMKV_MIRROR_URL/$MAKEMKV_VERSION"}; do
         if fetch "$base/$name" -o "$out"; then
             echo "fetched ${name} from ${base}"
             return 0
