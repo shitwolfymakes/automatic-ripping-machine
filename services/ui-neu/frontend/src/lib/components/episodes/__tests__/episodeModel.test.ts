@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { panelState, buildRows, placedCount, formatLength, activeSource } from '../episodeModel';
+import { failedSources, panelState, buildRows, placedCount, formatLength, activeSource } from '../episodeModel';
 import type { IdentityView, TrackIdentityView, JobView, TrackView, MatchPreview } from '$lib/types/api.gen';
 
 const job = (o: Partial<JobView> = {}) =>
@@ -107,4 +107,37 @@ it('activeSource also tolerates a bare setting name and ignores the manual claim
 	expect(activeSource(identity({ sources: { manual: { status: 'ok' }, episodes_tvmaze: { status: 'ok' } } }))).toBe(
 		'episodes_tvmaze'
 	);
+});
+
+describe('fix round 1', () => {
+	const errOnly = () =>
+		identity({ sources: { episodes_tmdb: { status: 'error', detail: 'boom' }, episodes_tvdb: { status: 'error' } } });
+	it('error-only is nomatch and names the failed sources', () => {
+		expect(panelState(job(), errOnly(), false)).toBe('nomatch');
+		expect(failedSources(errOnly())).toEqual([
+			{ id: 'episodes_tmdb', label: 'TMDb', detail: 'boom' },
+			{ id: 'episodes_tvdb', label: 'TVDB', detail: null }
+		]);
+	});
+	it('miss+error is nomatch, listing only the error', () => {
+		const id = identity({
+			sources: { episodes_tmdb: { status: 'miss' }, episodes_tvmaze: { status: 'error', detail: 'x' } }
+		});
+		expect(panelState(job(), id, false)).toBe('nomatch');
+		expect(failedSources(id).map((f) => f.id)).toEqual(['episodes_tvmaze']);
+	});
+	it('ok+error is applied', () => {
+		const id = identity({ sources: { episodes_tmdb: { status: 'ok' }, episodes_tvdb: { status: 'error' } } });
+		expect(panelState(job(), id, false)).toBe('applied');
+	});
+	it('any manual provenance value makes the row hand-set', () => {
+		const id = identity();
+		id.tracks![0].identity_provenance = { role: 'manual', episode_number: 'episodes_tmdb' };
+		expect(buildRows(tracks, id, null)[0]).toMatchObject({ handSet: true, origin: { kind: 'you' } });
+	});
+	it('precedence: matching > pinned > suggestion; manual-only is unavailable', () => {
+		expect(panelState(job(), identity({ pin: { episode: 'episodes_tmdb' } }), true)).toBe('matching');
+		expect(panelState(job(), identity({ pin: { episode: 'episodes_tmdb' } }, true), false)).toBe('pinned');
+		expect(panelState(job(), identity({ sources: { manual: { status: 'ok' } } }), false)).toBe('unavailable');
+	});
 });

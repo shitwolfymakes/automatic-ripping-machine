@@ -49,6 +49,12 @@ export function activeSource(identity: IdentityView): string | null {
 	return Object.keys(sources).find((id) => id.startsWith(EPISODE_PREFIX) && sources[id]?.status === 'ok') ?? null;
 }
 
+export function failedSources(identity: IdentityView): { id: string; label: string; detail: string | null }[] {
+	return Object.entries(identity.sources ?? {})
+		.filter(([id, s]) => id.startsWith(EPISODE_PREFIX) && s?.status === 'error')
+		.map(([id, s]) => ({ id, label: SOURCE_LABEL[id] ?? id, detail: s?.detail ?? null }));
+}
+
 export function panelState(job: JobView, identity: IdentityView | null, matching: boolean): PanelState {
 	if (!job.has_series) return 'noseries';
 	if (matching) return 'matching';
@@ -66,8 +72,8 @@ export function panelState(job: JobView, identity: IdentityView | null, matching
 
 function origin(t: TrackIdentityView, identity: IdentityView): Origin {
 	const prov = t.identity_provenance ?? {};
+	if (Object.values(prov).includes('manual')) return { kind: 'you', source: null };
 	const src = prov.episode_number ?? prov.role ?? null;
-	if (src === 'manual') return { kind: 'you', source: null };
 	if (src && src.startsWith(EPISODE_PREFIX)) {
 		return { kind: identity.sources?.[src]?.suggestion ? 'suggestion' : 'auto', source: src };
 	}
@@ -89,7 +95,7 @@ export function buildRows(tracks: TrackView[], identity: IdentityView, preview: 
 			code = episodeCode(t.season, t.episode_number, t.episode_number_end);
 			name = t.episode_name ?? '';
 		}
-		if (!code && proposal && o.kind !== 'you' && identity.sources?.[active ?? '']?.suggestion) {
+		if (!code && proposal && active && o.kind !== 'you' && identity.sources?.[active]?.suggestion) {
 			code = episodeCode(proposal.season, proposal.episode, proposal.episode_end);
 			name = proposal.episode_name ?? '';
 			o.kind = 'suggestion';
