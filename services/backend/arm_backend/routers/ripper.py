@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
+from arm_backend import iso_prepare
 from arm_backend.disc_dedupe import find_reusable_job_for_disc
 from arm_backend.auth import (
     require_drive_owner_by_job,
@@ -48,6 +49,7 @@ from arm_common.models import Track
 from arm_common.models._columns import enum_value_str
 from arm_common.schemas import (
     DriveDevicePathUpdateRequest,
+    IsoPrepareReport,
     flag_is_set,
     with_flags,
     HeldJobView,
@@ -314,6 +316,26 @@ async def heartbeat(req: RipperHeartbeatRequest, session: AsyncSession = Depends
     await session.commit()
 
 
+@router.post(
+    "/iso-prepare",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_service_token)],
+)
+async def iso_prepare_report(
+    req: IsoPrepareReport, request: Request, session: AsyncSession = Depends(get_session)
+) -> None:
+    """An ISO ripper's phase before its job exists (scanning, extracting with
+    progress). Kept in memory (`iso_prepare`) and pushed to the dashboard
+    through a non-persisted `ripper.events` event, which wakes its refresh."""
+    drive = (await session.execute(select(Drive).where(col(Drive.id) == req.drive_id))).scalar_one_or_none()
+    if drive is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
+    view = iso_prepare.record(req)
+    await _get_hub(request).emit(
+        topic="ripper.events", event_type="iso.preparing", payload=view.model_dump(mode="json"), persist=False
+    )
+
+
 @router.get("/drives/{drive_id}", response_model=Drive, dependencies=[Depends(require_service_token)])
 async def get_drive(drive_id: str, session: AsyncSession = Depends(get_session)) -> Drive:
     """This ripper's own row. Port-identity rippers read `device_path` from
@@ -481,6 +503,8 @@ async def identify(
     drive = (await session.execute(select(Drive).where(col(Drive.id) == req.drive_id))).scalar_one_or_none()
     if drive is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
+    # An ISO rip's job exists from here on; its "preparing" status is done.
+    iso_prepare.clear(drive.id)
 
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
 

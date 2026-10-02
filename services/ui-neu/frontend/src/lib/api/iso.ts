@@ -1,4 +1,4 @@
-import type { IsoLibraryListing, IsoRipCreated, IsoRipRequest } from '$lib/types/api.gen';
+import type { IsoLibraryListing, IsoPrepareView, IsoRipCreated, IsoRipRequest } from '$lib/types/api.gen';
 import { get, post, del, buildQuery } from './client';
 
 export function fetchIsoLibrary(subpath = ''): Promise<IsoLibraryListing> {
@@ -12,4 +12,9 @@ export function startIsoRip(path: string, sessionId?: string | null): Promise<Is
 
 export function cancelIsoRip(driveId: string): Promise<void> {
 	return del(`/api/iso/rips/${driveId}`);
+}
+
+/** ISO rips whose ripper is still scanning or unpacking the image (no job yet). */
+export function fetchIsoPreparing(): Promise<IsoPrepareView[]> {
+	return get<IsoPrepareView[]>('/api/iso/rips/preparing');
 }

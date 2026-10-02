@@ -19,12 +19,18 @@ vi.mock('$lib/api/transcoder', () => ({
 	fetchTranscoderJobs: vi.fn(() => Promise.resolve([]))
 }));
 
+vi.mock('$lib/api/iso', () => ({
+	fetchIsoPreparing: vi.fn(() => Promise.resolve([]))
+}));
+
 vi.mock('$lib/api/notifications', () => ({
 	fetchNotificationCount: vi.fn(() => Promise.resolve({ unseen: 0 }))
 }));
 
 import { fetchDrives } from '$lib/api/drives';
-import type { DriveView } from '$lib/types/api.gen';
+import { fetchIsoPreparing } from '$lib/api/iso';
+import { fetchJobs } from '$lib/api/jobs';
+import type { DriveView, IsoPrepareView, JobView } from '$lib/types/api.gen';
 import { fetchDashboard } from '../dashboard';
 
 const mockFetchDrives = vi.mocked(fetchDrives);
@@ -71,5 +77,46 @@ describe('fetchDashboard', () => {
 
 		expect(dash.drives_online).toBe(0);
 		expect(dash.iso_sources).toEqual({});
+	});
+
+	it('lists ISO rips that are preparing: live virtual drives with no job yet', async () => {
+		mockFetchDrives.mockResolvedValue([
+			{ id: 'drv_prep', kind: 'virtual', lifecycle: 'enrolled', display_name: 'MirrorMask.iso' },
+			{ id: 'drv_busy', kind: 'virtual', lifecycle: 'enrolled', display_name: 'Busy.iso' },
+			{ id: 'drv_done', kind: 'virtual', lifecycle: 'retired', display_name: 'Done.iso' }
+		] as DriveView[]);
+		vi.mocked(fetchJobs).mockResolvedValueOnce([{ id: 'job_1', drive_id: 'drv_busy', status: 'ripping' }] as JobView[]);
+		const at = '2026-10-02T14:00:00Z';
+		vi.mocked(fetchIsoPreparing).mockResolvedValueOnce([
+			{
+				drive_id: 'drv_prep',
+				phase: 'extracting',
+				progress_pct: 42,
+				current_file: 'BDMV/STREAM/1.m2ts',
+				updated_at: at
+			},
+			{ drive_id: 'drv_busy', phase: 'scanning', updated_at: at },
+			{ drive_id: 'drv_done', phase: 'scanning', updated_at: at }
+		] as IsoPrepareView[]);
+
+		const dash = await fetchDashboard();
+
+		expect(dash.preparing).toEqual([
+			{
+				drive_id: 'drv_prep',
+				phase: 'extracting',
+				progress_pct: 42,
+				current_file: 'BDMV/STREAM/1.m2ts',
+				updated_at: at,
+				iso_name: 'MirrorMask.iso'
+			}
+		]);
+	});
+
+	it('shows no preparing rips when that fetch fails', async () => {
+		mockFetchDrives.mockResolvedValue([] as DriveView[]);
+		vi.mocked(fetchIsoPreparing).mockRejectedValueOnce(new Error('boom'));
+
+		expect((await fetchDashboard()).preparing).toEqual([]);
 	});
 });

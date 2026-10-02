@@ -1,9 +1,9 @@
 import logging
 
-from arm_common import DiscType
+from arm_common import DiscType, IsoPreparePhase
 from arm_common.schemas import ScanResult
 
-from arm_ripper import iso_extract
+from arm_ripper import iso_extract, prepare
 from arm_ripper.scan.data import scan_data
 from arm_ripper.scan.makemkv import ScanError, scan_disc as scan_makemkv
 from arm_ripper.scan.musicbrainz_disc import scan_cd
@@ -20,6 +20,7 @@ async def _scan_extracted(device_path: str) -> ScanResult | None:
     the image can't be unpacked or the folder has no titles either."""
     if await iso_extract.extract(device_path) is None:
         return None
+    await prepare.report(IsoPreparePhase.SCANNING)
     try:
         result: ScanResult | None = await scan_makemkv(device_path)
     except ScanError as e:
@@ -45,7 +46,18 @@ async def _scan_extracted(device_path: str) -> ScanResult | None:
 
 
 async def scan(device_path: str) -> ScanResult:
-    """Heuristic disc scan: MakeMKV first, fall back to MusicBrainz disc-id, then data."""
+    """Heuristic disc scan: MakeMKV first, fall back to MusicBrainz disc-id, then data.
+
+    An ISO ripper reports this as its "preparing" phase (`prepare`, a no-op
+    for a physical drive) until the scan is done and identify takes over."""
+    await prepare.report(IsoPreparePhase.SCANNING)
+    try:
+        return await _scan(device_path)
+    finally:
+        await prepare.finish()
+
+
+async def _scan(device_path: str) -> ScanResult:
     try:
         result = await scan_makemkv(device_path)
     except ScanError as e:

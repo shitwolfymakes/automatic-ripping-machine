@@ -207,6 +207,7 @@ describe('Layout', () => {
 			drives_online: 1,
 			drive_names: {},
 			iso_sources: {},
+			preparing: [],
 			notification_count: 0,
 			ripping_enabled: true,
 			makemkv_key_valid: null,

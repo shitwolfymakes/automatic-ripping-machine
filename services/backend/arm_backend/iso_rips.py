@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlmodel import col, select
 
-from arm_backend import file_browser
+from arm_backend import file_browser, iso_prepare
 from arm_backend.config import settings
 from arm_backend.file_browser import PathError
 from arm_backend.iso_library import library_configured
@@ -93,6 +93,7 @@ async def retire_virtual_drive(db: AsyncSession, manager: RipperManager, drive: 
     drive, so the next reconcile removes it as an orphan."""
     _mark_retired(db, drive)
     await db.commit()
+    iso_prepare.clear(drive.id)
     try:
         await asyncio.to_thread(manager.remove, drive.id)
     except RipperManagerError as exc:

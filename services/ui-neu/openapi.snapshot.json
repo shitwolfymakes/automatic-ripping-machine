@@ -258,6 +258,59 @@
         }
       }
     },
+    "/api/ripper/iso-prepare": {
+      "post": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Iso Prepare Report",
+        "description": "An ISO ripper's phase before its job exists (scanning, extracting with\nprogress). Kept in memory (`iso_prepare`) and pushed to the dashboard\nthrough a non-persisted `ripper.events` event, which wakes its refresh.",
+        "operationId": "iso_prepare_report_api_ripper_iso_prepare_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IsoPrepareReport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ripper/drives/{drive_id}": {
       "get": {
         "tags": [
@@ -2938,6 +2991,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/IsoLibraryListing"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/iso/rips/preparing": {
+      "get": {
+        "tags": [
+          "iso"
+        ],
+        "summary": "Preparing",
+        "description": "ISO rips whose ripper is still scanning or unpacking the image, before\nidentify creates the job (`iso_prepare`).",
+        "operationId": "preparing_api_iso_rips_preparing_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IsoPrepareView"
+                  },
+                  "title": "Response Preparing Api Iso Rips Preparing Get"
                 }
               }
             }
@@ -12383,6 +12490,103 @@
           "entries"
         ],
         "title": "IsoLibraryListing"
+      },
+      "IsoPreparePhase": {
+        "type": "string",
+        "enum": [
+          "scanning",
+          "extracting"
+        ],
+        "title": "IsoPreparePhase",
+        "description": "What an ISO ripper is doing before its job exists: scanning the image\n(or its extracted folder) or unpacking it for MakeMKV."
+      },
+      "IsoPrepareReport": {
+        "properties": {
+          "drive_id": {
+            "type": "string",
+            "title": "Drive Id"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/IsoPreparePhase"
+          },
+          "progress_pct": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress Pct"
+          },
+          "current_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drive_id",
+          "phase"
+        ],
+        "title": "IsoPrepareReport",
+        "description": "POST /api/ripper/iso-prepare: what an ISO ripper is doing before\nidentify creates its job. Sent on every phase change, throttled progress\nupdates, and as a keepalive while a phase runs."
+      },
+      "IsoPrepareView": {
+        "properties": {
+          "drive_id": {
+            "type": "string",
+            "title": "Drive Id"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/IsoPreparePhase"
+          },
+          "progress_pct": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress Pct"
+          },
+          "current_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current File"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drive_id",
+          "phase",
+          "updated_at"
+        ],
+        "title": "IsoPrepareView",
+        "description": "GET /api/iso/rips/preparing: one ISO rip that has no job yet."
       },
       "IsoRipCreated": {
         "properties": {

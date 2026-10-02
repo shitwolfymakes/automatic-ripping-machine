@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend import file_browser
+from arm_backend import file_browser, iso_prepare
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.db import get_session
 from arm_backend.iso_library import library_configured, library_host_path
@@ -23,7 +23,7 @@ from arm_backend.iso_rips import IsoRipError, cancel_iso_rip, create_iso_rip
 from arm_backend.ripper_manager import RipperManager
 from arm_backend.ws import WSHub
 from arm_common import Drive, DriveKind, DriveLifecycle, User
-from arm_common.schemas import IsoLibraryEntry, IsoLibraryListing, IsoRipCreated, IsoRipRequest
+from arm_common.schemas import IsoLibraryEntry, IsoLibraryListing, IsoPrepareView, IsoRipCreated, IsoRipRequest
 
 logger = logging.getLogger("arm_backend.routers.iso")
 
@@ -105,6 +105,13 @@ async def library(
         parent_subpath=listing.parent_subpath,
         entries=entries,
     )
+
+
+@router.get("/rips/preparing", response_model=list[IsoPrepareView])
+async def preparing(_: User = Depends(require_jwt)) -> list[IsoPrepareView]:
+    """ISO rips whose ripper is still scanning or unpacking the image, before
+    identify creates the job (`iso_prepare`)."""
+    return iso_prepare.views()
 
 
 @router.post("/rips", response_model=IsoRipCreated, status_code=status.HTTP_201_CREATED)

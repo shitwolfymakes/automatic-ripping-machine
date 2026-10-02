@@ -1894,6 +1894,62 @@ export type IsoLibraryListing = {
 };
 
 /**
+ * IsoPreparePhase
+ *
+ * What an ISO ripper is doing before its job exists: scanning the image
+ * (or its extracted folder) or unpacking it for MakeMKV.
+ */
+export type IsoPreparePhase = 'scanning' | 'extracting';
+
+/**
+ * IsoPrepareReport
+ *
+ * POST /api/ripper/iso-prepare: what an ISO ripper is doing before
+ * identify creates its job. Sent on every phase change, throttled progress
+ * updates, and as a keepalive while a phase runs.
+ */
+export type IsoPrepareReport = {
+    /**
+     * Drive Id
+     */
+    drive_id: string;
+    phase: IsoPreparePhase;
+    /**
+     * Progress Pct
+     */
+    progress_pct?: number | null;
+    /**
+     * Current File
+     */
+    current_file?: string | null;
+};
+
+/**
+ * IsoPrepareView
+ *
+ * GET /api/iso/rips/preparing: one ISO rip that has no job yet.
+ */
+export type IsoPrepareView = {
+    /**
+     * Drive Id
+     */
+    drive_id: string;
+    phase: IsoPreparePhase;
+    /**
+     * Progress Pct
+     */
+    progress_pct?: number | null;
+    /**
+     * Current File
+     */
+    current_file?: string | null;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
  * IsoRipCreated
  */
 export type IsoRipCreated = {
@@ -5083,6 +5139,37 @@ export type HeartbeatApiRipperHeartbeatPostResponses = {
 
 export type HeartbeatApiRipperHeartbeatPostResponse = HeartbeatApiRipperHeartbeatPostResponses[keyof HeartbeatApiRipperHeartbeatPostResponses];
 
+export type IsoPrepareReportApiRipperIsoPreparePostData = {
+    body: IsoPrepareReport;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/ripper/iso-prepare';
+};
+
+export type IsoPrepareReportApiRipperIsoPreparePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type IsoPrepareReportApiRipperIsoPreparePostError = IsoPrepareReportApiRipperIsoPreparePostErrors[keyof IsoPrepareReportApiRipperIsoPreparePostErrors];
+
+export type IsoPrepareReportApiRipperIsoPreparePostResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type IsoPrepareReportApiRipperIsoPreparePostResponse = IsoPrepareReportApiRipperIsoPreparePostResponses[keyof IsoPrepareReportApiRipperIsoPreparePostResponses];
+
 export type GetDriveApiRipperDrivesDriveIdGetData = {
     body?: never;
     headers?: {
@@ -6619,6 +6706,39 @@ export type LibraryApiIsoLibraryGetResponses = {
 };
 
 export type LibraryApiIsoLibraryGetResponse = LibraryApiIsoLibraryGetResponses[keyof LibraryApiIsoLibraryGetResponses];
+
+export type PreparingApiIsoRipsPreparingGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/iso/rips/preparing';
+};
+
+export type PreparingApiIsoRipsPreparingGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreparingApiIsoRipsPreparingGetError = PreparingApiIsoRipsPreparingGetErrors[keyof PreparingApiIsoRipsPreparingGetErrors];
+
+export type PreparingApiIsoRipsPreparingGetResponses = {
+    /**
+     * Response Preparing Api Iso Rips Preparing Get
+     *
+     * Successful Response
+     */
+    200: Array<IsoPrepareView>;
+};
+
+export type PreparingApiIsoRipsPreparingGetResponse = PreparingApiIsoRipsPreparingGetResponses[keyof PreparingApiIsoRipsPreparingGetResponses];
 
 export type CreateRipApiIsoRipsPostData = {
     body: IsoRipRequest;

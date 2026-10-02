@@ -67,6 +67,14 @@ class DriveSourceKind(StrEnum):
     ISO = "iso"
 
 
+class IsoPreparePhase(StrEnum):
+    """What an ISO ripper is doing before its job exists: scanning the image
+    (or its extracted folder) or unpacking it for MakeMKV."""
+
+    SCANNING = "scanning"
+    EXTRACTING = "extracting"
+
+
 class DriveIdentityKind(StrEnum):
     """What a Drive row's identity is keyed on. BY_ID is the udev
     /dev/disk/by-id link name (stable across replug and renumbering); PORT

@@ -8,6 +8,7 @@ const emptyDashboard: DashboardData = {
 	drives_online: 0,
 	drive_names: {},
 	iso_sources: {},
+	preparing: [],
 	notification_count: 0,
 	ripping_enabled: true,
 	makemkv_key_valid: null,

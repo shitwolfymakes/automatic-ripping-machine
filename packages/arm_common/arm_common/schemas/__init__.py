@@ -58,6 +58,8 @@ from arm_common.schemas.identity_api import (
 from arm_common.schemas.iso import (
     IsoLibraryEntry,
     IsoLibraryListing,
+    IsoPrepareReport,
+    IsoPrepareView,
     IsoRipCreated,
     IsoRipRequest,
 )
@@ -276,6 +278,8 @@ __all__ = [
     "InAppChannelConfig",
     "IsoLibraryEntry",
     "IsoLibraryListing",
+    "IsoPrepareReport",
+    "IsoPrepareView",
     "IsoRipCreated",
     "IsoRipRequest",
     "JOB_CLAIM_FIELDS",

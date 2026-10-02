@@ -3,7 +3,7 @@ from typing import Any
 
 import httpx
 
-from arm_common import Drive, DriveMediaStatus, Job, KeydbState, MakemkvKeyState, MakemkvSdfState
+from arm_common import Drive, DriveMediaStatus, IsoPreparePhase, Job, KeydbState, MakemkvKeyState, MakemkvSdfState
 from arm_common.schemas import (
     HeldJobView,
     IdentifyRequest,
@@ -13,6 +13,7 @@ from arm_common.schemas import (
     MakemkvKeyStatusReport,
     RegisterRequest,
     RipperConfigView,
+    IsoPrepareReport,
     RipperHeartbeatRequest,
     RipStartResponse,
     ScanResult,
@@ -73,6 +74,14 @@ class BackendClient:
     async def heartbeat(self, *, drive_id: str, media_status: DriveMediaStatus) -> None:
         req = RipperHeartbeatRequest(drive_id=drive_id, media_status=media_status)
         r = await self._client.post("/api/ripper/heartbeat", json=req.model_dump(mode="json"))
+        r.raise_for_status()
+
+    async def report_iso_prepare(
+        self, *, drive_id: str, phase: IsoPreparePhase, progress_pct: int | None, current_file: str | None
+    ) -> None:
+        """An ISO ripper's phase before its job exists (`arm_ripper.prepare`)."""
+        req = IsoPrepareReport(drive_id=drive_id, phase=phase, progress_pct=progress_pct, current_file=current_file)
+        r = await self._client.post("/api/ripper/iso-prepare", json=req.model_dump(mode="json"))
         r.raise_for_status()
 
     async def update_device_path(self, *, drive_id: str, device_path: str) -> None:

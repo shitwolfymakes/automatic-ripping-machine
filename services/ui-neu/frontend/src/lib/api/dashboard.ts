@@ -1,6 +1,7 @@
-import type { JobView, JobStatus, TranscodeTaskView, ConfigView } from '$lib/types/api.gen';
+import type { JobView, JobStatus, TranscodeTaskView, ConfigView, IsoPrepareView } from '$lib/types/api.gen';
 import { apiFetch } from './client';
 import { fetchDrives } from './drives';
+import { fetchIsoPreparing } from './iso';
 import { fetchJobs } from './jobs';
 import { fetchTranscoderStats, fetchTranscoderJobs } from './transcoder';
 import { fetchNotificationCount } from './notifications';
@@ -24,6 +25,11 @@ export interface TranscoderStats {
 	pending?: number | null;
 }
 
+/** An ISO rip whose ripper is scanning or unpacking the image: no job yet. */
+export interface IsoPreparing extends IsoPrepareView {
+	iso_name: string;
+}
+
 export interface DashboardData {
 	db_available: boolean;
 	arm_online: boolean;
@@ -36,6 +42,9 @@ export interface DashboardData {
 	// (one per in-flight ISO rip). Lets the dashboard swap the drive chip for
 	// an ISO source chip without a second fetch.
 	iso_sources: Record<string, string>;
+	// ISO rips with no job yet (scanning / unpacking the image), so the
+	// dashboard can show them before identify creates the job.
+	preparing: IsoPreparing[];
 	notification_count: number;
 	ripping_enabled: boolean;
 	makemkv_key_valid: boolean | null;
@@ -67,16 +76,16 @@ function fetchConfig(): Promise<ConfigView> {
  * `transcoder_online` are derived from which fetches settled.
  */
 export async function fetchDashboard(): Promise<DashboardData> {
-	const [configRes, jobsRes, drivesRes, transcodesRes, transcoderStatsRes, notificationsRes] = await Promise.allSettled(
-		[
+	const [configRes, jobsRes, drivesRes, transcodesRes, transcoderStatsRes, notificationsRes, preparingRes] =
+		await Promise.allSettled([
 			fetchConfig(),
 			fetchJobs(),
 			fetchDrives({ includeRetired: true }),
 			fetchTranscoderJobs(),
 			fetchTranscoderStats(),
-			fetchNotificationCount()
-		]
-	);
+			fetchNotificationCount(),
+			fetchIsoPreparing()
+		]);
 
 	const config = configRes.status === 'fulfilled' ? configRes.value : null;
 	const jobs = jobsRes.status === 'fulfilled' ? jobsRes.value : null;
@@ -104,6 +113,13 @@ export async function fetchDashboard(): Promise<DashboardData> {
 		}
 	}
 
+	// Only a live ISO rip that has no active job yet; once identify creates
+	// the job, the job's own row takes over.
+	const jobDrives = new Set(activeJobs.map((j) => j.drive_id));
+	const preparing: IsoPreparing[] = (preparingRes.status === 'fulfilled' ? preparingRes.value : [])
+		.filter((p) => p.drive_id in isoSources && !jobDrives.has(p.drive_id))
+		.map((p) => ({ ...p, iso_name: isoSources[p.drive_id] }));
+
 	const activeTranscodes = (transcodes ?? []).filter((t) => IN_PROGRESS_TRANSCODE_STATUSES.has(t.status));
 
 	return {
@@ -115,6 +131,7 @@ export async function fetchDashboard(): Promise<DashboardData> {
 		drives_online: (drives ?? []).filter((d) => d.kind === 'optical' && d.lifecycle !== 'retired').length,
 		drive_names: driveNames,
 		iso_sources: isoSources,
+		preparing,
 		notification_count: notifications?.unseen ?? 0,
 		ripping_enabled: config ? !config.ripping_paused : true,
 		makemkv_key_valid: config?.makemkv_key_valid ?? null,

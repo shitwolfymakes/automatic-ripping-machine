@@ -191,6 +191,27 @@ image's own volume label (blkid) replaces the folder name MakeMKV reports.
   the old path applies: `scan_data` classifies the image by its directory
   names, and rip-start switches the job to the "ISO: Full-disc dump" session.
 
+### Preparing: before the job exists
+
+An ISO rip has no job until identify, and the scan before it can be long
+(MakeMKV opening a Blu-ray image, or the extract fallback unpacking 25-50 GB
+over a network share). So the ripper reports a **preparing** phase instead:
+
+- `arm_ripper/prepare.py`, configured only in source mode, posts
+  `POST /api/ripper/iso-prepare` (`IsoPrepareReport`: `scanning`, or
+  `extracting` with the percent and current file parsed from 7-Zip's `-bsp1`
+  output). Phase changes go out at once, progress at most every 3 s, and the
+  current phase is re-sent every 15 s as a keepalive. Failures are logged and
+  ignored.
+- The backend keeps the latest report per drive **in memory**
+  (`arm_backend/iso_prepare.py`; no migration, the backend is one process)
+  and emits a non-persisted `ripper.events` / `iso.preparing` event, which
+  wakes the dashboard's refresh. A status not refreshed for 60 s ages out;
+  identify (the job exists) and retire (the rip is over) clear it.
+- `GET /api/iso/rips/preparing` lists them; the dashboard shows a
+  **PREPARING** section (`IsoPreparingRow`) for every live virtual drive that
+  has no active job yet, with the phase, progress, current file and Cancel.
+
 ## The API
 
 All routes under `/api/iso` require writer (admin) access, except the `GET`,

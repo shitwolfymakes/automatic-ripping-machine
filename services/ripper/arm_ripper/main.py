@@ -18,7 +18,7 @@ from arm_ripper.job_controller import JobController
 from arm_ripper.makemkv_key import refresh_makemkv_key
 from arm_ripper.recovery import boot_probe
 from arm_ripper.scan.makemkv import probe_makemkv_key
-from arm_ripper import iso_extract
+from arm_ripper import iso_extract, prepare
 from arm_ripper.source import is_iso_source
 from arm_ripper.ws_client import WSClient
 
@@ -420,6 +420,9 @@ async def amain() -> None:
             ssl_context=ssl_ctx,
         ) as ws:
             if source_mode:
+                # Until identify creates the job, the dashboard shows this rip
+                # through its "preparing" reports (scanning / extracting).
+                prepare.configure(client, drive_id)
                 # The backend watchdog retires the drive once this container
                 # exits; it must not time out and exit FAILED while the
                 # operator is still parked at AWAITING_USER_ID / AWAITING_REVIEW.

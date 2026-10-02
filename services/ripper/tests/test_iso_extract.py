@@ -54,6 +54,27 @@ def _scratch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     iso_extract.discard_all()
 
 
+class _Stream:
+    def __init__(self, data: bytes) -> None:
+        self._data = data
+
+    async def read(self, _n: int = -1) -> bytes:
+        data, self._data = self._data, b""
+        return data
+
+
+class _Proc:
+    """A finished 7z: empty progress on stdout, `stderr` on stderr."""
+
+    def __init__(self, rc: int, stderr: bytes) -> None:
+        self.returncode = rc
+        self.stdout = _Stream(b"")
+        self.stderr = _Stream(stderr)
+
+    async def wait(self) -> int:
+        return self.returncode
+
+
 # --- extract ---------------------------------------------------------------
 
 
@@ -204,15 +225,9 @@ async def test_extract_runs_7zz_when_that_is_the_only_7zip_binary(
     monkeypatch.setattr(iso_extract.shutil, "which", lambda name: "/usr/bin/7zz" if name == "7zz" else None)
     argv: list[str] = []
 
-    class _Proc:
-        returncode = 0
-
-        async def communicate(self) -> tuple[bytes, bytes]:
-            return b"", b""
-
     async def _exec(*args: str, **_k: object) -> _Proc:
         argv.extend(args)
-        return _Proc()
+        return _Proc(0, b"")
 
     monkeypatch.setattr(iso_extract.asyncio, "create_subprocess_exec", _exec)
 
@@ -225,16 +240,10 @@ def _fake_7z(monkeypatch: pytest.MonkeyPatch, *, rc: int, stderr: bytes) -> None
     """A 7z that writes a BDMV tree into its `-o` directory, then exits `rc`."""
     monkeypatch.setattr(iso_extract.shutil, "which", lambda name: "/usr/bin/7zz" if name == "7zz" else None)
 
-    class _Proc:
-        returncode = rc
-
-        async def communicate(self) -> tuple[bytes, bytes]:
-            return b"", stderr
-
     async def _exec(*args: str, **_k: object) -> _Proc:
         out = next(a for a in args if a.startswith("-o"))[2:]
         (Path(out) / "BDMV" / "STREAM").mkdir(parents=True)
-        return _Proc()
+        return _Proc(rc, stderr)
 
     monkeypatch.setattr(iso_extract.asyncio, "create_subprocess_exec", _exec)
 

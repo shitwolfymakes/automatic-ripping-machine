@@ -24,6 +24,9 @@ import re
 import shutil
 from pathlib import Path
 
+from arm_common import IsoPreparePhase
+from arm_ripper import prepare
+
 logger = logging.getLogger("arm_ripper.iso_extract")
 
 # Must match the backend's `iso_rips.EXTRACT_DIRNAME` under RAW_ROOT.
@@ -39,12 +42,25 @@ _EXTRACT_TIMEOUT_SECONDS = 4 * 3600
 # 7-Zip's per-file failure lines, e.g. "ERROR: Data Error : CERTIFICATE/id.bdmv".
 _FILE_ERROR = re.compile(r"^ERROR: [^:\n]+ : (.+)$", re.MULTILINE)
 
+# One 7-Zip progress segment (`-bsp1`, segments separated by backspaces):
+# " 75% 3 - BDMV/STREAM/00002.m2ts" or just " 12%".
+_PROGRESS = re.compile(r"^\s*(\d{1,3})%(?:\s+\d+)?(?:\s+-\s+(.+?))?\s*$")
+
 # Image path -> the extracted disc folder MakeMKV should read instead.
 _extracted: dict[str, Path] = {}
 
 
 def extracted_dir(image_path: str) -> Path | None:
     return _extracted.get(image_path)
+
+
+def parse_progress(text: str) -> tuple[int, str | None] | None:
+    """The latest (percent, current file) in 7-Zip's `-bsp1` output, or None."""
+    for segment in reversed(re.split(r"[\b\r\n]+", text)):
+        m = _PROGRESS.match(segment)
+        if m:
+            return int(m.group(1)), m.group(2)
+    return None
 
 
 def _drive_dir() -> Path:
@@ -82,15 +98,31 @@ async def _run_7z(image: Path, dest: Path) -> bool:
         "x",
         "-tudf",
         "-y",
-        "-bd",
+        "-bsp1",  # progress to stdout, read below for the "preparing" report
+        "-bso0",  # no file listing on stdout
         f"-o{dest}",
         "--",
         str(image),
-        stdout=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
+    assert proc.stdout is not None and proc.stderr is not None
+    stdout, stderr_stream = proc.stdout, proc.stderr
+
+    async def _progress() -> None:
+        await prepare.report(IsoPreparePhase.EXTRACTING, 0, None)
+        tail = ""
+        while chunk := await stdout.read(4096):
+            tail = (tail + chunk.decode(errors="replace"))[-1024:]
+            parsed = parse_progress(tail)
+            if parsed is not None:
+                await prepare.report(IsoPreparePhase.EXTRACTING, *parsed)
+
     try:
-        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=_EXTRACT_TIMEOUT_SECONDS)
+        _, stderr = await asyncio.wait_for(
+            asyncio.gather(_progress(), stderr_stream.read()), timeout=_EXTRACT_TIMEOUT_SECONDS
+        )
+        await proc.wait()
     except BaseException:
         # Timeout or the pipeline being cancelled: never leave 7z writing.
         with contextlib.suppress(ProcessLookupError):
