@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/test-utils';
 import Layout from '../+layout.svelte';
 import { createRawSnippet } from 'svelte';
 
@@ -109,6 +109,21 @@ vi.mock('$lib/api/dashboard', () => ({
 	setRippingEnabled: vi.fn(() => Promise.resolve())
 }));
 
+// The gear menu opens the real IsoPicker; keep its loads off the (partly
+// mocked) API client, which has no `get` / `ApiError` here.
+const fetchIsoFoldersMock = vi.fn(() => Promise.resolve({ host_path: '/mnt/iso', entries: [], partial: false }));
+vi.mock('$lib/api/iso', () => ({
+	fetchIsoFolders: () => fetchIsoFoldersMock(),
+	fetchIsoLibrary: vi.fn(() =>
+		Promise.resolve({ host_path: '/mnt/iso', subpath: '', parent_subpath: null, entries: [] })
+	),
+	startIsoRip: vi.fn(),
+	cancelIsoRip: vi.fn()
+}));
+vi.mock('$lib/api/sessions', () => ({
+	fetchSessions: vi.fn(() => Promise.resolve([]))
+}));
+
 function childSnippet() {
 	return createRawSnippet(() => ({
 		render: () => '<p>Page Content</p>'
@@ -208,6 +223,7 @@ describe('Layout guest gating', () => {
 			await fireEvent.click(screen.getByTitle('Quick actions'));
 			await fireEvent.click(screen.getByRole('menuitem', { name: 'Rip from folder' }));
 			expect(await screen.findByRole('heading', { name: 'Rip from folder' })).toBeInTheDocument();
+			await waitFor(() => expect(fetchIsoFoldersMock).toHaveBeenCalled());
 		} finally {
 			showIsoPicker.set(false);
 		}
