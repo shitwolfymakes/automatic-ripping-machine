@@ -286,14 +286,16 @@ async def create_iso_rip(
     if not library_configured():
         raise IsoRipError(503, "the ISO library is not configured")
     async with _create_lock:
-        target = resolve_iso(rel)
+        # Off the event loop: the library is usually a network share and a stat
+        # there can take seconds (minutes under load).
+        target = await asyncio.to_thread(resolve_iso, rel)
         cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
         # Same rule as the ripper's identify: paused with the review hold off
         # refuses new discs, but paused with the hold on (the UI Pause toggle)
         # parks them for review, so an ISO rip starts and waits there too.
         if cfg is not None and cfg.ripping_paused and not cfg.hold_for_review:
             raise IsoRipError(409, "ripping is paused; no new jobs accepted")
-        rel_norm = str(target.relative_to(Path(settings.ISO_INGRESS_ROOT).resolve()))
+        rel_norm = await asyncio.to_thread(lambda: str(target.relative_to(Path(settings.ISO_INGRESS_ROOT).resolve())))
         if session_id is not None:
             session = (await db.execute(select(Session).where(col(Session.id) == session_id))).scalar_one_or_none()
             if session is None:

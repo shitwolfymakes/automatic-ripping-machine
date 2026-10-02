@@ -216,6 +216,31 @@ def test_library_lists_folders_then_isos_hides_others(lib: Path, signing_key: by
     assert body["host_path"] == "/mnt/nas/iso"
 
 
+def test_library_listing_runs_off_the_event_loop(
+    lib: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The library usually sits on a network share where one stat can take
+    seconds; the listing must run in a worker thread, never on the loop."""
+    import threading
+
+    seen: list[bool] = []
+    real = fb.list_dir
+
+    def recording(root_key: str, subpath: str):  # type: ignore[no-untyped-def]
+        seen.append(threading.current_thread() is threading.main_thread())
+        return real(root_key, subpath)
+
+    monkeypatch.setattr(fb, "list_dir", recording)
+    (lib / "a.iso").write_bytes(b"x")
+    db = FakeSession()
+    token = _admin_token(db, signing_key)
+    app = _build_app(db, signing_key, _StubManager())
+    with TestClient(app) as client:
+        r = client.get("/api/iso/library", headers=_auth(token))
+    assert r.status_code == 200
+    assert seen == [False]
+
+
 def test_library_marks_ripping(lib: Path, signing_key: bytes) -> None:
     (lib / "a.iso").write_bytes(b"x")
     db = FakeSession()

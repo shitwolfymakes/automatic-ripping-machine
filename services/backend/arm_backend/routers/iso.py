@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import logging
 from datetime import datetime
 from pathlib import PurePosixPath
@@ -56,7 +58,9 @@ async def library(
     if not library_configured():
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="the ISO library is not configured")
     try:
-        listing = file_browser.list_dir("ISO", subpath)
+        # Off the event loop: the library usually sits on a network share, and a
+        # single stat there has been seen to take seconds (or, under load, minutes).
+        listing = await asyncio.to_thread(file_browser.list_dir, "ISO", subpath)
     except file_browser.PathError as exc:
         raise HTTPException(
             status_code=_LIST_STATUS.get(exc.code, status.HTTP_400_BAD_REQUEST), detail=exc.code
