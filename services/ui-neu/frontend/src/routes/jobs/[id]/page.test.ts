@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-utils';
 import Page from './+page.svelte';
-import { createJob, createTrack } from '$lib/components/__fixtures__/job';
+import { createJob, createJobDetail, createTrack } from '$lib/components/__fixtures__/job';
+import type { JobView, TrackView } from '$lib/types/api.gen';
 
 // --- Mocks ---
 
@@ -47,7 +48,16 @@ vi.mock('$lib/api/jobs', () => ({
 	resolveJob: vi.fn(() => Promise.resolve({ job: createJob({ id: 'job_42' }), fan_out: [] })),
 	applySession: vi.fn(() => Promise.resolve({ session_application: {}, tasks: [], collisions: [], idempotent: false })),
 	searchMusicMetadata: vi.fn(() => Promise.resolve({ candidates: [] })),
-	fetchMusicDetail: vi.fn(() => Promise.resolve({}))
+	fetchMusicDetail: vi.fn(() => Promise.resolve({})),
+	setJobMediaType: vi.fn(() => Promise.resolve(createJob({ id: 'job_42' })))
+}));
+
+// The Match Episodes panel reads the job's identity on mount.
+vi.mock('$lib/api/identity', () => ({
+	fetchIdentity: vi.fn(() => new Promise(() => {})),
+	matchIdentity: vi.fn(() => new Promise(() => {})),
+	unpinIdentity: vi.fn(() => new Promise(() => {})),
+	fetchEpisodes: vi.fn(() => new Promise(() => {}))
 }));
 
 vi.mock('$lib/api/sessions', () => ({
@@ -79,11 +89,23 @@ vi.mock('$lib/api/ws', () => ({
 	wsClient: { subscribe: vi.fn(() => vi.fn()), start: vi.fn(), stop: vi.fn() }
 }));
 
+// Capture the page's ripper-event listener so a test can fire an event for this job.
+const ripperListeners: ((jobIds: Set<string>) => void)[] = [];
+vi.mock('$lib/stores/ripperEvents.svelte', () => ({
+	startRipperEvents: vi.fn(),
+	onRipperEvent: (fn: (jobIds: Set<string>) => void) => {
+		ripperListeners.push(fn);
+		return () => ripperListeners.splice(ripperListeners.indexOf(fn), 1);
+	}
+}));
+
 vi.mock('$lib/api/settings', () => ({
 	fetchSettings: vi.fn(() => Promise.resolve({ transcoder_config: { config: {} } }))
 }));
 
-import { fetchJob, updateTrack, fetchNamingPreview } from '$lib/api/jobs';
+import { fetchJob, updateTrack, fetchNamingPreview, setJobMediaType } from '$lib/api/jobs';
+import * as authStore from '$lib/stores/auth';
+import { fetchIdentity } from '$lib/api/identity';
 const mockFetchJob = vi.mocked(fetchJob);
 const mockUpdateTrack = vi.mocked(updateTrack);
 const mockFetchNamingPreview = vi.mocked(fetchNamingPreview);
@@ -484,5 +506,117 @@ describe('Job detail page (v3)', () => {
 		await waitFor(() => expect(screen.getByText('Done')).toBeInTheDocument());
 		const transcodeCell = document.querySelector('td[data-label="Transcode"]');
 		expect(transcodeCell?.textContent?.trim()).toBe('-');
+	});
+	describe('TV episode matching', () => {
+		afterEach(() => {
+			(authStore as unknown as { __setRole: (r: string | null) => void }).__setRole('admin');
+		});
+
+		const tvJob = ({ tracks = [], ...job }: Partial<JobView> & { tracks?: TrackView[] } = {}) => ({
+			...createJobDetail({ tracks }),
+			job: createJob({
+				id: 'job_42',
+				media_type: 'tv',
+				disc_type: 'bluray',
+				has_series: true,
+				status: 'ripped',
+				...job
+			})
+		});
+
+		it('shows Match Episodes only for TV jobs', async () => {
+			mockFetchJob.mockResolvedValue(tvJob());
+			renderComponent(Page);
+			expect(await screen.findByRole('button', { name: 'Match Episodes' })).toBeInTheDocument();
+		});
+
+		it('hides Match Episodes for a movie job', async () => {
+			mockFetchJob.mockResolvedValue(tvJob({ media_type: 'movie', has_series: false }));
+			renderComponent(Page);
+			await screen.findByRole('button', { name: /Poster/ });
+			expect(screen.queryByRole('button', { name: 'Match Episodes' })).not.toBeInTheDocument();
+		});
+
+		it('the header switch flips a movie to TV and opens episode matching', async () => {
+			// First load is the movie; the refresh after the flip returns the TV job.
+			mockFetchJob.mockResolvedValueOnce(tvJob({ media_type: 'movie', has_series: false }));
+			mockFetchJob.mockResolvedValue(tvJob());
+			vi.mocked(setJobMediaType).mockResolvedValue(createJob({ id: 'job_42', media_type: 'tv' }));
+			renderComponent(Page);
+			await fireEvent.click(await screen.findByRole('radio', { name: 'TV' }));
+			expect(setJobMediaType).toHaveBeenCalledWith('job_42', 'tv');
+			await waitFor(() =>
+				expect(screen.getByRole('button', { name: 'Match Episodes' })).toHaveAttribute('aria-pressed', 'true')
+			);
+		});
+
+		it('shows matching after the flip until a ripper event for the job arrives', async () => {
+			mockFetchJob.mockResolvedValueOnce(tvJob({ media_type: 'movie', has_series: false }));
+			mockFetchJob.mockResolvedValue(tvJob());
+			renderComponent(Page);
+			await fireEvent.click(await screen.findByRole('radio', { name: 'TV' }));
+			expect(await screen.findByText('Matching episodes…')).toBeInTheDocument();
+			const identityCalls = vi.mocked(fetchIdentity).mock.calls.length;
+			// Another job's event leaves it matching.
+			ripperListeners.forEach((fn) => fn(new Set(['job_other'])));
+			expect(screen.getByText('Matching episodes…')).toBeInTheDocument();
+			ripperListeners.forEach((fn) => fn(new Set(['job_42'])));
+			await waitFor(() => expect(screen.queryByText('Matching episodes…')).not.toBeInTheDocument());
+			expect(vi.mocked(fetchIdentity).mock.calls.length).toBeGreaterThan(identityCalls);
+		});
+
+		it('clears matching after a bounded timeout when no event arrives', async () => {
+			vi.useFakeTimers({ shouldAdvanceTime: true });
+			try {
+				mockFetchJob.mockResolvedValueOnce(tvJob({ media_type: 'movie', has_series: false }));
+				mockFetchJob.mockResolvedValue(tvJob());
+				renderComponent(Page);
+				await fireEvent.click(await screen.findByRole('radio', { name: 'TV' }));
+				expect(await screen.findByText('Matching episodes…')).toBeInTheDocument();
+				await vi.advanceTimersByTimeAsync(60_000);
+				await waitFor(() => expect(screen.queryByText('Matching episodes…')).not.toBeInTheDocument());
+			} finally {
+				vi.useRealTimers();
+			}
+		});
+
+		it('asks before switching a job with hand-set episodes to Movie', async () => {
+			const tracks = [createTrack({ id: 'trk_1', identity_provenance: { episode_number: 'manual' } })];
+			mockFetchJob.mockResolvedValue(tvJob({ tracks }));
+			renderComponent(Page);
+			await fireEvent.click(await screen.findByRole('radio', { name: 'Movie' }));
+			expect(setJobMediaType).not.toHaveBeenCalled();
+			expect(screen.getByText('1 track has episodes you set by hand. Switch to Movie anyway?')).toBeInTheDocument();
+			await fireEvent.click(screen.getByRole('button', { name: 'Switch to Movie' }));
+			await waitFor(() => expect(setJobMediaType).toHaveBeenCalledWith('job_42', 'movie'));
+		});
+
+		it('pluralises the confirm message for several hand-set tracks', async () => {
+			const tracks = [
+				createTrack({ id: 'trk_1', identity_provenance: { episode_number: 'manual' } }),
+				createTrack({ id: 'trk_2', identity_provenance: { role: 'manual' } }),
+				createTrack({ id: 'trk_3', identity_provenance: { episode_number: 'auto' } })
+			];
+			mockFetchJob.mockResolvedValue(tvJob({ tracks }));
+			renderComponent(Page);
+			await fireEvent.click(await screen.findByRole('radio', { name: 'Movie' }));
+			expect(screen.getByText('2 tracks have episodes you set by hand. Switch to Movie anyway?')).toBeInTheDocument();
+		});
+
+		it('switches straight to Movie when no episodes were set by hand', async () => {
+			mockFetchJob.mockResolvedValue(tvJob());
+			renderComponent(Page);
+			await fireEvent.click(await screen.findByRole('radio', { name: 'Movie' }));
+			await waitFor(() => expect(setJobMediaType).toHaveBeenCalledWith('job_42', 'movie'));
+		});
+
+		it('guests see the type as text, not a switch, and can still open Match Episodes', async () => {
+			(authStore as unknown as { __setRole: (r: string | null) => void }).__setRole('guest');
+			mockFetchJob.mockResolvedValue(tvJob());
+			renderComponent(Page);
+			expect(await screen.findByRole('button', { name: 'Match Episodes' })).toBeInTheDocument();
+			expect(screen.queryByRole('radiogroup', { name: 'Media type' })).not.toBeInTheDocument();
+			expect(screen.getByTestId('media-type-text')).toHaveTextContent('TV');
+		});
 	});
 });

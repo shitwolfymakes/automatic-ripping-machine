@@ -11,6 +11,8 @@
 	import TitleSearch from '$lib/components/TitleSearch.svelte';
 	import TrackTitleSearch from '$lib/components/TrackTitleSearch.svelte';
 	import MusicSearch from '$lib/components/MusicSearch.svelte';
+	import EpisodeMatchPanel from '$lib/components/episodes/EpisodeMatchPanel.svelte';
+	import MediaTypeSwitch from '$lib/components/episodes/MediaTypeSwitch.svelte';
 	import IdentifyDialog from '$lib/components/IdentifyDialog.svelte';
 	import ApplySessionDialog from '$lib/components/ApplySessionDialog.svelte';
 	import JobLifecycle from '$lib/components/JobLifecycle.svelte';
@@ -31,7 +33,29 @@
 	let detail = $state<JobDetailView | null>(null);
 	let jobLoading = $state(true);
 	let jobError = $state<Error | null>(null);
-	let activePanel = $state<string | null>(null);
+	let activePanel = $state<'title' | 'music' | 'episodes' | null>(null);
+	// Search type TitleSearch opens with; set when the episode panel asks for a series search.
+	let titleInitialType = $state<'movie' | 'tv' | undefined>(undefined);
+	let episodePanel = $state<{ reload: () => Promise<void> } | undefined>(undefined);
+
+	// True while the Backend re-matches episodes after a type flip or a series
+	// apply. Cleared by the next ripper event for this job (it carries
+	// job.identity_updated), or after MATCHING_TIMEOUT_MS so it never sticks.
+	const MATCHING_TIMEOUT_MS = 60_000;
+	let matching = $state(false);
+	let matchingTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function startMatching() {
+		matching = true;
+		if (matchingTimer) clearTimeout(matchingTimer);
+		matchingTimer = setTimeout(stopMatching, MATCHING_TIMEOUT_MS);
+	}
+
+	function stopMatching() {
+		matching = false;
+		if (matchingTimer) clearTimeout(matchingTimer);
+		matchingTimer = null;
+	}
 	let editingTrackId = $state<string | null>(null);
 	let previewItems = $state<NamingPreviewItem[]>([]);
 	let previewByTrack = $derived(new Map(previewItems.map((i) => [i.track_id, i])));
@@ -93,6 +117,12 @@
 			(t) => t.role === 'episode' || t.episode_number != null || (t.role == null && detail?.job.media_type === 'tv')
 		)
 	);
+	// Tracks whose episode or role the user set by hand (switching to Movie drops them).
+	let handSetCount = $derived(
+		(detail?.tracks ?? []).filter((t) =>
+			['episode_number', 'role'].some((k) => t.identity_provenance?.[k] === 'manual')
+		).length
+	);
 	let jobMeta = $derived(detail ? readJobMetadata(detail.job.metadata_json) : {});
 	let showRawMetadata = $state(false);
 	let rawMetadataPairs = $derived(
@@ -152,6 +182,24 @@
 		loadJob();
 	}
 
+	function handleSeriesApplied() {
+		activePanel = 'episodes';
+		startMatching();
+		loadJob();
+	}
+
+	function handleMediaTypeChanged(type: 'movie' | 'tv') {
+		if (type === 'tv') startMatching();
+		else stopMatching();
+		activePanel = type === 'tv' ? 'episodes' : null;
+		loadJob();
+	}
+
+	function togglePanel(panel: 'title' | 'music' | 'episodes') {
+		if (panel === 'title') titleInitialType = undefined;
+		activePanel = activePanel === panel ? null : panel;
+	}
+
 	function handleMusicApply() {
 		activePanel = null;
 		loadJob();
@@ -176,7 +224,13 @@
 		startRipperEvents();
 		const offRipperEvents = onRipperEvent((jobIds) => {
 			const id = $page.params.id ?? '';
-			if (id !== '' && jobIds.has(id)) loadJob();
+			if (id === '' || !jobIds.has(id)) return;
+			// The event set doesn't say which event fired, so any refresh for
+			// this job ends the matching state.
+			loadJob().then(() => {
+				episodePanel?.reload();
+				stopMatching();
+			});
 		});
 		async function poll() {
 			// Never exits while mounted: a finished job can go live again (a new
@@ -190,6 +244,7 @@
 		return () => {
 			stopped = true;
 			offRipperEvents();
+			if (matchingTimer) clearTimeout(matchingTimer);
 		};
 	});
 </script>
@@ -230,6 +285,15 @@
 						<span class="job-detail-year">({job.year})</span>
 					{/if}
 					<StatusBadge status={effectiveJobStatus(job)} />
+					{#if isVideoDisc}
+						{#if $isAdmin}
+							<MediaTypeSwitch {job} {handSetCount} onchanged={handleMediaTypeChanged} />
+						{:else}
+							<span class="job-detail-media-type" data-testid="media-type-text"
+								>{job.media_type === 'tv' ? 'TV' : 'Movie'}</span
+							>
+						{/if}
+					{/if}
 					{#if jobMeta.imdb_id && !isCdDisc}
 						<a
 							href="https://www.imdb.com/title/{jobMeta.imdb_id}"
@@ -323,15 +387,25 @@
 				{#if isVideoDisc}
 					<div class="flex job-detail-panel-toggle-bar">
 						<button
-							onclick={() => (activePanel = activePanel === 'title' ? null : 'title')}
+							type="button"
+							onclick={() => togglePanel('title')}
 							class="job-detail-panel-tab"
 							aria-pressed={activePanel === 'title'}>Poster &amp; metadata search</button
 						>
+						{#if job.media_type === 'tv'}
+							<button
+								type="button"
+								onclick={() => togglePanel('episodes')}
+								class="job-detail-panel-tab"
+								aria-pressed={activePanel === 'episodes'}>Match Episodes</button
+							>
+						{/if}
 					</div>
 				{:else if isCdDisc}
 					<div class="flex job-detail-panel-toggle-bar">
 						<button
-							onclick={() => (activePanel = activePanel === 'music' ? null : 'music')}
+							type="button"
+							onclick={() => togglePanel('music')}
 							class="job-detail-panel-tab"
 							aria-pressed={activePanel === 'music'}>Match CD</button
 						>
@@ -341,7 +415,26 @@
 				<!-- Active panel content -->
 				{#if activePanel === 'title'}
 					<div class="job-detail-panel-content">
-						<TitleSearch {job} onapply={handleTitleApply} />
+						<TitleSearch
+							{job}
+							onapply={handleTitleApply}
+							onseries={handleSeriesApplied}
+							initialType={titleInitialType}
+						/>
+					</div>
+				{/if}
+				{#if activePanel === 'episodes' && isVideoDisc && job.media_type === 'tv'}
+					<div class="job-detail-panel-content">
+						<EpisodeMatchPanel
+							bind:this={episodePanel}
+							{job}
+							{tracks}
+							{matching}
+							onsearchseries={() => {
+								titleInitialType = 'tv';
+								activePanel = 'title';
+							}}
+						/>
 					</div>
 				{/if}
 				{#if activePanel === 'music'}
@@ -717,6 +810,14 @@
 		font-weight: 500;
 		background: color-mix(in srgb, var(--color-accent-3) 15%, transparent);
 		color: var(--color-accent-3);
+	}
+	.job-detail-media-type {
+		border-radius: var(--radius-sm);
+		padding: 0.125rem 0.5rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+		background: var(--color-primary-tint-2);
+		color: var(--color-text-secondary);
 	}
 	.job-detail-poster-cell {
 		border-bottom: 1px solid var(--color-border);
