@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/Glyph.svelte';
 	import type { JobView, MetadataCandidate } from '$lib/types/api.gen';
 	import { searchMetadata, fetchMediaDetail, updateJobTitle, resolveJob } from '$lib/api/jobs';
 	import PosterImage from './PosterImage.svelte';
@@ -294,11 +295,8 @@
 		<div class="panel">
 			<div class="stack">
 				{#if results.length > 0}
-					<button onclick={backToResults} class="btn btn-link inline-flex items-center gap-1">
-						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-						</svg>
-						Back to results
+					<button onclick={backToResults} class="btn inline-flex items-center gap-1 self-start">
+						<Glyph name="arrow-left" /> Back to results
 					</button>
 				{/if}
 				<!-- Editable fields -->

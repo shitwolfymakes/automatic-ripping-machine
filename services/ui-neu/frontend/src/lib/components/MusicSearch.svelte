@@ -507,7 +507,9 @@
 		<p class="music-search-meta">Loading...</p>
 	{:else if detail}
 		<div class="stack panel-section">
-			<button onclick={() => (detail = null)} class="btn btn-ghost music-search-action-btn flex items-center gap-1"
+			<button
+				onclick={() => (detail = null)}
+				class="btn music-search-action-btn inline-flex items-center gap-1 self-start"
 				><Glyph name="arrow-left" /> Back to results</button
 			>
 			<div class="flex items-start gap-3">
