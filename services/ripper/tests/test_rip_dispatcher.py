@@ -837,8 +837,10 @@ async def test_rip_all_dump_track_uses_data_rip_even_on_a_bluray_scan(monkeypatc
     back into makemkvcon, even though the scan still says bluray."""
     data_calls: list[str] = []
 
-    async def fake_rip_data(*, device_path, output_dir):
+    async def fake_rip_data(*, device_path, output_dir, on_progress=None):
         data_calls.append(device_path)
+        if on_progress is not None:
+            await on_progress(512, 1024)
         return RipResult(ok=True, output_path=output_dir / "dump.iso", size_bytes=1, sha256="x")
 
     async def fake_rip_disc(**_kwargs):
@@ -866,3 +868,35 @@ async def test_rip_all_dump_track_uses_data_rip_even_on_a_bluray_scan(monkeypatc
     )
     assert data_calls == ["/source/movie.iso"]
     assert done == [("trk_0", True)]
+
+
+async def test_rip_all_dump_progress_carries_transfer_stats(monkeypatch, tmp_path):
+    """The full-disc copy reports a fraction plus bytes done, total and rate."""
+
+    async def fake_rip_data(*, device_path, output_dir, on_progress=None):
+        await on_progress(256, 1024)
+        await on_progress(1024, 1024)
+        return RipResult(ok=True, output_path=output_dir / "dump.iso", size_bytes=1024, sha256="x")
+
+    monkeypatch.setattr(dispatcher_module, "rip_data", fake_rip_data)
+    dump = _track(0, source_ref="full").model_copy(update={"kind": TrackKind.DATA_DUMP})
+    ticks: list[tuple[float, dict]] = []
+
+    async def on_progress(_t, fraction, stats=None):
+        ticks.append((fraction, stats))
+
+    async def _noop(*_a):
+        pass
+
+    await dispatcher_module.rip_all(
+        disc_type=DiscType.DATA,
+        device_path="/source/movie.iso",
+        tracks=[dump],
+        output_dir=tmp_path,
+        on_track_start=_noop,
+        on_track_done=_noop,
+        on_track_progress=on_progress,
+    )
+    assert [round(f, 2) for f, _s in ticks] == [0.25, 1.0]
+    assert ticks[0][1]["bytes_done"] == 256 and ticks[0][1]["bytes_total"] == 1024
+    assert ticks[-1][1]["rate_bps"] is None or ticks[-1][1]["rate_bps"] > 0

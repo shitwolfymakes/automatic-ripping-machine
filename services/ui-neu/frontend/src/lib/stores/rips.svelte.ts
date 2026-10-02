@@ -8,10 +8,15 @@
 // runes idiom (module-level $state, like lib/stores/toast.svelte.ts).
 
 import { wsClient, type WSEnvelope } from '$lib/api/ws';
+import { formatBytes } from '$lib/utils/format';
 
 interface RipperProgressPayload {
 	track_id: string;
 	progress_pct: number;
+	// Present on byte copies (the full-disc dump of an ISO or data disc).
+	bytes_done?: number | null;
+	bytes_total?: number | null;
+	rate_bps?: number | null;
 }
 
 interface RipBaseline {
@@ -26,8 +31,11 @@ export interface RipLiveProgress {
 	progress_pct: number;
 	// Null until we've seen ≥1 follow-up tick for the same track and the
 	// signal is past the masking threshold. Resets to null when the track
-	// changes.
+	// changes. A byte copy that reports its rate gets an ETA straight away.
 	eta_seconds: number | null;
+	bytes_done: number | null;
+	bytes_total: number | null;
+	rate_bps: number | null;
 }
 
 // Mask early per-track samples — the first tick has no rate yet, and the
@@ -83,6 +91,15 @@ export function reconcileSubscriptions(activeRippingJobIds: string[]): void {
 export function onProgress(jobId: string, env: WSEnvelope): void {
 	const payload = env.payload as unknown as RipperProgressPayload;
 	const now = Date.now();
+	const bytes = {
+		bytes_done: payload.bytes_done ?? null,
+		bytes_total: payload.bytes_total ?? null,
+		rate_bps: payload.rate_bps ?? null
+	};
+	const byteEta =
+		bytes.rate_bps && bytes.rate_bps > 0 && bytes.bytes_total != null && bytes.bytes_done != null
+			? Math.round(Math.max(0, bytes.bytes_total - bytes.bytes_done) / bytes.rate_bps)
+			: null;
 	const baseline = baselines[jobId];
 	// First tick for this track (or track changed) → reset baseline; ETA stays
 	// null until enough has accumulated. Also reset on a sustained backwards
@@ -92,7 +109,7 @@ export function onProgress(jobId: string, env: WSEnvelope): void {
 		baselines[jobId] = { trackId: payload.track_id, atMs: now, atPct: payload.progress_pct };
 		ripProgress.value = {
 			...ripProgress.value,
-			[jobId]: { track_id: payload.track_id, progress_pct: payload.progress_pct, eta_seconds: null }
+			[jobId]: { track_id: payload.track_id, progress_pct: payload.progress_pct, eta_seconds: byteEta, ...bytes }
 		};
 		return;
 	}
@@ -106,8 +123,20 @@ export function onProgress(jobId: string, env: WSEnvelope): void {
 	}
 	ripProgress.value = {
 		...ripProgress.value,
-		[jobId]: { track_id: payload.track_id, progress_pct: payload.progress_pct, eta_seconds: eta }
+		[jobId]: { track_id: payload.track_id, progress_pct: payload.progress_pct, eta_seconds: byteEta ?? eta, ...bytes }
 	};
+}
+
+/** "12.3 GB of 20.9 GB · 45.1 MB/s" for a byte copy, or null when none was reported. */
+export function formatTransfer(live: RipLiveProgress | null | undefined): string | null {
+	if (!live || live.bytes_done == null) return null;
+	const parts = [
+		live.bytes_total != null
+			? `${formatBytes(live.bytes_done)} of ${formatBytes(live.bytes_total)}`
+			: formatBytes(live.bytes_done)
+	];
+	if (live.rate_bps != null && live.rate_bps > 0) parts.push(`${formatBytes(live.rate_bps)}/s`);
+	return parts.join(' · ');
 }
 
 export function formatEta(seconds: number): string {

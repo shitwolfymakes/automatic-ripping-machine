@@ -14,7 +14,14 @@ vi.mock('$lib/api/ws', () => ({
 	}
 }));
 
-import { ripProgress, onProgress, reconcileSubscriptions, stopWS, formatEta } from '$lib/stores/rips.svelte';
+import {
+	ripProgress,
+	onProgress,
+	reconcileSubscriptions,
+	stopWS,
+	formatEta,
+	formatTransfer
+} from '$lib/stores/rips.svelte';
 
 function progressEnv(jobId: string, trackId: string, pct: number): WSEnvelope {
 	return {
@@ -46,7 +53,7 @@ describe('rips store', () => {
 
 	it('first tick of a track sets progress and leaves ETA null', () => {
 		onProgress('job_a', progressEnv('job_a', 'trk_1', 5));
-		expect(ripProgress.value['job_a']).toEqual({
+		expect(ripProgress.value['job_a']).toMatchObject({
 			track_id: 'trk_1',
 			progress_pct: 5,
 			eta_seconds: null
@@ -76,7 +83,7 @@ describe('rips store', () => {
 		expect(ripProgress.value['job_a'].eta_seconds).not.toBeNull();
 		// New track → first tick blanks ETA again.
 		onProgress('job_a', progressEnv('job_a', 'trk_2', 0));
-		expect(ripProgress.value['job_a']).toEqual({
+		expect(ripProgress.value['job_a']).toMatchObject({
 			track_id: 'trk_2',
 			progress_pct: 0,
 			eta_seconds: null
@@ -129,5 +136,58 @@ describe('formatEta', () => {
 	});
 	it('returns hours+minutes when over an hour', () => {
 		expect(formatEta(4_350)).toBe('1h 12m');
+	});
+});
+
+describe('rips store: byte copies', () => {
+	beforeEach(() => {
+		stopWS();
+	});
+
+	function copyEnv(done: number, total: number, rate: number): WSEnvelope {
+		return {
+			op: 'event',
+			event_id: `evt_${done}`,
+			event_type: 'ripper.progress',
+			emitted_at: 'now',
+			topic: 'ripper.progress.job_iso',
+			job_id: 'job_iso',
+			track_id: 'trk_dump',
+			payload: {
+				track_id: 'trk_dump',
+				progress_pct: (done / total) * 100,
+				bytes_done: done,
+				bytes_total: total,
+				rate_bps: rate
+			}
+		};
+	}
+
+	it('keeps bytes and rate and derives the ETA from the rate on the first tick', () => {
+		onProgress('job_iso', copyEnv(5 * 1024 ** 3, 20 * 1024 ** 3, 50 * 1024 ** 2));
+		const live = ripProgress.value['job_iso'];
+		expect(live.bytes_done).toBe(5 * 1024 ** 3);
+		expect(live.bytes_total).toBe(20 * 1024 ** 3);
+		// 15 GB left at 50 MB/s
+		expect(live.eta_seconds).toBe(Math.round((15 * 1024 ** 3) / (50 * 1024 ** 2)));
+	});
+
+	it('formats the transfer line', () => {
+		onProgress('job_iso', copyEnv(5 * 1024 ** 3, 20 * 1024 ** 3, 50 * 1024 ** 2));
+		expect(formatTransfer(ripProgress.value['job_iso'])).toBe('5 GB of 20 GB · 50 MB/s');
+	});
+
+	it('has no transfer line for a MakeMKV rip', () => {
+		expect(formatTransfer(null)).toBeNull();
+		expect(
+			formatTransfer({
+				track_id: 't',
+				progress_pct: 10,
+				eta_seconds: null,
+				bytes_done: null,
+				bytes_total: null,
+				rate_bps: null
+			})
+		).toBeNull();
 	});
 });
