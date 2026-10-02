@@ -599,3 +599,24 @@ async def test_with_tmdb_ids_skips_non_tmdb_keyless_and_idless_hits():
         idless = MetadataResult(provider="tmdb", kind="movie", title="X", year=1999, payload={})
         assert await d._with_tmdb_ids(idless, _config()) is idless
         assert idless.payload == {}
+
+
+async def test_with_tmdb_ids_timeout_keeps_the_hit(monkeypatch):
+    """A slow `external_ids` call is bounded by PROVIDER_TIMEOUT_SECONDS; on
+    timeout the hit is returned unchanged."""
+    import asyncio
+
+    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata.base import MetadataResult
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    async def slow(self, tmdb_id, kind):
+        await asyncio.sleep(10)
+        return {"imdb_id": "tt9"}
+
+    monkeypatch.setattr(TMDBClient, "get_external_id_map", slow)
+    monkeypatch.setattr(dispatcher_mod, "PROVIDER_TIMEOUT_SECONDS", 0.01)
+    async with httpx.AsyncClient() as client:
+        hit = MetadataResult(provider="tmdb", kind="tv", title="X", year=1999, payload={"id": 1})
+        assert await MetadataDispatcher(client)._with_tmdb_ids(hit, _config()) is hit
+    assert hit.payload == {"id": 1}

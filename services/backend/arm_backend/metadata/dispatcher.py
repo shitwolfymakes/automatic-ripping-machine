@@ -207,13 +207,21 @@ class MetadataDispatcher:
     async def _with_tmdb_ids(self, hit: MetadataResult | None, cfg: Config) -> MetadataResult | None:
         """Fill a TMDb hit's IMDb / TVDB ids (one `external_ids` call) so the
         stored identity lets every episode source find the show (spec 3.4).
-        Ids already in the payload win; a failed call changes nothing."""
+        Ids already in the payload win; a failed or timed-out call (bounded
+        by PROVIDER_TIMEOUT_SECONDS) changes nothing."""
         if hit is None or hit.provider != "tmdb" or hit.kind not in ("movie", "tv") or not cfg.tmdb_api_key:
             return hit
         tmdb_id = hit.payload.get("id")
         if tmdb_id is None:
             return hit
-        found = await TMDBClient(cfg.tmdb_api_key, self._http).get_external_id_map(tmdb_id, hit.kind)
+        try:
+            found = await asyncio.wait_for(
+                TMDBClient(cfg.tmdb_api_key, self._http).get_external_id_map(tmdb_id, hit.kind),
+                timeout=PROVIDER_TIMEOUT_SECONDS,
+            )
+        except TimeoutError:
+            logger.info("metadata.tmdb_external_ids timeout id=%s", tmdb_id)
+            return hit
         for key, value in found.items():
             hit.payload.setdefault(key, value)
         return hit
