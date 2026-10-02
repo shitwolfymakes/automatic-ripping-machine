@@ -376,6 +376,36 @@ describe('TitleSearch', () => {
 			expect(onapply).not.toHaveBeenCalled();
 		});
 
+		it('strips null ids from the candidate before resolving (null means clear)', async () => {
+			const ids = { tmdb: '5084', imdb: null, tvdb: null, tmdb_kind: 'tv' as const };
+			mockSearchMetadata.mockResolvedValue({
+				candidates: [createCandidate({ title: 'Kolchak', year: 1974, kind: 'tv', external_ids: ids })]
+			});
+			renderComponent(TitleSearch, {
+				props: { job: createJob({ id: 'job_9', status: 'ripped', title: 'kolchak', media_type: 'tv' }) }
+			});
+			await fireEvent.click(screen.getByText('Search'));
+			await fireEvent.click(await screen.findByText('Kolchak'));
+			await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+			await waitFor(() => expect(mockResolve).toHaveBeenCalled());
+			expect(mockResolve.mock.calls[0][1].external_ids).toEqual({ tmdb: '5084', tmdb_kind: 'tv' });
+		});
+
+		it('sends no ids when every candidate id is null', async () => {
+			const ids = { tmdb: null, imdb: null, tvdb: null, tmdb_kind: null };
+			mockSearchMetadata.mockResolvedValue({
+				candidates: [createCandidate({ title: 'Kolchak', year: 1974, kind: 'tv', external_ids: ids })]
+			});
+			renderComponent(TitleSearch, {
+				props: { job: createJob({ id: 'job_9', status: 'ripped', title: 'kolchak', media_type: 'tv' }) }
+			});
+			await fireEvent.click(screen.getByText('Search'));
+			await fireEvent.click(await screen.findByText('Kolchak'));
+			await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+			await waitFor(() => expect(mockResolve).toHaveBeenCalled());
+			expect(mockResolve.mock.calls[0][1].external_ids).toBeUndefined();
+		});
+
 		it('does not send a TV candidate ids when the form type is switched to Movie', async () => {
 			const ids = { tmdb: '5084', tmdb_kind: 'tv' as const };
 			mockSearchMetadata.mockResolvedValue({

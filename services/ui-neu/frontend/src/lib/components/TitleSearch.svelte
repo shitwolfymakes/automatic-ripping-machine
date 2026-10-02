@@ -133,7 +133,10 @@
 		const isSeries = editType === 'series';
 		// Only send the candidate's ids when the form's type still matches its kind.
 		const candidateIsSeries = selected?.kind === 'series' || selected?.kind === 'tv';
-		const externalIds = selected && candidateIsSeries === isSeries ? (selected.external_ids ?? undefined) : undefined;
+		const candidateIds = selected && candidateIsSeries === isSeries ? selected.external_ids : null;
+		// Resolve reads an explicit null as "clear this id": send only the ids the candidate has.
+		const presentIds = Object.entries(candidateIds ?? {}).filter(([, v]) => v != null);
+		const externalIds = presentIds.length ? Object.fromEntries(presentIds) : undefined;
 		try {
 			if (canResolve) {
 				await resolveJob(job.id, {
