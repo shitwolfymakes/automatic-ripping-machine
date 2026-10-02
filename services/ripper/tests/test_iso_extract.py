@@ -193,3 +193,29 @@ async def test_scan_never_extracts_a_device_node(monkeypatch: pytest.MonkeyPatch
     await scan_dispatcher.scan("/dev/sr0")
 
     assert seen["urls"] == ["dev:/dev/sr0"]
+
+
+async def test_extract_runs_7zz_when_that_is_the_only_7zip_binary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Debian 12's `7zip` package (the ripper image's base) ships only `7zz`."""
+    iso = tmp_path / "m.iso"
+    iso.write_bytes(b"\0")
+    monkeypatch.setattr(iso_extract.shutil, "which", lambda name: "/usr/bin/7zz" if name == "7zz" else None)
+    argv: list[str] = []
+
+    class _Proc:
+        returncode = 0
+
+        async def communicate(self) -> tuple[bytes, bytes]:
+            return b"", b""
+
+    async def _exec(*args: str, **_k: object) -> _Proc:
+        argv.extend(args)
+        return _Proc()
+
+    monkeypatch.setattr(iso_extract.asyncio, "create_subprocess_exec", _exec)
+
+    await iso_extract.extract(str(iso))
+
+    assert argv[:2] == ["/usr/bin/7zz", "x"]
