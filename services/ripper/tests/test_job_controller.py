@@ -886,6 +886,30 @@ async def test_scan_retry_exhausts_and_logs_marker(monkeypatch, caplog):
     assert "DISC_UNREADABLE_AFTER_RETRIES" in caplog.text
 
 
+async def test_scan_retry_iso_source_never_touches_drive_ioctl(monkeypatch, tmp_path):
+    """An ISO source that scans to zero titles returns at once: the drive-status
+    ioctl is meaningless on a regular file (ENOTTY) and must not be attempted."""
+    monkeypatch.setattr(jc_module.asyncio, "sleep", _noop_async)
+    iso = tmp_path / "movie.iso"
+    iso.write_bytes(b"\0" * 16)
+    calls = {"n": 0}
+
+    async def _scan(device_path):
+        calls["n"] += 1
+        return _empty_scan()
+
+    def _ioctl_on_file(_p):
+        raise OSError(25, "Inappropriate ioctl for device")
+
+    monkeypatch.setattr(jc_module, "scan_disc", _scan)
+    monkeypatch.setattr(jc_module, "read_drive_status", _ioctl_on_file)
+
+    controller = JobController(FakeClient(), "drv_iso")
+    out = await controller._scan_with_ready_retry(str(iso))
+    assert not out.titles
+    assert calls["n"] == 1
+
+
 async def test_scan_retry_stops_when_disc_pulled(monkeypatch):
     monkeypatch.setattr(jc_module.asyncio, "sleep", _noop_async)
     calls = {"n": 0}

@@ -439,6 +439,13 @@ class JobController:
             if result.titles:
                 return result
 
+            # An ISO file has no drive to settle: the CDROM_DRIVE_STATUS ioctl
+            # below is invalid on a regular file (ENOTTY) and would crash the
+            # one-shot source pipeline. Zero titles from a file is final.
+            if is_iso_source(device_path):
+                logger.warning("scan: 0 titles from ISO source %s — nothing to retry", device_path)
+                return result
+
             state = read_drive_status(device_path)
             if state != DriveState.DISC_OK:
                 logger.info(
