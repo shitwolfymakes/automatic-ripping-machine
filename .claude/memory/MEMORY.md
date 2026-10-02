@@ -23,3 +23,4 @@
 - [No session links in commits/PRs](feedback_no_session_links.md) — owner directive 2026-09-25; Co-Authored-By only, no Claude-Session trailer or PR session URL
 - [Setup reuses Settings components](feedback_setup_reuses_settings_components.md) — first-run walkthrough composes the same components + CONFIG_FIELD_META (setup_step tag) as Settings; never re-implement a setting in setup.
 - [Transcode offload architecture](project_transcode_offload_architecture.md) - neu long-lived transcoder vs v3 ephemeral per-task spawn; comparison for moving transcode off the N97 (#69).
+- [Dev-host validation tips](project_dev_host_validation.md) — browser automation via the vite dev server (MCP browser rejects the dev CA), ISO path via a tiny PyCdlib image, catching ISO ripper logs, npm flakes in Docker builds, hifi-server checkout path
