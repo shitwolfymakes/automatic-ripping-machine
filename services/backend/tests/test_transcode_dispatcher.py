@@ -1781,3 +1781,46 @@ async def test_tick_runs_orphan_sweep_after_stale_sweep(monkeypatch: pytest.Monk
     monkeypatch.setattr(disp, "spawn_pending", _spawn)
     await disp._tick()
     assert calls == ["stale", "orphan", "spawn"]
+
+
+async def test_spawn_factory_exception_keeps_old_client(caplog: pytest.LogCaptureFixture) -> None:
+    """A docker_client_factory that RAISES (rather than returning None) must
+    not wedge the dispatcher either: the old client is kept, the error is
+    logged, and the task follows the normal failure path."""
+    db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
+    db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
+    dead = MagicMock()
+    dead.containers.run.side_effect = SSHException("SSH session not active")
+
+    def factory() -> MagicMock:
+        raise RuntimeError("ssh host unreachable")
+
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), dead, WSHub(), docker_client_factory=factory)
+
+    with caplog.at_level(logging.WARNING, logger="arm_backend.transcode_dispatcher"):
+        spawned = await disp.spawn_pending(db)
+
+    assert spawned == 0
+    assert disp._docker is dead
+    dead.containers.run.assert_called_once()
+    assert any("rebuild failed" in r.message for r in caplog.records)
+
+
+async def test_spawn_rebuild_tolerates_old_client_close_failure() -> None:
+    """Closing the dead client is best-effort: a close() that raises must not
+    abort the retry on the freshly built client."""
+    db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
+    db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
+    dead = MagicMock()
+    dead.containers.run.side_effect = SSHException("SSH session not active")
+    dead.close.side_effect = RuntimeError("transport already torn down")
+    fresh = MagicMock()
+
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), dead, WSHub(), docker_client_factory=lambda: fresh)
+
+    spawned = await disp.spawn_pending(db)
+
+    assert spawned == 1
+    assert disp._docker is fresh
+    dead.close.assert_called_once()
+    fresh.containers.run.assert_called_once()
