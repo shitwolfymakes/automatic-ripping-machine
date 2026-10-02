@@ -37,7 +37,7 @@
 	<div class="rerun-panel-fields">
 		<div class="field">
 			<label class="field-label" for="{uid}-source">Source</label>
-			<select id="{uid}-source" bind:value={form.source} onchange={onfieldchange}>
+			<select id="{uid}-source" class="field-control" bind:value={form.source} onchange={onfieldchange}>
 				{#each sources as s (s.id)}
 					<option value={s.id} disabled={s.disabled}>{s.label}{s.disabled ? ' (not set up)' : ''}</option>
 				{/each}
@@ -45,16 +45,31 @@
 		</div>
 		<div class="field">
 			<label class="field-label" for="{uid}-season">Season</label>
-			<input id="{uid}-season" type="number" min="0" bind:value={form.season} oninput={onfieldchange} />
+			<input
+				id="{uid}-season"
+				class="field-control"
+				type="number"
+				min="0"
+				bind:value={form.season}
+				oninput={onfieldchange}
+			/>
 		</div>
 		<div class="field">
 			<label class="field-label" for="{uid}-disc">Disc</label>
-			<input id="{uid}-disc" type="number" min="1" bind:value={form.disc} oninput={onfieldchange} />
+			<input
+				id="{uid}-disc"
+				class="field-control"
+				type="number"
+				min="1"
+				bind:value={form.disc}
+				oninput={onfieldchange}
+			/>
 		</div>
 		<div class="field">
 			<label class="field-label" for="{uid}-tolerance">Tolerance (s)</label>
 			<input
 				id="{uid}-tolerance"
+				class="field-control"
 				type="number"
 				min="1"
 				max="1800"
@@ -98,13 +113,8 @@
 		align-items: end;
 		gap: 0.75rem;
 	}
-	.rerun-panel-fields :global(select),
-	.rerun-panel-fields :global(input) {
-		min-height: 2.75rem;
-		width: 100%;
-	}
 	.rerun-panel-preview {
-		min-height: 2.75rem;
+		min-height: var(--control-h);
 	}
 	.rerun-panel-bar {
 		display: flex;
