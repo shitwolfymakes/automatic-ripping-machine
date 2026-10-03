@@ -30,7 +30,7 @@ needs a Linux host. See [Known Issues](Status-Known-Issues).
 Apply a rip-only session/preset (e.g. the ISO-dump or a passthrough rip preset)
 instead of a transcoding session, or leave **Auto-transcode on idle** off and
 don't queue a transcode. The raw MakeMKV output lands in
-`~/arm/raw/<job-id>/`. See [Web UI § Sessions and presets](Web-UI#sessions-and-presets).
+`~/arm/raw/<job-id>/`. See [Web UI § Settings](Web-UI#settings) (the Sessions tab).
 
 ## Where do my files end up?
 
