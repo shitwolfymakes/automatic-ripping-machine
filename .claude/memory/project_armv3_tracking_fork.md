@@ -30,7 +30,10 @@ branch's own merge resolutions and were re-homed as explicit commits. The
 Playwright visual-suite refresh was deliberately NOT re-cut (owner: test
 artifacts). Method: cherry-pick with eof-append / keep-both resolution, merge
 conflicts resolved from the integration tip, verified by tree-diff against
-`integration/all-prs-3` plus pytest.
+`integration/all-prs-3` plus pytest. `integration/all-prs-4` (both remotes) is
+that verified union: top branch + `fix/pin-makemkv-1.18.4`; all-prs-3 is retired.
+The same six branches are wolfy PRs #105–#110; #102 was retargeted onto
+`feat/iso-udf-7zip`.
 
 **Why:** the owner wanted more latitude than the wolfy fork allows (issues,
 labels, projects, freedom to experiment) while still landing changes there.
