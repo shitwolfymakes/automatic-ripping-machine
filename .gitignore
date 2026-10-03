@@ -33,6 +33,9 @@ MANIFEST
 # explicit frontend/build, .svelte-kit, node_modules rules.
 !services/ui-neu/frontend/src/lib/
 !services/ui-neu/frontend/src/lib/**
+# Same for the shared deploy shell library.
+!deploy/lib/
+!deploy/lib/**
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

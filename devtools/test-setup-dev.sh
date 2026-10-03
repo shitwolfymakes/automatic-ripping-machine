@@ -8,6 +8,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "${HERE}/.." && pwd)"
 SETUP="${ROOT}/devtools/setup-dev.sh"
 TEMPLATE="${ROOT}/docker-compose.yml.example"
+LIB="${ROOT}/deploy/lib"
 
 fail=0
 check() {  # check <label> <expected-rc> <actual-rc>
@@ -30,23 +31,30 @@ absent "setup-dev has no ripper sentinel"       'arm-ripper services'       "${S
 absent "setup-dev has no per-ripper leaf certs" 'arm-ripper-sr'             "${SETUP}"
 absent "setup-dev has no detect_optical_drives" 'detect_optical_drives'     "${SETUP}"
 absent "setup-dev has no ensure_ripper_certs"   'ensure_ripper_certs'       "${SETUP}"
-present "setup-dev udev rule covers every optical drive" 'KERNEL=="sr\[0-9\]\*", ENV\{UDISKS_AUTO\}="0"' "${SETUP}"
+present "setup-dev udev rule covers every optical drive" 'KERNEL=="sr\[0-9\]\*", ENV\{UDISKS_AUTO\}="0"' "${LIB}/udev.sh"
 absent "setup-dev udev rule no longer scopes by ID_PATH" 'ID_PATH'          "${SETUP}"
 
 # --- setup-dev.sh: transcode image variants ----------------------------------
 absent  "setup-dev has no probe_encoder_caps"          'probe_encoder_caps'   "${SETUP}"
 absent  "setup-dev no longer runs --probe-encoders"    '--probe-encoders'     "${SETUP}"
-present "setup-dev filter names arm-transcode-intel"   '^ *arm-transcode-intel\)$' "${SETUP}"
-present "setup-dev filter names arm-transcode-amd"     '^ *arm-transcode-amd\)$'   "${SETUP}"
-present "detect_gpus emits empty encoder_kinds"        'encoder_kinds\\":\[\]\}' "${SETUP}"
+for f in "${LIB}"/*.sh; do
+    for pat in 'lsscsi' 'ARM_DRIVE_SERIAL' 'arm-ripper-sr' 'detect_optical_drives' 'ID_PATH' 'probe_encoder_caps' '--probe-encoders' '^[^#]*--remove-orphans'; do
+        absent "$(basename "${f}") has no ${pat}" "${pat}" "${f}"
+    done
+done
+present "setup-dev filter names arm-transcode-intel"   '^ *arm-transcode-intel\)$' "${LIB}/lifecycle.sh"
+present "setup-dev filter names arm-transcode-amd"     '^ *arm-transcode-amd\)$'   "${LIB}/lifecycle.sh"
+present "detect_gpus emits empty encoder_kinds"        'encoder_kinds\\":\[\]\}' "${LIB}/detect.sh"
 
 # select_up_services, run for real against stubbed compose/detect_gpus: prints
 # the services it would build ("ALL" when nothing is skipped).
-select_defs="$(awk '/^DETECTED_GPUS=""$/,/^}$/' "${SETUP}"; awk '/^UP_SERVICES=\(\)$/,/^}$/' "${SETUP}")"
+select_defs="$(awk '/^DETECTED_GPUS=""$/,/^}$/' "${LIB}/detect.sh"; awk '/^UP_SERVICES=\(\)$/,/^}$/' "${LIB}/lifecycle.sh")"
 selected() {  # selected <ripper_only> <remote_host 0|1> <ARM_GPUS json>
     # The variables and stubs below are consumed by the eval'd setup-dev code.
     # shellcheck disable=SC2034,SC2317,SC2329
     (
+        # shellcheck source=/dev/null
+        source "${LIB}/common.sh"
         RIPPER_ONLY="$1"
         ENV_FILE="$(mktemp)"
         trap 'rm -f "${ENV_FILE}"' EXIT
@@ -70,10 +78,12 @@ check "remote transcode host skips both variants, keeps base" "arm-db arm-backen
 
 # remove_retired_services, run for real against stubbed compose/docker: prints
 # the docker filters it queried and the ids it removed.
-retired_defs="$(awk '/^RETIRED_SERVICES=/,/^}$/' "${SETUP}")"
+retired_defs="$(awk '/^RETIRED_SERVICES=/,/^}$/' "${LIB}/lifecycle.sh")"
 retired() {  # retired <compose project name, empty = config fails> <ids docker ps returns>
     # shellcheck disable=SC2034,SC2317,SC2329
     (
+        # shellcheck source=/dev/null
+        source "${LIB}/common.sh"
         stub_project="$1" stub_ids="$2"
         compose() { [[ -n "${stub_project}" ]] && printf 'name: %s\n\nservices:\n' "${stub_project}"; }
         docker() {
@@ -99,10 +109,12 @@ present "up removes retired services"   '^    remove_retired_services$' "${SETUP
 # stubbed compose/docker: prints RIPPERS_REMOVED and whether the backend was
 # restarted. The backend respawns rippers only at startup, so a deploy that
 # leaves it running must restart it.
-spawn_defs="$(awk '/^RIPPERS_REMOVED=0$/,/^}$/' "${SETUP}"; awk '/^backend_started_at\(\) \{$/,/^}$/' "${SETUP}"; awk '/^respawn_rippers_if_needed\(\) \{/,/^}$/' "${SETUP}")"
+spawn_defs="$(awk '/^RIPPERS_REMOVED=0$/,/^}$/' "${LIB}/lifecycle.sh"; awk '/^backend_started_at\(\) \{$/,/^}$/' "${LIB}/lifecycle.sh"; awk '/^respawn_rippers_if_needed\(\) \{/,/^}$/' "${LIB}/lifecycle.sh")"
 respawn() {  # respawn <ripper ids> <transcoder ids> <StartedAt before> <StartedAt after>
     # shellcheck disable=SC2034,SC2317,SC2329
     (
+        # shellcheck source=/dev/null
+        source "${LIB}/common.sh"
         stub_rippers="$1" stub_tasks="$2" before="$3" stub_after="$4"
         BACKEND_SERVICE=arm-backend
         compose() {
@@ -140,6 +152,66 @@ check "backend was not running before up: no restart" \
     "removed=1 no-restart" "$(respawn r1 '' '' T2)"
 present "up restarts a kept backend after removing rippers" '^    respawn_rippers_if_needed "\$\{BACKEND_STARTED_BEFORE\}"$' "${SETUP}"
 absent  "setup-dev never runs --remove-orphans" '^[^#]*--remove-orphans' "${SETUP}"
+
+# --- shared library: dev output is unchanged ---------------------------------
+# dev_out <snippet>: run a snippet with the library loaded the way setup-dev.sh
+# loads it. The golden strings below are what setup-dev.sh printed before the
+# functions moved into deploy/lib/.
+dev_out() {
+    # shellcheck disable=SC2034,SC1090
+    (
+        ARM_HINT_FORCE_CMD="bash devtools/setup-dev.sh up --force"
+        ARM_HINT_IMAGES_READY="Images are built"
+        ARM_HINT_LOGS_CMD="docker compose logs"
+        ARM_HINT_RIPPER_ONLY="--ripper-only"
+        ARM_UDEV_MANAGED_BY="devtools/setup-dev.sh"
+        FORCE=0 NO_BACKUP=0 RIPPER_ONLY=0
+        for lib in common detect certs udev lifecycle; do source "${LIB}/${lib}.sh"; done
+        eval "$1"
+    )
+}
+check "arm_say prints the ==> prefix"      "==> hello"       "$(dev_out 'arm_say hello')"
+check "arm_sub prints the line verbatim"   "    (detail)"    "$(dev_out 'arm_sub "    (detail)"')"
+check "arm_warn prints WARNING: to stderr" "WARNING: careful" "$(dev_out 'arm_warn careful' 2>&1 >/dev/null)"
+check "arm_err prints ERROR: to stderr"    "ERROR: broken"   "$(dev_out 'arm_err broken' 2>&1 >/dev/null)"
+
+want_guard=$'ERROR: backend-spawned containers have ACTIVE work:\n         t1 (transcoder)\n       Removing them would kill the rip or transcode in progress. Images are built;\n       nothing has been backed up, removed or restarted yet.\n       Wait for the job to finish, or re-run the same command with --force, e.g.:\n         bash devtools/setup-dev.sh up --force'
+# shellcheck disable=SC2016  # the snippet expands inside dev_out's eval, not here
+got_guard="$(dev_out 'docker() { [[ "$3" == "label=arm.task_id" ]] && echo t1; return 0; }; guard_running_spawned' 2>&1 >/dev/null || true)"
+check "guard refusal text is unchanged" "${want_guard}" "${got_guard}"
+
+want_abort=$'ERROR: pre-deploy database backup failed: boom\n       Aborting before anything is removed or restarted; the running stack is untouched.\n       Fix the cause, or re-run with --no-backup to deploy without a backup.'
+check "backup abort text is unchanged" "${want_abort}" "$(dev_out 'backup_abort boom' 2>&1 >/dev/null || true)"
+
+check "udev rule header names setup-dev" \
+    "# Managed by devtools/setup-dev.sh — do not edit by hand." \
+    "$(dev_out build_udev_rule_content | head -n 1)"
+check "udev rule body is the host-wide rule" \
+    'SUBSYSTEM=="block", KERNEL=="sr[0-9]*", ENV{UDISKS_AUTO}="0"' \
+    "$(dev_out build_udev_rule_content | tail -n 1)"
+
+# shellcheck disable=SC2016  # the snippet expands inside dev_out's eval, not here
+check "ripper-only GPU message is unchanged" \
+    "==> --ripper-only: skipping GPU detection, ARM_GPUS=[]" \
+    "$(dev_out 'ENV_FILE="$(mktemp)"; RIPPER_ONLY=1; refresh_arm_gpus; rm -f "${ENV_FILE}"')"
+
+# shellcheck disable=SC2016  # the snippet expands inside dev_out's eval, not here
+check "env_set appends a new key" "A=1;B=2;" \
+    "$(dev_out 'f="$(mktemp)"; echo A=1 > "$f"; env_set B 2 "$f"; tr "\n" ";" < "$f"; rm -f "$f"')"
+# shellcheck disable=SC2016  # the snippet expands inside dev_out's eval, not here
+check "env_set replaces an existing key, even the only one" "A=x|y&z;" \
+    "$(dev_out 'f="$(mktemp)"; echo A=1 > "$f"; env_set A "x|y&z" "$f"; tr "\n" ";" < "$f"; rm -f "$f"')"
+# shellcheck disable=SC2016  # the snippet expands inside dev_out's eval, not here
+check "env_unset removes a key" "B=2;" \
+    "$(dev_out 'f="$(mktemp)"; printf "A=1\nB=2\n" > "$f"; env_unset A "$f"; tr "\n" ";" < "$f"; rm -f "$f"')"
+check "detect_cdrom_gid falls back to 44" "44" \
+    "$(dev_out 'getent() { return 2; }; detect_cdrom_gid')"
+
+# No message literal may remain outside the helpers: everything goes through them.
+rc=0; grep -nE '"(==> |ERROR: |WARNING: )' "${LIB}"/detect.sh "${LIB}"/certs.sh "${LIB}"/udev.sh "${LIB}"/lifecycle.sh >/dev/null || rc=$?
+check "library prints only through the output helpers" 1 "${rc}"
+present "setup-dev loads the shared library" 'deploy/lib/\$\{lib\}\.sh' "${SETUP}"
+absent  "setup-dev no longer shells out to install.sh" 'install\.sh" *\\$' "${SETUP}"
 
 # --- compose template -----------------------------------------------------------
 absent  "template has no generated region"      'arm-ripper services'       "${TEMPLATE}"
