@@ -24,3 +24,4 @@
 - [Setup reuses Settings components](feedback_setup_reuses_settings_components.md) — first-run walkthrough composes the same components + CONFIG_FIELD_META (setup_step tag) as Settings; never re-implement a setting in setup.
 - [Transcode offload architecture](project_transcode_offload_architecture.md) - neu long-lived transcoder vs v3 ephemeral per-task spawn; comparison for moving transcode off the N97 (#69).
 - [Dev-host validation tips](project_dev_host_validation.md) — browser automation via the vite dev server (MCP browser rejects the dev CA), ISO path via a tiny PyCdlib image, catching ISO ripper logs, npm flakes in Docker builds, hifi-server checkout path
+- [arm-v3 is the tracking fork](project_armv3_tracking_fork.md) — since 2026-10-02 `uprightbass360/arm-v3` (remote `armv3`) mirrors the PR stack, holds defect issues + labels, and the recut top-of-stack branches (PRs #122–#128); PRs still merge via shitwolfymakes
