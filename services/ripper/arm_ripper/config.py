@@ -12,6 +12,19 @@ class Settings(BaseSettings):
     # drive swap behind an unchanged srN slot; None when the drive doesn't
     # expose one (rare, but some very old ATAPI drives report nothing).
     ARM_DRIVE_SERIAL: str | None = None
+    # Identity handed down by the backend when it spawns this ripper.
+    # ARM_DRIVE_ID is the Drive row this container serves (registration and
+    # heartbeats are keyed to it from Plan 3 on). ARM_DRIVE_BY_ID is the exact
+    # udev /dev/disk/by-id link name for the physical drive — one readlink
+    # resolves it to the current /dev/srN, which is how the ripper follows its
+    # drive across a renumbering replug. None => port-identity drive (no by-id
+    # link on the host); ARM_DRIVE_DEV is then the hint and is refreshed from
+    # the backend while the drive is absent.
+    ARM_DRIVE_ID: str | None = None
+    ARM_DRIVE_BY_ID: str | None = None
+    # Where the host's /dev/disk is bind-mounted (read-only). Only the by-id
+    # symlink directory is needed; the host's /dev is never mounted whole.
+    ARM_HOST_DISK_ROOT: str = "/host-disk"
     ARM_BACKEND_URL: str
     ARM_SERVICE_TOKEN: str
     ARM_LOG_LEVEL: str = "info"

@@ -1,6 +1,7 @@
+import errno
 import fcntl
 import os
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 
 # <linux/cdrom.h>
 CDROM_DRIVE_STATUS = 0x5326
@@ -18,6 +19,32 @@ class DriveState(IntEnum):
     TRAY_OPEN = CDS_TRAY_OPEN
     NOT_READY = CDS_DRIVE_NOT_READY
     DISC_OK = CDS_DISC_OK
+    # Not a kernel value. The device node is missing or has no hardware behind
+    # it (drive unplugged, or not yet enumerated). Neutral for InsertDetector,
+    # like NO_INFO; the poll loop resets the detector explicitly on reattach.
+    ABSENT = -1
+
+
+class DriveErrorKind(StrEnum):
+    """Why open()/ioctl on the drive node failed. Drives the poll loop's
+    log-once-per-transition behaviour: each kind is one event, not a
+    per-poll signal."""
+
+    ABSENT = "absent"  # ENOENT / ENXIO / ENODEV — plug it in
+    MISCONFIGURED = "misconfigured"  # EPERM / EACCES — cgroup rule or group is wrong
+    OTHER = "other"  # EIO and friends — a real per-poll signal, keep logging
+
+
+_ABSENT_ERRNOS = frozenset({errno.ENOENT, errno.ENXIO, errno.ENODEV})
+_MISCONFIGURED_ERRNOS = frozenset({errno.EPERM, errno.EACCES})
+
+
+def classify_drive_error(exc: OSError) -> DriveErrorKind:
+    if exc.errno in _ABSENT_ERRNOS:
+        return DriveErrorKind.ABSENT
+    if exc.errno in _MISCONFIGURED_ERRNOS:
+        return DriveErrorKind.MISCONFIGURED
+    return DriveErrorKind.OTHER
 
 
 def read_drive_status(device_path: str) -> DriveState:
@@ -71,6 +98,13 @@ class InsertDetector:
         self._handled = False
         self._not_ready_streak = 0
         self._not_ready_rearm_polls = not_ready_rearm_polls
+
+    def reset(self) -> None:
+        """Forget the current disc. Called when the drive reattaches after an
+        ABSENT run: whatever is in the tray now may be a different disc, so
+        the next DISC_OK must fire."""
+        self._handled = False
+        self._not_ready_streak = 0
 
     def update(self, state: DriveState) -> bool:
         """Feed one reading; return True exactly once per insertion, when a
