@@ -140,6 +140,33 @@ check "a foreign arm folder stops the bootstrap" "1" "$rc"
 lacks "nothing is handed over" "HANDOVER" "$out"
 check "nothing was added to the foreign folder" "media" "$(cd "${TMP}/v2home/home/arm" && echo *)"
 
+# --- a failed bootstrap leaves the target as it was -------------------------------
+# failboot <case> : run bootstrap_main with a tampered bundle (checksum mismatch), report "rc=<n> <output>"
+failboot() {
+    local rc=0 o
+    o="$( (HOME="${TMP}/$1/home"; bootstrap_uid() { echo 1000; }; bootstrap_handover() { echo HANDOVER; }
+           bootstrap_main --bundle "${TMP}/bad/b.tar.gz" --version v3.9.9) 2>&1)" || rc=$?
+    echo "rc=${rc} ${o}"
+}
+mkdir -p "${TMP}/ff/home"
+out="$(failboot ff)"
+has "a failed fresh bootstrap exits 1" "rc=1 " "$out"
+lacks "a failed fresh bootstrap hands nothing over" "HANDOVER" "$out"
+check "a failed fresh bootstrap leaves no arm folder" "no" "$( [[ -e "${TMP}/ff/home/arm" ]] && echo yes || echo no )"
+mkdir -p "${TMP}/fe/home/arm"
+out="$(failboot fe)"
+has "a failed bootstrap into an empty folder exits 1" "rc=1 " "$out"
+lacks "that hands nothing over" "HANDOVER" "$out"
+check "the empty arm folder is still empty" "" "$(ls -A "${TMP}/fe/home/arm")"
+mkdir -p "${TMP}/fx/home/arm/.armctl/releases/v1"; echo keep > "${TMP}/fx/home/arm/.armctl/marker"
+ln -s releases/v1 "${TMP}/fx/home/arm/.armctl/current"
+out="$(failboot fx)"
+has "a failed bootstrap over an install exits 1" "rc=1 " "$out"
+lacks "that hands nothing over" "HANDOVER" "$out"
+check "the existing install's marker is intact" "keep" "$(cat "${TMP}/fx/home/arm/.armctl/marker")"
+check "current is unchanged" "releases/v1" "$(readlink "${TMP}/fx/home/arm/.armctl/current")"
+check "no release or partial folder was added" "v1" "$(ls "${TMP}/fx/home/arm/.armctl/releases")"
+
 # --- the generated launcher -------------------------------------------------------
 L="${TMP}/launch/arm"; mkdir -p "${L}/.armctl/releases/v1"
 # shellcheck disable=SC2016 # the fake armctl.sh must expand these itself, at run time

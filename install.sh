@@ -214,9 +214,19 @@ bootstrap_main() {
     tag="${version:-$(bootstrap_resolve_tag)}"
     bootstrap_log "installing ARM ${tag} into ${arm_dir}"
 
+    # Fetch into a staging folder first: nothing under the arm folder is created
+    # until the bundle is verified and unpacked, so a failure (bootstrap_err
+    # exits) leaves the target exactly as it was. The trap removes the staging
+    # folder; it is cleared before the handover.
+    BOOTSTRAP_STAGE="$(mktemp -d)"
+    trap 'rm -rf "${BOOTSTRAP_STAGE:-}"' EXIT
+    bootstrap_fetch_bundle "${tag}" "${BOOTSTRAP_STAGE}/release" "${bundle}"
     mkdir -p "${arm_dir}/.armctl/releases"
     chmod 700 "${arm_dir}/.armctl"
-    bootstrap_fetch_bundle "${tag}" "${arm_dir}/.armctl/releases/${tag}" "${bundle}"
+    rm -rf "${arm_dir}/.armctl/releases/${tag}"
+    mv "${BOOTSTRAP_STAGE}/release" "${arm_dir}/.armctl/releases/${tag}"
+    rm -rf "${BOOTSTRAP_STAGE}"
+    trap - EXIT
     ln -sfn "releases/${tag}" "${arm_dir}/.armctl/current"
     bootstrap_write_launcher "${arm_dir}"
 
