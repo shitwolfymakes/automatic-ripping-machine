@@ -68,18 +68,17 @@ bootstrap_resolve_tag() {
     printf '%s' "${tag}"
 }
 
-# bootstrap_fetch_bundle <tag> <dest dir> [local bundle path]
-# Download (or copy) the bundle and its checksum, verify, and unpack into
-# <dest>. On any failure <dest> is left exactly as it was: the bundle is
-# unpacked beside it first and moved into place only when complete.
-# A tag becomes a folder name (and is removed with rm -rf), so it must not be
-# able to name another folder.
+# Refuse a tag that could name another folder (it becomes a folder name).
 bootstrap_check_tag() {
     if [[ ! "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
         bootstrap_err "'$1' is not a valid release tag (letters, digits, '.', '_' and '-' only, not starting with a punctuation mark). Nothing was changed."
     fi
 }
 
+# bootstrap_fetch_bundle <tag> <dest dir> [local bundle path]
+# Download (or copy) the bundle and its checksum, verify, and unpack into
+# <dest>. On any failure <dest> is left exactly as it was: the bundle is
+# unpacked beside it first and moved into place only when complete.
 bootstrap_fetch_bundle() {
     local tag="$1" dest="$2" local_bundle="${3:-}" tmp archive base want got
     bootstrap_check_tag "${tag}"

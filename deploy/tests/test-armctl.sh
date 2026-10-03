@@ -587,7 +587,12 @@ apply_case() {
         compose() { echo "compose $*" >> "${log_file}"; }
         HEALTH_RESULT="backend healthy"
         eval "${extra}"
-        rc=0; ( cmd_apply_upgrade --from v3.1.0 --to v3.2.0 "${extra_args[@]+"${extra_args[@]}"}" ) > "${TMPROOT}/apply.out" 2>&1 || rc=$?
+        # Standalone, not after `||` or in an `if`: errexit is ignored in any
+        # conditional context, which would hide the very failures under test.
+        set +e
+        ( set -e; cmd_apply_upgrade --from v3.1.0 --to v3.2.0 "${extra_args[@]+"${extra_args[@]}"}" ) > "${TMPROOT}/apply.out" 2>&1
+        rc=$?
+        set -e
         {
             echo "rc=${rc}"
             echo "TAG=$(grep '^ARM_IMAGE_TAG=' "${ARM_STATE_DIR}/.env" | cut -d= -f2)"
@@ -625,8 +630,11 @@ has "apply: the previous release is still there for a manual rollback" "RELEASES
 has "apply: the user is told where the previous release is" "releases/v3.1.0" "$out"
 
 # A failed start after the switch is reported like an unhealthy backend.
+# The real go_live, with only `compose up` failing: it must stop right there.
 # shellcheck disable=SC2016  # evaluated inside apply_case, on purpose
-out="$(apply_case apply-start-fails '' 'go_live() { echo go_live >> "${log_file}"; exit 1; }')"
+out="$(apply_case apply-start-fails '' 'compose() { echo "compose $*" >> "${log_file}"; [[ "$1" != up ]]; }')"
+has "apply: a failed compose up stops go_live before the respawn" "compose up -d --no-build;rc=1;" "$out"
+lacks "apply: a failed compose up does not respawn rippers" "respawn_rippers_if_needed" "$out"
 has "apply: a failed start after the switch is an error" "rc=1;" "$out"
 has "apply: a failed start is reported as not rolled back" "not rolled back" "$out"
 has "apply: a failed start names the previous release" "releases/v3.1.0" "$out"

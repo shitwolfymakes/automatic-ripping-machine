@@ -364,7 +364,7 @@ cmd_upgrade() {
 # Runs in the NEW release. Everything up to "The switch" works on a candidate
 # .env and leaves the running install exactly as it was.
 cmd_apply_upgrade() {
-    local from="" to="" live_env env_next
+    local from="" to="" live_env env_next rc
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --from)      from="$2"; shift 2 ;;
@@ -412,7 +412,18 @@ cmd_apply_upgrade() {
     fi
     arm_say "switched to ${to}"
 
-    if ! ( go_live ) || ! ( finish_up ); then
+    # errexit is ignored in any conditional context (if, !, && or ||), so each
+    # step runs as a standalone subshell with errexit on and its status is read
+    # afterwards: the first failing command inside stops the step.
+    set +e
+    ( set -e; go_live )
+    rc=$?
+    if [[ "${rc}" -eq 0 ]]; then
+        ( set -e; finish_up )
+        rc=$?
+    fi
+    set -e
+    if [[ "${rc}" -ne 0 ]]; then
         after_switch_failure "${from}" "${to}"
         exit 1
     fi
