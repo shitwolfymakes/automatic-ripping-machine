@@ -109,8 +109,11 @@
 		bind:this={panel}
 		role="menu"
 		aria-label={label}
-		style="position: fixed; top: {pos.top}px; {pos.right !== undefined ? `right: ${pos.right}px;` : `left: ${pos.left}px;`} max-height: {pos.maxHeight}px;"
-		class="z-50 {width} overflow-y-auto rounded-lg border border-primary/20 bg-surface {paddingClass} shadow-lg dark:border-primary/30 dark:bg-surface-dark {panelClass}"
+		style:top="{pos.top}px"
+		style:left={pos.right === undefined ? `${pos.left}px` : undefined}
+		style:right={pos.right !== undefined ? `${pos.right}px` : undefined}
+		style:max-height="{pos.maxHeight}px"
+		class="flyout {width} overflow-y-auto {paddingClass} {panelClass}"
 	>
 		{@render children({ close })}
 	</div>

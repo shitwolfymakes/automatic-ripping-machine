@@ -42,3 +42,16 @@
 <svg class="h-5 w-5 shrink-0 {icon.color}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d={icon.path} />
 </svg>
+
+<style>
+	/* file-icon-*: category colour, dissolved from legacy.css (Task 6). Text
+	   colour only, so plain colour rules on tokens (no shared block covers a
+	   7-way category palette on a single-purpose icon). */
+	.file-icon-directory { color: var(--color-accent-1); }
+	.file-icon-video { color: var(--color-accent-3); }
+	.file-icon-audio { color: var(--color-success); }
+	.file-icon-image { color: var(--color-accent-2); }
+	.file-icon-text { color: var(--color-text-muted); }
+	.file-icon-archive { color: var(--color-warning); }
+	.file-icon-other { color: var(--color-text-faint); }
+</style>

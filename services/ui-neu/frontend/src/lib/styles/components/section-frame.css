@@ -1,0 +1,42 @@
+/* section-frame: the accent-barred frame around a page section (themeable via --frame-accent). Elements: section-frame-bar-top, section-frame-bar-bottom, section-frame-sidebar, section-frame-body. */
+
+@layer components {
+	.section-frame {
+		/* Accent precedence: per-instance prop (inline --frame-accent) beats the
+		   theme-level --frame-accent token (inherited from :root), beats the
+		   historical orange default that applies when neither is set. */
+		--_accent: var(--frame-accent, var(--color-frame-accent));
+		border-radius: var(--radius);
+		overflow: hidden;
+	}
+
+	.section-frame-bar-top {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		height: 2rem;
+		background: var(--_accent);
+		padding: 0 1rem;
+		font-size: 0.75rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--color-on-frame-accent);
+	}
+
+	.section-frame-bar-bottom {
+		height: 0.25rem;
+		background: var(--_accent);
+		opacity: 0.4;
+	}
+
+	.section-frame-sidebar {
+		display: none;
+	}
+
+	.section-frame-body {
+		padding: 0.75rem 0.5rem;
+		border-left: 2px solid color-mix(in srgb, var(--_accent) 30%, transparent);
+		border-right: 2px solid color-mix(in srgb, var(--_accent) 30%, transparent);
+	}
+}

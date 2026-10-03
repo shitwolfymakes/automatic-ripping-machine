@@ -30,7 +30,7 @@ describe('getVideoTypeConfig', () => {
 		// instead of presuming "Movie" or showing generic "Disc".
 		const dvd = getVideoTypeConfig(null, 'dvd');
 		expect(dvd.label).toBe('Video');
-		expect(dvd.badgeClasses).toContain('cyan');
+		expect(dvd.accent).toContain('--color-accent-4');
 		expect(getVideoTypeConfig('unknown', 'bluray').label).toBe('Video');
 		expect(getVideoTypeConfig(undefined, 'bluray4k').label).toBe('Video');
 		expect(getVideoTypeConfig(null, 'uhd').label).toBe('Video');

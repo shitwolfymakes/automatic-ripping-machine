@@ -31,23 +31,45 @@
 	});
 </script>
 
-<nav class="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400">
+<nav class="breadcrumb flex items-center gap-1">
 	{#each segments as segment, i}
 		{#if i > 0}
-			<svg class="h-4 w-4 shrink-0 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<svg class="breadcrumb-sep shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
 			</svg>
 		{/if}
 		{#if i === segments.length - 1}
-			<span class="font-medium text-gray-900 dark:text-white">{segment.label}</span>
+			<span class="breadcrumb-current">{segment.label}</span>
 		{:else}
 			<button
 				type="button"
 				onclick={() => onnavigate(segment.root, segment.subpath)}
-				class="transition-colors hover:text-primary dark:hover:text-primary-text-dark"
+				class="breadcrumb-crumb"
 			>
 				{segment.label}
 			</button>
 		{/if}
 	{/each}
 </nav>
+
+<style>
+	.breadcrumb {
+		font-size: 0.875rem;
+		color: var(--color-text-muted);
+	}
+	.breadcrumb-sep {
+		width: 1rem;
+		height: 1rem;
+		color: var(--color-text-faint);
+	}
+	.breadcrumb-current {
+		font-weight: 500;
+		color: var(--color-text);
+	}
+	.breadcrumb-crumb {
+		transition: color var(--motion-fast) var(--ease);
+	}
+	.breadcrumb-crumb:hover {
+		color: var(--color-primary-text);
+	}
+</style>

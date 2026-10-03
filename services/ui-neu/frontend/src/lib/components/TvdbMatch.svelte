@@ -191,46 +191,37 @@
 		return `${sign}${delta}s`;
 	}
 
-	const btnBase =
-		'rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-50 transition-colors';
-	const inputBase =
-		'rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary dark:border-primary/30 dark:bg-primary/10 dark:text-white';
-	const tabBase =
-		'px-3 py-1.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors';
+
 </script>
 
-<div class="space-y-4">
+<div class="stack">
 	<!-- TVDB ID status -->
-	<div class="flex items-center gap-2 text-sm">
+	<div class="flex items-center gap-2">
 		{#if tvdbId}
-			<span class="font-mono text-xs text-gray-500 dark:text-gray-400">TVDB {tvdbId}</span>
+			<span class="mono tvdb-match-id">TVDB {tvdbId}</span>
 		{:else}
-			<span class="text-gray-400 dark:text-gray-500 italic">TVDB ID resolves on first match</span>
+			<span class="tvdb-match-id-empty">TVDB ID resolves on first match</span>
 		{/if}
 		{#if seasonAuto}
-			<span
-				class="rounded-sm bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-			>
+			<span class="badge badge-sm">
 				Season {seasonAuto}
 			</span>
 		{/if}
 	</div>
 
 	<!-- Tab bar -->
-	<div class="flex border-b border-gray-200 dark:border-gray-700">
+	<div class="tabs">
 		<button
+			data-selected={activeTab === 'match'}
 			onclick={() => (activeTab = 'match')}
-			class="{tabBase} {activeTab === 'match'
-				? 'border-primary text-primary dark:text-primary'
-				: 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+			class="tabs-tab"
 		>
 			Match Tracks
 		</button>
 		<button
+			data-selected={activeTab === 'browse'}
 			onclick={() => (activeTab = 'browse')}
-			class="{tabBase} {activeTab === 'browse'
-				? 'border-primary text-primary dark:text-primary'
-				: 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+			class="tabs-tab"
 		>
 			Browse Episodes
 		</button>
@@ -244,77 +235,68 @@
 				<input
 					type="checkbox"
 					bind:checked={autoDetect}
-					class="h-4 w-4 rounded-sm border-primary/25 text-primary focus:ring-primary dark:border-primary/30 dark:bg-primary/10"
+					class="tvdb-match-checkbox"
 				/>
-				<span class="text-sm text-gray-700 dark:text-gray-300">Auto-detect season</span>
+				<span class="tvdb-match-checkbox-label">Auto-detect season</span>
 			</label>
 			{#if !autoDetect}
-				<label>
-					<span class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
-						>Season</span
-					>
+				<label class="field">
+					<span class="field-label tvdb-match-field-label">Season</span>
 					<input
 						type="number"
 						bind:value={seasonInput}
 						min="1"
-						class="w-20 {inputBase}"
+						class="w-20"
 					/>
 				</label>
 			{/if}
-			<label>
-				<span class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
-					>Tolerance (sec)</span
-				>
+			<label class="field">
+				<span class="field-label tvdb-match-field-label">Tolerance (sec)</span>
 				<input
 					type="number"
 					bind:value={toleranceInput}
 					min="60"
 					step="30"
-					class="w-24 {inputBase}"
+					class="w-24"
 				/>
 			</label>
 			<button
 				onclick={handlePreview}
 				disabled={loading}
-				class="{btnBase} bg-primary text-on-primary hover:bg-primary-hover dark:bg-primary dark:hover:bg-primary-hover"
+				class="btn btn-primary tvdb-match-action-btn"
 			>
 				{loading ? 'Matching...' : 'Preview Match'}
 			</button>
 		</div>
 
 		{#if error}
-			<p class="text-sm text-red-600 dark:text-red-400">{error}</p>
+			<p class="field-error">{error}</p>
 		{/if}
 
 		<!-- Results -->
 		{#if result}
-			<div class="space-y-3">
+			<div class="stack">
 				<!-- Summary -->
-				<div class="flex flex-wrap items-center gap-3 text-sm">
-					<span class="font-medium text-gray-900 dark:text-white">
+				<div class="flex flex-wrap items-center gap-3">
+					<span class="tvdb-match-summary">
 						Season {result.season}: {result.match_count} match{result.match_count !== 1
 							? 'es'
 							: ''}
 					</span>
 					{#if result.score > 0}
-						<span class="text-gray-500 dark:text-gray-400"
-							>avg delta {result.score}s</span
-						>
+						<span class="tvdb-match-summary-note">avg delta {result.score}s</span>
 					{/if}
 				</div>
 
 				<!-- Alternative seasons (clickable to re-match) -->
 				{#if result.alternatives.length > 0}
 					<div class="flex flex-wrap items-center gap-1.5">
-						<span
-							class="text-xs font-medium text-gray-400 dark:text-gray-500"
-							>Also try:</span
-						>
+						<span class="tvdb-match-also-try">Also try:</span>
 						{#each result.alternatives as alt}
 							{#if alt.match_count > 0}
 								<button
 									onclick={() => switchToSeason(alt.season)}
-									class="rounded-md px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-blue-200 hover:bg-blue-50 dark:text-blue-400 dark:ring-blue-800 dark:hover:bg-blue-900/30 transition-colors"
+									class="chip chip-info chip-sm"
 								>
 									S{String(alt.season).padStart(2, '0')} ({alt.match_count} match{alt.match_count !== 1 ? 'es' : ''})
 								</button>
@@ -325,31 +307,27 @@
 
 				<!-- Match table -->
 				{#if result.matches.length > 0}
-					<div
-						class="overflow-x-auto rounded-lg border border-primary/20 dark:border-primary/20"
-					>
-						<table class="w-full text-left text-sm">
-							<thead
-								class="bg-page text-gray-600 dark:bg-primary/5 dark:text-gray-400"
-							>
+					<div class="overflow-x-auto tvdb-match-table-scroll">
+						<table class="table">
+							<thead>
 								<tr>
-									<th class="w-8 px-3 py-2">
+									<th class="table-header w-8">
 										<input
 											type="checkbox"
 											checked={selectedCount === result.matches.length}
 											onchange={toggleAllMatches}
-											class="h-4 w-4 rounded-sm border-primary/25 text-primary focus:ring-primary dark:border-primary/30 dark:bg-primary/10"
+											class="tvdb-match-checkbox"
 										/>
 									</th>
-									<th class="px-3 py-2 font-medium">Track</th>
-									<th class="px-3 py-2 font-medium">Track Length</th>
-									<th class="px-3 py-2 font-medium">Episode</th>
-									<th class="px-3 py-2 font-medium">Name</th>
-									<th class="px-3 py-2 font-medium">TVDB Runtime</th>
-									<th class="px-3 py-2 font-medium">Delta</th>
+									<th class="table-header">Track</th>
+									<th class="table-header">Track Length</th>
+									<th class="table-header">Episode</th>
+									<th class="table-header">Name</th>
+									<th class="table-header">TVDB Runtime</th>
+									<th class="table-header">Delta</th>
 								</tr>
 							</thead>
-							<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+							<tbody>
 								{#each result.matches as match}
 									{@const trackLen =
 										trackLengthMap[match.track_number] ?? null}
@@ -361,26 +339,25 @@
 										match.track_number
 									)}
 									<tr
-										class="hover:bg-page dark:hover:bg-gray-800/50 {!selected
-											? 'opacity-40'
-											: ''}"
+										class="table-row"
+										data-disabled={!selected}
 									>
-										<td class="px-3 py-2">
+										<td class="table-cell">
 											<input
 												type="checkbox"
 												checked={selected}
 												onchange={() =>
 													toggleMatch(match.track_number)}
-												class="h-4 w-4 rounded-sm border-primary/25 text-primary focus:ring-primary dark:border-primary/30 dark:bg-primary/10"
+												class="tvdb-match-checkbox"
 											/>
 										</td>
-										<td class="px-3 py-2 font-mono"
+										<td class="table-cell mono"
 											>{match.track_number}</td
 										>
-										<td class="px-3 py-2"
+										<td class="table-cell"
 											>{formatRuntime(trackLen)}</td
 										>
-										<td class="px-3 py-2 font-medium"
+										<td class="table-cell tvdb-match-episode-cell"
 											>S{String(result.season).padStart(
 												2,
 												'0'
@@ -388,22 +365,21 @@
 												match.episode_number
 											).padStart(2, '0')}</td
 										>
-										<td
-											class="px-3 py-2 text-gray-900 dark:text-white"
+										<td class="table-cell"
 											>{match.episode_name}</td
 										>
-										<td class="px-3 py-2"
+										<td class="table-cell"
 											>{formatRuntime(
 												match.episode_runtime
 											)}</td
 										>
 										<td
-											class="px-3 py-2 font-mono text-xs {delta !=
-												null && delta < 60
-												? 'text-green-600 dark:text-green-400'
+											class="table-cell mono tvdb-match-delta"
+											data-tone={delta != null && delta < 60
+												? 'success'
 												: delta != null && delta < 120
-													? 'text-amber-600 dark:text-amber-400'
-													: 'text-gray-500 dark:text-gray-400'}"
+													? 'warning'
+													: 'muted'}
 										>
 											{formatDelta(trackLen, match.episode_runtime)}
 										</td>
@@ -423,7 +399,7 @@
 							(t.duration_seconds ?? 0) >= 120
 					)}
 					{#if unmatchedTracks.length > 0}
-						<p class="text-xs text-gray-400 dark:text-gray-500">
+						<p class="tvdb-match-unmatched">
 							Unmatched tracks: {unmatchedTracks
 								.map(
 									(t) =>
@@ -438,7 +414,7 @@
 						<button
 							onclick={handleApply}
 							disabled={applying || selectedCount === 0}
-							class="{btnBase} bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
+							class="btn tvdb-match-success-btn tvdb-match-action-btn"
 						>
 							{applying
 								? 'Applying...'
@@ -446,16 +422,15 @@
 						</button>
 						{#if applyFeedback}
 							<span
-								class="text-xs {applyFeedback.type === 'success'
-									? 'text-green-600 dark:text-green-400'
-									: 'text-red-600 dark:text-red-400'}"
+								class="tvdb-match-feedback"
+								data-tone={applyFeedback.type}
 							>
 								{applyFeedback.message}
 							</span>
 						{/if}
 					</div>
 				{:else}
-					<p class="text-sm text-gray-400 dark:text-gray-500">
+					<p class="tvdb-match-empty">
 						No matches found. Try adjusting the tolerance or season.
 					</p>
 				{/if}
@@ -465,86 +440,72 @@
 	<!-- ===== BROWSE TAB ===== -->
 	{:else if activeTab === 'browse'}
 		<div class="flex flex-wrap items-end gap-3">
-			<label>
-				<span class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
-					>Season</span
-				>
+			<label class="field">
+				<span class="field-label tvdb-match-field-label">Season</span>
 				<input
 					type="number"
 					bind:value={browseSeason}
 					min="1"
-					class="w-20 {inputBase}"
+					class="w-20"
 				/>
 			</label>
 			<button
 				onclick={handleBrowse}
 				disabled={browseLoading}
-				class="{btnBase} bg-primary text-on-primary hover:bg-primary-hover dark:bg-primary dark:hover:bg-primary-hover"
+				class="btn btn-primary tvdb-match-action-btn"
 			>
 				{browseLoading ? 'Loading...' : 'Load Episodes'}
 			</button>
 		</div>
 
 		{#if browseError}
-			<p class="text-sm text-red-600 dark:text-red-400">{browseError}</p>
+			<p class="field-error">{browseError}</p>
 		{/if}
 
 		{#if browseResult}
-			<div class="space-y-2">
-				<p class="text-xs text-gray-500 dark:text-gray-400">
+			<div class="stack-sm stack">
+				<p class="tvdb-match-summary-note">
 					{browseResult.episodes.length} episode{browseResult.episodes.length !== 1 ? 's' : ''} in Season {browseResult.season}
 					{#if browseResult.tvdb_id}
-						<span class="font-mono">(TVDB {browseResult.tvdb_id})</span>
+						<span class="mono">(TVDB {browseResult.tvdb_id})</span>
 					{/if}
 				</p>
 
 				{#if browseResult.episodes.length > 0}
-					<div
-						class="overflow-x-auto rounded-lg border border-primary/20 dark:border-primary/20"
-					>
-						<table class="w-full text-left text-sm">
-							<thead
-								class="bg-page text-gray-600 dark:bg-primary/5 dark:text-gray-400"
-							>
+					<div class="overflow-x-auto tvdb-match-table-scroll">
+						<table class="table">
+							<thead>
 								<tr>
-									<th class="px-3 py-2 font-medium w-16">#</th>
-									<th class="px-3 py-2 font-medium">Episode Name</th>
-									<th class="px-3 py-2 font-medium w-24">Runtime</th>
-									<th class="px-3 py-2 font-medium w-24">Aired</th>
-									<th class="px-3 py-2 font-medium w-24">Matched</th>
+									<th class="table-header w-16">#</th>
+									<th class="table-header">Episode Name</th>
+									<th class="table-header w-24">Runtime</th>
+									<th class="table-header w-24">Aired</th>
+									<th class="table-header w-24">Matched</th>
 								</tr>
 							</thead>
-							<tbody
-								class="divide-y divide-gray-200 dark:divide-gray-700"
-							>
+							<tbody>
 								{#each browseResult.episodes as ep}
 									{@const matchedTrack = trackEpisodeMap[String(ep.number)]}
-									<tr
-										class="hover:bg-page dark:hover:bg-gray-800/50"
-									>
-										<td class="px-3 py-2 font-mono text-gray-500 dark:text-gray-400"
+									<tr class="table-row">
+										<td class="table-cell mono tvdb-match-muted"
 											>E{String(ep.number).padStart(2, '0')}</td
 										>
-										<td
-											class="px-3 py-2 text-gray-900 dark:text-white"
+										<td class="table-cell"
 											>{ep.name}</td
 										>
-										<td class="px-3 py-2"
+										<td class="table-cell"
 											>{formatRuntime(ep.runtime)}</td
 										>
-										<td
-											class="px-3 py-2 text-xs text-gray-500 dark:text-gray-400"
+										<td class="table-cell tvdb-match-summary-note"
 											>{ep.aired || '--'}</td
 										>
-										<td class="px-3 py-2">
+										<td class="table-cell">
 											{#if matchedTrack}
-												<span
-													class="rounded-sm bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-400"
-												>
+												<span class="badge badge-sm badge-success">
 													Track {matchedTrack}
 												</span>
 											{:else}
-												<span class="text-xs text-gray-400">--</span>
+												<span class="tvdb-match-empty-sm">--</span>
 											{/if}
 										</td>
 									</tr>
@@ -553,7 +514,7 @@
 						</table>
 					</div>
 				{:else}
-					<p class="text-sm text-gray-400 dark:text-gray-500">
+					<p class="tvdb-match-empty">
 						No episodes found for this season.
 					</p>
 				{/if}
@@ -561,3 +522,31 @@
 		{/if}
 	{/if}
 </div>
+
+<style>
+	.tvdb-match-id { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
+	.tvdb-match-episode-cell { font-weight: 500; }
+	.tvdb-match-id-empty { font-style: italic; color: var(--color-text-faint); }
+	.tvdb-match-checkbox { width: 1rem; height: 1rem; border-radius: var(--radius-sm); accent-color: var(--color-primary); }
+	.tvdb-match-checkbox-label { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-secondary); }
+	.tvdb-match-field-label { font-size: 0.75rem; line-height: 1rem; }
+	.tvdb-match-summary { font-weight: 500; color: var(--color-text); }
+	.tvdb-match-summary-note { color: var(--color-text-muted); }
+	.tvdb-match-also-try { font-size: 0.75rem; line-height: 1rem; font-weight: 500; color: var(--color-text-faint); }
+	.tvdb-match-table-scroll { border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
+	.tvdb-match-delta { font-size: 0.75rem; line-height: 1rem; }
+	.tvdb-match-delta[data-tone="success"] { color: var(--color-success); }
+	.tvdb-match-delta[data-tone="warning"] { color: var(--color-on-warning-soft); }
+	.tvdb-match-delta[data-tone="muted"] { color: var(--color-text-muted); }
+	.tvdb-match-unmatched { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
+	.tvdb-match-success-btn { border: 0; background: var(--color-success); color: var(--color-on-primary); }
+	/* the original action buttons were px-3 py-1.5 (0.75rem/0.375rem) */
+	.tvdb-match-action-btn { padding: 0.375rem 0.75rem; }
+	.tvdb-match-success-btn:hover { filter: brightness(0.9); }
+	.tvdb-match-feedback { font-size: 0.75rem; line-height: 1rem; }
+	.tvdb-match-feedback[data-tone="success"] { color: var(--color-success); }
+	.tvdb-match-feedback[data-tone="error"] { color: var(--color-danger); }
+	.tvdb-match-empty { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-faint); }
+	.tvdb-match-empty-sm { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
+	.tvdb-match-muted { color: var(--color-text-muted); }
+</style>

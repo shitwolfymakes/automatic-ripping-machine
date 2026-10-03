@@ -16,7 +16,29 @@
 
 <span
 	data-glyph
-	class="inline-flex shrink-0 items-center justify-center rounded-md border border-white/5 font-bold"
-	style="width:{size}px; height:{size}px; font-size:{Math.round(size * 0.45)}px; background:{bg}; color:{fg};"
+	class="service-glyph"
+	style:--size="{size}px"
+	style:--font-size="{Math.round(size * 0.45)}px"
+	style:--bg={bg}
+	style:--fg={fg}
 	aria-hidden="true"
 >{letter}</span>
+
+<style>
+	.service-glyph {
+		display: inline-flex;
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		width: var(--size);
+		height: var(--size);
+		font-size: var(--font-size);
+		border-radius: var(--radius-md);
+		/* the glyph sits on its own coloured --bg, so the hairline is the
+		   on-primary white rather than a surface or border token. */
+		border: 1px solid color-mix(in srgb, var(--color-on-primary) 5%, transparent);
+		font-weight: 700;
+		background: var(--bg);
+		color: var(--fg);
+	}
+</style>

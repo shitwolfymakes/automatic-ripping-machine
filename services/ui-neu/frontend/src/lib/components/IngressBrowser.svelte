@@ -198,39 +198,39 @@
 
 <div class="flex min-h-0 flex-1 flex-col">
 	{#if needsConfig}
-		<div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400">
-			<p class="font-medium">Folder Import Path is not configured</p>
-			<p class="mt-1">Set the <strong>Folder Import Path</strong> in
+		<div class="alert alert-warning alert-lg">
+			<p class="alert-title">Folder Import Path is not configured</p>
+			<p class="alert-body">Set the <strong>Folder Import Path</strong> in
 				<button
 					type="button"
-					class="underline hover:text-amber-900 dark:hover:text-amber-300"
+					class="ingress-browser-config-link"
 					onclick={() => { showImportWizard.set(false); goto('/settings#ripping/media-directories'); }}
 				>Settings &rarr; Ripping &rarr; Media Directories</button>
 				to the directory containing your BDMV/VIDEO_TS folders or ISO files.</p>
 		</div>
 	{:else if error}
-		<div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+		<div class="alert alert-danger alert-lg">
 			<p>{error}</p>
 			<button
 				type="button"
 				onclick={init}
-				class="mt-2 rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-800 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50"
+				class="ingress-browser-retry"
 			>Retry</button>
 		</div>
 	{:else if loading && entries.length === 0}
-		<div class="py-8 text-center text-gray-400">Loading...</div>
+		<div class="ingress-browser-loading">Loading...</div>
 	{:else}
 		<!-- Navigation bar (pinned) -->
-		<div class="shrink-0 space-y-2 pb-2">
+		<div class="shrink-0 stack stack-sm ingress-browser-nav">
 			<!-- Path bar -->
-			<div class="flex items-center gap-1 rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-sm dark:border-primary/20 dark:bg-primary/10">
-				<svg class="h-4 w-4 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<div class="flex items-center gap-1 panel-section ingress-browser-path-bar">
+				<svg class="h-4 w-4 shrink-0 ingress-browser-path-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
 				</svg>
-				<span class="truncate text-gray-700 dark:text-gray-300">{currentPath || ingressPath}</span>
+				<span class="truncate ingress-browser-path-text">{currentPath || ingressPath}</span>
 			</div>
 			{#if !currentIsDisc}
-				<p class="text-xs text-gray-400 dark:text-gray-500">Navigate to a folder containing BDMV or VIDEO_TS, or pick an ISO file.</p>
+				<p class="ingress-browser-hint">Navigate to a folder containing BDMV or VIDEO_TS, or pick an ISO file.</p>
 			{/if}
 
 			<!-- Filter -->
@@ -239,59 +239,59 @@
 				bind:value={filter}
 				disabled={!filterEnabled}
 				placeholder="Filter entries..."
-				class="w-full rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary dark:border-primary/30 dark:bg-primary/10 dark:text-white dark:placeholder-gray-500 disabled:cursor-not-allowed disabled:opacity-40"
+				class="field-control"
 			/>
 
 			<!-- Disc detected banner -->
 			{#if currentIsDisc}
-				<div class="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400">
+				<div class="alert alert-success ingress-browser-disc-alert">
 					Disc folder detected - this folder is ready to import.
 				</div>
 			{/if}
 		</div>
 
 		<!-- Directory table (scrollable) -->
-		<div bind:this={scrollContainer} class="min-h-0 flex-1 overflow-y-auto transition-opacity {loading ? 'pointer-events-none opacity-50' : ''}">
-			<div class="rounded-lg border border-primary/20 dark:border-primary/20">
-				<table class="w-full table-fixed text-left text-sm">
+		<div bind:this={scrollContainer} class="min-h-0 flex-1 overflow-y-auto ingress-browser-table-scroll" data-loading={loading}>
+			<div class="ingress-browser-table-wrap">
+				<table class="table ingress-browser-table">
 					<colgroup>
 						<col />
 						<col class="w-20" />
 						<col class="w-28" />
 					</colgroup>
-					<thead class="bg-page text-gray-600 dark:bg-primary/5 dark:text-gray-400">
+					<thead>
 						<tr>
-							<th class="px-4 py-2 font-medium">
-								<button type="button" onclick={() => toggleSort('name')} class="hover:text-gray-700 dark:hover:text-gray-300">Name {@render sortIcon('name')}</button>
+							<th class="table-header">
+								<button type="button" onclick={() => toggleSort('name')} class="ingress-browser-sort-btn">Name {@render sortIcon('name')}</button>
 							</th>
-							<th class="px-4 py-2 font-medium">
-								<button type="button" onclick={() => toggleSort('size')} class="hover:text-gray-700 dark:hover:text-gray-300">Size {@render sortIcon('size')}</button>
+							<th class="table-header">
+								<button type="button" onclick={() => toggleSort('size')} class="ingress-browser-sort-btn">Size {@render sortIcon('size')}</button>
 							</th>
-							<th class="px-4 py-2 font-medium">
-								<button type="button" onclick={() => toggleSort('modified')} class="hover:text-gray-700 dark:hover:text-gray-300">Modified {@render sortIcon('modified')}</button>
+							<th class="table-header">
+								<button type="button" onclick={() => toggleSort('modified')} class="ingress-browser-sort-btn">Modified {@render sortIcon('modified')}</button>
 							</th>
 						</tr>
 					</thead>
-					<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+					<tbody>
 					{#if currentPath && currentPath !== ingressPath}
 						<tr
-							class="cursor-pointer transition-colors hover:bg-primary/5 dark:hover:bg-primary/10"
+							class="table-row ingress-browser-row"
 							onclick={goBack}
 						>
-							<td class="px-4 py-2">
+							<td class="table-cell">
 								<div class="flex items-center gap-2">
-									<svg class="h-4 w-4 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<svg class="h-4 w-4 shrink-0 ingress-browser-path-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12" />
 									</svg>
-									<span class="text-gray-500 dark:text-gray-400">..</span>
+									<span class="ingress-browser-muted">..</span>
 								</div>
 							</td>
-							<td class="px-4 py-2"></td>
-							<td class="px-4 py-2"></td>
+							<td class="table-cell"></td>
+							<td class="table-cell"></td>
 						</tr>
 					{/if}
 					{#if sortedEntries.length === 0}
-						<tr><td colspan="3" class="px-4 py-6 text-center text-gray-400 dark:text-gray-500">No entries found.</td></tr>
+						<tr><td colspan="3" class="table-cell ingress-browser-empty">No entries found.</td></tr>
 					{/if}
 						{#each sortedEntries as entry (entry.name)}
 							{@const fullPath = currentPath ? `${currentPath}/${entry.name}` : entry.name}
@@ -302,35 +302,34 @@
 								data-kind={entry.kind}
 								data-disabled={disabled ? '' : undefined}
 								aria-disabled={disabled ? 'true' : undefined}
-								class="transition-colors {disabled
-									? 'cursor-default opacity-50'
-									: `cursor-pointer hover:bg-primary/5 dark:hover:bg-primary/10 ${selectedPath === fullPath ? 'bg-primary/15 dark:bg-primary/15' : ''}`}"
+								class="table-row ingress-browser-row"
+								data-selected={!disabled && selectedPath === fullPath}
 								onclick={() => { if (!disabled) handleSelect(entry); }}
 								ondblclick={() => { if (!disabled) handleOpen(entry); }}
 							>
-								<td class="px-4 py-2">
+								<td class="table-cell">
 									<div class="flex items-center gap-2 overflow-hidden">
 										<span class="shrink-0">
 											{#if entry.kind === 'iso'}
-												<Disc class="h-4 w-4 text-primary" />
+												<Disc class="h-4 w-4 ingress-browser-icon-primary" />
 											{:else if entry.kind === 'dir' && entry.importable && !isStructureDir}
-												<FolderArchive class="h-4 w-4 text-primary" />
+												<FolderArchive class="h-4 w-4 ingress-browser-icon-primary" />
 											{:else if entry.kind === 'dir'}
-												<Folder class="h-4 w-4 text-gray-500" />
+												<Folder class="h-4 w-4 ingress-browser-icon-muted" />
 											{:else}
-												<FileIcon class="h-4 w-4 text-gray-400" />
+												<FileIcon class="h-4 w-4 ingress-browser-icon-faint" />
 											{/if}
 										</span>
-										<span class="truncate {disabled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}">{entry.name}</span>
+										<span class="truncate ingress-browser-name" data-disabled={disabled}>{entry.name}</span>
 										{#if badge}
-											<span class="shrink-0 rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+											<span class="ingress-browser-disc-badge">
 												{badge}
 											</span>
 										{/if}
 									</div>
 								</td>
-								<td class="px-4 py-2 text-gray-500 dark:text-gray-400">{formatSize(entry.size ?? 0)}</td>
-								<td class="whitespace-nowrap px-4 py-2 text-gray-500 dark:text-gray-400">
+								<td class="table-cell ingress-browser-muted">{formatSize(entry.size ?? 0)}</td>
+								<td class="table-cell whitespace-nowrap ingress-browser-muted">
 									{entry.modified ? new Date(entry.modified).toLocaleDateString() : '--'}
 								</td>
 							</tr>
@@ -341,3 +340,40 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	.ingress-browser-config-link { text-decoration: underline; }
+	/* the original was a soft danger pill (bg-red-100 text-red-800), not a
+	   solid badge fill - no shared block matches this shape exactly */
+	.ingress-browser-retry { margin-top: 0.5rem; border: 0; border-radius: var(--radius-md); padding: 0.25rem 0.75rem; font-size: 0.75rem; line-height: 1rem; font-weight: 500; cursor: pointer; background: var(--color-danger-soft); color: var(--color-on-danger-soft); }
+	/* original was p-3 (0.75rem all sides), not .alert's own 0.5rem/0.75rem default */
+	.ingress-browser-disc-alert { padding: 0.75rem; }
+	.ingress-browser-retry:hover { background: color-mix(in srgb, var(--color-danger-soft) 60%, var(--color-danger)); }
+	.ingress-browser-loading { padding: 2rem 0; text-align: center; color: var(--color-text-faint); }
+	.ingress-browser-nav { padding-bottom: 0.5rem; }
+	.ingress-browser-path-bar { font-size: 0.875rem; line-height: 1.25rem; padding: 0.375rem 0.75rem; }
+	.ingress-browser-path-icon { color: var(--color-text-faint); }
+	.ingress-browser-path-text { color: var(--color-text-secondary); }
+	.ingress-browser-hint { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
+	.ingress-browser-table-scroll { transition: opacity var(--motion-fast) var(--ease); }
+	.ingress-browser-table-scroll[data-loading="true"] { pointer-events: none; opacity: 0.5; }
+	.ingress-browser-table-wrap { border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
+	.ingress-browser-table { table-layout: fixed; }
+	.ingress-browser-sort-btn { color: inherit; }
+	.ingress-browser-sort-btn:hover { color: var(--color-text-secondary); }
+	.ingress-browser-row { cursor: pointer; }
+	.ingress-browser-row[data-disabled] { cursor: default; opacity: 0.5; }
+	.ingress-browser-muted { color: var(--color-text-muted); }
+	.ingress-browser-empty { padding: 1.5rem 1rem; text-align: center; color: var(--color-text-faint); }
+	/* :global: forwarded through lucide-svelte's Disc/FolderArchive class prop */
+	:global(.ingress-browser-icon-primary) { color: var(--color-primary); }
+	/* :global: forwarded through lucide-svelte's Folder class prop */
+	:global(.ingress-browser-icon-muted) { color: var(--color-text-muted); }
+	/* :global: forwarded through lucide-svelte's FileIcon class prop */
+	:global(.ingress-browser-icon-faint) { color: var(--color-text-faint); }
+	.ingress-browser-name { color: var(--color-text); }
+	.ingress-browser-name[data-disabled="true"] { color: var(--color-text-faint); }
+	/* the original was a soft warning pill (bg-amber-100 text-amber-700
+	   text-[10px]), not badge-warning's solid fill */
+	.ingress-browser-disc-badge { border-radius: var(--radius-sm); padding: 0.125rem 0.375rem; font-size: 10px; font-weight: 600; background: var(--color-warning-soft); color: var(--color-on-warning-soft); }
+</style>

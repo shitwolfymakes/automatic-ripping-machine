@@ -22,15 +22,15 @@ describe('SortIndicator', () => {
 		expect(container.querySelector('svg')).toBeNull();
 	});
 
-	it('applies the inline sort-indicator size classes', () => {
+	it('applies the table-sort-indicator class', () => {
 		const { container } = renderComponent(SortIndicator, { props: { dir: 'asc' } });
 		const svg = container.querySelector('svg');
-		expect(svg).toHaveClass('h-3', 'w-3', 'inline-block');
+		expect(svg).toHaveClass('table-sort-indicator');
 	});
 
 	it('appends a custom class', () => {
 		const { container } = renderComponent(SortIndicator, { props: { dir: 'asc', class: 'inline' } });
 		const svg = container.querySelector('svg');
-		expect(svg).toHaveClass('h-3', 'w-3', 'inline-block', 'inline');
+		expect(svg).toHaveClass('table-sort-indicator', 'inline');
 	});
 });

@@ -10,11 +10,6 @@
 	let { onclick, label = 'Close', class: className = '' }: Props = $props();
 </script>
 
-<button
-	type="button"
-	aria-label={label}
-	{onclick}
-	class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 {className}"
->
+<button type="button" aria-label={label} {onclick} class="btn btn-icon {className}">
 	<Glyph name="x" />
 </button>

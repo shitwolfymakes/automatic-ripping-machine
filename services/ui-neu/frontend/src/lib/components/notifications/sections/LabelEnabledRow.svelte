@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { FIELD_INPUT_CLASS } from '$lib/types/notifications';
 	import Toggle from '../Toggle.svelte';
 
 	let {
@@ -8,13 +7,19 @@
 	}: { name: string; enabled: boolean } = $props();
 </script>
 
-<div class="grid grid-cols-[1fr_auto] items-end gap-4">
-	<label class="flex flex-col gap-1">
-		<span class="text-sm font-medium text-gray-700 dark:text-gray-300">Channel Label *</span>
-		<input class={FIELD_INPUT_CLASS} aria-label="Channel Label" bind:value={name} required />
+<div class="label-enabled-row">
+	<label class="field">
+		<span class="field-label">Channel Label *</span>
+		<input aria-label="Channel Label" bind:value={name} required />
 	</label>
-	<div class="flex items-center gap-2 pb-2">
+	<div class="cluster label-enabled-row-toggle">
 		<Toggle checked={enabled} label="Enabled" onchange={(v) => (enabled = v)} />
-		<span class="text-sm text-gray-700 dark:text-gray-300">Enabled</span>
+		<span class="label-enabled-row-toggle-label">Enabled</span>
 	</div>
 </div>
+
+<style>
+	.label-enabled-row { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 1rem; }
+	.label-enabled-row-toggle { padding-bottom: 0.5rem; }
+	.label-enabled-row-toggle-label { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-secondary); }
+</style>

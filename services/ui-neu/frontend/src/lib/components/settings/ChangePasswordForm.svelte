@@ -38,25 +38,32 @@
 	}
 </script>
 
-<form onsubmit={onSubmit} class="w-full max-w-sm space-y-4 rounded-lg border border-primary/20 bg-surface p-6 dark:bg-surface-dark">
+<form onsubmit={onSubmit} class="panel change-password-form stack">
 	<!-- Title lives in the route page -->
 
 	{#if error}
-		<p in:reveal class="rounded bg-red-100 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">{error}</p>
+		<p in:reveal class="alert alert-danger">{error}</p>
 	{/if}
-	<label class="block text-sm">
-		<span class="mb-1 block">Current password</span>
-		<input bind:value={current} type="password" required autocomplete="current-password" class="w-full rounded border border-primary/20 px-3 py-2 dark:bg-surface-dark" />
+	<label class="field">
+		<span class="field-label">Current password</span>
+		<input bind:value={current} type="password" required autocomplete="current-password" />
 	</label>
-	<label class="block text-sm">
-		<span class="mb-1 block">New password</span>
-		<input bind:value={next} type="password" required autocomplete="new-password" class="w-full rounded border border-primary/20 px-3 py-2 dark:bg-surface-dark" />
+	<label class="field">
+		<span class="field-label">New password</span>
+		<input bind:value={next} type="password" required autocomplete="new-password" />
 	</label>
-	<label class="block text-sm">
-		<span class="mb-1 block">Confirm new password</span>
-		<input bind:value={confirm} type="password" required autocomplete="new-password" class="w-full rounded border border-primary/20 px-3 py-2 dark:bg-surface-dark" />
+	<label class="field">
+		<span class="field-label">Confirm new password</span>
+		<input bind:value={confirm} type="password" required autocomplete="new-password" />
 	</label>
-	<button type="submit" disabled={submitting} class="w-full rounded bg-primary px-4 py-2 font-medium text-white disabled:opacity-60">
+	<button type="submit" disabled={submitting} class="btn btn-primary change-password-form-submit">
 		{submitting ? 'Saving...' : 'Set new password'}
 	</button>
 </form>
+
+<style>
+	/* the form is capped to a comfortable reading width and its own vertical
+	   rhythm (space-y-4 = 1rem) rather than the wider panel default. */
+	.change-password-form { width: 100%; max-width: 24rem; gap: 1rem; }
+	.change-password-form-submit { width: 100%; }
+</style>

@@ -6,23 +6,23 @@ describe('StatusBadge', () => {
 	afterEach(() => cleanup());
 
 	it.each([
-		['ripping', 'Ripping', 'status-active'],
-		['SUCCESS', 'Success', 'status-success'],
-		['copying', 'Copying', 'status-finishing'],
+		['ripping', 'Ripping', 'active'],
+		['SUCCESS', 'Success', 'success'],
+		['copying', 'Copying', 'finishing'],
 		// Unmapped statuses humanize (proper-cased) rather than leaking raw text.
-		['something_new', 'Something New', 'status-unknown']
-	])('renders status=%s as "%s" with class %s', (status, expectedText, expectedClass) => {
+		['something_new', 'Something New', 'unknown']
+	])('renders status=%s as "%s" with data-status %s', (status, expectedText, expectedDataStatus) => {
 		renderComponent(StatusBadge, { props: { status } });
 		const badge = screen.getByText(expectedText);
 		expect(badge).toBeInTheDocument();
-		expect(badge).toHaveClass(expectedClass);
+		expect(badge).toHaveAttribute('data-status', expectedDataStatus);
 	});
 
 	it('renders null status as Unknown', () => {
 		renderComponent(StatusBadge, { props: { status: null } });
 		const badge = screen.getByText('Unknown');
 		expect(badge).toBeInTheDocument();
-		expect(badge).toHaveClass('status-unknown');
+		expect(badge).toHaveAttribute('data-status', 'unknown');
 	});
 
 	it('renders Complete for a done transcode job when given the effective status', () => {

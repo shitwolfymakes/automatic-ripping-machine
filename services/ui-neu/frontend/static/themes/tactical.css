@@ -4,7 +4,7 @@
 	-webkit-backdrop-filter: blur(10px);
 }
 
-[data-scheme="tactical"] aside [data-logo]::before {
+[data-scheme="tactical"] aside .nav-logo::before {
 	content: '';
 	display: block;
 	height: 1px;
@@ -14,12 +14,12 @@
 	margin-bottom: 1rem;
 }
 
-[data-scheme="tactical"] aside [data-logo] {
+[data-scheme="tactical"] aside .nav-logo {
 	flex-direction: column;
 	text-shadow: 0 0 15px rgba(100, 255, 218, 0.8);
 }
 
-[data-scheme="tactical"] aside [data-logo] img {
+[data-scheme="tactical"] aside .nav-logo img {
 	filter: drop-shadow(0 0 10px rgba(100, 255, 218, 0.6));
 }
 
@@ -30,7 +30,7 @@
 	box-shadow: 0 0 8px rgba(100, 255, 218, 0.4);
 }
 
-[data-scheme="tactical"] aside nav a {
+[data-scheme="tactical"] aside .nav-item {
 	text-transform: uppercase;
 	font-size: 0.7rem;
 	letter-spacing: 0.2em;
@@ -40,26 +40,20 @@
 	transition: all 0.3s;
 }
 
-[data-scheme="tactical"] aside nav a svg {
+[data-scheme="tactical"] aside .nav-item svg {
 	display: none;
 }
 
-[data-scheme="tactical"] aside nav a:hover {
+[data-scheme="tactical"] aside .nav-item:hover {
 	background: rgba(100, 255, 218, 0.05) !important;
 	border-left: 1px solid #64ffda;
 	padding-left: 1.5rem;
 }
 
-[data-scheme="tactical"] aside nav a[data-active="true"] {
+[data-scheme="tactical"] aside .nav-item[data-active="true"] {
 	background: rgba(100, 255, 218, 0.1) !important;
 	border-left: 3px solid #64ffda;
 	color: #fff !important;
-}
-
-[data-scheme="tactical"] aside [data-stats] {
-	border: 1px solid rgba(100, 255, 218, 0.2);
-	background: transparent;
-	margin: 0.5rem;
 }
 
 [data-scheme="tactical"] [data-progress-track] {
@@ -74,33 +68,29 @@
 	border-radius: 0 !important;
 }
 
-[data-scheme="tactical"] aside .text-gray-400,
+/* Muted sidebar readouts (the stats labels and the Storage eyebrow).
+   The colour is a token override scoped to the sidebar, so it reaches
+   component-local text too; the typography rides the .eyebrow block. */
+[data-scheme="tactical"] aside {
+	--color-text-muted: #64ffda;
+	--color-text-faint: #64ffda;
+}
 
-[data-scheme="tactical"] aside .text-gray-500,
-
-[data-scheme="tactical"] aside .text-gray-600,
-
-[data-scheme="tactical"] aside .dark\:text-gray-300,
-
-[data-scheme="tactical"] aside .dark\:text-gray-400,
-
-[data-scheme="tactical"] aside .dark\:text-gray-500 {
-	color: #64ffda !important;
+[data-scheme="tactical"] aside .eyebrow {
+	color: #64ffda;
 	font-size: 0.6rem;
 	letter-spacing: 0.15em;
 	text-transform: uppercase;
 }
 
-[data-scheme="tactical"] aside .text-orange-500 {
-	color: #64ffda !important;
+/* The CPU temperature readout in the sidebar stats reads the
+   accent-1 role. */
+[data-scheme="tactical"] aside {
+	--color-accent-1: #64ffda;
 }
 
 [data-scheme="tactical"] header {
 	border-color: rgba(100, 255, 218, 0.2) !important;
-}
-
-[data-scheme="tactical"] .bg-primary .text-on-primary {
-	color: rgb(0, 223, 169) !important;
 }
 
 [data-scheme="tactical"] body {

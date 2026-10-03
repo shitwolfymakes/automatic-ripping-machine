@@ -4,6 +4,7 @@
 	import { groupBlurb, sectionFields, KEY_CHECK_NAMES } from '$lib/utils/settings-sections';
 	import { formatDateTime } from '$lib/utils/format';
 	import ConfigSchemaField from './ConfigSchemaField.svelte';
+	import Glyph from '$lib/components/Glyph.svelte';
 
 	let {
 		group,
@@ -96,25 +97,25 @@
 
 <div class="flex flex-col gap-6">
 	<div>
-		<h2 class="text-lg font-semibold text-gray-900 dark:text-white">{group.name}</h2>
+		<h2 class="schema-config-form-title">{group.name}</h2>
 		{#if blurb}
-			<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{blurb}</p>
+			<p class="schema-config-form-description mt-1">{blurb}</p>
 		{/if}
 	</div>
 
-	<section class="space-y-6">
+	<section class="stack stack-lg">
 		{#each sections as section (section.title)}
 			<div
 				data-testid="settings-section"
-				class="rounded-lg border border-primary/20 bg-surface p-6 shadow-xs dark:border-primary/20 dark:bg-surface-dark"
+				class="panel schema-config-form-panel"
 			>
-				<h3 class="mb-1 text-base font-semibold text-gray-900 dark:text-white">{section.title}</h3>
+				<h3 class="schema-config-form-section-title">{section.title}</h3>
 				{#if section.blurb}
-					<p class="mb-4 text-sm text-gray-500 dark:text-gray-400">{section.blurb}</p>
+					<p class="schema-config-form-description schema-config-form-section-blurb">{section.blurb}</p>
 				{:else}
-					<div class="mb-4"></div>
+					<div class="schema-config-form-section-blurb"></div>
 				{/if}
-				<div class="space-y-4">
+				<div class="stack">
 					{#each section.fields as field (field.key)}
 						{#if field.key in KEY_CHECK_NAMES}
 							<ConfigSchemaField {field} bind:value={values[field.key]}>
@@ -123,68 +124,38 @@
 										type="button"
 										onclick={() => runKeyCheck(field.key)}
 										disabled={keyCheckRunning[field.key]}
-										class="shrink-0 rounded-lg border border-primary/20 px-3 py-2 text-sm text-gray-700 hover:bg-primary/5 disabled:opacity-50 dark:border-primary/20 dark:text-gray-300 dark:hover:bg-primary/10"
+										class="btn schema-config-form-key-check-btn"
 									>
 										{keyCheckRunning[field.key] ? 'Checking...' : 'Check API Key'}
 									</button>
 								{/snippet}
 							</ConfigSchemaField>
-							<div class="text-sm" data-testid="key-check-{field.key}">
+							<div class="schema-config-form-key-check" data-testid="key-check-{field.key}" data-empty={!keyCheckResult[field.key]}>
 								{#if keyCheckResult[field.key]}
 									{@const result = keyCheckResult[field.key]}
 									{#if result?.status === 'ok'}
-										<span class="flex items-center gap-1.5 text-green-600 dark:text-green-400">
-											<svg class="h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-												<path
-													fill-rule="evenodd"
-													d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-													clip-rule="evenodd"
-												/>
-											</svg>
+										<span class="flex items-center gap-1.5 schema-config-form-key-check-success">
+											<Glyph name="check-circle" class="shrink-0" />
 											Valid{#if result.detail}, {result.detail}{/if}{#if result.checked_at}<span class="mx-1">&middot;</span>checked {formatDateTime(result.checked_at)}{/if}
 										</span>
 									{:else if result?.status === 'invalid'}
-										<span class="flex items-center gap-1.5 text-red-600 dark:text-red-400">
-											<svg class="h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-												<path
-													fill-rule="evenodd"
-													d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-													clip-rule="evenodd"
-												/>
-											</svg>
+										<span class="flex items-center gap-1.5 schema-config-form-key-check-danger">
+											<Glyph name="x-circle" class="shrink-0" />
 											{result.detail}
 										</span>
 									{:else if result?.status === 'missing'}
-										<span class="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
-											<svg class="h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-												<path
-													fill-rule="evenodd"
-													d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-													clip-rule="evenodd"
-												/>
-											</svg>
+										<span class="flex items-center gap-1.5 schema-config-form-key-check-muted">
+											<Glyph name="info" class="shrink-0" />
 											No key set
 										</span>
 									{:else if result?.status === 'unknown'}
-										<span class="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
-											<svg class="h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-												<path
-													fill-rule="evenodd"
-													d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-													clip-rule="evenodd"
-												/>
-											</svg>
+										<span class="flex items-center gap-1.5 schema-config-form-key-check-warning">
+											<Glyph name="question-circle" class="shrink-0" />
 											{result.detail}
 										</span>
 									{:else if result}
-										<span class="flex items-center gap-1.5 text-red-600 dark:text-red-400">
-											<svg class="h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-												<path
-													fill-rule="evenodd"
-													d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-													clip-rule="evenodd"
-												/>
-											</svg>
+										<span class="flex items-center gap-1.5 schema-config-form-key-check-danger">
+											<Glyph name="x-circle" class="shrink-0" />
 											{result.detail}
 										</span>
 									{/if}
@@ -201,12 +172,46 @@
 
 	{#if editable.length > 0}
 		<div class="flex items-center gap-3">
-			<button onclick={save} disabled={saving} class="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-hover disabled:opacity-50">
+			<button onclick={save} disabled={saving} class="btn btn-primary">
 				{saving ? 'Saving...' : 'Save'}
 			</button>
 			{#if feedback}
-				<span class="text-sm {feedback.type === 'error' ? 'text-red-600 dark:text-red-400' : 'text-gray-500'}">{feedback.message}</span>
+				<span class="schema-config-form-feedback" data-error={feedback.type === 'error'}>{feedback.message}</span>
 			{/if}
 		</div>
 	{/if}
 </div>
+
+<style>
+	.schema-config-form-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-text); }
+	/* the original settings-section panel was p-6 (1.5rem), not .panel's
+	   own p-4 (1rem) default. */
+	.schema-config-form-panel { padding: 1.5rem; }
+	/* the original group/section blurbs were text-sm (0.875rem/1.25rem),
+	   not panel-hint's 0.75rem - panel-hint is sized for a note under a
+	   form control, a visibly smaller role. */
+	.schema-config-form-description { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	.schema-config-form-section-title { margin-bottom: 0.25rem; font-size: 1rem; line-height: 1.5rem; font-weight: 600; color: var(--color-text); }
+	.schema-config-form-section-blurb { margin-bottom: 1rem; }
+	.schema-config-form-key-check { font-size: 0.875rem; line-height: 1.25rem; }
+	/* .stack's flex gap is unconditional between every child, unlike the
+	   original margin-based space-y-4 stack, where this div's own top/bottom
+	   margins collapsed through it when it held no content (an empty block
+	   box with no border/padding) - display:none removes it from the flex
+	   layout entirely so an empty result row costs no gap, matching that
+	   collapse instead of adding a second, uncollapsed gap unit. */
+	.schema-config-form-key-check[data-empty="true"] { display: none; }
+	.schema-config-form-key-check-success { color: var(--color-success); }
+	.schema-config-form-key-check-danger { color: var(--color-danger); }
+	.schema-config-form-key-check-warning { color: var(--color-on-warning-soft); }
+	.schema-config-form-key-check-muted { color: var(--color-text-muted); }
+	.schema-config-form-feedback { font-size: 0.875rem; color: var(--color-text-muted); }
+	.schema-config-form-feedback[data-error="true"] { color: var(--color-danger); }
+	/* the original was px-3 py-2 text-sm - .btn's own default size, not
+	   .btn-sm's compact one, but at a 0.75rem horizontal padding rather
+	   than .btn's 1rem. Its border was border-primary/20 (--color-border)
+	   with muted text (text-gray-700), not .btn's default
+	   border-primary-strong + primary text. It never wrapped, so keep the
+	   label on one line at the narrow mobile width. */
+	.schema-config-form-key-check-btn { white-space: nowrap; padding-inline: 0.75rem; border-color: var(--color-border); color: var(--color-text-secondary); }
+</style>

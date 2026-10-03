@@ -6,8 +6,19 @@
 	}
 
 	let { status }: Props = $props();
+
+	// statusColor() buckets the many backend status strings into the small
+	// status-* vocabulary badge.css keys its [data-status] rules off; strip
+	// the "status-" prefix to get the bare data-status token.
+	let dataStatus = $derived(statusColor(status).replace(/^status-/, ''));
 </script>
 
-<span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium text-white {statusColor(status)}">
+<span class="badge badge-status status-badge" data-status={dataStatus}>
 	{statusLabel(status)}
 </span>
+
+<style>
+	/* the .badge block's horizontal padding (0.5rem) is tighter than this
+	   component's original px-2.5 (0.625rem). */
+	.status-badge { padding-left: 0.625rem; padding-right: 0.625rem; }
+</style>

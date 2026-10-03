@@ -10,7 +10,16 @@
 </script>
 
 {#if dir === 'asc'}
-	<Glyph name="chevron-up" class="h-3 w-3 inline-block {className}" />
+	<Glyph name="chevron-up" class="table-sort-indicator {className}" />
 {:else if dir === 'desc'}
-	<Glyph name="chevron-down" class="h-3 w-3 inline-block {className}" />
+	<Glyph name="chevron-down" class="table-sort-indicator {className}" />
 {/if}
+
+<style>
+	/* :global: the class lands on the <svg> Glyph renders, a child component's markup, not an element in this template. */
+	:global(.table-sort-indicator) {
+		display: inline-block;
+		width: 0.75rem;
+		height: 0.75rem;
+	}
+</style>

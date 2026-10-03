@@ -1,0 +1,84 @@
+@layer utilities {
+	.tabular { font-variant-numeric: tabular-nums; }
+	/* replaces the banned inline `animate-spin` utility (spec 6.4) for the
+	   handful of loading-spinner SVGs across the app (Task 11: setup
+	   readiness checks, files orphan-folders/move-picker modals) */
+	.spin { animation: spin 1s linear infinite; }
+	/* the classic two-part spinner icon markup (a faint full-circle track
+	   plus an opaque quarter-circle fill) - replaces the banned inline
+	   opacity-25/opacity-75 utilities on its <circle>/<path> */
+	.spinner-track { opacity: 0.25; }
+	.spinner-fill { opacity: 0.75; }
+}
+
+@keyframes spin {
+	to { transform: rotate(360deg); }
+}
+
+/* responsive-table (table.css's own modifier - stacks a .table to
+   label/value cards below lg (1024px); add data-label="Column Name" to
+   each <td> that should show a label when stacked, the <thead> is hidden
+   below lg): these rules live HERE, in `@layer utilities`, rather than in
+   table.css's own `@layer components`, because `table`, `table-row`, and
+   `table-cell` are also valid CSS `display` keyword values - Tailwind v4
+   auto-generates a utility class of each of those names (`display: table`
+   / `table-row` / `table-cell`), landing in Tailwind's own `utilities`
+   layer. Cascade layers resolve by LAYER first, specificity/source-order
+   only within a tied layer, so a bare Tailwind utility of the same class
+   name always outranked table.css's own `components`-layer rule for
+   `.responsive-table tr`/`td`'s `display: block`, regardless of the
+   selector's own higher specificity - silently breaking the documented
+   mobile stacking for every consumer app-wide (dashboard, job-detail,
+   files, logs) since the modifier was introduced in Task 8. Task 11 fix
+   round 1 patched this with `!important` (which does work, since
+   `!important` reverses layer priority), but the coordinator's fix round 2
+   ruling is that moving the rules into this same `utilities` layer -
+   which Tailwind's own layer order registers AFTER `components` - is the
+   correct fix: these rules now share Tailwind's own `.table-row`'s layer,
+   so the more specific `.responsive-table tr` selector wins on ordinary
+   specificity within that layer, no `!important` needed. Verified against
+   the true pre-migration app.css (441d35d2): its own copy of this exact
+   CSS is byte-identical, confirming this is a restoration of already-
+   working behaviour, not a new design. */
+@layer utilities {
+	@media (max-width: 1023.98px) {
+		.responsive-table,
+		.responsive-table thead,
+		.responsive-table tbody,
+		.responsive-table tr,
+		.responsive-table th,
+		.responsive-table td {
+			display: block;
+		}
+		.responsive-table thead {
+			position: absolute;
+			left: -9999px;
+		}
+		.responsive-table tr {
+			padding: 0.5rem 0.75rem;
+			border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 15%, transparent);
+		}
+		.responsive-table tr:last-child { border-bottom: 0; }
+		.responsive-table td {
+			padding: 0.25rem 0;
+			border: 0;
+			max-width: 100%;
+		}
+		.responsive-table td[data-label]:not([data-label=""])::before {
+			content: attr(data-label);
+			display: block;
+			color: color-mix(in srgb, currentColor 55%, transparent);
+			font-size: 0.6875rem;
+			font-weight: 500;
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+			margin-bottom: 0.125rem;
+		}
+	}
+}
+
+/* Safe-area insets for mobile browsers */
+@layer utilities {
+	.safe-bottom { padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
+	.safe-top    { padding-top:    max(0.5rem, env(safe-area-inset-top));    }
+}

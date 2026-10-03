@@ -18,30 +18,26 @@
 	let open = $state(classifyJsonValue(value).isContainer && depth <= 1);
 
 	const scalarClass: Record<string, string> = {
-		string: 'text-gray-900 dark:text-white',
-		number: 'text-amber-600 dark:text-amber-400',
-		boolean: 'text-gray-400 italic',
-		null: 'text-gray-400 italic'
+		string: 'json-tree-string',
+		number: 'json-tree-number',
+		boolean: 'json-tree-const',
+		null: 'json-tree-const'
 	};
 </script>
 
 {#if node.isContainer}
-	<div class="font-mono text-xs">
-		<button
-			type="button"
-			onclick={() => { open = !open; }}
-			class="flex w-full items-center gap-1 py-0.5 text-left hover:bg-page dark:hover:bg-gray-800/50"
-		>
-			<svg class="h-3 w-3 shrink-0 transition-transform {open ? 'rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+	<div class="mono json-tree-node">
+		<button type="button" onclick={() => { open = !open; }} class="json-tree-toggle flex w-full items-center gap-1" aria-expanded={open}>
+			<svg class="json-tree-chevron h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
 			</svg>
 			{#if name !== undefined}
-				<span class="text-gray-500 dark:text-gray-400">{name}</span>
+				<span class="json-tree-key">{name}</span>
 			{/if}
-			<span class="text-gray-400 dark:text-gray-500">{node.preview}</span>
+			<span class="json-tree-preview">{node.preview}</span>
 		</button>
 		{#if open}
-			<div class="ml-3 border-l border-primary/15 pl-2 dark:border-primary/15">
+			<div class="json-tree-children ml-3">
 				{#each node.entries as entry}
 					<Self value={entry.value} name={entry.key} depth={depth + 1} />
 				{/each}
@@ -49,10 +45,26 @@
 		{/if}
 	</div>
 {:else}
-	<div class="flex items-baseline gap-1 py-0.5 font-mono text-xs">
+	<div class="mono json-tree-node json-tree-scalar flex items-baseline gap-1">
 		{#if name !== undefined}
-			<span class="text-gray-500 dark:text-gray-400">{name}</span><span class="text-gray-400 dark:text-gray-500">:</span>
+			<span class="json-tree-key">{name}</span><span class="json-tree-preview">:</span>
 		{/if}
-		<span class={scalarClass[node.kind] ?? 'text-gray-900 dark:text-white'}>{node.preview}</span>
+		<span class={scalarClass[node.kind] ?? 'json-tree-string'}>{node.preview}</span>
 	</div>
 {/if}
+
+<style>
+	/* .mono is size-neutral; this was font-mono text-xs (0.75rem/1rem). */
+	.json-tree-node { font-size: 0.75rem; line-height: 1rem; }
+	.json-tree-toggle { padding: 0.125rem 0; text-align: left; border: 0; background: none; cursor: pointer; color: inherit; font: inherit; }
+	.json-tree-toggle:hover { background: var(--color-primary-tint-1); }
+	.json-tree-chevron { transition: transform var(--motion-fast) var(--ease); }
+	.json-tree-toggle[aria-expanded="true"] .json-tree-chevron { transform: rotate(90deg); }
+	.json-tree-children { padding-left: 0.5rem; border-left: 1px solid var(--color-border); }
+	.json-tree-scalar { padding: 0.125rem 0; }
+	.json-tree-key { color: var(--color-text-muted); }
+	.json-tree-preview { color: var(--color-text-faint); }
+	.json-tree-string { color: var(--color-text); }
+	.json-tree-number { color: var(--color-on-warning-soft); }
+	.json-tree-const { color: var(--color-text-faint); font-style: italic; }
+</style>

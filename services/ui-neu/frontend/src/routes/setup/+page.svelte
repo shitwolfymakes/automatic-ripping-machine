@@ -9,14 +9,23 @@
 	<title>ARM - Setup</title>
 </svelte:head>
 
-<div class="min-h-screen bg-page dark:bg-page-dark">
+<div class="setup-page">
 	{#if data.status}
 		<SetupWizard status={data.status} />
 	{:else}
-		<div class="flex min-h-screen items-center justify-center">
-			<div class="rounded-lg border border-red-200 bg-red-50 p-6 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+		<div class="setup-page-error-wrap">
+			<div class="alert alert-danger setup-page-error">
 				Failed to load setup status
 			</div>
 		</div>
 	{/if}
 </div>
+
+<style>
+	.setup-page { min-height: 100vh; background: var(--color-page); }
+	.setup-page-error-wrap { display: flex; min-height: 100vh; align-items: center; justify-content: center; }
+	/* original had no text-size utility at all (p-6 text-red-700), so it
+	   renders at the ambient body size (1rem/1.5rem), not .alert's own
+	   text-sm (0.875rem/1.25rem) default */
+	.setup-page-error { padding: 1.5rem; font-size: 1rem; line-height: 1.5rem; }
+</style>

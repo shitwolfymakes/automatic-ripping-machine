@@ -46,13 +46,13 @@ describe('ConfirmDialog', () => {
 		it('applies danger variant class to confirm button', () => {
 			renderDialog({ variant: 'danger' });
 			const confirmBtn = screen.getByText('Confirm');
-			expect(confirmBtn).toHaveClass('confirm-btn-danger');
+			expect(confirmBtn).toHaveClass('btn-danger');
 		});
 
 		it('applies primary variant class to confirm button by default', () => {
 			renderDialog();
 			const confirmBtn = screen.getByText('Confirm');
-			expect(confirmBtn).toHaveClass('confirm-btn-primary');
+			expect(confirmBtn).toHaveClass('btn-primary');
 		});
 	});
 

@@ -55,11 +55,11 @@ describe('reviewPhaseBadge', () => {
 	it('awaiting_review -> REVIEW amber', () => {
 		const b = reviewPhaseBadge(badgeJob('awaiting_review'));
 		expect(b.label).toBe('REVIEW');
-		expect(b.accent).toContain('#f59e0b');
+		expect(b.accent).toContain('--color-accent-1');
 	});
 	it('awaiting_user_id -> IDENTIFY cyan', () => {
 		expect(reviewPhaseBadge(badgeJob('awaiting_user_id')).label).toBe('IDENTIFY');
-		expect(reviewPhaseBadge(badgeJob('awaiting_user_id')).accent).toContain('#06b6d4');
+		expect(reviewPhaseBadge(badgeJob('awaiting_user_id')).accent).toContain('--color-accent-4');
 	});
 	it('ripped_awaiting_identify -> IDENTIFY', () => {
 		expect(reviewPhaseBadge(badgeJob('ripped_awaiting_identify')).label).toBe('IDENTIFY');
@@ -76,7 +76,7 @@ describe('reviewPhaseBadge', () => {
 		expect(reviewPhaseBadge(badgeJob('ripped', 'MysterySuspense')).label).toBe('RIPPED | NEEDS SESSION');
 	});
 	it('ripped violet accent', () => {
-		expect(reviewPhaseBadge(badgeJob('ripped', null)).accent).toContain('#8b5cf6');
+		expect(reviewPhaseBadge(badgeJob('ripped', null)).accent).toContain('--color-accent-3');
 	});
 });
 

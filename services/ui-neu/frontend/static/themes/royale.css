@@ -8,15 +8,27 @@
 	border-color: #112a5e !important;
 }
 
-[data-scheme="royale"] aside [data-logo] {
+[data-scheme="royale"] aside .nav-logo {
 	transform: skew(-10deg);
 }
 
-[data-scheme="royale"] aside [data-logo] img {
+[data-scheme="royale"] aside .nav-logo img {
 	filter: drop-shadow(3px 3px 0px #007bff);
 }
 
-[data-scheme="royale"] aside nav a {
+/* The .nav block is a flex column, where adjacent margins do NOT
+   collapse (the original block-level <nav> let them). This scheme's
+   inter-link spacing therefore rides the nav's own gap instead of a
+   margin on each link, which would otherwise double. */
+[data-scheme="royale"] aside .nav {
+	gap: 2px;
+	/* the link margin also sat above the first link and below the
+	   last one, which a gap does not reproduce */
+	padding-top: calc(1rem + 2px);
+	padding-bottom: calc(1rem + 2px);
+}
+
+[data-scheme="royale"] aside .nav-item {
 	font-style: italic;
 	font-weight: 900;
 	letter-spacing: 0.05em;
@@ -24,18 +36,17 @@
 	background: #0b1a3d;
 	clip-path: polygon(5% 0%, 100% 0%, 95% 100%, 0% 100%);
 	border-bottom: 3px solid rgba(0, 0, 0, 0.3);
-	margin: 2px 0;
 	padding: 0.85rem 1.25rem;
 	transition: all 0.1s;
 }
 
-[data-scheme="royale"] aside nav a:hover {
+[data-scheme="royale"] aside .nav-item:hover {
 	background: #007bff !important;
 	transform: scale(1.05) skew(-2deg);
 	color: #fff !important;
 }
 
-[data-scheme="royale"] aside nav a[data-active="true"] {
+[data-scheme="royale"] aside .nav-item[data-active="true"] {
 	background: #f8fb11 !important;
 	color: #000 !important;
 	box-shadow: 0 0 20px rgba(248, 251, 17, 0.4);
@@ -46,11 +57,6 @@
 	border: none;
 	height: 4px;
 	background: #112a5e;
-}
-
-[data-scheme="royale"] aside [data-stats] {
-	background: rgba(0, 0, 0, 0.4);
-	border-color: #112a5e;
 }
 
 [data-scheme="royale"] [data-progress-track] {
@@ -66,24 +72,24 @@
 	border-radius: 0 !important;
 }
 
-[data-scheme="royale"] aside .text-gray-400,
+/* Muted sidebar readouts (the stats labels and the Storage eyebrow).
+   The colour is a token override scoped to the sidebar, so it reaches
+   component-local text too; the typography rides the .eyebrow block. */
+[data-scheme="royale"] aside {
+	--color-text-muted: #aaa;
+	--color-text-faint: #aaa;
+}
 
-[data-scheme="royale"] aside .text-gray-500,
-
-[data-scheme="royale"] aside .text-gray-600,
-
-[data-scheme="royale"] aside .dark\:text-gray-300,
-
-[data-scheme="royale"] aside .dark\:text-gray-400,
-
-[data-scheme="royale"] aside .dark\:text-gray-500 {
-	color: #aaa !important;
+[data-scheme="royale"] aside .eyebrow {
+	color: #aaa;
 	font-size: 0.65rem;
 	letter-spacing: 0.05em;
 }
 
-[data-scheme="royale"] aside .text-orange-500 {
-	color: #f8fb11 !important;
+/* The CPU temperature readout in the sidebar stats reads the
+   accent-1 role. */
+[data-scheme="royale"] aside {
+	--color-accent-1: #f8fb11;
 }
 
 [data-scheme="royale"] header {

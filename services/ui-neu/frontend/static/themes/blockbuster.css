@@ -13,28 +13,40 @@
 	border-right: 4px solid rgb(255, 235, 0) !important;
 }
 
-[data-scheme="blockbuster"] aside nav a {
+/* The .nav block is a flex column, where adjacent margins do NOT
+   collapse (the original block-level <nav> let them). This scheme's
+   inter-link spacing therefore rides the nav's own gap instead of a
+   margin on each link, which would otherwise double. */
+[data-scheme="blockbuster"] aside .nav {
+	gap: 4px;
+	/* the link margin also sat above the first link and below the
+	   last one, which a gap does not reproduce */
+	padding-top: calc(1rem + 4px);
+	padding-bottom: calc(1rem + 4px);
+}
+
+[data-scheme="blockbuster"] aside .nav-item {
 	text-transform: uppercase;
 	font-weight: 900;
 	font-style: italic;
-	margin: 4px 8px;
+	margin: 0 8px;
 	border-radius: 4px;
 	transition: transform 0.1s ease;
 }
 
-[data-scheme="blockbuster"] aside nav a:hover {
+[data-scheme="blockbuster"] aside .nav-item:hover {
 	background-color: rgb(255, 235, 0) !important;
 	color: rgb(0, 51, 153) !important;
 	transform: scale(1.05);
 }
 
-[data-scheme="blockbuster"] aside nav a[data-active="true"] {
+[data-scheme="blockbuster"] aside .nav-item[data-active="true"] {
 	background-color: rgb(255, 235, 0) !important;
 	color: rgb(0, 51, 153) !important;
 	box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.5);
 }
 
-[data-scheme="blockbuster"] aside [data-logo] img {
+[data-scheme="blockbuster"] aside .nav-logo img {
 	filter: drop-shadow(3px 3px 0px #000);
 }
 
@@ -50,44 +62,17 @@
 	border-right: 2px solid #000;
 }
 
-[data-scheme="blockbuster"] aside [data-stats] {
-	background: #fff !important;
-	color: #000 !important;
-	border: 2px dashed #666 !important;
-	font-family: "Courier New", Courier, monospace;
-	font-weight: bold;
-	transform: rotate(-1deg);
-	margin: 1rem;
-}
-
-[data-scheme="blockbuster"] aside [data-stats] > div:first-child {
-	background: rgb(255, 235, 0) !important;
-}
-
-[data-scheme="blockbuster"] aside [data-stats] button {
-	color: #000 !important;
-	background: transparent !important;
-	box-shadow: none !important;
-}
-
-[data-scheme="blockbuster"] aside [data-stats] button.shadow-xs {
-	background: rgb(0, 51, 153) !important;
-	color: rgb(255, 235, 0) !important;
-}
-
-[data-scheme="blockbuster"] aside [data-stats] span,
-
-[data-scheme="blockbuster"] aside [data-stats] p {
-	color: #333 !important;
-}
-
 [data-scheme="blockbuster"] header {
 	border-bottom: 4px solid rgb(255, 235, 0) !important;
 }
 
+/* Record surfaces get the yellow rental-sticker border and a hard offset
+   shadow. (The sheet's original selector list also carried a
+   [data-surface] hook that was never present in any markup, added
+   aspirationally when the built-in sheets moved into static/ - dropped.) */
 [data-scheme="blockbuster"] .card,
-
-[data-scheme="blockbuster"] [data-surface] {
+[data-scheme="blockbuster"] .panel,
+[data-scheme="blockbuster"] .stat {
 	border: 2px solid rgb(255, 235, 0) !important;
 	box-shadow: 8px 8px 0px rgba(0, 0, 0, 0.3);
 }

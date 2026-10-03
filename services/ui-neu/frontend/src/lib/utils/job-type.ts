@@ -1,46 +1,65 @@
+// The five video-type hues (blue/purple/green/amber/cyan) plus a neutral
+// fallback have no five-tone block in the vocabulary (spec 5.1 has four
+// tones: danger/warning/success/info). Movie/Music/Data map onto the
+// nearest existing tone (info/success/warning); Series and the unidentified
+// Video fallback have no tone at all, so they take the fixed accent tokens
+// (accent-3 violet, accent-4 cyan) the disc-type icons already use. Each
+// config now carries CSS custom-property VALUES (not Tailwind classes):
+// consumers bind them via `style:--jt-*` and a shared scoped/`badge`-family
+// rule reads the vars, so no component hand-rolls its own colour switch.
 export interface VideoTypeConfig {
 	label: string;
 	icon: string;
-	badgeClasses: string;
-	placeholderClasses: string;
-	accentBorder: string;
+	badgeBg: string;
+	badgeText: string;
+	placeholderBg: string;
+	placeholderText: string;
+	accent: string;
 	iconColor: string;
 }
 
 const MOVIE_CONFIG: VideoTypeConfig = {
 	label: 'Movie',
 	icon: 'clapperboard',
-	badgeClasses: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-	placeholderClasses: 'bg-blue-100 text-blue-400 dark:bg-blue-900/30 dark:text-blue-500',
-	accentBorder: 'border-l-blue-500',
-	iconColor: 'text-blue-500 dark:text-blue-400',
+	badgeBg: 'var(--color-info-soft)',
+	badgeText: 'var(--color-on-info-soft)',
+	placeholderBg: 'var(--color-info-soft)',
+	placeholderText: 'var(--color-info)',
+	accent: 'var(--color-info)',
+	iconColor: 'var(--color-info)',
 };
 
 const SERIES_CONFIG: VideoTypeConfig = {
 	label: 'Series',
 	icon: 'tv',
-	badgeClasses: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-	placeholderClasses: 'bg-purple-100 text-purple-400 dark:bg-purple-900/30 dark:text-purple-500',
-	accentBorder: 'border-l-purple-500',
-	iconColor: 'text-purple-500 dark:text-purple-400',
+	badgeBg: 'color-mix(in srgb, var(--color-accent-3) 30%, transparent)',
+	badgeText: 'var(--color-accent-3)',
+	placeholderBg: 'color-mix(in srgb, var(--color-accent-3) 30%, transparent)',
+	placeholderText: 'var(--color-accent-3)',
+	accent: 'var(--color-accent-3)',
+	iconColor: 'var(--color-accent-3)',
 };
 
 const MUSIC_CONFIG: VideoTypeConfig = {
 	label: 'Music',
 	icon: 'music',
-	badgeClasses: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-	placeholderClasses: 'bg-green-100 text-green-400 dark:bg-green-900/30 dark:text-green-500',
-	accentBorder: 'border-l-green-500',
-	iconColor: 'text-green-500 dark:text-green-400',
+	badgeBg: 'var(--color-success-soft)',
+	badgeText: 'var(--color-on-success-soft)',
+	placeholderBg: 'var(--color-success-soft)',
+	placeholderText: 'var(--color-success)',
+	accent: 'var(--color-success)',
+	iconColor: 'var(--color-success)',
 };
 
 const DATA_CONFIG: VideoTypeConfig = {
 	label: 'Data',
 	icon: 'database',
-	badgeClasses: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-	placeholderClasses: 'bg-amber-100 text-amber-400 dark:bg-amber-900/30 dark:text-amber-500',
-	accentBorder: 'border-l-amber-500',
-	iconColor: 'text-amber-500 dark:text-amber-400',
+	badgeBg: 'var(--color-warning-soft)',
+	badgeText: 'var(--color-on-warning-soft)',
+	placeholderBg: 'var(--color-warning-soft)',
+	placeholderText: 'var(--color-warning)',
+	accent: 'var(--color-warning)',
+	iconColor: 'var(--color-warning)',
 };
 
 // Unidentified video disc: ARM knows it's a DVD/Blu-ray/UHD but
@@ -49,19 +68,23 @@ const DATA_CONFIG: VideoTypeConfig = {
 const VIDEO_FALLBACK_CONFIG: VideoTypeConfig = {
 	label: 'Video',
 	icon: 'disc',
-	badgeClasses: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
-	placeholderClasses: 'bg-cyan-100 text-cyan-400 dark:bg-cyan-900/30 dark:text-cyan-500',
-	accentBorder: 'border-l-cyan-500',
-	iconColor: 'text-cyan-500 dark:text-cyan-400',
+	badgeBg: 'color-mix(in srgb, var(--color-accent-4) 30%, transparent)',
+	badgeText: 'var(--color-accent-4)',
+	placeholderBg: 'color-mix(in srgb, var(--color-accent-4) 30%, transparent)',
+	placeholderText: 'var(--color-accent-4)',
+	accent: 'var(--color-accent-4)',
+	iconColor: 'var(--color-accent-4)',
 };
 
 const FALLBACK_CONFIG: VideoTypeConfig = {
 	label: 'Disc',
 	icon: 'disc',
-	badgeClasses: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
-	placeholderClasses: 'bg-primary/10 text-gray-400 dark:bg-primary/15 dark:text-gray-500',
-	accentBorder: 'border-l-gray-400',
-	iconColor: 'text-gray-500 dark:text-gray-400',
+	badgeBg: 'var(--color-primary-tint-2)',
+	badgeText: 'var(--color-text-secondary)',
+	placeholderBg: 'var(--color-primary-tint-2)',
+	placeholderText: 'var(--color-text-faint)',
+	accent: 'var(--color-text-faint)',
+	iconColor: 'var(--color-text-muted)',
 };
 
 const TYPE_MAP: Record<string, VideoTypeConfig> = {

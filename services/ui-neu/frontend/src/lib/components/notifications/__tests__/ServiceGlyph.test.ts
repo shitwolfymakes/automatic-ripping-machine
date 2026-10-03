@@ -12,10 +12,10 @@ describe('ServiceGlyph', () => {
 
 	it('is deterministic: same id yields the same background color', () => {
 		const { container: a } = renderComponent(ServiceGlyph, { props: { id: 'slack', name: 'Slack' } });
-		const colorA = (a.querySelector('[data-glyph]') as HTMLElement).style.background;
+		const colorA = (a.querySelector('[data-glyph]') as HTMLElement).style.getPropertyValue('--bg');
 		cleanup();
 		const { container: b } = renderComponent(ServiceGlyph, { props: { id: 'slack', name: 'Slack' } });
-		const colorB = (b.querySelector('[data-glyph]') as HTMLElement).style.background;
+		const colorB = (b.querySelector('[data-glyph]') as HTMLElement).style.getPropertyValue('--bg');
 		expect(colorA).toBe(colorB);
 		expect(colorA).not.toBe('');
 	});

@@ -156,7 +156,8 @@ describe('JobActions', () => {
 				props: { job: createJob({ status: 'ripped' }), compact: true }
 			});
 			const deleteBtn = screen.getByText('Delete');
-			expect(deleteBtn).toHaveClass('text-xs');
+			expect(deleteBtn).toHaveClass('job-actions-pill', 'job-actions-pill-danger');
+			expect(deleteBtn).toHaveAttribute('data-compact', 'true');
 		});
 
 		it('renders standard buttons when compact is false', () => {
@@ -164,7 +165,8 @@ describe('JobActions', () => {
 				props: { job: createJob({ status: 'ripped' }), compact: false }
 			});
 			const deleteBtn = screen.getByText('Delete');
-			expect(deleteBtn).toHaveClass('text-xs');
+			expect(deleteBtn).toHaveClass('job-actions-pill', 'job-actions-pill-danger');
+			expect(deleteBtn).toHaveAttribute('data-compact', 'false');
 		});
 	});
 });

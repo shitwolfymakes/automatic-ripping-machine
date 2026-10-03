@@ -6,16 +6,12 @@
 </script>
 
 {#if rows.length === 0}
-	<p class="text-sm text-gray-500 dark:text-gray-400">No sends yet.</p>
+	<p class="dispatch-history-empty">No sends yet.</p>
 {:else}
-	<ul class="space-y-1">
+	<ul class="stack stack-sm dispatch-history-list">
 		{#each rows as row (row.id)}
-			<li class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-				<span
-					class:text-status-success={row.status === 'success'}
-					class:text-status-error={row.status === 'failed'}
-					class:text-gray-400={row.status !== 'success' && row.status !== 'failed'}
-				>
+			<li class="dispatch-history-row" data-status={row.status}>
+				<span class="dispatch-history-icon">
 					{#if row.status === 'success'}
 						<Glyph name="check" />
 					{:else if row.status === 'failed'}
@@ -24,12 +20,25 @@
 						<Glyph name="clock" />
 					{/if}
 				</span>
-				<span class="font-medium">{row.event_key}</span>
-				<span class="text-gray-400">{row.created_at ?? ''}</span>
+				<span class="dispatch-history-key">{row.event_key}</span>
+				<span class="dispatch-history-time">{row.created_at ?? ''}</span>
 				{#if row.last_error}
-					<span class="text-status-error">| {row.last_error}</span>
+					<span class="dispatch-history-error">| {row.last_error}</span>
 				{/if}
 			</li>
 		{/each}
 	</ul>
 {/if}
+
+<style>
+	.dispatch-history-empty { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	/* Tailwind's space-y-1 (0.25rem) is tighter than .stack-sm (0.5rem). */
+	.dispatch-history-list { gap: 0.25rem; }
+	.dispatch-history-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-secondary); }
+	.dispatch-history-icon { color: var(--color-text-faint); }
+	.dispatch-history-row[data-status="success"] .dispatch-history-icon { color: var(--color-status-success); }
+	.dispatch-history-row[data-status="failed"] .dispatch-history-icon { color: var(--color-status-error); }
+	.dispatch-history-key { font-weight: 500; }
+	.dispatch-history-time { color: var(--color-text-faint); }
+	.dispatch-history-error { color: var(--color-status-error); }
+</style>

@@ -122,8 +122,3 @@ export function isCatalogField(v: unknown): v is CatalogField {
 	return typeof f.key === 'string' && typeof f.label === 'string' && typeof f.type === 'string';
 }
 
-// Shared input styling for the notification form fields, so the long
-// Tailwind class string lives in one place (components can't reach the
-// settings page's local inputClass constant).
-export const FIELD_INPUT_CLASS =
-	'rounded-md border border-primary/25 bg-primary/5 px-3 py-2 text-sm focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary dark:border-primary/30 dark:bg-primary/10 dark:text-white';
