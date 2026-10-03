@@ -42,9 +42,16 @@ location keeps the test apart from any real install. The install lands in
 install folder).
 
 A curl install needs a published release, so from a checkout run
-`install.sh` directly. It packs a bundle from the checkout and pins every
-image to `v<VERSION>` (the repo's `VERSION` file) unless `--version` or
-`--image-prefix` say otherwise. It starts the stack by default.
+`install.sh` directly. It packs a bundle from the checkout, and the images
+are named by two separate settings:
+
+- **Tag**: the bundle's version, `v<VERSION>` (the repo's `VERSION` file)
+  from a checkout, or whatever `--version <tag>` names. A `--version` tag
+  must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`.
+- **Prefix** (registry and namespace): `docker.io/automaticrippingmachine`
+  unless `--image-prefix <prefix>` is given. It does not change the tag.
+
+It starts the stack by default.
 
 ```bash
 TEST=/tmp/arm-smoke
@@ -63,11 +70,23 @@ docker exec armv3-backend cat /logs/first-boot.log
 # the drive from the UI (the installer does not detect drives).
 ```
 
-If the images for that version are not published (a branch build), build
-them locally and install against them instead, as
-[devtools/install-drill.sh](../../../devtools/install-drill.sh) does:
-install with `--image-prefix <your-prefix> --no-start`, then run
-`"$ARM/armctl" up --no-pull`.
+The images that must exist are `<prefix>/arm-backend:<tag>`,
+`<prefix>/arm-ui:<tag>` and `<prefix>/arm-ripper:<tag>` (the database uses
+`postgres:18`). Unless the profile is ripper-only, so is
+`<prefix>/arm-transcode:<tag>`, plus `<prefix>/arm-transcode:<tag>-intel`
+or `-amd` only when the host has that GPU vendor and transcodes are not
+offloaded.
+
+If those images are not published (a branch build), build and tag them
+locally as `<prefix>/arm-...:<tag>`, then install against them with both
+settings. [devtools/install-drill.sh](../../../devtools/install-drill.sh) is
+the worked example: it builds `arm-drill/arm-backend:drill`,
+`arm-ripper:drill` and `arm-ui:drill`, then runs
+`bash install.sh --prefix <dir> --bundle <bundle> --version drill --profile ripper-only --image-prefix arm-drill --no-host-changes --no-start`
+and `<arm>/armctl up --no-pull`. For a checkout, drop `--bundle` and give
+`--version <tag> --image-prefix <prefix> --no-start`, then run
+`"$ARM/armctl" up --no-pull`. Without `--version` the tag is `v<VERSION>`, and
+`up --no-pull` fails on images tagged anything else.
 
 The settings file is `$ARM/.armctl/.env`; after editing it, run
 `"$ARM/armctl" up`. Stop the stack with `"$ARM/armctl" down`.
