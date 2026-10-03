@@ -42,7 +42,11 @@ If `armctl` is not on your PATH, use `~/arm/armctl upgrade`.
 If the start or the health check fails after the switch, `armctl` says so and
 prints which release the install is now on, that it was **not** rolled back,
 the database backup taken in that run (or that none was taken), and where the
-previous release is kept. See [Rolling back](#rolling-back).
+previous release is kept. Once the cause is fixed, `armctl up` tries the start
+again. See [Rolling back](#rolling-back).
+
+If an upgrade stops part way through the switch (a power cut, for example),
+run `armctl upgrade` again: it notices and finishes the upgrade.
 
 To change an answer you gave at install time (profile, storage folders),
 run `armctl install` again. It keeps your secrets and certificates authority

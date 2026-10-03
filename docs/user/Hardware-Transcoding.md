@@ -247,8 +247,10 @@ See [Configuring ARM § Ripper-only installs](Configuring-ARM#ripper-only-instal
 NVENC needs the **NVIDIA Container Toolkit** on the host so the docker daemon
 can pass GPU devices into the transcoder. When `armctl install` detects an NVIDIA
 GPU without the toolkit registered, **it offers to install and configure it
-for you** on Debian/Ubuntu hosts (with a confirmation prompt). On other
-distros it prints the steps. To do it manually:
+for you** on Debian/Ubuntu hosts (with a confirmation prompt). The install
+restarts Docker, so it is skipped while ARM is running: run `armctl down`, then
+`armctl install` again. If the install fails, `armctl install` carries on
+without it and lists it as skipped. On other distros it prints the steps. To do it manually:
 
 ```bash
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \

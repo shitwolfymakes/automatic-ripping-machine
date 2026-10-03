@@ -29,8 +29,9 @@ versions, and incomplete docs.
 
 - **Desktop hosts need auto-mount disabled to eject.** On a host with a GNOME/
   KDE/XFCE session, `udisks2`/`gvfs` grabs the disc and the ripper can't eject
-  after a rip. The installer writes a scoped udev rule to fix this; if you
-  installed manually or eject still fails, see
+  after a rip. With your consent, the installer writes a host-wide udev rule
+  that stops auto-mounting of optical discs; if you declined it, installed
+  manually, or eject still fails, see
   [Troubleshooting § Disc won't eject](Troubleshooting#disc-wont-eject-after-a-rip).
 - **No database schema rollback.** Alembic `downgrade` across versions isn't
   supported — back up Postgres before upgrading if you want a safety net. See

@@ -371,10 +371,10 @@ The ripper and transcode images are already variables in the template (`ARM_RIPP
 
 **`armctl upgrade [--version <tag>]`:**
 
-1. Picks the target: the latest stable v3, or the named version. If the install is already on it, it says so and stops.
+1. Picks the target: the latest stable v3, or the named version. If the install is already on it, it says so and stops. If `.env` and the `current` link name different releases (an upgrade stopped during the switch), it says what it found and runs the upgrade again to finish it, reusing the bundle that is already unpacked.
 2. Downloads, verifies and unpacks the new bundle beside the current one. Nothing live has changed yet.
 3. Hands over to the new release's `armctl`, which pulls the new images, runs the guard and takes the backup. Still nothing live has changed.
-4. Switches: records the new version in `.env`, merges in any new settings with their defaults, and points `current` at the new release.
+4. Switches: first points `current` at the new release in one step (a new link renamed over the old one), then replaces `.env` with the candidate that records the new version and any new settings with their defaults. If `.env` cannot be replaced, `current` is put back and the install stays on the old release.
 5. Removes spawned containers, starts, recreates rippers, waits for health.
 
 The previous release's folder is kept for a manual rollback. Older ones are pruned after a successful upgrade.
@@ -386,9 +386,9 @@ The previous release's folder is kept for a manual rollback. Older ones are prun
 **Failure behavior.**
 
 - **Before the switch**, any failure (network, registry, checksum, active work, backup) leaves the running install exactly as it was, and the message says so.
-- **After the switch**, a failed start or health check is reported with the release the install is now on, a statement that it was not rolled back, the database backup taken in that run (or that none was taken), the folder where the previous release is kept, and the command that shows the backend log. There is no automatic rollback, because database migrations cannot be reversed. See [the user Upgrading page](../../user/Upgrading.md#rolling-back).
+- **After the switch**, a failed start or health check is reported with the release the install is now on, a statement that it was not rolled back, the database backup taken in that run (or that none was taken), the folder where the previous release is kept, the command that shows the backend log, and that `armctl up` tries the start again once the cause is fixed. There is no automatic rollback, because database migrations cannot be reversed. See [the user Upgrading page](../../user/Upgrading.md#rolling-back).
 - **One at a time.** A lock in `.armctl/` stops two `armctl` runs overlapping. Without `flock` on the host, `armctl` warns and carries on unguarded.
-- **No terminal** never blocks on a prompt: defaults are taken and skipped steps are listed.
+- **No terminal** never blocks on a prompt and reads nothing from stdin: defaults are taken, every yes/no question is answered "no", host changes are skipped unless `--yes` is given, and skipped steps are listed. An offload install with `--offload-host` and `--offload-backend-url` checks each walkthrough step once without waiting, and a step that fails is reported in the completion table. When `--yes` is given but `sudo` cannot run without a password, the udev rule is written to `.armctl/99-arm-no-automount.rules` with the three commands that install it, and the step is listed as skipped.
 
 The install drill, `devtools/install-drill.sh`, runs this path end to end against images built from a checkout. It is manual and refuses to run on a host that already has an ARM v3 stack.
 

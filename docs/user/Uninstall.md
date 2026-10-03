@@ -36,7 +36,7 @@ armctl compose down --volumes
 
 ## Removing the host udev rule (desktop installs)
 
-If you installed on a desktop, the installer added a scoped auto-mount rule.
+If you agreed to it during the install, the installer added a host-wide rule that stops the desktop auto-mounting optical discs.
 Remove it if you no longer want ARM's drives left un-automounted:
 
 ```bash
