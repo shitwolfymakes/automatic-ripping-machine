@@ -288,6 +288,139 @@ has "pins: an existing prefix is kept across an upgrade" "ARM_RIPPER_IMAGE=ghcr.
 out="$( (write_image_pins "" "$pin") 2>&1 || true)"
 has "pins: an empty version is refused" "no release version" "$out"
 
+# --- docker diagnosis ---------------------------------------------------------------
+# dstate <stub code>: run docker_state with `command -v docker` succeeding and
+# `docker` replaced by the given stub body.
+dstate() {
+    (
+        command() { if [[ "$1" == -v && "$2" == docker ]]; then return 0; fi; builtin command "$@"; }
+        eval "docker() { $1; }"
+        docker_state
+    )
+}
+check "docker: not installed" "missing" \
+    "$( (command() { if [[ "$1" == -v && "$2" == docker ]]; then return 1; fi; builtin command "$@"; }; docker_state) )"
+# shellcheck disable=SC2016 # the stub body is evaluated later, single quotes are intended
+check "docker: too old" "old:20.10.24" \
+    "$(dstate 'case "$1" in --version) echo "Docker version 20.10.24+dfsg1, build 297e128" ;; esac')"
+# shellcheck disable=SC2016 # the stub body is evaluated later, single quotes are intended
+check "docker: no compose plugin" "no-compose" \
+    "$(dstate 'case "$1" in --version) echo "Docker version 27.3.1, build ce12230" ;; compose) return 1 ;; esac')"
+# shellcheck disable=SC2016 # the stub body is evaluated later, single quotes are intended
+check "docker: daemon not running" "daemon-down" \
+    "$(dstate 'case "$1" in --version) echo "Docker version 27.3.1, build x" ;; compose) return 0 ;; info) echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?" >&2; return 1 ;; esac')"
+# shellcheck disable=SC2016 # the stub body is evaluated later, single quotes are intended
+check "docker: session lacks the docker group" "no-group" \
+    "$(dstate 'case "$1" in --version) echo "Docker version 27.3.1, build x" ;; compose) return 0 ;; info) echo "permission denied while trying to connect to the Docker daemon socket" >&2; return 1 ;; esac')"
+# shellcheck disable=SC2016 # the stub body is evaluated later, single quotes are intended
+check "docker: ready" "ok" \
+    "$(dstate 'case "$1" in --version) echo "Docker version 27.3.1, build x" ;; *) return 0 ;; esac')"
+
+osr="${TMPROOT}/os-release"
+printf 'ID=debian\nVERSION_CODENAME=trixie\n' > "$osr"
+check "os: debian" "debian" "$(OS_RELEASE_FILE="$osr" os_family)"
+check "os: codename" "trixie" "$(OS_RELEASE_FILE="$osr" os_codename)"
+printf 'ID=ubuntu\nVERSION_CODENAME=noble\n' > "$osr"
+check "os: ubuntu" "ubuntu" "$(OS_RELEASE_FILE="$osr" os_family)"
+printf 'ID=linuxmint\nID_LIKE="ubuntu debian"\n' > "$osr"
+check "os: a derivative is not automated" "other" "$(OS_RELEASE_FILE="$osr" os_family)"
+check "os: no os-release file" "other" "$(OS_RELEASE_FILE="${TMPROOT}/absent" os_family)"
+
+# --- docker group restart (Review Focus 5) --------------------------------------------
+# regroup <ARMCTL_SG_REEXEC value> <sg available: yes|no>
+regroup() {
+    (
+        new_install regroup
+        ARMCTL_ARGV=(up --force); ARMCTL_SG_REEXEC="$1"
+        me="$(id -un)"
+        getent() { echo "docker:x:998:someone,${me}"; }
+        if [[ "$2" == yes ]]; then
+            command() { if [[ "$1" == -v && "$2" == sg ]]; then return 0; fi; builtin command "$@"; }
+            sg() { return 0; }
+        else
+            command() { if [[ "$1" == -v && "$2" == sg ]]; then return 1; fi; builtin command "$@"; }
+        fi
+        run_sg_exec() { echo "EXEC $1"; exit 0; }
+        reexec_under_docker_group
+    )
+}
+out="$(regroup "" yes 2>&1)"
+has "regroup: restarts the same command under the docker group" "EXEC ARMCTL_SG_REEXEC=1 " "$out"
+has "regroup: the restart carries the original arguments" "armctl up --force" "$out"
+rc=0; out="$(regroup 1 yes 2>&1)" || rc=$?
+check "regroup: never restarts twice" "1" "$rc"
+lacks "regroup: a second attempt does not exec" "EXEC" "$out"
+has "regroup: a second attempt asks for a new login" "Log out and back in" "$out"
+rc=0; out="$(regroup "" no 2>&1)" || rc=$?
+check "regroup: without sg it stops" "1" "$rc"
+has "regroup: without sg it names the command to run after login" "armctl up --force" "$out"
+
+# --- ensure_docker -----------------------------------------------------------------
+# edocker <first state> <os id> <ARMCTL_ASSUME>
+edocker() {
+    (
+        new_install edocker
+        statefile="${TMPROOT}/dstate"; echo "$1" > "${statefile}"
+        printf 'ID=%s\nVERSION_CODENAME=trixie\n' "$2" > "${TMPROOT}/osr"; OS_RELEASE_FILE="${TMPROOT}/osr"
+        ARMCTL_ASSUME="$3"; SKIPPED=()
+        docker_state() { cat "${statefile}"; }
+        docker_apt_install() { echo "APT $1"; echo ok > "${statefile}"; }
+        ensure_docker </dev/null
+    )
+}
+out="$(edocker ok debian ask 2>&1)"
+has "ensure_docker: nothing to do when ready" "Docker is ready" "$out"
+out="$(edocker missing debian yes 2>&1)"
+has "ensure_docker: installs on debian with consent" "APT debian" "$out"
+has "ensure_docker: ready after the install" "Docker is ready" "$out"
+rc=0; out="$(edocker missing debian ask 2>&1)" || rc=$?
+check "ensure_docker: no terminal and no --yes stops" "1" "$rc"
+lacks "ensure_docker: nothing is installed without consent" "APT" "$out"
+has "ensure_docker: the docs are linked" "docs.docker.com/engine/install" "$out"
+rc=0; out="$(edocker old:20.10.24 fedora yes 2>&1)" || rc=$?
+check "ensure_docker: another distro stops even with --yes" "1" "$rc"
+lacks "ensure_docker: another distro is never automated" "APT" "$out"
+has "ensure_docker: another distro gets the docs link" "docs.docker.com/engine/install" "$out"
+has "ensure_docker: the reason is stated" "too old" "$out"
+
+# --- PATH link ---------------------------------------------------------------------
+# plink <case name> <PATH has ~/.local/bin: yes|no> <ARMCTL_ASSUME> [pre-existing: foreign|own]
+plink() {
+    (
+        new_install "plink-$1"
+        ARMCTL_CMD="${ARM_DIR}/armctl"  # armctl_settings keeps the first value it saw in this process
+        HOME="${TMPROOT}/plink-$1/home"; mkdir -p "${HOME}/.local/bin"
+        ARMCTL_SYSTEM_BIN="${TMPROOT}/plink-$1/sysbin"; mkdir -p "${ARMCTL_SYSTEM_BIN}"
+        printf '#!/bin/sh\n' > "${ARM_DIR}/armctl"
+        if [[ "$2" == yes ]]; then PATH="${HOME}/.local/bin:${PATH}"; dest="${HOME}/.local/bin/armctl"; else dest="${ARMCTL_SYSTEM_BIN}/armctl"; fi
+        case "${4:-}" in
+            foreign) echo other > "${dest}" ;;
+            own)     ln -s "${ARM_DIR}/armctl" "${dest}" ;;
+        esac
+        ARMCTL_ASSUME="$3"; SKIPPED=()
+        sudo() { "$@"; }
+        link_armctl </dev/null >/dev/null 2>&1
+        if [[ -L "${dest}" ]]; then echo "LINK=$(readlink "${dest}")"; else echo "LINK=none"; fi
+        echo "CMD=${ARMCTL_CMD}"
+        echo "SKIPPED=${SKIPPED[*]:-}"
+        if [[ -f "${dest}" && ! -L "${dest}" ]]; then echo "FOREIGN=$(cat "${dest}")"; fi
+    )
+}
+out="$(plink local yes ask)"
+has "path link: ~/.local/bin on the PATH gets the link, no sudo, no question" "LINK=${TMPROOT}/plink-local/arm/armctl" "$out"
+has "path link: the short command is advertised" "CMD=armctl" "$out"
+out="$(plink sys-yes no yes)"
+has "path link: the system folder is used with consent" "LINK=${TMPROOT}/plink-sys-yes/arm/armctl" "$out"
+out="$(plink sys-ask no ask)"
+has "path link: no terminal skips the sudo link" "LINK=none" "$out"
+has "path link: the full path is advertised when skipped" "CMD=${TMPROOT}/plink-sys-ask/arm/armctl" "$out"
+has "path link: the skip is recorded" "armctl on the PATH" "$out"
+out="$(plink foreign yes ask foreign)"
+has "path link: a file we did not create is left alone" "FOREIGN=other" "$out"
+has "path link: the full path is advertised when blocked" "CMD=${TMPROOT}/plink-foreign/arm/armctl" "$out"
+out="$(plink own yes ask own)"
+has "path link: our own link is kept" "CMD=armctl" "$out"
+
 # --- dispatch -----------------------------------------------------------------------
 rc=0; (ARM_DIR="${TMPROOT}/settings/arm"; current_uid() { echo 1000; }; armctl_main frobnicate) >/dev/null 2>&1 || rc=$?
 check "an unknown command exits 2" "2" "$rc"

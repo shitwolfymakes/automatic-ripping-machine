@@ -34,7 +34,7 @@ for _lib in common detect certs udev lifecycle; do
     # shellcheck source=/dev/null
     source "${ARMCTL_RELEASE_DIR}/lib/${_lib}.sh"
 done
-for _mod in ui config nvidia offload; do
+for _mod in ui config docker nvidia offload pathlink; do
     # shellcheck source=/dev/null
     source "${ARMCTL_RELEASE_DIR}/install/${_mod}.sh"
 done
@@ -141,11 +141,6 @@ load_profile() {
     if [[ "${PROFILE}" == "ripper-only" ]]; then
         RIPPER_ONLY=1
     fi
-}
-
-require_docker_ready() {
-    require docker "Install Docker first: https://docs.docker.com/engine/install/"
-    require_compose
 }
 
 # The services this host pulls and starts, one per line. select_up_services
