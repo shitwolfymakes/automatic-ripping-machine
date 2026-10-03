@@ -55,13 +55,36 @@ install_udev_rule() {
     fi
     if consent "udev rule" "Write a udev rule so the desktop stops auto-mounting discs ARM is ripping (needs sudo)?"; then
         # Ask for the sudo password now, so ensure_udev_rule's non-interactive
-        # check passes. Without a terminal this fails and ensure_udev_rule
-        # prints the commands to run by hand.
+        # check passes.
         sudo -v || true
-        ensure_udev_rule
+        if sudo -n true 2>/dev/null; then
+            ensure_udev_rule
+        else
+            udev_rule_by_hand
+        fi
     else
         warnline "without the rule, a desktop session can hold the disc and block eject after a rip"
     fi
+}
+
+# Consent was given but sudo cannot run here (no terminal to ask for the
+# password on, or a wrong password): leave the rule in the state folder with
+# three commands to install it, and list the step as skipped.
+udev_rule_by_hand() {
+    local file="${ARM_STATE_DIR}/99-arm-no-automount.rules" content
+    # No trailing newline: the same bytes ensure_udev_rule writes, so a later
+    # run sees the hand-installed rule as current.
+    content="$(build_udev_rule_content)"
+    if ! printf '%s' "${content}" > "${file}"; then
+        warnline "could not write ${file}; run '${ARMCTL_CMD} install' again from a terminal to add the udev rule"
+        SKIPPED+=("udev rule (sudo was not available)")
+        return 0
+    fi
+    warnline "sudo was not available, so the udev rule was not installed. To install it, run:"
+    log "  sudo install -m 0644 $(printf '%q' "${file}") ${UDEV_RULE_PATH}"
+    log "  sudo udevadm control --reload-rules"
+    log "  sudo udevadm trigger --subsystem-match=block"
+    SKIPPED+=("udev rule (sudo was not available; the commands to install it by hand are printed above)")
 }
 
 print_install_summary() {  # print_install_summary <started 0|1>

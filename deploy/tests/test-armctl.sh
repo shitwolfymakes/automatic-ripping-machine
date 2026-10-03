@@ -570,6 +570,88 @@ out="$(udev_case no ask)"
 lacks "udev: no terminal does not write" "WROTE" "$out"
 has "udev: the skip is recorded" "SKIPPED=udev rule" "$out"
 
+# udev: consent given (--yes) but sudo cannot run without a password. The
+# library's paste block is not used; the rule is left in the state folder with
+# three plain commands, and the step is listed as skipped.
+udev_nosudo() {
+    (
+        new_install udev-nosudo
+        command() { if [[ "$1" == -v && "$2" == udevadm ]]; then return 0; fi; builtin command "$@"; }
+        udev_rule_current() { return 1; }
+        ensure_udev_rule() { echo WROTE; }
+        sudo() { return 1; }
+        ARMCTL_ASSUME=yes; SKIPPED=()
+        install_udev_rule </dev/null
+        echo "SKIPPED=${SKIPPED[*]:-}"
+        if cmp -s "${ARM_STATE_DIR}/99-arm-no-automount.rules" <(printf '%s' "$(build_udev_rule_content)"); then
+            echo "RULEFILE=same"
+        fi
+    ) 2>&1
+}
+out="$(udev_nosudo)"
+lacks "udev, no sudo: the library's paste block is not used" "WROTE" "$out"
+has "udev, no sudo: the step is listed as skipped" "SKIPPED=udev rule (sudo was not available" "$out"
+has "udev, no sudo: the rule is left in the state folder, as the installed bytes" "RULEFILE=same" "$out"
+has "udev, no sudo: command to install the file" "sudo install -m 0644 ${TMPROOT}/udev-nosudo/arm/.armctl/99-arm-no-automount.rules /etc/udev/rules.d/99-arm-no-automount.rules" "$out"
+has "udev, no sudo: command to reload the rules" "sudo udevadm control --reload-rules" "$out"
+has "udev, no sudo: command to trigger the block subsystem" "sudo udevadm trigger --subsystem-match=block" "$out"
+lacks "udev, no sudo: no heredoc to paste" "<<'RULE'" "$out"
+
+# --- NVIDIA container toolkit -----------------------------------------------------------
+# nv_case: an NVIDIA GPU on an apt host. NV_* variables shape docker and curl.
+# Run standalone with errexit live, as in armctl, then report what was called.
+nv_case() {
+    (
+        nvlog="${TMPROOT}/nv.log"; : > "${nvlog}"
+        command() {
+            if [[ "$1" == -v ]]; then
+                case "$2" in
+                    lspci|apt-get) return 0 ;;
+                    nvidia-ctk) return "${NV_CTK:-1}" ;;
+                esac
+            fi
+            builtin command "$@"
+        }
+        lspci() { echo "01:00.0 VGA compatible controller: NVIDIA Corporation GA102"; }
+        docker() {
+            case "$1" in
+                info) printf '%s\n' "${NV_INFO:-}"; return "${NV_INFO_RC:-0}" ;;
+                ps) if [[ "$*" == *label=* ]]; then printf '%s' "${NV_SPAWNED:-}"; else printf '%s\n' "${NV_NAMES:-}"; fi ;;
+            esac
+        }
+        curl() { echo "curl" >> "${nvlog}"; [[ "${NV_CURL:-ok}" == ok ]] && echo DATA; }
+        sudo() { echo "sudo $*" >> "${nvlog}"; if [[ "$1" == gpg || "$1" == tee ]]; then cat >/dev/null; fi; return 0; }
+        ARMCTL_ASSUME=yes; SKIPPED=(); ARMCTL_CMD=/x/arm/armctl
+        set +e
+        ( set -e; ensure_nvidia_container_toolkit; echo "CONTINUED SKIPPED=${SKIPPED[*]:-}" ) </dev/null
+        echo "rc=$?"
+        set -e
+        echo "CALLS=$(tr '\n' ';' < "${nvlog}")"
+    ) 2>&1
+}
+# docker can exit non-zero after printing the runtime list (SIGPIPE when a
+# reader stops early); the output, not the exit code, says the toolkit is there.
+out="$(NV_CTK=0 NV_INFO=" Runtimes: io.containerd.runc.v2 nvidia runc" NV_INFO_RC=141 nv_case)"
+has "nvidia: an installed toolkit is recognised from docker info's output" "CALLS=" "$out"
+lacks "nvidia: an installed toolkit installs nothing" "sudo " "$out"
+lacks "nvidia: an installed toolkit downloads nothing" "curl" "$out"
+out="$(NV_NAMES="armv3-backend" nv_case)"
+lacks "nvidia: the ARM stack running, nothing is installed (it restarts Docker)" "sudo " "$out"
+has "nvidia: the ARM stack running, the skip says to stop ARM first" "run '/x/arm/armctl down', then '/x/arm/armctl install' again" "$out"
+has "nvidia: the ARM stack running, the install carries on" "CONTINUED" "$out"
+out="$(NV_NAMES="someone-else" NV_SPAWNED="0123abcd" nv_case)"
+lacks "nvidia: a spawned ripper or transcoder running, nothing is installed" "sudo " "$out"
+out="$(NV_CURL=fail nv_case)"
+has "nvidia: a failed install does not end the install" "CONTINUED" "$out"
+has "nvidia: a failed install exits 0" "rc=0" "$out"
+has "nvidia: a failed install is listed as skipped" "NVIDIA container toolkit (the install failed" "$out"
+lacks "nvidia: a failed install does not restart Docker" "systemctl restart docker" "$out"
+out="$(nv_case)"
+has "nvidia: the install runs every step and restarts Docker last" "sudo nvidia-ctk runtime configure --runtime=docker;sudo systemctl restart docker;" "$out"
+has "nvidia: the keyring is written without an overwrite question" "sudo gpg --batch --yes --dearmor" "$out"
+has "nvidia: a good install skips nothing" "CONTINUED SKIPPED=" "$out"
+lacks "nvidia: a good install skips nothing (no entry)" "CONTINUED SKIPPED=NVIDIA" "$out"
+
 # --- upgrade: the old release fetches, then hands over ------------------------------
 # upgrade_case <name> <resolved tag> <fetch: ok|fail> [upgrade args...]
 upgrade_case() {
