@@ -9,14 +9,15 @@ import type { IdentityView, JobView, TrackView } from '$lib/types/api.gen';
 const mockGoto = vi.fn();
 vi.mock('$app/navigation', () => ({ goto: (...args: unknown[]) => mockGoto(...args) }));
 
-vi.mock('$app/stores', () => ({
-	page: {
-		subscribe: (fn: (val: { params: { id: string } }) => void) => {
-			fn({ params: { id: 'job_42' } });
-			return () => {};
-		}
-	}
-}));
+vi.mock('$app/stores', async () => {
+	const { writable } = await import('svelte/store');
+	const _page = writable({ params: { id: 'job_42' } });
+	return {
+		page: { subscribe: _page.subscribe },
+		// Test-only helper: simulate client-side navigation to another job.
+		__setPageId: (id: string) => _page.set({ params: { id } })
+	};
+});
 
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');
@@ -155,6 +156,16 @@ describe('Job detail page (v3)', () => {
 		await waitFor(() => {
 			expect(screen.getByTestId('job-log-open')).toHaveAttribute('href', '/logs/job_42');
 		});
+	});
+
+	it('reloads when client-side navigation changes the job id', async () => {
+		renderComponent(Page);
+		await waitFor(() => expect(mockFetchJob).toHaveBeenCalledWith('job_42'));
+		const stores = (await import('$app/stores')) as unknown as { __setPageId: (id: string) => void };
+		stores.__setPageId('job_43');
+		await waitFor(() => expect(mockFetchJob).toHaveBeenCalledWith('job_43'));
+		// The mocked store is module-wide: put the id back for the tests that follow.
+		stores.__setPageId('job_42');
 	});
 
 	it('redirects to home on 404', async () => {
