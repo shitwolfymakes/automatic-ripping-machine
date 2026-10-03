@@ -79,7 +79,9 @@ afterEach(() => cleanup());
 describe('JobLogPanel', () => {
 	it('renders lines from load()', async () => {
 		fetchJobLogMock.mockResolvedValue(ENTRIES);
-		renderComponent(JobLogPanel, { props: { jobId: 'job_a', status: 'ripped', defaultOpen: true } });
+		renderComponent(JobLogPanel, {
+			props: { jobId: 'job_a', job: { status: 'failed', transcode_progress: null }, defaultOpen: true }
+		});
 		await waitFor(() => {
 			expect(screen.getByText('backend line')).toBeInTheDocument();
 			expect(screen.getByText('ripper line')).toBeInTheDocument();
@@ -89,7 +91,9 @@ describe('JobLogPanel', () => {
 
 	it('shows the empty state when there are no lines', async () => {
 		fetchJobLogMock.mockResolvedValue([]);
-		renderComponent(JobLogPanel, { props: { jobId: 'job_a', status: 'ripped', defaultOpen: true } });
+		renderComponent(JobLogPanel, {
+			props: { jobId: 'job_a', job: { status: 'failed', transcode_progress: null }, defaultOpen: true }
+		});
 		await waitFor(() => {
 			expect(screen.getByText(/no log lines for this job yet/i)).toBeInTheDocument();
 		});
@@ -98,7 +102,9 @@ describe('JobLogPanel', () => {
 	it('shows a loading line instead of the empty state while the first fetch is pending', async () => {
 		let resolve: (v: unknown) => void = () => {};
 		fetchJobLogMock.mockReturnValue(new Promise((r) => (resolve = r)));
-		renderComponent(JobLogPanel, { props: { jobId: 'job_a', status: 'ripped', defaultOpen: true } });
+		renderComponent(JobLogPanel, {
+			props: { jobId: 'job_a', job: { status: 'failed', transcode_progress: null }, defaultOpen: true }
+		});
 		await waitFor(() => expect(screen.getByText('Loading log...')).toBeInTheDocument());
 		expect(screen.queryByText(/no log lines for this job yet/i)).not.toBeInTheDocument();
 
@@ -110,12 +116,12 @@ describe('JobLogPanel', () => {
 	it('does not show the loading line on a reload once lines exist', async () => {
 		fetchJobLogMock.mockResolvedValueOnce(ENTRIES);
 		const { rerender } = renderComponent(JobLogPanel, {
-			props: { jobId: 'job_a', status: 'ripped', defaultOpen: true }
+			props: { jobId: 'job_a', job: { status: 'failed', transcode_progress: null }, defaultOpen: true }
 		});
 		await waitFor(() => expect(screen.getByText('backend line')).toBeInTheDocument());
 
 		fetchJobLogMock.mockReturnValueOnce(new Promise(() => {}));
-		await rerender({ jobId: 'job_b', status: 'ripped', defaultOpen: true });
+		await rerender({ jobId: 'job_b', job: { status: 'failed', transcode_progress: null }, defaultOpen: true });
 		await waitFor(() => expect(fetchJobLogMock).toHaveBeenCalledTimes(2));
 		expect(screen.queryByText('Loading log...')).not.toBeInTheDocument();
 		expect(screen.getByText('backend line')).toBeInTheDocument();
@@ -123,7 +129,9 @@ describe('JobLogPanel', () => {
 
 	it('shows the error state in red on a failed load', async () => {
 		fetchJobLogMock.mockRejectedValue(new Error('boom'));
-		renderComponent(JobLogPanel, { props: { jobId: 'job_a', status: 'ripped', defaultOpen: true } });
+		renderComponent(JobLogPanel, {
+			props: { jobId: 'job_a', job: { status: 'failed', transcode_progress: null }, defaultOpen: true }
+		});
 		await waitFor(() => {
 			expect(screen.getByText(/boom/)).toBeInTheDocument();
 		});
@@ -131,7 +139,9 @@ describe('JobLogPanel', () => {
 
 	it('filters hide other services without dropping them from state', async () => {
 		fetchJobLogMock.mockResolvedValue(ENTRIES);
-		renderComponent(JobLogPanel, { props: { jobId: 'job_a', status: 'ripped', defaultOpen: true } });
+		renderComponent(JobLogPanel, {
+			props: { jobId: 'job_a', job: { status: 'failed', transcode_progress: null }, defaultOpen: true }
+		});
 		await waitFor(() => expect(screen.getByText('backend line')).toBeInTheDocument());
 
 		const ripperBtn = screen.getByTestId('job-log-filter-ripper');
@@ -147,7 +157,9 @@ describe('JobLogPanel', () => {
 
 	it('appends a live line delivered via the mocked wsClient.subscribe handler', async () => {
 		fetchJobLogMock.mockResolvedValue([]);
-		renderComponent(JobLogPanel, { props: { jobId: 'job_a', status: 'ripping', defaultOpen: true } });
+		renderComponent(JobLogPanel, {
+			props: { jobId: 'job_a', job: { status: 'ripping', transcode_progress: null }, defaultOpen: true }
+		});
 		await waitFor(() => expect(screen.getByText(/no log lines/i)).toBeInTheDocument());
 
 		expect(wsHandler).not.toBeNull();
@@ -169,7 +181,9 @@ describe('JobLogPanel', () => {
 
 	it('header links point at the job log page and the download zip', async () => {
 		fetchJobLogMock.mockResolvedValue([]);
-		renderComponent(JobLogPanel, { props: { jobId: 'job_a', status: 'ripped', defaultOpen: true } });
+		renderComponent(JobLogPanel, {
+			props: { jobId: 'job_a', job: { status: 'failed', transcode_progress: null }, defaultOpen: true }
+		});
 		await waitFor(() => {
 			expect(screen.getByTestId('job-log-open')).toHaveAttribute('href', '/logs/job_a');
 			expect(screen.getByTestId('job-log-download')).toHaveAttribute('href', '/api/logs/job_a.zip');
@@ -178,7 +192,9 @@ describe('JobLogPanel', () => {
 
 	it('header links are rendered even when collapsed', async () => {
 		fetchJobLogMock.mockResolvedValue([]);
-		renderComponent(JobLogPanel, { props: { jobId: 'job_a', status: 'ripped', defaultOpen: false } });
+		renderComponent(JobLogPanel, {
+			props: { jobId: 'job_a', job: { status: 'failed', transcode_progress: null }, defaultOpen: false }
+		});
 		await waitFor(() => {
 			expect(screen.getByTestId('job-log-open')).toBeInTheDocument();
 			expect(screen.getByTestId('job-log-download')).toBeInTheDocument();
@@ -187,14 +203,14 @@ describe('JobLogPanel', () => {
 
 	it('is collapsed by default for a terminal job', async () => {
 		fetchJobLogMock.mockResolvedValue(ENTRIES);
-		renderComponent(JobLogPanel, { props: { jobId: 'job_a', status: 'ripped' } });
+		renderComponent(JobLogPanel, { props: { jobId: 'job_a', job: { status: 'failed', transcode_progress: null } } });
 		await waitFor(() => expect(fetchJobLogMock).toHaveBeenCalled());
 		expect(screen.queryByTestId('job-log-view')).not.toBeInTheDocument();
 	});
 
 	it('is open by default for an active job', async () => {
 		fetchJobLogMock.mockResolvedValue(ENTRIES);
-		renderComponent(JobLogPanel, { props: { jobId: 'job_a', status: 'ripping' } });
+		renderComponent(JobLogPanel, { props: { jobId: 'job_a', job: { status: 'ripping', transcode_progress: null } } });
 		await waitFor(() => {
 			expect(screen.getByTestId('job-log-view')).toBeInTheDocument();
 		});
@@ -202,13 +218,17 @@ describe('JobLogPanel', () => {
 
 	it('subscribes to the WS feed only for an active job', async () => {
 		fetchJobLogMock.mockResolvedValue([]);
-		renderComponent(JobLogPanel, { props: { jobId: 'job_a', status: 'ripping', defaultOpen: true } });
+		renderComponent(JobLogPanel, {
+			props: { jobId: 'job_a', job: { status: 'ripping', transcode_progress: null }, defaultOpen: true }
+		});
 		await waitFor(() => expect(subscribeMock).toHaveBeenCalledWith('logs.job_a', expect.any(Function)));
 	});
 
 	it('does not subscribe to the WS feed for a terminal job', async () => {
 		fetchJobLogMock.mockResolvedValue(ENTRIES);
-		renderComponent(JobLogPanel, { props: { jobId: 'job_a', status: 'ripped', defaultOpen: true } });
+		renderComponent(JobLogPanel, {
+			props: { jobId: 'job_a', job: { status: 'failed', transcode_progress: null }, defaultOpen: true }
+		});
 		await waitFor(() => expect(fetchJobLogMock).toHaveBeenCalled());
 		expect(subscribeMock).not.toHaveBeenCalled();
 	});
@@ -218,18 +238,20 @@ describe('JobLogPanel', () => {
 		subscribeMock.mockReturnValue(unsub);
 		fetchJobLogMock.mockResolvedValue([]);
 		const { rerender } = renderComponent(JobLogPanel, {
-			props: { jobId: 'job_a', status: 'ripping', defaultOpen: true }
+			props: { jobId: 'job_a', job: { status: 'ripping', transcode_progress: null }, defaultOpen: true }
 		});
 		await waitFor(() => expect(subscribeMock).toHaveBeenCalled());
 
-		await rerender({ jobId: 'job_a', status: 'ripped', defaultOpen: true });
+		await rerender({ jobId: 'job_a', job: { status: 'failed', transcode_progress: null }, defaultOpen: true });
 
 		await waitFor(() => expect(unsub).toHaveBeenCalled());
 	});
 
 	it('shows a live indicator while subscribed', async () => {
 		fetchJobLogMock.mockResolvedValue([]);
-		renderComponent(JobLogPanel, { props: { jobId: 'job_a', status: 'ripping', defaultOpen: true } });
+		renderComponent(JobLogPanel, {
+			props: { jobId: 'job_a', job: { status: 'ripping', transcode_progress: null }, defaultOpen: true }
+		});
 		await waitFor(() => {
 			expect(screen.getByText(/live/i)).toBeInTheDocument();
 		});
@@ -237,7 +259,9 @@ describe('JobLogPanel', () => {
 
 	it('shows the line count in the header', async () => {
 		fetchJobLogMock.mockResolvedValue(ENTRIES);
-		renderComponent(JobLogPanel, { props: { jobId: 'job_a', status: 'ripped', defaultOpen: true } });
+		renderComponent(JobLogPanel, {
+			props: { jobId: 'job_a', job: { status: 'failed', transcode_progress: null }, defaultOpen: true }
+		});
 		await waitFor(() => {
 			expect(screen.getByText(/3 lines/)).toBeInTheDocument();
 		});

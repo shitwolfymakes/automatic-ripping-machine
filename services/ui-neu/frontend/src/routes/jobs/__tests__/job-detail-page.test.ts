@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor } from '$lib/test-utils';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-utils';
 import JobDetailPage from '../[id]/+page.svelte';
 import { createJob, createTrack } from '$lib/components/__fixtures__/job';
-import type { JobView, JobDetailView } from '$lib/types/api.gen';
+import type { JobView, JobDetailView, SessionView, ApplySessionResponse } from '$lib/types/api.gen';
 
 vi.mock('$app/stores', async () => {
 	const { readable } = await import('svelte/store');
@@ -137,6 +137,20 @@ describe('Job Detail Page', () => {
 			expect(screen.queryByRole('button', { name: /Poster & metadata search/ })).not.toBeInTheDocument();
 		});
 
+		it('shows Edit identity on a held review disc', async () => {
+			const { fetchJob } = await import('$lib/api/jobs');
+			vi.mocked(fetchJob).mockResolvedValueOnce(buildDetail({ status: 'awaiting_review' }));
+			renderComponent(JobDetailPage);
+			await waitFor(() => expect(screen.getByTestId('identify-open')).toHaveTextContent('Edit identity'));
+		});
+
+		it('shows Apply session for a ripped disc awaiting identification', async () => {
+			const { fetchJob } = await import('$lib/api/jobs');
+			vi.mocked(fetchJob).mockResolvedValueOnce(buildDetail({ status: 'ripped_awaiting_identify' }));
+			renderComponent(JobDetailPage);
+			await waitFor(() => expect(screen.getByTestId('apply-open')).toBeInTheDocument());
+		});
+
 		it('shows the Identify (resolve) and Apply session buttons for a resolvable status', async () => {
 			renderComponent(JobDetailPage);
 			await waitFor(() => {
@@ -188,6 +202,151 @@ describe('Job Detail Page', () => {
 			});
 			expect(screen.getByTestId('apply-open')).toBeInTheDocument();
 			expect(screen.getByText('Delete')).toBeInTheDocument();
+		});
+	});
+
+	describe('apply note', () => {
+		const session: SessionView = {
+			id: 'ses_1',
+			name: 'My Plex',
+			media_type: 'movie',
+			is_builtin: false,
+			rip_preset_id: 'rpr_1',
+			transcode_preset_id: null,
+			output_path_template: '{title}/{title}.mkv',
+			overrides_json: null,
+			created_by_user_id: null,
+			created_at: null,
+			updated_at: null
+		};
+
+		async function applyVia(resp: ApplySessionResponse) {
+			const { applySession } = await import('$lib/api/jobs');
+			const { fetchSessions } = await import('$lib/api/sessions');
+			vi.mocked(fetchSessions).mockResolvedValue([session]);
+			vi.mocked(applySession).mockResolvedValueOnce(resp);
+			renderComponent(JobDetailPage);
+			await waitFor(() => expect(screen.getByTestId('apply-open')).toBeInTheDocument());
+			await fireEvent.click(screen.getByTestId('apply-open'));
+			const select = await screen.findByTestId('apply-session-select');
+			await waitFor(() => expect(select.querySelector('option[value="ses_1"]')).not.toBeNull());
+			await fireEvent.change(select, { target: { value: 'ses_1' } });
+			await waitFor(() => expect(screen.getByTestId('apply-session-apply')).not.toBeDisabled());
+			await fireEvent.click(screen.getByTestId('apply-session-apply'));
+		}
+
+		afterEach(async () => {
+			const { fetchSessions } = await import('$lib/api/sessions');
+			vi.mocked(fetchSessions).mockResolvedValue([]);
+		});
+
+		it('says the session is parked until the rip finishes when a held disc parks', async () => {
+			const { fetchJob } = await import('$lib/api/jobs');
+			vi.mocked(fetchJob).mockResolvedValue(buildDetail({ status: 'awaiting_review' }));
+			try {
+				await applyVia({
+					session_application: { id: 'sap_1', session_id: 'ses_1', job_id: 'job_1', status: 'waiting_identify' },
+					tasks: [],
+					collisions: [],
+					idempotent: false
+				} as unknown as ApplySessionResponse);
+				await waitFor(() =>
+					expect(screen.getByText('Session parked; applies when the rip finishes')).toBeInTheDocument()
+				);
+				expect(screen.queryByText(/transcode tasks? queued/)).not.toBeInTheDocument();
+			} finally {
+				vi.mocked(fetchJob).mockImplementation(() => Promise.resolve(buildDetail()));
+			}
+		});
+
+		it('does not promise a rip-complete fan-out when a ripped job parks', async () => {
+			const { fetchJob } = await import('$lib/api/jobs');
+			vi.mocked(fetchJob).mockResolvedValue(buildDetail({ status: 'ripped_awaiting_identify' }));
+			try {
+				await applyVia({
+					session_application: { id: 'sap_1', session_id: 'ses_1', job_id: 'job_1', status: 'waiting_identify' },
+					tasks: [],
+					collisions: [],
+					idempotent: false
+				} as unknown as ApplySessionResponse);
+				await waitFor(() => expect(screen.getByText('Session parked; waiting')).toBeInTheDocument());
+			} finally {
+				vi.mocked(fetchJob).mockImplementation(() => Promise.resolve(buildDetail()));
+			}
+		});
+
+		it('counts queued transcode tasks when the apply fans out', async () => {
+			await applyVia({
+				session_application: { id: 'sap_1', session_id: 'ses_1', job_id: 'job_1', status: 'queued' },
+				tasks: [{ id: 'tsk_1' }, { id: 'tsk_2' }],
+				collisions: [],
+				idempotent: false
+			} as unknown as ApplySessionResponse);
+			await waitFor(() => expect(screen.getByText('2 transcode tasks queued')).toBeInTheDocument());
+		});
+	});
+
+	describe('refresh', () => {
+		beforeEach(async () => {
+			const { stopRipperEvents } = await import('$lib/stores/ripperEvents.svelte');
+			stopRipperEvents();
+		});
+		afterEach(() => vi.useRealTimers());
+
+		it('keeps refreshing a ripped job while it transcodes', async () => {
+			vi.useFakeTimers();
+			const { fetchJob } = await import('$lib/api/jobs');
+			vi.mocked(fetchJob).mockResolvedValue(
+				buildDetail({
+					status: 'ripped',
+					transcode_progress: { state: 'transcoding', tasks_total: 1, tasks_done: 0, tasks_failed: 0, percent: 5 }
+				})
+			);
+			renderComponent(JobDetailPage);
+			await vi.advanceTimersByTimeAsync(0);
+			const before = vi.mocked(fetchJob).mock.calls.length;
+			await vi.advanceTimersByTimeAsync(15000);
+			expect(vi.mocked(fetchJob).mock.calls.length).toBeGreaterThanOrEqual(before + 3);
+		});
+
+		it('stops fetching once the transcode is done, and resumes if it goes live again', async () => {
+			vi.useFakeTimers();
+			const { fetchJob } = await import('$lib/api/jobs');
+			const done = buildDetail({
+				status: 'ripped',
+				transcode_progress: { state: 'done', tasks_total: 1, tasks_done: 1, tasks_failed: 0, percent: 100 }
+			});
+			const live = buildDetail({
+				status: 'ripped',
+				transcode_progress: { state: 'transcoding', tasks_total: 2, tasks_done: 1, tasks_failed: 0, percent: 50 }
+			});
+			vi.mocked(fetchJob).mockResolvedValue(done);
+			renderComponent(JobDetailPage);
+			await vi.advanceTimersByTimeAsync(0);
+			const settled = vi.mocked(fetchJob).mock.calls.length;
+			await vi.advanceTimersByTimeAsync(15000);
+			expect(vi.mocked(fetchJob).mock.calls.length).toBe(settled);
+
+			// A WS event (e.g. a new apply) reloads the job; it is live again.
+			vi.mocked(fetchJob).mockResolvedValue(live);
+			const { wsClient } = await import('$lib/api/ws');
+			const handler = vi.mocked(wsClient.subscribe).mock.calls.find(([topic]) => topic === 'transcode.events')?.[1] as (
+				e: unknown
+			) => void;
+			handler({
+				op: 'event',
+				event_id: 'evt_1',
+				event_type: 'session.queued',
+				emitted_at: '2026-09-29T00:00:00Z',
+				topic: 'transcode.events',
+				job_id: 'job_1',
+				track_id: null,
+				payload: {}
+			});
+			await vi.advanceTimersByTimeAsync(400);
+			const afterEvent = vi.mocked(fetchJob).mock.calls.length;
+			await vi.advanceTimersByTimeAsync(10000);
+			expect(vi.mocked(fetchJob).mock.calls.length).toBeGreaterThanOrEqual(afterEvent + 2);
 		});
 	});
 });

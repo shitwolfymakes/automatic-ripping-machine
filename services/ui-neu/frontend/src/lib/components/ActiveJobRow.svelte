@@ -3,8 +3,9 @@
 	import StatusBadge from './StatusBadge.svelte';
 	import ProgressBar from './ProgressBar.svelte';
 	import { statusAccentVar } from '$lib/utils/format';
-	import { getVideoTypeConfig, isJobActive, discTypeLabel } from '$lib/utils/job-type';
+	import { getVideoTypeConfig, discTypeLabel } from '$lib/utils/job-type';
 	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
+	import { isInProgress } from '$lib/utils/job-status-groups';
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import PosterImage from './PosterImage.svelte';
 	import { jobPoster } from '$lib/utils/poster';
@@ -68,11 +69,12 @@
 	let expanded = $state(false);
 
 	let typeConfig = $derived(getVideoTypeConfig(null, job?.disc_type ?? null));
-	// Gate the progress row on the EFFECTIVE status so it shows while the job
-	// is genuinely in-flight (ripping OR transcoding) and disappears once it is
-	// terminal (complete/failed). A done job (raw `ripped` + transcode_progress
-	// 'done') reads effective 'complete' → not active → no progress bar.
-	let active = $derived(job ? isJobActive(effectiveJobStatus(job)) : false);
+	// Gate the progress row on isInProgress: isLive minus the idle post-rip
+	// statuses (ripped, ripped_partial, ripped_awaiting_identify). A job
+	// waiting on the operator shows no progress bar, a transcoding job
+	// (effective 'transcoding') does, and a terminal one (complete/failed)
+	// does not.
+	let active = $derived(job ? isInProgress(job) : false);
 	let accentVar = $derived(statusAccentVar(job?.status));
 
 	function toggle(e: MouseEvent) {

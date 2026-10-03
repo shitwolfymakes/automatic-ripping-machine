@@ -1,9 +1,14 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from arm_common.enums import (
+    APPLY_OK_JOB_STATUSES,
+    APPLY_PARK_JOB_STATUSES,
+    NON_TERMINAL_JOB_STATUSES,
+    RESOLVABLE_JOB_STATUSES,
+    TERMINAL_JOB_STATUSES,
     DiscType,
     JobStatus,
     MediaType,
@@ -145,6 +150,29 @@ class TranscodeProgressSummary(BaseModel):
     percent: float
 
 
+class JobActions(BaseModel):
+    """Operator actions the backend will accept for a job in its current status.
+
+    Derived from the same status groups the endpoints enforce, so a UI button
+    gated on these flags cannot offer an action its endpoint rejects. Role
+    (admin/guest) gating stays in the UI.
+    """
+
+    can_resolve: bool
+    can_apply: bool
+    can_abandon: bool
+    can_delete: bool
+
+
+def job_actions_for(status: JobStatus) -> JobActions:
+    return JobActions(
+        can_resolve=status in RESOLVABLE_JOB_STATUSES,
+        can_apply=status in APPLY_OK_JOB_STATUSES or status in APPLY_PARK_JOB_STATUSES,
+        can_abandon=status in NON_TERMINAL_JOB_STATUSES,
+        can_delete=status in TERMINAL_JOB_STATUSES,
+    )
+
+
 class JobView(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -163,6 +191,11 @@ class JobView(BaseModel):
     media_type: MediaType | None = None
     season: int | None = None
     pending_session_id: str | None = None
+    # Sessions applied to this job that are parked (waiting_identify): pre-rip
+    # they fan out at rip-complete; post-rip something else holds them (e.g.
+    # transcoding disabled). Filled by GET /api/jobs and GET /api/jobs/{id}
+    # only; other endpoints returning a JobView leave it empty.
+    parked_session_ids: list[str] = []
     disc_number: int | None = None
     disc_total: int | None = None
     # Computed at identify; UI prefers `poster_url_manual` if set.
@@ -181,6 +214,11 @@ class JobView(BaseModel):
     # Populated by the jobs list + detail endpoints by aggregating the job's
     # session_applications. None when no session has been applied.
     transcode_progress: TranscodeProgressSummary | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def actions(self) -> JobActions:
+        return job_actions_for(self.status)
 
 
 class HeldJobView(BaseModel):

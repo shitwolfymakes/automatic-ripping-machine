@@ -1,7 +1,10 @@
-// Instant status refresh from `ripper.events`. A NOTIFIER, not a data store:
-// it holds no job state. It subscribes once to the bare `ripper.events`
-// topic, coalesces the job_ids seen within a debounce window, and invokes
-// each registered listener once per flush with the accumulated set.
+// Instant status refresh from `ripper.events` and `transcode.events`. A
+// NOTIFIER, not a data store: it holds no job state. It subscribes once to
+// the bare `ripper.events` and `transcode.events` topics, coalesces the
+// job_ids seen within a debounce window, and invokes each registered
+// listener once per flush with the accumulated set. Every listener (the
+// dashboard included) therefore also refreshes on transcode lifecycle
+// events, debounced. The name predates the transcode topic and is kept.
 // Listeners re-run their own existing fetchers; polling stays untouched as
 // reconciliation (WS down => exactly today's behavior).
 //
@@ -23,7 +26,7 @@ const listeners = new Set<Listener>();
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- notifier bookkeeping, never read reactively
 let pendingJobIds = new Set<string>();
 let timer: ReturnType<typeof setTimeout> | null = null;
-let unsub: (() => void) | null = null;
+let unsubs: Array<() => void> = [];
 
 function jobIdOf(env: WSEnvelope): string | null {
 	if (env.job_id) return env.job_id;
@@ -55,16 +58,14 @@ function flush(): void {
 
 export function startRipperEvents(): void {
 	wsClient.start();
-	if (unsub === null) {
-		unsub = wsClient.subscribe('ripper.events', onEvent);
+	if (unsubs.length === 0) {
+		unsubs = [wsClient.subscribe('ripper.events', onEvent), wsClient.subscribe('transcode.events', onEvent)];
 	}
 }
 
 export function stopRipperEvents(): void {
-	if (unsub !== null) {
-		unsub();
-		unsub = null;
-	}
+	for (const u of unsubs) u();
+	unsubs = [];
 	if (timer !== null) {
 		clearTimeout(timer);
 		timer = null;

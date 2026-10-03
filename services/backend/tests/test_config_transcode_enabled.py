@@ -179,7 +179,7 @@ def _client_with_hub(signing_key: bytes, db: FakeSession) -> tuple[TestClient, A
     return c, hub
 
 
-@pytest.mark.parametrize("job_status", [JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL, JobStatus.IDENTIFIED])
+@pytest.mark.parametrize("job_status", [JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL])
 def test_reenable_promotes_encode_application_parked_while_disabled(
     signing_key: bytes, db: FakeSession, config_row: Config, media_root: Path, job_status: JobStatus
 ) -> None:
@@ -199,6 +199,31 @@ def test_reenable_promotes_encode_application_parked_while_disabled(
     assert len(db.rows["transcode_tasks"]) == 1
     assert db.rows["transcode_tasks"][0].session_application_id == "sap_encode"
     assert any(e["event_type"] == "session.queued" for e in hub.events)
+
+
+@pytest.mark.parametrize("job_status", [JobStatus.IDENTIFIED, JobStatus.AWAITING_REVIEW])
+def test_reenable_leaves_pre_rip_application_parked_even_with_review_tracks(
+    signing_key: bytes, db: FakeSession, config_row: Config, media_root: Path, job_status: JobStatus
+) -> None:
+    """A held (or identified, not yet ripped) disc can already carry review
+    Track rows from identify's hold_for_review path. Re-enabling transcode
+    must not fan those unripped titles out: the application stays parked
+    until rip-complete drains it."""
+    from arm_common import TrackStatus
+
+    config_row.transcode_enabled = False
+    _seed_parked_encode(db, job_status=job_status)
+    for track in db.rows["tracks"]:
+        track.status = TrackStatus.QUEUED
+    assert db.rows["tracks"], "review tracks must be present for this regression"
+    c, hub = _client_with_hub(signing_key, db)
+
+    r = c.patch("/api/config", json={"transcode_enabled": True})
+
+    assert r.status_code == 200, r.text
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
+    assert not any(e["event_type"] == "session.queued" for e in hub.events)
 
 
 def test_patch_without_transition_does_not_redrain(

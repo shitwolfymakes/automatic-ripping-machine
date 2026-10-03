@@ -68,130 +68,78 @@ export function etaTime(startTime: string | null | undefined, progressPct: numbe
 }
 
 /**
- * Map a job status to a themeable CSS variable reference suitable for
- * inline `style="background: ${statusAccentVar(status)}"` use. Falls back
- * to the primary brand color so unrecognized statuses still pick up
- * theme tinting.
+ * Map a status to a themeable CSS variable reference suitable for inline
+ * `style="background: ${statusAccentVar(status)}"` use. Falls back to the
+ * primary brand color so unrecognized statuses still pick up theme tinting.
  *
- * Accepts a job status (v3 JobStatus), a transcode-task status
- * (v3 TaskStatus), or a track status (TrackStatus) value. The status
- * vocabulary is now owned by v3 — see the generated `$lib/types/api.gen`
- * (`JobStatus` / `TaskStatus` / `TrackStatus`), not arm_contracts. v2.0.0
- * disambiguated 'ripping' into 'video_ripping'/'audio_ripping' and 'waiting'
- * into 'manual_paused'/'makemkv_throttled'; both new and legacy strings are
- * mapped here so in-flight jobs observed mid-deploy still tint correctly.
+ * Accepts three vocabularies (see the generated `$lib/types/api.gen`):
+ *   - v3 JobStatus values (created ... failed), plus the effective statuses
+ *     transcoding / complete / transcode_failed from effectiveJobStatus()
+ *   - transcode task and track statuses (queued, in_progress, done, cancelled)
+ *   - application statuses (waiting_identify, running, done_partial)
  */
 export function statusAccentVar(status: string | null | undefined): string {
 	switch (status?.toLowerCase()) {
-		case 'identifying':
-		case 'created': // v3 JobStatus
+		case 'created':
 		case 'preparing': // ISO rip scanning / unpacking its image, no job yet
 			return 'var(--color-status-scanning)';
-		case 'identified': // v3 JobStatus — queued to rip
-		case 'ready':
-		case 'active':
-		case 'ripping': // legacy pre-v2.0.0
-		case 'video_ripping':
-		case 'audio_ripping':
-		case 'importing':
+		case 'identified': // queued to rip
+		case 'ripping':
 			return 'var(--color-status-ripping)';
-		case 'copying':
-		case 'ejecting':
-			return 'var(--color-status-finishing)';
 		case 'transcoding':
-		case 'processing':
 			return 'var(--color-status-transcoding)';
-		case 'success':
-		case 'completed':
 		case 'complete':
-		case 'transcoded':
-		case 'done': // TaskStatus — terminal transcode success
-		case 'ripped': // v3 JobStatus — terminal rip success
+		case 'done':
+		case 'ripped':
 			return 'var(--color-status-success)';
-		case 'fail':
 		case 'failed':
-		case 'error':
+		case 'transcode_failed':
+		case 'done_partial':
 			return 'var(--color-status-error)';
-		case 'waiting': // legacy pre-v2.0.0
-		case 'manual_paused':
-		case 'makemkv_throttled':
-		case 'waiting_transcode':
-		case 'pending':
-		case 'awaiting_user_id': // v3 JobStatus
-		case 'awaiting_review': // v3 JobStatus — held for the timed review gate
-		case 'ripped_partial': // v3 JobStatus — partial success
-		case 'ripped_awaiting_identify': // v3 JobStatus
+		case 'awaiting_user_id':
+		case 'awaiting_review': // held for the timed review gate
+		case 'ripped_partial':
+		case 'ripped_awaiting_identify':
+		case 'waiting_identify':
 			return 'var(--color-status-waiting)';
-		default: // incl. 'abandoned' (v3) — neutral
+		default: // incl. abandoned, queued, in_progress, running, cancelled: neutral
 			return 'var(--color-primary)';
 	}
 }
 
 /**
- * Map a status string to a CSS class. Receives values from three different
- * v3 status enums (all in the generated `$lib/types/api.gen`, not
- * arm_contracts) depending on caller:
- *   - JobStatus (Job.status) - StatusBadge in JobRow, JobCard, ActiveJobRow,
- *     DriveCard, jobs/[id]. Disambiguated in v2.0.0: 'ripping' ->
- *     'video_ripping'/'audio_ripping', 'waiting' ->
- *     'manual_paused'/'makemkv_throttled'. Old strings kept as defensive
- *     fallbacks for in-flight jobs observed mid-deploy.
- *   - TaskStatus (transcode-task status) - StatusBadge in TranscodeCard,
- *     transcoder/+page.svelte
- *   - TrackStatus (Track.status) - StatusBadge at jobs/[id]:849.
- *     'failed' is a real TrackStatus member as of v2.0.0 (was previously
- *     only handled defensively for transcode-task status).
- * Plus two locally-generated literals: 'importing' (folder-import override
- * for status='ripping') and 'skipped' (UI-only marker for filtered/disabled
- * tracks). Both are produced inline at the StatusBadge call site, not by any
- * backend.
+ * Map a status string to a CSS class. Accepts three vocabularies (see the
+ * generated `$lib/types/api.gen`):
+ *   - v3 JobStatus values (created ... failed), plus the effective statuses
+ *     transcoding / complete / transcode_failed from effectiveJobStatus()
+ *   - transcode task and track statuses (queued, in_progress, done, cancelled)
+ *   - application statuses (waiting_identify, running, done_partial)
  */
 export function statusColor(status: string | null | undefined): string {
 	switch (status?.toLowerCase()) {
-		case 'identifying':
-		case 'created': // v3 JobStatus — disc inserted, not yet identified
+		case 'created': // disc inserted, not yet identified
 		case 'preparing': // ISO rip scanning / unpacking its image, no job yet
 			return 'status-scanning';
-		case 'awaiting_user_id': // v3 JobStatus — needs manual identification
-		case 'awaiting_review': // v3 JobStatus — held for the timed review gate
-		case 'ripped_awaiting_identify': // v3 JobStatus — ripped, still needs ID
+		case 'awaiting_user_id': // needs manual identification
+		case 'awaiting_review': // held for the timed review gate
+		case 'ripped_awaiting_identify': // ripped, still needs ID
+		case 'waiting_identify':
+		case 'ripped_partial': // rip finished with some titles failed
 			return 'status-warning';
-		case 'identified': // v3 JobStatus — identified, queued/ready to rip
-		case 'ready':
-		case 'ripping': // legacy pre-v2.0.0; in-flight jobs mid-deploy
-		case 'video_ripping':
-		case 'audio_ripping':
-		case 'importing': // locally generated when isFolderImport && status='ripping'
+		case 'identified': // identified, queued/ready to rip
+		case 'ripping':
 			return 'status-active';
-		case 'copying':
-		case 'ejecting':
-			return 'status-finishing';
 		case 'transcoding':
-		case 'processing': // TaskStatus (transcode task) - TranscodeCard / transcoder page
 			return 'status-processing';
-		case 'success':
-		case 'completed': // TaskStatus (transcode task) terminal
 		case 'complete': // effectiveJobStatus() rollup for a fully-transcoded job
-		case 'done': // TaskStatus (transcode task) terminal-success
-		case 'transcoded': // TrackStatus terminal (transcode-phase)
-		case 'ripped': // v3 JobStatus — rip complete (terminal)
+		case 'done': // transcode task terminal success
+		case 'ripped': // rip complete (terminal)
 			return 'status-success';
-		case 'ripped_partial': // v3 JobStatus — rip finished with some titles failed
-			return 'status-warning';
-		case 'fail':
-		case 'failed': // TaskStatus (transcode task) terminal AND TrackStatus.failed (v2.0.0+)
-		case 'transcode_failed': // effectiveJobStatus() rollup — ripped OK but some/all tracks failed to transcode
+		case 'failed':
+		case 'transcode_failed': // ripped OK but some/all tracks failed to transcode
+		case 'done_partial': // transcode finished with some titles failed
 			return 'status-error';
-		case 'waiting': // legacy pre-v2.0.0; in-flight jobs mid-deploy
-		case 'manual_paused':
-		case 'makemkv_throttled':
-		case 'waiting_transcode':
-		case 'pending': // TaskStatus (transcode task) + TrackStatus member
-			return 'status-warning';
-		case 'abandoned': // v3 JobStatus — user abandoned (terminal)
-		case 'skipped': // locally generated for !track.enabled || filtered (jobs/[id]:849)
-			return 'status-unknown';
-		default:
+		default: // incl. abandoned, queued, in_progress, running, cancelled
 			return 'status-unknown';
 	}
 }
@@ -202,42 +150,24 @@ const STATUS_LABELS: Record<string, string> = {
 	awaiting_user_id: 'Awaiting ID',
 	awaiting_review: 'Ready: review',
 	identified: 'Identified',
+	ripping: 'Ripping',
 	ripped: 'Ripped',
 	ripped_partial: 'Ripped (partial)',
 	ripped_awaiting_identify: 'Ripped (awaiting ID)',
 	abandoned: 'Abandoned',
-	// generic / legacy / per-track / per-task statuses
-	identifying: 'Scanning',
-	ready: 'Ready',
-	active: 'Active',
-	ripping: 'Ripping', // legacy pre-v2.0.0; in-flight jobs mid-deploy
-	video_ripping: 'Ripping',
-	audio_ripping: 'Ripping',
-	importing: 'Processing',
-	copying: 'Copying',
-	ejecting: 'Ejecting',
-	processing: 'Transcoding',
-	transcoding: 'Transcoding',
-	success: 'Success',
-	completed: 'Completed',
-	complete: 'Complete',
-	fail: 'Failed',
 	failed: 'Failed',
+	// effective statuses (effectiveJobStatus)
+	transcoding: 'Transcoding',
+	complete: 'Complete',
 	transcode_failed: 'Transcode failed',
-	error: 'Error',
-	waiting: 'Waiting', // legacy pre-v2.0.0; in-flight jobs mid-deploy
-	manual_paused: 'Paused',
-	makemkv_throttled: 'Throttled',
-	waiting_transcode: 'Waiting to Transcode',
-	pending: 'Pending',
-	skipped: 'Skipped',
-	transcoded: 'Transcoded',
-	info: 'Scanning',
-	cancelled: 'Cancelled',
-	// TrackStatus / TranscodeTaskStatus (per-track + per-task rows)
+	// task / track / application statuses
 	queued: 'Queued',
 	in_progress: 'In Progress',
-	done: 'Done'
+	done: 'Done',
+	cancelled: 'Cancelled',
+	waiting_identify: 'Waiting to identify',
+	running: 'Running',
+	done_partial: 'Done (partial)'
 };
 
 export function statusLabel(status: string | null | undefined): string {

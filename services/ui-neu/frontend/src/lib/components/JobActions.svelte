@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { JobView } from '$lib/types/api.gen';
 	import { abandonJob, deleteJob } from '$lib/api/jobs';
-	import { isJobActive } from '$lib/utils/job-type';
 
 	interface Props {
 		job: JobView;
@@ -15,11 +14,8 @@
 	let loading = $state<string | null>(null);
 	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
 
-	let active = $derived(isJobActive(job.status));
-	// v3 terminal JobStatus members that a finished job can land in.
-	const TERMINAL = new Set(['ripped', 'ripped_partial', 'ripped_awaiting_identify', 'abandoned', 'failed']);
-	let canAbandon = $derived(active);
-	let canDelete = $derived(TERMINAL.has(job.status));
+	let canAbandon = $derived(job.actions.can_abandon);
+	let canDelete = $derived(job.actions.can_delete);
 
 	function clearFeedback() {
 		setTimeout(() => (feedback = null), 3000);

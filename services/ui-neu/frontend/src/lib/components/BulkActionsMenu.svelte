@@ -1,5 +1,4 @@
 <script lang="ts">
-	import type { JobStats } from './JobStatsPanel.svelte';
 	import Flyout from './Flyout.svelte';
 	import FlyoutItem from './FlyoutItem.svelte';
 	import FlyoutDivider from './FlyoutDivider.svelte';
@@ -7,12 +6,11 @@
 	interface Props {
 		// v3 job ids are strings (was Set<number> under the BFF).
 		selectedJobs: Set<string>;
-		jobsStats: JobStats | null;
 		bulkBusy: boolean;
 		onaction: (action: 'delete', params: { job_ids?: string[]; status?: string }, description: string) => void;
 	}
 
-	let { selectedJobs, jobsStats, bulkBusy, onaction }: Props = $props();
+	let { selectedJobs, bulkBusy, onaction }: Props = $props();
 
 	// v3 only supports bulk DELETE (no bulk purge endpoint). Every action
 	// routes through bulkDeleteJobs.
@@ -27,14 +25,14 @@
 		return [
 			{
 				action: 'delete',
-				label: `Delete All Failed${jobsStats?.fail ? ` (${jobsStats.fail})` : ''}`,
-				description: `delete all failed jobs${jobsStats?.fail ? ` (${jobsStats.fail})` : ''}`,
+				label: 'Delete All Failed',
+				description: 'delete all failed jobs',
 				params: { status: 'failed' }
 			},
 			{
 				action: 'delete',
-				label: `Delete All Successful${jobsStats?.success ? ` (${jobsStats.success})` : ''}`,
-				description: `delete all successful jobs${jobsStats?.success ? ` (${jobsStats.success})` : ''}`,
+				label: 'Delete All Successful',
+				description: 'delete all successful jobs',
 				params: { status: 'ripped' }
 			}
 		];
