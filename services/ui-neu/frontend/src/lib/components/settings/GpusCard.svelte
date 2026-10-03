@@ -108,8 +108,6 @@
 
 	onMount(() => {
 		load();
-		// Start the socket ourselves: no store on the Settings route has.
-		wsClient.start();
 		return wsClient.subscribe('transcode.events', (env: WSEnvelope) => {
 			// The encoders store follows gpu.probed itself.
 			if (env.event_type === 'gpu.probed') load();
