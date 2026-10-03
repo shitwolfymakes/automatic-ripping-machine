@@ -1,5 +1,7 @@
 import subprocess
 
+import pytest
+
 import arm_backend.disk_usage_cache as duc
 
 
@@ -55,3 +57,15 @@ def test_refresh_path_parses_subprocess_json(monkeypatch):
     monkeypatch.setattr(duc.subprocess, "run", lambda *a, **k: R())
     duc.refresh_path("/raw")
     assert duc.get_disk_usage("/raw") == {"total": 200, "used": 50, "free": 150, "percent": 25.0}
+
+
+def test_refresh_path_ignores_non_json_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
+    duc._cache.clear()
+
+    class R:
+        returncode = 0
+        stdout = "statvfs: not json at all"
+
+    monkeypatch.setattr(duc.subprocess, "run", lambda *a, **k: R())
+    duc.refresh_path("/raw")  # must not raise
+    assert duc.get_disk_usage("/raw") is None

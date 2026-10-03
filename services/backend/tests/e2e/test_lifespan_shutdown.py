@@ -55,3 +55,33 @@ def test_a_startup_failure_after_the_dispatcher_is_set_clears_the_holder(
 
     assert seen == [app.state.transcode_dispatcher]
     assert td._active_dispatcher is None
+
+
+def test_disk_refresher_stop_timeout_falls_back_to_cancel(
+    e2e_app: tuple[FastAPI, AsyncEngine], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If the disk refresher doesn't wind down within the grace period, the
+    lifespan cancels its task outright and still finishes the remaining
+    shutdown steps."""
+    import asyncio
+
+    app, engine = e2e_app
+    real_wait_for = asyncio.wait_for
+    timed_out: list[str] = []
+
+    async def _wait_for(fut: object, timeout: float | None = None) -> object:
+        get_coro = getattr(fut, "get_coro", None)
+        if get_coro is not None and getattr(get_coro(), "__qualname__", "") == "DiskRefresher.run":
+            timed_out.append("disk_refresher")
+            raise TimeoutError
+        return await real_wait_for(fut, timeout=timeout)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(main_mod.asyncio, "wait_for", _wait_for)
+
+    with TestClient(app) as client:
+        dispose_on_client_loop(client, engine)
+
+    assert timed_out == ["disk_refresher"]
+    assert app.state.transcode_dispatcher._stop.is_set()
+    assert app.state.http.is_closed
+    assert td._active_dispatcher is None

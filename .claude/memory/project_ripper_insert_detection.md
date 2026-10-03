@@ -23,3 +23,12 @@ swallowed *every* real insertion (always preceded by NOT_READY). Fixed
 with `InsertDetector` in `drive_poll.py`: latch on fire, re-arm on
 NO_DISC/TRAY_OPEN **or** a sustained NOT_READY run (default 3 polls).
 Tests in `tests/test_drive_poll.py`.
+
+**Known gap (observed live 2026-06-29, not yet fixed):** swapping a disc
+while the ripper is *idle-polling* (all jobs abandoned, drive
+`media=loaded current_job=None`, Tier-24 idle re-probe loop hitting
+`GET /drives/{id}/current-job`) does NOT re-trigger a scan — the swap's
+`NOT_READY→DISC_OK` insertion edge isn't latched on that path, so the
+ripper keeps heartbeat/current-job polling without scanning the new disc.
+Workaround: `docker restart` the ripper (boot probe re-scans the seated
+disc). See [[project_session_state_2026-06-29]].

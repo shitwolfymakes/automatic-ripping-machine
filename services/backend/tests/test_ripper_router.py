@@ -2764,3 +2764,64 @@ def test_identify_keeps_movie_first_for_a_feature_disc() -> None:
         r = client.post("/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": scan}, headers=_SERVICE_AUTH)
     assert r.status_code == 200, r.text
     assert dispatcher.received_kwargs["prefer_tv"] is False
+
+
+# --- coverage gaps: in-flight re-scan, multi-job current-job, orphaned job ---
+
+
+def test_identify_in_flight_match_returns_live_job_untouched() -> None:
+    """Re-scanning a disc whose rip is still in flight (ripper restart race)
+    must hand back the live RIPPING job as-is — no new Job, no re-identify."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, hold_for_review=False)]
+    live = _job("job_live", status=JobStatus.RIPPING, disc_type=DiscType.DVD)
+    live.title = "Mid-Rip Title"
+    db.rows["jobs"] = [live]
+    db.rows["disc_fingerprints"] = [DiscFingerprint(job_id="job_live", algo="crc64", value="abc")]
+    dispatcher = _Dispatcher(result=None)  # must NOT be consulted
+    app = _make_app(db, dispatcher=dispatcher, hub=_Hub())
+    scan = _scan_dict("dvd")
+    scan["fingerprints"] = [{"algo": "crc64", "value": "abc"}]
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan},
+            headers=_SERVICE_AUTH,
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["id"] == "job_live"
+    assert resp.json()["title"] == "Mid-Rip Title"
+    assert resp.json()["status"] == JobStatus.RIPPING.value
+    assert [r for r in db.added if type(r).__name__ == "Job"] == []
+
+
+def test_current_job_multiple_non_terminal_logs_violation_returns_first(caplog: pytest.LogCaptureFixture) -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [
+        _job("job_first", status=JobStatus.IDENTIFIED, disc_type=DiscType.DVD),
+        _job("job_second", status=JobStatus.RIPPING, disc_type=DiscType.DVD),
+    ]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/current-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["id"] == "job_first"
+    assert any("data-model violation" in rec.message for rec in caplog.records)
+
+
+def test_owner_check_rejects_job_whose_drive_was_deleted() -> None:
+    """jobs.drive_id is ON DELETE SET NULL: a job with no owning drive can't be
+    claimed by any ripper hostname — 403 before any drive lookup."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    orphan = _job(status=JobStatus.IDENTIFIED)
+    orphan.drive_id = None
+    db.rows["jobs"] = [orphan]
+    with TestClient(_make_app(db)) as client:
+        r = client.post(f"/api/ripper/jobs/{orphan.id}/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 403
+    assert r.json()["detail"] == "job has no owning drive"

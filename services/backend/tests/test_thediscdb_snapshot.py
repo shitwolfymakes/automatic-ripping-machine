@@ -7,7 +7,10 @@ import json
 import tarfile
 from pathlib import Path
 
-from arm_backend.identity.sources.thediscdb_snapshot import SnapshotStore, build_index
+import httpx
+import pytest
+
+from arm_backend.identity.sources.thediscdb_snapshot import TARBALL_URL, SnapshotStore, build_index, refresh
 
 DISC = {
     "Index": 1,
@@ -109,3 +112,80 @@ def test_empty_tarball_refuses_to_replace(tmp_path: Path) -> None:
     # Verify live index unchanged and no .new leftover
     assert SnapshotStore(tmp_path).count() == 1
     assert not dest.with_suffix(".sqlite.new").exists()
+
+
+# --- build_index: member filtering and malformed entries ----------------------
+
+
+def _custom_tarball(path: Path, members: list[tuple[str, bytes | None]]) -> Path:
+    """Arbitrary members; `None` content adds a directory entry."""
+    tar_path = path / "custom.tar.gz"
+    with tarfile.open(tar_path, "w:gz") as tar:
+        for name, raw in members:
+            info = tarfile.TarInfo(name)
+            if raw is None:
+                info.type = tarfile.DIRTYPE
+                tar.addfile(info)
+            else:
+                info.size = len(raw)
+                tar.addfile(info, io.BytesIO(raw))
+    return tar_path
+
+
+def test_build_skips_non_json_dirs_and_malformed_discs(tmp_path: Path) -> None:
+    base = "data-main/data/movie/Round Midnight (1986)/2022-criterion-blu-ray"
+    tarball = _custom_tarball(
+        tmp_path,
+        [
+            ("data-main/data/movie", None),  # directory entry
+            ("data-main/README.md", b"# not json"),  # non-.json file
+            (f"{base}/disc01.json", b"{not valid json"),  # malformed → skipped
+            (f"{base}/disc02.json", json.dumps(DISC).encode()),
+        ],
+    )
+    assert build_index(tarball, tmp_path / "index.sqlite") == 1
+    assert SnapshotStore(tmp_path).lookup(str(DISC["ContentHash"])) is not None
+
+
+def test_build_treats_unextractable_member_as_absent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # extractfile() returns None for members that aren't regular files; with
+    # every disc unreadable the build must refuse to replace the index.
+    monkeypatch.setattr(tarfile.TarFile, "extractfile", lambda self, member: None)
+    with pytest.raises(ValueError, match="no indexable discs"):
+        build_index(_mini_tarball(tmp_path), tmp_path / "index.sqlite")
+
+
+def test_store_path_property(tmp_path: Path) -> None:
+    assert SnapshotStore(tmp_path).path == tmp_path / "index.sqlite"
+
+
+# --- refresh: download → build, failure keeps the previous index --------------
+
+
+async def test_refresh_downloads_tarball_and_builds_index(tmp_path: Path) -> None:
+    payload = _mini_tarball(tmp_path).read_bytes()
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(200, content=payload)
+
+    store_dir = tmp_path / "store"
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        count = await refresh(http, store_dir)
+
+    assert count == 1
+    assert seen == [TARBALL_URL]
+    assert SnapshotStore(store_dir).count() == 1
+
+
+async def test_refresh_http_failure_propagates_and_keeps_index_absent(tmp_path: Path) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503)
+
+    store_dir = tmp_path / "store"
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        with pytest.raises(httpx.HTTPStatusError):
+            await refresh(http, store_dir)
+
+    assert not SnapshotStore(store_dir).exists()

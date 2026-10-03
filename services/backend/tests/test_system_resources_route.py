@@ -126,3 +126,20 @@ def test_resources_omits_uncached_root(signing_key: bytes, monkeypatch) -> None:
 
     assert resp.status_code == 200
     assert resp.json()["storage"] == []
+
+
+def test_cpu_temp_reads_first_known_sensor(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        system_mod.psutil,
+        "sensors_temperatures",
+        lambda: {"k10temp": [SimpleNamespace(current=47.5)]},
+    )
+    assert system_mod._cpu_temp() == 47.5
+
+
+def test_cpu_temp_zero_when_platform_has_no_sensors(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _boom() -> dict[str, list[object]]:
+        raise AttributeError("sensors_temperatures not available on this platform")
+
+    monkeypatch.setattr(system_mod.psutil, "sensors_temperatures", _boom)
+    assert system_mod._cpu_temp() == 0.0

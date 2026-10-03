@@ -321,3 +321,22 @@ async def test_transcode_enabled_now_null_column_and_missing_row_mean_enabled(
 
     db.rows["config"] = []
     assert await transcode_enabled_now(db) is True  # type: ignore[arg-type]
+
+
+async def test_find_collisions_skips_live_rows_without_output_path(tmp_path: Path) -> None:
+    """A live task with a blank output_path can never be an existing-task
+    collision (the column is only filled once a path is resolved)."""
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [
+        TranscodeTask(
+            id="txt_blank",
+            session_application_id="sap_1",
+            source_track_id="trk_1",
+            status=TranscodeTaskStatus.IN_PROGRESS,
+            output_path="",
+            progress_pct=0,
+            attempts=0,
+        )
+    ]
+    cols = await find_collisions(db, ["", "a.flac"], tmp_path)  # type: ignore[arg-type]
+    assert not any(c.reason == "existing_task" for c in cols)

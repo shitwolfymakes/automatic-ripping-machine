@@ -7,10 +7,12 @@ as static assets); the backend stores only user-uploaded themes.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
+import json  # noqa: E402
 import pytest  # noqa: E402
 
 from arm_backend import theme_service  # noqa: E402
@@ -118,3 +120,18 @@ def test_get_user_theme_includes_css(user_dir):
     full = theme_service.get_theme("mine")
     assert full["css"] == "[data-scheme=mine]{}"
     assert full["builtin"] is False
+
+
+def test_safe_path_blocks_traversal(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="Path traversal blocked"):
+        theme_service._safe_path(tmp_path, "../escape.json")
+
+
+def test_validate_theme_rejects_non_dict() -> None:
+    assert theme_service._validate_theme(["id", "label", "tokens"]) is False
+
+
+def test_load_theme_file_rejects_missing_required_fields(tmp_path: Path) -> None:
+    path = tmp_path / "bad.json"
+    path.write_text(json.dumps({"id": "bad", "label": "No tokens"}), encoding="utf-8")
+    assert theme_service._load_theme_file(path) is None
