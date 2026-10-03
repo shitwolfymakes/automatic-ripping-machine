@@ -38,15 +38,16 @@ vercmp_ge() {
     [[ "$lower" = "$2" ]]
 }
 
-# confirm <prompt>: yes/no question. Without a terminal it reads one line from
-# stdin (so tests and pipes can answer) and treats end-of-input as "no".
+# confirm <prompt>: yes/no question. Without a terminal it answers "no" and
+# reads nothing: stdin may be at end-of-input (errexit would end the run) or a
+# pipe that never closes (the run would wait forever). Flags answer questions
+# on an unattended run.
 confirm() {
-    local prompt="$1" reply
+    local prompt="$1" reply=""
     if [[ ! -t 0 ]]; then
-        read -r reply || reply="n"
-    else
-        read -rp "$prompt [y/N] " reply
+        return 1
     fi
+    read -rp "$prompt [y/N] " reply || reply="n"
     [[ "$reply" =~ ^[yY]([eE][sS])?$ ]]
 }
 

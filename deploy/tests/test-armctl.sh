@@ -485,6 +485,56 @@ out="$( (new_install flow-nover; ARMCTL_RELEASE_DIR="${TMPROOT}/empty-rel"; mkdi
 has "install: a bundle without VERSION is rejected" "no VERSION file" "$out"
 has "install: --help lists the options" "--offload-backend-url" "$(install_usage)"
 
+# Unattended offload install, configure only, through the real flow: profile,
+# storage, the offload walkthrough, certificates, .env, overlay and the
+# completion table. Only the host and the remote are stubbed; the remote is
+# unreachable, so every remote check fails. Nothing may wait on stdin and the
+# run must reach the end with the failures in the completion table.
+unattended_offload_install() {
+    ARM_DIR="${TMPROOT}/unattended-$1/arm"; mkdir -p "${ARM_DIR}"; armctl_settings
+    ARMCTL_RELEASE_DIR="${REL}"
+    ensure_docker() { :; }; acquire_lock() { :; }; link_armctl() { :; }
+    docker() { return 1; }
+    hostname() { echo testhost; }
+    ssh-keygen() { local f=""; while [[ $# -gt 0 ]]; do [[ "$1" == -f ]] && f="$2"; shift; done; : > "$f"; echo "ssh-ed25519 AAAA test" > "$f.pub"; }
+    ssh-keyscan() { return 1; }
+    ssh() { cat >/dev/null; return 255; }
+    REMOTE_RUN=(false)
+    BACKEND_RUNNING_TEST=(false)
+    ARMCTL_ARGV=(install)
+    cmd_install --profile offload --offload-host ssh://sam@192.168.0.92 \
+        --offload-backend-url https://192.168.0.68:8080 --no-host-changes --no-start
+    echo "INSTALL REACHED THE END"
+}
+set +e
+out="$( ( set -e; unattended_offload_install eof ) </dev/null 2>&1 )"
+rc=$?
+set -e
+check "unattended offload install, stdin at end-of-input: exits 0" "0" "$rc"
+has "unattended offload install: reaches the end" "INSTALL REACHED THE END" "$out"
+has "unattended offload install: the completion table runs" "Remote offload verification (ssh://sam@192.168.0.92)" "$out"
+has "unattended offload install: the table shows the failed ssh row" "ssh + docker access ......... FAIL" "$out"
+has "unattended offload install: the table shows the failed CA row" "CA fingerprint .............. FAIL" "$out"
+has "unattended offload install: the table shows the failed image row" "transcode image ............. FAIL" "$out"
+has "unattended offload install: the summary lists the skipped host changes" "skipped during this install" "$out"
+has "unattended offload install: .env records the offload host" "ARM_TRANSCODE_DOCKER_HOST=ssh://sam@192.168.0.92" "$(cat "${TMPROOT}/unattended-eof/arm/.armctl/.env")"
+# stdin an open pipe that never reaches end-of-input (a FIFO opened read-write).
+mkfifo "${TMPROOT}/install.fifo"
+exec 7<>"${TMPROOT}/install.fifo"
+( set -e; unattended_offload_install pipe ) <&7 >"${TMPROOT}/install-pipe.out" 2>&1 &
+pid=$!
+waited=0
+while kill -0 "${pid}" 2>/dev/null && (( waited < 300 )); do sleep 0.1; waited=$(( waited + 1 )); done
+if kill -0 "${pid}" 2>/dev/null; then
+    kill "${pid}" 2>/dev/null || true
+    rc="blocked"
+else
+    set +e; wait "${pid}"; rc=$?; set -e
+fi
+exec 7>&-
+check "unattended offload install, stdin an open pipe: does not block" "0" "${rc}"
+has "unattended offload install, open pipe: the completion table shows the failures" "ssh + docker access ......... FAIL" "$(cat "${TMPROOT}/install-pipe.out")"
+
 # layout and summary, for real
 new_install layout; ( ensure_layout )
 check "layout: certs folder is private" "700" "$(stat -c '%a' "${ARM_DIR}/certs")"

@@ -305,6 +305,23 @@ offload_restore_persisted() {
     REMOTE_RENDER_GID="$(sed -nE 's/^ARM_RENDER_GID=(.*)$/\1/p' "${ENV_FILE}" | head -n1)"
 }
 
+# The walkthrough's pauses. With a terminal the user pastes a block, then
+# presses Enter to have it verified. Without one (flags on an unattended run)
+# there is nobody to wait for: each step is verified once, nothing is read
+# from stdin, and a failed step is reported in the completion table.
+pause_to_verify() {
+    if [[ -t 0 ]]; then
+        read -rp "  Press Enter to verify... " _ || true
+    fi
+}
+skip_note() {
+    if [[ -t 0 ]]; then
+        warnline "step skipped"
+    else
+        warnline "no terminal to wait on; not retried. The completion table reports this step."
+    fi
+}
+
 # Interactive: offer remote transcode offload. On yes, provision a dedicated
 # ssh key, print the authorize line, detect the REMOTE GPU inventory, and set
 # the REMOTE_* globals the rest of install.sh consumes. On no/non-interactive,
@@ -379,7 +396,8 @@ setup_remote_offload() {
     remote_port="$(endpoint_port "$REMOTE_DOCKER_HOST")"
     mkdir -p "$sshdir"
     if [[ ! -f "$key" ]]; then
-        ssh-keygen -t ed25519 -N "" -C "armv3-backend@${remote_host}" -f "$key" >/dev/null
+        ssh-keygen -t ed25519 -N "" -C "armv3-backend@${remote_host}" -f "$key" >/dev/null \
+            || err "could not generate the ssh key ${key} for the offload host"
         log "generated dedicated ssh key: $key"
     fi
     # Pre-populate known_hosts (best-effort). StrictHostKeyChecking below is
@@ -413,7 +431,7 @@ setup_remote_offload() {
     echo; log "Step 1 of 5 — authorize the ARM key on the remote"
     paste_block_key "$(cat "$key.pub")" "$remote_host" "${remote_user_disp:-<user>}"
     while true; do
-        read -rp "  Press Enter to verify... " _
+        pause_to_verify
         case "$(verify_docker_access)" in
             PASS*) okline "docker reachable over the ARM key"; break ;;
             FAIL_DOCKER)
@@ -422,7 +440,7 @@ setup_remote_offload() {
                 log "  Fix on the remote:  sudo usermod -aG docker ${remote_user_disp}   (then log out/in there)" ;;
             *)  failline "ssh to ${remote_host} failed — key not authorized yet, or host unreachable." ;;
         esac
-        confirm "  Re-check now? (No = skip; offload will FAIL in the completion table)" || { warnline "step skipped"; break; }
+        confirm "  Re-check now? (No = skip; offload will FAIL in the completion table)" || { skip_note; break; }
     done
 
     # Step 2 — CA for transcoder callbacks
@@ -436,13 +454,13 @@ setup_remote_offload() {
     echo; log "Step 2 of 5 — place the CA for transcoder callbacks"
     paste_block_ca "${ARM_CERTS_DIR}/arm-ca.crt" "$certs_path" "$remote_host" "${remote_user_disp:-<user>}"
     while true; do
-        read -rp "  Press Enter to verify... " _
+        pause_to_verify
         case "$(verify_ca "${ARM_CERTS_DIR}/arm-ca.crt" "$certs_path")" in
             PASS) okline "CA present, fingerprint matches"; break ;;
             FAIL_MISMATCH) failline "a DIFFERENT CA is at ${certs_path}/arm-ca.crt — stale from a previous install? Re-paste the block." ;;
             *) failline "CA not found at ${certs_path}/arm-ca.crt" ;;
         esac
-        confirm "  Re-check now? (No = skip)" || { warnline "step skipped"; break; }
+        confirm "  Re-check now? (No = skip)" || { skip_note; break; }
     done
 
     # Step 3 — transcode image. ARM_IMAGE_TAG_DEFAULT is empty until
@@ -469,7 +487,7 @@ setup_remote_offload() {
                 paste_block_save_load "$image_ref" "$REMOTE_DOCKER_HOST" "$key"
             fi
             while true; do
-                confirm "  Re-check now? (No = skip)" || { warnline "step skipped"; break; }
+                confirm "  Re-check now? (No = skip)" || { skip_note; break; }
                 [[ "$(verify_image "$image_ref")" == PASS ]] && { okline "image present on remote"; break; }
                 failline "still not present"
             done

@@ -287,4 +287,55 @@ check "offload: no terminal and no flags is an error" "yes" "$( [[ "$out" == *"-
 out="$( (ARM_DIR="$NOENV"; ENV_FILE="$NOENV/.env"; OFFLOAD_HOST_ARG="not-an-endpoint"; OFFLOAD_URL_ARG="https://h:8443"; setup_remote_offload) </dev/null 2>&1 || true)"
 check "offload: a malformed --offload-host is rejected" "yes" "$( [[ "$out" == *"--offload-host must look like"* ]] && echo yes || echo no )"
 
+# --- no terminal: nothing is read from stdin ------------------------------------------
+# confirm answers "no" and leaves stdin alone (an answer on stdin is not taken).
+out="$(printf 'y\nleft\n' | { rc=0; confirm "Do it?" || rc=$?; echo "rc=${rc}"; cat; })"
+check "confirm: no terminal answers no" "yes" "$( [[ "$out" == rc=1* ]] && echo yes || echo no )"
+check "confirm: no terminal reads nothing from stdin" "yes" "$( [[ "$out" == *$'\ny\nleft' ]] && echo yes || echo no )"
+
+# The offload walkthrough with its inputs given as flags and no terminal: every
+# step is checked once, the run reaches the end, and nothing waits. The remote
+# is unreachable (ssh and every remote check fail).
+UNATT="$TMPROOT/unattended/arm"; mkdir -p "$UNATT/certs"
+unattended_walkthrough() {
+    ARM_DIR="$UNATT"; ENV_FILE="$UNATT/.env"; ARM_CERTS_DIR="$UNATT/certs"
+    OFFLOAD_HOST_ARG="ssh://sam@192.168.0.92"; OFFLOAD_URL_ARG="https://192.168.0.68:8080"; OFFLOAD_UIDGID_ARG=""
+    ARM_IMAGE_TAG_DEFAULT="v3.1.0"
+    ssh-keygen() { local f=""; while [[ $# -gt 0 ]]; do [[ "$1" == -f ]] && f="$2"; shift; done; : > "$f"; echo "ssh-ed25519 AAAA test" > "$f.pub"; }
+    ssh-keyscan() { return 1; }
+    ssh() { cat >/dev/null; return 255; }
+    REMOTE_RUN=(false)
+    setup_remote_offload
+    echo "WALKTHROUGH END GPUS=${REMOTE_GPUS}"
+}
+# Standalone, not after `||` or in an `if`: errexit must be live, as it is in
+# armctl, or a `read` at end-of-input would not end the run here.
+set +e
+out="$( ( set -e; unattended_walkthrough ) </dev/null 2>&1 )"
+rc=$?
+set -e
+check "unattended offload, stdin at end-of-input: the walkthrough completes" "0" "$rc"
+check "unattended offload: reaches the end with a CPU-only inventory" "yes" "$( [[ "$out" == *"WALKTHROUGH END GPUS=[]"* ]] && echo yes || echo no )"
+check "unattended offload: no Press Enter pause" "no" "$( [[ "$out" == *"Press Enter"* ]] && echo yes || echo no )"
+check "unattended offload: a failed step says it goes to the completion table" "yes" "$( [[ "$out" == *"not retried. The completion table reports this step."* ]] && echo yes || echo no )"
+
+# stdin an open pipe that never closes (ssh without -t, a service manager):
+# the walkthrough must not wait on it. A FIFO opened read-write never reaches
+# end-of-input, so any read would block until the deadline.
+FIFO="$TMPROOT/stdin.fifo"; mkfifo "$FIFO"
+exec 7<>"$FIFO"
+( set -e; unattended_walkthrough ) <&7 >"$TMPROOT/pipe.out" 2>&1 &
+pid=$!
+waited=0
+while kill -0 "$pid" 2>/dev/null && (( waited < 150 )); do sleep 0.1; waited=$(( waited + 1 )); done
+if kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+    rc="blocked"
+else
+    set +e; wait "$pid"; rc=$?; set -e
+fi
+exec 7>&-
+check "unattended offload, stdin an open pipe: does not block" "0" "$rc"
+check "unattended offload, open pipe: reaches the end" "yes" "$( [[ "$(cat "$TMPROOT/pipe.out")" == *"WALKTHROUGH END GPUS=[]"* ]] && echo yes || echo no )"
+
 exit "$fail"
