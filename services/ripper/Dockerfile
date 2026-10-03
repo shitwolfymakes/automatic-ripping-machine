@@ -36,6 +36,16 @@ RUN apt-get update \
 # or logs (pass with --secret id=makemkv_mirror_password[,env=...]).
 ARG MAKEMKV_MIRROR_URL=
 
+# Pinned MakeMKV release (empty = whatever makemkv.com lists as current).
+# Held at 1.18.4: MakeMKV 2.0.0's makemkvcon segfaults opening any
+# UNENCRYPTED Blu-ray (no AACS directory), i.e. every decrypted backup -
+# ISO or BDMV folder - while 1.18.4 reads the same disc fine. The crash is in
+# the closed makemkvcon binary, independent of key, keydb, distro/glibc and
+# Java (reproduced 2026-10-02; upstream thread: forum.makemkv.com t=42469).
+# Retail (encrypted) discs may be fine on 2.0.0. Re-test a decrypted backup
+# before raising this to a 2.0.x release.
+ARG MAKEMKV_VERSION=1.18.4
+
 COPY services/ripper/install/install_makemkv.sh /install_makemkv.sh
 RUN --mount=type=secret,id=makemkv_mirror_password \
     chmod +x /install_makemkv.sh && /install_makemkv.sh
