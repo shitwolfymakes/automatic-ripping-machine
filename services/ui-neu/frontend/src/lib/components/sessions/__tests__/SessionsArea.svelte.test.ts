@@ -24,7 +24,7 @@ vi.mock('$lib/api/transcodePresets', () => ({
 }));
 // The preset form's encoders store follows transcode.events; keep jsdom off a real socket.
 vi.mock('$lib/api/ws', () => ({
-	wsClient: { start: vi.fn(), subscribe: vi.fn(() => () => {}) },
+	wsClient: { start: vi.fn(), subscribe: vi.fn(() => () => {}) }
 }));
 
 import { fetchSessions } from '$lib/api/sessions';
