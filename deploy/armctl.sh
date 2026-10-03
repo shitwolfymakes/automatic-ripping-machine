@@ -34,8 +34,7 @@ for _lib in common detect certs udev lifecycle; do
     # shellcheck source=/dev/null
     source "${ARMCTL_RELEASE_DIR}/lib/${_lib}.sh"
 done
-# shellcheck disable=SC2043 # one module for now; later tasks extend this list
-for _mod in ui; do
+for _mod in ui config nvidia offload; do
     # shellcheck source=/dev/null
     source "${ARMCTL_RELEASE_DIR}/install/${_mod}.sh"
 done

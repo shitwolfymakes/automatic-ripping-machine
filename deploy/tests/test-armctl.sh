@@ -163,6 +163,131 @@ else
     echo "skip - flock not available"
 fi
 
+# --- config: storage paths --------------------------------------------------------
+for p in "/mnt/nas/raw" "/media/sam/My Passport/rips"; do
+    rc=0; valid_storage_path "$p" || rc=$?
+    check "storage path accepted: ${p}" "0" "$rc"
+done
+# shellcheck disable=SC2016 # literal $ in a rejected path is the case under test
+for p in "relative/path" "/a:b" '/a"b' '/a$b' "/a#b" '/a\b' "/a'b"; do
+    rc=0; valid_storage_path "$p" || rc=$?
+    check "storage path rejected: ${p}" "1" "$rc"
+done
+new_install storage
+check "storage: a flag wins" "/srv/rips" \
+    "$(pick_storage "raw rips" "/srv/rips" ARM_HOST_RAW_PATH "${ARM_DIR}/raw" </dev/null)"
+check "storage: no terminal takes the default" "${ARM_DIR}/raw" \
+    "$(pick_storage "raw rips" "" ARM_HOST_RAW_PATH "${ARM_DIR}/raw" </dev/null)"
+printf 'ARM_HOST_RAW_PATH=/mnt/saved\n' > "${ENV_FILE}"
+check "storage: a saved answer becomes the default" "/mnt/saved" \
+    "$(pick_storage "raw rips" "" ARM_HOST_RAW_PATH "${ARM_DIR}/raw" </dev/null)"
+# shellcheck disable=SC2016 # the literal ${PWD} is what .env.example ships
+printf 'ARM_HOST_RAW_PATH=${PWD}/arm/raw\n' > "${ENV_FILE}"
+check "storage: the template's \${PWD} placeholder is not a saved answer" "${ARM_DIR}/raw" \
+    "$(pick_storage "raw rips" "" ARM_HOST_RAW_PATH "${ARM_DIR}/raw" </dev/null)"
+out="$( (pick_storage "raw rips" "not/absolute" ARM_HOST_RAW_PATH /x </dev/null) 2>&1 || true)"
+has "storage: a bad flag value is rejected" "must be a full path" "$out"
+( prepare_storage "${ARM_DIR}/raw" )
+check "storage: a folder inside arm is created setgid, group-writable" "2775" "$(stat -c '%a' "${ARM_DIR}/raw")"
+ro="${TMPROOT}/readonly"; mkdir -p "$ro"; chmod 555 "$ro"
+out="$( (prepare_storage "$ro") 2>&1 || true)"
+has "storage: an unwritable folder is an error" "is not writable" "$out"
+check "storage: a folder outside arm keeps its mode" "555" "$(stat -c '%a' "$ro")"
+
+# --- config: profile ---------------------------------------------------------------
+new_install profile-choice; : > "${ENV_FILE}"
+check "profile: a flag wins" "ripper-only" "$( (PROFILE_ARG=ripper-only; choose_profile >/dev/null </dev/null; echo "${PROFILE}") )"
+check "profile: ripper-only sets RIPPER_ONLY" "1" "$( (PROFILE_ARG=ripper-only; choose_profile >/dev/null </dev/null; echo "${RIPPER_ONLY}") )"
+check "profile: no terminal defaults to full" "full" "$( (PROFILE_ARG=""; choose_profile >/dev/null </dev/null; echo "${PROFILE}") )"
+printf 'ARMCTL_PROFILE=offload\n' > "${ENV_FILE}"
+check "profile: no terminal keeps the saved profile" "offload" "$( (PROFILE_ARG=""; choose_profile >/dev/null </dev/null; echo "${PROFILE}") )"
+out="$( (PROFILE_ARG=everything; choose_profile </dev/null) 2>&1 || true)"
+has "profile: an unknown profile is rejected" "must be full, ripper-only or offload" "$out"
+
+# --- config: host overlay (Review Focus 1: a path with spaces) ----------------------
+new_install overlay
+PROFILE=full; RAW_PATH="/media/sam/My Passport/rips"; MEDIA_PATH="/mnt/nas/media"; write_host_overlay
+ov="$(cat "${HOST_OVERLAY}")"
+has "overlay quotes a path with spaces" '      - "/media/sam/My Passport/rips:/raw"' "$ov"
+has "overlay mounts the media folder" '      - "/mnt/nas/media:/media"' "$ov"
+lacks "overlay: no published port without offload" "ports:" "$ov"
+PROFILE=offload; REMOTE_BACKEND_URL="https://192.168.0.68:8080"; write_host_overlay
+ov="$(cat "${HOST_OVERLAY}")"
+has "overlay: offload publishes the callback port" '      - "8080:8443"' "$ov"
+has "overlay: offload mounts the ssh folder read-only" "      - \"${ARM_DIR}/ssh:/home/arm/.ssh:ro\"" "$ov"
+check "overlay: one ports key after a re-run" "1" "$(grep -c '^    ports:$' "${HOST_OVERLAY}")"
+
+# --- config: .env -------------------------------------------------------------------
+REL="${TMPROOT}/rel"; mkdir -p "${REL}"; cp "${DEPLOY}/../.env.example" "${REL}/.env.example"
+# env_case <install name> <profile> [keep]: run write_env; print the .env.
+# `keep` re-runs on the existing .env instead of starting fresh.
+env_case() {
+    (
+        # Not new_install: that would overwrite the .env a `keep` run re-uses.
+        ARM_DIR="${TMPROOT}/$1/arm"; mkdir -p "${ARM_DIR}/.armctl"; armctl_settings
+        if [[ "${3:-}" != keep ]]; then rm -f "${ENV_FILE}"; fi
+        ARMCTL_RELEASE_DIR="${REL}"
+        PROFILE="$2"; RIPPER_ONLY=0
+        if [[ "$2" == ripper-only ]]; then RIPPER_ONLY=1; fi
+        RAW_PATH="/r"; MEDIA_PATH="/m"; ARM_IMAGE_TAG_DEFAULT="v3.1.0"; IMAGE_PREFIX_ARG=""
+        REMOTE_DOCKER_HOST="ssh://sam@192.168.0.92"; REMOTE_BACKEND_URL="https://192.168.0.68:8080"
+        REMOTE_TRANSCODE_PUID=1001; REMOTE_TRANSCODE_PGID=1000
+        REMOTE_GPUS='[{"vendor":"nvenc","device_path":"nvidia://0","encoder_kinds":[]}]'; REMOTE_RENDER_GID=""
+        detect_gpus() { printf '[]'; }
+        detect_render_gid() { echo 993; }
+        detect_cdrom_gid() { printf 24; }
+        DETECTED_GPUS_SET=0
+        write_env >/dev/null
+        cat "${ENV_FILE}"
+        stat -c 'MODE=%a' "${ENV_FILE}"
+    )
+}
+e="$(env_case env-full full)"
+lacks "env: placeholders are replaced by generated secrets" "change-me" "$e"
+has "env: readable by the owner only" "MODE=600" "$e"
+has "env: profile is recorded" "ARMCTL_PROFILE=full" "$e"
+has "env: full box is transcode-capable" "ARM_TRANSCODE_CAPABLE=true" "$e"
+has "env: raw path is absolute" "ARM_HOST_RAW_PATH=/r" "$e"
+has "env: logs path is absolute" "ARM_HOST_LOGS_PATH=${TMPROOT}/env-full/arm/logs" "$e"
+has "env: certs path is the local folder" "ARM_HOST_CERTS_PATH=${TMPROOT}/env-full/arm/certs" "$e"
+# shellcheck disable=SC2016 # the literal ${PWD} is what must be absent
+lacks "env: no \${PWD} paths remain" 'ARM_HOST_RAW_PATH=${PWD}' "$e"
+has "env: release tag is pinned" "ARM_IMAGE_TAG=v3.1.0" "$e"
+has "env: ripper image is pinned" "ARM_RIPPER_IMAGE=docker.io/automaticrippingmachine/arm-ripper:v3.1.0" "$e"
+has "env: base transcode image is pinned" "ARM_TRANSCODE_IMAGE=docker.io/automaticrippingmachine/arm-transcode:v3.1.0" "$e"
+has "env: intel variant is pinned" "ARM_TRANSCODE_IMAGE_QSV=docker.io/automaticrippingmachine/arm-transcode:v3.1.0-intel" "$e"
+has "env: amd variant is pinned" "ARM_TRANSCODE_IMAGE_VAAPI=docker.io/automaticrippingmachine/arm-transcode:v3.1.0-amd" "$e"
+has "env: UI origin is allowed" "ARM_ALLOWED_ORIGINS=https://localhost:8081" "$e"
+has "env: cdrom gid is detected" "CDROM_GID=24" "$e"
+has "env: render gid is detected" "ARM_RENDER_GID=993" "$e"
+lacks "env: no offload keys on a full box" "ARM_TRANSCODE_DOCKER_HOST=" "$(grep -v '^#' <<<"$e")"
+
+e="$(env_case env-ripper ripper-only)"
+has "env: ripper-only is not transcode-capable" "ARM_TRANSCODE_CAPABLE=false" "$e"
+has "env: ripper-only records no GPUs" "ARM_GPUS=[]" "$e"
+
+e="$(env_case env-offload offload)"
+has "env: offload records the remote daemon" "ARM_TRANSCODE_DOCKER_HOST=ssh://sam@192.168.0.92" "$e"
+has "env: offload points transcoder certs at the remote path" "ARM_HOST_CERTS_PATH=/home/sam/.arm/certs" "$e"
+has "env: offload keeps rippers on the local certs" "ARM_RIPPER_CERTS_PATH=${TMPROOT}/env-offload/arm/certs" "$e"
+has "env: offload records the remote GPUs" 'ARM_GPUS=[{"vendor":"nvenc"' "$e"
+
+pw_before="$(env_case env-rerun full | grep '^POSTGRES_PASSWORD=')"
+echo 'NEW_SETTING=7' >> "${REL}/.env.example"
+e="$(env_case env-rerun full keep)"
+check "env: a re-run keeps the database password" "$pw_before" "$(grep '^POSTGRES_PASSWORD=' <<<"$e")"
+has "env: a re-run adds settings the new release introduced" "NEW_SETTING=7" "$e"
+env_case env-switch offload >/dev/null
+e="$(env_case env-switch full keep)"
+lacks "env: leaving the offload profile removes its keys" "ARM_TRANSCODE_DOCKER_HOST=" "$(grep -v '^#' <<<"$e")"
+lacks "env: leaving the offload profile removes the ripper certs override" "ARM_RIPPER_CERTS_PATH=" "$(grep -v '^#' <<<"$e")"
+
+pin="${TMPROOT}/pin.env"; printf 'ARM_IMAGE_PREFIX=ghcr.io/fork\nARM_IMAGE_TAG=v3.0.0\n' > "$pin"
+( IMAGE_PREFIX_ARG=""; write_image_pins v3.2.0 "$pin" )
+has "pins: an existing prefix is kept across an upgrade" "ARM_RIPPER_IMAGE=ghcr.io/fork/arm-ripper:v3.2.0" "$(cat "$pin")"
+out="$( (write_image_pins "" "$pin") 2>&1 || true)"
+has "pins: an empty version is refused" "no release version" "$out"
+
 # --- dispatch -----------------------------------------------------------------------
 rc=0; (ARM_DIR="${TMPROOT}/settings/arm"; current_uid() { echo 1000; }; armctl_main frobnicate) >/dev/null 2>&1 || rc=$?
 check "an unknown command exits 2" "2" "$rc"
