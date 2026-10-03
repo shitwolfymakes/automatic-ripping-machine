@@ -2,13 +2,21 @@
 	import { tick } from 'svelte';
 	import { FIELD_INPUT_CLASS } from '$lib/types/notifications';
 	import type { ChannelTemplate } from '$lib/types/notifications';
-	import type { EventTypeInfo } from '$lib/api/channels';
+	import type { EventTypeInfo, ScriptInput } from '$lib/api/channels';
 
 	let {
 		selected = $bindable(),
 		templates = $bindable(),
-		eventTypes = []
-	}: { selected: string[]; templates: Record<string, ChannelTemplate>; eventTypes: EventTypeInfo[] } = $props();
+		eventTypes = [],
+		inputs = []
+	}: {
+		selected: string[];
+		templates: Record<string, ChannelTemplate>;
+		eventTypes: EventTypeInfo[];
+		inputs?: ScriptInput[];
+	} = $props();
+
+	const overridable = $derived(inputs.filter((i) => !i.secret));
 
 	type FieldName = 'title' | 'body';
 	type FocusTarget = { key: string; field: FieldName; el: HTMLInputElement | HTMLTextAreaElement; start: number; end: number };
@@ -35,6 +43,12 @@
 	}
 	function rememberCaret(key: string, field: FieldName, el: HTMLInputElement | HTMLTextAreaElement) {
 		active = { key, field, el, start: el.selectionStart ?? el.value.length, end: el.selectionEnd ?? el.value.length };
+	}
+	function setInput(key: string, inputKey: string, value: string) {
+		const t = ensure(key);
+		const next = { ...(t.inputs ?? {}) };
+		if (value === '') delete next[inputKey]; else next[inputKey] = value;
+		t.inputs = Object.keys(next).length ? next : null;
 	}
 	async function insertVariable(key: string, varName: string) {
 		const token = `{${varName}}`;
@@ -102,7 +116,20 @@
 							class={FIELD_INPUT_CLASS}
 						></textarea>
 					</label>
-					<p class="text-xs text-gray-500 dark:text-gray-400">Leave blank to use the default shown.</p>
+					{#each overridable as i (i.key)}
+						<label class="flex flex-col gap-1">
+							<span class="text-xs font-medium text-gray-600 dark:text-gray-400">{i.label}{i.required ? " *" : ""}</span>
+							{#if i.values && i.values.length}
+								<select aria-label={`${et.key} ${i.label}`} value={templates[et.key]?.inputs?.[i.key] ?? ''} onchange={(e) => setInput(et.key, i.key, (e.currentTarget as HTMLSelectElement).value)} class={FIELD_INPUT_CLASS}>
+									<option value="">inherit</option>
+									{#each i.values as v}<option value={v}>{v}</option>{/each}
+								</select>
+							{:else}
+								<input aria-label={`${et.key} ${i.label}`} placeholder="inherit" value={templates[et.key]?.inputs?.[i.key] ?? ''} oninput={(e) => setInput(et.key, i.key, (e.currentTarget as HTMLInputElement).value)} class={FIELD_INPUT_CLASS} />
+							{/if}
+						</label>
+					{/each}
+					<p class="text-xs text-gray-500 dark:text-gray-400">Leave blank to use the default shown{overridable.length ? "; blank inputs inherit the hook's values." : '.'}</p>
 					<div class="flex flex-wrap gap-1">
 						{#each varsFor(et.key) as v}
 							<button

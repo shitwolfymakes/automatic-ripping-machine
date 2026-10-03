@@ -1,13 +1,19 @@
 <script lang="ts">
 	import EventSubscriptions from '../EventSubscriptions.svelte';
 	import type { ChannelTemplate } from '$lib/types/notifications';
-	import type { EventTypeInfo } from '$lib/api/channels';
+	import type { EventTypeInfo, ScriptInput } from '$lib/api/channels';
 
 	let {
 		selected = $bindable(),
 		templates = $bindable(),
-		eventTypes = []
-	}: { selected: string[]; templates: Record<string, ChannelTemplate>; eventTypes: EventTypeInfo[] } = $props();
+		eventTypes = [],
+		inputs = []
+	}: {
+		selected: string[];
+		templates: Record<string, ChannelTemplate>;
+		eventTypes: EventTypeInfo[];
+		inputs?: ScriptInput[];
+	} = $props();
 
 	function selectAll() { selected = eventTypes.map((e) => e.key); }
 	function clear() { selected = []; }
@@ -22,5 +28,5 @@
 			<button type="button" class="hover:text-primary" onclick={clear}>Clear</button>
 		</span>
 	</div>
-	<EventSubscriptions bind:selected bind:templates {eventTypes} />
+	<EventSubscriptions bind:selected bind:templates {eventTypes} {inputs} />
 </div>

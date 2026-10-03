@@ -14,6 +14,7 @@
 		ontoggle,
 		ontest,
 		onexpand,
+		onedit,
 		oneditorsave,
 		oneditortest,
 		ondelete
@@ -26,6 +27,7 @@
 		ontoggle?: (c: Channel) => void;
 		ontest?: (c: Channel) => void;
 		onexpand?: (c: Channel) => void;
+		onedit?: (c: Channel) => void;
 		oneditorsave?: (c: Channel, body: EditorBody) => void;
 		oneditortest?: (c: Channel, body: EditorBody) => void;
 		ondelete?: (c: Channel) => void;
@@ -45,6 +47,7 @@
 				ontoggle={() => ontoggle?.(c)}
 				ontest={() => ontest?.(c)}
 				onexpand={() => onexpand?.(c)}
+				onedit={() => onedit?.(c)}
 			/>
 			{#if expandedId === c.id}
 				<ChannelEditor

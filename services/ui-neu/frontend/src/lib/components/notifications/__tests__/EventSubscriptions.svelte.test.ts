@@ -75,4 +75,19 @@ describe('EventSubscriptions', () => {
 		renderComponent(EventSubscriptions, { props: { selected: [], templates: {}, eventTypes: [] } });
 		expect(screen.queryByRole('checkbox')).toBeNull();
 	});
+
+	it('renders non-secret inputs per subscribed event and writes overrides into templates', async () => {
+		const inputs = [
+			{ key: 'TO', label: 'Recipient', required: true, secret: false, default: '', values: null },
+			{ key: 'SMTP_PASS', label: 'SMTP password', required: false, secret: true, default: '', values: null }
+		];
+		const props = $state({ selected: ['rip.completed'], templates: {} as Record<string, ChannelTemplate>, eventTypes: catalogEventTypes, inputs });
+		renderComponent(EventSubscriptions, { props });
+		const field = screen.getByLabelText('rip.completed Recipient') as HTMLInputElement;
+		expect(field.placeholder).toBe('inherit');
+		expect(screen.getByText('Recipient *')).toBeTruthy();
+		expect(screen.queryByLabelText('rip.completed SMTP password')).toBeNull();
+		await fireEvent.input(field, { target: { value: 'oncall@x' } });
+		expect(props.templates['rip.completed'].inputs).toEqual({ TO: 'oncall@x' });
+	});
 });
