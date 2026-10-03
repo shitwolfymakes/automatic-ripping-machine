@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import DriveCard from './DriveCard.svelte';
-import type { DriveView as Drive, SessionView } from '$lib/types/api.gen';
+import type { DriveView as Drive, SessionView, TranscodePresetView } from '$lib/types/api.gen';
+import { setTranscoderEnabled } from '$lib/stores/config';
 vi.mock('$lib/api/drives', () => ({
 	updateDrive: vi.fn(() => Promise.resolve()),
 	unenrollDrive: vi.fn(() => Promise.resolve())
@@ -343,6 +344,61 @@ describe('DriveCard', () => {
 			await waitFor(() =>
 				expect(screen.getByTestId('drive-default-session-error')).toHaveTextContent('default boom')
 			);
+		});
+	});
+
+	describe('ripper-only deployment (not transcode-capable)', () => {
+		const sessions = [
+			{ id: 'ses_raw', name: 'Raw finalize', is_builtin: true, transcode_preset_id: null } as SessionView,
+			{ id: 'ses_pass', name: 'Passthrough', is_builtin: false, transcode_preset_id: 'tpr_none' } as SessionView,
+			{ id: 'ses_enc', name: 'Plex 1080p', is_builtin: false, transcode_preset_id: 'tpr_hb' } as SessionView
+		];
+		const transcodePresets = [
+			{ id: 'tpr_none', tool: 'none' } as TranscodePresetView,
+			{ id: 'tpr_hb', tool: 'handbrake' } as TranscodePresetView
+		];
+
+		function render(overrides: Partial<Drive> = {}) {
+			return renderComponent(DriveCard, { props: { drive: createDrive(overrides), sessions, transcodePresets } });
+		}
+
+		function optionLabels(testId: string): string[] {
+			const sel = screen.getByTestId(testId) as HTMLSelectElement;
+			return Array.from(sel.options).map((o) => o.textContent?.trim() ?? '');
+		}
+
+		afterEach(() => setTranscoderEnabled(true));
+
+		it('Start-rip picker offers only passthrough sessions', () => {
+			setTranscoderEnabled(false);
+			render();
+			expect(optionLabels('drive-session-select')).toEqual(['- none -', 'Raw finalize (built-in)', 'Passthrough']);
+		});
+
+		it('default-session picker offers only passthrough sessions', async () => {
+			setTranscoderEnabled(false);
+			render();
+			await fireEvent.click(screen.getByTitle('Drive settings'));
+			expect(optionLabels('drive-default-session')).toEqual(['- none -', 'Raw finalize (built-in)', 'Passthrough']);
+		});
+
+		it('keeps an already-saved encode default visible so the select shows the real value', async () => {
+			setTranscoderEnabled(false);
+			render({ default_session_id: 'ses_enc' });
+			await fireEvent.click(screen.getByTitle('Drive settings'));
+			const sel = screen.getByTestId('drive-default-session') as HTMLSelectElement;
+			expect(sel.value).toBe('ses_enc');
+			expect(optionLabels('drive-default-session')).toContain('Plex 1080p');
+			// ...but it is still not offered for a new manual rip.
+			expect(optionLabels('drive-session-select')).not.toContain('Plex 1080p');
+		});
+
+		it('capable deployment keeps every session in both pickers', async () => {
+			setTranscoderEnabled(true);
+			render();
+			expect(optionLabels('drive-session-select')).toContain('Plex 1080p');
+			await fireEvent.click(screen.getByTitle('Drive settings'));
+			expect(optionLabels('drive-default-session')).toContain('Plex 1080p');
 		});
 	});
 

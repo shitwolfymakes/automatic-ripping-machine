@@ -143,6 +143,14 @@ class Settings(BaseSettings):
     ARM_TRANSCODE_PUID: str = ""
     ARM_TRANSCODE_PGID: str = ""
 
+    # Deployment capability: can this backend get a transcode container run
+    # somewhere (the local daemon, or ARM_TRANSCODE_DOCKER_HOST)? setup-dev's
+    # ripper-only profile writes false: the arm-transcode image is not built
+    # and encode work is impossible by construction. Runtime enable/disable
+    # is config.transcode_enabled (DB); this is the deployment fact that
+    # gates whether that toggle may be switched on at all.
+    ARM_TRANSCODE_CAPABLE: bool = True
+
     # --- Drive lifecycle Plan 3: ripper manager (spec §3) --------------------
     # Image for the durable per-drive ripper containers the backend creates on
     # enroll. Defaults like ARM_TRANSCODE_IMAGE: built locally by compose (the
@@ -225,6 +233,13 @@ class Settings(BaseSettings):
     ARM_LOG_PER_FILE_HARD_CAP: int = 10_000
     ARM_LOG_ZIP_PER_ENTRY_LINE_CAP: int = 5000
     ARM_LOG_ZIP_PER_ENTRY_BYTE_CAP: int = 5 * 1024 * 1024  # 5 MB
+
+
+def effective_transcode_capable(s: Settings) -> bool:
+    """A configured remote docker host implies capability regardless of the
+    flag (you cannot be incapable of something you have wired a host for);
+    main.py warns about the contradictory combo at startup."""
+    return s.ARM_TRANSCODE_CAPABLE or bool(s.ARM_TRANSCODE_DOCKER_HOST)
 
 
 settings = Settings()  # type: ignore[call-arg]  # fields loaded from env by pydantic-settings

@@ -427,7 +427,63 @@ def test_diagnostics_transcoder_warning_when_no_dispatcher(signing_key: bytes, t
     assert r.status_code == 200, r.text
     check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
     assert check["status"] == "warning"
-    assert "docker" in check["detail"]
+    assert "not running" in check["detail"]
+
+
+def test_diagnostics_transcoder_ok_on_ripper_only_deployment(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    """A ripper-only deployment (capability off, no remote docker host) is a
+    supported configuration: the transcoder check reports ok with an
+    explanatory detail, even though the dispatcher has no docker client and
+    its probe would fail."""
+    from arm_backend.config import settings
+
+    monkeypatch.setattr(settings, "ARM_TRANSCODE_CAPABLE", False)
+    monkeypatch.setattr(settings, "ARM_TRANSCODE_DOCKER_HOST", "")
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.transcode_dispatcher = _StubDispatcher(
+        host_paths=True, probe=(False, "no docker client (ripper-only deployment or docker unavailable)")
+    )
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
+    assert check["status"] == "ok"
+    assert check["detail"] == "ripper-only deployment (transcoding not installed)"
+
+
+def test_diagnostics_transcoder_ripper_only_ok_even_without_dispatcher(
+    signing_key: bytes, tmp_path, monkeypatch
+) -> None:
+    from arm_backend.config import settings
+
+    monkeypatch.setattr(settings, "ARM_TRANSCODE_CAPABLE", False)
+    monkeypatch.setattr(settings, "ARM_TRANSCODE_DOCKER_HOST", "")
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
+    assert check["status"] == "ok"
+    assert "ripper-only" in check["detail"]
+
+
+def test_diagnostics_transcoder_remote_host_overrides_capability_off(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    """A remote docker host implies capability, so the normal probe path runs."""
+    from arm_backend.config import settings
+
+    monkeypatch.setattr(settings, "ARM_TRANSCODE_CAPABLE", False)
+    monkeypatch.setattr(settings, "ARM_TRANSCODE_DOCKER_HOST", "ssh://sam@transcoder-server")
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.transcode_dispatcher = _StubDispatcher(host_paths=True, probe=(False, "unreachable"))
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
+    assert check["status"] == "warning" and check["detail"] == "unreachable"
 
 
 def test_diagnostics_transcoder_warning_when_host_paths_unset(signing_key: bytes, tmp_path) -> None:

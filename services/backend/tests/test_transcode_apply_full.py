@@ -21,9 +21,12 @@ from arm_backend.transcode_apply import (  # noqa: E402
     _track_kinds_for_media,
     compute_outputs,
     find_collisions,
+    is_passthrough_preset,
     stat_exists,
+    transcode_enabled_now,
 )
 from arm_common import (  # noqa: E402
+    Config,
     ContainerFormat,
     DiscType,
     Job,
@@ -232,3 +235,89 @@ def test_stat_exists(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(Path, "exists", _boom)
     assert stat_exists(tmp_path, "whatever") is False
+
+
+def test_is_passthrough_preset() -> None:
+    assert is_passthrough_preset(None) is True
+    assert (
+        is_passthrough_preset(
+            TranscodePreset(
+                id="tpr_pass",
+                name="Passthrough",
+                media_type=MediaType.MOVIE,
+                tool=TranscodeTool.NONE,
+                container=ContainerFormat.MKV,
+            )
+        )
+        is True
+    )
+    assert (
+        is_passthrough_preset(
+            TranscodePreset(
+                id="tpr_x",
+                name="Plex 1080p H.265",
+                media_type=MediaType.MOVIE,
+                tool=TranscodeTool.HANDBRAKE,
+                container=ContainerFormat.MKV,
+            )
+        )
+        is False
+    )
+
+
+async def test_transcode_enabled_now_not_capable_short_circuits_before_db(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A not-transcode-capable deployment refuses encode work regardless of
+    the DB toggle — and never needs to query it."""
+    from arm_backend import config as bcfg
+
+    monkeypatch.setattr(bcfg.settings, "ARM_TRANSCODE_CAPABLE", False)
+    monkeypatch.setattr(bcfg.settings, "ARM_TRANSCODE_DOCKER_HOST", "")
+    db = FakeSession()
+    db.rows["config"] = [Config(id=1, transcode_enabled=True)]
+    assert await transcode_enabled_now(db) is False  # type: ignore[arg-type]
+
+
+async def test_transcode_enabled_now_capable_via_remote_docker_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ARM_TRANSCODE_CAPABLE=false but a remote docker host is configured:
+    still capable, so the DB toggle decides."""
+    from arm_backend import config as bcfg
+
+    monkeypatch.setattr(bcfg.settings, "ARM_TRANSCODE_CAPABLE", False)
+    monkeypatch.setattr(bcfg.settings, "ARM_TRANSCODE_DOCKER_HOST", "ssh://sam@transcoder-server")
+    db = FakeSession()
+    db.rows["config"] = [Config(id=1, transcode_enabled=True)]
+    assert await transcode_enabled_now(db) is True  # type: ignore[arg-type]
+
+
+async def test_transcode_enabled_now_reads_db_toggle(monkeypatch: pytest.MonkeyPatch) -> None:
+    from arm_backend import config as bcfg
+
+    monkeypatch.setattr(bcfg.settings, "ARM_TRANSCODE_CAPABLE", True)
+    monkeypatch.setattr(bcfg.settings, "ARM_TRANSCODE_DOCKER_HOST", "")
+
+    db = FakeSession()
+    db.rows["config"] = [Config(id=1, transcode_enabled=False)]
+    assert await transcode_enabled_now(db) is False  # type: ignore[arg-type]
+
+    db.rows["config"][0].transcode_enabled = True
+    assert await transcode_enabled_now(db) is True  # type: ignore[arg-type]
+
+
+async def test_transcode_enabled_now_null_column_and_missing_row_mean_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from arm_backend import config as bcfg
+
+    monkeypatch.setattr(bcfg.settings, "ARM_TRANSCODE_CAPABLE", True)
+    monkeypatch.setattr(bcfg.settings, "ARM_TRANSCODE_DOCKER_HOST", "")
+
+    db = FakeSession()
+    db.rows["config"] = [Config(id=1, transcode_enabled=None)]
+    assert await transcode_enabled_now(db) is True  # type: ignore[arg-type]
+
+    db.rows["config"] = []
+    assert await transcode_enabled_now(db) is True  # type: ignore[arg-type]

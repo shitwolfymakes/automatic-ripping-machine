@@ -5,6 +5,8 @@
 	import { fetchTranscodePresets } from '$lib/api/transcodePresets';
 	import { applySession, fetchNamingPreview } from '$lib/api/jobs';
 	import { ApiError } from '$lib/api/client';
+	import { transcodeRuntimeEnabled } from '$lib/stores/config';
+	import { isPassthroughSession, presetToolMap } from '$lib/utils/sessions';
 	import type {
 		ApplySessionResponse,
 		CollisionInfo,
@@ -30,6 +32,11 @@
 	let sessions = $state<SessionView[]>([]);
 	let ripPresets = $state<RipPresetView[]>([]);
 	let transcodePresets = $state<TranscodePresetView[]>([]);
+	// Only meaningful for the runtime-disabled passthrough filter below: true
+	// until the concurrent sessions+presets fetch in onMount settles, so that
+	// branch can tell "presets not loaded yet" apart from "no passthrough
+	// sessions exist".
+	let presetsLoading = $state(true);
 	let selected = $state<string>('');
 	let collisions = $state<CollisionInfo[]>([]);
 	let error = $state<string | null>(null);
@@ -44,9 +51,26 @@
 		return null;
 	}
 
+	// id -> tool for the passthrough filter below; presetToolById.get(id) is
+	// undefined until transcodePresets has loaded, which only excludes
+	// preset-backed sessions from the filtered list until then (a session
+	// with no preset at all is unaffected).
+	const presetToolById = $derived(presetToolMap(transcodePresets));
+
 	const filteredSessions = $derived.by(() => {
 		const mt = discTypeToMediaType(job.disc_type);
-		return sessions.filter((s) => mt === null || s.media_type === mt || s.media_type === 'tv');
+		const byMediaType = sessions.filter(
+			(s) => mt === null || s.media_type === mt || s.media_type === 'tv'
+		);
+		// Encode sessions can only be applied while transcoding is running;
+		// when it's disabled, only passthrough-compatible sessions are offered
+		// - but only once transcodePresets has loaded (presetsLoading), since a
+		// preset-backed session's passthrough status is unknown until then and
+		// the dialog shows a loading affordance instead of this list meanwhile.
+		if (!$transcodeRuntimeEnabled && !presetsLoading) {
+			return byMediaType.filter((s) => isPassthroughSession(s, presetToolById));
+		}
+		return byMediaType;
 	});
 
 	const hasDuplicateInRequest = $derived(
@@ -154,24 +178,22 @@
 		};
 	});
 
-	onMount(async () => {
-		// Sessions drive the picker; the rip/transcode preset lists only enrich the
-		// recipe preview. Fetch them independently so a preset-list failure degrades
-		// the preview (names fall back to ids) rather than breaking the dialog.
-		try {
-			sessions = await fetchSessions();
-		} catch {
-			sessions = [];
-		}
-		try {
-			[ripPresets, transcodePresets] = await Promise.all([
-				fetchRipPresets(),
-				fetchTranscodePresets()
-			]);
-		} catch {
-			ripPresets = [];
-			transcodePresets = [];
-		}
+	onMount(() => {
+		// Sessions drive the picker; the rip/transcode preset lists enrich the
+		// recipe preview and (when transcoding is runtime-disabled) gate the
+		// passthrough filter on filteredSessions. Fire both fetches
+		// CONCURRENTLY (not sessions-then-presets) and let each update its own
+		// state independently as it settles - sessions no longer waits on a
+		// sequential presets round-trip, and a preset-list failure still only
+		// degrades the recipe preview (names fall back to ids) rather than
+		// breaking the dialog.
+		fetchSessions()
+			.then((s) => { sessions = s; })
+			.catch(() => { sessions = []; });
+		Promise.all([fetchRipPresets(), fetchTranscodePresets()])
+			.then(([rp, tp]) => { ripPresets = rp; transcodePresets = tp; })
+			.catch(() => { ripPresets = []; transcodePresets = []; })
+			.finally(() => { presetsLoading = false; });
 	});
 
 	async function applyOnce(overwrite: boolean): Promise<void> {
@@ -223,17 +245,31 @@
 		{#if collisions.length === 0}
 			<label class="field apply-session-select-field">
 				<span class="field-label">Session</span>
-				<select
-					id="apply-session-select"
-					data-testid="apply-session-select"
-					bind:value={selected}
-				>
-					<option value="" disabled>Choose...</option>
-					{#each filteredSessions as s (s.id)}
-						<option value={s.id}>{s.name} ({s.media_type})</option>
-					{/each}
-				</select>
+				{#if !$transcodeRuntimeEnabled && presetsLoading}
+					<!-- The passthrough filter needs preset tool data to know which
+					     preset-backed sessions qualify; show a loading affordance
+					     instead of a list that would otherwise render empty and be
+					     indistinguishable from "no passthrough sessions". -->
+					<p class="field-help" data-testid="apply-session-presets-loading">Loading...</p>
+				{:else}
+					<select
+						id="apply-session-select"
+						data-testid="apply-session-select"
+						bind:value={selected}
+					>
+						<option value="" disabled>Choose...</option>
+						{#each filteredSessions as s (s.id)}
+							<option value={s.id}>{s.name} ({s.media_type})</option>
+						{/each}
+					</select>
+				{/if}
 			</label>
+
+			{#if !$transcodeRuntimeEnabled && !presetsLoading}
+				<p class="field-help" data-testid="apply-session-passthrough-hint">
+					Transcoding is disabled; only passthrough sessions are listed.
+				</p>
+			{/if}
 
 			{#if selectedSession}
 				<div

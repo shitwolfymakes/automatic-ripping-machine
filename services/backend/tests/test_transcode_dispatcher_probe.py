@@ -20,7 +20,17 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
 import docker.errors  # noqa: E402
 
-from arm_common import SessionApplication, SessionApplicationStatus, TranscodeTask, TranscodeTaskStatus  # noqa: E402
+from arm_common import (  # noqa: E402
+    ContainerFormat,
+    MediaType,
+    Session,
+    SessionApplication,
+    SessionApplicationStatus,
+    TranscodePreset,
+    TranscodeTask,
+    TranscodeTaskStatus,
+    TranscodeTool,
+)
 
 from tests._fakes import FakeSession  # noqa: E402
 from tests.test_transcode_dispatcher_full import _disp  # noqa: E402
@@ -123,6 +133,33 @@ async def test_last_spawn_error_set_on_failure_and_cleared_on_next_success() -> 
             job_id="job_01JZXR7K3M5Q8N4VWA00000099",
             status=SessionApplicationStatus.RUNNING,
             overwrite=False,
+        )
+    ]
+    # Real ENCODE preset: a None preset would now route through the
+    # in-process passthrough executor instead of the container-spawn path
+    # this test is pinning.
+    db.rows["sessions"] = [
+        Session(
+            id="ses_probe",
+            name="Movie to Plex",
+            media_type=MediaType.MOVIE,
+            is_builtin=True,
+            rip_preset_id="rpr_x",
+            transcode_preset_id="tpr_x",
+            output_path_template="{title}/{title}.mkv",
+        )
+    ]
+    db.rows["transcode_presets"] = [
+        TranscodePreset(
+            id="tpr_x",
+            name="Plex 1080p",
+            media_type=MediaType.MOVIE,
+            is_builtin=True,
+            tool=TranscodeTool.HANDBRAKE,
+            preset_ref="H.265 MKV 1080p30",
+            container=ContainerFormat.MKV,
+            codec=None,
+            hw_preference=None,
         )
     ]
     db.rows["gpus"] = []

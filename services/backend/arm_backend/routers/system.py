@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt, require_writer
-from arm_backend.config import settings
+from arm_backend.config import effective_transcode_capable, settings
 from arm_backend.db import get_session
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
@@ -152,8 +152,13 @@ async def diagnostics(
     checks.append(SystemDiagnosticCheck(name="makemkv_sdf", status=sdf_status_v, detail=sdf_detail))
 
     dispatcher = getattr(request.app.state, "transcode_dispatcher", None)
-    if dispatcher is None:
-        tc_status, tc_detail = "warning", "transcoder disabled: docker socket unavailable"
+    if not effective_transcode_capable(settings):
+        # Ripper-only is a supported deployment, not a degraded one: the
+        # dispatcher runs without a docker client by design, so reporting its
+        # (absent) container path as a warning would be permanent noise.
+        tc_status, tc_detail = "ok", "ripper-only deployment (transcoding not installed)"
+    elif dispatcher is None:
+        tc_status, tc_detail = "warning", "transcoder dispatcher not running"
     elif not dispatcher.host_paths_set():
         tc_status, tc_detail = "warning", "transcoder disabled: ARM_HOST_*_PATH not set"
     else:

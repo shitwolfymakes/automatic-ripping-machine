@@ -12,7 +12,7 @@ import uvicorn
 from fastapi import FastAPI
 from sqlmodel import col, select
 
-from arm_backend.config import settings
+from arm_backend.config import effective_transcode_capable, settings
 from arm_backend.crash_recovery import sweep_in_flight_jobs
 from arm_backend.db import SessionLocal
 from arm_backend.gpu_probe import load_configured_gpus
@@ -210,37 +210,54 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception as exc:  # pragma: no cover — startup-degradation guard; sweep failing is real-DB-only
         logger.exception("startup crash-recovery sweep failed: %s", exc)
 
+    # No-transcode-mode: the dispatcher now always runs, even for a
+    # ripper-only deployment (ARM_TRANSCODE_CAPABLE=false, no remote docker
+    # host), since it still needs it for passthrough tasks and the
+    # stale-claim/orphan sweeps. Docker itself stays optional: `capable`
+    # gates whether we even try to build a client, and the dispatcher
+    # degrades encode to "held" (see TranscodeDispatcher.spawn_pending /
+    # .probe) when `self._docker is None`.
+    capable = effective_transcode_capable(settings)
+    if (
+        not settings.ARM_TRANSCODE_CAPABLE and settings.ARM_TRANSCODE_DOCKER_HOST
+    ):  # pragma: no cover, contradictory env combo, defensive log only
+        logger.warning(
+            "ARM_TRANSCODE_CAPABLE=false but ARM_TRANSCODE_DOCKER_HOST is set; "
+            "a remote docker host implies capability, treating this deployment as capable"
+        )
+
     def _make_docker_client() -> object | None:
         return _build_docker_client(settings.ARM_TRANSCODE_DOCKER_HOST)
 
-    docker_client = _make_docker_client()
-    transcode_dispatcher: TranscodeDispatcher | None = None
-    dispatcher_task: asyncio.Task[None] | None = None
-    if docker_client is not None:  # pragma: no cover — needs a real docker socket; integration tier, not the SQLite e2e
-        transcode_dispatcher = TranscodeDispatcher(
-            settings=settings,
-            db_factory=SessionLocal,
-            docker_client=docker_client,
-            hub=app.state.ws_hub,
-            docker_client_factory=_make_docker_client,
-        )
-        # One-shot orphan sweep before the dispatcher loop starts.
-        try:
-            swept = await transcode_dispatcher.sweep_arm_inprogress(Path(settings.MEDIA_ROOT))
-            if swept:
-                logger.info("backend startup: swept %d .arm-inprogress orphans", swept)
-        except Exception as exc:
-            logger.exception("startup .arm-inprogress sweep failed: %s", exc)
-        # One-shot reconcile of crash-orphaned session_applications (no live task).
-        try:
-            async with SessionLocal() as db:
-                orphaned = await transcode_dispatcher.sweep_orphaned_applications(db)
-                await db.commit()
-            if orphaned:
-                logger.info("backend startup: reconciled %d orphaned session_application(s)", orphaned)
-        except Exception as exc:
-            logger.exception("startup orphaned-application sweep failed: %s", exc)
-        dispatcher_task = asyncio.create_task(transcode_dispatcher.run())
+    docker_client = _make_docker_client() if capable else None
+    if not capable:  # pragma: no cover, needs ARM_TRANSCODE_CAPABLE=false; e2e runs the default-capable path
+        logger.info("transcode capability off (ripper-only); dispatcher runs for passthrough and sweeps only")
+    transcode_dispatcher = TranscodeDispatcher(
+        settings=settings,
+        db_factory=SessionLocal,
+        docker_client=docker_client,
+        hub=app.state.ws_hub,
+        docker_client_factory=_make_docker_client if capable else None,
+    )
+    # One-shot sweeps run in every mode (they are DB/file-side, not
+    # docker-side): a ripper-only deployment still needs orphaned
+    # .arm-inprogress markers and crash-orphaned session_applications cleaned
+    # up on boot.
+    try:
+        swept = await transcode_dispatcher.sweep_arm_inprogress(Path(settings.MEDIA_ROOT))
+        if swept:  # pragma: no cover, only when a startup orphan exists; sweep logic is unit-tested in test_transcode_dispatcher
+            logger.info("backend startup: swept %d .arm-inprogress orphans", swept)
+    except Exception as exc:  # pragma: no cover, startup-degradation guard; sweep failing is real-DB-only
+        logger.exception("startup .arm-inprogress sweep failed: %s", exc)
+    try:
+        async with SessionLocal() as db:
+            orphaned = await transcode_dispatcher.sweep_orphaned_applications(db)
+            await db.commit()
+        if orphaned:  # pragma: no cover, only when a startup orphan exists; sweep logic is unit-tested in test_transcode_dispatcher
+            logger.info("backend startup: reconciled %d orphaned session_application(s)", orphaned)
+    except Exception as exc:  # pragma: no cover, startup-degradation guard; sweep failing is real-DB-only
+        logger.exception("startup orphaned-application sweep failed: %s", exc)
+    dispatcher_task = asyncio.create_task(transcode_dispatcher.run())
     app.state.transcode_dispatcher = transcode_dispatcher
 
     # Drive lifecycle Plan 3 — ripper manager (spec §3). Always the LOCAL
@@ -332,13 +349,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await asyncio.wait_for(notification_task, timeout=10.0)
         except asyncio.TimeoutError:  # pragma: no cover — only if the dispatcher hangs >10s on shutdown
             notification_task.cancel()
-        if transcode_dispatcher is not None:  # pragma: no cover — set only on the real-docker path above
-            transcode_dispatcher.stop()
-        if dispatcher_task is not None:  # pragma: no cover — set only on the real-docker path above
-            try:
-                await asyncio.wait_for(dispatcher_task, timeout=10.0)
-            except asyncio.TimeoutError:
-                dispatcher_task.cancel()
+        # transcode_dispatcher/dispatcher_task are unconditionally set above
+        # (the dispatcher always runs, docker or not).
+        transcode_dispatcher.stop()
+        try:
+            await asyncio.wait_for(dispatcher_task, timeout=10.0)
+        except asyncio.TimeoutError:  # pragma: no cover, only if the dispatcher hangs >10s on shutdown
+            dispatcher_task.cancel()
         await app.state.dispatcher.aclose()
 
 

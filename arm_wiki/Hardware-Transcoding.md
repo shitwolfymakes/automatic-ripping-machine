@@ -49,6 +49,11 @@ itself.
 > upgrade) so `ARM_GPUS` is refreshed — detection happens at install time, not on
 > every boot.
 
+A ripper-only dev checkout (`devtools/setup-dev.sh --ripper-only`) skips this
+detection entirely and writes `ARM_GPUS=[]` plus `ARM_TRANSCODE_CAPABLE=false`,
+since a ripper-only box never spawns a local transcoder to hand a device to.
+See [Configuring ARM § Ripper-only installs](Configuring-ARM#ripper-only-installs).
+
 ## NVIDIA: the Container Toolkit
 
 NVENC needs the **NVIDIA Container Toolkit** on the host so the docker daemon can
