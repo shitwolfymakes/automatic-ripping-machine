@@ -18,12 +18,14 @@ from arm_common.models import (
     Config,
     RipPreset,
     Session,
+    SessionRoute,
     TranscodePreset,
     User,
 )
 from arm_common.models.user import ADMIN_ROLE, GUEST_ROLE
 from arm_common import (
     ContainerFormat,
+    DiscType,
     HwPreference,
     IdentificationMode,
     MediaType,
@@ -411,6 +413,47 @@ SESSIONS: list[dict[str, Any]] = [
 ]
 
 
+# --- Built-in session routes (G-17) --------------------------------------------
+
+# A music disc routes to a music session out of the box; video stays on the
+# drive default to preserve existing behavior (no video routes seeded).
+SESSION_ROUTES: list[dict[str, Any]] = [
+    {"media_type": MediaType.MUSIC, "disc_type": DiscType.CD, "session_id": "ses_builtin_music_flac"},
+    {"media_type": MediaType.MUSIC, "disc_type": None, "session_id": "ses_builtin_music_flac"},
+]
+
+
+async def _seed_session_routes(session: AsyncSession) -> None:
+    """Seed the built-in session routes exactly once (I1).
+
+    Unlike the id-keyed builtins above, `SessionRoute` rows have no
+    deterministic id to key an idempotent per-row insert on (their natural
+    key is `(media_type, disc_type)`), so a plain empty-table gate isn't
+    enough: a user who deliberately clears every route would get them
+    silently reseeded on the very next boot, since "empty" can't distinguish
+    "never seeded" from "seeded then deleted".
+
+    `config.session_routes_seeded` closes that gap: seed only when the table
+    is empty AND the flag is false, then set the flag true — whether this
+    call actually inserted fresh rows or found the table already populated
+    (converges old/pre-migration states where rows exist but the flag
+    hadn't been set yet).
+    """
+    config_row = (
+        await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))
+    ).scalar_one_or_none()
+    if config_row is not None and config_row.session_routes_seeded:
+        return
+    existing = (await session.execute(select(SessionRoute))).scalars().first()
+    if existing is None:
+        for row in SESSION_ROUTES:
+            session.add(SessionRoute(**row))
+    if config_row is not None:
+        config_row.session_routes_seeded = True
+        session.add(config_row)
+    await session.flush()
+
+
 class _BuiltinRow(Protocol):
     """Seedable model: has a string id and name and accepts row dicts plus is_builtin in its ctor."""
 
@@ -448,4 +491,5 @@ async def run_seeders(session: AsyncSession) -> None:
     await _insert_missing(session, RipPreset, RIP_PRESETS)
     await _insert_missing(session, TranscodePreset, TRANSCODE_PRESETS)
     await _insert_missing(session, Session, SESSIONS)
+    await _seed_session_routes(session)
     await session.commit()

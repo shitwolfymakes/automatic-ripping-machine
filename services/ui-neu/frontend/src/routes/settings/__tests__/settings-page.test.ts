@@ -112,6 +112,12 @@ vi.mock('$lib/api/sessions', () => ({
 	previewTemplate: vi.fn()
 }));
 
+vi.mock('$lib/api/sessionRoutes', () => ({
+	fetchSessionRoutes: vi.fn(() => Promise.resolve([])),
+	upsertSessionRoute: vi.fn(),
+	deleteSessionRoute: vi.fn()
+}));
+
 vi.mock('$lib/api/ripPresets', () => ({
 	fetchRipPresets: vi.fn(() => Promise.resolve([])),
 	createRipPreset: vi.fn(),

@@ -20,10 +20,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
+from paramiko.ssh_exception import SSHException  # type: ignore[import-untyped]
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
 
@@ -53,6 +55,29 @@ logger = logging.getLogger("arm_backend.transcode_dispatcher")
 # gracefully before falling back to `docker stop`.
 _CANCEL_GRACE_SECONDS = 10
 _DOCKER_LABEL_KEY = "arm.task_id"
+
+# A dead docker-over-SSH transport (idle paramiko connection reset by the
+# remote end) surfaces as one of these, either raw or wrapped inside
+# docker-py's APIError cause chain. EOFError is included because paramiko
+# commonly surfaces a dead transport that way (the read side hits EOF when
+# the remote end has silently closed the connection).
+_TRANSPORT_DEAD_ERRORS = (SSHException, ConnectionResetError, BrokenPipeError, EOFError)
+
+
+def _is_transport_death(exc: BaseException) -> bool:
+    """A dead docker-over-SSH transport surfaces either as a raw paramiko
+    SSHException or wrapped inside docker's APIError cause chain (docker-py
+    wraps the underlying requests/urllib3 error, whose root cause is
+    paramiko's SSHException). Walk __cause__/__context__ to find it.
+    """
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        if isinstance(cur, _TRANSPORT_DEAD_ERRORS):
+            return True
+        cur = cur.__cause__ or cur.__context__
+    return False
 
 
 class GpuAssignment(NamedTuple):
@@ -86,10 +111,12 @@ class TranscodeDispatcher:
         db_factory: async_sessionmaker[AsyncSession],
         docker_client: Any,
         hub: WSHub,
+        docker_client_factory: Callable[[], Any] | None = None,
     ) -> None:
         self._settings = settings
         self._db_factory = db_factory
         self._docker = docker_client
+        self._docker_factory = docker_client_factory
         self._hub = hub
         self._stop = asyncio.Event()
         self._tick_interval = settings.ARM_TRANSCODE_DISPATCH_INTERVAL_SECONDS
@@ -395,7 +422,18 @@ class TranscodeDispatcher:
                     )
                     continue
                 try:
-                    self._spawn_container(task, assignment=assignment)
+                    # `_spawn_container` is a blocking call: a plain docker
+                    # socket round-trip normally, but on the SSH-transport-
+                    # rebuild path (see `_is_transport_death`) it also does a
+                    # blocking TCP+SSH handshake that can take tens of
+                    # seconds against a black-holed remote host. Run it off
+                    # the event loop so a stuck spawn doesn't freeze
+                    # HTTP/WS/ripper callbacks for the whole tick.
+                    # `_spawn_container` touches only `self._docker`,
+                    # `self._docker_factory`, `self._settings`, and its own
+                    # locals/args (never the AsyncSession), so moving it to a
+                    # thread doesn't put any DB access off the loop.
+                    await asyncio.to_thread(self._spawn_container, task, assignment=assignment)
                     spawned += 1
                     self.last_spawn_error = None
                 except Exception as exc:
@@ -529,7 +567,7 @@ class TranscodeDispatcher:
         # for `docker ps` and unique enough that two simultaneous transcoders
         # never collide.
         hostname = f"arm-transcode-{task.id[-12:]}"
-        container = self._docker.containers.run(
+        run_kwargs: dict[str, Any] = dict(
             image=self._settings.ARM_TRANSCODE_IMAGE,
             name=hostname,
             hostname=hostname,
@@ -541,6 +579,51 @@ class TranscodeDispatcher:
             auto_remove=True,
             **extra_run_kwargs,
         )
+        try:
+            container = self._docker.containers.run(**run_kwargs)
+        except Exception as exc:
+            if self._docker_factory is not None and _is_transport_death(exc):
+                logger.warning(
+                    "docker ssh transport dead; rebuilding client and retrying spawn task_id=%s: %s",
+                    task.id,
+                    exc,
+                )
+                old_docker = self._docker
+                try:
+                    rebuilt = self._docker_factory()
+                except Exception as factory_exc:  # noqa: BLE001 - factory failure must not wedge the dispatcher
+                    logger.warning(
+                        "docker client rebuild failed; keeping old client task_id=%s: %s",
+                        task.id,
+                        factory_exc,
+                    )
+                    raise
+                if rebuilt is None:
+                    # _build_docker_client (main.py) returns None on any
+                    # failure (dev without the socket, unreachable/
+                    # misconfigured remote host). Assigning self._docker =
+                    # None here would make every LATER spawn raise
+                    # AttributeError instead of the transport-death path
+                    # that can actually recover — permanently wedging the
+                    # dispatcher. Keep the old (dead) client instead: this
+                    # tick's spawn still fails via the original exception
+                    # below, and the next tick's spawn attempt will detect
+                    # transport death again and retry the rebuild.
+                    logger.warning(
+                        "docker client rebuild returned None; keeping old client task_id=%s",
+                        task.id,
+                    )
+                    raise
+                self._docker = rebuilt
+                try:
+                    old_docker.close()
+                except Exception:  # noqa: BLE001 - best-effort cleanup of the dead client
+                    pass
+                # A second failure here propagates into the existing
+                # error handling in spawn_pending — no infinite retry.
+                container = self._docker.containers.run(**run_kwargs)
+            else:
+                raise
         logger.info(
             "transcode spawned task_id=%s container=%s image=%s gpu=%s",
             task.id,

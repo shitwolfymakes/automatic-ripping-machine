@@ -53,10 +53,25 @@
 		collisions.some((c) => c.reason === 'duplicate_in_request')
 	);
 
+	// I3: the backend refuses overwrite unconditionally when any collision is
+	// owned by a DIFFERENT job (see _evict_colliding_tasks / G-08) — eviction
+	// only ever removes tasks owned by the applying job. Offering Overwrite
+	// here would loop the user into a 409 every time, so hide it and explain
+	// instead. Same-job-only (or ownership-unknown) collisions keep the
+	// normal Overwrite flow.
+	const hasCrossJobCollision = $derived(
+		collisions.some((c) => c.existing_job_id != null && c.existing_job_id !== job.id)
+	);
+
 	function collisionLabel(reason: CollisionInfo['reason']): string {
 		if (reason === 'existing_task') return 'queued/done in DB';
 		if (reason === 'on_disk') return 'exists on disk';
 		return 'duplicate within this apply';
+	}
+
+	function collisionOwnerSuffix(c: CollisionInfo): string {
+		if (!c.existing_job_id || c.existing_job_id === job.id) return '';
+		return ` in job ${c.existing_job_id.slice(-8)}`;
 	}
 
 	const selectedSession = $derived(sessions.find((s) => s.id === selected) ?? null);
@@ -306,12 +321,18 @@
 				{#each collisions as c (c.output_path + c.reason)}
 					<li>
 						<code class="text-gray-900 dark:text-gray-100">{c.output_path}</code>
-						<span class="text-gray-500 dark:text-gray-400">({collisionLabel(c.reason)})</span>
+						<span class="text-gray-500 dark:text-gray-400"
+							>({collisionLabel(c.reason)}{collisionOwnerSuffix(c)})</span
+						>
 					</li>
 				{/each}
 			</ul>
 
-			{#if hasDuplicateInRequest}
+			{#if hasCrossJobCollision}
+				<p class="mt-3 text-sm text-gray-500 dark:text-gray-400" data-testid="cross-job-collision-notice">
+					Some outputs are owned by another job. Cancel, or delete that job's output first.
+				</p>
+			{:else if hasDuplicateInRequest}
 				<p class="mt-3 text-sm text-gray-500 dark:text-gray-400">
 					Two or more tracks resolve to the same output path - the session's template doesn't
 					differentiate per track. Pick a session whose template includes <code>{'{track}'}</code>
@@ -333,7 +354,7 @@
 				>
 					Cancel
 				</button>
-				{#if !hasDuplicateInRequest}
+				{#if !hasCrossJobCollision && !hasDuplicateInRequest}
 					<button
 						type="button"
 						data-testid="apply-session-overwrite"

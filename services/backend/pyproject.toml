@@ -18,6 +18,11 @@ dependencies = [
     "docker[ssh]>=7.1",
     "apprise>=1.9",
     "psutil>=7.0",
+    # Real dependency, not just docker[ssh]'s transitive pull: transcode_dispatcher.py
+    # imports paramiko.ssh_exception.SSHException directly to detect dead SSH
+    # transports. Floor matches the version docker[ssh] currently resolves to
+    # in uv.lock.
+    "paramiko>=5.0",
     "arm_common",
 ]
 

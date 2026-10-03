@@ -14,6 +14,7 @@ import pytest  # noqa: E402
 from arm_backend.auto_session import (  # noqa: E402
     SessionNotFoundError,
     apply_session_internal,
+    media_mismatch_detail,
 )
 from arm_common import (  # noqa: E402
     ContainerFormat,
@@ -280,6 +281,140 @@ async def test_unknown_session_raises(tmp_path: Path) -> None:
             source="auto",
             hub=None,
         )
+
+
+@pytest.mark.asyncio
+async def test_fan_out_skips_on_media_mismatch(tmp_path: Path) -> None:
+    """G-04: a session routed/applied against a job whose identified
+    media_type disagrees (e.g. a movie session on a music CD job) must not
+    fan out any tasks — it's a first-class skip, not an empty-fan-out that
+    later gets orphan-swept as a fake crash."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    job.media_type = MediaType.MUSIC
+    db.rows["sessions"][0].media_type = MediaType.MOVIE
+    hub = CapturingHub()
+
+    outcome = await apply_session_internal(
+        db,
+        job=job,
+        session_id="ses_x",
+        overwrite=False,
+        created_by_user_id=None,
+        source="auto",
+        hub=hub,  # type: ignore[arg-type]
+    )
+
+    assert outcome.skipped_reason == "media_mismatch"
+    assert outcome.tasks == []
+    assert hub.events == []
+    # Hard-stop error (like collisions), not a park: no new
+    # session_application row was created for this fresh apply.
+    assert outcome.application is None
+    assert db.rows["session_applications"] == []
+
+
+@pytest.mark.asyncio
+async def test_fan_out_proceeds_for_tv_session_on_movie_job(tmp_path: Path) -> None:
+    """C1: movie and tv are the same track kind (VIDEO_TITLE) — compatible,
+    not a mismatch."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    job.media_type = MediaType.MOVIE
+    db.rows["sessions"][0].media_type = MediaType.TV
+    hub = CapturingHub()
+
+    outcome = await apply_session_internal(
+        db,
+        job=job,
+        session_id="ses_x",
+        overwrite=False,
+        created_by_user_id=None,
+        source="manual",
+        hub=hub,  # type: ignore[arg-type]
+    )
+
+    assert outcome.skipped_reason is None
+    assert len(outcome.tasks) == 1
+
+
+@pytest.mark.asyncio
+async def test_fan_out_proceeds_for_iso_session_on_movie_job(tmp_path: Path) -> None:
+    """C1: an iso/data session consumes a dump of any video disc — no
+    identified job is ever `iso`, so this must not dead-end as a mismatch."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    job.media_type = MediaType.MOVIE
+    db.rows["sessions"][0].media_type = MediaType.ISO
+    hub = CapturingHub()
+
+    outcome = await apply_session_internal(
+        db,
+        job=job,
+        session_id="ses_x",
+        overwrite=False,
+        created_by_user_id=None,
+        source="auto",
+        hub=hub,  # type: ignore[arg-type]
+    )
+
+    assert outcome.skipped_reason is None
+    assert len(outcome.tasks) == 1
+
+
+@pytest.mark.asyncio
+async def test_mismatch_skipped_when_job_media_type_unknown(tmp_path: Path) -> None:
+    """The guard only fires when BOTH sides declare a media_type. A job
+    that hasn't been identified yet (media_type=None) can't disagree with
+    anything, so fan-out proceeds normally."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    job.media_type = None
+    db.rows["sessions"][0].media_type = MediaType.MOVIE
+    hub = CapturingHub()
+
+    outcome = await apply_session_internal(
+        db,
+        job=job,
+        session_id="ses_x",
+        overwrite=False,
+        created_by_user_id=None,
+        source="manual",
+        hub=hub,  # type: ignore[arg-type]
+    )
+
+    assert outcome.skipped_reason is None
+    assert len(outcome.tasks) == 1
+
+
+def test_media_mismatch_detail_survives_raw_string_media_type() -> None:
+    """M2: a forward-compat row can load `media_type` as a raw `str` instead
+    of a `MediaType` member. `media_mismatch_detail` must render it via
+    `enum_value_str`, not `.value`, or a stray string yields an
+    AttributeError 500 instead of the intended 422."""
+    job = Job(
+        id="job_x",
+        drive_id="drv_x",
+        disc_type=DiscType.DVD,
+        status=JobStatus.RIPPED,
+        metadata_json={},
+        media_type="movie",  # type: ignore[arg-type] — simulating a raw-string load
+    )
+    sess = Session(
+        id="ses_x",
+        name="S",
+        media_type="future_type",  # type: ignore[arg-type]
+        rip_preset_id="rpr_x",
+        output_path_template="{title}",
+    )
+    detail = media_mismatch_detail(job, sess)
+    assert "movie" in detail
+    assert "future_type" in detail
+    assert "not compatible with" in detail
 
 
 @pytest.mark.asyncio
