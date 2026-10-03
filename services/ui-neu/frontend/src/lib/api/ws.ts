@@ -9,9 +9,21 @@
 // the extensible base — any store can `wsClient.subscribe('<topic>', h)`
 // (ripper.progress.{job_id}, ripper.events, transcode.events, logs.{job_id}, …).
 
+import { writable, type Readable } from 'svelte/store';
+
 import { getToken } from './client';
 
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 30000];
+
+// Connection status for the UI's "live updates unavailable" state (G-28).
+// 'offline' only after OFFLINE_AFTER_FAILURES consecutive failed attempts, so
+// a single blip reconnecting within a second never flashes the banner; once
+// shown it stays until a connection actually authenticates.
+export type WSStatus = 'idle' | 'connecting' | 'online' | 'offline';
+const OFFLINE_AFTER_FAILURES = 2;
+
+const statusStore = writable<WSStatus>('idle');
+export const wsStatus: Readable<WSStatus> = { subscribe: statusStore.subscribe };
 
 export interface WSEnvelope {
 	op: 'event';
@@ -37,6 +49,7 @@ class WSConnection {
 	start(): void {
 		if (this.ws !== null) return;
 		this.stopping = false;
+		statusStore.set('connecting');
 		this.connect();
 	}
 
@@ -51,6 +64,7 @@ class WSConnection {
 			this.ws = null;
 		}
 		this.connected = false;
+		statusStore.set('idle');
 	}
 
 	subscribe(topic: string, handler: Handler): () => void {
@@ -96,6 +110,7 @@ class WSConnection {
 			if (!this.stopping) {
 				const delay = RECONNECT_DELAYS[Math.min(this.retryIdx, RECONNECT_DELAYS.length - 1)];
 				this.retryIdx += 1;
+				statusStore.set(this.retryIdx >= OFFLINE_AFTER_FAILURES ? 'offline' : 'connecting');
 				this.reconnectTimer = setTimeout(() => {
 					this.reconnectTimer = null;
 					this.connect();
@@ -119,6 +134,7 @@ class WSConnection {
 			// Initial auth ack — connection is live; replay every subscription.
 			this.connected = true;
 			this.retryIdx = 0;
+			statusStore.set('online');
 			for (const topic of this.handlers.keys()) {
 				this.send({ op: 'subscribe', topic });
 			}

@@ -104,12 +104,15 @@ password, and the rest of the UI unlocks. The default credentials are also in
 
 ## Live updates don't appear (WebSocket)
 
-The dashboard updates over a WebSocket whose origin is allow-listed. If progress
-never moves, make sure the URL you're using is in `ARM_ALLOWED_ORIGINS` in
-`~/arm/.env` — add your LAN hostname/IP if you log in from another device, e.g.:
+The dashboard updates over a WebSocket. Same-origin connections are accepted
+automatically, so opening the UI by any hostname, LAN IP or port works out of
+the box; when live updates are down the UI shows a "Live updates unavailable"
+banner while it retries. If the banner persists and you are fronting ARM with
+your own reverse proxy on a different origin, add that origin to
+`ARM_ALLOWED_ORIGINS` in `~/arm/.env`, e.g.:
 
 ```bash
-ARM_ALLOWED_ORIGINS=https://localhost:8081,https://nas.lan:8081,https://192.168.1.20:8081
+ARM_ALLOWED_ORIGINS=https://arm.example.com
 ```
 
 Then `docker compose up -d`.
