@@ -1,0 +1,36 @@
+{
+  "repo": "uprightbass360/arm-v3",
+  "repoAliases": ["automatic-ripping-machine/automatic-ripping-machine"],
+  "siteUrl": "https://example.test/arm-v3/",
+  "wiki": "docs/user",
+  "sections": [
+    {
+      "id": "start",
+      "label": "Get started",
+      "audience": "user",
+      "groups": [{ "files": [{ "file": "docs/user/Home.md", "label": "Home" }, "docs/user/Getting-Started.md"] }]
+    },
+    {
+      "id": "using",
+      "label": "Using ARM",
+      "audience": "user",
+      "groups": [
+        {
+          "files": [
+            "docs/user/Configuring-ARM.md",
+            { "label": "Open an issue", "link": "https://github.com/automatic-ripping-machine/automatic-ripping-machine/issues/new/choose" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "developers",
+      "label": "Developers",
+      "audience": "dev",
+      "groups": [
+        { "label": "Architecture", "files": ["docs/developers/architecture/README.md", "docs/developers/architecture/[0-9]*.md"] },
+        { "label": "Contributing", "files": ["CONTRIBUTING.md"] }
+      ]
+    }
+  ]
+}

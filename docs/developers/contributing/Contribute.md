@@ -1,0 +1,94 @@
+# Contributing
+
+Thanks for helping build ARM! This page is the wiki-side summary; the
+**authoritative contributor guide is in the repo** at
+[`CONTRIBUTING.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/CONTRIBUTING.md).
+Start there, and read the architecture docs at
+[`docs/developers/architecture/README.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/developers/architecture/README.md)
+to understand the v3 service topology before making changes.
+
+> This is **ARM v3** — a FastAPI backend, a SvelteKit UI, Postgres, a ripper per drive,
+> and an ephemeral transcoder. It shares no code with v2 (frozen, no longer developed).
+> If you're patching Flask/`arm.yaml`/the v2 monolith, you're in the wrong tree.
+
+## Project layout
+
+The Python side is a [`uv`](https://astral.sh/uv) workspace; the UI is a SvelteKit
+(Svelte 5) app.
+
+- `packages/arm_common/` — shared Pydantic schemas, enums, SQLModel models.
+- `services/backend/` — FastAPI app, Alembic migrations, WS hub, dispatchers.
+- `services/ripper/` — per-drive poller + MakeMKV/HandBrake/abcde drivers.
+- `services/transcode/` — ephemeral per-job transcoder.
+- `services/ui-neu/` - SvelteKit SPA served by nginx (the `arm-ui` image).
+- `devtools/` — contributor tooling (setup, smoke tests, OpenAPI regen).
+
+## Local development
+
+Prerequisites: `uv`, Docker + the `docker compose` v2 plugin, `openssl`, and
+Node/`npm` for the UI. From a checkout:
+
+```bash
+bash devtools/setup-dev.sh        # uv sync, generate certs, seed .env (idempotent)
+docker compose up -d --build      # build images from your working tree and start
+```
+
+The dev compose that `devtools/setup-dev.sh` generates from
+`docker-compose.yml.example` (into a gitignored `docker-compose.yml`, one
+`arm-ripper-srN` per drive) keeps `build:` blocks (vs the installer's `image:`
+references) so you iterate against your own code. The UI comes up at
+<https://localhost:8081>.
+
+The `.env` file contains the switch for the log level, so you'll want to run
+`docker compose up -d --build --force-recreate` after changing values there.
+
+## Development model: trunk-based
+
+`main` is the trunk and is always releasable. **There is no long-lived `dev`
+branch.** Cut a short-lived branch from `main`, keep it focused, rebase often,
+and open a PR back into `main`. Releases are semver **tags** on `main`. Full
+rules in
+[`CONTRIBUTING.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/CONTRIBUTING.md#development-model-trunk-based).
+
+## Tests, lint, and the wire contract
+
+```bash
+uv run pytest                       # all backend/ripper/transcode suites; zero infra
+uv run pre-commit run --all-files   # ruff, mypy, eslint + prettier (UI), shellcheck
+cd services/ui-neu/frontend && npm run check && npx vitest run   # UI: svelte-check + tests
+cd services/ui-neu/frontend && npm run lint && npm run format    # UI: ESLint + Prettier
+```
+
+The UI hooks need `npm ci --prefix services/ui-neu/frontend` once
+(`devtools/setup-dev.sh` does it). To keep the one-time Prettier reformat out of
+`git blame`, run `git config blame.ignoreRevsFile .git-blame-ignore-revs`.
+
+If you change a backend router or an `arm_common` schema that affects the API,
+regenerate the OpenAPI artifacts (CI's `openapi-drift` job gates on this) and
+commit them:
+
+```bash
+bash devtools/regen-openapi-snapshot.sh    # refresh services/ui-neu/openapi.snapshot.json
+bash services/ui-neu/scripts/codegen.sh    # regenerate the TS types (api.gen.ts)
+```
+
+Heavier end-to-end drills live in `devtools/` — `iso-smoke.sh` (full
+scan → rip → transcode against an ISO fixture, no disc needed) and
+`crash-drill.sh` (backend crash recovery).
+
+## Pull requests
+
+- One logical change per PR; open it **against `main`**.
+- Rebase before review (the trunk is squash-merged and kept linear).
+- CI must pass: ruff format/lint, mypy, the UI's `svelte-check` and vitest suites,
+  the `pytest` suites, and the OpenAPI and UI codegen drift checks.
+- Update affected docs — including this wiki — in the same PR. See
+  [Contributing to the Wiki](Contribute-Wiki.md).
+
+## Reporting bugs
+
+Open an issue with the **service** involved (`backend`/`ripper`/`transcode`/`ui`)
+and logs captured at `ARM_LOG_LEVEL=debug` (`docker compose logs <service>`).
+Because ARM drives MakeMKV/HandBrake, try the underlying tool by hand to rule out
+an upstream problem — see
+[`docs/user/MakeMKV-Ripper.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/user/MakeMKV-Ripper.md).

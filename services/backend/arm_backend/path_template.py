@@ -1,6 +1,6 @@
 """Path-template token expansion + save-time validation.
 
-The token whitelist per `MediaType` mirrors arch §02 (`docs/arch/02-job-lifecycle.md`).
+The token whitelist per `MediaType` mirrors arch §02 (`docs/developers/architecture/02-job-lifecycle.md`).
 Save-time validation expands the template against a synthetic context that
 populates every legal token; an empty expansion or an unknown token both
 raise `TemplateValidationError`.

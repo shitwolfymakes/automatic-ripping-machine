@@ -1,4 +1,4 @@
-# TODO(v3-release): pin base image by @sha256:<digest> — see docs/arch/06-deployment.md
+# TODO(v3-release): pin base image by @sha256:<digest> — see docs/developers/architecture/06-deployment.md
 
 # ---- HandBrake CLI builder ------------------------------------------------
 # Debian's `handbrake-cli` package ships with NO hardware encoders (only x264/

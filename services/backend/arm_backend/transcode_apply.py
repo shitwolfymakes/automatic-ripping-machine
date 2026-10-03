@@ -102,7 +102,7 @@ def _build_track_ctx(
         # The metadata.get() fallbacks below are belt-and-braces for rows
         # written before those columns existed / before the metadata-mirror
         # scrub (migration 0032) — not an active lift path. Ints are
-        # zero-padded to match the S{NN}D{NN} convention (docs/arch/02 § TV).
+        # zero-padded to match the S{NN}D{NN} convention (docs/developers/architecture/02 § TV).
         "season": sanitize_path_component(
             f"{job.season:02d}" if job.season is not None else str(metadata.get("season") or "")
         ),

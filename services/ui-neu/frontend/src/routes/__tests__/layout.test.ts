@@ -167,6 +167,11 @@ describe('Layout', () => {
 		expect(screen.getByText('Settings')).toBeInTheDocument();
 	});
 
+	it('shows the Help nav item linking to /help', () => {
+		renderComponent(Layout, { props: { children: childSnippet() } });
+		expect(screen.getByText('Help').closest('a')?.getAttribute('href')).toBe('/help');
+	});
+
 	it('shows Files nav item (file browser is enabled in v3)', () => {
 		renderComponent(Layout, { props: { children: childSnippet() } });
 		expect(screen.getByText('Files')).toBeInTheDocument();

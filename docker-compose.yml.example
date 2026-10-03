@@ -109,7 +109,7 @@ services:
       - ./arm/certs/arm-backend.crt:/etc/ssl/arm/tls.crt:ro
       - ./arm/certs/arm-backend.key:/etc/ssl/arm/tls.key:ro
       # Phase 7 — Backend spawns arm-transcode-* containers via the socket.
-      # Acceptable per docs/arch/06-deployment.md (root-equivalent on host).
+      # Acceptable per docs/developers/architecture/06-deployment.md (root-equivalent on host).
       - /var/run/docker.sock:/var/run/docker.sock
       # Drive detection (spec §2): the host's udev by-id symlink directory,
       # read-only. Symlinks only — no device nodes, no cgroup rule; the
@@ -134,7 +134,7 @@ services:
   # change on an existing install, or a root-owned volume from an older
   # release. arm-data is an ARM-owned named volume, not a user bind mount, so
   # managing its ownership here does not break the never-chown invariant
-  # (docs/arch/06-deployment.md). It reuses the backend's build (all layers
+  # (docs/developers/architecture/06-deployment.md). It reuses the backend's build (all layers
   # cached, nothing extra to pull) with the entrypoint replaced, so the shared
   # entrypoint's gosu drop and /data guard never run here. Owner already
   # right: logs and exits 0 without walking the tree. Otherwise: re-owns the

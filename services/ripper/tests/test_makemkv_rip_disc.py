@@ -685,7 +685,7 @@ async def test_msg_5021_surfaces_distinct_error_and_kills_proc(monkeypatch, tmp_
     the subprocess from inside the streamer and returns a distinct
     `overall_error` that names the docs entry — so operators don't wait
     out the 6-hour RIP_TIMEOUT_SECONDS for a known upstream-blocked state.
-    See docs/ops/makemkv.md § Failure modes."""
+    See docs/user/MakeMKV-Ripper.md § Failure modes."""
     _stub_subprocess(
         monkeypatch,
         [
@@ -709,7 +709,7 @@ async def test_msg_5021_surfaces_distinct_error_and_kills_proc(monkeypatch, tmp_
 
     assert result.overall_error is not None
     assert "MSG:5021" in result.overall_error
-    assert "docs/ops/makemkv.md" in result.overall_error
+    assert "docs/user/MakeMKV-Ripper.md" in result.overall_error
     assert result.titles == {}
     # The MSG:5021 line is preserved in the composed-error diagnostics so
     # operators can see the exact line that fired the guard.

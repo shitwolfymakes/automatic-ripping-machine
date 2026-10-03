@@ -21,7 +21,7 @@ What it does (idempotent — safe to re-run):
 
 After it finishes: `docker compose up -d --build`.
 
-Cert generation is delegated to [install.sh](../install.sh) — the end-user installer is the single source of truth for the CA + leaves under `certs/`. See [../docs/arch/05-cross-cutting.md § Transport (TLS)](../docs/arch/05-cross-cutting.md#transport-tls) for the full cert design.
+Cert generation is delegated to [install.sh](../install.sh) — the end-user installer is the single source of truth for the CA + leaves under `certs/`. See [../docs/developers/architecture/05-cross-cutting.md § Transport (TLS)](../docs/developers/architecture/05-cross-cutting.md#transport-tls) for the full cert design.
 
 ## ripper-containers.sh
 
@@ -43,7 +43,7 @@ bash devtools/iso-smoke.sh
 
 Prereqs: dev stack up (`docker compose up -d arm-db arm-backend arm-ui`) and at least one **enrolled** drive. The script borrows an enrolled drive (`ARM_SMOKE_DRIVE_ID`, or the first enrolled drive from `GET /api/drives`) and stops its manager-created container for the duration of the run (two rippers can't register the same `drive_id`), starting it back up when it's done.
 
-Defaults to caching the ISO under `~/arm-corpus/` (override with `ISO_CACHE_DIR`). MakeMKV key resolution: `MAKEMKV_KEY` env first (any value MakeMKV accepts — purchased perma-key or a beta you grabbed manually), then a single forum-scrape attempt. See [../docs/contributors/real-disc-smoke.md § Run the test (ISO fixture)](../docs/contributors/real-disc-smoke.md#run-the-test-iso-fixture--no-physical-disc-needed) for the full runbook and known gotchas.
+Defaults to caching the ISO under `~/arm-corpus/` (override with `ISO_CACHE_DIR`). MakeMKV key resolution: `MAKEMKV_KEY` env first (any value MakeMKV accepts — purchased perma-key or a beta you grabbed manually), then a single forum-scrape attempt. See [../docs/developers/contributing/real-disc-smoke.md § Run the test (ISO fixture)](../docs/developers/contributing/real-disc-smoke.md#run-the-test-iso-fixture--no-physical-disc-needed) for the full runbook and known gotchas.
 
 ## crash-drill.sh
 
@@ -86,7 +86,7 @@ when running under WSL — the **Windows CurrentUser Root** store (`certutil.exe
 UAC) so Chrome/Edge on Windows trust it too. Idempotent (remove-then-add), so it's
 safe to re-run after `install.sh --rotate-ca`. Dev-only — not run by `setup-dev.sh`
 or CI. `install.sh` owns CA *generation*; this only *trusts* an existing CA. See
-[../docs/arch/05-cross-cutting.md § Transport (TLS)](../docs/arch/05-cross-cutting.md#transport-tls).
+[../docs/developers/architecture/05-cross-cutting.md § Transport (TLS)](../docs/developers/architecture/05-cross-cutting.md#transport-tls).
 
 ## regen-openapi-snapshot.sh
 

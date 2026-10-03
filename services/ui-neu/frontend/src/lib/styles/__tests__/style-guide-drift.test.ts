@@ -9,14 +9,14 @@ import { BLOCKS } from './blocks-registry';
 // documentation twin of the openapi-drift job.
 //
 // Sources of truth:            what must stay current:
-//   tokens.css                   docs/ui-neu-style-guide.md (names)
+//   tokens.css                   docs/developers/ui/ui-neu-style-guide.md (names)
 //   blocks-registry.ts           static/style-guide.html   (names + swatch values)
 //   components/*.css file set    both
 
 const styles = resolve(__dirname, '..');
 const repoRoot = resolve(__dirname, '../../../../../../..');
 const tokensCss = readFileSync(resolve(styles, 'tokens.css'), 'utf8');
-const mdRaw = readFileSync(resolve(repoRoot, 'docs/ui-neu-style-guide.md'), 'utf8');
+const mdRaw = readFileSync(resolve(repoRoot, 'docs/developers/ui/ui-neu-style-guide.md'), 'utf8');
 const htmlRaw = readFileSync(resolve(__dirname, '../../../../static/style-guide.html'), 'utf8');
 
 // The md tables use three compact family conventions; expand them so a
@@ -53,7 +53,7 @@ describe('style guide drift', () => {
 		const missing = [...new Set(names)].filter((n) => !docs.includes(n));
 		expect(
 			missing,
-			`tokens undocumented in docs/ui-neu-style-guide.md or static/style-guide.html: ${missing.join(', ')}`
+			`tokens undocumented in docs/developers/ui/ui-neu-style-guide.md or static/style-guide.html: ${missing.join(', ')}`
 		).toEqual([]);
 	});
 

@@ -4,7 +4,7 @@ Thank you for contributing to the Automatic Ripping Machine.
 
 This is **ARM v3** — a greenfield rebuild (FastAPI backend, SvelteKit UI, Postgres, a
 ripper-per-drive and an ephemeral transcoder). The architecture is documented
-under [docs/arch/](docs/arch/); start at [docs/arch/README.md](docs/arch/README.md).
+under [docs/developers/architecture/](docs/developers/architecture/); start at [docs/developers/architecture/README.md](docs/developers/architecture/README.md).
 ARM v2 is frozen — no new work targets it. Its code remains in the
 repository's pre-cutover git history.
 
@@ -18,7 +18,7 @@ Open an issue on GitHub. For a bug report, please include:
   attaching. You can drag-and-drop a log file onto an issue comment.
 - Because ARM drives external tools (MakeMKV, HandBrake), try the underlying
   tool by hand to rule out an upstream problem — see
-  [docs/ops/makemkv.md](docs/ops/makemkv.md).
+  [docs/user/MakeMKV-Ripper.md](docs/user/MakeMKV-Ripper.md).
 
 When filing a bug, enhancement, or feature request, please say whether you are
 able/willing to make the change yourself in a pull request.
@@ -77,7 +77,7 @@ Postgres, drives, or network:
 uv run pytest                  # all backend / ripper / transcode suites
 ```
 
-See [docs/arch/09-testing.md](docs/arch/09-testing.md) for the two-tier design
+See [docs/developers/architecture/09-testing.md](docs/developers/architecture/09-testing.md) for the two-tier design
 (fast fake-session unit tests + the real-DB e2e harness) and the coverage policy.
 
 Heavier end-to-end drills live in `devtools/`:

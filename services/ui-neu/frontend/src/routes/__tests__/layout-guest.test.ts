@@ -133,6 +133,15 @@ describe('Layout guest gating', () => {
 		expect(screen.queryByText('Settings')).not.toBeInTheDocument();
 	});
 
+	it('keeps the Help nav link for guests', async () => {
+		const auth = (await import('$lib/stores/auth')) as unknown as {
+			__setSession: (kind: 'admin' | 'guest') => void;
+		};
+		auth.__setSession('guest');
+		renderComponent(Layout, { props: { children: childSnippet() } });
+		expect(screen.getByText('Help').closest('a')?.getAttribute('href')).toBe('/help');
+	});
+
 	it('header health dots and the drives count are not links to Settings for guests', async () => {
 		const auth = (await import('$lib/stores/auth')) as unknown as {
 			__setSession: (kind: 'admin' | 'guest') => void;

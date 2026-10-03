@@ -1,6 +1,6 @@
 ---
 name: ISO-source ripping must use ephemeral backend-spawned workers, not a long-running service
-description: First-class "rip from an .iso file" in v3 is designed as ephemeral worker containers spawned per-ISO by the backend (the transcode-container lifecycle), NOT a persistent arm-ripper-iso service. Owner directive; eventual front door is UI file upload → spawn an ephemeral ripper per upload. Design lives at docs/arch/10-iso-source-ripping.md.
+description: First-class "rip from an .iso file" in v3 is designed as ephemeral worker containers spawned per-ISO by the backend (the transcode-container lifecycle), NOT a persistent arm-ripper-iso service. Owner directive; eventual front door is UI file upload → spawn an ephemeral ripper per upload. Design lives at docs/developers/architecture/10-iso-source-ripping.md.
 type: project
 ---
 
@@ -17,4 +17,4 @@ The owner's architectural directive: **ISO-source rippers are ephemeral, spawned
 - v1 source = a server-side ISO **library directory** (host path `ARM_HOST_ISO_LIBRARY_PATH`, mounted into the spawned worker; backend validates the requested name with realpath containment under the library root — never accept an absolute client path). **Deferred (not today):** UI file upload writes the ISO into that library then enqueues the same task; the ephemeral-spawn core is unchanged.
 - The Docker socket is already mounted into the backend for transcode spawns, so no new privilege is taken on.
 
-Full design + open decisions: [docs/arch/10-iso-source-ripping.md](../../docs/arch/10-iso-source-ripping.md). Related: [[feedback_db_enums_as_varchar]] (any new enum like a Drive `kind` or `rip_tasks.status` is VARCHAR, validated in-app), [[feedback_ripper_no_per_title]] (the rip the ephemeral worker runs is still one makemkvcon per disc).
+Full design + open decisions: [docs/developers/architecture/10-iso-source-ripping.md](../../docs/developers/architecture/10-iso-source-ripping.md). Related: [[feedback_db_enums_as_varchar]] (any new enum like a Drive `kind` or `rip_tasks.status` is VARCHAR, validated in-app), [[feedback_ripper_no_per_title]] (the rip the ephemeral worker runs is still one makemkvcon per disc).

@@ -1,4 +1,4 @@
-# TODO(v3-release): pin both stages by @sha256:<digest> — see docs/arch/06-deployment.md
+# TODO(v3-release): pin both stages by @sha256:<digest> — see docs/developers/architecture/06-deployment.md
 
 # ---------- Stage 1: build MakeMKV from upstream signed tarballs ----------
 FROM python:3.14-slim-bookworm AS mkv-build

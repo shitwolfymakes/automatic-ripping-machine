@@ -122,7 +122,7 @@ jobs:
       - run: npm ci
       - run: npm run check
       # style lint: bans inline utility styling outside the allowed layout
-      # families (see devtools/ui-neu-style-lint.mjs and docs/ui-neu-theming.md)
+      # families (see devtools/ui-neu-style-lint.mjs and docs/developers/ui/ui-neu-theming.md)
       - run: node --test devtools/ui-neu-style-lint.test.mjs
         working-directory: .
       - run: npm run lint:styles
@@ -158,6 +158,24 @@ jobs:
           cache: 'npm'
           cache-dependency-path: services/ui-neu/frontend/package-lock.json
       - run: npm ci
+      - run: npm test
+
+  test-site:
+    name: test (docs site)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      # npm test includes a full build of the real tree, so a broken doc
+      # link fails the PR rather than the Pages deploy.
       - run: npm test
 
   codegen-ui-neu:
