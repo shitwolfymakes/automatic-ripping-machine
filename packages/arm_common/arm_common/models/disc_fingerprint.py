@@ -2,8 +2,9 @@
 
 A single disc may carry multiple fingerprints — e.g. a DVD has a CRC64 (via
 pydvdid) plus the volume label as a weak fingerprint; a Blu-ray would
-carry an AACS Disc ID; a CD has a MusicBrainz Disc ID; future custom
-algos like matrix256 slot in without a schema change.
+carry an AACS Disc ID; a CD has a MusicBrainz Disc ID; DVDs and BDs
+carry a matrix256v1 structural hash. New algos slot in without a schema
+change.
 
 Reverse lookup is the medium-term motivation: "have I ripped this disc
 before?" needs an index on (algo, value), so this table is shaped for
@@ -43,7 +44,7 @@ class DiscFingerprint(SQLModel, table=True):
     )
     # Free-form to permit new algos without migrations. Canonical values:
     # "crc64" (pydvdid DVD), "aacs" (Blu-ray AACS Disc ID), "musicbrainz"
-    # (CD disc id), "matrix256" (future ARM-native fingerprint).
+    # (CD disc id), "matrix256" (matrix256v1 structural hash).
     algo: str = Field(sa_column=Column(String, nullable=False))
     value: str = Field(sa_column=Column(String, nullable=False))
     created_at: datetime | None = Field(sa_column=created_at_column())

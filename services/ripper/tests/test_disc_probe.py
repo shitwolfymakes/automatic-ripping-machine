@@ -257,6 +257,19 @@ async def test_probe_disc_skips_thediscdb_when_not_ready(monkeypatch: pytest.Mon
 
 
 @pytest.mark.asyncio
+async def test_probe_disc_carries_matrix256(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _ready(_dev: str) -> bool:
+        return True
+
+    monkeypatch.setattr(disc_probe, "await_device_ready", _ready)
+    monkeypatch.setattr(disc_probe, "_compute_crc", lambda _dev: None)
+    monkeypatch.setattr(disc_probe, "probe_thediscdb_hash", lambda _dev: None)
+    monkeypatch.setattr(disc_probe, "probe_matrix256", lambda _dev: "ab" * 32)
+    probe = await disc_probe.probe_disc("/dev/sr0")
+    assert probe.matrix256 == "ab" * 32
+
+
+@pytest.mark.asyncio
 async def test_probe_disc_returns_bd_meta(monkeypatch: pytest.MonkeyPatch) -> None:
     from arm_common.schemas import BdDiscMeta
 
@@ -267,6 +280,7 @@ async def test_probe_disc_returns_bd_meta(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(disc_probe, "await_device_ready", _ready)
     monkeypatch.setattr(disc_probe, "_compute_crc", lambda _dev: None)
     monkeypatch.setattr(disc_probe, "probe_thediscdb_hash", lambda _p: None)
+    monkeypatch.setattr(disc_probe, "probe_matrix256", lambda _p: None)
     monkeypatch.setattr(disc_probe, "probe_bd_meta", lambda _p: meta)
     probe = await disc_probe.probe_disc("/dev/sr0", bluray=True)
     assert probe.bd_meta == meta
@@ -288,6 +302,7 @@ async def test_probe_disc_skips_bd_meta_when_not_bluray(monkeypatch: pytest.Monk
     monkeypatch.setattr(disc_probe, "await_device_ready", _ready)
     monkeypatch.setattr(disc_probe, "_compute_crc", lambda _dev: None)
     monkeypatch.setattr(disc_probe, "probe_thediscdb_hash", lambda _p: None)
+    monkeypatch.setattr(disc_probe, "probe_matrix256", lambda _p: None)
     monkeypatch.setattr(disc_probe, "probe_bd_meta", _boom)
     probe = await disc_probe.probe_disc("/dev/sr0")
     assert probe.bd_meta is None
@@ -313,6 +328,7 @@ async def test_probe_disc_runs_bd_meta_when_bluray(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(disc_probe, "await_device_ready", _ready)
     monkeypatch.setattr(disc_probe, "_compute_crc", lambda _dev: None)
     monkeypatch.setattr(disc_probe, "probe_thediscdb_hash", lambda _p: None)
+    monkeypatch.setattr(disc_probe, "probe_matrix256", lambda _p: None)
     monkeypatch.setattr(disc_probe, "probe_bd_meta", _record)
     probe = await disc_probe.probe_disc("/dev/sr0", bluray=True)
     assert calls == ["/dev/sr0"]
