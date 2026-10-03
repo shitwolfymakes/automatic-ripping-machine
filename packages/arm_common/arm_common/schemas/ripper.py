@@ -12,6 +12,9 @@ class MakemkvKeyStatusReport(BaseModel):
 
     state: MakemkvKeyState
     detail: str | None = None
+    # Reporting drive, for setup's "checked by" (setup spec §6.7). Optional so
+    # rippers older than the backend still validate.
+    drive_id: str | None = None
 
 
 class KeydbStatusReport(BaseModel):

@@ -16,6 +16,7 @@
           "files": [
             { "file": "docs/user/Home.md", "label": "Home" },
             "docs/user/Getting-Started.md",
+            { "file": "docs/user/Setup-Walkthrough.md", "label": "Setup walkthrough" },
             "docs/user/Configuring-ARM.md",
             "docs/user/Upgrading.md",
             "docs/user/Uninstall.md"

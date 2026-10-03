@@ -3,6 +3,7 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,9 +52,21 @@ def _current_job(jobs_for_drive: list[Job]) -> DriveCurrentJobView | None:
     return DriveCurrentJobView(id=latest.id, title=latest.title, status=latest.status)
 
 
+def _connection(by_id_name: str | None) -> Literal["usb", "sata", "other"] | None:
+    """USB / SATA chip on the drive cards, from the udev by-id prefix."""
+    if not by_id_name:
+        return None
+    if by_id_name.startswith("usb-"):
+        return "usb"
+    if by_id_name.startswith("ata-"):
+        return "sata"
+    return "other"
+
+
 def _to_view(drive: Drive, jobs_for_drive: list[Job]) -> DriveView:
     view = DriveView.model_validate(drive)
     view.current_job = _current_job(jobs_for_drive)
+    view.connection = _connection(drive.by_id_name)
     return view
 
 

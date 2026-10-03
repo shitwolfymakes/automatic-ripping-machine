@@ -312,3 +312,29 @@ class UserRole(StrEnum):
 
     ADMIN = "admin"
     GUEST = "guest"
+
+
+class SetupStep(StrEnum):
+    """First-run setup walkthrough steps, in walkthrough order (setup spec 2026-10-01).
+
+    Stored as VARCHAR keys inside Config.setup_progress JSON, validated in the app.
+    """
+
+    ACCOUNT = "account"
+    SYSTEM = "system"
+    DRIVES = "drives"
+    MAKEMKV = "makemkv"
+    METADATA = "metadata"
+    DISCS = "discs"
+    TRANSCODING = "transcoding"
+    NOTIFICATIONS = "notifications"
+    FINISH = "finish"
+
+
+SETUP_STEP_ORDER: tuple[SetupStep, ...] = tuple(SetupStep)
+
+
+class SetupStepState(StrEnum):
+    DONE = "done"
+    SKIPPED = "skipped"
+    ATTENTION = "attention"

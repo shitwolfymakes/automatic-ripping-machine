@@ -1,4 +1,4 @@
-import type { ConfigFieldMeta } from '$lib/types/api.gen';
+import type { ConfigFieldMeta, SettingsGroup } from '$lib/types/api.gen';
 
 /** Presentation-only grouping for the schema-driven settings tabs, so they
  *  read like the Sessions / Appearance tabs: a tab description, then one
@@ -66,7 +66,7 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 		},
 		{
 			title: 'Review gate',
-			blurb: 'Hold each disc after identification so the match can be corrected before the rip starts.',
+			blurb: 'With "Review first", how long ARM waits for you to check the title before it rips anyway.',
 			keys: ['hold_for_review', 'manual_wait_seconds']
 		},
 		{
@@ -87,6 +87,30 @@ export const KEY_CHECK_NAMES: Record<string, 'tmdb' | 'omdb' | 'tvdb' | 'makemkv
 	makemkv_key: 'makemkv'
 };
 
+/** Display name per key-check service, for "Couldn't reach {service}". */
+export const KEY_SERVICE_LABEL: Record<'tmdb' | 'omdb' | 'tvdb' | 'makemkv', string> = {
+	tmdb: 'TMDb',
+	omdb: 'OMDb',
+	tvdb: 'TVDB',
+	makemkv: 'MakeMKV'
+};
+
+/** The fields a setup walkthrough step renders: those tagged `setup_step`, in
+ *  `setup_order`, plus any field whose widget lives on one of them
+ *  (`part_of`), across every settings group (setup spec 2026-10-01 §7.2). */
+export function stepFields(groups: SettingsGroup[], step: string): ConfigFieldMeta[] {
+	const all = groups.flatMap((g) => g.fields);
+	const tagged = all.filter((f) => f.setup_step === step).sort((a, b) => (a.setup_order ?? 0) - (b.setup_order ?? 0));
+	const owners = new Set(tagged.map((f) => f.key));
+	const parts = all.filter((f) => f.part_of != null && owners.has(f.part_of));
+	return [...tagged, ...parts];
+}
+
+/** A synthetic group for SchemaConfigForm holding one setup step's fields. */
+export function stepGroup(groups: SettingsGroup[], step: string): SettingsGroup {
+	return { name: `setup:${step}`, fields: stepFields(groups, step) };
+}
+
 export function groupBlurb(group: string): string | undefined {
 	return GROUP_BLURBS[group];
 }
@@ -96,7 +120,9 @@ export function groupBlurb(group: string): string | undefined {
  *  name. Each section's own keys are further split into `columns`,
  *  `advanced` and the remaining `fields`, so a key named in `columns` or
  *  `advanced` is never repeated in `fields`. */
-export function sectionFields(group: string, fields: ConfigFieldMeta[]): SectionFieldGroups[] {
+export function sectionFields(group: string, allFields: ConfigFieldMeta[]): SectionFieldGroups[] {
+	// A `part_of` field is rendered by its owner's widget, never on its own.
+	const fields = allFields.filter((f) => f.part_of == null);
 	const byKey = new Map(fields.map((f) => [f.key, f]));
 	const placed = new Set<string>();
 	const out: SectionFieldGroups[] = [];

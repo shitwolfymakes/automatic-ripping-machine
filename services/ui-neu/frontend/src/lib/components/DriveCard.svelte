@@ -4,7 +4,15 @@
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { isPassthroughSession, presetToolMap } from '$lib/utils/sessions';
 	import { triggerManual } from '$lib/api/jobs';
-	import { driveStatusLabel, isRipping, DETACHED_LABEL } from '$lib/utils/drives';
+	import {
+		connectionLabel,
+		driveStatusLabel,
+		driveTitle,
+		isRipping,
+		mediaLabel,
+		DETACHED_LABEL
+	} from '$lib/utils/drives';
+	import StatusStrip from './StatusStrip.svelte';
 	import StatusBadge from './StatusBadge.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import SlideOver from './SlideOver.svelte';
@@ -24,9 +32,21 @@
 			prescan_retries?: number;
 			disc_enum_timeout?: number;
 		};
+		/** 'essentials': name + 4K only, for the setup walkthrough (setup spec §5.4). */
+		variant?: 'full' | 'essentials';
+		/** The global auto-rip default a drive with no mode of its own follows (setup spec D1). */
+		globalAutoRip?: boolean;
 	}
 
-	let { drive, onupdate, globalDefaults = {}, sessions = [], transcodePresets = [] }: Props = $props();
+	let {
+		drive,
+		onupdate,
+		globalDefaults = {},
+		sessions = [],
+		transcodePresets = [],
+		variant = 'full',
+		globalAutoRip = true
+	}: Props = $props();
 
 	// A ripper-only deployment (not transcode-capable) can never run an encode
 	// session, so both session pickers offer only passthrough ones. An
@@ -294,12 +314,12 @@
 		if (e.key === 'Escape') cancelEdit();
 	}
 
-	async function toggleMode() {
+	// '' = no mode of its own: follow the global auto-rip default (null on the wire).
+	async function setMode(next: string) {
 		if (!drive) return;
 		togglingMode = true;
-		const newMode = drive.drive_mode === 'manual' ? 'auto' : 'manual';
 		try {
-			await updateDrive(drive.id, { drive_mode: newMode });
+			await updateDrive(drive.id, { drive_mode: next === '' ? null : (next as 'auto' | 'manual') });
 			onupdate?.();
 		} catch {
 			// ignore
@@ -307,10 +327,107 @@
 			togglingMode = false;
 		}
 	}
+
+	// --- essentials variant (setup walkthrough) ---
+	let essentialsName = $state<string | null>(null);
+	let essentialsSaved = $state<string | null>(null);
+	let essentialsError = $state<string | null>(null);
+	const nameValue = $derived(essentialsName ?? drive?.display_name ?? '');
+
+	async function saveEssentialName() {
+		if (!drive || essentialsName === null) return;
+		const next = essentialsName.trim();
+		if (next === (drive.display_name ?? '')) return;
+		essentialsError = null;
+		try {
+			await updateDrive(drive.id, { display_name: next || null });
+			essentialsSaved = 'Name saved';
+			onupdate?.();
+		} catch (e) {
+			essentialsError = e instanceof Error ? e.message : 'Saving the name failed';
+		}
+	}
+
+	async function saveEssentialUhd(checked: boolean) {
+		if (!drive) return;
+		essentialsError = null;
+		try {
+			await updateDrive(drive.id, { uhd_capable: checked });
+			essentialsSaved = '4K setting saved';
+			onupdate?.();
+		} catch (e) {
+			essentialsError = e instanceof Error ? e.message : 'Saving the 4K setting failed';
+		}
+	}
 </script>
 
 {#if !drive}
 	<SkeletonCard />
+{:else if variant === 'essentials'}
+	{@const conn = connectionLabel(drive)}
+	<div class="panel drive-card-essentials" data-testid="drive-card-essentials">
+		<div class="drive-card-essentials-head">
+			<span class="drive-card-essentials-icon" aria-hidden="true"><Glyph name="hard-drive" class="h-5 w-5" /></span>
+			<div class="drive-card-essentials-main">
+				<h3 class="drive-card-essentials-title">{driveTitle(drive)}</h3>
+				<code class="mono drive-card-essentials-path"
+					>{drive.device_path}{drive.by_id_name ? `  ${drive.by_id_name}` : ''}</code
+				>
+				<div class="cluster drive-card-essentials-chips">
+					{#if conn}<span class="chip chip-sm">{conn}</span>{/if}
+					<span class="chip chip-sm"><Glyph name="disc-3" class="h-3 w-3" />{mediaLabel(drive)}</span>
+				</div>
+			</div>
+		</div>
+		{#if drive.last_error}
+			<StatusStrip tone="danger" title="The ripper for this drive reported a problem." message={drive.last_error} />
+		{:else if drive.present === false || drive.media_status === 'detached'}
+			<StatusStrip
+				tone="warning"
+				title="Not connected"
+				detail="Reconnect the drive. It shows Ready once its ripper checks in."
+			/>
+		{:else if isRipping(drive)}
+			<StatusStrip tone="busy" title="Ripping" detail="A disc is being ripped right now." />
+		{:else if drive.status === 'online'}
+			<StatusStrip tone="ok" title="Ready" detail="Insert a disc any time" />
+		{:else}
+			<StatusStrip tone="busy" title="Starting ripper..." detail="Usually under 10 seconds" progress />
+		{/if}
+		<div class="field">
+			<label class="field-label" for="drive-name-{drive.id}"
+				>Friendly name <span class="drive-card-essentials-optional">(optional)</span></label
+			>
+			<input
+				id="drive-name-{drive.id}"
+				class="field-control"
+				value={nameValue}
+				placeholder={[drive.vendor, drive.model].filter(Boolean).join(' ') || 'Living room Blu-ray'}
+				oninput={(e) => (essentialsName = (e.currentTarget as HTMLInputElement).value)}
+				onblur={saveEssentialName}
+				onkeydown={(e) => {
+					if (e.key === 'Enter') saveEssentialName();
+				}}
+			/>
+			<p class="field-help">Shown on the dashboard and in notifications.</p>
+		</div>
+		<label class="field field-row drive-card-essentials-uhd">
+			<input
+				type="checkbox"
+				checked={!!drive.uhd_capable}
+				onchange={(e) => saveEssentialUhd((e.currentTarget as HTMLInputElement).checked)}
+			/>
+			<span>
+				<span class="drive-card-essentials-uhd-label">This drive can read 4K UHD discs</span>
+				<span class="field-help">Only some drives can. Leave it off if you're not sure.</span>
+			</span>
+		</label>
+		{#if essentialsError}
+			<p class="field-error" role="alert">{essentialsError}</p>
+		{:else if essentialsSaved}
+			<p class="field-help" aria-live="polite">{essentialsSaved}</p>
+		{/if}
+	</div>
 {:else}
 	<!-- Plain `card`, deliberately NOT `card card-status`: the original card shell
      (git 441d35d2, `rounded-lg border border-primary/20 bg-surface p-2.5
@@ -423,15 +540,19 @@
 
 		<!-- Consolidated action bar -->
 		<div class="flex items-center gap-1 drive-card-action-bar">
-			<button
-				onclick={toggleMode}
-				disabled={togglingMode}
+			<select
 				class="drive-card-mode-btn"
-				data-manual={drive.drive_mode === 'manual'}
-				title="Toggle between auto and manual rip mode"
+				aria-label="Rip mode"
+				title="Rip on insert (Auto), wait for Start (Manual), or follow the global default"
+				disabled={togglingMode}
+				data-manual={drive.drive_mode === 'manual' || (drive.drive_mode == null && !globalAutoRip)}
+				value={drive.drive_mode ?? ''}
+				onchange={(e) => setMode((e.currentTarget as HTMLSelectElement).value)}
 			>
-				{drive.drive_mode === 'manual' ? 'Manual' : 'Auto'}
-			</button>
+				<option value="">Default ({globalAutoRip ? 'Auto' : 'Manual'})</option>
+				<option value="auto">Auto</option>
+				<option value="manual">Manual</option>
+			</select>
 
 			<select
 				bind:value={selectedSessionId}
@@ -675,6 +796,60 @@
 		border-radius: var(--radius-lg);
 		background: color-mix(in srgb, var(--color-surface-raised) 2.5%, transparent);
 		padding: 0.25rem;
+	}
+	.drive-card-essentials {
+		display: grid;
+		gap: 0.875rem;
+		padding: 1.25rem;
+	}
+	.drive-card-essentials-head {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.75rem;
+	}
+	.drive-card-essentials-icon {
+		flex: none;
+		display: grid;
+		place-items: center;
+		width: 2.25rem;
+		height: 2.25rem;
+		border-radius: var(--radius-md);
+		background: var(--color-primary-tint-2);
+		color: var(--color-primary-text);
+	}
+	.drive-card-essentials-main {
+		min-width: 0;
+		display: grid;
+		gap: 0.25rem;
+	}
+	.drive-card-essentials-title {
+		font-weight: 600;
+		color: var(--color-text);
+		overflow-wrap: anywhere;
+	}
+	.drive-card-essentials-path {
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		overflow-wrap: anywhere;
+		white-space: pre-wrap;
+	}
+	.drive-card-essentials-chips {
+		gap: 0.375rem;
+	}
+	.drive-card-essentials-optional {
+		font-weight: 400;
+		color: var(--color-text-muted);
+	}
+	.drive-card-essentials-uhd {
+		align-items: flex-start;
+		gap: 0.625rem;
+	}
+	.drive-card-essentials-uhd input {
+		margin-top: 0.25rem;
+	}
+	.drive-card-essentials-uhd-label {
+		display: block;
+		color: var(--color-text);
 	}
 	.drive-card-mode-btn {
 		border-radius: var(--radius-md);

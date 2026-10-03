@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+	import { restartSetup } from '$lib/api/setup';
 	import { slide } from 'svelte/transition';
 	import { onMount } from 'svelte';
 	import { reveal } from '$lib/transitions';
@@ -246,6 +248,17 @@
 		document.querySelector('main')?.scrollTo(0, 0);
 	}
 
+	let restartingSetup = $state(false);
+	async function runSetupAgain() {
+		restartingSetup = true;
+		try {
+			await restartSetup();
+			goto('/setup/system');
+		} finally {
+			restartingSetup = false;
+		}
+	}
+
 	onMount(() => {
 		// Rescan drives to pick up hardware info (model, serial) that
 		// may not have been available at container startup.
@@ -447,7 +460,20 @@
 					<h2 class="settings-page-section-title">System</h2>
 
 					<!-- Health check (API keys + path permissions) -->
-					<SystemHealth />
+					<!-- First-run walkthrough re-entry (setup spec §5.11) -->
+					<section class="panel settings-page-setup-again" data-testid="run-setup-again">
+						<div>
+							<h3 class="settings-page-section-title">Setup walkthrough</h3>
+							<p class="settings-page-setup-again-help">
+								Walk through drives, keys and defaults again. Your current values are kept.
+							</p>
+						</div>
+						<button type="button" class="btn" onclick={runSetupAgain} disabled={restartingSetup}>
+							{restartingSetup ? 'Opening...' : 'Run setup again'}
+						</button>
+					</section>
+
+					<SystemHealth grouped />
 
 					<!-- Read-only infra configuration (schema-driven) -->
 					{#if systemGroup}
@@ -641,6 +667,7 @@
 										{drive}
 										sessions={driveSessions}
 										transcodePresets={driveTranscodePresets}
+										globalAutoRip={settings?.config?.auto_rip_on_insert !== false}
 										onupdate={() => drives.refresh()}
 										globalDefaults={{
 											prescan_cache_mb: Number(settings?.arm_config?.PRESCAN_CACHE_MB) || 1,
@@ -1087,5 +1114,17 @@
 		box-shadow:
 			0 0 0 2px var(--color-page),
 			0 0 0 4px var(--color-primary);
+	}
+	.settings-page-setup-again {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		padding: 1.25rem;
+	}
+	.settings-page-setup-again-help {
+		font-size: 0.875rem;
+		color: var(--color-text-muted);
 	}
 </style>

@@ -2,10 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { features, isScreenEnabled } from '../features';
 
 describe('features', () => {
-	it('disables screens whose v3 backend is MISSING (setup)', () => {
-		expect(features.setup).toBe(false);
-	});
-
 	it('enables screens v3 supports (including files)', () => {
 		expect(features.dashboard).toBe(true);
 		expect(features.notifications).toBe(true);
@@ -16,7 +12,7 @@ describe('features', () => {
 
 	it('isScreenEnabled maps a nav href to its flag', () => {
 		expect(isScreenEnabled('/files')).toBe(true);
-		expect(isScreenEnabled('/setup')).toBe(false);
+		expect(isScreenEnabled('/setup')).toBe(true); // the first-run walkthrough has a v3 backend now
 		expect(isScreenEnabled('/logs')).toBe(true);
 		expect(isScreenEnabled('/')).toBe(true);
 	});

@@ -1,7 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import type { LayoutLoad } from './$types';
 import { hydrateConfig } from '$lib/stores/config';
-import { features } from '$lib/features';
+import { getToken } from '$lib/api/client';
 
 export const prerender = false;
 export const ssr = false;
@@ -14,22 +14,30 @@ let setupConfirmedComplete = false;
 // Hydrate feature flags once per page load.
 let configHydrated = false;
 
+function isAdminSession(): boolean {
+	try {
+		return getToken() !== null && localStorage.getItem('arm_role') === 'admin';
+	} catch {
+		return false;
+	}
+}
+
 export const load: LayoutLoad = async ({ url, fetch }) => {
 	if (!configHydrated) {
 		await hydrateConfig();
 		configHydrated = true;
 	}
 
-	// Skip setup check if already on /setup
+	// The walkthrough itself, and the sign-in pages that lead into it.
 	if (url.pathname.startsWith('/setup')) return {};
-
-	// Setup wizard backend is MISSING in v3 — skip the first-run redirect until a
-	// setup-status endpoint lands (feature-flagged off). The block below revives
-	// when features.setup flips to true.
-	if (!features.setup) return {};
+	if (url.pathname.startsWith('/login') || url.pathname.startsWith('/change-password')) return {};
 
 	// Skip if we already know setup is done (cached from a previous navigation)
 	if (setupConfirmedComplete) return {};
+
+	// Only the admin runs setup; guests browse normally. "Finish later" is
+	// server-wide: the status endpoint then reports first_run=false.
+	if (!isAdminSession()) return {};
 
 	try {
 		const resp = await fetch('/api/setup/status');
@@ -38,7 +46,7 @@ export const load: LayoutLoad = async ({ url, fetch }) => {
 			if (status.first_run === true) {
 				redirect(307, '/setup');
 			}
-			// Setup is complete - cache this so we don't re-check on every click
+			// Setup is complete or deferred - cache this so we don't re-check on every click
 			setupConfirmedComplete = true;
 		}
 		// Non-ok response (503, etc.) - ARM unreachable, don't redirect

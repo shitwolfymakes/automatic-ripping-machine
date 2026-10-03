@@ -117,3 +117,67 @@ def test_drive_defaults_optical() -> None:
     assert d.kind == "optical"
     assert d.source_kind is None
     assert d.source_path is None
+
+
+# --- First-run setup walkthrough tags (setup spec 2026-10-01 §7.2) ---
+
+
+def test_setup_step_tags_are_valid_steps() -> None:
+    from arm_common.enums import SetupStep
+
+    valid = {s.value for s in SetupStep}
+    for m in CONFIG_FIELD_META:
+        if m.setup_step is not None:
+            assert m.setup_step in valid, m.key
+            assert m.setup_order is not None, m.key
+            assert m.editable, m.key
+
+
+def test_setup_step_tagging_matches_spec() -> None:
+    def keys(step: str) -> list[str]:
+        tagged = [m for m in CONFIG_FIELD_META if m.setup_step == step]
+        return [m.key for m in sorted(tagged, key=lambda m: m.setup_order or 0)]
+
+    assert keys("makemkv") == ["makemkv_key", "community_keydb_enabled", "makemkv_sdf_enabled"]
+    assert keys("metadata") == [
+        "tmdb_api_key",
+        "omdb_api_key",
+        "tvdb_api_key",
+        "metadata_provider",
+        "thediscdb_enabled",
+    ]
+    assert keys("discs") == ["auto_rip_on_insert"]
+    assert keys("transcoding") == ["transcode_enabled", "max_parallel_transcodes"]
+
+
+def test_widgets_and_part_of() -> None:
+    meta = {m.key: m for m in CONFIG_FIELD_META}
+    assert meta["makemkv_key"].widget == "makemkv_key"
+    assert meta["auto_rip_on_insert"].widget == "disc_handling"
+    assert meta["hold_for_review"].part_of == "auto_rip_on_insert"
+    for m in CONFIG_FIELD_META:
+        if m.part_of is not None:
+            assert m.part_of in meta, m.key
+
+
+def test_signup_urls_on_metadata_keys() -> None:
+    meta = {m.key: m for m in CONFIG_FIELD_META}
+    assert meta["tmdb_api_key"].signup_url == "https://www.themoviedb.org/settings/api"
+    assert meta["omdb_api_key"].signup_url == "https://www.omdbapi.com/apikey.aspx"
+    assert meta["tvdb_api_key"].signup_url == "https://thetvdb.com/api-information"
+
+
+def test_setup_step_order() -> None:
+    from arm_common.enums import SETUP_STEP_ORDER
+
+    assert [s.value for s in SETUP_STEP_ORDER] == [
+        "account",
+        "system",
+        "drives",
+        "makemkv",
+        "metadata",
+        "discs",
+        "transcoding",
+        "notifications",
+        "finish",
+    ]
