@@ -10,6 +10,8 @@
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import { fadeIn, fadeOut } from '$lib/transitions';
 	import { transcoderStats, transcoderWorkers, getJobsCache, setJobsCache } from '$lib/stores/transcoder';
+	import { fetchGpus } from '$lib/api/gpus';
+	import type { GpuView } from '$lib/types/api.gen';
 	import { sortTranscodeTasks } from '$lib/utils/transcode-sort';
 	import { isAdmin } from '$lib/stores/auth';
 
@@ -120,9 +122,21 @@
 		}
 	});
 
+	let gpuRows = $state<GpuView[]>([]);
+
+	async function loadGpus() {
+		try {
+			gpuRows = await fetchGpus();
+		} catch {
+			// The summary counts still render; the per-device rows just stay hidden.
+			gpuRows = [];
+		}
+	}
+
 	onMount(() => {
 		stats.start();
 		workers.start();
+		loadGpus();
 		// Skeleton only when we have nothing cached for the current tab.
 		loadJobs(getJobsCache(activeTab) == null);
 		return () => { stats.stop(); workers.stop(); stopJobsPolling(); };
@@ -202,6 +216,31 @@
 					GPUs: {s.gpus_available}/{s.gpus_total} available &middot; Queue: {statusCount('queued')} queued
 				</span>
 			</div>
+			{#if gpuRows.length > 0}
+				<!-- Per-device inventory rows (G-30 awareness): live status per GPU,
+				     with the management card one link away in Settings. -->
+				<div class="stack stack-sm transcoder-page-gpu-rows" data-testid="gpu-rows">
+					{#each gpuRows as g (g.id)}
+						<div class="transcoder-page-gpu-row">
+							<span class="status-dot" data-status={!g.enabled ? 'off' : g.status === 'available' ? 'ok' : 'warn'} aria-hidden="true"></span>
+							<span class="badge">{g.vendor.toUpperCase()}</span>
+							<span class="transcoder-page-gpu-device" title={g.device_path}>{g.device_path}</span>
+							<span class="transcoder-page-gpu-state">
+								{#if !g.enabled}
+									disabled
+								{:else if g.status === 'available'}
+									available
+								{:else if g.claimed_by_task_id}
+									busy
+								{:else}
+									{g.status}
+								{/if}
+							</span>
+						</div>
+					{/each}
+					<a href="/settings" class="transcoder-page-gpu-manage">Manage GPUs in Settings</a>
+				</div>
+			{/if}
 			{#if w.length > 0}
 				<div class="grid gap-2 {s.max_parallel > 1 ? 'sm:grid-cols-2 lg:grid-cols-3' : ''}">
 					{#each w as worker (worker.task_id)}
@@ -462,4 +501,33 @@
 	.transcoder-page-claimed-by { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
 	.transcoder-page-took { color: var(--color-success); }
 	.transcoder-page-arrow { color: var(--color-text-faint); }
+
+	.transcoder-page-gpu-rows {
+		margin-bottom: 0.75rem;
+	}
+	.transcoder-page-gpu-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.8125rem;
+	}
+	.transcoder-page-gpu-device {
+		font-family: var(--font-mono);
+		color: var(--color-text-muted);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		min-width: 0;
+	}
+	.transcoder-page-gpu-state {
+		color: var(--color-text-muted);
+	}
+	.transcoder-page-gpu-manage {
+		font-size: 0.8125rem;
+		color: var(--color-primary);
+		text-decoration: none;
+	}
+	.transcoder-page-gpu-manage:hover {
+		text-decoration: underline;
+	}
 </style>

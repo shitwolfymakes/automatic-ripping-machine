@@ -363,3 +363,86 @@ async def test_spawn_failure_releases_gpu_claim() -> None:
     # GPU claim was rolled back so the next dispatch tick can retry.
     assert db.rows["gpus"][0].status == GpuStatus.AVAILABLE
     assert db.rows["gpus"][0].claimed_by_task_id is None
+
+
+# --- enabled switch + deterministic vendor ordering (G-30 first half) ---------
+
+
+async def test_disabled_gpu_is_never_claimed() -> None:
+    db = _build_db(
+        hw_preference=None,
+        gpus=[(GpuVendor.QSV, GpuStatus.AVAILABLE, ["h264", "h265"], None)],
+    )
+    db.rows["gpus"][0].enabled = False
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+    spawned = await disp.spawn_pending(db)
+    # Only disabled silicon advertises the codec -> CPU spawn, GPU untouched.
+    assert spawned == 1
+    kwargs = docker.containers.run.call_args.kwargs
+    assert "ARM_GPU_VENDOR" not in kwargs["environment"]
+    assert db.rows["gpus"][0].status == GpuStatus.AVAILABLE
+    assert db.rows["gpus"][0].claimed_by_task_id is None
+
+
+async def test_claim_prefers_vendor_order_not_row_order() -> None:
+    # vaapi row FIRST: row order must not decide - nvenc > qsv > vaapi.
+    db = _build_db(
+        hw_preference=None,
+        gpus=[
+            (GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h264", "h265"], None),
+            (GpuVendor.QSV, GpuStatus.AVAILABLE, ["h264", "h265"], None),
+        ],
+    )
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+    await disp.spawn_pending(db)
+    kwargs = docker.containers.run.call_args.kwargs
+    assert kwargs["environment"]["ARM_GPU_VENDOR"] == "qsv"
+    claimed = [g for g in db.rows["gpus"] if g.claimed_by_task_id == "txt_1"]
+    assert len(claimed) == 1 and claimed[0].vendor == GpuVendor.QSV
+
+
+async def test_disabled_preferred_vendor_falls_through_to_next() -> None:
+    db = _build_db(
+        hw_preference=None,
+        gpus=[
+            (GpuVendor.NVENC, GpuStatus.AVAILABLE, ["h264", "h265"], None),
+            (GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h264", "h265"], None),
+        ],
+    )
+    db.rows["gpus"][0].enabled = False  # nvenc disabled by the operator
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+    await disp.spawn_pending(db)
+    kwargs = docker.containers.run.call_args.kwargs
+    assert kwargs["environment"]["ARM_GPU_VENDOR"] == "vaapi"
+
+
+# --- max_parallel_transcodes from operator config -----------------------------
+
+
+async def test_max_parallel_read_from_config_row() -> None:
+    from arm_backend.seeders import CONFIG_SINGLETON_ID
+    from arm_common import Config
+
+    db = _build_db(hw_preference=None, gpus=[])
+    db.rows["config"] = [Config(id=CONFIG_SINGLETON_ID, max_parallel_transcodes=0)]
+    docker = MagicMock()
+    # env says 2, operator config says 0 -> config wins, nothing spawns.
+    disp = TranscodeDispatcher(_settings(MAX_PARALLEL_TRANSCODES=2), _db_factory(db), docker, WSHub())
+    spawned = await disp.spawn_pending(db)
+    assert spawned == 0
+    docker.containers.run.assert_not_called()
+
+
+async def test_max_parallel_falls_back_to_env_when_unseeded() -> None:
+    from arm_backend.seeders import CONFIG_SINGLETON_ID
+    from arm_common import Config
+
+    db = _build_db(hw_preference=None, gpus=[])
+    db.rows["config"] = [Config(id=CONFIG_SINGLETON_ID, max_parallel_transcodes=None)]
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(MAX_PARALLEL_TRANSCODES=1), _db_factory(db), docker, WSHub())
+    spawned = await disp.spawn_pending(db)
+    assert spawned == 1

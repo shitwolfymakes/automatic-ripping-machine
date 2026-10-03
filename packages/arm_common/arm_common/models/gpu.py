@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlmodel import Field, SQLModel
 
@@ -24,6 +24,10 @@ class Gpu(SQLModel, table=True):
         sa_column=Column(ARRAY(String), nullable=False, server_default="{}"),
     )
     status: GpuStatus = Field(sa_column=enum_column(GpuStatus, "gpu_status", server_default=GpuStatus.AVAILABLE.value))
+    # Operator switch (Settings > GPUs): a disabled device stays in the
+    # inventory but the dispatcher never claims it. Rows are DB-authoritative;
+    # ARM_GPUS only seeds an empty table.
+    enabled: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, server_default="true"))
     claimed_by_task_id: str | None = Field(
         sa_column=Column(String, ForeignKey("transcode_tasks.id", ondelete="SET NULL"), nullable=True)
     )

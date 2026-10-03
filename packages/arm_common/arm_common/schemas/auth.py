@@ -53,6 +53,10 @@ class ConfigView(BaseModel):
     # Drive scanner tunables (spec §2) — operator-editable, read every tick.
     drive_scan_interval_seconds: int
     drive_detected_prune_days: int
+    # Transcode dispatcher parallelism cap — operator-editable, read every
+    # tick (moved from the MAX_PARALLEL_TRANSCODES env var, which now only
+    # seeds this on first boot).
+    max_parallel_transcodes: int
     makemkv_sdf_enabled: bool
     thediscdb_enabled: bool
     thediscdb_refresh_days: int
@@ -82,6 +86,7 @@ class ConfigUpdateRequest(BaseModel):
     community_keydb_enabled: bool | None = None
     drive_scan_interval_seconds: int | None = None
     drive_detected_prune_days: int | None = None
+    max_parallel_transcodes: int | None = None
     makemkv_sdf_enabled: bool | None = None
     thediscdb_enabled: bool | None = None
     thediscdb_refresh_days: int | None = None

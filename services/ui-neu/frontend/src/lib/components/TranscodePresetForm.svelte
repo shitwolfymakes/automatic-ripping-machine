@@ -4,7 +4,9 @@
 	// driven by props. media_type is immutable on edit; built-in presets are
 	// name-only; nullable fields submit `value || null`. Adds a `codec` select
 	// (beyond the Vue form, per the T2b spec). preset_json is not exposed.
+	import { onMount } from 'svelte';
 	import { createTranscodePreset, updateTranscodePreset } from '$lib/api/transcodePresets';
+	import { fetchGpus } from '$lib/api/gpus';
 	import type {
 		ContainerFormat,
 		HwPreference,
@@ -35,6 +37,27 @@
 	// '' represents "no codec" (null). VideoCodec never includes ''.
 	let codec = $state<VideoCodec | ''>(preset?.codec ?? '');
 	let hwPreference = $state<HwPreference | ''>(preset?.hw_preference ?? '');
+
+	// Live inventory context (G-30 awareness): what silicon "Any" will actually
+	// use, shown where hardware intent is expressed. Soft-fails to no hint.
+	let gpuHint = $state<string | null>(null);
+	onMount(async () => {
+		try {
+			const gpus = await fetchGpus();
+			if (gpus.length === 0) {
+				gpuHint = 'This host has no GPUs configured; hardware presets fall back to CPU.';
+				return;
+			}
+			const parts = gpus.map((g) => {
+				const dev = g.device_path.split('/').pop() ?? g.device_path;
+				const base = `${g.vendor.toUpperCase()} ${dev} (${g.encoder_kinds.join(', ')})`;
+				return g.enabled ? base : `${base} disabled`;
+			});
+			gpuHint = `This host: ${parts.join(' + ')}`;
+		} catch {
+			gpuHint = null;
+		}
+	});
 	let extraArgs = $state(preset?.extra_args ?? '');
 
 	let submitting = $state(false);
@@ -184,7 +207,7 @@
 			bind:value={codec}
 			disabled={isBuiltin}
 		>
-			<option value="">(default)</option>
+			<option value="">CPU (preset's own encoder)</option>
 			<option value="h264">H.264</option>
 			<option value="h265">H.265</option>
 			<option value="av1">AV1</option>
@@ -203,6 +226,9 @@
 			<option value="cpu_only">CPU only</option>
 			<option value="any">Any</option>
 		</select>
+		{#if gpuHint}
+			<span class="transcode-preset-form-gpu-hint" data-testid="tp-gpu-hint">{gpuHint}</span>
+		{/if}
 	</label>
 
 	<label class="field">
@@ -241,4 +267,11 @@
 <style>
 	.transcode-preset-form-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-text); }
 	.transcode-preset-form-actions { display: flex; justify-content: flex-end; gap: 0.75rem; padding-top: 0.5rem; }
+
+	.transcode-preset-form-gpu-hint {
+		display: block;
+		margin-top: 0.25rem;
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+	}
 </style>

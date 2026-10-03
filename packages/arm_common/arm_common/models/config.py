@@ -73,6 +73,11 @@ class Config(SQLModel, table=True):
     manual_wait_seconds: int = Field(sa_column=Column(Integer, nullable=False, server_default="60"))
     # Drive scanner (spec §2). Read on every tick, so edits apply live.
     drive_scan_interval_seconds: int = Field(sa_column=Column(Integer, nullable=False, server_default="30"))
+    # Dispatcher parallelism cap - operator config (Settings > Transcoding),
+    # moved from the MAX_PARALLEL_TRANSCODES env var. NULL = not yet seeded;
+    # the backend's config seeder backfills it from the env value once, then
+    # this column is authoritative and the dispatcher reads it per tick.
+    max_parallel_transcodes: int | None = Field(default=None, sa_column=Column(Integer, nullable=True))
     drive_detected_prune_days: int = Field(sa_column=Column(Integer, nullable=False, server_default="7"))
     default_retention_policy: RetentionPolicy = Field(
         sa_column=enum_column(

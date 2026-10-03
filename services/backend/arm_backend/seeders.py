@@ -128,6 +128,17 @@ async def _seed_config_singleton(session: AsyncSession) -> None:
         session.add(existing)
         await session.flush()
 
+    # One-shot backfill for the env->DB move of the dispatcher parallelism
+    # cap: NULL means this install has never seen the column, so seed it from
+    # the legacy MAX_PARALLEL_TRANSCODES env value (default 1). After this,
+    # the column is authoritative and Settings edits stick.
+    if existing.max_parallel_transcodes is None:
+        from arm_backend.config import settings  # noqa: PLC0415 — avoid import cycle at module load
+
+        existing.max_parallel_transcodes = settings.MAX_PARALLEL_TRANSCODES
+        session.add(existing)
+        await session.flush()
+
 
 # --- In-app notification channel ----------------------------------------------
 

@@ -15,18 +15,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-ACTION="setup"
-FORCE=0
-for arg in "$@"; do
-    case "${arg}" in
-        setup|up|down) ACTION="${arg}" ;;
-        --force) FORCE=1 ;;
-        *)
-            echo "Usage: bash devtools/setup-dev.sh [setup|up|down] [--force]" >&2
-            exit 2
-            ;;
-    esac
-done
+ACTION="${1:-setup}"
+case "${ACTION}" in
+    setup|up|down) ;;
+    *)
+        echo "Usage: bash devtools/setup-dev.sh [up|down]" >&2
+        exit 2
+        ;;
+esac
 
 # Runtime/data dirs (db, raw, media, logs, certs) live under ./arm/ to keep the
 # repo root tidy — the dev mirror of production's ~/arm prefix. The compose file
@@ -51,16 +47,9 @@ compose() {
 # `arm.task_id`, transcode_dispatcher.py). They are not compose services, so
 # `docker compose down` leaves them behind — still holding the old image, the
 # compose network, and the optical device nodes across a redeploy.
-BACKEND_SERVICE="arm-backend"
-RIPPERS_REMOVED=0
-
 remove_spawned_containers() {
-    local ids rippers
-    rippers="$(docker ps -aq --filter "label=arm.drive_id")"
-    ids="$( { printf '%s\n' "${rippers}"; docker ps -aq --filter "label=arm.task_id"; } | sed '/^$/d' | sort -u )"
-    # Rippers are respawned only by the backend's startup reconcile; `up`
-    # checks this flag to make sure that reconcile runs again (see below).
-    [[ -n "${rippers}" ]] && RIPPERS_REMOVED=1
+    local ids
+    ids="$( { docker ps -aq --filter "label=arm.drive_id"; docker ps -aq --filter "label=arm.task_id"; } | sort -u )"
     if [[ -n "${ids}" ]]; then
         echo "==> removing backend-spawned ripper/transcoder containers"
         # shellcheck disable=SC2086  # ids is a list of container ids by design
@@ -68,98 +57,6 @@ remove_spawned_containers() {
     else
         echo "==> no backend-spawned ripper/transcoder containers to remove"
     fi
-}
-
-# The backend's container start time, or empty when it is not running.
-backend_started_at() {
-    local id
-    id="$(compose ps -q "${BACKEND_SERVICE}" 2>/dev/null)" || true
-    [[ -n "${id}" ]] || return 0
-    docker inspect -f '{{.State.StartedAt}}' "${id}" 2>/dev/null || true
-}
-
-# The backend spawns rippers only at startup (reconcile_enrolled_rippers in
-# main.py). `up` removes them before `compose up`, and compose leaves the
-# backend running when its image and config are unchanged (a UI-only deploy),
-# so nothing would respawn them: restart the backend in that case.
-respawn_rippers_if_needed() {  # respawn_rippers_if_needed <backend StartedAt before up>
-    [[ "${RIPPERS_REMOVED}" -eq 1 ]] || return 0
-    local before="$1" after
-    after="$(backend_started_at)"
-    if [[ -n "${before}" && "${after}" == "${before}" ]]; then
-        echo "==> ${BACKEND_SERVICE} kept running; restarting it so it respawns the removed rippers"
-        compose restart "${BACKEND_SERVICE}"
-    fi
-}
-
-# What a ripper container runs while a rip is in flight; printed one tool per
-# line by the probe below (empty output = idle).
-# shellcheck disable=SC2016  # expands inside the container, not here
-RIP_PROBE_SH='
-tools="makemkvcon abcde dd"
-if command -v pgrep >/dev/null 2>&1; then
-    for t in $tools; do pgrep -x "$t" >/dev/null 2>&1 && echo "$t"; done
-    exit 0
-fi
-if command -v ps >/dev/null 2>&1; then
-    ps -eo comm= 2>/dev/null | while read -r c; do
-        for t in $tools; do [ "$c" = "$t" ] && echo "$t"; done
-    done | sort -u
-    exit 0
-fi
-[ -r /proc/self/comm ] || exit 3
-for f in /proc/[0-9]*/comm; do
-    c=$(cat "$f" 2>/dev/null) || continue
-    for t in $tools; do [ "$c" = "$t" ] && echo "$t"; done
-done | sort -u
-exit 0
-'
-
-# `up` replaces backend-spawned containers. A transcoder that is RUNNING is
-# mid-encode by definition; a ripper is only busy while makemkvcon/abcde/dd
-# runs inside it (every enrolled drive keeps an idle ripper), so an idle
-# ripper alone is not a reason to refuse. Refuse unless --force when:
-#   - a transcoder container is running, or
-#   - a running ripper has one of those tools in flight.
-guard_running_spawned() {
-    local tasks drives ctr found active=()
-    tasks="$(docker ps --filter "label=arm.task_id" --filter "status=running" --format '{{.Names}}')"
-    drives="$(docker ps --filter "label=arm.drive_id" --filter "status=running" --format '{{.Names}}')"
-    if [[ -n "${tasks}" ]]; then
-        while IFS= read -r ctr; do
-            [[ -n "${ctr}" ]] && active+=("${ctr} (transcoder)")
-        done <<<"${tasks}"
-    fi
-    if [[ -n "${drives}" ]]; then
-        while IFS= read -r ctr; do
-            [[ -n "${ctr}" ]] || continue
-            if found="$(timeout 15 docker exec "${ctr}" sh -c "${RIP_PROBE_SH}" 2>/dev/null </dev/null)"; then
-                if [[ -n "${found}" ]]; then
-                    active+=("${ctr} (ripping: $(tr '\n' ' ' <<<"${found}" | sed 's/ *$//'))")
-                fi
-            else
-                echo "==> could not inspect ${ctr} for an active rip; treating it as idle"
-            fi
-        done <<<"${drives}"
-    fi
-    if [[ ${#active[@]} -eq 0 ]]; then
-        [[ -n "${drives}" ]] && echo "==> running rippers are idle (no makemkvcon/abcde/dd); safe to replace"
-        return 0
-    fi
-    if [[ "${FORCE}" -eq 1 ]]; then
-        echo "==> --force: removing containers with ACTIVE work:"
-        printf '      %s\n' "${active[@]}"
-        return 0
-    fi
-    {
-        echo "ERROR: backend-spawned containers have ACTIVE work:"
-        printf '         %s\n' "${active[@]}"
-        echo "       Removing them would kill the rip or transcode in progress. Images are built;"
-        echo "       nothing has been backed up, removed or restarted yet."
-        echo "       Wait for the job to finish, or re-run the same command with --force, e.g.:"
-        echo "         bash devtools/setup-dev.sh up --force"
-    } >&2
-    exit 1
 }
 
 if [[ "${ACTION}" == "down" ]]; then
@@ -500,24 +397,9 @@ ensure_udev_rule() {
 ensure_udev_rule
 
 if [[ "${ACTION}" == "up" ]]; then
-    # 1. Build first: a failed build must not leave the stack half torn down.
-    echo "==> building images"
-    compose build
-
-    # 2. Refuse (unless --force) while a rip or transcode is ACTIVE. This runs
-    #    before anything is removed, so a refused run leaves no side effects
-    #    beyond the built images.
-    guard_running_spawned
-
-    # 3. Only now remove backend-spawned rippers/transcoders. Note the backend's
-    #    start time first, to tell whether step 4 restarts it.
-    BACKEND_STARTED_BEFORE="$(backend_started_at)"
     remove_spawned_containers
-
-    # 4. Start from the images built above (no --build).
-    echo "==> starting the stack"
-    compose up -d
-    respawn_rippers_if_needed "${BACKEND_STARTED_BEFORE}"
+    echo "==> building + starting the stack"
+    compose up -d --build
     cat <<EOF
 
 stack is up — open https://localhost:8081 → Drives → Enroll each drive you want ARM to use
@@ -532,7 +414,7 @@ fi
 cat <<EOF
 
 done — next:
-  bash devtools/setup-dev.sh up      # build + start the stack (refuses with active rips unless --force)
+  bash devtools/setup-dev.sh up      # build + start the stack (or: docker compose up -d --build)
   then open https://localhost:8081 → Drives → Enroll each drive you want ARM to use
   spin it down (stack + spawned ripper/transcoder containers): bash devtools/setup-dev.sh down
 
