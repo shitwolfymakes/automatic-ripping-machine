@@ -311,13 +311,51 @@ after_switch_failure() {
     fi
     arm_sub "Previous release kept at: ${ARM_STATE_DIR}/releases/${from}"
     arm_sub "Logs: ${ARMCTL_CMD} compose logs ${BACKEND_SERVICE}"
+    arm_sub "Once the cause is fixed, try the start again with: ${ARMCTL_CMD} up"
     arm_sub "To go back by hand, see 'Rolling back' on the Upgrading page of the ARM docs."
+}
+
+# link_current <target>: point .armctl/current at <target> in one step. The new
+# link is made under a temporary name and renamed over the old one, so
+# `current` always names a release.
+link_current() {
+    local tmp="${ARM_STATE_DIR}/current.new"
+    rm -f "${tmp}" || return 1
+    ln -s "$1" "${tmp}" || return 1
+    if ! mv -T "${tmp}" "${ARM_STATE_DIR}/current"; then
+        rm -f "${tmp}"
+        return 1
+    fi
+}
+
+# switch_release <from> <to> <candidate env> <live env>: repoint `current`
+# first, then replace .env. If the run stops between the two, .env still names
+# <from> while `current` names <to>, and `armctl upgrade` (now run from <to>)
+# sees the mismatch and finishes the upgrade. Every step is checked, so this is
+# safe in a conditional context.
+switch_release() {
+    local from="$1" to="$2" env_next="$3" live_env="$4" old_link
+    old_link="$(readlink "${ARM_STATE_DIR}/current" 2>/dev/null || true)"
+    if ! link_current "releases/${to}"; then
+        arm_err "could not point ${ARM_STATE_DIR}/current at ${to}; the install is still on ${from}"
+        return 1
+    fi
+    if mv "${env_next}" "${live_env}"; then
+        return 0
+    fi
+    if [[ -n "${old_link}" ]] && link_current "${old_link}"; then
+        arm_err "could not replace ${live_env}; the install is still on ${from}"
+    else
+        arm_err "could not replace ${live_env}, and could not point ${ARM_STATE_DIR}/current back at ${from}."
+        arm_sub "Run '${ARMCTL_CMD} upgrade --version ${to}' again to finish the upgrade."
+    fi
+    return 1
 }
 
 # Runs in the release that is currently installed: pick the target, download
 # and verify its bundle, then let the NEW release's armctl do the upgrade.
 cmd_upgrade() {
-    local version="" bundle="" pass=() current target repo new_dir
+    local version="" bundle="" pass=() current target repo new_dir linked from
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --version)
@@ -351,14 +389,35 @@ cmd_upgrade() {
     else
         target="$(bootstrap_resolve_tag)" || exit 1
     fi
-    if [[ "${target}" == "${current}" ]]; then
-        arm_say "already on ${current}; nothing to upgrade"
-        return 0
-    fi
-    arm_say "upgrading ${current} to ${target}"
     new_dir="${ARM_STATE_DIR}/releases/${target}"
-    bootstrap_fetch_bundle "${target}" "${new_dir}" "${bundle}"
-    run_new_release "${new_dir}/armctl.sh" apply-upgrade --from "${current}" --to "${target}" "${pass[@]+"${pass[@]}"}"
+    # The release the `current` link points at. It names the same release as
+    # .env's ARM_IMAGE_TAG unless an upgrade stopped in the middle of the switch.
+    linked="$(readlink "${ARM_STATE_DIR}/current" 2>/dev/null || true)"
+    linked="${linked##*/}"
+    if [[ -n "${linked}" && "${linked}" != "${current}" ]]; then
+        arm_warn "found an unfinished upgrade: ${ENV_FILE} names ${current}, but ${ARM_STATE_DIR}/current points at ${linked}"
+        # The upgrade is run again from the release that is not the target.
+        if [[ "${target}" == "${current}" ]]; then
+            from="${linked}"
+        else
+            from="${current}"
+        fi
+        arm_say "running the upgrade to ${target} again to finish it"
+        # The target's bundle is already here when the stop came after the
+        # fetch; do not replace the folder this command may be running from.
+        if [[ ! -f "${new_dir}/armctl.sh" || "$(cat "${new_dir}/VERSION" 2>/dev/null || true)" != "${target}" ]]; then
+            bootstrap_fetch_bundle "${target}" "${new_dir}" "${bundle}"
+        fi
+    else
+        if [[ "${target}" == "${current}" ]]; then
+            arm_say "already on ${current}; nothing to upgrade"
+            return 0
+        fi
+        from="${current}"
+        arm_say "upgrading ${current} to ${target}"
+        bootstrap_fetch_bundle "${target}" "${new_dir}" "${bundle}"
+    fi
+    run_new_release "${new_dir}/armctl.sh" apply-upgrade --from "${from}" --to "${target}" "${pass[@]+"${pass[@]}"}"
 }
 
 # Runs in the NEW release. Everything up to "The switch" works on a candidate
@@ -404,12 +463,8 @@ cmd_apply_upgrade() {
     backup_db
 
     # The switch. From here the install is on the new release.
-    mv "${env_next}" "${live_env}" || { arm_err "could not replace ${live_env}; the install is still on ${from}"; exit 1; }
+    switch_release "${from}" "${to}" "${env_next}" "${live_env}" || exit 1
     use_env_file "${live_env}"
-    if ! ln -sfn "releases/${to}" "${ARM_STATE_DIR}/current"; then
-        arm_err "could not point ${ARM_STATE_DIR}/current at ${to}; ${live_env} already names ${to}, so fix the link by hand"
-        exit 1
-    fi
     arm_say "switched to ${to}"
 
     # errexit is ignored in any conditional context (if, !, && or ||), so each

@@ -657,8 +657,14 @@ lacks "nvidia: a good install skips nothing (no entry)" "CONTINUED SKIPPED=NVIDI
 upgrade_case() {
     (
         ARM_DIR="${TMPROOT}/$1/arm"; mkdir -p "${ARM_DIR}/.armctl/releases/v3.1.0"; armctl_settings
-        ln -sfn releases/v3.1.0 "${ARM_STATE_DIR}/current"
-        printf 'ARMCTL_PROFILE=full\nARM_IMAGE_TAG=v3.1.0\n' > "${ENV_FILE}"
+        # UPG_LINK / UPG_ENV_TAG: where `current` and .env point (default v3.1.0).
+        # UPG_HAVE: release folders already unpacked, with their VERSION.
+        ln -sfn "releases/${UPG_LINK:-v3.1.0}" "${ARM_STATE_DIR}/current"
+        printf 'ARMCTL_PROFILE=full\nARM_IMAGE_TAG=%s\n' "${UPG_ENV_TAG:-v3.1.0}" > "${ENV_FILE}"
+        for r in ${UPG_HAVE:-}; do
+            mkdir -p "${ARM_STATE_DIR}/releases/${r}"; echo "${r}" > "${ARM_STATE_DIR}/releases/${r}/VERSION"
+            : > "${ARM_STATE_DIR}/releases/${r}/armctl.sh"
+        done
         resolved="$2"; fetch="$3"; shift 3
         ARMCTL_RELEASE_DIR="${TMPROOT}/fake-rel"; mkdir -p "${ARMCTL_RELEASE_DIR}"
         log_file="${TMPROOT}/upgrade.log"; : > "${log_file}"
@@ -698,6 +704,20 @@ has "upgrade: a failed download leaves the install as it was" "TAG=v3.1.0;CURREN
 out="$(upgrade_case upg-bundle v3.2.0 ok --bundle /tmp/b.tar.gz)"
 has "upgrade: --bundle without --version is refused" "--bundle needs --version" "$out"
 
+# A run that stopped between the two halves of the switch. `current` is
+# repointed first, so the usual stop leaves current on the new release and
+# .env on the old one; a re-run finishes the upgrade from the unpacked bundle.
+out="$(UPG_LINK=v3.2.0 UPG_HAVE=v3.2.0 upgrade_case upg-half v3.2.0 ok)"
+has "upgrade: a half switch is noticed" "found an unfinished upgrade" "$out"
+lacks "upgrade: a half switch reuses the unpacked bundle" "fetch " "$out"
+has "upgrade: a half switch runs the new release's apply again" "handover ${TMPROOT}/upg-half/arm/.armctl/releases/v3.2.0/armctl.sh apply-upgrade --from v3.1.0 --to v3.2.0" "$out"
+# The other way round (.env on the new release, current on the old one): not
+# "already on", the upgrade runs again.
+out="$(UPG_ENV_TAG=v3.2.0 upgrade_case upg-half-env v3.2.0 ok)"
+lacks "upgrade: .env and current disagreeing is not 'already on'" "already on" "$out"
+has "upgrade: .env ahead of current fetches the missing bundle" "fetch v3.2.0 []" "$out"
+has "upgrade: .env ahead of current runs apply from the linked release" "apply-upgrade --from v3.1.0 --to v3.2.0" "$out"
+
 # --- upgrade: the new release applies it ----------------------------------------------
 # apply_case <name> <FAIL_AT step or ''> [<setup code> [apply-upgrade args...]]
 apply_case() {
@@ -732,6 +752,7 @@ apply_case() {
             echo "CURRENT=$(readlink "${ARM_STATE_DIR}/current")"
             echo "RELEASES=$(cd "${ARM_STATE_DIR}/releases" && echo *)"
             echo "MODE=$(stat -c '%a' "${ARM_STATE_DIR}/.env")"
+            echo "TMPLINK=$( [[ -e "${ARM_STATE_DIR}/current.new" || -L "${ARM_STATE_DIR}/current.new" ]] && echo left || echo none)"
         } >> "${log_file}"
         tr '\n' ';' < "${log_file}"
         cat "${TMPROOT}/apply.out"
@@ -760,6 +781,25 @@ has "apply: the install stays on the new release" "TAG=v3.2.0;" "$out"
 has "apply: the user is told it was not rolled back, and why" "not rolled back" "$out"
 has "apply: the previous release is still there for a manual rollback" "RELEASES=v3.0.0 v3.1.0 v3.2.0;" "$out"
 has "apply: the user is told where the previous release is" "releases/v3.1.0" "$out"
+has "apply: the user is told armctl up tries the start again" "try the start again with: ${ARMCTL_CMD} up" "$out"
+
+# The switch repoints `current` before it replaces .env, and does it in one step.
+out="$(apply_case apply-ok2 '')"
+has "apply: the switch leaves no temporary link behind" "TMPLINK=none;" "$out"
+# shellcheck disable=SC2016  # evaluated inside apply_case, on purpose
+out="$(apply_case apply-lnfail '' 'ln() { return 1; }')"
+has "apply: a failed link stops the upgrade" "rc=1;" "$out"
+has "apply: a failed link leaves .env on the old release" "TAG=v3.1.0;RIPPER=reg/arm-ripper:v3.1.0;" "$out"
+has "apply: a failed link leaves current on the old release" "CURRENT=releases/v3.1.0;" "$out"
+has "apply: a failed link says the install is still on the old release" "the install is still on v3.1.0" "$out"
+lacks "apply: a failed link starts nothing" "remove_spawned_containers" "$out"
+# shellcheck disable=SC2016  # evaluated inside apply_case, on purpose
+out="$(apply_case apply-envfail '' 'mv() { if [[ "$1" == *.env.next ]]; then return 1; fi; command mv "$@"; }')"
+has "apply: a failed .env replace stops the upgrade" "rc=1;" "$out"
+has "apply: a failed .env replace puts current back" "TAG=v3.1.0;RIPPER=reg/arm-ripper:v3.1.0;CURRENT=releases/v3.1.0;" "$out"
+has "apply: a failed .env replace says the install is still on the old release" "could not replace ${TMPROOT}/apply-envfail/arm/.armctl/.env; the install is still on v3.1.0" "$out"
+has "apply: a failed .env replace leaves no temporary link" "TMPLINK=none;" "$out"
+lacks "apply: a failed .env replace starts nothing" "remove_spawned_containers" "$out"
 
 # A failed start after the switch is reported like an unhealthy backend.
 # The real go_live, with only `compose up` failing: it must stop right there.
