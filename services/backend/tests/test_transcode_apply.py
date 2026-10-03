@@ -10,7 +10,6 @@ from arm_backend.transcode_apply import compute_outputs  # noqa: E402
 from arm_common import (  # noqa: E402
     ContainerFormat,
     DiscType,
-    HwPreference,
     Job,
     JobStatus,
     MediaType,
@@ -40,7 +39,7 @@ def _movie_preset() -> TranscodePreset:
         media_type=MediaType.MOVIE,
         tool=TranscodeTool.HANDBRAKE,
         container=ContainerFormat.MKV,
-        hw_preference=HwPreference.CPU_ONLY,
+        encoder="preset",
     )
 
 

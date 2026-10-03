@@ -149,6 +149,10 @@ async def test_refresh_gpu_inventory_populates(monkeypatch: pytest.MonkeyPatch) 
     await main_mod._refresh_gpu_inventory(hub)
     added = [r for r in db.added if type(r).__name__ == "Gpu"]
     assert len(added) == 1
+    # The descriptor's encoder_kinds are hints only: a seeded row is unprobed
+    # and claims nothing until the backend's own device probe verifies it.
+    assert added[0].encoder_kinds == []
+    assert added[0].probed_at is None
     assert hub.events == []  # GPU present → no hw_unavailable
 
 

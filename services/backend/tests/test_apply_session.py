@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import secrets
+from datetime import UTC, datetime
 from pathlib import Path
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
@@ -21,7 +22,9 @@ from arm_common import (  # noqa: E402
     Config,
     ContainerFormat,
     DiscType,
-    HwPreference,
+    Gpu,
+    GpuStatus,
+    GpuVendor,
     IdentificationMode,
     Job,
     JobStatus,
@@ -82,7 +85,7 @@ def _seed(db: FakeSession, *, job_status: JobStatus = JobStatus.RIPPED) -> None:
             is_builtin=True,
             tool=TranscodeTool.HANDBRAKE,
             container=ContainerFormat.MKV,
-            hw_preference=HwPreference.CPU_ONLY,
+            encoder="preset",
         )
     ]
     db.rows["sessions"] = [
@@ -868,7 +871,7 @@ def test_passthrough_apply_flows_when_disabled(signing_key: bytes, tmp_path: Pat
             is_builtin=True,
             tool=TranscodeTool.NONE,
             container=ContainerFormat.MKV,
-            hw_preference=HwPreference.CPU_ONLY,
+            encoder="preset",
         )
     )
     db.rows["sessions"].append(
@@ -933,3 +936,163 @@ def test_null_toggle_column_means_enabled(signing_key: bytes, tmp_path: Path) ->
             headers=_auth(token),
         )
     assert r.status_code == 200, r.text
+
+
+def _gpu(gpu_id: str = "gpu_1", vendor: GpuVendor = GpuVendor.QSV, **kw: object) -> Gpu:
+    defaults: dict = {
+        "id": gpu_id,
+        "vendor": vendor,
+        "device_path": "/dev/dri/renderD128",
+        "encoder_kinds": ["h264", "h265"],
+        "status": GpuStatus.AVAILABLE,
+        "enabled": True,
+        "probed_at": datetime(2026, 9, 26, 12, 0, tzinfo=UTC),
+    }
+    defaults.update(kw)
+    return Gpu(**defaults)
+
+
+def _seed_vendor_pinned_session(db: FakeSession, *, encoder: str) -> None:
+    db.rows["transcode_presets"].append(
+        TranscodePreset(
+            id="tpr_vendor",
+            name="QSV H.265",
+            media_type=MediaType.MOVIE,
+            is_builtin=True,
+            tool=TranscodeTool.HANDBRAKE,
+            container=ContainerFormat.MKV,
+            encoder=encoder,
+        )
+    )
+    db.rows["sessions"].append(
+        Session(
+            id="ses_vendor",
+            name="QSV H.265",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_x",
+            transcode_preset_id="tpr_vendor",
+            output_path_template="{title} ({year})/{title} - {transcode_slug}.{ext}",
+        )
+    )
+
+
+def test_encode_apply_refused_when_encoder_unavailable(signing_key: bytes, tmp_path: Path) -> None:
+    """A preset pinned to a vendor encoder (qsv_h265) is refused with a typed
+    422 when no enabled device's probe has verified that vendor/codec; no
+    application row is created."""
+    db = FakeSession()
+    _seed(db)
+    _seed_vendor_pinned_session(db, encoder="qsv_h265")
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_vendor"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"] == "no enabled device has verified qsv_h265; re-probe or enable it in Settings > GPUs"
+    assert db.rows["session_applications"] == []
+
+
+def test_encode_apply_succeeds_with_eligible_device(signing_key: bytes, tmp_path: Path) -> None:
+    """The same vendor-pinned preset succeeds once an enabled, probed QSV
+    device verifies h265."""
+    db = FakeSession()
+    _seed(db)
+    _seed_vendor_pinned_session(db, encoder="qsv_h265")
+    db.rows["gpus"] = [_gpu()]
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_vendor"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+
+
+def test_any_encoder_apply_succeeds_without_any_gpu_rows(signing_key: bytes, tmp_path: Path) -> None:
+    """`any_h265` is never refused at apply time: it falls back to the CPU
+    at dispatch time when nothing eligible shows up."""
+    db = FakeSession()
+    _seed(db)
+    _seed_vendor_pinned_session(db, encoder="any_h265")
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_vendor"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+
+
+@pytest.mark.parametrize(("awaiting", "expected_status"), [(True, 200), (False, 422)])
+def test_encode_apply_with_a_device_awaiting_its_first_probe(
+    signing_key: bytes, tmp_path: Path, awaiting: bool, expected_status: int
+) -> None:
+    """A never-probed matching device whose probe is reserved or running does
+    not refuse the vendor-pinned preset: the task queues until the probe
+    decides. A never-probed device nobody is probing still refuses."""
+    from unittest.mock import MagicMock
+
+    from arm_backend import transcode_dispatcher as td
+
+    db = FakeSession()
+    _seed(db)
+    _seed_vendor_pinned_session(db, encoder="qsv_h265")
+    db.rows["gpus"] = [_gpu(probed_at=None, encoder_kinds=[])]
+    dispatcher = MagicMock()
+    dispatcher.awaiting_probe.return_value = awaiting
+    td.set_active_dispatcher(dispatcher)
+    try:
+        app, token = _make_app(signing_key, db, tmp_path)
+        with TestClient(app) as client:
+            r = client.post(
+                "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+                json={"session_id": "ses_vendor"},
+                headers=_auth(token),
+            )
+    finally:
+        td.set_active_dispatcher(None)
+    assert r.status_code == expected_status, r.text
+
+
+def test_transcode_disabled_wins_over_encoder_unavailable(signing_key: bytes, tmp_path: Path) -> None:
+    """When both gates would fire (transcoding off AND no eligible device),
+    the transcode_disabled gate reports first: it runs before the encoder
+    gate."""
+    db = FakeSession()
+    _seed(db)
+    _seed_vendor_pinned_session(db, encoder="qsv_h265")
+    _seed_config(db, transcode_enabled=False)
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_vendor"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422, r.text
+    assert "transcoding is disabled" in r.json()["detail"]
+
+
+def test_encode_apply_refused_with_unknown_catalog_encoder(signing_key: bytes, tmp_path: Path) -> None:
+    """A preset row carrying an encoder id no longer in the catalog (a stale
+    row from a removed encoder) is refused with a typed 422 naming the
+    preset, not a 500 from an unguarded catalog lookup."""
+    db = FakeSession()
+    _seed(db)
+    _seed_vendor_pinned_session(db, encoder="removed_encoder")
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_vendor"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"] == "preset tpr_vendor has unknown encoder 'removed_encoder'"
+    assert db.rows["session_applications"] == []

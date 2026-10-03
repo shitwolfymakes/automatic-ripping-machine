@@ -28,8 +28,8 @@
 #                          # or a ripper running makemkvcon, abcde or dd).
 #                          # Without it, `up` refuses and lists them. Idle
 #                          # rippers are always replaced without --force.
-#         --ripper-only   # ripper-only profile: skip the arm-transcode image
-#                          # build, the HW-encoder probe, and host GPU
+#         --ripper-only   # ripper-only profile: skip every arm-transcode
+#                          # image build (base, intel, amd) and host GPU
 #                          # detection; write ARM_TRANSCODE_CAPABLE=false to
 #                          # .env (ARM_GPUS is written as `[]`). Combine with
 #                          # any action, e.g. `setup-dev.sh up --ripper-only`.
@@ -63,8 +63,13 @@ Usage: bash devtools/setup-dev.sh [setup|up|down] [--ripper-only] [--no-backup] 
                    (needs docker + the compose plugin; no uv/node/npm)
   down             stop the stack + backend-spawned ripper/transcoder containers
 
-  --ripper-only    skip the arm-transcode image, the encoder probe and GPU
-                   detection; write ARM_TRANSCODE_CAPABLE=false (per run, not sticky)
+  --ripper-only    skip every arm-transcode image and GPU detection; write
+                   ARM_TRANSCODE_CAPABLE=false (per run, not sticky)
+
+  Transcode images on `up`: arm-transcode (base: CPU + NVENC) is always built;
+  the arm-transcode-intel / arm-transcode-amd variants are built only when an
+  Intel (qsv) / AMD (vaapi) GPU is detected on this host, and never when
+  ARM_TRANSCODE_DOCKER_HOST is set (the remote host builds its own).
   --no-backup      up: skip the pre-deploy pg_dump into ./arm/backups/
                    (without it: the newest 5 pg-backup-<UTC>.sql.gz files, e.g.
                    pg-backup-20260926T120000Z.sql.gz, are kept and older ones of
@@ -213,69 +218,15 @@ env_file_value() {
     printf '%s' "${val}"
 }
 
-# Probe the transcode image for the HW encoders HandBrake can actually run.
-# Prints the raw JSON ({"qsv":["h264"],...}) on success, nothing on failure.
-# On `up` this runs AFTER `compose build`, so the image exists; on plain
-# `setup` it may not exist yet, and detect_gpus then seeds `[]` with a warning.
-#
-# Image name resolves like compose does: shell env, then the just-seeded .env,
-# then the template default. The `arm-transcode:latest` default is correct HERE
-# (unlike install.sh, which must qualify it as
-# ${ARM_IMAGE_PREFIX}/arm-transcode:${ARM_IMAGE_TAG}): the dev
-# docker-compose.yml.example BUILDS + tags the transcode image as
-# ${ARM_TRANSCODE_IMAGE:-arm-transcode:latest}.
-probe_encoder_caps() {
-    local image="${ARM_TRANSCODE_IMAGE:-$(env_file_value ARM_TRANSCODE_IMAGE)}"
-    image="${image:-arm-transcode:latest}"
-    local devflags=()
-    if [[ -d /dev/dri ]]; then
-        devflags+=(--device /dev/dri)
-        # gosu (entrypoint) RESETS supplementary groups, so a docker --group-add
-        # render_gid would not survive into the `arm` process → HandBrake could
-        # not open the render node → QSV/VAAPI init fails → probe falsely reports
-        # {}. Pass RENDER_GID env instead: the entrypoint adds `arm` to it BEFORE
-        # the gosu drop (same as the transcode dispatcher). Mirrors install.sh.
-        local render_gid
-        render_gid="$(detect_render_gid || true)"
-        [[ -n "${render_gid}" ]] && devflags+=(-e "RENDER_GID=${render_gid}")
-    fi
-    command -v nvidia-smi >/dev/null 2>&1 && devflags+=(--gpus all)
-    # Print the probe's JSON on stdout and RETURN ITS EXIT STATUS (no `|| true`).
-    # The caller treats exit 0 as authoritative — even a `{}` result means
-    # "checked, this device has no working HW encoder" and MUST NOT be overridden
-    # with the h264+h265 default. Only a non-zero exit is a genuine probe failure.
-    timeout 60 docker run --rm "${devflags[@]}" "${image}" \
-        python -m arm_transcode.main --probe-encoders 2>/dev/null
-}
-
 # Phase 7b: enumerate GPUs host-side so the GPU-free backend can fill the `gpus`
 # table from ARM_GPUS instead of probing hardware. Prints a compact JSON array
-# (empty `[]` if none). Mirrors services/backend/arm_backend/gpu_probe.py and the
-# detect_gpus in install.sh.
+# (empty `[]` if none). Every entry carries `"encoder_kinds":[]`: the backend
+# probes each device itself with a real test encode, so this only reports which
+# devices exist, never which codecs they can run. Needs no built image.
+# Mirrors services/backend/arm_backend/gpu_probe.py and the detect_gpus in
+# install.sh.
 detect_gpus() {
     local entries=() node vendor_file vid vendor idx
-    local caps_json probe_ok
-    # Capture BOTH the probe output and whether it ran authoritatively. `&& ... ||`
-    # keeps the non-zero exit from aborting under `set -e`. probe_ok=1 means the
-    # probe ran and its JSON is the truth (even `{}`); probe_ok=0 means it failed
-    # (image missing/timeout/docker error) and NO GPU is advertised (see below).
-    caps_json="$(probe_encoder_caps)" && probe_ok=1 || probe_ok=0
-    # kinds_for <vendor> -> JSON array string, e.g. ["h264","h265"], ["h264"], or [].
-    # The probe's answer is authoritative: a vendor absent from the JSON (or
-    # present as []) means "no working HW encoder" -> [] (do NOT over-claim).
-    kinds_for() {
-        local vendor="$1" kinds=""
-        if [[ -n "${caps_json}" ]] && command -v jq >/dev/null 2>&1; then
-            kinds="$(printf '%s' "${caps_json}" | jq -c --arg v "${vendor}" '.[$v] // empty' 2>/dev/null)"
-        elif [[ -n "${caps_json}" ]]; then
-            kinds="$(printf '%s' "${caps_json}" | grep -oE "\"${vendor}\":\[[^]]*\]" | sed -E "s/\"${vendor}\"://")"
-        fi
-        if [[ -n "${kinds}" ]]; then
-            printf '%s' "${kinds}"        # probe reported real codecs for this vendor
-        else
-            printf '[]'                   # vendor has no working HW encoder -> honest empty
-        fi
-    }
     if [[ -d /dev/dri ]]; then
         for node in /dev/dri/renderD*; do
             [[ -e "${node}" ]] || continue
@@ -287,32 +238,14 @@ detect_gpus() {
                 0x1002) vendor=vaapi ;;
                 *)      continue ;;
             esac
-            entries+=("{\"vendor\":\"${vendor}\",\"device_path\":\"${node}\",\"encoder_kinds\":$(kinds_for "${vendor}")}")
+            entries+=("{\"vendor\":\"${vendor}\",\"device_path\":\"${node}\",\"encoder_kinds\":[]}")
         done
     fi
     if command -v nvidia-smi >/dev/null 2>&1 && [[ "$(nvenc_driver_ok)" == 0 ]]; then
         while IFS= read -r idx; do
             [[ -n "${idx}" ]] || continue
-            entries+=("{\"vendor\":\"nvenc\",\"device_path\":\"nvidia://${idx}\",\"encoder_kinds\":$(kinds_for nvenc)}")
+            entries+=("{\"vendor\":\"nvenc\",\"device_path\":\"nvidia://${idx}\",\"encoder_kinds\":[]}")
         done < <(nvidia-smi -L 2>/dev/null | sed -nE 's/^GPU ([0-9]+):.*/\1/p')
-    fi
-    # Probe failed but the host HAS GPUs: advertise none rather than guess. The
-    # backend seeds the gpus table from ARM_GPUS only while the table is empty,
-    # so `[]` self-heals on the next successful run, while a wrong guess (e.g.
-    # h265 on a QSV part that cannot encode it) would stick forever.
-    if [[ "${probe_ok}" != "1" && ${#entries[@]} -gt 0 ]]; then
-        {
-            echo "WARNING: ================================================================"
-            echo "WARNING: GPU detection FAILED: the HW-encoder probe could not run in"
-            echo "WARNING: the transcode image (missing image, docker error or timeout)."
-            echo "WARNING: Found ${#entries[@]} GPU device(s) but writing ARM_GPUS=[] so no"
-            echo "WARNING: unverified encoder is advertised; transcodes will use the CPU."
-            echo "WARNING: Fix the cause, then re-run 'bash devtools/setup-dev.sh up':"
-            echo "WARNING: an empty gpus table is re-seeded from the corrected ARM_GPUS."
-            echo "WARNING: ================================================================"
-        } >&2
-        printf '[]'
-        return 0
     fi
     local IFS=,
     printf '[%s]' "${entries[*]:-}"
@@ -330,15 +263,26 @@ detect_render_gid() {
     done
 }
 
+# Host GPU list for this run, detected once and shared by the variant-build
+# filter (select_up_services, before the build) and the .env write
+# (refresh_arm_gpus, after the active-work guard). Detection only reads sysfs
+# and nvidia-smi, so it never writes .env: a refused `up` leaves .env untouched.
+DETECTED_GPUS=""
+DETECTED_GPUS_SET=0
+detect_gpus_once() {
+    if [[ "${DETECTED_GPUS_SET}" -eq 0 ]]; then
+        DETECTED_GPUS="$(detect_gpus)"
+        DETECTED_GPUS_SET=1
+    fi
+}
+
 # Refresh ARM_GPUS from host detection (it's derived, not a secret), UNLESS the
 # transcode dispatcher is pointed at a remote docker host: then ARM_GPUS
 # describes the REMOTE machine's GPUs (the dispatcher injects device access
-# where the container actually runs), and probing this host would overwrite a
-# hand-set remote GPU list with the wrong hardware.
-# --ripper-only also skips detection (and therefore the encoder-probe docker
-# run inside it): a ripper-only install never spawns a local transcoder, so
-# there's nothing to advertise GPUs for.
-# On `up` this runs after `compose build` so the probe finds the fresh image.
+# where the container actually runs), and detecting this host's GPUs would
+# overwrite a hand-set remote GPU list with the wrong hardware.
+# --ripper-only also skips detection: a ripper-only install never spawns a
+# local transcoder, so there's nothing to advertise GPUs for.
 refresh_arm_gpus() {
     local value
     if grep -qE '^ARM_TRANSCODE_DOCKER_HOST=..*' "${ENV_FILE}"; then
@@ -347,7 +291,8 @@ refresh_arm_gpus() {
     elif [[ "${RIPPER_ONLY}" -eq 1 ]]; then
         value="[]"
     else
-        value="$(detect_gpus)"
+        detect_gpus_once
+        value="${DETECTED_GPUS}"
     fi
     if grep -q '^ARM_GPUS=' "${ENV_FILE}"; then
         sed -i "s|^ARM_GPUS=.*|ARM_GPUS=${value}|" "${ENV_FILE}"
@@ -355,7 +300,7 @@ refresh_arm_gpus() {
         printf 'ARM_GPUS=%s\n' "${value}" >> "${ENV_FILE}"
     fi
     if [[ "${RIPPER_ONLY}" -eq 1 ]]; then
-        echo "==> --ripper-only: skipping encoder probe + GPU detection, ARM_GPUS=[]"
+        echo "==> --ripper-only: skipping GPU detection, ARM_GPUS=[]"
     else
         echo "==> detected GPU(s) for ARM_GPUS: ${value}"
     fi
@@ -627,19 +572,39 @@ wait_for_backend() {
     exit 1
 }
 
-# Services to build + start. Empty means "all" (compose's default); with
-# --ripper-only it names every service EXCEPT arm-transcode, because
+# Services to build + start. Empty means "all" (compose's default). Otherwise
+# it names every service except the skipped transcode images, because
 # `compose build`/`up` with no service args builds every service with a
-# `build:` key, including arm-transcode (deploy.replicas:0: never started,
-# but still built), and the fat HW transcode image must be skipped.
+# `build:` key (deploy.replicas:0 services are never started, but still built):
+#   - --ripper-only skips arm-transcode, arm-transcode-intel and
+#     arm-transcode-amd (no local transcoder ever runs);
+#   - arm-transcode-intel is built only when this host has a `qsv` GPU, and
+#     arm-transcode-amd only when it has a `vaapi` GPU;
+#   - with ARM_TRANSCODE_DOCKER_HOST set, both variants are skipped (the remote
+#     host builds its own) but arm-transcode is kept.
+# The backend falls back to arm-transcode for a vendor whose variant is absent.
 UP_SERVICES=()
 select_up_services() {
-    local svc
-    [[ "${RIPPER_ONLY}" -eq 1 ]] || return 0
+    local svc want_intel=0 want_amd=0 skipped=0 all=()
+    if [[ "${RIPPER_ONLY}" -eq 0 ]] && ! grep -qE '^ARM_TRANSCODE_DOCKER_HOST=..*' "${ENV_FILE}"; then
+        detect_gpus_once
+        [[ "${DETECTED_GPUS}" == *'"vendor":"qsv"'* ]] && want_intel=1
+        [[ "${DETECTED_GPUS}" == *'"vendor":"vaapi"'* ]] && want_amd=1
+    fi
     while IFS= read -r svc; do
-        [[ "${svc}" == "arm-transcode" ]] && continue
-        UP_SERVICES+=("${svc}")
+        case "${svc}" in
+            arm-transcode)
+                if [[ "${RIPPER_ONLY}" -eq 1 ]]; then skipped=1; continue; fi ;;
+            arm-transcode-intel)
+                if [[ "${want_intel}" -eq 0 ]]; then skipped=1; continue; fi ;;
+            arm-transcode-amd)
+                if [[ "${want_amd}" -eq 0 ]]; then skipped=1; continue; fi ;;
+        esac
+        all+=("${svc}")
     done < <(compose config --services)
+    if [[ "${skipped}" -eq 1 ]]; then
+        UP_SERVICES=("${all[@]}")
+    fi
 }
 
 # Prereqs. Every action needs docker + the compose plugin; openssl mints the
@@ -742,9 +707,8 @@ else
     chmod 600 "${ENV_FILE}"
 fi
 
-# ARM_GPUS: `setup` refreshes it here (no build happens, so the probe uses
-# whatever transcode image already exists); `up` defers it until after
-# `compose build` so the probe runs against the freshly built image.
+# ARM_GPUS: `setup` refreshes it here; `up` defers the .env write until after
+# its active-work guard so a refused run leaves .env untouched.
 if [[ "${ACTION}" == "setup" ]]; then
     refresh_arm_gpus
 fi
@@ -783,10 +747,10 @@ else
     printf 'ARM_TRANSCODE_CAPABLE=%s\n' "${ARM_TRANSCODE_CAPABLE_VALUE}" >> "${ENV_FILE}"
 fi
 
-# The transcode image is built by `up`'s `compose build` like every other
-# service (the arm-transcode service has deploy.replicas:0: built, never run).
-# --ripper-only skips it explicitly below by naming the services to build/start
-# (everything except arm-transcode, see select_up_services).
+# The transcode images are built by `up`'s `compose build` like every other
+# service (the arm-transcode* services have deploy.replicas:0: built, never
+# run). select_up_services decides which of them to build: base always (except
+# --ripper-only), the intel/amd variants only for GPU vendors found on this host.
 
 # Prevent the host's udisks2/gvfs from auto-mounting optical drives ARM
 # wants to drive. Without this, post-rip `eject` from the ripper
@@ -840,10 +804,11 @@ ensure_udev_rule
 
 if [[ "${ACTION}" == "up" ]]; then
     # 1. Build first. A failed build aborts here (set -e) with the running
-    #    stack, its rippers and transcoders untouched.
+    #    stack, its rippers and transcoders untouched. The service list comes
+    #    from GPU detection (read-only; .env is written in step 3).
     select_up_services
-    if [[ "${RIPPER_ONLY}" -eq 1 ]]; then
-        echo "==> --ripper-only: building images (skipping the arm-transcode image)"
+    if [[ ${#UP_SERVICES[@]} -gt 0 ]]; then
+        echo "==> building images: ${UP_SERVICES[*]}"
         compose build "${UP_SERVICES[@]}"
     else
         echo "==> building images"
@@ -855,7 +820,7 @@ if [[ "${ACTION}" == "up" ]]; then
     #    beyond the built images.
     guard_running_spawned
 
-    # 3. GPU detection now that the transcode image exists for the probe.
+    # 3. Write the detected GPUs to .env as ARM_GPUS.
     refresh_arm_gpus
 
     # 4. Back up the running database before migrations can touch it.
@@ -864,9 +829,10 @@ if [[ "${ACTION}" == "up" ]]; then
     # 5. Only now remove backend-spawned rippers/transcoders.
     remove_spawned_containers
 
-    # 6. Start from the images built above (no --build).
+    # 6. Start from the images built above (no --build). An explicit service
+    #    list keeps `up` from building a skipped image that does not exist yet.
     echo "==> starting the stack"
-    if [[ "${RIPPER_ONLY}" -eq 1 ]]; then
+    if [[ ${#UP_SERVICES[@]} -gt 0 ]]; then
         compose up -d "${UP_SERVICES[@]}"
     else
         compose up -d

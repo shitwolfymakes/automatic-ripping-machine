@@ -2,7 +2,7 @@ import asyncio
 import contextlib
 import logging
 import subprocess
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -16,6 +16,7 @@ from arm_backend.config import effective_transcode_capable, settings
 from arm_backend.crash_recovery import sweep_in_flight_jobs
 from arm_backend.db import SessionLocal
 from arm_backend.gpu_probe import load_configured_gpus
+from arm_backend.gpu_probe_runner import GpuProbeRunner
 from arm_backend import image_cache
 from arm_backend.disk_refresh import DiskRefresher
 from arm_backend.drive_scanner import DriveScanner
@@ -31,6 +32,7 @@ from arm_backend.notifications.inbox_listener import InboxListener
 from arm_backend.ripper_manager import RipperManager, reconcile_enrolled_rippers
 from arm_backend.routers import (
     gpus as gpus_router,
+    encoders as encoders_router,
     auth,
     config as config_router,
     diagnostics,
@@ -56,7 +58,7 @@ from arm_backend.routers import (
     users as users_router,
 )
 from arm_backend.seeders import CONFIG_SINGLETON_ID, run_seeders
-from arm_backend.transcode_dispatcher import TranscodeDispatcher
+from arm_backend.transcode_dispatcher import TranscodeDispatcher, set_active_dispatcher
 from arm_backend.utils import ensure_roots, default_roots
 from arm_backend.ws import WSHub
 from arm_backend.ws.router import router as ws_router
@@ -92,10 +94,12 @@ async def _refresh_gpu_inventory(hub: WSHub) -> None:
     an already-populated table is left untouched. Deleting every row and
     restarting the backend is the deliberate re-seed path (the GPUs card
     documents it). The env descriptor comes from host-side detection at
-    install time (or is hand-written for remote transcode hosts); the
-    backend does not probe hardware. `load_configured_gpus` degrades to `[]`
-    on malformed input. Emits `transcode.hw_unavailable` when the inventory
-    ends up empty.
+    install time (or is hand-written for remote transcode hosts). Its
+    `encoder_kinds` are hints only: seeded rows start with no verified
+    encoders and `probed_at` NULL, and the boot probe pass
+    (`GpuProbeRunner.probe_unprobed`) verifies each device. `load_configured_gpus`
+    degrades to `[]` on malformed input. Emits `transcode.hw_unavailable` when
+    the inventory ends up empty.
     """
     now = datetime.now(UTC)
     async with SessionLocal() as session:
@@ -109,9 +113,10 @@ async def _refresh_gpu_inventory(hub: WSHub) -> None:
                 Gpu(
                     vendor=g.vendor,
                     device_path=g.device_path,
-                    encoder_kinds=g.encoder_kinds,
+                    encoder_kinds=[],
                     status=GpuStatus.AVAILABLE,
                     last_seen_at=now,
+                    probed_at=None,
                 )
             )
         if probed:
@@ -171,7 +176,7 @@ def _build_docker_client(docker_host: str = "", *, purpose: str = "transcode dis
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def _lifespan_services(app: FastAPI) -> AsyncIterator[None]:
     _run_migrations()
     await _run_seeders()
     # Rebuild the image-proxy disk-cache index from disk (LRU/TTL). Sync, fast,
@@ -259,6 +264,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.exception("startup orphaned-application sweep failed: %s", exc)
     dispatcher_task = asyncio.create_task(transcode_dispatcher.run())
     app.state.transcode_dispatcher = transcode_dispatcher
+    set_active_dispatcher(transcode_dispatcher)
+    # Per-device GPU probes: the boot pass removes orphaned probe containers
+    # and verifies every enabled row that was never probed or has no verified
+    # encoder, in the background (a no-op without a docker client); the
+    # /api/gpus re-probe endpoints schedule through the same runner.
+    gpu_probe_runner = GpuProbeRunner(settings, SessionLocal, transcode_dispatcher, app.state.ws_hub)
+    app.state.gpu_probe_runner = gpu_probe_runner
+    gpu_probe_runner.start_boot_pass()
 
     # Drive lifecycle Plan 3 — ripper manager (spec §3). Always the LOCAL
     # daemon and always its OWN client: the drives are plugged into this
@@ -323,32 +336,40 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     disk_refresher_task = asyncio.create_task(disk_refresher.run())
     app.state.disk_refresher = disk_refresher
 
-    try:
-        yield
-    finally:
+    async def _stop_thediscdb_refresh() -> None:
         thediscdb_refresh_task.cancel()
         try:
             await asyncio.wait_for(thediscdb_refresh_task, timeout=10.0)
-        except TimeoutError, asyncio.CancelledError:  # pragma: no cover — cancellation is the expected path
+        except TimeoutError, asyncio.CancelledError:  # pragma: no cover, cancellation is the expected path
             pass
+
+    async def _stop_disk_refresher() -> None:
         disk_refresher.stop()
         try:
             await asyncio.wait_for(disk_refresher_task, timeout=10.0)
         except TimeoutError, asyncio.CancelledError:
             disk_refresher_task.cancel()
+
+    async def _stop_log_tailer() -> None:
         log_tailer.stop()
         try:
             await asyncio.wait_for(log_tailer_task, timeout=10.0)
-        except asyncio.TimeoutError:  # pragma: no cover — only if the tailer hangs >10s on shutdown
+        except asyncio.TimeoutError:  # pragma: no cover, only if the tailer hangs >10s on shutdown
             log_tailer_task.cancel()
+
+    async def _stop_drive_scanner() -> None:
         drive_scanner_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await drive_scanner_task
+
+    async def _stop_notifications() -> None:
         notification_dispatcher.stop()
         try:
             await asyncio.wait_for(notification_task, timeout=10.0)
-        except asyncio.TimeoutError:  # pragma: no cover — only if the dispatcher hangs >10s on shutdown
+        except asyncio.TimeoutError:  # pragma: no cover, only if the dispatcher hangs >10s on shutdown
             notification_task.cancel()
+
+    async def _stop_transcode_dispatcher() -> None:
         # transcode_dispatcher/dispatcher_task are unconditionally set above
         # (the dispatcher always runs, docker or not).
         transcode_dispatcher.stop()
@@ -356,7 +377,40 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await asyncio.wait_for(dispatcher_task, timeout=10.0)
         except asyncio.TimeoutError:  # pragma: no cover, only if the dispatcher hangs >10s on shutdown
             dispatcher_task.cancel()
-        await app.state.dispatcher.aclose()
+
+    shutdown_steps: list[tuple[str, Callable[[], Awaitable[None]]]] = [
+        ("thediscdb refresh", _stop_thediscdb_refresh),
+        ("disk refresher", _stop_disk_refresher),
+        ("log tailer", _stop_log_tailer),
+        ("drive scanner", _stop_drive_scanner),
+        ("notification dispatcher", _stop_notifications),
+        # Cancels the boot pass and any re-probe, waiting briefly so each
+        # cancelled probe removes its container.
+        ("gpu probe runner", gpu_probe_runner.shutdown),
+        ("transcode dispatcher", _stop_transcode_dispatcher),
+        ("metadata dispatcher", app.state.dispatcher.aclose),
+    ]
+
+    try:
+        yield
+    finally:
+        # Each step runs whatever an earlier one raised.
+        for name, step in shutdown_steps:
+            try:
+                await step()
+            except Exception:
+                logger.exception("backend shutdown: stopping the %s failed", name)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # The active-dispatcher holder is cleared however startup or shutdown
+    # ends, so a stopped dispatcher never answers gpu_awaiting_probe.
+    try:
+        async with _lifespan_services(app):
+            yield
+    finally:
+        set_active_dispatcher(None)
 
 
 app = FastAPI(title="ARM v3 Backend", lifespan=lifespan)
@@ -372,6 +426,7 @@ app.include_router(transcode_presets.router)
 app.include_router(transcoder.router)
 app.include_router(transcodes.router)
 app.include_router(gpus_router.router)
+app.include_router(encoders_router.router)
 app.include_router(config_router.router)
 app.include_router(diagnostics.router)
 app.include_router(metadata_router.router)

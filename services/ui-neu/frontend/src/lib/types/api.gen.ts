@@ -1236,6 +1236,57 @@ export type DriveView = {
 };
 
 /**
+ * EncoderAvailabilityView
+ *
+ * One `arm_common.encoders.ENCODERS` catalog entry, with availability
+ * computed server-side from the live `gpus` inventory (GET /api/encoders).
+ *
+ * `group` buckets `preset`/`cpu`/`any` kinds by themselves and `gpu` kinds
+ * by vendor, so the transcode preset picker can render sections without
+ * re-deriving the grouping client-side. `available` is always true for
+ * `preset`/`cpu`/`any` (an `any_*` encoder falls back to CPU at dispatch
+ * time); for a vendor-pinned `gpu` encoder it reflects whether any enabled
+ * device's probe currently verifies that vendor/codec. `reason` explains
+ * an unavailable `gpu` entry, or an `any_*` entry that would currently run
+ * on the CPU for lack of a verified GPU; it is `None` otherwise.
+ */
+export type EncoderAvailabilityView = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Group
+     */
+    group: 'preset' | 'cpu' | 'any' | 'qsv' | 'nvenc' | 'vaapi';
+    /**
+     * Engine
+     */
+    engine: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    vendor: GpuVendor | null;
+    /**
+     * Codec
+     */
+    codec: string | null;
+    /**
+     * Available
+     */
+    available: boolean;
+    /**
+     * Reason
+     */
+    reason: string | null;
+};
+
+/**
  * EventTypeInfo
  */
 export type EventTypeInfo = {
@@ -1389,6 +1440,32 @@ export type FixPermsResponse = {
 };
 
 /**
+ * GpuProbeAllScheduled
+ *
+ * 202 body for a re-probe of every enabled, idle row: the ids whose
+ * background probe was scheduled.
+ */
+export type GpuProbeAllScheduled = {
+    /**
+     * Scheduled
+     */
+    scheduled: Array<string>;
+};
+
+/**
+ * GpuProbeScheduled
+ *
+ * 202 body for a single-row re-probe: the probe runs in the background
+ * and the row updates when `gpu.probed` arrives on `transcode.events`.
+ */
+export type GpuProbeScheduled = {
+    /**
+     * Scheduled
+     */
+    scheduled: boolean;
+};
+
+/**
  * GpuStatus
  */
 export type GpuStatus = 'available' | 'busy';
@@ -1443,6 +1520,14 @@ export type GpuView = {
      * Last Seen At
      */
     last_seen_at?: string | null;
+    /**
+     * Probed At
+     */
+    probed_at?: string | null;
+    /**
+     * Probe Error
+     */
+    probe_error?: string | null;
 };
 
 /**
@@ -1525,11 +1610,6 @@ export type HeldJobView = {
      */
     paused: boolean;
 };
-
-/**
- * HwPreference
- */
-export type HwPreference = 'cpu_only' | 'any';
 
 /**
  * IdentificationMode
@@ -2900,7 +2980,7 @@ export type ResolveFanOutOutcomeView = {
     /**
      * Skipped Reason
      */
-    skipped_reason?: 'collisions' | 'template' | 'session_missing' | 'no_tracks' | 'no_outputs' | 'media_mismatch' | 'transcode_disabled' | null;
+    skipped_reason?: 'collisions' | 'template' | 'session_missing' | 'no_tracks' | 'no_outputs' | 'media_mismatch' | 'transcode_disabled' | 'encoder_unavailable' | null;
     /**
      * Error Detail
      */
@@ -3870,8 +3950,10 @@ export type TranscodePresetCreateRequest = {
         [key: string]: unknown;
     } | null;
     container: ContainerFormat;
-    codec?: VideoCodec | null;
-    hw_preference?: HwPreference | null;
+    /**
+     * Encoder
+     */
+    encoder?: string;
     /**
      * Extra Args
      */
@@ -3898,8 +3980,10 @@ export type TranscodePresetUpdateRequest = {
         [key: string]: unknown;
     } | null;
     container?: ContainerFormat | null;
-    codec?: VideoCodec | null;
-    hw_preference?: HwPreference | null;
+    /**
+     * Encoder
+     */
+    encoder?: string | null;
     /**
      * Extra Args
      */
@@ -3935,8 +4019,10 @@ export type TranscodePresetView = {
         [key: string]: unknown;
     } | null;
     container: ContainerFormat;
-    codec: VideoCodec | null;
-    hw_preference: HwPreference | null;
+    /**
+     * Encoder
+     */
+    encoder: string;
     /**
      * Extra Args
      */
@@ -4201,11 +4287,6 @@ export type ValidationError = {
         [key: string]: unknown;
     };
 };
-
-/**
- * VideoCodec
- */
-export type VideoCodec = 'h264' | 'h265' | 'av1';
 
 export type HealthApiHealthGetData = {
     body?: never;
@@ -6945,6 +7026,106 @@ export type UpdateGpuApiGpusGpuIdPatchResponses = {
 };
 
 export type UpdateGpuApiGpusGpuIdPatchResponse = UpdateGpuApiGpusGpuIdPatchResponses[keyof UpdateGpuApiGpusGpuIdPatchResponses];
+
+export type ProbeAllGpusApiGpusProbePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/gpus/probe';
+};
+
+export type ProbeAllGpusApiGpusProbePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProbeAllGpusApiGpusProbePostError = ProbeAllGpusApiGpusProbePostErrors[keyof ProbeAllGpusApiGpusProbePostErrors];
+
+export type ProbeAllGpusApiGpusProbePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: GpuProbeAllScheduled;
+};
+
+export type ProbeAllGpusApiGpusProbePostResponse = ProbeAllGpusApiGpusProbePostResponses[keyof ProbeAllGpusApiGpusProbePostResponses];
+
+export type ProbeGpuApiGpusGpuIdProbePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Gpu Id
+         */
+        gpu_id: string;
+    };
+    query?: never;
+    url: '/api/gpus/{gpu_id}/probe';
+};
+
+export type ProbeGpuApiGpusGpuIdProbePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProbeGpuApiGpusGpuIdProbePostError = ProbeGpuApiGpusGpuIdProbePostErrors[keyof ProbeGpuApiGpusGpuIdProbePostErrors];
+
+export type ProbeGpuApiGpusGpuIdProbePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: GpuProbeScheduled;
+};
+
+export type ProbeGpuApiGpusGpuIdProbePostResponse = ProbeGpuApiGpusGpuIdProbePostResponses[keyof ProbeGpuApiGpusGpuIdProbePostResponses];
+
+export type ListEncodersApiEncodersGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/encoders';
+};
+
+export type ListEncodersApiEncodersGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListEncodersApiEncodersGetError = ListEncodersApiEncodersGetErrors[keyof ListEncodersApiEncodersGetErrors];
+
+export type ListEncodersApiEncodersGetResponses = {
+    /**
+     * Response List Encoders Api Encoders Get
+     *
+     * Successful Response
+     */
+    200: Array<EncoderAvailabilityView>;
+};
+
+export type ListEncodersApiEncodersGetResponse = ListEncodersApiEncodersGetResponses[keyof ListEncodersApiEncodersGetResponses];
 
 export type GetConfigApiConfigGetData = {
     body?: never;

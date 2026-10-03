@@ -22,10 +22,14 @@ vi.mock('$lib/api/transcodePresets', () => ({
 	updateTranscodePreset: vi.fn(),
 	deleteTranscodePreset: vi.fn(),
 }));
+// The preset form's encoders store follows transcode.events; keep jsdom off a real socket.
+vi.mock('$lib/api/ws', () => ({
+	wsClient: { start: vi.fn(), subscribe: vi.fn(() => () => {}) },
+}));
 
 import { fetchSessions } from '$lib/api/sessions';
 import { fetchRipPresets, createRipPreset } from '$lib/api/ripPresets';
-import { fetchTranscodePresets } from '$lib/api/transcodePresets';
+import { fetchTranscodePresets, createTranscodePreset } from '$lib/api/transcodePresets';
 import { deleteSession, cloneSession } from '$lib/api/sessions';
 import SessionsArea from '../SessionsArea.svelte';
 import { setTranscoderEnabled } from '$lib/stores/config';
@@ -67,8 +71,7 @@ const makeTranscode = (id = 't1', name = 'tc t1') => ({
 	preset_ref: null,
 	preset_json: null,
 	container: 'mkv' as const,
-	codec: 'h265' as const,
-	hw_preference: 'any' as const,
+	encoder: 'any_h265',
 	extra_args: null,
 	created_by_user_id: null,
 	created_at: null,
@@ -103,6 +106,19 @@ it('Transcode presets tab shows the transcode presets section', async () => {
 	await screen.findByText(/ses /i);
 	await fireEvent.click(screen.getByRole('tab', { name: /transcode presets/i }));
 	expect(screen.getByRole('heading', { name: /transcode presets/i })).toBeInTheDocument();
+});
+
+it('cloning a transcode preset carries its encoder', async () => {
+	vi.mocked(createTranscodePreset).mockResolvedValue(makeTranscode('t2', 'tc t1 (copy)') as any);
+	renderComponent(SessionsArea);
+	await screen.findByText(/ses /i);
+	await fireEvent.click(screen.getByRole('tab', { name: /transcode presets/i }));
+	await fireEvent.click(screen.getByRole('button', { name: /^clone$/i }));
+	await waitFor(() =>
+		expect(createTranscodePreset).toHaveBeenCalledWith(
+			expect.objectContaining({ name: 'tc t1 (copy)', encoder: 'any_h265' })
+		)
+	);
 });
 
 it('tab switches back from a preset tab to sessions', async () => {

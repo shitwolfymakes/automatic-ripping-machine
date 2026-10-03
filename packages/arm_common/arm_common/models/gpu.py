@@ -32,5 +32,10 @@ class Gpu(SQLModel, table=True):
         sa_column=Column(String, ForeignKey("transcode_tasks.id", ondelete="SET NULL"), nullable=True)
     )
     last_seen_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
+    # Per-device encoder probe (encoder-first presets). NULL probed_at means the
+    # row was never probed and can never take GPU work; encoder_kinds then holds
+    # only what the last successful probe verified.
+    probed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    probe_error: str | None = Field(default=None, sa_column=Column(String, nullable=True))
     created_at: datetime | None = Field(sa_column=created_at_column())
     updated_at: datetime | None = Field(sa_column=updated_at_column())

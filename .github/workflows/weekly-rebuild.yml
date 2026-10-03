@@ -11,8 +11,9 @@
 # Strategy:
 #   1. Find the most recent stable `v3.*` tag (excludes pre-releases like -alpha-1).
 #   2. Check that tag out.
-#   3. Rebuild every service Dockerfile from scratch (no Docker layer cache —
-#      that's the whole point: pull fresh base + apt indices).
+#   3. Rebuild every service image (and each arm-transcode variant target,
+#      tagged <tag>-intel / <tag>-amd) from scratch (no Docker layer cache:
+#      that's the whole point, pull fresh base + apt indices).
 #   4. Push to the SAME tag only.
 #   5. Re-sign + re-attest SBOM. Sigstore accepts multiple sigs per image.
 #
@@ -72,22 +73,56 @@ jobs:
           fi
 
   rebuild:
-    name: rebuild (${{ matrix.service }})
+    name: rebuild (${{ matrix.service }}${{ matrix.suffix }})
     needs: resolve-tag
     if: needs.resolve-tag.outputs.skip != 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        service: [backend, ripper, transcode, ui]
+        # Same legs as release.yml: `target` picks a Dockerfile stage (empty:
+        # the file's last stage), `suffix` is appended to the tag, so the
+        # transcode variants :<tag>-intel / :<tag>-amd are refreshed too.
+        include:
+          - {service: backend, target: "", suffix: ""}
+          - {service: ripper, target: "", suffix: ""}
+          - {service: transcode, target: base, suffix: ""}
+          - {service: transcode, target: intel, suffix: "-intel"}
+          - {service: transcode, target: amd, suffix: "-amd"}
+          - {service: ui, target: "", suffix: ""}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ needs.resolve-tag.outputs.tag }}
 
+      # A stable tag cut before the transcode Dockerfile was split into
+      # targets has no such stages. Its base leg then builds the file's last
+      # stage (that tag's only runtime image); its variant legs have no image
+      # to refresh and are skipped instead of failing. An empty target always
+      # builds the last stage.
+      - name: Resolve the Dockerfile target at this tag
+        id: target
+        env:
+          TARGET: ${{ matrix.target }}
+          DOCKERFILE: services/${{ matrix.service }}/Dockerfile
+        run: |
+          if [[ -z "$TARGET" ]] || grep -qiE "^FROM .+ AS ${TARGET}\$" "$DOCKERFILE"; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          elif [[ "$TARGET" == "base" ]]; then
+            echo "::notice::$DOCKERFILE at this tag has no 'base' stage; building its last stage"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "target=" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::$DOCKERFILE at this tag has no '$TARGET' stage; skipping"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+        if: steps.target.outputs.build == 'true'
 
       - name: Verify required repo configuration
+        if: steps.target.outputs.build == 'true'
         env:
           NS: ${{ secrets.DOCKERHUB_NAMESPACE }}
           USER: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -103,15 +138,20 @@ jobs:
           fi
 
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        if: steps.target.outputs.build == 'true'
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Compute image tags
         id: meta
+        if: steps.target.outputs.build == 'true'
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}
+          flavor: |
+            latest=false
+            suffix=${{ matrix.suffix }}
           tags: |
             type=raw,value=${{ needs.resolve-tag.outputs.tag }}
 
@@ -119,10 +159,12 @@ jobs:
       # the cache and pull fresh base layers + apt indices.
       - name: Build & push (no cache)
         id: build
+        if: steps.target.outputs.build == 'true'
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: services/${{ matrix.service }}/Dockerfile
+          target: ${{ steps.target.outputs.target }}
           push: true
           no-cache: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -136,28 +178,32 @@ jobs:
             makemkv_mirror_password=${{ secrets.MAKEMKV_MIRROR_PASSWORD }}
 
       - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
+        if: steps.target.outputs.build == 'true'
         with:
           cosign-release: 'v2.4.1'
 
       - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        if: steps.target.outputs.build == 'true'
         with:
           image: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}@${{ steps.build.outputs.digest }}
           format: spdx-json
-          output-file: /tmp/sbom-${{ matrix.service }}.spdx.json
+          output-file: /tmp/sbom-${{ matrix.service }}${{ matrix.suffix }}.spdx.json
           upload-artifact: false
 
       - name: Sign image (cosign keyless)
+        if: steps.target.outputs.build == 'true'
         env:
           COSIGN_EXPERIMENTAL: '1'
           IMAGE: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}@${{ steps.build.outputs.digest }}
         run: cosign sign --yes "$IMAGE"
 
       - name: Attest SBOM (cosign keyless)
+        if: steps.target.outputs.build == 'true'
         env:
           COSIGN_EXPERIMENTAL: '1'
           IMAGE: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}@${{ steps.build.outputs.digest }}
         run: |
           cosign attest --yes \
-            --predicate /tmp/sbom-${{ matrix.service }}.spdx.json \
+            --predicate /tmp/sbom-${{ matrix.service }}${{ matrix.suffix }}.spdx.json \
             --type spdxjson \
             "$IMAGE"

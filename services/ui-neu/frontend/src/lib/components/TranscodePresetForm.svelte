@@ -2,19 +2,35 @@
 	// Ported from services/ui/src/views/TranscodePresetForm.vue, structured to
 	// match the sibling RipPresetForm.svelte (T2a). Inline (no-route) form
 	// driven by props. media_type is immutable on edit; built-in presets are
-	// name-only; nullable fields submit `value || null`. Adds a `codec` select
-	// (beyond the Vue form, per the T2b spec). preset_json is not exposed.
+	// name-only; nullable fields submit `value || null`. `encoder` is one
+	// arm_common.encoders catalog id. preset_json is not exposed.
 	import { onMount } from 'svelte';
 	import { createTranscodePreset, updateTranscodePreset } from '$lib/api/transcodePresets';
-	import { fetchGpus } from '$lib/api/gpus';
+	import { encodersStore, PRESET_ENCODER_ID } from '$lib/stores/encoders.svelte';
 	import type {
 		ContainerFormat,
-		HwPreference,
+		EncoderAvailabilityView,
 		MediaType,
 		TranscodePresetView,
-		TranscodeTool,
-		VideoCodec
+		TranscodeTool
 	} from '$lib/types/api.gen';
+
+	// Encoder optgroup order and headings; a group is only rendered when the
+	// catalog response has an entry for it.
+	const GROUP_ORDER: EncoderAvailabilityView['group'][] = ['preset', 'cpu', 'any', 'qsv', 'nvenc', 'vaapi'];
+	const GROUP_LABELS: Record<EncoderAvailabilityView['group'], string> = {
+		preset: "HandBrake preset's own",
+		cpu: 'CPU',
+		any: 'Any GPU',
+		qsv: 'Intel QSV',
+		nvenc: 'NVIDIA NVENC',
+		vaapi: 'AMD VAAPI'
+	};
+
+	// A HandBrake preset name that names a hardware encoder (a common
+	// convention in preset libraries) does nothing on its own. HandBrake
+	// only attaches a GPU when the Encoder field above asks for one.
+	const HARDWARE_HINT_PATTERN = /QSV|NVENC|VCN|VCE/i;
 
 	let {
 		preset = null,
@@ -34,30 +50,51 @@
 	let tool = $state<TranscodeTool>(preset?.tool ?? 'handbrake');
 	let presetRef = $state(preset?.preset_ref ?? '');
 	let container = $state<ContainerFormat>(preset?.container ?? 'mkv');
-	// '' represents "no codec" (null). VideoCodec never includes ''.
-	let codec = $state<VideoCodec | ''>(preset?.codec ?? '');
-	let hwPreference = $state<HwPreference | ''>(preset?.hw_preference ?? '');
+	let encoder = $state<string>(preset?.encoder ?? PRESET_ENCODER_ID);
 
-	// Live inventory context (G-30 awareness): what silicon "Any" will actually
-	// use, shown where hardware intent is expressed. Soft-fails to no hint.
-	let gpuHint = $state<string | null>(null);
-	onMount(async () => {
-		try {
-			const gpus = await fetchGpus();
-			if (gpus.length === 0) {
-				gpuHint = 'This host has no GPUs configured; hardware presets fall back to CPU.';
-				return;
-			}
-			const parts = gpus.map((g) => {
-				const dev = g.device_path.split('/').pop() ?? g.device_path;
-				const base = `${g.vendor.toUpperCase()} ${dev} (${g.encoder_kinds.join(', ')})`;
-				return g.enabled ? base : `${base} disabled`;
-			});
-			gpuHint = `This host: ${parts.join(' + ')}`;
-		} catch {
-			gpuHint = null;
-		}
+	// Availability-aware encoder catalog (GET /api/encoders, cached by the
+	// shared store), in catalog order. Refreshed on open: availability moves
+	// with GPU probes and the enabled switches.
+	onMount(() => {
+		encodersStore.refresh();
 	});
+	let encoders = $derived(encodersStore.list);
+	let encodersLoading = $derived(encodersStore.loading);
+	let encodersError = $derived(encodersStore.error);
+
+	let groupedEncoders = $derived(
+		(() => {
+			const groups = new Map<string, EncoderAvailabilityView[]>();
+			for (const enc of encoders) {
+				const list = groups.get(enc.group);
+				if (list) list.push(enc);
+				else groups.set(enc.group, [enc]);
+			}
+			return groups;
+		})()
+	);
+
+	// abcde/none presets can't carry a codec encoder (only handbrake presets
+	// can); force it back to the tool's own encoder so saving never 422s.
+	let encoderLocked = $derived(tool === 'abcde' || tool === 'none');
+	$effect(() => {
+		if (encoderLocked && !isBuiltin) encoder = PRESET_ENCODER_ID;
+	});
+
+	let selectedEncoder = $derived(encoders.find((e) => e.id === encoder));
+	// vaapi_* encoders run over ffmpeg directly; the HandBrake preset name
+	// plays no part, and extra_args are ffmpeg CLI flags, not HandBrake ones.
+	let usesFfmpegVaapi = $derived(selectedEncoder?.engine === 'ffmpeg_vaapi');
+	// An any_* encoder may resolve to an AMD device at claim time, which runs
+	// ffmpeg instead of HandBrake.
+	let anyGpuSelected = $derived(selectedEncoder?.kind === 'any');
+
+	let encoderHint = $derived(
+		encoder === PRESET_ENCODER_ID && HARDWARE_HINT_PATTERN.test(presetRef)
+			? 'This HandBrake preset uses a hardware encoder; choose the matching encoder above or ARM will not attach a GPU.'
+			: null
+	);
+
 	let extraArgs = $state(preset?.extra_args ?? '');
 
 	let submitting = $state(false);
@@ -80,8 +117,7 @@
 					tool,
 					preset_ref: presetRef || null,
 					container,
-					codec: codec || null,
-					hw_preference: hwPreference || null,
+					encoder,
 					extra_args: extraArgs || null
 				});
 			} else {
@@ -91,8 +127,7 @@
 					tool,
 					preset_ref: presetRef || null,
 					container,
-					codec: codec || null,
-					hw_preference: hwPreference || null,
+					encoder,
 					extra_args: extraArgs || null
 				});
 			}
@@ -178,6 +213,9 @@
 			bind:value={presetRef}
 			disabled={isBuiltin}
 		/>
+		{#if usesFfmpegVaapi}
+			<p class="field-help" data-testid="tp-preset-ref-note">Not used by this encoder.</p>
+		{/if}
 	</label>
 
 	<label class="field">
@@ -200,39 +238,49 @@
 	</label>
 
 	<label class="field">
-		<span class="field-label">Codec</span>
+		<span class="field-label">Encoder</span>
 		<select
-			id="tp-codec"
-			data-testid="tp-codec"
-			bind:value={codec}
-			disabled={isBuiltin}
+			id="tp-encoder"
+			data-testid="tp-encoder"
+			bind:value={encoder}
+			disabled={isBuiltin || encoderLocked || encodersLoading}
 		>
-			<option value="">CPU (preset's own encoder)</option>
-			<option value="h264">H.264</option>
-			<option value="h265">H.265</option>
-			<option value="av1">AV1</option>
+			{#if encodersLoading}
+				<option value={encoder} disabled>Loading encoders...</option>
+			{:else if encoders.length === 0}
+				<option value={encoder}>{encoder}</option>
+			{:else}
+				{#each GROUP_ORDER as g (g)}
+					{#if groupedEncoders.get(g)?.length}
+						<optgroup label={GROUP_LABELS[g]}>
+							{#each groupedEncoders.get(g) ?? [] as enc (enc.id)}
+								<option value={enc.id} disabled={!enc.available} title={enc.reason ?? undefined}>
+									{enc.label}{enc.reason ? ` (${enc.reason})` : ''}
+								</option>
+							{/each}
+						</optgroup>
+					{/if}
+				{/each}
+			{/if}
 		</select>
-	</label>
-
-	<label class="field">
-		<span class="field-label">Hardware preference</span>
-		<select
-			id="tp-hw-preference"
-			data-testid="tp-hw-preference"
-			bind:value={hwPreference}
-			disabled={isBuiltin}
-		>
-			<option value="">(unset)</option>
-			<option value="cpu_only">CPU only</option>
-			<option value="any">Any</option>
-		</select>
-		{#if gpuHint}
-			<span class="transcode-preset-form-gpu-hint" data-testid="tp-gpu-hint">{gpuHint}</span>
+		{#if encodersError}
+			<p class="field-error" data-testid="tp-encoder-error">
+				Could not load encoders; the current encoder is kept.
+			</p>
+		{/if}
+		{#if anyGpuSelected}
+			<p class="field-help" data-testid="tp-encoder-any-note">
+				HandBrake preset settings (scaling, filters, audio) apply on CPU, NVENC and QSV, but not
+				when the job runs on an AMD (VAAPI) device.
+			</p>
+		{/if}
+		{#if encoderHint}
+			<p class="field-help" data-testid="tp-encoder-hint">{encoderHint}</p>
 		{/if}
 	</label>
 
 	<label class="field">
-		<span class="field-label">Extra args</span>
+		<span class="field-label">{usesFfmpegVaapi ? 'ffmpeg arguments' : 'Extra args'}</span>
 		<input
 			id="tp-extra-args"
 			data-testid="tp-extra-args"
@@ -267,11 +315,4 @@
 <style>
 	.transcode-preset-form-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-text); }
 	.transcode-preset-form-actions { display: flex; justify-content: flex-end; gap: 0.75rem; padding-top: 0.5rem; }
-
-	.transcode-preset-form-gpu-hint {
-		display: block;
-		margin-top: 0.25rem;
-		font-size: 0.75rem;
-		color: var(--color-text-muted);
-	}
 </style>

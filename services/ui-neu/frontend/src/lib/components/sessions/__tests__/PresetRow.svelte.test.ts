@@ -1,6 +1,26 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import PresetRow from '../PresetRow.svelte';
+
+// PresetRow labels a transcode preset's encoder id via the shared
+// encoders store (GET /api/encoders, cached); stub the fetch it triggers
+// on mount so the "Any GPU H.265" label resolves deterministically.
+vi.mock('$lib/api/encoders', () => ({
+	fetchEncoders: () =>
+		Promise.resolve([
+			{
+				id: 'any_h265',
+				label: 'Any GPU H.265',
+				group: 'any',
+				engine: 'handbrake',
+				kind: 'any',
+				vendor: null,
+				codec: 'h265',
+				available: true,
+				reason: null
+			}
+		])
+}));
 
 const ripPreset = (over = {}) => ({
 	id: 'r1',
@@ -26,8 +46,7 @@ const transcodePreset = (over = {}) => ({
 	preset_ref: null,
 	preset_json: null,
 	container: 'mkv' as const,
-	codec: 'h265' as const,
-	hw_preference: 'any' as const,
+	encoder: 'any_h265',
 	extra_args: null,
 	created_by_user_id: null,
 	created_at: null,
@@ -246,23 +265,25 @@ describe('PresetRow — transcode preset', () => {
 		expect(screen.getByText('t1')).toBeInTheDocument();
 	});
 
-	it('renders transcode summary: tool · container · codec · hw_preference', () => {
+	it('renders transcode summary: tool · container · encoder', async () => {
 		renderComponent(PresetRow, {
 			kind: 'transcode',
-			preset: transcodePreset({ tool: 'handbrake', container: 'mkv', codec: 'h265', hw_preference: 'any' }),
+			preset: transcodePreset({ tool: 'handbrake', container: 'mkv', encoder: 'any_h265' }),
 			usedBy: 0,
 			onview: vi.fn(),
 			onedit: vi.fn(),
 			onclone: vi.fn(),
 			ondelete: vi.fn(),
 		});
-		expect(screen.getByText(/handbrake.*mkv.*h\.?265.*any/i)).toBeInTheDocument();
+		await waitFor(() =>
+			expect(screen.getByText(/handbrake.*mkv.*any gpu h\.265/i)).toBeInTheDocument()
+		);
 	});
 
-	it('omits the codec and hardware parts when the preset has none', () => {
+	it('omits the encoder part when the preset uses the tool\'s own encoder', () => {
 		renderComponent(PresetRow, {
 			kind: 'transcode',
-			preset: transcodePreset({ codec: null, hw_preference: null }),
+			preset: transcodePreset({ encoder: 'preset' }),
 			usedBy: 0,
 			onview: vi.fn(),
 			onedit: vi.fn(),

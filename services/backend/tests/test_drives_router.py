@@ -23,7 +23,6 @@ from arm_common import (  # noqa: E402
     DriveLifecycle,
     DriveMode,
     DriveStatus,
-    HwPreference,
     IdentificationMode,
     Job,
     JobStatus,
@@ -87,7 +86,7 @@ def _seed(db: FakeSession) -> None:
             is_builtin=True,
             tool=TranscodeTool.HANDBRAKE,
             container=ContainerFormat.MKV,
-            hw_preference=HwPreference.CPU_ONLY,
+            encoder="preset",
         )
     ]
     db.rows["sessions"] = [

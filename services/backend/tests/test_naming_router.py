@@ -19,7 +19,6 @@ from arm_common import (  # noqa: E402
     Config,
     Drive,
     ContainerFormat,
-    HwPreference,
     Job,
     MediaType,
     Session,
@@ -267,7 +266,7 @@ def test_job_naming_preview_no_session_409(signing_key: bytes) -> None:
 def test_job_naming_preview_with_transcode_preset(signing_key: bytes) -> None:
     """When the session references a transcode preset, the preset is resolved and
     {transcode_slug}/{ext} tokens are available in the template."""
-    from arm_common import ContainerFormat, HwPreference, TranscodePreset, TranscodeTool
+    from arm_common import ContainerFormat, TranscodePreset, TranscodeTool
 
     db = FakeSession()
     _seed(db)
@@ -280,7 +279,7 @@ def test_job_naming_preview_with_transcode_preset(signing_key: bytes) -> None:
             is_builtin=True,
             tool=TranscodeTool.HANDBRAKE,
             container=ContainerFormat.MKV,
-            hw_preference=HwPreference.CPU_ONLY,
+            encoder="preset",
         )
     ]
     db.rows["sessions"] = [
@@ -380,7 +379,7 @@ def test_naming_preview_split_and_job_fields(signing_key: bytes) -> None:
             is_builtin=True,
             tool=TranscodeTool.HANDBRAKE,
             container=ContainerFormat.MKV,
-            hw_preference=HwPreference.CPU_ONLY,
+            encoder="preset",
         )
     ]
     db.rows["sessions"] = [
@@ -454,7 +453,7 @@ def test_naming_preview_flat_template(signing_key: bytes) -> None:
             is_builtin=True,
             tool=TranscodeTool.HANDBRAKE,
             container=ContainerFormat.MKV,
-            hw_preference=HwPreference.CPU_ONLY,
+            encoder="preset",
         )
     ]
     db.rows["sessions"] = [

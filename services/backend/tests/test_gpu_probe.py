@@ -16,7 +16,7 @@ import json  # noqa: E402
 
 import pytest  # noqa: E402
 
-from arm_backend.gpu_probe import _DEFAULT_ENCODER_KINDS, load_configured_gpus  # noqa: E402
+from arm_backend.gpu_probe import load_configured_gpus  # noqa: E402
 from arm_common.enums import GpuVendor  # noqa: E402
 
 
@@ -65,18 +65,19 @@ def test_mixed_vendors_all_parsed() -> None:
     assert [g.vendor for g in gpus] == [GpuVendor.VAAPI, GpuVendor.NVENC, GpuVendor.QSV]
 
 
-def test_missing_encoder_kinds_defaults() -> None:
+def test_missing_encoder_kinds_hint_is_empty() -> None:
+    # encoder_kinds is only a hint now (the backend probes each device), so an
+    # absent hint claims nothing rather than defaulting to h264 + h265.
     raw = json.dumps([{"vendor": "nvenc", "device_path": "nvidia://0"}])
     gpus = load_configured_gpus(raw)
-    assert gpus[0].encoder_kinds == _DEFAULT_ENCODER_KINDS
-    assert gpus[0].encoder_kinds is not _DEFAULT_ENCODER_KINDS  # fresh copy, not the shared constant
+    assert gpus[0].encoder_kinds == []
 
 
 @pytest.mark.parametrize("bad_kinds", [[], "h264", [1, 2], ["h264", 5]])
-def test_malformed_encoder_kinds_falls_back_to_default(bad_kinds: object) -> None:
+def test_malformed_encoder_kinds_hint_is_empty(bad_kinds: object) -> None:
     raw = json.dumps([{"vendor": "vaapi", "device_path": "/dev/dri/renderD128", "encoder_kinds": bad_kinds}])
     gpus = load_configured_gpus(raw)
-    assert gpus[0].encoder_kinds == _DEFAULT_ENCODER_KINDS
+    assert gpus[0].encoder_kinds == []
 
 
 def test_non_object_entry_is_skipped() -> None:

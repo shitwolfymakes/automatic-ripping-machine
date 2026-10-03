@@ -35,7 +35,6 @@ from arm_common import (  # noqa: E402
     Drive,
     DriveLifecycle,
     DriveStatus,
-    HwPreference,
     Job,
     JobStatus,
     MediaType,
@@ -1564,7 +1563,7 @@ def _seed_parked_session(db: FakeSession, *, session_exists: bool = True) -> Non
             is_builtin=True,
             tool=TranscodeTool.HANDBRAKE,
             container=ContainerFormat.MKV,
-            hw_preference=HwPreference.CPU_ONLY,
+            encoder="preset",
         )
     ]
     db.rows["sessions"] = (

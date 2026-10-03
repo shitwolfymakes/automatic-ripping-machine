@@ -32,12 +32,15 @@ from arm_common.schemas import (
     TranscodePresetView,
     WSEnvelope,
 )
-from arm_common.enums import TranscodeTool
+from arm_common.enums import GpuVendor, TranscodeTool
 from arm_common.fileops import atomic_output, transcode_none
 
 from arm_transcode.api_client import BackendClient
 from arm_transcode.config import TranscoderConfig
-from arm_transcode.encoder_probe import probe_encoders
+from arm_transcode.device_probe import ProbeSetupError, probe_device
+from arm_transcode.engines import selected_encoder
+from arm_transcode.engines.ffmpeg_vaapi import transcode_ffmpeg_vaapi
+from arm_transcode.engines.handbrake_engine import encoder_args as handbrake_encoder_args
 from arm_transcode.ffmpeg_audio import transcode_audio
 from arm_transcode.handbrake import transcode_handbrake
 from arm_transcode.heartbeat import HeartbeatPump, ProgressState
@@ -110,6 +113,28 @@ async def _run_encoder(
         state.pct = 100
         return size
 
+    spec = selected_encoder()
+    if tool == TranscodeTool.HANDBRAKE and spec is not None and spec.engine == "ffmpeg_vaapi":
+        # `tool` only equals HANDBRAKE when `preset` produced it (see `run()`
+        # above), so `preset` is never None on this branch.
+        assert preset is not None
+        device = os.environ.get("ARM_GPU_DEVICE")
+        if not device:
+            raise RuntimeError("ffmpeg_vaapi encoder requires ARM_GPU_DEVICE")
+        with atomic_output(final_output) as tmp:
+            size = await transcode_ffmpeg_vaapi(
+                input_path=raw_input,
+                output_path=tmp,
+                spec=spec,
+                device=device,
+                container=preset.container,
+                extra_args=preset.extra_args,
+                duration_seconds=duration_seconds,
+                progress_callback=_on_progress,
+            )
+        state.pct = 100
+        return size
+
     if preset is None or preset.preset_ref is None:
         raise RuntimeError(f"transcode tool={tool.value} requires a preset_ref")
 
@@ -120,6 +145,7 @@ async def _run_encoder(
                 output_path=tmp,
                 preset_ref=preset.preset_ref,
                 extra_args=preset.extra_args,
+                encoder_args=handbrake_encoder_args(selected_encoder()),
                 progress_callback=_on_progress,
             )
         state.pct = 100
@@ -235,7 +261,32 @@ async def run() -> int:
 
 def main() -> int:
     if "--probe-encoders" in sys.argv[1:]:
-        print(json.dumps(probe_encoders(), separators=(",", ":")))
+        # Deprecated compatibility mode. The install-time HandBrakeCLI --help
+        # scrape this used to run is gone; an installer or drill script that
+        # still invokes this flag gets an empty result rather than a crash.
+        # The backend now treats install-time encoder lists as hints only and
+        # probes each GPU device for real via --probe-device, so an empty
+        # {} here is a truthful "nothing probed", not an over-claim.
+        print("--probe-encoders is deprecated; the backend probes each GPU with --probe-device", file=sys.stderr)
+        print(json.dumps({}, separators=(",", ":")))
+        return 0
+    if "--probe-device" in sys.argv[1:]:
+        vendor, device = os.environ.get("ARM_GPU_VENDOR"), os.environ.get("ARM_GPU_DEVICE")
+        if not vendor or not device:
+            print("--probe-device needs ARM_GPU_VENDOR and ARM_GPU_DEVICE", file=sys.stderr)
+            return 2
+        try:
+            gpu_vendor = GpuVendor(vendor)
+        except ValueError:
+            valid = ", ".join(v.value for v in GpuVendor)
+            print(f"--probe-device: unknown ARM_GPU_VENDOR={vendor!r} (valid: {valid})", file=sys.stderr)
+            return 2
+        try:
+            result = probe_device(gpu_vendor, device)
+        except ProbeSetupError as exc:
+            print(str(exc), file=sys.stderr)
+            return 3
+        print(json.dumps(result, separators=(",", ":")))
         return 0
     return asyncio.run(run())
 

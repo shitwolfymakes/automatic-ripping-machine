@@ -4763,6 +4763,168 @@
         }
       }
     },
+    "/api/gpus/probe": {
+      "post": {
+        "tags": [
+          "gpus"
+        ],
+        "summary": "Probe All Gpus",
+        "description": "Re-probe every enabled row that isn't running a transcode. Rows already\nbeing probed are left to that probe and not listed.",
+        "operationId": "probe_all_gpus_api_gpus_probe_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GpuProbeAllScheduled"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/gpus/{gpu_id}/probe": {
+      "post": {
+        "tags": [
+          "gpus"
+        ],
+        "summary": "Probe Gpu",
+        "description": "Re-probe one row (enabled or not: a disabled row may be re-probed\nbefore an operator turns it back on).",
+        "operationId": "probe_gpu_api_gpus__gpu_id__probe_post",
+        "parameters": [
+          {
+            "name": "gpu_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Gpu Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GpuProbeScheduled"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/encoders": {
+      "get": {
+        "tags": [
+          "encoders"
+        ],
+        "summary": "List Encoders",
+        "operationId": "list_encoders_api_encoders_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EncoderAvailabilityView"
+                  },
+                  "title": "Response List Encoders Api Encoders Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/config": {
       "get": {
         "tags": [
@@ -10668,6 +10830,88 @@
         ],
         "title": "DriveView"
       },
+      "EncoderAvailabilityView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "group": {
+            "type": "string",
+            "enum": [
+              "preset",
+              "cpu",
+              "any",
+              "qsv",
+              "nvenc",
+              "vaapi"
+            ],
+            "title": "Group"
+          },
+          "engine": {
+            "type": "string",
+            "title": "Engine"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "vendor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GpuVendor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "codec": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Codec"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "group",
+          "engine",
+          "kind",
+          "vendor",
+          "codec",
+          "available",
+          "reason"
+        ],
+        "title": "EncoderAvailabilityView",
+        "description": "One `arm_common.encoders.ENCODERS` catalog entry, with availability\ncomputed server-side from the live `gpus` inventory (GET /api/encoders).\n\n`group` buckets `preset`/`cpu`/`any` kinds by themselves and `gpu` kinds\nby vendor, so the transcode preset picker can render sections without\nre-deriving the grouping client-side. `available` is always true for\n`preset`/`cpu`/`any` (an `any_*` encoder falls back to CPU at dispatch\ntime); for a vendor-pinned `gpu` encoder it reflects whether any enabled\ndevice's probe currently verifies that vendor/codec. `reason` explains\nan unavailable `gpu` entry, or an `any_*` entry that would currently run\non the CPU for lack of a verified GPU; it is `None` otherwise."
+      },
       "EventTypeInfo": {
         "properties": {
           "key": {
@@ -10913,6 +11157,37 @@
         ],
         "title": "FixPermsResponse"
       },
+      "GpuProbeAllScheduled": {
+        "properties": {
+          "scheduled": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scheduled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scheduled"
+        ],
+        "title": "GpuProbeAllScheduled",
+        "description": "202 body for a re-probe of every enabled, idle row: the ids whose\nbackground probe was scheduled."
+      },
+      "GpuProbeScheduled": {
+        "properties": {
+          "scheduled": {
+            "type": "boolean",
+            "title": "Scheduled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scheduled"
+        ],
+        "title": "GpuProbeScheduled",
+        "description": "202 body for a single-row re-probe: the probe runs in the background\nand the row updates when `gpu.probed` arrives on `transcode.events`."
+      },
       "GpuStatus": {
         "type": "string",
         "enum": [
@@ -10994,6 +11269,29 @@
               }
             ],
             "title": "Last Seen At"
+          },
+          "probed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probed At"
+          },
+          "probe_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probe Error"
           }
         },
         "type": "object",
@@ -11119,14 +11417,6 @@
         ],
         "title": "HeldJobView",
         "description": "Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).\n\n`paused` is true when the held disc should survive a ripper reboot as a hold\n(global `ripping_paused` on \u2014 or, once it lands, a per-job pause). The ripper\nuses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)\non restart. See the timed-review-gate spec \u00a76.3."
-      },
-      "HwPreference": {
-        "type": "string",
-        "enum": [
-          "cpu_only",
-          "any"
-        ],
-        "title": "HwPreference"
       },
       "IdentificationMode": {
         "type": "string",
@@ -13616,7 +13906,8 @@
                   "no_tracks",
                   "no_outputs",
                   "media_mismatch",
-                  "transcode_disabled"
+                  "transcode_disabled",
+                  "encoder_unavailable"
                 ]
               },
               {
@@ -15459,25 +15750,11 @@
           "container": {
             "$ref": "#/components/schemas/ContainerFormat"
           },
-          "codec": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/VideoCodec"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "hw_preference": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/HwPreference"
-              },
-              {
-                "type": "null"
-              }
-            ]
+          "encoder": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Encoder",
+            "default": "preset"
           },
           "extra_args": {
             "anyOf": [
@@ -15557,25 +15834,17 @@
               }
             ]
           },
-          "codec": {
+          "encoder": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/VideoCodec"
+                "type": "string",
+                "minLength": 1
               },
               {
                 "type": "null"
               }
-            ]
-          },
-          "hw_preference": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/HwPreference"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            ],
+            "title": "Encoder"
           },
           "extra_args": {
             "anyOf": [
@@ -15638,25 +15907,9 @@
           "container": {
             "$ref": "#/components/schemas/ContainerFormat"
           },
-          "codec": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/VideoCodec"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "hw_preference": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/HwPreference"
-              },
-              {
-                "type": "null"
-              }
-            ]
+          "encoder": {
+            "type": "string",
+            "title": "Encoder"
           },
           "extra_args": {
             "anyOf": [
@@ -15715,8 +15968,7 @@
           "preset_ref",
           "preset_json",
           "container",
-          "codec",
-          "hw_preference",
+          "encoder",
           "extra_args",
           "created_by_user_id",
           "created_at",
@@ -16124,15 +16376,6 @@
           "type"
         ],
         "title": "ValidationError"
-      },
-      "VideoCodec": {
-        "type": "string",
-        "enum": [
-          "h264",
-          "h265",
-          "av1"
-        ],
-        "title": "VideoCodec"
       }
     }
   }

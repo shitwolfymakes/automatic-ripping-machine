@@ -296,8 +296,21 @@ class RipStartResponse(BaseModel):
 # preset but the deployment's runtime transcode switch is off (or the
 # deployment isn't transcode-capable); passthrough sessions are never
 # gated this way.
+# "encoder_unavailable": the session resolves an encode preset whose
+# catalog encoder is vendor-pinned (`arm_common.encoders.EncoderSpec.kind
+# == "gpu"`) and no enabled `Gpu` row's probe currently verifies that
+# vendor/codec; checked after the `transcode_disabled` gate, so a deployment
+# with transcoding off reports "transcode_disabled" even when the encoder
+# would also be unavailable.
 ApplySkippedReason = Literal[
-    "collisions", "template", "session_missing", "no_tracks", "no_outputs", "media_mismatch", "transcode_disabled"
+    "collisions",
+    "template",
+    "session_missing",
+    "no_tracks",
+    "no_outputs",
+    "media_mismatch",
+    "transcode_disabled",
+    "encoder_unavailable",
 ]
 
 

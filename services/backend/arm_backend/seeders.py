@@ -26,7 +26,6 @@ from arm_common.models.user import ADMIN_ROLE, GUEST_ROLE
 from arm_common import (
     ContainerFormat,
     DiscType,
-    HwPreference,
     IdentificationMode,
     MediaType,
     NotificationChannel,
@@ -34,7 +33,6 @@ from arm_common import (
     RetentionPolicy,
     TrackSelection,
     TranscodeTool,
-    VideoCodec,
 )
 
 logger = logging.getLogger("arm_backend.seeders")
@@ -249,21 +247,18 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
         "tool": TranscodeTool.HANDBRAKE,
         "preset_ref": "H.265 MKV 1080p30",
         "container": ContainerFormat.MKV,
-        "codec": VideoCodec.H265,
-        "hw_preference": None,
+        "encoder": "any_h265",
     },
     {
-        # GPU-preferred sibling: same HandBrake preset, but `hw_preference=ANY`
-        # so the dispatcher will hand it the first available NVENC/VAAPI/QSV
-        # GPU advertising H.265 and fall back to CPU if none is free.
+        # GPU-preferred sibling: same HandBrake preset and encoder. Kept as its
+        # own row because built-in sessions (and existing installs) reference it.
         "id": "tpr_builtin_plex_1080p_h265_gpu",
         "name": "Plex 1080p H.265 (GPU preferred)",
         "media_type": MediaType.MOVIE,
         "tool": TranscodeTool.HANDBRAKE,
         "preset_ref": "H.265 MKV 1080p30",
         "container": ContainerFormat.MKV,
-        "codec": VideoCodec.H265,
-        "hw_preference": HwPreference.ANY,
+        "encoder": "any_h265",
     },
     {
         "id": "tpr_builtin_plex_2160p_hevc",
@@ -272,8 +267,7 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
         "tool": TranscodeTool.HANDBRAKE,
         "preset_ref": "H.265 MKV 2160p60 4K",
         "container": ContainerFormat.MKV,
-        "codec": VideoCodec.H265,
-        "hw_preference": None,
+        "encoder": "any_h265",
     },
     {
         # Pure copy of the MakeMKV-produced .mkv onto /media — `tool=none`
@@ -286,8 +280,7 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
         "tool": TranscodeTool.NONE,
         "preset_ref": None,
         "container": ContainerFormat.MKV,
-        "codec": None,
-        "hw_preference": None,
+        "encoder": "preset",
     },
     {
         "id": "tpr_builtin_tv_plex_1080p_h265",
@@ -296,8 +289,7 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
         "tool": TranscodeTool.HANDBRAKE,
         "preset_ref": "H.265 MKV 1080p30",
         "container": ContainerFormat.MKV,
-        "codec": VideoCodec.H265,
-        "hw_preference": None,
+        "encoder": "any_h265",
     },
     {
         "id": "tpr_builtin_music_flac",
@@ -306,8 +298,7 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
         "tool": TranscodeTool.ABCDE,
         "preset_ref": "flac",
         "container": ContainerFormat.FLAC,
-        "codec": None,
-        "hw_preference": None,
+        "encoder": "preset",
     },
     {
         "id": "tpr_builtin_music_mp3_v0",
@@ -316,8 +307,7 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
         "tool": TranscodeTool.ABCDE,
         "preset_ref": "mp3",
         "container": ContainerFormat.MP3,
-        "codec": None,
-        "hw_preference": None,
+        "encoder": "preset",
     },
     {
         "id": "tpr_builtin_data_passthrough",
@@ -326,8 +316,7 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
         "tool": TranscodeTool.NONE,
         "preset_ref": None,
         "container": ContainerFormat.NONE,
-        "codec": None,
-        "hw_preference": None,
+        "encoder": "preset",
     },
     {
         "id": "tpr_builtin_iso_passthrough",
@@ -336,8 +325,7 @@ TRANSCODE_PRESETS: list[dict[str, Any]] = [
         "tool": TranscodeTool.NONE,
         "preset_ref": None,
         "container": ContainerFormat.ISO,
-        "codec": None,
-        "hw_preference": None,
+        "encoder": "preset",
     },
 ]
 
@@ -379,9 +367,9 @@ SESSIONS: list[dict[str, Any]] = [
     },
     {
         # Same `rpr_builtin_movie_archive` (every title), but each track is
-        # transcoded H.265 with `hw_preference=ANY` instead of remuxed —
-        # disc-equivalent contents in a smaller form, GPU-accelerated when
-        # the host has matching silicon and CPU otherwise.
+        # transcoded H.265 with the `any_h265` encoder instead of remuxed:
+        # disc-equivalent contents in a smaller form, on whichever GPU is
+        # eligible for H.265.
         "id": "ses_builtin_movie_archive_gpu",
         "name": "Movie to Archive H.265 (GPU preferred)",
         "media_type": MediaType.MOVIE,

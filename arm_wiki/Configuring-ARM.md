@@ -32,7 +32,7 @@ never touch; the ones you might are flagged **editable** below.
 | `MAX_PARALLEL_TRANSCODES` | **Editable.** How many transcoder containers may run at once. Default `1` (a 1080p HandBrake job pegs every core). |
 | `ARM_TRANSCODE_CAPABLE` | **Editable.** Whether this deployment can run a transcode container at all. Default `true`. A ripper-only setup writes `false` here, see [Ripper-only installs](#ripper-only-installs) below. Encode sessions are refused while this is `false`; passthrough (no-preset) sessions still run, in-process, on the backend. Setting `ARM_TRANSCODE_DOCKER_HOST` implies `true` no matter what this is set to. |
 | `ARM_IMAGE_PREFIX` / `ARM_IMAGE_TAG` | Registry path + image tag. **Bump `ARM_IMAGE_TAG` to upgrade** — see [Upgrading](Upgrading). |
-| `ARM_TRANSCODE_IMAGE` | The image the backend spawns per transcode job. |
+| `ARM_TRANSCODE_IMAGE` | The base image the backend spawns for CPU/NVENC work. Its `-intel` / `-amd` tag variants serve QSV / VAAPI GPUs automatically; see [Hardware Transcoding § Image variants](Hardware-Transcoding#image-variants) for the naming convention and the per-vendor override vars. |
 | `ARM_HOST_*_PATH` | Host paths (`raw`/`media`/`logs`/`certs`) the backend hands to the Docker daemon when spawning transcoders. Default to `${PWD}/...`; only change if you move data out of the prefix. |
 | `ARM_DOCKER_NETWORK` | The compose network a spawned transcoder joins to reach the backend (`armv3_default`). |
 | `COMPOSE_FILE` | **Editable, commented out by default.** Uncomment to auto-load the GPU overlay — see [Hardware Transcoding](Hardware-Transcoding). |
@@ -115,9 +115,12 @@ the transcode side entirely:
 bash devtools/setup-dev.sh --ripper-only
 ```
 
-This skips the `arm-transcode` image build, the hardware-encoder probe, and
-GPU detection, and writes `ARM_TRANSCODE_CAPABLE=false` to `.env` (see the
-table above). Encode sessions are then refused everywhere in the UI and API;
+This skips the `arm-transcode` image build and GPU detection, and writes
+`ARM_TRANSCODE_CAPABLE=false` to `.env` (see the table above). There is no
+install-time hardware-encoder probe any more: the Backend probes each GPU
+row for real with a test encode after boot, so a ripper-only box simply
+never gets one, since `ARM_GPUS` stays `[]`. Encode sessions are then
+refused everywhere in the UI and API;
 passthrough (no-preset, ISO/data-copy) sessions still run normally, in-process
 on the backend, so raw-and-ship workflows are unaffected.
 
