@@ -209,6 +209,70 @@ def test_hint_does_not_overwrite_unowned_job_season() -> None:
     assert job.season == 7 and job.identity_provenance is None
 
 
+def test_unknown_owner_field_is_left_alone() -> None:
+    """A field whose provenance names a source no longer in `tiers` (rolled
+    back / removed) is left untouched, not reset to default, when nothing
+    proposes it this run."""
+    track = _track(episode_number=4, identity_provenance={"episode_number": "retired_source"})
+    apply_resolution(_job(), [track], resolve(IdentityClaims(), tiers=TIERS))
+    assert track.episode_number == 4 and track.identity_provenance == {"episode_number": "retired_source"}
+
+
+def test_apply_reports_changed_track_ids() -> None:
+    t1, t2 = _track("1"), _track("2")
+    changed: set[str] = set()
+    res = resolve(_claims(thediscdb=SourceClaims(tracks={"2": TrackClaim(episode=5)})), tiers=TIERS)
+    apply_resolution(_job(), [t1, t2], res, changed_track_ids=changed)
+    assert changed == {t2.id}
+
+
+def test_suggestion_sources_are_not_applied() -> None:
+    res = resolve(
+        _claims(ep_a=SourceClaims(suggestion=True, tracks={"1": TrackClaim(episode=4)})),
+        tiers=TIERS,
+    )
+    assert res.tracks == {}
+
+
+def test_pinned_ok_suggestion_is_applied() -> None:
+    """Task 9 F4 round 2: the resolver (not a stored-claims rewrite) lets a
+    pinned "episode" source's suggestion through when its status is ok."""
+    res = resolve(
+        IdentityClaims(
+            sources={"ep_a": SourceClaims(suggestion=True, tracks={"1": TrackClaim(episode=4)})},
+            pin={"episode": "ep_a"},
+        ),
+        tiers=TIERS,
+    )
+    assert res.tracks["1"]["episode"] == Winner(4, "ep_a")
+
+
+def test_pinned_suggestion_not_ok_is_still_skipped() -> None:
+    """A pin never rescues a non-"ok" entry (error/miss stay inapplicable
+    exactly as before, regardless of the pin)."""
+    res = resolve(
+        IdentityClaims(
+            sources={"ep_a": SourceClaims(status="miss", suggestion=True, tracks={"1": TrackClaim(episode=4)})},
+            pin={"episode": "ep_a"},
+        ),
+        tiers=TIERS,
+    )
+    assert res.tracks == {}
+
+
+def test_unpinned_suggestion_is_skipped_even_with_a_different_pin() -> None:
+    """An unpinned suggestion source stays inapplicable -- pinning a
+    DIFFERENT source for "episode" doesn't make every suggestion usable."""
+    res = resolve(
+        IdentityClaims(
+            sources={"ep_a": SourceClaims(suggestion=True, tracks={"1": TrackClaim(episode=4)})},
+            pin={"episode": "ep_b"},
+        ),
+        tiers=TIERS,
+    )
+    assert res.tracks == {}
+
+
 def test_tier_beats_pin() -> None:
     res = resolve(
         IdentityClaims(
@@ -221,3 +285,63 @@ def test_tier_beats_pin() -> None:
         tiers=TIERS,
     )
     assert res.tracks["1"]["episode"].source == "thediscdb"
+
+
+# --- I1: the episode-match tier is winner-takes-all ---------------------------
+
+
+def _multi_provider() -> dict[str, SourceClaims]:
+    """The reviewer's fixture: TMDb places tracks 0-2 as E5-E7 and calls 3-4
+    extras; TVmaze places 0-4 as E3-E7. Merged field by field, tracks 3-4
+    would take TVmaze's E6-E7 and collide with TMDb's E6-E7."""
+    tmdb = {str(i): TrackClaim(role=TrackRole.EPISODE, season=1, episode=5 + i) for i in range(3)}
+    tmdb.update({str(i): TrackClaim(role=TrackRole.EXTRA) for i in (3, 4)})
+    tvmaze = {str(i): TrackClaim(role=TrackRole.EPISODE, season=1, episode=3 + i) for i in range(5)}
+    return {
+        "episodes_tmdb": SourceClaims(tracks=tmdb),
+        "episodes_tvmaze": SourceClaims(tracks=tvmaze),
+    }
+
+
+def test_episode_tier_takes_only_the_first_usable_source() -> None:
+    ranks = {"episodes_tmdb": 0, "episodes_tvmaze": 1}
+    tiers = {"episodes_tmdb": 3, "episodes_tvmaze": 3}
+    res = resolve(_claims(**_multi_provider()), tiers=tiers, ranks=ranks)
+    tracks = [_track(str(i)) for i in range(5)]
+    apply_resolution(_job(), tracks, res)
+
+    assert [t.episode_number for t in tracks] == [5, 6, 7, None, None]
+    assert [t.role for t in tracks[3:]] == [TrackRole.EXTRA, TrackRole.EXTRA]
+    numbers = [t.episode_number for t in tracks if t.episode_number is not None]
+    assert len(numbers) == len(set(numbers))
+    assert all(w.source == "episodes_tmdb" for slot in res.tracks.values() for w in slot.values())
+
+
+def test_pinned_episode_source_leaves_the_other_sources_claims_unused() -> None:
+    """After `/match source=tvmaze` pins TVmaze, TMDb's stale claims fill
+    nothing, not even a track or field TVmaze leaves empty."""
+    sources = _multi_provider()
+    sources["episodes_tmdb"].tracks["5"] = TrackClaim(role=TrackRole.EXTRA)
+    sources["episodes_tmdb"].tracks["0"] = TrackClaim(role=TrackRole.EPISODE, season=1, episode=5, episode_name="X")
+    res = resolve(
+        IdentityClaims(sources=sources, pin={"episode": "episodes_tvmaze"}),
+        tiers={"episodes_tmdb": 3, "episodes_tvmaze": 3},
+        ranks={"episodes_tmdb": 0, "episodes_tvmaze": 1},
+    )
+    assert "5" not in res.tracks
+    assert "episode_name" not in res.tracks["0"]
+    assert {ref: slot["episode"].value for ref, slot in res.tracks.items()} == {str(i): 3 + i for i in range(5)}
+
+
+def test_unusable_episode_source_does_not_take_the_tier() -> None:
+    """The first *usable* source wins: a higher-ranked suggestion or error
+    entry does not block the next one."""
+    sources = {
+        "ep_a": SourceClaims(suggestion=True, tracks={"1": TrackClaim(episode=1)}),
+        "ep_b": SourceClaims(status="error", tracks={"1": TrackClaim(episode=2)}),
+        "ep_c": SourceClaims(tracks={"1": TrackClaim(episode=3)}),
+        "thediscdb": SourceClaims(tracks={"2": TrackClaim(episode=8)}),
+    }
+    res = resolve(_claims(**sources), tiers={**TIERS, "ep_c": 3})
+    assert res.tracks["1"]["episode"] == Winner(3, "ep_c")
+    assert res.tracks["2"]["episode"] == Winner(8, "thediscdb")

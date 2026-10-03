@@ -12,6 +12,7 @@ from arm_common.schemas.identity import (
     SourceClaims,
     TrackClaim,
 )
+from arm_common.schemas.job_metadata import ExternalIds
 
 
 def test_track_claim_presence_survives_round_trip() -> None:
@@ -71,3 +72,9 @@ def test_router_identity_attr_sets_derive_from_claim_fields() -> None:
     assert jobs_router._IDENTITY_TRACK_ATTRS == frozenset(TRACK_CLAIM_FIELDS.values())
     # JobUpdateRequest has no season (season is set through /resolve).
     assert jobs_router._IDENTITY_JOB_ATTRS == frozenset({"disc_number", "disc_total"})
+
+
+def test_source_claims_suggestion_and_new_external_ids_round_trip() -> None:
+    sc = SourceClaims(suggestion=True)
+    assert SourceClaims.model_validate(sc.model_dump(mode="json", exclude_unset=True)).suggestion is True
+    assert ExternalIds(tvmaze="82", anidb="1").model_dump(exclude_none=True) == {"tvmaze": "82", "anidb": "1"}

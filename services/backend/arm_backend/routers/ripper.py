@@ -19,9 +19,11 @@ from arm_backend.metadata import MetadataDispatcher
 from arm_backend.metadata.base import MetadataResult, extract_poster_url, metadata_with_identity
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
 from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.identity.episode_stage import is_tv_candidate
 from arm_backend.identity.pipeline import hint_is_tv, hint_title, resolve_job, run_disc_hints
 from arm_backend.identity.proposals import put_source, record_preset
 from arm_backend.identity.sources.thediscdb import SOURCE_ID as THEDISCDB, build_claims, external_imdb_id
+from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.track_selection import select_tracks, select_tracks_for_review
 from arm_backend.ws import WSHub
 from arm_common import (
@@ -233,6 +235,12 @@ def _get_dispatcher(request: Request) -> MetadataDispatcher:
 def _get_hub(request: Request) -> WSHub:
     hub: WSHub = request.app.state.ws_hub
     return hub
+
+
+def _get_stage_runner(request: Request) -> EpisodeStageRunner | None:
+    """None when `app.state` carries no runner (e.g. an existing router test
+    that never set one up) — callers then just skip scheduling."""
+    return getattr(request.app.state, "episode_stage", None)
 
 
 @router.get("/config", response_model=RipperConfigView, dependencies=[Depends(require_service_token)])
@@ -449,6 +457,7 @@ async def identify(
     session: AsyncSession = Depends(get_session),
     dispatcher: MetadataDispatcher = Depends(_get_dispatcher),
     hub: WSHub = Depends(_get_hub),
+    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
 ) -> Job:
     drive = (await session.execute(select(Drive).where(col(Drive.id) == req.drive_id))).scalar_one_or_none()
     if drive is None:
@@ -655,6 +664,15 @@ async def identify(
                 session=session,
             )
             await session.commit()
+
+    # Background episode stage trigger (Task 8): only after the final commit
+    # above (whichever branch made it), and only when it's worth the async
+    # DB round-trip — the runner itself re-checks is_tv_candidate against
+    # freshly loaded tracks before doing any work.
+    if stage_runner is not None:
+        stage_tracks = (await session.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
+        if is_tv_candidate(job, stage_tracks):
+            stage_runner.schedule(job.id)
     return job
 
 
@@ -671,6 +689,7 @@ async def rip_start(
     job: Job = Depends(require_drive_owner_by_job),
     session: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
+    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
 ) -> RipStartResponse:
     # Fix 75-8: resolve the routed session ONCE for this request — the preset
     # choice and the min-length override both derive from the same `sess`
@@ -775,6 +794,11 @@ async def rip_start(
         session=session,
     )
     await session.commit()
+
+    # C1: without the review hold, identify creates no Track rows, so the
+    # stage it scheduled saw nothing to match. The tracks appear here.
+    if stage_runner is not None and is_tv_candidate(job, new_tracks):
+        stage_runner.schedule(job.id)
 
     return RipStartResponse(
         job_id=job.id,

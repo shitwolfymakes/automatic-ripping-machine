@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Protocol
+from typing import Any, Protocol
 
 from arm_common import Job
 from arm_common.schemas import ScanResult
@@ -42,6 +42,11 @@ class Source(Protocol):
 
     def applies_to(self, ctx: JobContext) -> str | None:
         """None when the source should run; otherwise the reason it is skipped."""
+        ...
+
+    def inputs(self, ctx: JobContext) -> dict[str, Any]:
+        """What run() reads, recorded on its claims (ok or error) so a failed
+        re-run keeps the last good claims only when they are for the same inputs."""
         ...
 
     def run(self, ctx: JobContext) -> SourceClaims: ...

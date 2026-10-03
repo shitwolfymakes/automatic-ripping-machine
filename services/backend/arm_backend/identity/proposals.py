@@ -51,6 +51,19 @@ def _store(job: Job, claims: IdentityClaims) -> None:
 
 def put_source(job: Job, source_id: str, source_claims: SourceClaims) -> None:
     claims = claims_of(job)
+    existing = claims.sources.get(source_id)
+    if (
+        source_claims.status == "error"
+        and existing is not None
+        and existing.status == "ok"
+        and source_claims.inputs == existing.inputs
+    ):
+        # A failed re-run on the same inputs keeps the last good proposals (a
+        # provider outage must not wipe episode numbers); the failure is
+        # recorded for the UI. Claims made for different inputs are not kept.
+        at = source_claims.run_at.isoformat() if source_claims.run_at else None
+        existing.extra = {**existing.extra, "last_error": {"at": at, "detail": source_claims.detail}}
+        source_claims = existing
     claims.sources = {**claims.sources, source_id: source_claims}
     _store(job, claims)
 
@@ -113,10 +126,13 @@ def revert_manual_track(job: Job, source_ref: str, attrs: Iterable[str]) -> None
     _store(job, claims)
 
 
-def record_manual_job(job: Job, edits: dict[str, Any]) -> bool:
+def record_manual_job(job: Job, edits: dict[str, Any], *, keep_restated: bool = False) -> bool:
     """Record the operator's job edits as `manual` claims, skipping restated
-    values. Returns whether any claim was recorded."""
-    edits = {attr: value for attr, value in edits.items() if not _restated(job, attr, value)}
+    values unless `keep_restated` (an explicit operator choice, e.g. the
+    `/identity/match` season, that must pin even a value an automatic source
+    already set). Returns whether any claim was recorded."""
+    if not keep_restated:
+        edits = {attr: value for attr, value in edits.items() if not _restated(job, attr, value)}
     if not edits:
         return False
     claims = claims_of(job)
@@ -128,6 +144,42 @@ def record_manual_job(job: Job, edits: dict[str, Any]) -> bool:
     claims.sources = {**claims.sources, MANUAL: manual}
     _store(job, claims)
     return True
+
+
+# Episode-match source ids share this prefix (sources.registry).
+_EPISODE_SOURCE_PREFIX = "episodes_"
+
+
+def forget_episode_show_ids(job: Job) -> None:
+    """Set `inputs["show_id"]` to None in every stored episode-match entry
+    (R2): once the job names a different show, a stored entry must never
+    again look like "the same request", so an error or backoff re-run can
+    not keep claims made for the previous show."""
+    claims = claims_of(job)
+    changed = False
+    for source_id, entry in claims.sources.items():
+        if source_id.startswith(_EPISODE_SOURCE_PREFIX) and entry.inputs.get("show_id") is not None:
+            entry.inputs = {**entry.inputs, "show_id": None}
+            changed = True
+    if changed:
+        _store(job, claims)
+
+
+def set_pin(job: Job, capability: str, source_id: str) -> None:
+    """Pin `source_id` as the operator's chosen source for `capability`
+    (e.g. "episode") -- it then outranks its tier-mates in the resolver."""
+    claims = claims_of(job)
+    claims.pin = {**claims.pin, capability: source_id}
+    _store(job, claims)
+
+
+def clear_pin(job: Job, capability: str) -> None:
+    """Remove any pin for `capability`. A no-op when nothing is pinned."""
+    claims = claims_of(job)
+    if capability not in claims.pin:
+        return
+    claims.pin = {k: v for k, v in claims.pin.items() if k != capability}
+    _store(job, claims)
 
 
 def record_preset(job: Job, tracks: Iterable[Track], *, now: datetime) -> None:

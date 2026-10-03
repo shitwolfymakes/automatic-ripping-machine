@@ -12,6 +12,7 @@ each candidate path under `MEDIA_ROOT` to surface filesystem-only hits
 (pre-v3 content the user copied in by hand).
 """
 
+import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -31,6 +32,7 @@ from arm_common import (
     Session,
     Track,
     TrackKind,
+    TrackRole,
     TranscodePreset,
 )
 from arm_common.encoders import EncoderSpec, get_encoder, gpu_could_serve, gpu_is_eligible
@@ -88,7 +90,13 @@ def _build_track_ctx(
     eff_title = track.title or job.title or ""
     eff_year = track.year if track.year is not None else job.year
     eff_season = track.season if track.season is not None else job.season
-    episode = f"{track.episode_number:02d}" if track.episode_number is not None else ""
+    if track.episode_number is None:
+        episode = ""
+    elif track.episode_number_end is not None and track.episode_number_end > track.episode_number:
+        # Multi-episode title: S01E01-E02 (the Plex / Jellyfin form).
+        episode = f"{track.episode_number:02d}-E{track.episode_number_end:02d}"
+    else:
+        episode = f"{track.episode_number:02d}"
 
     # Human-readable metadata fields land inside path segments; sanitise
     # so titles like "Crown / She Said" don't introduce a phantom path
@@ -124,6 +132,60 @@ def _build_track_ctx(
     return ctx
 
 
+_EPISODE_TOKENS = frozenset({"episode", "episode_title"})
+_WS_RUN = re.compile(r"\s+")
+_DASH_RUN = re.compile(r"(?:\s*-\s*){2,}")
+_DASH_BEFORE_EXT = re.compile(r"\s*-\s*(?=\.[A-Za-z0-9]+$)")
+# "S01E" left behind by an empty {episode}: drop the E when no digit/letter follows.
+_DANGLING_E = re.compile(r"(\bS\d+)E(?![A-Za-z0-9])")
+_EXT = re.compile(r"\.[A-Za-z0-9]+$")
+
+
+def _episode_tokens_required(job: Job, track: Track, session: Session) -> bool:
+    """Episode tokens must resolve for episode titles (and, as before, for
+    titles of unknown role on a TV disc); a bonus film or extra on a TV disc
+    renders them empty instead of failing the whole apply (spec 5).
+
+    An unidentified job (`job.media_type is None`) can still be applied to a
+    TV session (`auto_session.py` allows and documents this); for a
+    role-None track, fall back to the session's media type so that case
+    keeps today's strict behaviour instead of silently going lenient.
+    """
+    if track.role is not None:
+        return track.role == TrackRole.EPISODE
+    return (job.media_type or session.media_type) == MediaType.TV
+
+
+def _tidy_segment(seg: str) -> str:
+    seg = _DANGLING_E.sub(r"\1", seg)
+    seg = _WS_RUN.sub(" ", seg)
+    seg = _DASH_RUN.sub(" - ", seg)
+    seg = _DASH_BEFORE_EXT.sub("", seg)
+    return seg.strip(" -_")
+
+
+def _render_with_empty_episode(template: str, ctx: dict[str, str]) -> list[str]:
+    """Render a template whose episode tokens were allowed to resolve empty
+    (a bonus title on a TV disc) segment by segment. Only the `/`-segments
+    that referenced an empty episode token are tidied; the rest render
+    byte-for-byte."""
+    segments = []
+    for seg_template in template.split("/"):
+        seg = expand_template(seg_template, ctx)
+        if any(not ctx.get(t) for t in referenced_tokens(seg_template) & _EPISODE_TOKENS):
+            seg = _tidy_segment(seg)
+        segments.append(seg)
+    return segments
+
+
+def _with_track_suffix(name: str, track: str) -> str:
+    """`Show - S01.mkv` -> `Show - S01 - T02.mkv`: keeps a disc's bonus titles
+    on distinct paths when the template has no `{track}`."""
+    ext = m.group(0) if (m := _EXT.search(name)) else ""
+    stem = name[: len(name) - len(ext)]
+    return f"{stem} - T{track}{ext}" if stem else f"T{track}{ext}"
+
+
 def _track_kinds_for_media(media_type: MediaType) -> set[TrackKind]:
     if media_type in (MediaType.MOVIE, MediaType.TV):
         return {TrackKind.VIDEO_TITLE}
@@ -151,12 +213,26 @@ def compute_outputs(
     resolved: list[ResolvedTask] = []
     for track in candidates:
         ctx = _build_track_ctx(job, track, session, transcode_preset)
+        allowed_empty = False
         for token in referenced:
             if not ctx.get(token):
+                if token in _EPISODE_TOKENS and not _episode_tokens_required(job, track, session):
+                    allowed_empty = True
+                    continue
                 raise TemplateValidationError(
                     f"track index={track.index}: token {{{token}}} resolved empty against the job's metadata"
                 )
-        path = expand_template(template, ctx)
+        if allowed_empty:
+            segments = _render_with_empty_episode(template, ctx)
+            if any(not seg for seg in segments):
+                raise TemplateValidationError(
+                    f"track index={track.index}: an allowed-empty episode token left an empty path segment"
+                )
+            if "track" not in referenced:
+                segments[-1] = _with_track_suffix(segments[-1], ctx["track"])
+            path = "/".join(segments)
+        else:
+            path = expand_template(template, ctx)
         if track.custom_filename:
             p = PurePosixPath(path)
             ext = p.suffix

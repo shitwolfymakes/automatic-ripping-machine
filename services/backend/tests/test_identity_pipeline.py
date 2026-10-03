@@ -28,8 +28,9 @@ async def test_resolve_job_applies_thediscdb_claims() -> None:
     db.rows["jobs"] = [job]
     db.rows["tracks"] = [track]
     put_source(job, "thediscdb", SourceClaims(tracks={"1": TrackClaim(role=TrackRole.EPISODE, episode=3)}))
-    changed = await resolve_job(db, job)  # type: ignore[arg-type]
-    assert changed == 2
+    outcome = await resolve_job(db, job)  # type: ignore[arg-type]
+    assert outcome.changed == 2
+    assert outcome.track_ids == frozenset({"trk_1"})
     assert track.episode_number == 3
     assert track.identity_provenance == {"role": "thediscdb", "episode_number": "thediscdb"}
 
@@ -44,8 +45,8 @@ async def test_resolve_job_idempotent_second_call_changes_nothing() -> None:
     db.rows["jobs"] = [job]
     db.rows["tracks"] = [track]
     put_source(job, "thediscdb", SourceClaims(tracks={"1": TrackClaim(role=TrackRole.EPISODE, episode=3)}))
-    assert await resolve_job(db, job) == 2  # type: ignore[arg-type]
-    assert await resolve_job(db, job) == 0  # type: ignore[arg-type]
+    assert (await resolve_job(db, job)).changed == 2  # type: ignore[arg-type]
+    assert (await resolve_job(db, job)).changed == 0  # type: ignore[arg-type]
 
 
 def test_run_disc_hints_records_both_sources_and_skips() -> None:
@@ -133,6 +134,90 @@ def test_run_disc_hints_handles_source_applies_to_exception(monkeypatch) -> None
     # Label source should have run successfully
     assert sources["label"].status == "ok"
     assert sources["label"].job.model_dump(exclude_unset=True) == {"season": 2, "disc_number": 3, "title": "lost"}
+
+
+def test_run_disc_hints_error_keeps_last_good_after_prior_ok(monkeypatch) -> None:
+    """A source that previously matched on this job and now errors (e.g. a
+    transient provider outage on re-run) must not wipe its earlier-good
+    claims -- run_disc_hints stores through put_source's keep-last-good rule."""
+    from arm_backend.identity.sources import registry
+
+    job = Job(id="job_1", drive_id="d", disc_type=DiscType.BLURAY, status=JobStatus.CREATED, metadata_json={})
+    scan = ScanResult(disc_type=DiscType.BLURAY, volume_label="LOST_S2D3", bd_meta=BdDiscMeta(name="The West Wing"))
+    run_disc_hints(job, scan, now=NOW)
+    assert claims_of(job).sources["bd_title"].status == "ok"
+
+    def boom(ctx):
+        raise RuntimeError("provider outage")
+
+    monkeypatch.setattr(registry.BD_TITLE, "run", boom)
+    run_disc_hints(job, scan, now=NOW)
+
+    entry = claims_of(job).sources["bd_title"]
+    assert entry.status == "ok"
+    assert entry.job.model_dump(exclude_unset=True) == {"title": "the west wing"}
+    assert entry.extra["last_error"]["detail"] == "RuntimeError: provider outage"
+    assert hint_title(job) == "the west wing"
+
+
+def test_run_disc_hints_error_with_changed_inputs_replaces_last_good(monkeypatch) -> None:
+    """The kept claims must describe the same inputs: an error on a different
+    BDMT name stores the error (with the inputs it would have used)."""
+    from arm_backend.identity.sources import registry
+
+    job = Job(id="job_1", drive_id="d", disc_type=DiscType.BLURAY, status=JobStatus.CREATED, metadata_json={})
+    run_disc_hints(job, ScanResult(disc_type=DiscType.BLURAY, bd_meta=BdDiscMeta(name="The West Wing")), now=NOW)
+    assert claims_of(job).sources["bd_title"].status == "ok"
+
+    def boom(ctx):
+        raise RuntimeError("provider outage")
+
+    monkeypatch.setattr(registry.BD_TITLE, "run", boom)
+    run_disc_hints(job, ScanResult(disc_type=DiscType.BLURAY, bd_meta=BdDiscMeta(name="Lost")), now=NOW)
+
+    entry = claims_of(job).sources["bd_title"]
+    assert entry.status == "error"
+    assert entry.inputs == {"name": "Lost"}
+    assert hint_title(job) is None
+
+
+def test_run_disc_hints_records_label_inputs_on_error(monkeypatch) -> None:
+    from arm_backend.identity.sources import registry
+
+    job = Job(id="job_1", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.CREATED, metadata_json={})
+
+    def boom(ctx):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(registry.LABEL, "applies_to", boom)
+    run_disc_hints(job, ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3"), now=NOW)
+    entry = claims_of(job).sources["label"]
+    assert entry.status == "error" and entry.inputs == {"volume_label": "LOST_S2D3"}
+
+
+def test_run_disc_hints_error_inputs_fall_back_to_empty(monkeypatch) -> None:
+    # If even reading the inputs fails, the error is still recorded (no inputs).
+    from arm_backend.identity.sources import registry
+
+    job = Job(id="job_1", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.CREATED, metadata_json={})
+
+    def boom(ctx):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(registry.LABEL, "run", boom)
+    monkeypatch.setattr(registry.LABEL, "inputs", boom)
+    run_disc_hints(job, ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3"), now=NOW)
+    entry = claims_of(job).sources["label"]
+    assert entry.status == "error" and entry.inputs == {}
+
+
+def test_bd_title_inputs_empty_without_bd_meta() -> None:
+    from arm_backend.identity.sources.base import JobContext
+    from arm_backend.identity.sources.registry import BD_TITLE
+
+    job = Job(id="job_1", drive_id="d", disc_type=DiscType.BLURAY, status=JobStatus.CREATED, metadata_json={})
+    ctx = JobContext(job=job, scan=ScanResult(disc_type=DiscType.BLURAY), now=NOW)
+    assert BD_TITLE.inputs(ctx) == {}
 
 
 def test_run_disc_hints_handles_source_run_exception(monkeypatch) -> None:

@@ -65,6 +65,8 @@ class SourceClaims(BaseModel):
 
     run_at: datetime | None = None
     status: ClaimStatus = "ok"
+    # True: stored for the operator to accept, never applied by the resolver (spec 5, C2).
+    suggestion: bool = False
     detail: str | None = None
     inputs: dict[str, Any] = Field(default_factory=dict)
     job: JobClaim = Field(default_factory=JobClaim)

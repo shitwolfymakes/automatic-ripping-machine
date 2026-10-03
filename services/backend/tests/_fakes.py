@@ -157,6 +157,16 @@ class FakeSession:
         self.added: list[Any] = []
         self.flushed = 0
         self.commit_raises: Exception | None = None
+        # `expire_all()` is a no-op here (this fake has no identity map to
+        # expire), but a real AsyncSession's IS meaningful (Task 9 F1): a
+        # test that can't model the staleness itself can still assert this
+        # was called, and ordered before the fresh re-select, via
+        # `expire_all_calls` / `call_log`.
+        self.expire_all_calls = 0
+        self.call_log: list[str] = []
+        # Tables selected `FOR UPDATE`, in order (M2: routers lock the job row
+        # before its tracks). The fake takes no real lock.
+        self.locked: list[str] = []
 
     async def __aenter__(self) -> "FakeSession":
         return self
@@ -187,11 +197,13 @@ class FakeSession:
         self.rows[tbl] = [r for r in self.rows[tbl] if r is not obj]
 
     async def commit(self) -> None:
+        self.call_log.append("commit")
         if self.commit_raises is not None:
             raise self.commit_raises
         self.committed += 1
 
     async def rollback(self) -> None:
+        self.call_log.append("rollback")
         return None
 
     async def flush(self) -> None:
@@ -200,11 +212,22 @@ class FakeSession:
     async def refresh(self, _obj: Any) -> None:
         return None
 
+    def expire_all(self) -> None:
+        """No real identity map here to expire -- this fake's rows are live
+        object references, always "fresh". Recorded so a test that can't
+        model the staleness `expire_all()` fixes for a real session can
+        still assert it was called, and ordered before the next re-select."""
+        self.expire_all_calls += 1
+        self.call_log.append("expire_all")
+
     async def execute(self, stmt: Any) -> _Result:
+        self.call_log.append("execute")
         if not isinstance(stmt, Select):
             return _Result([])
 
         table = _table_for_stmt(stmt)
+        if stmt._for_update_arg is not None and table:
+            self.locked.append(table)
         rows = list(self.rows.get(table, [])) if table else []
         filters = _all_filters(stmt)
         rows = [r for r in rows if _matches(r, filters)]

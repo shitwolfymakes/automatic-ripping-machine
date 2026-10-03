@@ -23,6 +23,10 @@ class BdTitleSource:
             return "no BDMT disc title"
         return None
 
+    def inputs(self, ctx: JobContext) -> dict[str, Any]:
+        meta = ctx.scan.bd_meta
+        return {} if meta is None else {k: v for k, v in meta.model_dump().items() if v is not None}
+
     def run(self, ctx: JobContext) -> SourceClaims:
         meta = ctx.scan.bd_meta
         assert meta is not None  # applies_to guarantees it
@@ -38,8 +42,7 @@ class BdTitleSource:
             fields["disc_total"] = total
         if hints.title and not hints.part_marker_only:
             fields["title"] = hints.title
-        inputs = {k: v for k, v in meta.model_dump().items() if v is not None}
-        return SourceClaims(run_at=ctx.now, status="ok", inputs=inputs, job=JobClaim(**fields))
+        return SourceClaims(run_at=ctx.now, status="ok", inputs=self.inputs(ctx), job=JobClaim(**fields))
 
 
 BD_TITLE = BdTitleSource()

@@ -6,7 +6,7 @@ os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
 from arm_backend.path_template import TemplateValidationError  # noqa: E402
-from arm_backend.transcode_apply import compute_outputs  # noqa: E402
+from arm_backend.transcode_apply import _build_track_ctx, compute_outputs  # noqa: E402
 from arm_common import (  # noqa: E402
     ContainerFormat,
     DiscType,
@@ -16,6 +16,7 @@ from arm_common import (  # noqa: E402
     Session,
     Track,
     TrackKind,
+    TrackRole,
     TranscodePreset,
     TranscodeTool,
 )
@@ -194,6 +195,7 @@ def _tv_job(title: str = "My Show", year: int = 2020) -> Job:
         title=title,
         year=year,
         status=JobStatus.RIPPED,
+        media_type=MediaType.TV,
         metadata_json={"season": "01", "disc": "01"},
     )
 
@@ -202,10 +204,12 @@ def _tv_track(
     idx: int,
     *,
     episode_number: int | None = None,
+    episode_number_end: int | None = None,
     episode_name: str | None = None,
     title: str | None = None,
     excluded: bool = False,
     custom_filename: str | None = None,
+    role: TrackRole | None = None,
 ) -> Track:
     return Track(
         id=f"trk_{idx}",
@@ -214,10 +218,12 @@ def _tv_track(
         index=idx,
         source_ref=str(idx),
         episode_number=episode_number,
+        episode_number_end=episode_number_end,
         episode_name=episode_name,
         title=title,
         excluded=excluded,
         custom_filename=custom_filename,
+        role=role,
     )
 
 
@@ -431,3 +437,162 @@ def test_season_token_falls_back_to_job_season() -> None:
     )
     resolved = compute_outputs(job, [track], sess, tp)
     assert resolved[0].output_path.startswith("Show (2020)/Season 02/Show S02E01 - ")
+
+
+# ── two-episode {episode} range + role-aware episode-token checks ──
+
+
+def _ctx_for(**track_kwargs: object) -> dict[str, str]:
+    job = _tv_job()
+    track = _tv_track(1, **track_kwargs)
+    sess = _tv_session("{episode}")
+    tp = _tv_preset()
+    return _build_track_ctx(job, track, sess, tp)
+
+
+def test_episode_token_renders_two_episode_range() -> None:
+    ctx = _ctx_for(episode_number=1, episode_number_end=2)
+    assert ctx["episode"] == "01-E02"
+
+
+def test_episode_token_ignores_end_not_after_start() -> None:
+    assert _ctx_for(episode_number=3, episode_number_end=3)["episode"] == "03"
+
+
+def test_tv_template_skips_episode_tokens_for_non_episode_titles() -> None:
+    template = "{show}/Season {season}/{show} - S{season}E{episode} - {episode_title}.{ext}"
+    job = _tv_job(title="Show")
+    tracks = [
+        _tv_track(1, role=TrackRole.EPISODE, episode_number=1, episode_name="Pilot"),
+        _tv_track(2, role=TrackRole.MAIN),  # bonus film, no episode
+        _tv_track(3, role=TrackRole.EXTRA),
+    ]
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    out = {r.track_id: r.output_path for r in compute_outputs(job, tracks, sess, tp)}
+    assert out["trk_1"] == "Show/Season 01/Show - S01E01 - Pilot.mkv"
+    # Distinct paths: the dangling "E" is dropped and the track number is
+    # appended (the template has no {track}), so bonus titles never collide.
+    assert out["trk_2"] == "Show/Season 01/Show - S01 - T02.mkv"
+    assert out["trk_3"] == "Show/Season 01/Show - S01 - T03.mkv"
+
+
+def test_bonus_title_gets_no_track_suffix_when_template_has_track() -> None:
+    template = "{show}/Season {season}/{show} - S{season}E{episode} - T{track}.{ext}"
+    job = _tv_job(title="Show")
+    tracks = [_tv_track(2, role=TrackRole.EXTRA), _tv_track(3, role=TrackRole.EXTRA)]
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    out = {r.track_id: r.output_path for r in compute_outputs(job, tracks, sess, tp)}
+    assert out == {
+        "trk_2": "Show/Season 01/Show - S01 - T02.mkv",
+        "trk_3": "Show/Season 01/Show - S01 - T03.mkv",
+    }
+
+
+def test_bonus_title_tidies_only_segments_with_an_empty_episode_token() -> None:
+    # The show folder's double space is not near an episode token: it stays
+    # byte-for-byte; only the filename segment is tidied.
+    template = "{show}  -  Collection/Season {season}/{show} - S{season}E{episode}.{ext}"
+    job = _tv_job(title="Show")
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    out = compute_outputs(job, [_tv_track(4, role=TrackRole.EXTRA)], sess, tp)
+    assert out[0].output_path == "Show  -  Collection/Season 01/Show - S01 - T04.mkv"
+
+
+def test_bonus_title_keeps_e_that_is_not_dangling() -> None:
+    # "S01Extras" is not a dangling E (a letter follows); an extensionless
+    # final segment gets the track suffix at its end.
+    template = "{show}/S{season}Extras {episode_title}"
+    job = _tv_job(title="Show")
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    out = compute_outputs(job, [_tv_track(5, role=TrackRole.EXTRA)], sess, tp)
+    assert out[0].output_path == "Show/S01Extras - T05"
+
+
+def test_episode_role_with_empty_episode_still_fails() -> None:
+    template = "{show} - S{season}E{episode}.{ext}"
+    job = _tv_job()
+    track = _tv_track(1, role=TrackRole.EPISODE)
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    with pytest.raises(TemplateValidationError):
+        compute_outputs(job, [track], sess, tp)
+
+
+def test_unknown_role_on_tv_disc_keeps_strict_check() -> None:
+    template = "{show} - S{season}E{episode}.{ext}"
+    job = _tv_job()
+    track = _tv_track(1, role=None)
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    with pytest.raises(TemplateValidationError):
+        compute_outputs(job, [track], sess, tp)
+
+
+def test_unidentified_job_on_tv_session_role_none_keeps_strict_check() -> None:
+    """An unidentified job (media_type=None) can still be applied to a TV
+    session (auto_session.py allows this); a role-None track must fall back
+    to the session's media type, not silently go lenient (fix round 1)."""
+    template = "{show} - S{season}E{episode}.{ext}"
+    job = _tv_job()
+    job.media_type = None
+    track = _tv_track(1, role=None)
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    with pytest.raises(TemplateValidationError):
+        compute_outputs(job, [track], sess, tp)
+
+
+def test_tidy_raises_when_a_path_segment_becomes_empty() -> None:
+    """A leading segment made entirely of skipped episode tokens must not
+    collapse to "" (which would escape MEDIA_ROOT via a leading "/" once
+    joined downstream) — raise instead of returning it (fix round 1)."""
+    template = "{episode_title}/{show} S{season}E{episode}.{ext}"
+    job = _tv_job()
+    track = _tv_track(1, role=TrackRole.EXTRA)
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    with pytest.raises(TemplateValidationError):
+        compute_outputs(job, [track], sess, tp)
+
+
+def test_tidy_raises_when_the_final_segment_becomes_empty() -> None:
+    """The track suffix must not rescue a filename made only of skipped
+    episode tokens: the empty-segment rule still applies."""
+    template = "{show}/{episode_title}"
+    job = _tv_job()
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    with pytest.raises(TemplateValidationError):
+        compute_outputs(job, [_tv_track(1, role=TrackRole.EXTRA)], sess, tp)
+
+
+def test_bonus_title_with_only_an_extension_gets_a_bare_track_name() -> None:
+    template = "{show}/{episode_title}.{ext}"
+    job = _tv_job(title="Show")
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    out = compute_outputs(job, [_tv_track(6, role=TrackRole.EXTRA)], sess, tp)
+    assert out[0].output_path == "Show/T06.mkv"
+
+
+def test_paths_without_skipped_tokens_are_untouched() -> None:
+    # A movie template with double spaces / dashes renders byte-for-byte as
+    # before: no episode token was allowed to render empty, so nothing is tidied.
+    template = "{title} ({year})/{title} ({year})  -  {transcode_slug}.{ext}"
+    job = _job(title="Arrival", year=2016)
+    sess = _movie_session(template)
+    tp = _movie_preset()
+    track = Track(
+        id="trk_1",
+        job_id=job.id,
+        kind=TrackKind.VIDEO_TITLE,
+        index=1,
+        source_ref="1",
+        role=TrackRole.MAIN,
+    )
+    resolved = compute_outputs(job, [track], sess, tp)
+    assert resolved[0].output_path == "Arrival (2016)/Arrival (2016)  -  plex-1080p-h-265.mkv"
