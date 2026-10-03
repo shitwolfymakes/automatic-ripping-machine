@@ -424,6 +424,42 @@ def test_patch_unknown_tuning_field_422(signing_key: bytes) -> None:
     assert r.status_code == 422
 
 
+class _StubScanner:
+    def __init__(self, summary) -> None:
+        self.summary = summary
+        self.calls = 0
+
+    async def scan_once(self, session):
+        self.calls += 1
+        return self.summary
+
+
+def test_rescan_runs_the_scanner_and_reports_counts(signing_key: bytes) -> None:
+    from arm_backend.drive_scanner import ScanSummary
+
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    scanner = _StubScanner(ScanSummary(detected=2, ignored=1, enrolled=1, absent=1, pruned=0))
+    app.state.drive_scanner = scanner
+    with TestClient(app) as client:
+        r = client.post("/api/drives/rescan", headers=_auth(token))
+    assert r.status_code == 200
+    body = r.json()
+    assert scanner.calls == 1
+    assert (body["detected"], body["ignored"], body["enrolled"], body["absent"], body["pruned"]) == (2, 1, 1, 1, 0)
+    assert "online" in body and "stale" in body
+
+
+def test_rescan_without_scanner_is_503(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/drives/rescan", headers=_auth(token))
+    assert r.status_code == 503
+
+
 def test_current_job_handles_none_created_at(signing_key: bytes) -> None:
     db = FakeSession()
     _seed(db)

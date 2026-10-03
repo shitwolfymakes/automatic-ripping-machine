@@ -50,6 +50,9 @@ def _seed(db: FakeSession) -> Drive:
         default_session_id=None,
         media_status=None,
         media_status_at=None,
+        # explicit None: a hand-built Drive only serialises fields that were set
+        # (a real SELECT sets every column); get_drive's body must carry this key
+        last_seen_at=None,
     )
     db.rows["drives"] = [drive]
     return drive
@@ -95,3 +98,52 @@ def test_heartbeat_requires_service_token() -> None:
             json={"drive_id": "drv_x", "media_status": "loaded"},
         )
     assert r.status_code in (401, 403)
+
+
+def test_detached_heartbeat_marks_the_drive_offline_and_absent() -> None:
+    db = FakeSession()
+    drive = _seed(db)
+    with TestClient(_make_app(db)) as client:
+        r = client.post(
+            "/api/ripper/heartbeat", json={"drive_id": "drv_x", "media_status": "detached"}, headers=_service_auth()
+        )
+    assert r.status_code == 204
+    assert drive.status is DriveStatus.OFFLINE and drive.present is False
+    assert drive.media_status is DriveMediaStatus.DETACHED
+
+
+def test_heartbeat_after_detached_brings_the_drive_back_online() -> None:
+    db = FakeSession()
+    drive = _seed(db)
+    drive.status = DriveStatus.OFFLINE
+    drive.present = False
+    with TestClient(_make_app(db)) as client:
+        client.post(
+            "/api/ripper/heartbeat", json={"drive_id": "drv_x", "media_status": "no_disc"}, headers=_service_auth()
+        )
+    assert drive.status is DriveStatus.ONLINE and drive.present is True
+
+
+def test_heartbeat_never_clears_error() -> None:
+    db = FakeSession()
+    drive = _seed(db)
+    drive.status = DriveStatus.ERROR
+    with TestClient(_make_app(db)) as client:
+        client.post(
+            "/api/ripper/heartbeat", json={"drive_id": "drv_x", "media_status": "loaded"}, headers=_service_auth()
+        )
+    assert drive.status is DriveStatus.ERROR
+
+
+def test_detached_heartbeat_on_an_error_drive_stays_error() -> None:
+    """DETACHED still marks the drive absent, but a pre-existing ERROR
+    (operator problem) must not be downgraded to OFFLINE by the heartbeat."""
+    db = FakeSession()
+    drive = _seed(db)
+    drive.status = DriveStatus.ERROR
+    with TestClient(_make_app(db)) as client:
+        client.post(
+            "/api/ripper/heartbeat", json={"drive_id": "drv_x", "media_status": "detached"}, headers=_service_auth()
+        )
+    assert drive.status is DriveStatus.ERROR
+    assert drive.present is False
