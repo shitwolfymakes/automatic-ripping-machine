@@ -127,8 +127,15 @@ export function updateJobConfig(jobId: string, data: JobUpdateRequest): Promise<
 
 // v3 POST /api/jobs/{id}/resolve  body: ResolveRequest { title, year?, disc_number?, disc_total?, media_type?, music? }.
 // Stamps the chosen identity onto the job (status → identified). `year` defaults
-// to null, disc fields to null; `music`/`media_type` are only sent by callers that
-// have something typed to say (the free-form `metadata` bag is gone — unknown keys 422).
+// to null; `music`/`media_type` are only sent by callers that have something
+// typed to say (the free-form `metadata` bag is gone — unknown keys 422).
+//
+// disc_number/disc_total are a classification like media_type/season on the
+// Backend, not part of the identity statement: omitted keeps whatever value
+// is already stored (a disc-hint source may have filled it before the
+// operator ever opened the identify dialog -- Review Focus 5), while an
+// explicit `null` is the operator clearing it. `!== undefined` is the only
+// way to tell "the caller didn't pass this" from "the caller passed null".
 export function resolveJob(
 	jobId: string,
 	body: {
@@ -140,14 +147,19 @@ export function resolveJob(
 		music?: MusicMeta;
 	}
 ): Promise<ResolveResponse> {
-	return post<ResolveResponse>(`/api/jobs/${jobId}/resolve`, {
+	const payload: Record<string, unknown> = {
 		title: body.title,
-		year: body.year ?? null,
-		disc_number: body.disc_number ?? null,
-		disc_total: body.disc_total ?? null,
-		media_type: body.media_type,
-		music: body.music
-	});
+		year: body.year ?? null
+	};
+	if (body.disc_number !== undefined) {
+		payload.disc_number = body.disc_number;
+	}
+	if (body.disc_total !== undefined) {
+		payload.disc_total = body.disc_total;
+	}
+	payload.media_type = body.media_type;
+	payload.music = body.music;
+	return post<ResolveResponse>(`/api/jobs/${jobId}/resolve`, payload);
 }
 
 // v3 POST /api/jobs/manual  body: ManualTriggerRequest { drive_id, session_id? }.

@@ -2,6 +2,7 @@ import asyncio
 import logging
 import re
 import unicodedata
+from typing import Literal
 
 import httpx
 
@@ -79,14 +80,21 @@ class MetadataDispatcher:
     async def aclose(self) -> None:
         await self._http.aclose()
 
-    async def identify(self, scan: ScanResult, cfg: Config) -> MetadataResult | None:
+    async def identify(
+        self,
+        scan: ScanResult,
+        cfg: Config,
+        *,
+        title_hint: str | None = None,
+        title_hint_is_tv: bool = False,
+    ) -> MetadataResult | None:
         if scan.disc_type in (DiscType.DATA, DiscType.UNKNOWN):
             return None
 
         if scan.disc_type == DiscType.CD:
             return await self._identify_cd(scan)
 
-        return await self._identify_video(scan, cfg)
+        return await self._identify_video(scan, cfg, title_hint=title_hint, title_hint_is_tv=title_hint_is_tv)
 
     async def _identify_cd(self, scan: ScanResult) -> MetadataResult | None:
         if not scan.musicbrainz_disc_id:
@@ -94,7 +102,14 @@ class MetadataDispatcher:
         client = MusicBrainzClient(MUSICBRAINZ_USER_AGENT, self._http)
         return await self._call("musicbrainz", client.lookup_disc_id(scan.musicbrainz_disc_id))
 
-    async def _identify_video(self, scan: ScanResult, cfg: Config) -> MetadataResult | None:
+    async def _identify_video(
+        self,
+        scan: ScanResult,
+        cfg: Config,
+        *,
+        title_hint: str | None = None,
+        title_hint_is_tv: bool = False,
+    ) -> MetadataResult | None:
         # 1337server first when we have a DVD CRC64. This is the
         # community-maintained crc64 → title DB; a hit beats fuzzy
         # title matching on TMDB/OMDB because the fingerprint is unique
@@ -109,25 +124,68 @@ class MetadataDispatcher:
             if hit is not None:
                 return hit
 
-        if not scan.volume_label:
-            return None
-        title, year = _normalize_volume_label(scan.volume_label)
-        if not title:
-            return None
+        # Disc hints (bd_title / label, see arm_backend.identity) supply a
+        # cleaner search title than the raw volume label — try it first, then
+        # fall back to the normalized volume-label title. Empty and duplicate
+        # (case-insensitive) candidates are skipped so a hint equal to the
+        # label title doesn't double the provider calls. A hint that carries
+        # a season claim (a season/box-set disc) is TV-shaped: search TMDb TV
+        # before TMDb movie for THAT candidate only, so e.g. `LOST_S2D3`'s
+        # hint title "lost" doesn't mismatch to TMDb's top movie hit. The
+        # label-derived candidate keeps the existing movie-first order.
+        # Compute the label candidate's (title, year) first so the hint
+        # candidate — which has no year of its own — can be searched with the
+        # same year filter (e.g. `ALIEN_1979` narrows the hint "alien" to
+        # 1979 too, not an unfiltered search).
+        label_title: str | None = None
+        label_year: int | None = None
+        if scan.volume_label:
+            label_title, label_year = _normalize_volume_label(scan.volume_label)
 
+        candidates: list[tuple[str, int | None, bool]] = []
+        if title_hint and title_hint.strip():
+            candidates.append((title_hint.strip(), label_year, title_hint_is_tv))
+        if label_title:
+            candidates.append((label_title, label_year, False))
+        seen: set[str] = set()
+        for title, year, tv_first in candidates:
+            key = title.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            hit = await self._search_title(title, year, cfg, tv_first=tv_first)
+            if hit is not None:
+                return hit
+        return None
+
+    async def _search_title(
+        self, title: str, year: int | None, cfg: Config, *, tv_first: bool = False
+    ) -> MetadataResult | None:
         if cfg.tmdb_api_key:
             tmdb = TMDBClient(cfg.tmdb_api_key, self._http)
-            hit = await self._call("tmdb_movie", tmdb.search_movie(title, year))
-            if hit is not None:
-                return hit
-            hit = await self._call("tmdb_tv", tmdb.search_tv(title))
-            if hit is not None:
-                return hit
+            if tv_first:
+                hit = await self._call("tmdb_tv", tmdb.search_tv(title))
+                if hit is not None:
+                    return hit
+                hit = await self._call("tmdb_movie", tmdb.search_movie(title, year))
+                if hit is not None:
+                    return hit
+            else:
+                hit = await self._call("tmdb_movie", tmdb.search_movie(title, year))
+                if hit is not None:
+                    return hit
+                hit = await self._call("tmdb_tv", tmdb.search_tv(title))
+                if hit is not None:
+                    return hit
 
         omdb_key = self._omdb_api_key_override or cfg.omdb_api_key
         if omdb_key:
             omdb = OMDBClient(omdb_key, self._http)
-            hit = await self._call("omdb_movie", omdb.lookup_by_title(title, year, kind="movie"))
+            # A season-shaped hint is TV, not a movie: an OMDb-only install
+            # (no TMDb key) must search OMDb `type=series` for it, or a hint
+            # like "lost" silently identifies as the movie "Lost" (finding 1).
+            kind: Literal["movie", "tv"] = "tv" if tv_first else "movie"
+            hit = await self._call(f"omdb_{kind}", omdb.lookup_by_title(title, year, kind=kind))
             if hit is not None:
                 return hit
 

@@ -61,7 +61,7 @@ class _Dispatcher:
     def __init__(self, result: MetadataResult | None = None) -> None:
         self.result = result
 
-    async def identify(self, _scan: Any, _cfg: Any) -> MetadataResult | None:
+    async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
         return self.result
 
 

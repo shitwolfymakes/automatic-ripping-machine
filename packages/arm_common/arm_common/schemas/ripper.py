@@ -81,6 +81,16 @@ class DiscFingerprintInput(BaseModel):
     value: str
 
 
+class BdDiscMeta(BaseModel):
+    """Blu-ray disc title from BDMV/META/DL/bdmt_<lang>.xml (studio-authored).
+    Optional on the wire: older rippers never send it."""
+
+    name: str
+    set_number: int | None = None
+    num_sets: int | None = None
+    language: str | None = None
+
+
 class ScanResult(BaseModel):
     disc_type: DiscType
     volume_label: str | None = None
@@ -90,6 +100,8 @@ class ScanResult(BaseModel):
     # lookup (crc64), and reverse "have we seen this disc before?" lookup
     # in future flows. Empty when nothing fingerprintable.
     fingerprints: list[DiscFingerprintInput] = Field(default_factory=list)
+    # Studio disc title + set position from the Blu-ray BDMT file, when present.
+    bd_meta: BdDiscMeta | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
 
 

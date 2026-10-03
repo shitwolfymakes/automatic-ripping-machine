@@ -313,14 +313,14 @@ async def scan_disc(device_path: str) -> ScanResult:
 
     # MakeMKV's CINFO:1 is the authoritative disc-type signal — works on
     # region-locked discs that the kernel refuses to mount, and on UDF
-    # quirks. The probe's only job is the CRC64 fingerprint (read off the
-    # device, no mount); when CINFO:1 is missing we fall back to a title-size
-    # heuristic rather than any layout probe.
-    probe = await probe_disc(device_path)
+    # quirks; when CINFO:1 is missing we fall back to a title-size heuristic.
+    # Classify before probing so the probe knows whether to bother opening
+    # the disc a third time for the Blu-ray-only BDMT read.
     if mkv_disc_type is not None:
         disc_type = mkv_disc_type
     else:
         disc_type = _classify_from_titles(titles)
+    probe = await probe_disc(device_path, bluray=disc_type == DiscType.BLURAY)
 
     fingerprints: list[DiscFingerprintInput] = []
     if probe.crc64:
@@ -333,4 +333,5 @@ async def scan_disc(device_path: str) -> ScanResult:
         volume_label=volume_label,
         titles=titles,
         fingerprints=fingerprints,
+        bd_meta=probe.bd_meta,
     )

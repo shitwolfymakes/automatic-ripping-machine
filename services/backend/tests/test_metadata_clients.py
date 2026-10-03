@@ -65,6 +65,24 @@ async def test_omdb_hit(http_client):
 
 
 @respx.mock
+async def test_omdb_lookup_by_title_tv_kind_maps_to_series_type(http_client):
+    """Our `kind="tv"` isn't a valid OMDb `type=` value (movie/series/
+    episode) — it must map to `type=series` on the wire, while the returned
+    MetadataResult.kind stays "tv"."""
+    route = respx.get("https://www.omdbapi.com/").mock(
+        return_value=httpx.Response(
+            200,
+            json={"Response": "True", "Title": "Lost", "Year": "2004"},
+        )
+    )
+    client = OMDBClient("k", http_client)
+    result = await client.lookup_by_title("lost", kind="tv")
+    assert result.title == "Lost"
+    assert result.kind == "tv"
+    assert route.calls.last.request.url.params["type"] == "series"
+
+
+@respx.mock
 async def test_omdb_miss(http_client):
     respx.get("https://www.omdbapi.com/").mock(
         return_value=httpx.Response(200, json={"Response": "False", "Error": "not found"})
