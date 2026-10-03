@@ -210,14 +210,14 @@ change to the transcode image or on the remote host's own upgrades.
 ## Enabling GPU transcoding
 
 There's nothing to enable by hand beyond the image build above: **the
-installer detects your GPUs and wires them up.** When you run `install.sh`
+installer detects your GPUs and wires them up.** When you run `armctl install`
 (or `devtools/setup-dev.sh` for a dev checkout) it enumerates your hardware:
 
 - **Intel QSV / AMD VAAPI**: lists `/dev/dri/renderD*` and reads each card's
   vendor ID (`0x8086` Intel, `0x1002` AMD).
 - **NVIDIA NVENC**: runs `nvidia-smi -L`, one entry per GPU.
 
-The result is written to the `ARM_GPUS` line in `~/arm/.env` as a JSON
+The result is written to the `ARM_GPUS` line in `~/arm/.armctl/.env` as a JSON
 array, for example:
 
 ```bash
@@ -245,7 +245,7 @@ See [Configuring ARM § Ripper-only installs](Configuring-ARM#ripper-only-instal
 ## NVIDIA: the Container Toolkit
 
 NVENC needs the **NVIDIA Container Toolkit** on the host so the docker daemon
-can pass GPU devices into the transcoder. When `install.sh` detects an NVIDIA
+can pass GPU devices into the transcoder. When `armctl install` detects an NVIDIA
 GPU without the toolkit registered, **it offers to install and configure it
 for you** on Debian/Ubuntu hosts (with a confirmation prompt). On other
 distros it prints the steps. To do it manually:
@@ -273,7 +273,7 @@ when it was last probed, and any probe error, with **Re-probe** available per
 row. You can also check the backend log:
 
 ```bash
-docker compose logs arm-backend | grep -i "gpu probe"
+armctl compose logs arm-backend | grep -i "gpu probe"
 ```
 
 Transcode presets built around `any_h264` / `any_h265` / `any_av1` prefer a

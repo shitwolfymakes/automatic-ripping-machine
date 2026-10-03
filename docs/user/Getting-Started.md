@@ -63,87 +63,77 @@ granted access to the drive via `group_add` automatically.
 
 ## Install
 
-One command bootstraps everything:
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/install.sh | bash
 ```
 
-Prefer to read the script first, or want a TTY for the prompts? Use either of:
+Run it as your normal user, not as root and not with `sudo`. It asks for
+`sudo` only for the steps that need it.
+
+Prefer to read it first?
 
 ```bash
-# Download, read, run
 curl -fsSLo install.sh https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/install.sh
-less install.sh && bash install.sh
-
-# Or run with a real TTY attached
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/install.sh)"
+less install.sh
+bash install.sh
 ```
 
-Useful flags (`install.sh --help` lists them all):
+The installer asks a few questions:
 
-| Flag | Effect |
-|---|---|
-| `--prefix <path>` | Install somewhere other than `~/arm` (e.g. `/srv/arm`, `/mnt/tank/arm`). |
-| `--start` | Run `docker compose up -d` at the end instead of just printing the command. |
-| `--rotate-ca` | Regenerate the internal CA **and every leaf cert** (you'll need to re-trust it on every device — only for suspected key compromise). |
+- **How the host is used.** Full box (rip and transcode here), ripper-only, or
+  rip here and transcode on another machine.
+- **Where raw rips and finished media go.** The default is inside `~/arm`;
+  point them at a NAS mount or a second disk if you have one.
+- **Host changes, one at a time.** Installing Docker (Debian and Ubuntu only),
+  the NVIDIA container toolkit if you have an NVIDIA GPU, and a udev rule that
+  stops a desktop session auto-mounting discs. You can decline any of them.
 
-The installer is **idempotent** — rerun it any time you attach a new drive or
-upgrade across a major version. It preserves your `.env` secrets and your CA,
-and only *adds* service blocks for newly-detected drives.
+On a distro other than Debian or Ubuntu, install Docker Engine 24 or newer with
+the Compose plugin yourself first
+([Docker's instructions](https://docs.docker.com/engine/install/)); the
+installer then does everything else.
+
+To install somewhere other than your home folder, add `--prefix /srv`, which
+gives `/srv/arm`. For an unattended install, every question has a flag:
+
+```bash
+bash install.sh --profile ripper-only --raw-path /mnt/rips --media-path /mnt/media --yes
+```
 
 ## What the installer creates
 
-Everything lands under the prefix (`~/arm` by default). You never clone the repo
-and nothing compiles on the host — the stack is entirely image-based.
+Everything lives in one folder, `~/arm`:
 
-```text
-~/arm/
-├── .env                     # generated secrets + tunables (mode 0600)
-├── docker-compose.yml       # generated; one arm-ripper-srN block per drive
-├── certs/                   # internal CA + per-service TLS leaf certs
-├── db/                      # Postgres data
-├── raw/                     # intermediate rip output
-├── media/                   # finished, Plex/Jellyfin-friendly library
-└── logs/                    # per-service JSONL logs
-```
-
-In order, the installer:
-
-1. **Checks prerequisites** (above) and fails fast with a clear message.
-2. **Generates an internal CA** (`certs/arm-ca.{key,crt}`, EC P-384, 10-year).
-   The CA key stays on the host and is never mounted into a container.
-3. **Detects optical drives** by scanning `/dev/sr*`, pairing each with its
-   SCSI-generic node (`/dev/sg*` — MakeMKV needs both), and issues a TLS leaf
-   cert per drive plus leaves for the backend, UI, and database.
-4. **Seeds `.env`** with a random `POSTGRES_PASSWORD` and `ARM_SERVICE_TOKEN`,
-   your `PUID`/`PGID` (`id -u`/`id -g`), and the host's optical group GID
-   (`CDROM_GID`). Third-party API keys are left blank — you set those in the UI.
-5. **Generates `docker-compose.yml`** with one `arm-ripper-srN` service per
-   detected drive. With no drives detected the stack still installs (UI +
-   backend + transcoder); only the ripper services are omitted.
-6. **On a desktop host, disables auto-mount** for the ARM drive(s) only, by
-   writing a scoped udev rule (`/etc/udev/rules.d/99-arm-no-automount.rules`).
-   This is required so the ripper can eject after a rip — see
-   [Troubleshooting § Disc won't eject](Troubleshooting#disc-wont-eject-after-a-rip).
+| Path | What it is |
+|---|---|
+| `armctl` | The command you use to start, stop and upgrade ARM. |
+| `raw/`, `media/` | Raw rips and finished media, unless you chose other folders. |
+| `logs/` | Job and service logs. |
+| `certs/` | ARM's own certificate authority and the service certificates. |
+| `db/` | The database. |
+| `backups/` | Database backups taken before each restart and upgrade. |
+| `scripts/` | Your notification scripts. |
+| `iso-library/` | Disc images for "Rip from ISO". |
+| `.armctl/` | Configuration: `.env` (secrets, settings) and the installed release. |
 
 ## Start the stack
 
-```bash
-cd ~/arm
-docker compose pull      # fetch the published images
-docker compose up -d
-```
-
-Check that everything is healthy:
+The installer starts ARM for you. Afterwards:
 
 ```bash
-docker compose ps
-docker compose logs -f arm-backend
+armctl up        # start, or restart after a change
+armctl down      # stop
+armctl upgrade   # move to the latest release
+armctl compose ps                  # any docker compose command
+armctl compose logs arm-backend
 ```
+
+`armctl up` and `armctl down` refuse to run while a rip or transcode is in
+progress, so they cannot kill a job by accident; add `--force` to override.
+If `armctl` is not found, use `~/arm/armctl`.
 
 > **Alpha note:** during early v3 development the published registry images may
-> not yet exist for every tag, and `docker compose pull` can 404. To run today,
+> not yet exist for every tag, and the image pull can 404. To run today,
 > build the images locally from a checkout — see
 > [Local development in the README](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/README.md#local-development).
 

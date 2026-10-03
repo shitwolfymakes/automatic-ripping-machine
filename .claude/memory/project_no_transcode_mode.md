@@ -40,8 +40,8 @@ Known follow-ups (ledgered, PR body names the first):
    docstring still overclaims).
 3. Serial passthrough copies stall the tick for the batch; cancel of an
    in-process passthrough doesn't stop the copy.
-4. install.sh compose heredoc lacks `ARM_TRANSCODE_CAPABLE` passthrough
-   (carryover doc; [[install-sh-is-legacy]]).
+4. install.sh compose heredoc lacks `ARM_TRANSCODE_CAPABLE` passthrough.
+   DONE 2026-10: production runs the template itself; `armctl install --profile ripper-only` writes the flag.
 5. Stale-config merge bug pre-exists in Metadata/Ripping settings forms (fixed
    for Transcoding only; generic fix would round-trip secrets).
 

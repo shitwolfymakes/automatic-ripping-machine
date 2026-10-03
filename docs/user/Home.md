@@ -21,10 +21,9 @@ The short version:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/install.sh | bash
-cd ~/arm && docker compose up -d
 ```
 
-Then open **`https://localhost:8081`** and log in as `admin` / `admin` (you'll
+The installer starts ARM for you. Then open **`https://localhost:8081`** and log in as `admin` / `admin` (you'll
 be forced to set a real password immediately). The full walkthrough — prereqs,
 what the installer generates, trusting the TLS certificate, and your first rip —
 is in [Getting Started](Getting-Started).

@@ -70,8 +70,8 @@ Not yet as a user feature — that's designed but not built. ARM *can* produce a
 
 ## How do I read the logs?
 
-`docker compose logs <service>` from `~/arm`, or browse `~/arm/logs/`. Set
-`ARM_LOG_LEVEL=debug` in `.env` first for detail. More in
+`armctl compose logs <service>`, or browse `~/arm/logs/`. Set
+`ARM_LOG_LEVEL=debug` in `~/arm/.armctl/.env` first for detail. More in
 [Troubleshooting](Troubleshooting).
 
 ## How do I back up my install?

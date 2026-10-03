@@ -16,19 +16,10 @@ picked.
     cp docs/user/examples/send-email.sh arm/scripts/
     chmod +x arm/scripts/send-email.sh
 
-`devtools/setup-dev.sh` creates the directory and generates the compose file
-with the mount from `docker-compose.yml.example`. A stack that predates this
-feature has neither; to add them by hand, create `scripts/` next to `media/`
-in the install prefix and give the `arm-backend` service this volume in
-`docker-compose.override.yml` (then `docker compose up -d arm-backend`):
-
-    services:
-      arm-backend:
-        volumes:
-          - ./scripts:/scripts:ro
-
-Until the mount exists the picker shows "No scripts found" for every file
-you add.
+`devtools/setup-dev.sh` and `armctl install` create the `scripts/` directory,
+and the compose template (`docker-compose.yml.example`) mounts it into
+`arm-backend` read-only. Until the directory exists with your files in it, the
+picker shows "No scripts found".
 
 ## Calling convention
 

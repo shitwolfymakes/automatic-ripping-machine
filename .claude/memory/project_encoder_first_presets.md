@@ -40,6 +40,6 @@ truthful source.
   stops at the first failure.
 - Found on the way, out of scope: cancelling an in-flight encode can be
   swallowed (`CancelRequested` in consume_progress); a PATCH with an explicit null
-  tool/container writes NULL; install.sh has no variant awareness.
+  tool/container writes NULL; `armctl` pins and pulls the `-intel`/`-amd` variants (`write_image_pins`, `select_up_services`).
 - Deferred: AMF (`vce_*`) on real AMD hardware; the backend + ripper trixie bump.
 - Migration 0038 downgrade does NOT restore `gpus.encoder_kinds`.

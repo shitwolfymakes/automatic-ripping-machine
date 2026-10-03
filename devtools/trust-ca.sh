@@ -6,11 +6,11 @@
 # Installs into the Linux trust store (update-ca-certificates) and — when
 # running under WSL — the Windows CurrentUser Root store (certutil.exe -user,
 # no UAC) so Chrome/Edge on Windows trust it too. Idempotent + rotation-safe
-# (remove-then-add), so re-run freely (e.g. after install.sh --rotate-ca).
+# (remove-then-add), so re-run freely (e.g. after armctl install --rotate-ca).
 # `--untrust` removes the CA from both stores.
 #
-# Dev-only. Not shipped, not invoked by setup-dev.sh or CI. install.sh owns
-# CA *generation*; this only trusts an already-minted CA.
+# Dev-only. Not shipped, not invoked by setup-dev.sh or CI. deploy/lib/certs.sh (used by
+# setup-dev.sh and armctl install) owns CA *generation*; this only trusts an already-minted CA.
 set -euo pipefail
 
 usage() {
@@ -41,7 +41,7 @@ LINUX_DEST="/usr/local/share/ca-certificates/arm-v3-local-ca.crt"
 
 if [[ ! -f "$CA" ]]; then
     echo "CA not found at ${CA}" >&2
-    echo "generate it first: bash devtools/setup-dev.sh  (or: bash install.sh --certs-only)" >&2
+    echo "generate it first: bash devtools/setup-dev.sh" >&2
     exit 1
 fi
 
