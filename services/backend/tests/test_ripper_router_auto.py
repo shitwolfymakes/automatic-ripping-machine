@@ -170,6 +170,22 @@ async def test_ripped_with_default_and_auto_creates_application(tmp_path: Path) 
 
 
 @pytest.mark.asyncio
+async def test_auto_apply_succeeds_for_job_with_no_year_when_year_is_optional(tmp_path: Path) -> None:
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    job.year = None
+    db.rows["sessions"][0].output_path_template = "{title} ({year?})/{title} - {transcode_slug}.{ext}"
+    hub = CapturingHub()
+
+    await maybe_auto_apply_session(db, job, hub)  # type: ignore[arg-type]
+
+    tasks = db.rows["transcode_tasks"]
+    assert len(tasks) == 1
+    assert tasks[0].output_path.startswith("Iron Man/Iron Man - ")
+
+
+@pytest.mark.asyncio
 async def test_ripped_partial_also_triggers(tmp_path: Path) -> None:
     _set_media_root(tmp_path)
     db = FakeSession()

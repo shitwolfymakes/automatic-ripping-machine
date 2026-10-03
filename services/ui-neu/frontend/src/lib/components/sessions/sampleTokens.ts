@@ -36,5 +36,5 @@ export const MEDIA_SAMPLE: Record<MediaType, Record<string, string>> = {
 
 export function resolveSample(template: string, mediaType: MediaType): string {
 	const map = MEDIA_SAMPLE[mediaType] ?? {};
-	return template.replace(/\{(\w+)\}/g, (m, key) => (key in map ? map[key] : m));
+	return template.replace(/\{(\w+)\??\}/g, (m, key) => (key in map ? map[key] : m));
 }

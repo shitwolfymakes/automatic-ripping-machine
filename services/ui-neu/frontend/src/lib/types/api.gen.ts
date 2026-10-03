@@ -4560,6 +4560,10 @@ export type TemplatePreviewResponse = {
      * Expansion
      */
     expansion: string;
+    /**
+     * Expansion Without Optional
+     */
+    expansion_without_optional?: string | null;
 };
 
 /**

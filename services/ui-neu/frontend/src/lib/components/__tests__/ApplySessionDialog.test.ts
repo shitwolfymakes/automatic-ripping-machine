@@ -454,6 +454,7 @@ describe('ApplySessionDialog', () => {
 			expect(screen.getByTestId('recipe-output-problem')).toHaveTextContent(
 				'This job has no year, so {year} in the output path cannot be filled.'
 			);
+			expect(screen.getByTestId('recipe-output-problem')).toHaveTextContent('marks it optional as {year?}');
 		});
 		expect(screen.getByTestId('apply-session-apply')).toBeDisabled();
 	});

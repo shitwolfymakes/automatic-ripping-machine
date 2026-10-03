@@ -315,6 +315,21 @@ def test_preview_template_returns_synthetic_expansion(signing_key: bytes) -> Non
         )
     assert r.status_code == 200
     assert r.json()["expansion"] == "Iron Man (2008).mkv"
+    assert r.json()["expansion_without_optional"] is None
+
+
+def test_preview_template_returns_expansion_without_optional(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/sessions/preview",
+            json={"template": "{title} ({year?}).{ext}", "media_type": "movie", "has_transcode_preset": True},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    assert r.json() == {"expansion": "Iron Man (2008).mkv", "expansion_without_optional": "Iron Man.mkv"}
 
 
 def test_preview_template_422_on_bad_token(signing_key: bytes) -> None:
